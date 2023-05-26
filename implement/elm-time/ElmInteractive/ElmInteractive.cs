@@ -367,7 +367,7 @@ public class ElmInteractive
                 if (left is null || right is null)
                     return false;
 
-                if (left.ListAsString is string leftString && right.ListAsString is string rightString)
+                if (left.ListAsString is { } leftString && right.ListAsString is { } rightString)
                     return leftString == rightString;
 
                 return left.origin.Equals(right.origin);
@@ -431,7 +431,7 @@ public class ElmInteractive
                 if (1 < usageCountLowerBound)
                     return;
 
-                if (mappedForTransport.ListAsString is null && mappedForTransport.List is IReadOnlyList<PineValueMappedForTransport> asList)
+                if (mappedForTransport.ListAsString is null && mappedForTransport.List is { } asList)
                 {
                     foreach (var item in asList)
                     {
@@ -462,7 +462,7 @@ public class ElmInteractive
                     return;
                 }
 
-                if (mappedForTransport.List is IReadOnlyList<PineValueMappedForTransport> isList)
+                if (mappedForTransport.List is { } isList)
                 {
                     foreach (var item in isList)
                     {
@@ -525,10 +525,10 @@ public class ElmInteractive
             if (!doNotDictionaryOnFirstLevel && (dictionary?.TryGetValue(pineValue, out var result) ?? false))
                 return new PineValueJson { Reference = result };
 
-            if (pineValue.ListAsString is string asString)
+            if (pineValue.ListAsString is { } asString)
                 return new PineValueJson { ListAsString = asString };
 
-            if (pineValue.List is IReadOnlyList<PineValueMappedForTransport> asList)
+            if (pineValue.List is { } asList)
             {
                 return new PineValueJson
                 {
@@ -545,16 +545,16 @@ public class ElmInteractive
 
     private static PineValue ParsePineValueFromJson(PineValueJson fromJson, IReadOnlyDictionary<string, PineValue>? dictionary)
     {
-        if (fromJson.List is IReadOnlyList<PineValueJson> list)
+        if (fromJson.List is { } list)
             return PineValue.List(list.Select(item => ParsePineValueFromJson(item, dictionary)).ToImmutableList());
 
-        if (fromJson.Blob is IReadOnlyList<int> blob)
+        if (fromJson.Blob is { } blob)
             return PineValue.Blob(blob.Select(b => (byte)b).ToArray());
 
-        if (fromJson.ListAsString is string listAsString)
+        if (fromJson.ListAsString is { } listAsString)
             return PineValueAsString.ValueFromString(listAsString);
 
-        if (fromJson.Reference is string reference)
+        if (fromJson.Reference is { } reference)
         {
             return
                 dictionary switch

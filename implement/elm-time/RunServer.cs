@@ -35,43 +35,41 @@ public class RunServer
 
         IFileStore buildProcessStoreFileStore()
         {
-            if (processStorePath is null)
-            {
-                Console.WriteLine("I got no path to a persistent store for the process. This process will not be persisted!");
+            if (processStorePath is not null)
+                return new FileStoreFromSystemIOFile(processStorePath);
 
-                var files = new System.Collections.Concurrent.ConcurrentDictionary<IImmutableList<string>, IReadOnlyList<byte>>(EnumerableExtension.EqualityComparer<IImmutableList<string>>());
+            Console.WriteLine("I got no path to a persistent store for the process. This process will not be persisted!");
 
-                var fileStoreWriter = new DelegatingFileStoreWriter
-                (
-                    SetFileContentDelegate: file => files[file.path] = file.fileContent,
-                    AppendFileContentDelegate: file => files.AddOrUpdate(
-                       file.path, _ => file.fileContent,
-                       (_, fileBefore) => fileBefore.Concat(file.fileContent).ToArray()),
-                    DeleteFileDelegate: path => files.Remove(path, out var _)
-                );
+            var files = new System.Collections.Concurrent.ConcurrentDictionary<IImmutableList<string>, IReadOnlyList<byte>>(EnumerableExtension.EqualityComparer<IImmutableList<string>>());
 
-                var fileStoreReader = new DelegatingFileStoreReader
-                (
-                    ListFilesInDirectoryDelegate: path =>
-                        files.Select(file =>
-                        {
-                            if (!file.Key.Take(path.Count).SequenceEqual(path))
-                                return null;
+            var fileStoreWriter = new DelegatingFileStoreWriter
+            (
+                SetFileContentDelegate: file => files[file.path] = file.fileContent,
+                AppendFileContentDelegate: file => files.AddOrUpdate(
+                    file.path, _ => file.fileContent,
+                    (_, fileBefore) => fileBefore.Concat(file.fileContent).ToArray()),
+                DeleteFileDelegate: path => files.Remove(path, out var _)
+            );
 
-                            return file.Key.Skip(path.Count).ToImmutableList();
-                        }).WhereNotNull(),
-                    GetFileContentDelegate: path =>
-                    {
-                        files.TryGetValue(path, out var fileContent);
+            var fileStoreReader = new DelegatingFileStoreReader
+            (
+                ListFilesInDirectoryDelegate: path =>
+                    files.Select(file =>
+                        !file.Key.Take(path.Count).SequenceEqual(path) 
+                            ? 
+                            null
+                            :
+                            file.Key.Skip(path.Count).ToImmutableList()).WhereNotNull(),
+                GetFileContentDelegate: path =>
+                {
+                    files.TryGetValue(path, out var fileContent);
 
-                        return fileContent;
-                    }
-                );
+                    return fileContent;
+                }
+            );
 
-                return new FileStoreFromWriterAndReader(fileStoreWriter, fileStoreReader);
-            }
+            return new FileStoreFromWriterAndReader(fileStoreWriter, fileStoreReader);
 
-            return new FileStoreFromSystemIOFile(processStorePath);
         }
 
         var processStoreFileStore = buildProcessStoreFileStore();
@@ -147,7 +145,7 @@ public class RunServer
                 .ConfigureAppConfiguration(builder => builder.AddEnvironmentVariables("APPSETTING_"))
                 .UseUrls(adminInterfaceUrls)
                 .UseStartup<StartupAdminInterface>()
-                .WithSettingPublicWebHostUrls(publicAppUrls?.ToArray())
+                .WithSettingPublicWebHostUrls(publicAppUrls)
                 .WithJsEngineFactory(jsEngineFactory)
                 .WithProcessStoreFileStore(processStoreFileStore);
 

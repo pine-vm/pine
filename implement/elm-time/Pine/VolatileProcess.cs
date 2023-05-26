@@ -91,7 +91,7 @@ public class VolatileProcess
                                      * 
                                      * Metadata file 'sha256:11111111ac74d50062c63d9df5e6d5c23a4da6ae64cf1898138cb0b5982de286' could not be found
                                      * */
-                                    .Split(new[] { '\'', '“', '”' })
+                                    .Split('\'', '“', '”')
                                     .Where(c => !c.Contains(' ') && 0 < c.Trim().Length)
                                     .ToImmutableList();
 
@@ -156,7 +156,7 @@ public class VolatileProcess
         return
             resolution.HashSHA256Base16 switch
             {
-                string hashBase16 =>
+                { } hashBase16 =>
                 resolution.HashResolution is null ?
                 "Missing resolution report for hash: " + hashBase16
                 :
@@ -218,7 +218,7 @@ public class VolatileProcess
         {
             public ImmutableArray<PortableExecutableReference> References =>
                 HashResolution
-                ?.Extract(err => ImmutableArray<PortableExecutableReference>.Empty) ??
+                ?.Extract(_ => ImmutableArray<PortableExecutableReference>.Empty) ??
                 ImmutableArray<PortableExecutableReference>.Empty;
         }
 
@@ -332,7 +332,7 @@ public class VolatileProcess
                 .AddOrUpdate(
                     request,
                     addValueFactory: ResolveReferenceWithoutCache,
-                    updateValueFactory: (request, previousReport) => previousReport);
+                    updateValueFactory: (_, previousReport) => previousReport);
 
             var fromDefaultResolver =
                 ScriptMetadataResolver.Default.ResolveReference(

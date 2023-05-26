@@ -32,7 +32,7 @@ public static class Asp
         HttpContext context,
         Func<Task> next)
     {
-        string ClientId()
+        string clientId()
         {
             const string defaultClientId = "MapToIPv4-failed";
             try
@@ -50,7 +50,7 @@ public static class Asp
 
         var clientRateLimitState =
             rateLimitFromClientId.GetOrAdd(
-                ClientId(), _ => BuildRateLimitContainerForClient(serverConfig));
+                clientId(), _ => BuildRateLimitContainerForClient(serverConfig));
 
         if (clientRateLimitState?.AttemptPass(Configuration.GetDateTimeOffset(context).ToUnixTimeMilliseconds()) ?? true)
         {
@@ -60,7 +60,6 @@ public static class Asp
 
         context.Response.StatusCode = 429;
         await context.Response.WriteAsync("");
-        return;
     }
 
     private static IMutableRateLimit BuildRateLimitContainerForClient(WebServiceConfigJson? jsonStructure)

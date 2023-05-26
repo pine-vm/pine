@@ -427,10 +427,10 @@ public static class LoadFromGitHubOrGitLab
         if (directory == Path.GetPathRoot(directory))
             return directory;
 
-        if (Directory.ResolveLinkTarget(directory, returnFinalTarget: true) is FileSystemInfo resolved)
+        if (Directory.ResolveLinkTarget(directory, returnFinalTarget: true) is { } resolved)
             return resolved.FullName;
 
-        if (Path.GetDirectoryName(directory) is string parent)
+        if (Path.GetDirectoryName(directory) is { } parent)
         {
             return ResolveLinkTargetFullNameIncludingParents(parent) + Path.DirectorySeparatorChar + Path.GetFileName(directory);
         }

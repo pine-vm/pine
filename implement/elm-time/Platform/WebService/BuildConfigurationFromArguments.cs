@@ -72,7 +72,7 @@ public static class BuildConfigurationFromArguments
     {
         var parseSourceAsTree =
             PineValueComposition.ParseAsTreeWithStringPath(sourceComposition)
-            .Extract(error => throw new Exception("Failed to map source to tree."));
+            .Extract(_ => throw new Exception("Failed to map source to tree."));
 
         var sourceFiles = PineValueComposition.TreeToFlatDictionaryWithPathComparer(parseSourceAsTree);
 

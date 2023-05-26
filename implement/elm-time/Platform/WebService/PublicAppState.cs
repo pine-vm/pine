@@ -115,7 +115,7 @@ public class PublicAppState
             {
                 kestrelOptions.ConfigureHttpsDefaults(httpsOptions =>
                 {
-                    httpsOptions.ServerCertificateSelector = (c, s) => LetsEncryptRenewalService.Certificate;
+                    httpsOptions.ServerCertificateSelector = (_, _) => LetsEncryptRenewalService.Certificate;
                 });
             })
             .UseUrls(publicWebHostUrls.ToArray())
@@ -244,7 +244,7 @@ public class PublicAppState
 
             ReadOnlyMemory<byte>? contentAsByteArray = null;
 
-            if (httpResponse.bodyAsBase64.WithDefault(null) is string responseBodyAsBase64)
+            if (httpResponse.bodyAsBase64.WithDefault(null) is { } responseBodyAsBase64)
             {
                 var buffer = new byte[responseBodyAsBase64.Length * 3 / 4];
 
@@ -321,7 +321,6 @@ public class PublicAppState
             }
             catch (Exception) when (applicationStoppingCancellationTokenSource.IsCancellationRequested)
             {
-                return;
             }
         });
 

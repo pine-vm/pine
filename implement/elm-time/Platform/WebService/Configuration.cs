@@ -64,12 +64,12 @@ public static class Configuration
 
     public static IWebHostBuilder WithSettingPublicWebHostUrls(
         this IWebHostBuilder orig,
-        string[] urls) =>
-        orig.UseSetting(PublicWebHostUrlsSettingKey, string.Join(",", urls));
+        IEnumerable<string>? urls) =>
+        orig.UseSetting(PublicWebHostUrlsSettingKey, urls is null ? null : string.Join(",", urls));
 
     public static IReadOnlyList<string> GetSettingPublicWebHostUrls(
         this IConfiguration? configuration) =>
-        configuration?.GetValue<string>(PublicWebHostUrlsSettingKey)?.Split(new[] { ',', ';' }) ??
+        configuration?.GetValue<string>(PublicWebHostUrlsSettingKey)?.Split(',', ';') ??
         PublicWebHostUrlsDefault;
 
     public static IWebHostBuilder WithJsEngineFactory(

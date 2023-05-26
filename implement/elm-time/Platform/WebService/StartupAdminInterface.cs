@@ -78,11 +78,11 @@ public class StartupAdminInterface
 
         var getDateTimeOffset = serviceProvider.GetService<Func<DateTimeOffset>>();
 
-        if (getDateTimeOffset == null)
-        {
-            getDateTimeOffset = () => DateTimeOffset.UtcNow;
-            services.AddSingleton(getDateTimeOffset);
-        }
+        if (getDateTimeOffset != null)
+            return;
+
+        getDateTimeOffset = () => DateTimeOffset.UtcNow;
+        services.AddSingleton(getDateTimeOffset);
     }
 
     private record PublicHostConfiguration(
@@ -117,15 +117,15 @@ public class StartupAdminInterface
         {
             lock (avoidConcurrencyLock)
             {
-                if (publicAppHost != null)
-                {
-                    logger.LogInformation("Begin to stop the public app.");
+                if (publicAppHost == null)
+                    return;
 
-                    publicAppHost?.webHost?.StopAsync(TimeSpan.FromSeconds(10)).Wait();
-                    publicAppHost?.webHost?.Dispose();
-                    publicAppHost?.processLiveRepresentation?.Dispose();
-                    publicAppHost = null;
-                }
+                logger.LogInformation("Begin to stop the public app.");
+
+                publicAppHost?.webHost?.StopAsync(TimeSpan.FromSeconds(10)).Wait();
+                publicAppHost?.webHost?.Dispose();
+                publicAppHost?.processLiveRepresentation?.Dispose();
+                publicAppHost = null;
             }
         }
 
@@ -188,7 +188,7 @@ public class StartupAdminInterface
 
                                         lock (avoidConcurrencyLock)
                                         {
-                                            var (reductionRecord, _) = processLiveRepresentation.StoreReductionRecordForCurrentState(processStoreWriter!);
+                                            var (_, _) = processLiveRepresentation.StoreReductionRecordForCurrentState(processStoreWriter!);
                                         }
 
                                         cyclicReductionStoreLastTime = currentDateTime;
@@ -288,148 +288,148 @@ public class StartupAdminInterface
 
         startPublicApp();
 
-        app.Run(async (context) =>
+        app.Run(async context =>
+        {
+            var bodyControlFeature = context.Features.Get<Microsoft.AspNetCore.Http.Features.IHttpBodyControlFeature>();
+            if (bodyControlFeature != null)
             {
-                var syncIOFeature = context.Features.Get<Microsoft.AspNetCore.Http.Features.IHttpBodyControlFeature>();
-                if (syncIOFeature != null)
+                bodyControlFeature.AllowSynchronousIO = true;
+            }
+
+            {
+                context.Request.Headers.TryGetValue("Authorization", out var requestAuthorizationHeaderValue);
+
+                context.Response.Headers.Add("X-Powered-By", "Elm-Time");
+
+                AuthenticationHeaderValue.TryParse(
+                    requestAuthorizationHeaderValue.FirstOrDefault(), out var requestAuthorization);
+
+                if (!(0 < adminPassword?.Length))
                 {
-                    syncIOFeature.AllowSynchronousIO = true;
+                    context.Response.StatusCode = 403;
+                    await context.Response.WriteAsync("The admin interface is not available because the admin password is not yet configured.");
+                    return;
                 }
 
+                var buffer = new byte[400];
+
+                var decodedRequestAuthorizationParameter =
+                    Convert.TryFromBase64String(requestAuthorization?.Parameter ?? "", buffer, out var bytesWritten) ?
+                    Encoding.UTF8.GetString(buffer, 0, bytesWritten) : null;
+
+                var requestAuthorizationPassword =
+                    decodedRequestAuthorizationParameter?.Split(':')?.ElementAtOrDefault(1);
+
+                if (!(string.Equals(adminPassword, requestAuthorizationPassword) &&
+                    string.Equals("basic", requestAuthorization?.Scheme, StringComparison.OrdinalIgnoreCase)))
                 {
-                    context.Request.Headers.TryGetValue("Authorization", out var requestAuthorizationHeaderValue);
+                    context.Response.StatusCode = 401;
+                    context.Response.Headers.Add(
+                        "WWW-Authenticate",
+                        @"Basic realm=""" + context.Request.Host + @""", charset=""UTF-8""");
+                    await context.Response.WriteAsync("Unauthorized");
+                    return;
+                }
+            }
 
-                    context.Response.Headers.Add("X-Powered-By", "Elm-Time");
+            async System.Threading.Tasks.Task deployElmApp(bool initElmAppState)
+            {
+                var memoryStream = new MemoryStream();
+                await context.Request.Body.CopyToAsync(memoryStream);
 
-                    AuthenticationHeaderValue.TryParse(
-                        requestAuthorizationHeaderValue.FirstOrDefault(), out var requestAuthorization);
+                var deploymentZipArchive = memoryStream.ToArray();
 
-                    if (!(0 < adminPassword?.Length))
+                {
+                    try
                     {
-                        context.Response.StatusCode = 403;
-                        await context.Response.WriteAsync("The admin interface is not available because the admin password is not yet configured.");
+                        var filesFromZipArchive = ZipArchive.EntriesFromZipArchive(deploymentZipArchive).ToImmutableList();
+
+                        if (filesFromZipArchive.Count < 1)
+                            throw new Exception("Contains no files.");
+                    }
+                    catch (Exception e)
+                    {
+                        context.Response.StatusCode = 400;
+                        await context.Response.WriteAsync("Malformed web app config zip-archive:\n" + e);
                         return;
                     }
-
-                    var buffer = new byte[400];
-
-                    var decodedRequestAuthorizationParameter =
-                        Convert.TryFromBase64String(requestAuthorization?.Parameter ?? "", buffer, out var bytesWritten) ?
-                        Encoding.UTF8.GetString(buffer, 0, bytesWritten) : null;
-
-                    var requestAuthorizationPassword =
-                        decodedRequestAuthorizationParameter?.Split(':')?.ElementAtOrDefault(1);
-
-                    if (!(string.Equals(adminPassword, requestAuthorizationPassword) &&
-                        string.Equals("basic", requestAuthorization?.Scheme, StringComparison.OrdinalIgnoreCase)))
-                    {
-                        context.Response.StatusCode = 401;
-                        context.Response.Headers.Add(
-                            "WWW-Authenticate",
-                            @"Basic realm=""" + context.Request.Host + @""", charset=""UTF-8""");
-                        await context.Response.WriteAsync("Unauthorized");
-                        return;
-                    }
                 }
 
-                async System.Threading.Tasks.Task deployElmApp(bool initElmAppState)
-                {
-                    var memoryStream = new MemoryStream();
-                    context.Request.Body.CopyTo(memoryStream);
+                var deploymentTree =
+                    PineValueComposition.SortedTreeFromSetOfBlobsWithCommonFilePath(
+                        ZipArchive.EntriesFromZipArchive(deploymentZipArchive));
 
-                    var deploymentZipArchive = memoryStream.ToArray();
+                var deploymentPineValue = PineValueComposition.FromTreeWithStringPath(deploymentTree);
 
+                var deploymentHashBase16 = CommonConversion.StringBase16(PineValueHashTree.ComputeHash(deploymentPineValue));
+
+                logger.LogInformation("Got request to deploy app " + deploymentHashBase16);
+
+                processStoreWriter.StoreComponent(deploymentPineValue);
+
+                var deploymentEventValueInFile =
+                    new ValueInFileStructure
                     {
-                        try
-                        {
-                            var filesFromZipArchive = ZipArchive.EntriesFromZipArchive(deploymentZipArchive).ToImmutableList();
-
-                            if (filesFromZipArchive.Count < 1)
-                                throw new Exception("Contains no files.");
-                        }
-                        catch (Exception e)
-                        {
-                            context.Response.StatusCode = 400;
-                            await context.Response.WriteAsync("Malformed web app config zip-archive:\n" + e);
-                            return;
-                        }
-                    }
-
-                    var deploymentTree =
-                        PineValueComposition.SortedTreeFromSetOfBlobsWithCommonFilePath(
-                            ZipArchive.EntriesFromZipArchive(deploymentZipArchive));
-
-                    var deploymentPineValue = PineValueComposition.FromTreeWithStringPath(deploymentTree);
-
-                    var deploymentHashBase16 = CommonConversion.StringBase16(PineValueHashTree.ComputeHash(deploymentPineValue));
-
-                    logger.LogInformation("Got request to deploy app " + deploymentHashBase16);
-
-                    processStoreWriter.StoreComponent(deploymentPineValue);
-
-                    var deploymentEventValueInFile =
-                        new ValueInFileStructure
-                        {
-                            HashBase16 = deploymentHashBase16
-                        };
-
-                    var compositionLogEvent =
-                        CompositionLogRecordInFile.CompositionEvent.EventForDeployAppConfig(
-                            appConfigValueInFile: deploymentEventValueInFile,
-                            initElmAppState: initElmAppState);
-
-                    await attemptContinueWithCompositionEventAndSendHttpResponse(compositionLogEvent);
-                }
-
-                Result<string, IReadOnlyList<StateShim.InterfaceToHost.NamedExposedFunction>> listDatabaseFunctions()
-                {
-                    if (publicAppHost?.processLiveRepresentation is null)
-                        return Result<string, IReadOnlyList<StateShim.InterfaceToHost.NamedExposedFunction>>.err(
-                            "No application deployed.");
-
-                    return publicAppHost.processLiveRepresentation.ListDatabaseFunctions();
-                }
-
-                Result<string, AdminInterface.ApplyDatabaseFunctionSuccess> applyDatabaseFunction(
-                    AdminInterface.ApplyDatabaseFunctionRequest request)
-                {
-                    lock (avoidConcurrencyLock)
-                    {
-                        if (publicAppHost?.processLiveRepresentation is null)
-                            return Result<string, AdminInterface.ApplyDatabaseFunctionSuccess>.err(
-                                "No application deployed.");
-
-                        return publicAppHost.processLiveRepresentation.ApplyFunctionOnMainBranch(storeWriter: processStoreWriter, request);
-                    }
-                }
-
-                IReadOnlyList<ApiRoute> apiRoutes = null;
-
-                IEnumerable<Gui.EventToElmApp> handleMessageFromGui(
-                    Gui.MessageToHost messageFromGui) =>
-                    messageFromGui switch
-                    {
-                        Gui.MessageToHost.ReadAdminInterfaceConfigRequest =>
-                        ImmutableList.Create(
-                            new Gui.EventToElmApp.ReadAdminInterfaceConfigEvent(
-                                new Gui.AdminInterfaceConfig(
-                                    elmTimeVersionId: Program.AppVersionId,
-                                    httpRoutes:
-                                    apiRoutes.Select(apiRoute => new Gui.HttpRoute(
-                                        path: apiRoute.path,
-                                        methods: apiRoute.methods.Keys.ToImmutableList())).ToImmutableList(),
-                                    databaseFunctions:
-                                    listDatabaseFunctions()
-                                    .Extract(_ => ImmutableList<StateShim.InterfaceToHost.NamedExposedFunction>.Empty))
-                                )
-                            ),
-
-                        _ =>
-                        throw new Exception("Unknown message from GUI: " + System.Text.Json.JsonSerializer.Serialize(messageFromGui))
+                        HashBase16 = deploymentHashBase16
                     };
 
-                apiRoutes = new[]
+                var compositionLogEvent =
+                    CompositionLogRecordInFile.CompositionEvent.EventForDeployAppConfig(
+                        appConfigValueInFile: deploymentEventValueInFile,
+                        initElmAppState: initElmAppState);
+
+                await attemptContinueWithCompositionEventAndSendHttpResponse(compositionLogEvent);
+            }
+
+            Result<string, IReadOnlyList<StateShim.InterfaceToHost.NamedExposedFunction>> listDatabaseFunctions()
+            {
+                if (publicAppHost?.processLiveRepresentation is null)
+                    return Result<string, IReadOnlyList<StateShim.InterfaceToHost.NamedExposedFunction>>.err(
+                        "No application deployed.");
+
+                return publicAppHost.processLiveRepresentation.ListDatabaseFunctions();
+            }
+
+            Result<string, AdminInterface.ApplyDatabaseFunctionSuccess> applyDatabaseFunction(
+                AdminInterface.ApplyDatabaseFunctionRequest request)
+            {
+                lock (avoidConcurrencyLock)
                 {
+                    if (publicAppHost?.processLiveRepresentation is null)
+                        return Result<string, AdminInterface.ApplyDatabaseFunctionSuccess>.err(
+                            "No application deployed.");
+
+                    return publicAppHost.processLiveRepresentation.ApplyFunctionOnMainBranch(storeWriter: processStoreWriter, request);
+                }
+            }
+
+            IReadOnlyList<ApiRoute> apiRoutes = null;
+
+            IEnumerable<Gui.EventToElmApp> handleMessageFromGui(
+                Gui.MessageToHost messageFromGui) =>
+                messageFromGui switch
+                {
+                    Gui.MessageToHost.ReadAdminInterfaceConfigRequest =>
+                    ImmutableList.Create(
+                        new Gui.EventToElmApp.ReadAdminInterfaceConfigEvent(
+                            new Gui.AdminInterfaceConfig(
+                                elmTimeVersionId: Program.AppVersionId,
+                                httpRoutes:
+                                apiRoutes.Select(apiRoute => new Gui.HttpRoute(
+                                    path: apiRoute.path,
+                                    methods: apiRoute.methods.Keys.ToImmutableList())).ToImmutableList(),
+                                databaseFunctions:
+                                listDatabaseFunctions()
+                                .Extract(_ => ImmutableList<StateShim.InterfaceToHost.NamedExposedFunction>.Empty))
+                            )
+                        ),
+
+                    _ =>
+                    throw new Exception("Unknown message from GUI: " + System.Text.Json.JsonSerializer.Serialize(messageFromGui))
+                };
+
+            apiRoutes = new[]
+            {
                     new ApiRoute
                     (
                         path : PathApiGetDeployedAppConfig,
@@ -452,7 +452,7 @@ public class StartupAdminInterface
                             var appConfigZipArchive =
                             appConfigTreeResult
                             .Unpack(
-                                fromErr: error => throw   new Exception("Failed to parse as tree with string path"),
+                                fromErr: _ => throw   new Exception("Failed to parse as tree with string path"),
                                 fromOk: appConfigTree =>
                                 ZipArchive.ZipArchiveFromEntries(
                                     PineValueComposition.TreeToFlatDictionaryWithPathComparer(appConfigTree)));
@@ -548,19 +548,19 @@ public class StartupAdminInterface
                     (
                         path : PathApiDeployAndInitAppState,
                         methods : ImmutableDictionary<string, Func<HttpContext, PublicHostConfiguration?, System.Threading.Tasks.Task>>.Empty
-                        .Add("post", async (context, publicAppHost) => await deployElmApp(initElmAppState: true))
+                        .Add("post", async (_, _) => await deployElmApp(initElmAppState: true))
                     ),
                     new ApiRoute
                     (
                         path : PathApiDeployAndMigrateAppState,
                         methods : ImmutableDictionary<string, Func<HttpContext, PublicHostConfiguration?, System.Threading.Tasks.Task>>.Empty
-                        .Add("post", async (context, publicAppHost) => await deployElmApp(initElmAppState: false))
+                        .Add("post", async (_, _) => await deployElmApp(initElmAppState: false))
                     ),
                     new ApiRoute
                     (
                         path : PathApiListDatabaseFunctions,
                         methods : ImmutableDictionary<string, Func<HttpContext, PublicHostConfiguration?, System.Threading.Tasks.Task>>.Empty
-                        .Add("get", async (context, publicAppHost) =>
+                        .Add("get", async (context, _) =>
                         {
                             try
                             {
@@ -580,7 +580,7 @@ public class StartupAdminInterface
                     (
                         path : PathApiApplyDatabaseFunction,
                         methods : ImmutableDictionary<string, Func<HttpContext, PublicHostConfiguration?, System.Threading.Tasks.Task>>.Empty
-                        .Add("post", async (context, publicAppHost) =>
+                        .Add("post", async (context, _) =>
                         {
                             try
                             {
@@ -603,7 +603,7 @@ public class StartupAdminInterface
                     (
                         path : PathApiGuiRequest,
                         methods : ImmutableDictionary<string, Func<HttpContext, PublicHostConfiguration?, System.Threading.Tasks.Task>>.Empty
-                        .Add("post", async (context, publicAppHost) =>
+                        .Add("post", async (context, _) =>
                         {
                             try
                             {
@@ -626,17 +626,17 @@ public class StartupAdminInterface
                     (
                         path : PathApiReplaceProcessHistory,
                         methods : ImmutableDictionary<string, Func<HttpContext, PublicHostConfiguration?, System.Threading.Tasks.Task>>.Empty
-                        .Add("post", async (context, publicAppHost) =>
+                        .Add("post", async (context, _) =>
                         {
                             var memoryStream = new MemoryStream();
-                            context.Request.Body.CopyTo(memoryStream);
+                            await context.Request.Body.CopyToAsync(memoryStream);
 
                             var historyZipArchive = memoryStream.ToArray();
 
                             var replacementFiles =
                                 ZipArchive.EntriesFromZipArchive(historyZipArchive)
                                 .Select(filePathAndContent =>
-                                    (path: filePathAndContent.name.Split(new[] { '/', '\\' }).ToImmutableList()
+                                    (path: filePathAndContent.name.Split('/', '\\').ToImmutableList()
                                     , filePathAndContent.content))
                                 .ToImmutableList();
 
@@ -659,314 +659,314 @@ public class StartupAdminInterface
                     ),
                 };
 
-                foreach (var apiRoute in apiRoutes)
+            foreach (var apiRoute in apiRoutes)
+            {
+                if (!context.Request.Path.Equals(new PathString(apiRoute.path)))
+                    continue;
+
+                var matchingMethod =
+                    apiRoute.methods
+                    .FirstOrDefault(m => string.Equals(m.Key, context.Request.Method, StringComparison.InvariantCultureIgnoreCase));
+
+                if (matchingMethod.Value == null)
                 {
-                    if (!context.Request.Path.Equals(new PathString(apiRoute.path)))
-                        continue;
+                    var supportedMethodsNames =
+                        apiRoute.methods.Keys.Select(m => m.ToUpperInvariant()).ToList();
 
-                    var matchingMethod =
-                        apiRoute.methods
-                        .FirstOrDefault(m => m.Key.ToUpperInvariant() == context.Request.Method.ToUpperInvariant());
+                    var guide =
+                        HtmlFromLines(
+                            "<h2>Method Not Allowed</h2>",
+                            "",
+                            context.Request.Path.ToString() +
+                            " is a valid path, but the method " + context.Request.Method.ToUpperInvariant() +
+                            " is not supported here.",
+                            "Only following " +
+                            (supportedMethodsNames.Count == 1 ? "method is" : "methods are") +
+                            " supported here: " + string.Join(", ", supportedMethodsNames));
 
-                    if (matchingMethod.Value == null)
-                    {
-                        var supportedMethodsNames =
-                            apiRoute.methods.Keys.Select(m => m.ToUpperInvariant()).ToList();
-
-                        var guide =
-                            HtmlFromLines(
-                                "<h2>Method Not Allowed</h2>",
-                                "",
-                                context.Request.Path.ToString() +
-                                " is a valid path, but the method " + context.Request.Method.ToUpperInvariant() +
-                                " is not supported here.",
-                                "Only following " +
-                                (supportedMethodsNames.Count == 1 ? "method is" : "methods are") +
-                                " supported here: " + string.Join(", ", supportedMethodsNames));
-
-                        context.Response.StatusCode = 405;
-                        await context.Response.WriteAsync(HtmlDocument(guide));
-                        return;
-                    }
-
-                    matchingMethod.Value?.Invoke(context, publicAppHost);
+                    context.Response.StatusCode = 405;
+                    await context.Response.WriteAsync(HtmlDocument(guide));
                     return;
                 }
 
-                if (context.Request.Path.StartsWithSegments(new PathString(PathApiRevertProcessTo),
-                    out var revertToRemainingPath))
+                matchingMethod.Value?.Invoke(context, publicAppHost);
+                return;
+            }
+
+            if (context.Request.Path.StartsWithSegments(new PathString(PathApiRevertProcessTo),
+                out var revertToRemainingPath))
+            {
+                if (!string.Equals(context.Request.Method, "post", StringComparison.InvariantCultureIgnoreCase))
                 {
-                    if (!string.Equals(context.Request.Method, "post", StringComparison.InvariantCultureIgnoreCase))
+                    context.Response.StatusCode = 405;
+                    await context.Response.WriteAsync("Method not supported.");
+                    return;
+                }
+
+                var processVersionId = revertToRemainingPath.ToString().Trim('/');
+
+                var processVersionCompositionRecord =
+                    new ProcessStoreReaderInFileStore(processStoreFileStore)
+                    .EnumerateSerializedCompositionLogRecordsReverse()
+                    .FirstOrDefault(compositionEntry => CompositionLogRecordInFile.HashBase16FromCompositionRecord(compositionEntry) == processVersionId);
+
+                if (processVersionCompositionRecord == null)
+                {
+                    context.Response.StatusCode = 404;
+                    await context.Response.WriteAsync("Did not find process version '" + processVersionId + "'.");
+                    return;
+                }
+
+                await attemptContinueWithCompositionEventAndSendHttpResponse(new CompositionLogRecordInFile.CompositionEvent
+                {
+                    RevertProcessTo = new ValueInFileStructure { HashBase16 = processVersionId },
+                });
+                return;
+            }
+
+            TruncateProcessHistoryReport truncateProcessHistory(TimeSpan productionBlockDurationLimit)
+            {
+                var beginTime = CommonConversion.TimeStringViewForReport(DateTimeOffset.UtcNow);
+
+                var totalStopwatch = System.Diagnostics.Stopwatch.StartNew();
+
+                const int numbersOfThreadsToDeleteFiles = 4;
+
+                var filePathsInProcessStorePartitions =
+                    processStoreFileStore.ListFiles()
+                    .Select((s, i) => (s, i))
+                    .GroupBy(x => x.i % numbersOfThreadsToDeleteFiles)
+                    .Select(g => g.Select(x => x.s).ToImmutableList())
+                    .ToImmutableList();
+
+                logger.LogInformation(
+                    message: nameof(truncateProcessHistory) + ": Found {filePathCount} file paths to delete",
+                    filePathsInProcessStorePartitions.Sum(partition => partition.Count));
+
+                lock (avoidConcurrencyLock)
+                {
+                    var lockStopwatch = System.Diagnostics.Stopwatch.StartNew();
+
+                    var storeReductionStopwatch = System.Diagnostics.Stopwatch.StartNew();
+
+                    var storeReductionReport =
+                        publicAppHost?.processLiveRepresentation?.StoreReductionRecordForCurrentState(processStoreWriter).report;
+
+                    storeReductionStopwatch.Stop();
+
+                    logger.LogInformation(
+                        message: nameof(truncateProcessHistory) + ": Stored reduction in {storeReductionDurationMs} ms",
+                        storeReductionStopwatch.ElapsedMilliseconds);
+
+                    var getFilesForRestoreStopwatch = System.Diagnostics.Stopwatch.StartNew();
+
+                    var filesForRestore =
+                        PersistentProcessLiveRepresentation.GetFilesForRestoreProcess(
+                            processStoreFileStore).files
+                        .Select(filePathAndContent => filePathAndContent.Key)
+                        .ToImmutableHashSet(EnumerableExtension.EqualityComparer<IReadOnlyList<string>>());
+
+                    getFilesForRestoreStopwatch.Stop();
+
+                    var deleteFilesStopwatch = System.Diagnostics.Stopwatch.StartNew();
+
+                    var partitionsTasks =
+                        filePathsInProcessStorePartitions
+                        .Select(partitionFilePaths => System.Threading.Tasks.Task.Run(() =>
+                        {
+                            int partitionDeletedFilesCount = 0;
+
+                            foreach (var filePath in partitionFilePaths)
+                            {
+                                if (filesForRestore.Contains(filePath))
+                                    continue;
+
+                                if (productionBlockDurationLimit < lockStopwatch.Elapsed)
+                                    break;
+
+                                processStoreFileStore.DeleteFile(filePath);
+                                ++partitionDeletedFilesCount;
+                            }
+
+                            return partitionDeletedFilesCount;
+                        }))
+                        .ToImmutableList();
+
+                    var totalDeletedFilesCount = partitionsTasks.Sum(task => task.Result);
+
+                    deleteFilesStopwatch.Stop();
+
+                    logger.LogInformation(
+                        message: nameof(truncateProcessHistory) + ": Deleted {totalDeletedFilesCount} files in {storeReductionDurationMs} ms",
+                        totalDeletedFilesCount,
+                        deleteFilesStopwatch.ElapsedMilliseconds);
+
+                    return new TruncateProcessHistoryReport
+                    (
+                        beginTime: beginTime,
+                        filesForRestoreCount: filesForRestore.Count,
+                        discoveredFilesCount: filePathsInProcessStorePartitions.Sum(partition => partition.Count),
+                        deletedFilesCount: totalDeletedFilesCount,
+                        storeReductionTimeSpentMilli: (int)storeReductionStopwatch.ElapsedMilliseconds,
+                        storeReductionReport: storeReductionReport,
+                        getFilesForRestoreTimeSpentMilli: (int)getFilesForRestoreStopwatch.ElapsedMilliseconds,
+                        deleteFilesTimeSpentMilli: (int)deleteFilesStopwatch.ElapsedMilliseconds,
+                        lockedTimeSpentMilli: (int)lockStopwatch.ElapsedMilliseconds,
+                        totalTimeSpentMilli: (int)totalStopwatch.ElapsedMilliseconds
+                    );
+                }
+            }
+
+            if (context.Request.Path.Equals(new PathString(PathApiTruncateProcessHistory)))
+            {
+                var truncateResult = truncateProcessHistory(productionBlockDurationLimit: TimeSpan.FromMinutes(1));
+
+                context.Response.StatusCode = 200;
+                context.Response.ContentType = "application/json";
+                await context.Response.WriteAsync(System.Text.Json.JsonSerializer.Serialize(truncateResult));
+                return;
+            }
+
+            {
+                if (context.Request.Path.StartsWithSegments(
+                    new PathString(PathApiProcessHistoryFileStoreGetFileContent), out var remainingPathString))
+                {
+                    if (!string.Equals(context.Request.Method, "get", StringComparison.InvariantCultureIgnoreCase))
                     {
                         context.Response.StatusCode = 405;
                         await context.Response.WriteAsync("Method not supported.");
                         return;
                     }
 
-                    var processVersionId = revertToRemainingPath.ToString().Trim('/');
+                    var filePathInStore =
+                        remainingPathString.ToString().Trim('/').Split('/').ToImmutableList();
 
-                    var processVersionCompositionRecord =
-                        new ProcessStoreReaderInFileStore(processStoreFileStore)
-                        .EnumerateSerializedCompositionLogRecordsReverse()
-                        .FirstOrDefault(compositionEntry => CompositionLogRecordInFile.HashBase16FromCompositionRecord(compositionEntry) == processVersionId);
+                    var fileContent = processStoreFileStore.GetFileContent(filePathInStore);
 
-                    if (processVersionCompositionRecord == null)
+                    if (fileContent == null)
                     {
                         context.Response.StatusCode = 404;
-                        await context.Response.WriteAsync("Did not find process version '" + processVersionId + "'.");
+                        await context.Response.WriteAsync("No file at '" + string.Join("/", filePathInStore) + "'.");
                         return;
                     }
 
-                    await attemptContinueWithCompositionEventAndSendHttpResponse(new CompositionLogRecordInFile.CompositionEvent
+                    context.Response.StatusCode = 200;
+                    context.Response.ContentType = "application/octet-stream";
+                    await context.Response.Body.WriteAsync(fileContent as byte[] ?? fileContent.ToArray());
+                    return;
+                }
+            }
+
+            {
+                if (context.Request.Path.StartsWithSegments(
+                    new PathString(PathApiProcessHistoryFileStoreListFilesInDirectory), out var remainingPathString))
+                {
+                    if (!string.Equals(context.Request.Method, "get", StringComparison.InvariantCultureIgnoreCase))
                     {
-                        RevertProcessTo = new ValueInFileStructure { HashBase16 = processVersionId },
+                        context.Response.StatusCode = 405;
+                        await context.Response.WriteAsync("Method not supported.");
+                        return;
+                    }
+
+                    var filePathInStore =
+                        remainingPathString.ToString().Trim('/').Split('/').ToImmutableList();
+
+                    var filesPaths = processStoreFileStore.ListFilesInDirectory(filePathInStore);
+
+                    var filesPathsList =
+                        string.Join('\n', filesPaths.Select(path => string.Join('/', path)));
+
+                    context.Response.StatusCode = 200;
+                    context.Response.ContentType = "application/octet-stream";
+                    await context.Response.Body.WriteAsync(Encoding.UTF8.GetBytes(filesPathsList));
+                    return;
+                }
+            }
+
+            (int statusCode, AttemptContinueWithCompositionEventReport responseReport) attemptContinueWithCompositionEvent(
+                CompositionLogRecordInFile.CompositionEvent compositionLogEvent)
+            {
+                lock (avoidConcurrencyLock)
+                {
+                    var storeReductionStopwatch = System.Diagnostics.Stopwatch.StartNew();
+
+                    var storeReductionReport =
+                        publicAppHost?.processLiveRepresentation?.StoreReductionRecordForCurrentState(processStoreWriter).report;
+
+                    storeReductionStopwatch.Stop();
+
+                    var (statusCode, report) =
+                        AttemptContinueWithCompositionEventAndCommit(
+                            compositionLogEvent,
+                            processStoreFileStore,
+                            testContinueLogger: logEntry => logger.LogInformation(logEntry));
+
+                    report = report with
+                    {
+                        storeReductionTimeSpentMilli = (int)storeReductionStopwatch.ElapsedMilliseconds,
+                        storeReductionReport = storeReductionReport
+                    };
+
+                    startPublicApp();
+
+                    return (statusCode, report);
+                }
+            }
+
+            async System.Threading.Tasks.Task writeAsHttpResponse<ErrT, OkT>(Result<ErrT, OkT> result)
+            {
+                static string reportAsString(object report)
+                {
+                    return report switch
+                    {
+                        null => "",
+
+                        string alreadyString => alreadyString,
+
+                        _ => System.Text.Json.JsonSerializer.Serialize(report)
+                    };
+                }
+
+                var (statusCode, responseBodyString) = result.Unpack(err => (400, reportAsString(err)), ok => (200, reportAsString(ok)));
+
+                context.Response.StatusCode = statusCode;
+                await context.Response.WriteAsync(responseBodyString);
+            }
+
+            async System.Threading.Tasks.Task attemptContinueWithCompositionEventAndSendHttpResponse(
+                CompositionLogRecordInFile.CompositionEvent compositionLogEvent,
+                ILogger? logger = null)
+            {
+                logger?.LogInformation(
+                    "Begin attempt to continue with composition event: " +
+                    System.Text.Json.JsonSerializer.Serialize(compositionLogEvent));
+
+                var (statusCode, attemptReport) = attemptContinueWithCompositionEvent(compositionLogEvent);
+
+                var responseBodyString =
+                System.Text.Json.JsonSerializer.Serialize(
+                    attemptReport,
+                    options: new System.Text.Json.JsonSerializerOptions
+                    {
+                        WriteIndented = true
                     });
-                    return;
-                }
 
-                TruncateProcessHistoryReport truncateProcessHistory(TimeSpan productionBlockDurationLimit)
-                {
-                    var beginTime = CommonConversion.TimeStringViewForReport(DateTimeOffset.UtcNow);
+                context.Response.StatusCode = statusCode;
+                await context.Response.WriteAsync(responseBodyString);
+            }
 
-                    var totalStopwatch = System.Diagnostics.Stopwatch.StartNew();
+            if (context.Request.Path.Equals(PathString.Empty) || context.Request.Path.Equals(new PathString("/")))
+            {
+                var html = ComposeAdminGuiHtml();
 
-                    var numbersOfThreadsToDeleteFiles = 4;
-
-                    var filePathsInProcessStorePartitions =
-                        processStoreFileStore.ListFiles()
-                        .Select((s, i) => (s, i))
-                        .GroupBy(x => x.i % numbersOfThreadsToDeleteFiles)
-                        .Select(g => g.Select(x => x.s).ToImmutableList())
-                        .ToImmutableList();
-
-                    logger.LogInformation(
-                        message: nameof(truncateProcessHistory) + ": Found {filePathCount} file paths to delete",
-                        filePathsInProcessStorePartitions.Sum(partition => partition.Count));
-
-                    lock (avoidConcurrencyLock)
-                    {
-                        var lockStopwatch = System.Diagnostics.Stopwatch.StartNew();
-
-                        var storeReductionStopwatch = System.Diagnostics.Stopwatch.StartNew();
-
-                        var storeReductionReport =
-                            publicAppHost?.processLiveRepresentation?.StoreReductionRecordForCurrentState(processStoreWriter).report;
-
-                        storeReductionStopwatch.Stop();
-
-                        logger.LogInformation(
-                            message: nameof(truncateProcessHistory) + ": Stored reduction in {storeReductionDurationMs} ms",
-                            storeReductionStopwatch.ElapsedMilliseconds);
-
-                        var getFilesForRestoreStopwatch = System.Diagnostics.Stopwatch.StartNew();
-
-                        var filesForRestore =
-                            PersistentProcessLiveRepresentation.GetFilesForRestoreProcess(
-                                processStoreFileStore).files
-                            .Select(filePathAndContent => filePathAndContent.Key)
-                            .ToImmutableHashSet(EnumerableExtension.EqualityComparer<IReadOnlyList<string>>());
-
-                        getFilesForRestoreStopwatch.Stop();
-
-                        var deleteFilesStopwatch = System.Diagnostics.Stopwatch.StartNew();
-
-                        var partitionsTasks =
-                            filePathsInProcessStorePartitions
-                            .Select(partitionFilePaths => System.Threading.Tasks.Task.Run(() =>
-                            {
-                                int partitionDeletedFilesCount = 0;
-
-                                foreach (var filePath in partitionFilePaths)
-                                {
-                                    if (filesForRestore.Contains(filePath))
-                                        continue;
-
-                                    if (productionBlockDurationLimit < lockStopwatch.Elapsed)
-                                        break;
-
-                                    processStoreFileStore.DeleteFile(filePath);
-                                    ++partitionDeletedFilesCount;
-                                }
-
-                                return partitionDeletedFilesCount;
-                            }))
-                            .ToImmutableList();
-
-                        var totalDeletedFilesCount = partitionsTasks.Sum(task => task.Result);
-
-                        deleteFilesStopwatch.Stop();
-
-                        logger.LogInformation(
-                            message: nameof(truncateProcessHistory) + ": Deleted {totalDeletedFilesCount} files in {storeReductionDurationMs} ms",
-                            totalDeletedFilesCount,
-                            deleteFilesStopwatch.ElapsedMilliseconds);
-
-                        return new TruncateProcessHistoryReport
-                        (
-                            beginTime: beginTime,
-                            filesForRestoreCount: filesForRestore.Count,
-                            discoveredFilesCount: filePathsInProcessStorePartitions.Sum(partition => partition.Count),
-                            deletedFilesCount: totalDeletedFilesCount,
-                            storeReductionTimeSpentMilli: (int)storeReductionStopwatch.ElapsedMilliseconds,
-                            storeReductionReport: storeReductionReport,
-                            getFilesForRestoreTimeSpentMilli: (int)getFilesForRestoreStopwatch.ElapsedMilliseconds,
-                            deleteFilesTimeSpentMilli: (int)deleteFilesStopwatch.ElapsedMilliseconds,
-                            lockedTimeSpentMilli: (int)lockStopwatch.ElapsedMilliseconds,
-                            totalTimeSpentMilli: (int)totalStopwatch.ElapsedMilliseconds
-                        );
-                    }
-                }
-
-                if (context.Request.Path.Equals(new PathString(PathApiTruncateProcessHistory)))
-                {
-                    var truncateResult = truncateProcessHistory(productionBlockDurationLimit: TimeSpan.FromMinutes(1));
-
-                    context.Response.StatusCode = 200;
-                    context.Response.ContentType = "application/json";
-                    await context.Response.WriteAsync(System.Text.Json.JsonSerializer.Serialize(truncateResult));
-                    return;
-                }
-
-                {
-                    if (context.Request.Path.StartsWithSegments(
-                        new PathString(PathApiProcessHistoryFileStoreGetFileContent), out var remainingPathString))
-                    {
-                        if (!string.Equals(context.Request.Method, "get", StringComparison.InvariantCultureIgnoreCase))
-                        {
-                            context.Response.StatusCode = 405;
-                            await context.Response.WriteAsync("Method not supported.");
-                            return;
-                        }
-
-                        var filePathInStore =
-                            remainingPathString.ToString().Trim('/').Split('/').ToImmutableList();
-
-                        var fileContent = processStoreFileStore.GetFileContent(filePathInStore);
-
-                        if (fileContent == null)
-                        {
-                            context.Response.StatusCode = 404;
-                            await context.Response.WriteAsync("No file at '" + string.Join("/", filePathInStore) + "'.");
-                            return;
-                        }
-
-                        context.Response.StatusCode = 200;
-                        context.Response.ContentType = "application/octet-stream";
-                        await context.Response.Body.WriteAsync(fileContent as byte[] ?? fileContent.ToArray());
-                        return;
-                    }
-                }
-
-                {
-                    if (context.Request.Path.StartsWithSegments(
-                        new PathString(PathApiProcessHistoryFileStoreListFilesInDirectory), out var remainingPathString))
-                    {
-                        if (!string.Equals(context.Request.Method, "get", StringComparison.InvariantCultureIgnoreCase))
-                        {
-                            context.Response.StatusCode = 405;
-                            await context.Response.WriteAsync("Method not supported.");
-                            return;
-                        }
-
-                        var filePathInStore =
-                            remainingPathString.ToString().Trim('/').Split('/').ToImmutableList();
-
-                        var filesPaths = processStoreFileStore.ListFilesInDirectory(filePathInStore);
-
-                        var filesPathsList =
-                            string.Join('\n', filesPaths.Select(path => string.Join('/', path)));
-
-                        context.Response.StatusCode = 200;
-                        context.Response.ContentType = "application/octet-stream";
-                        await context.Response.Body.WriteAsync(Encoding.UTF8.GetBytes(filesPathsList));
-                        return;
-                    }
-                }
-
-                (int statusCode, AttemptContinueWithCompositionEventReport responseReport) attemptContinueWithCompositionEvent(
-                    CompositionLogRecordInFile.CompositionEvent compositionLogEvent)
-                {
-                    lock (avoidConcurrencyLock)
-                    {
-                        var storeReductionStopwatch = System.Diagnostics.Stopwatch.StartNew();
-
-                        var storeReductionReport =
-                            publicAppHost?.processLiveRepresentation?.StoreReductionRecordForCurrentState(processStoreWriter).report;
-
-                        storeReductionStopwatch.Stop();
-
-                        var (statusCode, report) =
-                            AttemptContinueWithCompositionEventAndCommit(
-                                compositionLogEvent,
-                                processStoreFileStore,
-                                testContinueLogger: logEntry => logger.LogInformation(logEntry));
-
-                        report = report with
-                        {
-                            storeReductionTimeSpentMilli = (int)storeReductionStopwatch.ElapsedMilliseconds,
-                            storeReductionReport = storeReductionReport
-                        };
-
-                        startPublicApp();
-
-                        return (statusCode, report);
-                    }
-                }
-
-                async System.Threading.Tasks.Task writeAsHttpResponse<ErrT, OkT>(Result<ErrT, OkT> result)
-                {
-                    static string reportAsString(object report)
-                    {
-                        if (report is null)
-                            return "";
-
-                        if (report is string alreadyString)
-                            return alreadyString;
-
-                        return System.Text.Json.JsonSerializer.Serialize(report);
-                    }
-
-                    var (statusCode, responseBodyString) = result.Unpack(err => (400, reportAsString(err)), ok => (200, reportAsString(ok)));
-
-                    context.Response.StatusCode = statusCode;
-                    await context.Response.WriteAsync(responseBodyString);
-                }
-
-                async System.Threading.Tasks.Task attemptContinueWithCompositionEventAndSendHttpResponse(
-                    CompositionLogRecordInFile.CompositionEvent compositionLogEvent,
-                    ILogger? logger = null)
-                {
-                    logger?.LogInformation(
-                        "Begin attempt to continue with composition event: " +
-                        System.Text.Json.JsonSerializer.Serialize(compositionLogEvent));
-
-                    var (statusCode, attemptReport) = attemptContinueWithCompositionEvent(compositionLogEvent);
-
-                    var responseBodyString =
-                    System.Text.Json.JsonSerializer.Serialize(
-                        attemptReport,
-                        options: new System.Text.Json.JsonSerializerOptions
-                        {
-                            WriteIndented = true
-                        });
-
-                    context.Response.StatusCode = statusCode;
-                    await context.Response.WriteAsync(responseBodyString);
-                }
-
-                if (context.Request.Path.Equals(PathString.Empty) || context.Request.Path.Equals(new PathString("/")))
-                {
-                    var html = ComposeAdminGuiHtml();
-
-                    context.Response.StatusCode = 200;
-                    await context.Response.WriteAsync(html);
-                    return;
-                }
-
-                context.Response.StatusCode = 404;
-                await context.Response.WriteAsync("Not Found");
+                context.Response.StatusCode = 200;
+                await context.Response.WriteAsync(html);
                 return;
-            });
+            }
+
+            context.Response.StatusCode = 404;
+            await context.Response.WriteAsync("Not Found");
+        });
     }
 
     private static void BeginMakeAdminGuiHtml() =>
@@ -975,7 +975,7 @@ public class StartupAdminInterface
     private static string ComposeAdminGuiHtml() =>
         BuildAdminGuiInteractiveHtml()
         .Unpack(
-            fromErr: err => ComposeAdminGuiStaticHtml(buildInteractiveGuiError: err),
+            fromErr: ComposeAdminGuiStaticHtml,
             fromOk: html => html);
 
     private static Result<string, string> BuildAdminGuiInteractiveHtml() =>
@@ -1002,35 +1002,18 @@ public class StartupAdminInterface
         string.Join(" ", styles.Select(style => style.property + ": " + style.value + ";"))
         + "\"";
 
-    public static string HtmlAttributeCssStyle(IEnumerable<(string property, string value)> styles) =>
-        HtmlAttributeCssStyle(styles.ToArray());
-
-    private static string LinkToGuideUrl => "https://github.com/elm-time/elm-time/blob/main/guide/how-to-configure-and-deploy-an-elm-backend-app.md";
-
     private static string LinkHtmlElementFromUrl(string url) =>
         "<a href='" + url + "'>" + url + "</a>";
 
     private static string HtmlFromLines(params string[] lines) =>
         string.Join("<br>\n", lines);
 
-    private static string HtmlToDescribeApiRoute(ApiRoute apiRoute) =>
-        LinkHtmlElementFromUrl(apiRoute.path) +
-        " [ " + string.Join(", ", apiRoute.methods.Select(m => m.Key.ToUpperInvariant())) + " ]";
-
     private record ApiRoute(
         string path,
         ImmutableDictionary<string, Func<HttpContext, PublicHostConfiguration?, System.Threading.Tasks.Task>> methods);
 
     public static string HtmlDocument(string body) =>
-        string.Join("\n",
-        new[]
-        {
-            "<html>",
-            "<body>",
-            body,
-            "</body>",
-            "</html>"
-        });
+        string.Join("\n", "<html>", "<body>", body, "</body>", "</html>");
 
     public static (int statusCode, AttemptContinueWithCompositionEventReport responseReport) AttemptContinueWithCompositionEventAndCommit(
         CompositionLogRecordInFile.CompositionEvent compositionLogEvent,

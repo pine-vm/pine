@@ -140,7 +140,7 @@ public class ElmTestRs
 
         var stdoutLines =
             stdout
-            .Split(new[] { (char)10, (char)13 })
+            .Split((char)10, (char)13)
             .Where(l => 0 < l?.Length)
             .ToImmutableList();
 

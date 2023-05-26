@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using Pine;
 using Pine.Json;
 using System.Text.Json;
@@ -29,21 +30,37 @@ public record HttpRequestEventStruct(
     HttpRequestContext requestContext,
     HttpRequest request);
 
-public record HttpRequestContext(Maybe<string> clientAddress);
+public record HttpRequest(
+    string method,
+    string uri,
+    Maybe<string> bodyAsBase64,
+    HttpHeader[] headers);
 
-public record HttpRequest(string method, string uri, Maybe<string> bodyAsBase64, HttpHeader[] headers);
+public record HttpRequestContext(
+    Maybe<string> clientAddress);
 
-public record HttpHeader(string name, string[] values);
+public record HttpResponseRequest(
+    string httpRequestId,
+    HttpResponse response);
 
-public record HttpResponseRequest(string httpRequestId, HttpResponse response);
+public record HttpResponse(
+    int statusCode,
+    Maybe<string> bodyAsBase64,
+    IReadOnlyList<HttpHeader> headersToAdd);
 
-public record HttpResponse(int statusCode, Maybe<string> bodyAsBase64, HttpHeader[] headersToAdd);
+public record HttpHeader(
+    string name,
+    string[] values);
 
-public record PosixTimeHasArrivedEventStruct(long posixTimeMilli);
+public record PosixTimeHasArrivedEventStruct(
+    long posixTimeMilli);
 
-public record NotifyWhenPosixTimeHasArrivedRequestStruct(long minimumPosixTimeMilli);
+public record NotifyWhenPosixTimeHasArrivedRequestStruct(
+    long minimumPosixTimeMilli);
 
-public record ResultFromTaskWithId(string taskId, TaskResult taskResult);
+public record ResultFromTaskWithId(
+    string taskId,
+    TaskResult taskResult);
 
 [JsonConverter(typeof(JsonConverterForChoiceType))]
 public abstract record TaskResult
@@ -61,12 +78,12 @@ public abstract record TaskResult
 
     public static Result<string, TaskResult> From_2023_02_27(_2023_02_27.TaskResult taskResult)
     {
-        if (taskResult.CreateVolatileProcessResponse is _2023_02_27.Result<CreateVolatileProcessErrorStructure, CreateVolatileProcessComplete> createVolatileProcessResponse)
+        if (taskResult.CreateVolatileProcessResponse is { } createVolatileProcessResponse)
             return
                 Result<string, TaskResult>.ok(
                     new CreateVolatileProcessResponse(createVolatileProcessResponse.AsPineResult()));
 
-        if (taskResult.RequestToVolatileProcessResponse is _2023_02_27.Result<RequestToVolatileProcessError, _2023_02_27.RequestToVolatileProcessComplete> requestToVolatileProcessResponse)
+        if (taskResult.RequestToVolatileProcessResponse is { } requestToVolatileProcessResponse)
             return
                 Result<string, TaskResult>.ok(
                     new RequestToVolatileProcessResponse(
@@ -84,11 +101,14 @@ public abstract record TaskResult
     }
 }
 
-public record CreateVolatileProcessErrorStructure(string exceptionToString);
+public record CreateVolatileProcessErrorStructure(
+    string exceptionToString);
 
-public record CreateVolatileProcessComplete(string processId);
+public record CreateVolatileProcessComplete(
+    string processId);
 
-public record RequestToVolatileProcessError(object ProcessNotFound);
+public record RequestToVolatileProcessError(
+    object ProcessNotFound);
 
 public record RequestToVolatileProcessComplete(
     Maybe<string> exceptionToString,

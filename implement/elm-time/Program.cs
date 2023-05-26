@@ -204,14 +204,13 @@ public class Program
                 var elmFsCommandName = CheckIfExecutableIsRegisteredOnPath().commandName;
 
                 var overviewText =
-                    string.Join("\n\n", new[]
-                    {
+                    string.Join(
+                        "\n\n",
                         app.Description,
                         "Usage: " + elmFsCommandName + " [command] [options]",
                         "These are common elm-time commands used in various situations:",
                         string.Join("\n\n", groupsTexts),
-                        "'" + elmFsCommandName + " help -a' lists available subcommands.\nSee '" + elmFsCommandName + " help <command>' to read about a specific subcommand.",
-                    });
+                        "'" + elmFsCommandName + " help -a' lists available subcommands.\nSee '" + elmFsCommandName + " help <command>' to read about a specific subcommand.");
 
                 Console.WriteLine(overviewText);
 
@@ -310,7 +309,7 @@ public class Program
 
                 Console.WriteLine("Completed starting the web server with the admin interface at '" + adminInterfaceUrls + "'.");
 
-                WebHostExtensions.WaitForShutdown(webHost);
+                webHost.WaitForShutdown();
             });
         });
 
@@ -1043,7 +1042,7 @@ public class Program
                             }
                         }
 
-                        if (compileToOption.Value() is string compileTo)
+                        if (compileToOption.Value() is { } compileTo)
                         {
                             var profilingScenarios =
                             scenariosResults
@@ -1718,7 +1717,7 @@ public class Program
         var defaultEngineFromEnvironmentVarible =
             defaultFromEnvironmentVariablePrefix switch
             {
-                string variablePrefix => ElmEngineFromEnvironmentVariableWithPrefix(variablePrefix),
+                { } variablePrefix => ElmEngineFromEnvironmentVariableWithPrefix(variablePrefix),
                 null => null
             };
 
@@ -1733,7 +1732,7 @@ public class Program
 
         ElmInteractive.ElmEngineType parseElmEngineTypeFromOption()
         {
-            if (elmEngineOption?.Value() is string implementationAsString)
+            if (elmEngineOption?.Value() is { } implementationAsString)
                 return Enum.Parse<ElmInteractive.ElmEngineType>(implementationAsString, ignoreCase: true);
 
             return defaultEngine;
@@ -1749,7 +1748,7 @@ public class Program
             (environmentVariablePrefix is null ? "" : "_") +
             "elm_engine";
 
-        if (Environment.GetEnvironmentVariable(environmentVariable) is not string asString)
+        if (Environment.GetEnvironmentVariable(environmentVariable) is not { } asString)
             return null;
 
         if (Enum.TryParse<ElmInteractive.ElmEngineType>(asString, ignoreCase: true, out var result))

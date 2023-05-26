@@ -23,7 +23,7 @@ public class JsEngineJintOptimizedForElmApps
         yield return new FunctionDelegateIntoHost(
             // https://github.com/danfishgold/base64-bytes/blob/ee966331d3819f56244145ed485ab13b0dc4f45a/src/Decode.elm#L8-L10
             delegatedJavaScriptFunctionName: "$danfishgold$base64_bytes$Decode$fromBytes",
-            buildWrapperJavaScript: (hostFuncName, originalExpression) =>
+            buildWrapperJavaScript: (hostFuncName, _) =>
             {
                 var dataViewParamName = "dataView";
 
@@ -69,7 +69,7 @@ public class JsEngineJintOptimizedForElmApps
             // https://github.com/danfishgold/base64-bytes/blob/ee966331d3819f56244145ed485ab13b0dc4f45a/src/Encode.elm#L8-L10
             delegatedJavaScriptFunctionName: "$danfishgold$base64_bytes$Encode$toBytes",
             // toBytes : String -> Maybe Bytes
-            buildWrapperJavaScript: (hostFuncName, originalExpression) => new Esprima.Ast.Identifier(hostFuncName),
+            buildWrapperJavaScript: (hostFuncName, _) => new Esprima.Ast.Identifier(hostFuncName),
             hostFunc: (engine, _, arguments) =>
             {
                 var argumentString = arguments.Single().AsString();
@@ -89,7 +89,7 @@ public class JsEngineJintOptimizedForElmApps
         yield return new FunctionDelegateIntoHost(
             // https://github.com/elm/bytes/blob/2bce2aeda4ef18c3dcccd84084647d22a7af36a6/src/Elm/Kernel/Bytes.js#L74-L85
             delegatedJavaScriptFunctionName: "_Bytes_getStringWidth",
-            buildWrapperJavaScript: (hostFuncName, originalExpression) => new Esprima.Ast.Identifier(hostFuncName),
+            buildWrapperJavaScript: (hostFuncName, _) => new Esprima.Ast.Identifier(hostFuncName),
             hostFunc: (_, _, arguments) =>
             {
                 var argument = arguments.Single();
@@ -179,7 +179,7 @@ public class JsEngineJintOptimizedForElmApps
         yield return new FunctionDelegateIntoHost(
             // https://github.com/folkertdev/elm-sha2/blob/2a106ca6850c3f8197e02c7e6a3e3797f599e87a/src/SHA256.elm#L103-L105
             delegatedJavaScriptFunctionName: "$folkertdev$elm_sha2$SHA256$fromBytes",
-            buildWrapperJavaScript: (hostFuncName, originalExpression) => new Esprima.Ast.Identifier(hostFuncName),
+            buildWrapperJavaScript: (hostFuncName, _) => new Esprima.Ast.Identifier(hostFuncName),
             hostFunc: (engine, _, arguments) =>
             {
                 var argumentDataView = arguments[0];
@@ -207,7 +207,7 @@ public class JsEngineJintOptimizedForElmApps
         yield return new FunctionDelegateIntoHost(
             // https://github.com/folkertdev/elm-sha2/blob/2a106ca6850c3f8197e02c7e6a3e3797f599e87a/src/SHA256.elm#L67-L69
             delegatedJavaScriptFunctionName: "$folkertdev$elm_sha2$SHA256$fromString",
-            buildWrapperJavaScript: (hostFuncName, originalExpression) => new Esprima.Ast.Identifier(hostFuncName),
+            buildWrapperJavaScript: (hostFuncName, _) => new Esprima.Ast.Identifier(hostFuncName),
             hostFunc: (engine, _, arguments) =>
             {
                 var argumentString = arguments[0].AsString();

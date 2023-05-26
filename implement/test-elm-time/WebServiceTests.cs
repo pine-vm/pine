@@ -472,7 +472,7 @@ public class WebServiceTests
             Microsoft.AspNetCore.WebHost.CreateDefaultBuilder()
             .Configure(app =>
             {
-                app.Run(async (context) =>
+                app.Run(async context =>
                 {
                     var requestRecord = await Asp.AsPersistentProcessInterfaceHttpRequest(context.Request);
 

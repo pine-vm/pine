@@ -27,7 +27,7 @@ public static class EnumerableExtension
     public static IEnumerable<OutT> SelectWhereNotNull<InT, OutT>(this IEnumerable<InT> source, Func<InT, OutT?> selector) where OutT : class
     {
         foreach (var item in source)
-            if (selector(item) is OutT notNull)
+            if (selector(item) is { } notNull)
                 yield return notNull;
     }
 

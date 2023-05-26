@@ -83,9 +83,9 @@ public static class Maybe
 {
     public static Maybe<ClassJustT> NothingFromNull<ClassJustT>(ClassJustT? maybeNull)
         where ClassJustT : class =>
-        maybeNull is ClassJustT notNull ? Maybe<ClassJustT>.just(notNull) : Maybe<ClassJustT>.nothing();
+        maybeNull is { } notNull ? Maybe<ClassJustT>.just(notNull) : Maybe<ClassJustT>.nothing();
 
     public static Maybe<StructJustT> NothingFromNull<StructJustT>(StructJustT? maybeNull)
         where StructJustT : struct =>
-        maybeNull is StructJustT notNull ? Maybe<StructJustT>.just(notNull) : Maybe<StructJustT>.nothing();
+        maybeNull is { } notNull ? Maybe<StructJustT>.just(notNull) : Maybe<StructJustT>.nothing();
 }

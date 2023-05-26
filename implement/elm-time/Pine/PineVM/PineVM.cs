@@ -239,7 +239,7 @@ public class PineVM
         ImmutableDictionary<string, Func<Func<PineValue, Result<string, Expression>>, PineValue, Result<string, Expression>>>.Empty
         .SetItem(
             "Literal",
-            (generalDecoder, literal) => Result<string, Expression>.ok(new Expression.LiteralExpression(literal)))
+            (_, literal) => Result<string, Expression>.ok(new Expression.LiteralExpression(literal)))
         .SetItem(
             "List",
             (generalDecoder, listValue) =>

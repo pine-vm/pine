@@ -148,7 +148,7 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
                     {
                         var appConfigAsTree =
                         PineValueComposition.ParseAsTreeWithStringPath(appConfigComponent)
-                        .Extract(error => throw new Exception("Unexpected content of appConfigComponent " + reductionRecord.appConfig?.HashBase16 + ": Failed to parse as tree."));
+                        .Extract(_ => throw new Exception("Unexpected content of appConfigComponent " + reductionRecord.appConfig?.HashBase16 + ": Failed to parse as tree."));
 
                         if (elmAppStateComponent is not PineValue.BlobValue elmAppStateComponentBlob)
                         {
@@ -255,7 +255,7 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
 
             var compositionEvent = compositionLogRecord.compositionRecord.compositionEvent;
 
-            if (compositionLogRecord.reduction is ReductionWithResolvedDependencies reductionWithResolvedDependencies)
+            if (compositionLogRecord.reduction is { } reductionWithResolvedDependencies)
             {
                 var prepareProcessResult =
                     ProcessFromDeployment(
@@ -269,7 +269,7 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
 
                 return
                     StateShim.StateShim.SetAppStateOnMainBranch(process: newElmAppProcess, stateJson: elmAppState)
-                    .AndThen(setStateOk =>
+                    .AndThen(_ =>
                     {
                         process.lastElmAppVolatileProcess?.Dispose();
 
@@ -352,7 +352,7 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
         ElmAppInterfaceConfig? overrideElmAppInterfaceConfig,
         Func<IJsEngine>? overrideJsEngineFactory = null)
     {
-        if (compositionEvent.UpdateElmAppStateForEvent is byte[] updateElmAppStateForEvent)
+        if (compositionEvent.UpdateElmAppStateForEvent is { } updateElmAppStateForEvent)
         {
             return
                 TranslateUpdateElmAppEventFromStore(updateElmAppStateForEvent)
@@ -385,7 +385,7 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
                 });
         }
 
-        if (compositionEvent.ApplyFunctionOnElmAppState is byte[] applyFunctionOnElmAppStateSerial)
+        if (compositionEvent.ApplyFunctionOnElmAppState is { } applyFunctionOnElmAppStateSerial)
         {
             var applyFunctionOnElmAppState =
                 JsonSerializer.Deserialize<CompositionLogRecordInFile.ApplyFunctionOnStateEvent>(applyFunctionOnElmAppStateSerial);
@@ -403,7 +403,7 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
                 .Map(_ => processBefore);
         }
 
-        if (compositionEvent.SetElmAppState is byte[] setElmAppState)
+        if (compositionEvent.SetElmAppState is { } setElmAppState)
         {
             if (processBefore.lastElmAppVolatileProcess == null)
             {
@@ -421,7 +421,7 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
                 .Map(_ => processBefore);
         }
 
-        if (compositionEvent.DeployAppConfigAndMigrateElmAppState is TreeNodeWithStringPath deployAppConfigAndMigrateElmAppState)
+        if (compositionEvent.DeployAppConfigAndMigrateElmAppState is { } deployAppConfigAndMigrateElmAppState)
         {
             var elmAppStateBefore =
                 processBefore.lastElmAppVolatileProcess is null ?
@@ -572,14 +572,14 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
             return
                 webServiceEvent_2023_02_27 switch
                 {
-                    InterfaceToHost._2023_02_27.AppEventStructure webServiceEvent
-                    when webServiceEvent.ArrivedAtTimeEvent is InterfaceToHost._2023_02_27.ArrivedAtTimeEventStructure arrivedAtTime =>
+                    { } webServiceEvent
+                    when webServiceEvent.ArrivedAtTimeEvent is { } arrivedAtTime =>
                     continueWithWebServiceEvent(
                         new InterfaceToHost.BackendEventStruct.PosixTimeHasArrivedEvent(
                             new InterfaceToHost.PosixTimeHasArrivedEventStruct(posixTimeMilli: arrivedAtTime.posixTimeMilli))),
 
-                    InterfaceToHost._2023_02_27.AppEventStructure webServiceEvent
-                    when webServiceEvent.HttpRequestEvent is InterfaceToHost._2023_02_27.HttpRequestEvent httpRequestEvent =>
+                    { } webServiceEvent
+                    when webServiceEvent.HttpRequestEvent is { } httpRequestEvent =>
 
                     continueWithWebServiceEvent(
                         new InterfaceToHost.BackendEventStruct.HttpRequestEvent(
@@ -594,8 +594,8 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
                                     bodyAsBase64: Maybe.NothingFromNull(httpRequestEvent.request.bodyAsBase64),
                                     headers: httpRequestEvent.request.headers)))),
 
-                    InterfaceToHost._2023_02_27.AppEventStructure webServiceEvent
-                    when webServiceEvent.TaskCompleteEvent is InterfaceToHost._2023_02_27.ResultFromTaskWithId taskCompleteEvent =>
+                    { } webServiceEvent
+                    when webServiceEvent.TaskCompleteEvent is { } taskCompleteEvent =>
 
                     InterfaceToHost.TaskResult.From_2023_02_27(taskCompleteEvent.taskResult)
                     .AndThen(taskResult =>
@@ -677,7 +677,7 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
 
             return
                 PineValueComposition.ParseAsTreeWithStringPath(component)
-                .Extract(error => throw new Exception("Failed to load component " + componentHash + " as tree: Failed to parse as tree."));
+                .Extract(_ => throw new Exception("Failed to load component " + componentHash + " as tree: Failed to parse as tree."));
         }
 
         if (compositionEvent.UpdateElmAppStateForEvent != null)
@@ -749,7 +749,7 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
                     new ProcessStoreReaderInFileStore(projectionResult.projectedReader),
                     logger: message => logger?.Invoke(message),
                     overrideJsEngineFactory: overrideJsEngineFactory)
-                .Map(restoreOk => projectionResult);
+                .Map(_ => projectionResult);
         }
         catch (Exception e)
         {

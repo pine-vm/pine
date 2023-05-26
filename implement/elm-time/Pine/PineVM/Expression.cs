@@ -20,7 +20,7 @@ public abstract record Expression
     {
         public virtual bool Equals(ListExpression? other)
         {
-            if (other is not ListExpression notNull)
+            if (other is not { } notNull)
                 return false;
 
             return
@@ -57,7 +57,7 @@ public abstract record Expression
     {
         public virtual bool Equals(KernelApplicationExpression? other)
         {
-            if (other is not KernelApplicationExpression notNull)
+            if (other is not { } notNull)
                 return false;
 
             return

@@ -197,7 +197,7 @@ public class JsonConverterForChoiceType<T> : JsonConverter<T>
         {
             var constructorParameter = variant.ConstructorParameters[argumentIndex];
 
-            if (constructorParameter.JsonIgnore is JsonConverterForChoiceType.JsonIgnore JsonIgnore)
+            if (constructorParameter.JsonIgnore is { } JsonIgnore)
             {
                 constructorArguments[argumentIndex] = JsonIgnore.Default;
             }
