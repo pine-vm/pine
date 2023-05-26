@@ -104,6 +104,11 @@ public class PublicAppState
 
         var logger = loggerFactory.CreateLogger<PublicAppState>();
 
+        appBuilder.Services.AddResponseCompression(options =>
+        {
+            options.EnableForHttps = true;
+        });
+
         var webHostBuilder =
             appBuilder.WebHost
             .ConfigureKestrel(kestrelOptions =>
@@ -132,6 +137,8 @@ public class PublicAppState
             applicationStoppingCancellationTokenSource.Cancel();
             app.Logger?.LogInformation("Public app noticed ApplicationStopping.");
         });
+
+        app.UseResponseCompression();
 
         app.Run(async context =>
         {
@@ -232,6 +239,8 @@ public class PublicAppState
 
             if (headerContentType != null)
                 context.Response.ContentType = headerContentType;
+
+            context.Response.Headers.Add("X-Powered-By", "Elm-Time");
 
             ReadOnlyMemory<byte>? contentAsByteArray = null;
 

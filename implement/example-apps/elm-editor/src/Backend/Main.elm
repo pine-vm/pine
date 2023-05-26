@@ -12,7 +12,6 @@ import CompilationInterface.ElmMake
 import CompilationInterface.SourceFiles
 import Dict
 import FileTree
-import Flate
 import MonacoHtml
 import Platform.WebService
 import Set
@@ -277,13 +276,13 @@ updateForHttpRequestEventExceptRequestsToVolatileProcess httpRequestEvent stateB
                             httpResponseOkWithBodyAsBase64
                                 (Just
                                     (if debug then
-                                        CompilationInterface.ElmMake.elm_make____src_Frontend_Main_elm.debug.javascript.gzip.base64
+                                        CompilationInterface.ElmMake.elm_make____src_Frontend_Main_elm.debug.javascript.base64
 
                                      else
-                                        CompilationInterface.ElmMake.elm_make____src_Frontend_Main_elm.javascript.gzip.base64
+                                        CompilationInterface.ElmMake.elm_make____src_Frontend_Main_elm.javascript.base64
                                     )
                                 )
-                                (staticContentHttpHeaders { contentType = "text/javascript", contentEncoding = Just "gzip" })
+                                (staticContentHttpHeaders { contentType = "text/javascript", contentEncoding = Nothing })
                                 |> continueWithStaticHttpResponse
 
                         Just (Backend.Route.StaticFileRoute Backend.Route.MonacoFrameDocumentRoute) ->
@@ -370,9 +369,8 @@ updateForRequestToVolatileProcessResult taskId requestToVolatileProcessResult st
                                                                     returnValueToString
                                                                         |> Bytes.Encode.string
                                                                         |> Bytes.Encode.encode
-                                                                        |> Flate.deflateGZip
                                                             in
-                                                            ( [ { name = "Content-Encoding", values = [ "gzip" ] } ]
+                                                            ( []
                                                             , deflateEncodedBody |> Base64.fromBytes
                                                             )
                                             in

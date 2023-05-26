@@ -49,7 +49,9 @@ updateForHttpRequestEvent httpRequestEvent stateBefore =
             then
                 { statusCode = 200
                 , bodyAsBase64 = Just CompilationInterface.ElmMake.elm_make____src_Frontend_Main_elm.debug.base64
-                , headersToAdd = []
+                , headersToAdd =
+                    [ { name = "Content-Type", values = [ "text/html" ] }
+                    ]
                 }
 
             else

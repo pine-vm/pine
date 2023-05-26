@@ -299,7 +299,7 @@ public class StartupAdminInterface
                 {
                     context.Request.Headers.TryGetValue("Authorization", out var requestAuthorizationHeaderValue);
 
-                    context.Response.Headers.Add("X-Powered-By", "Elm-Time " + Program.AppVersionId);
+                    context.Response.Headers.Add("X-Powered-By", "Elm-Time");
 
                     AuthenticationHeaderValue.TryParse(
                         requestAuthorizationHeaderValue.FirstOrDefault(), out var requestAuthorization);
