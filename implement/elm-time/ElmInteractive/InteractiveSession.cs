@@ -20,7 +20,10 @@ public interface IInteractiveSession : IDisposable
             new InteractiveSessionJavaScript(appCodeTree, InteractiveSessionJavaScript.JavaScriptEngineFlavor.V8),
 
             ElmEngineType.Pine =>
-            new InteractiveSessionPine(appCodeTree),
+            new InteractiveSessionPine(appCodeTree, caching: true),
+
+            ElmEngineType.Pine_without_cache =>
+            new InteractiveSessionPine(appCodeTree, caching: false),
 
             _ => throw new ArgumentOutOfRangeException(nameof(engineType), $"Unexpected engine type value: {engineType}"),
         };
@@ -35,5 +38,6 @@ public enum ElmEngineType
 {
     JavaScript_Jint = 1,
     JavaScript_V8 = 2,
-    Pine = 4
+    Pine = 4,
+    Pine_without_cache = 4001
 }

@@ -22,14 +22,47 @@ public class InteractiveSessionPine : IInteractiveSession
 
     private readonly PineVM pineVM;
 
+    private readonly PineVMCache? pineVMCache;
+
     private static readonly ConcurrentDictionary<ElmInteractive.CompileInteractiveEnvironmentResult, ElmInteractive.CompileInteractiveEnvironmentResult> compiledEnvironmentCache = new();
 
-    public InteractiveSessionPine(TreeNodeWithStringPath? appCodeTree, PineVM? pineVM = null)
+    public long? FunctionApplicationCacheLookupCount => pineVMCache?.FunctionApplicationCacheLookupCount;
+
+    public long EvaluateExpressionCount => pineVM.EvaluateExpressionCount;
+
+    public InteractiveSessionPine(TreeNodeWithStringPath? appCodeTree, bool caching)
+        :
+        this(appCodeTree: appCodeTree, BuildPineVM(caching))
     {
-        this.pineVM = pineVM ?? new PineVM();
+    }
+
+    public InteractiveSessionPine(TreeNodeWithStringPath? appCodeTree, PineVM pineVM)
+        :
+        this(appCodeTree: appCodeTree, (pineVM, pineVMCache: null))
+    {
+    }
+
+    InteractiveSessionPine(TreeNodeWithStringPath? appCodeTree, (PineVM pineVM, PineVMCache? pineVMCache) pineVMAndCache)
+    {
+        pineVM = pineVMAndCache.pineVM;
+        pineVMCache = pineVMAndCache.pineVMCache;
 
         buildPineEvalContextTask = System.Threading.Tasks.Task.Run(() =>
             CompileInteractiveEnvironment(appCodeTree: appCodeTree));
+    }
+
+    private static (PineVM, PineVMCache?) BuildPineVM(bool caching)
+    {
+        var cache = caching ? new PineVMCache() : null;
+
+        var overrideEvaluateExpression =
+            cache is null
+            ?
+            null
+            :
+            (PineVM.OverrideEvalExprDelegate?)cache.BuildEvalExprDelegate;
+
+        return (new PineVM(overrideEvaluateExpression: overrideEvaluateExpression), cache);
     }
 
     private static readonly ConcurrentDictionary<string, Result<string, PineValue>> compileEvalContextCache = new();

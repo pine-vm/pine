@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
@@ -10,16 +9,9 @@ public class PineVM
 {
     public delegate Result<string, PineValue> EvalExprDelegate(Expression expression, PineValue environment);
 
-    public record FunctionApplicationCacheEntryKey(PineValue function, PineValue argument);
+    public delegate EvalExprDelegate OverrideEvalExprDelegate(EvalExprDelegate evalExprDelegate);
 
-    private readonly ConcurrentDictionary<FunctionApplicationCacheEntryKey, PineValue> functionApplicationCache = new();
-
-    public IImmutableDictionary<FunctionApplicationCacheEntryKey, PineValue> CopyFunctionApplicationCache() =>
-        functionApplicationCache.ToImmutableDictionary();
-
-    public long FunctionApplicationCacheSize => functionApplicationCache.Count;
-
-    public long FunctionApplicationCacheLookupCount { private set; get; }
+    public long EvaluateExpressionCount { private set; get; }
 
     public long FunctionApplicationMaxEnvSize { private set; get; }
 
@@ -29,7 +21,7 @@ public class PineVM
 
     public PineVM(
         IReadOnlyDictionary<PineValue, Func<EvalExprDelegate, PineValue, Result<string, PineValue>>>? decodeExpressionOverrides = null,
-        Func<EvalExprDelegate, EvalExprDelegate>? overrideEvaluateExpression = null)
+        OverrideEvalExprDelegate? overrideEvaluateExpression = null)
     {
         evalExprDelegate =
             overrideEvaluateExpression?.Invoke(EvaluateExpressionDefault) ?? EvaluateExpressionDefault;
@@ -110,27 +102,13 @@ public class PineVM
         .MapError(error => "Failed to evaluate argument: " + error)
         .AndThen(argumentValue =>
         {
-            ++FunctionApplicationCacheLookupCount;
-
-            var cacheKey = new FunctionApplicationCacheEntryKey(function: functionValue, argument: argumentValue);
-
-            if (functionApplicationCache.TryGetValue(cacheKey, out var cachedResult))
-                return Result<string, PineValue>.ok(cachedResult);
-
             if (argumentValue is PineValue.ListValue list)
             {
                 FunctionApplicationMaxEnvSize =
                 FunctionApplicationMaxEnvSize < list.Elements.Count ? list.Elements.Count : FunctionApplicationMaxEnvSize;
             }
 
-            var evalStopwatch = System.Diagnostics.Stopwatch.StartNew();
-
             var evalResult = EvaluateExpression(environment: argumentValue, expression: functionExpression);
-
-            if (4 <= evalStopwatch.ElapsedMilliseconds && evalResult is Result<string, PineValue>.Ok evalOk)
-            {
-                functionApplicationCache[cacheKey] = evalOk.Value;
-            }
 
             return evalResult;
         })));
