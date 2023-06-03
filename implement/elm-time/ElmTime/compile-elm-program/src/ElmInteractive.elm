@@ -2255,6 +2255,90 @@ emitFunctionBindingEnvironmentToName stackBefore function =
             )
 
 
+{-| This function returns an expression that evaluates to the encoding of the input expression. In other words, it is an inversion of `Pine.evaluateExpression emptyEnv >> Pine.decodeExpressionFromValue`
+Most expressions have multiple valid encoded representations, and the one produced here supports building templates to bind the parent environment.
+One typical use case for these templates is wrapping a function to support the partial application of the wrapped function.
+-}
+generateTemplateEvaluatingToExpression : Pine.Expression -> Pine.Expression
+generateTemplateEvaluatingToExpression expression =
+    let
+        buildFromTagAndArgument tagName argument =
+            [ Pine.LiteralExpression (Pine.valueFromString tagName)
+            , argument
+            ]
+                |> Pine.ListExpression
+
+        buildRecordExpression fields =
+            fields
+                |> List.map
+                    (\( name, value ) ->
+                        [ Pine.LiteralExpression (Pine.valueFromString name)
+                        , value
+                        ]
+                            |> Pine.ListExpression
+                    )
+                |> Pine.ListExpression
+    in
+    case expression of
+        Pine.ListExpression list ->
+            buildFromTagAndArgument
+                "List"
+                (Pine.ListExpression (List.map generateTemplateEvaluatingToExpression list))
+
+        Pine.LiteralExpression literal ->
+            buildFromTagAndArgument
+                "Literal"
+                (Pine.LiteralExpression literal)
+
+        Pine.DecodeAndEvaluateExpression decodeAndEval ->
+            buildFromTagAndArgument
+                "DecodeAndEvaluate"
+                (buildRecordExpression
+                    [ ( "expression", generateTemplateEvaluatingToExpression decodeAndEval.expression )
+                    , ( "environment", generateTemplateEvaluatingToExpression decodeAndEval.environment )
+                    ]
+                )
+
+        Pine.KernelApplicationExpression kernelApp ->
+            buildFromTagAndArgument
+                "KernelApplication"
+                (buildRecordExpression
+                    [ ( "functionName", Pine.LiteralExpression (Pine.valueFromString kernelApp.functionName) )
+                    , ( "argument", generateTemplateEvaluatingToExpression kernelApp.argument )
+                    ]
+                )
+
+        Pine.ConditionalExpression conditional ->
+            buildFromTagAndArgument
+                "Conditional"
+                (buildRecordExpression
+                    [ ( "condition"
+                      , generateTemplateEvaluatingToExpression conditional.condition
+                      )
+                    , ( "ifTrue"
+                      , generateTemplateEvaluatingToExpression conditional.ifTrue
+                      )
+                    , ( "ifFalse"
+                      , generateTemplateEvaluatingToExpression conditional.ifFalse
+                      )
+                    ]
+                )
+
+        Pine.EnvironmentExpression ->
+            buildFromTagAndArgument
+                "Environment"
+                (Pine.ListExpression [])
+
+        Pine.StringTagExpression tag tagged ->
+            buildFromTagAndArgument
+                "StringTag"
+                (Pine.ListExpression
+                    [ Pine.LiteralExpression (Pine.valueFromString tag)
+                    , generateTemplateEvaluatingToExpression tagged
+                    ]
+                )
+
+
 emitClosureExpressions :
     EmitStack
     -> List ( String, Expression )
