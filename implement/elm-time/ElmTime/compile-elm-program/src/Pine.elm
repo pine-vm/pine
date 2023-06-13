@@ -84,10 +84,16 @@ evaluateExpression context expression =
 
         ListExpression listElements ->
             listElements
-                |> List.map (evaluateExpression context)
+                |> List.indexedMap
+                    (\listElementIndex listElement ->
+                        evaluateExpression context listElement
+                            |> Result.mapError
+                                (DescribePathNode
+                                    ("Failed to evaluate list item " ++ String.fromInt listElementIndex ++ ": ")
+                                )
+                    )
                 |> Result.Extra.combine
                 |> Result.map ListValue
-                |> Result.mapError (DescribePathNode "Failed to evaluate list element")
 
         DecodeAndEvaluateExpression decodeAndEvaluate ->
             evaluateDecodeAndEvaluate context decodeAndEvaluate
@@ -131,6 +137,7 @@ evaluateExpression context expression =
                         tag
             in
             evaluateExpression context tagged
+                |> Result.mapError (DescribePathNode ("Failed to evaluate tagged expression '" ++ tag ++ "': "))
 
 
 valueFromContextExpansionWithName : ( String, Value ) -> Value
@@ -556,7 +563,7 @@ stringFromListValue =
             >> Result.andThen intFromBigInt
         )
         >> Result.Extra.combine
-        >> Result.mapError ((++) "Failed to map list elements to chars: ")
+        >> Result.mapError ((++) "Failed to map list items to chars: ")
         >> Result.map (List.map Char.fromCode >> String.fromList)
 
 
@@ -759,7 +766,15 @@ decodeExpressionFromValue value =
                   )
                 , ( "List"
                   , decodePineListValue
-                        >> Result.andThen (List.map decodeExpressionFromValue >> Result.Extra.combine)
+                        >> Result.andThen
+                            (List.indexedMap
+                                (\itemIndex item ->
+                                    item
+                                        |> decodeExpressionFromValue
+                                        |> Result.mapError ((++) ("Failed to decode item at index " ++ String.fromInt itemIndex ++ ": "))
+                                )
+                                >> Result.Extra.combine
+                            )
                         >> Result.map ListExpression
                   )
                 , ( "DecodeAndEvaluate"
@@ -893,7 +908,7 @@ decodeRecordFromPineValue =
                                                     |> Result.map (\fieldName -> ( fieldName, fieldValue ) :: fields)
 
                                             _ ->
-                                                Err ("Unexpected number of list elements for field: " ++ String.fromInt (List.length fieldList))
+                                                Err ("Unexpected number of list items for field: " ++ String.fromInt (List.length fieldList))
                                     )
                         )
                 )
@@ -918,10 +933,11 @@ encodeUnionToPineValue tagName unionTagValue =
 
 
 decodeUnionFromPineValue : Dict.Dict String (Value -> Result String a) -> Value -> Result String a
-decodeUnionFromPineValue tags =
-    decodePineListValue
-        >> Result.andThen decodeListWithExactlyTwoElements
-        >> Result.andThen
+decodeUnionFromPineValue tags value =
+    value
+        |> decodePineListValue
+        |> Result.andThen decodeListWithExactlyTwoElements
+        |> Result.andThen
             (\( tagNameValue, unionTagValue ) ->
                 stringFromValue tagNameValue
                     |> Result.mapError ((++) "Failed to decode union tag name: ")
@@ -929,12 +945,16 @@ decodeUnionFromPineValue tags =
                         (\tagName ->
                             case tags |> Dict.get tagName of
                                 Nothing ->
-                                    Err ("Unexpected tag name: " ++ tagName)
+                                    if tagName == "" then
+                                        Err "Tag name is empty"
+
+                                    else
+                                        Err ("Unexpected tag name: " ++ tagName)
 
                                 Just tagDecode ->
                                     unionTagValue
                                         |> tagDecode
-                                        |> Result.mapError ((++) "Failed to decode tag value: ")
+                                        |> Result.mapError ((++) ("Failed to decode value for tag " ++ tagName ++ ": "))
                         )
             )
         >> Result.mapError ((++) "Failed to decode union: ")
