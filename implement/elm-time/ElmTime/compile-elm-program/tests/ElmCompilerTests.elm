@@ -1,7 +1,8 @@
 module ElmCompilerTests exposing (..)
 
 import BigInt
-import ElmInteractive exposing (InteractiveContext(..))
+import Dict
+import ElmInteractive exposing (Expression(..), InteractiveContext(..))
 import Expect
 import Pine
 import Result.Extra
@@ -39,7 +40,19 @@ standardTestEnvironments =
 
 compiler_reduces_decode_and_eval_test_cases : List ( String, ReduceDecodeAndEvalTestCase )
 compiler_reduces_decode_and_eval_test_cases =
-    [ ( "simple reducible - list head"
+    [ ( "simple reducible - literal"
+      , { original =
+            { expression =
+                Pine.LiteralExpression (Pine.valueFromString "test")
+                    |> Pine.encodeExpressionAsValue
+                    |> Pine.LiteralExpression
+            , environment = Pine.ListExpression []
+            }
+        , expected = Pine.LiteralExpression (Pine.valueFromString "test")
+        , additionalTestEnvironments = []
+        }
+      )
+    , ( "simple reducible - list head"
       , { original =
             { expression =
                 Pine.EnvironmentExpression
@@ -176,71 +189,914 @@ compilerReducesDecodeAndEvaluateExpression =
         |> Test.describe "Compiler reduces decode and eval expression"
 
 
-generateTemplateEvaluatingToExpressionTests : Test.Test
-generateTemplateEvaluatingToExpressionTests =
-    [ ( "Empty list expression"
-      , Pine.ListExpression []
+emitClosureExpressionTests : Test.Test
+emitClosureExpressionTests =
+    [ ( "Zero parameters"
+      , { functionInnerExpr =
+            ElmInteractive.LiteralExpression (Pine.valueFromString "test")
+        , functionParams = []
+        , arguments = []
+        , environmentFunctions = []
+        , expectedValue = Pine.valueFromString "test"
+        }
       )
-    , ( "List of two empty lists"
-      , Pine.ListExpression
-            [ Pine.ListExpression []
-            , Pine.ListExpression []
+    , ( "Zero parameters - return from function with one param"
+      , { functionInnerExpr =
+            ElmInteractive.FunctionApplicationExpression
+                (ReferenceExpression "repeat_three_times")
+                [ ElmInteractive.LiteralExpression (Pine.valueFromString "argument_alfa") ]
+        , functionParams = []
+        , arguments = []
+        , environmentFunctions =
+            [ ( "repeat_three_times"
+              , { functionInnerExpr =
+                    ElmInteractive.ListExpression
+                        [ ElmInteractive.ReferenceExpression "param_name"
+                        , ElmInteractive.ReferenceExpression "param_name"
+                        , ElmInteractive.ReferenceExpression "param_name"
+                        ]
+                , functionParams =
+                    [ [ ( "param_name", identity ) ] ]
+                }
+              )
             ]
+        , expectedValue =
+            Pine.ListValue
+                [ Pine.valueFromString "argument_alfa"
+                , Pine.valueFromString "argument_alfa"
+                , Pine.valueFromString "argument_alfa"
+                ]
+        }
       )
-    , ( "String literal"
-      , Pine.LiteralExpression (Pine.valueFromString "test")
+    , ( "Zero parameters - return literal from function with zero param - once"
+      , { functionInnerExpr =
+            ElmInteractive.FunctionApplicationExpression
+                (ReferenceExpression "return_constant_literal")
+                []
+        , functionParams = []
+        , arguments = []
+        , environmentFunctions =
+            [ ( "return_constant_literal"
+              , { functionInnerExpr =
+                    ElmInteractive.LiteralExpression (Pine.valueFromString "constant")
+                , functionParams = []
+                }
+              )
+            ]
+        , expectedValue = Pine.valueFromString "constant"
+        }
       )
-    , ( "Int literal"
-      , Pine.LiteralExpression (Pine.valueFromBigInt (BigInt.fromInt 3))
+    , ( "Zero parameters - return literal from function with zero param - twice"
+      , { functionInnerExpr =
+            ElmInteractive.FunctionApplicationExpression
+                (ReferenceExpression "return_constant_literal_first")
+                []
+        , functionParams = []
+        , arguments = []
+        , environmentFunctions =
+            [ ( "return_constant_literal_first"
+              , { functionInnerExpr =
+                    ElmInteractive.FunctionApplicationExpression
+                        (ReferenceExpression "return_constant_literal_second")
+                        []
+                , functionParams = []
+                }
+              )
+            , ( "return_constant_literal_second"
+              , { functionInnerExpr =
+                    ElmInteractive.LiteralExpression (Pine.valueFromString "constant")
+                , functionParams = []
+                }
+              )
+            ]
+        , expectedValue = Pine.valueFromString "constant"
+        }
       )
-    , ( "DecodeAndEvaluateExpression"
-      , Pine.DecodeAndEvaluateExpression
-            { expression = Pine.LiteralExpression (Pine.valueFromString "expression-placeholder")
-            , environment = Pine.LiteralExpression (Pine.valueFromString "environment-placeholder")
-            }
+    , ( "One parameter - literal"
+      , { functionInnerExpr =
+            ElmInteractive.LiteralExpression (Pine.valueFromString "test-literal")
+        , functionParams = [ [ ( "param-name", identity ) ] ]
+        , arguments = [ Pine.valueFromString "test-123" ]
+        , environmentFunctions = []
+        , expectedValue = Pine.valueFromString "test-literal"
+        }
       )
-    , ( "KernelApplicationExpression"
-      , Pine.KernelApplicationExpression
-            { functionName = "equal"
-            , argument = Pine.LiteralExpression (Pine.valueFromString "argument-placeholder")
-            }
+    , ( "One parameter - reference"
+      , { functionInnerExpr =
+            ElmInteractive.ReferenceExpression "param-name"
+        , functionParams = [ [ ( "param-name", identity ) ] ]
+        , arguments = [ Pine.valueFromString "test-345" ]
+        , environmentFunctions = []
+        , expectedValue = Pine.valueFromString "test-345"
+        }
       )
-    , ( "ConditionalExpression"
-      , Pine.ConditionalExpression
-            { condition = Pine.LiteralExpression (Pine.valueFromString "condition-placeholder")
-            , ifTrue = Pine.LiteralExpression (Pine.valueFromString "ifTrue-placeholder")
-            , ifFalse = Pine.LiteralExpression (Pine.valueFromString "ifFalse-placeholder")
-            }
+    , ( "One parameter - reference decons tuple second"
+      , { functionInnerExpr =
+            ElmInteractive.ReferenceExpression "param-name"
+        , functionParams =
+            [ [ ( "param-name"
+                , ElmInteractive.listItemFromIndexExpression_Pine 1
+                )
+              ]
+            ]
+        , arguments =
+            [ Pine.ListValue
+                [ Pine.ListValue []
+                , Pine.valueFromString "test-456"
+                ]
+            ]
+        , environmentFunctions = []
+        , expectedValue = Pine.valueFromString "test-456"
+        }
       )
-    , ( "EnvironmentExpression"
-      , Pine.EnvironmentExpression
+    , ( "One parameter - repeat"
+      , { functionInnerExpr =
+            ElmInteractive.FunctionApplicationExpression
+                (ReferenceExpression "repeat_help")
+                [ ElmInteractive.ListExpression
+                    [ ElmInteractive.LiteralExpression (Pine.ListValue [])
+                    , ElmInteractive.ReferenceExpression "count"
+                    , ElmInteractive.ReferenceExpression "value"
+                    ]
+                ]
+        , functionParams =
+            [ [ ( "count"
+                , ElmInteractive.listItemFromIndexExpression_Pine 0
+                )
+              , ( "value"
+                , ElmInteractive.listItemFromIndexExpression_Pine 1
+                )
+              ]
+            ]
+        , arguments =
+            [ Pine.ListValue
+                [ Pine.valueFromBigInt (BigInt.fromInt 3)
+                , Pine.valueFromString "test_elem"
+                ]
+            ]
+        , environmentFunctions =
+            [ ( "repeat_help"
+              , { functionInnerExpr =
+                    ElmInteractive.ConditionalExpression
+                        { condition =
+                            ElmInteractive.KernelApplicationExpression
+                                { functionName = "is_sorted_ascending_int"
+                                , argument =
+                                    ElmInteractive.ListExpression
+                                        [ ElmInteractive.ReferenceExpression "remainingCount"
+                                        , ElmInteractive.LiteralExpression (Pine.valueFromBigInt (BigInt.fromInt 0))
+                                        ]
+                                }
+                        , ifTrue =
+                            ElmInteractive.ReferenceExpression "result"
+                        , ifFalse =
+                            ElmInteractive.FunctionApplicationExpression
+                                (ReferenceExpression "repeat_help")
+                                [ ElmInteractive.ListExpression
+                                    [ ElmInteractive.KernelApplicationExpression
+                                        { functionName = "concat"
+                                        , argument =
+                                            ElmInteractive.ListExpression
+                                                [ ElmInteractive.ListExpression
+                                                    [ ElmInteractive.ReferenceExpression "value"
+                                                    ]
+                                                , ElmInteractive.ReferenceExpression "result"
+                                                ]
+                                        }
+                                    , ElmInteractive.KernelApplicationExpression
+                                        { functionName = "sub_int"
+                                        , argument =
+                                            ElmInteractive.ListExpression
+                                                [ ElmInteractive.ReferenceExpression "remainingCount"
+                                                , ElmInteractive.LiteralExpression (Pine.valueFromBigInt (BigInt.fromInt 1))
+                                                ]
+                                        }
+                                    , ElmInteractive.ReferenceExpression "value"
+                                    ]
+                                ]
+                        }
+                , functionParams =
+                    [ [ ( "result"
+                        , ElmInteractive.listItemFromIndexExpression_Pine 0
+                        )
+                      , ( "remainingCount"
+                        , ElmInteractive.listItemFromIndexExpression_Pine 1
+                        )
+                      , ( "value"
+                        , ElmInteractive.listItemFromIndexExpression_Pine 2
+                        )
+                      ]
+                    ]
+                }
+              )
+            ]
+        , expectedValue =
+            Pine.valueFromString "test_elem"
+                |> List.repeat 3
+                |> Pine.ListValue
+        }
       )
-    , ( "StringTagExpression"
-      , Pine.StringTagExpression
-            "tag-placeholder"
-            (Pine.LiteralExpression (Pine.valueFromString "tagged-expr-placeholder"))
+    , ( "One parameter - repeat - separate <= 0"
+      , { functionInnerExpr =
+            ElmInteractive.FunctionApplicationExpression
+                (ReferenceExpression "repeat_help")
+                [ ElmInteractive.ListExpression
+                    [ ElmInteractive.LiteralExpression (Pine.ListValue [])
+                    , ElmInteractive.ReferenceExpression "count"
+                    , ElmInteractive.ReferenceExpression "value"
+                    ]
+                ]
+        , functionParams =
+            [ [ ( "count"
+                , ElmInteractive.listItemFromIndexExpression_Pine 0
+                )
+              , ( "value"
+                , ElmInteractive.listItemFromIndexExpression_Pine 1
+                )
+              ]
+            ]
+        , arguments =
+            [ Pine.ListValue
+                [ Pine.valueFromBigInt (BigInt.fromInt 3)
+                , Pine.valueFromString "test_elem"
+                ]
+            ]
+        , environmentFunctions =
+            [ ( "is_less_than_or_equal_to_zero"
+              , { functionInnerExpr =
+                    ElmInteractive.KernelApplicationExpression
+                        { functionName = "is_sorted_ascending_int"
+                        , argument =
+                            ElmInteractive.ListExpression
+                                [ ElmInteractive.ReferenceExpression "num"
+                                , ElmInteractive.LiteralExpression (Pine.valueFromBigInt (BigInt.fromInt 0))
+                                ]
+                        }
+                , functionParams =
+                    [ [ ( "num"
+                        , identity
+                        )
+                      ]
+                    ]
+                }
+              )
+            , ( "repeat_help"
+              , { functionInnerExpr =
+                    ElmInteractive.ConditionalExpression
+                        { condition =
+                            ElmInteractive.FunctionApplicationExpression
+                                (ReferenceExpression "is_less_than_or_equal_to_zero")
+                                [ ElmInteractive.ReferenceExpression "remainingCount"
+                                ]
+                        , ifTrue =
+                            ElmInteractive.ReferenceExpression "result"
+                        , ifFalse =
+                            ElmInteractive.FunctionApplicationExpression
+                                (ReferenceExpression "repeat_help")
+                                [ ElmInteractive.ListExpression
+                                    [ ElmInteractive.KernelApplicationExpression
+                                        { functionName = "concat"
+                                        , argument =
+                                            ElmInteractive.ListExpression
+                                                [ ElmInteractive.ListExpression
+                                                    [ ElmInteractive.ReferenceExpression "value"
+                                                    ]
+                                                , ElmInteractive.ReferenceExpression "result"
+                                                ]
+                                        }
+                                    , ElmInteractive.KernelApplicationExpression
+                                        { functionName = "sub_int"
+                                        , argument =
+                                            ElmInteractive.ListExpression
+                                                [ ElmInteractive.ReferenceExpression "remainingCount"
+                                                , ElmInteractive.LiteralExpression (Pine.valueFromBigInt (BigInt.fromInt 1))
+                                                ]
+                                        }
+                                    , ElmInteractive.ReferenceExpression "value"
+                                    ]
+                                ]
+                        }
+                , functionParams =
+                    [ [ ( "result"
+                        , ElmInteractive.listItemFromIndexExpression_Pine 0
+                        )
+                      , ( "remainingCount"
+                        , ElmInteractive.listItemFromIndexExpression_Pine 1
+                        )
+                      , ( "value"
+                        , ElmInteractive.listItemFromIndexExpression_Pine 2
+                        )
+                      ]
+                    ]
+                }
+              )
+            ]
+        , expectedValue =
+            Pine.valueFromString "test_elem"
+                |> List.repeat 3
+                |> Pine.ListValue
+        }
+      )
+    , ( "Two parameters - return literal"
+      , { functionInnerExpr = ElmInteractive.LiteralExpression (Pine.valueFromString "constant-literal")
+        , functionParams =
+            [ [ ( "param_alfa", identity ) ]
+            , [ ( "param_beta", identity ) ]
+            ]
+        , arguments =
+            [ Pine.valueFromString "argument_alfa"
+            , Pine.valueFromString "argument_beta"
+            ]
+        , environmentFunctions = []
+        , expectedValue = Pine.valueFromString "constant-literal"
+        }
+      )
+    , ( "Two parameters - return second"
+      , { functionInnerExpr = ElmInteractive.ReferenceExpression "param_beta"
+        , functionParams =
+            [ [ ( "param_alfa", identity ) ]
+            , [ ( "param_beta", identity ) ]
+            ]
+        , arguments =
+            [ Pine.valueFromString "argument_alfa"
+            , Pine.valueFromString "argument_beta"
+            ]
+        , environmentFunctions = []
+        , expectedValue = Pine.valueFromString "argument_beta"
+        }
+      )
+    , ( "Two parameters - return first"
+      , { functionInnerExpr = ElmInteractive.ReferenceExpression "param_alfa"
+        , functionParams =
+            [ [ ( "param_alfa", identity ) ]
+            , [ ( "param_beta", identity ) ]
+            ]
+        , arguments =
+            [ Pine.valueFromString "argument_alfa"
+            , Pine.valueFromString "argument_beta"
+            ]
+        , environmentFunctions = []
+        , expectedValue = Pine.valueFromString "argument_alfa"
+        }
+      )
+    , ( "Three parameters - return literal"
+      , { functionInnerExpr = ElmInteractive.LiteralExpression (Pine.valueFromString "constant-literal")
+        , functionParams =
+            [ [ ( "param_alfa", identity ) ]
+            , [ ( "param_beta", identity ) ]
+            , [ ( "param_gamma", identity ) ]
+            ]
+        , arguments =
+            [ Pine.valueFromString "argument_alfa"
+            , Pine.valueFromString "argument_beta"
+            , Pine.valueFromString "argument_gamma"
+            ]
+        , environmentFunctions = []
+        , expectedValue = Pine.valueFromString "constant-literal"
+        }
+      )
+    , ( "Three parameters - return third"
+      , { functionInnerExpr = ElmInteractive.ReferenceExpression "param_gamma"
+        , functionParams =
+            [ [ ( "param_alfa", identity ) ]
+            , [ ( "param_beta", identity ) ]
+            , [ ( "param_gamma", identity ) ]
+            ]
+        , arguments =
+            [ Pine.valueFromString "argument_alfa"
+            , Pine.valueFromString "argument_beta"
+            , Pine.valueFromString "argument_gamma"
+            ]
+        , environmentFunctions = []
+        , expectedValue = Pine.valueFromString "argument_gamma"
+        }
+      )
+    , ( "Three parameters - return second"
+      , { functionInnerExpr = ElmInteractive.ReferenceExpression "param_beta"
+        , functionParams =
+            [ [ ( "param_alfa", identity ) ]
+            , [ ( "param_beta", identity ) ]
+            , [ ( "param_gamma", identity ) ]
+            ]
+        , arguments =
+            [ Pine.valueFromString "argument_alfa"
+            , Pine.valueFromString "argument_beta"
+            , Pine.valueFromString "argument_gamma"
+            ]
+        , environmentFunctions = []
+        , expectedValue = Pine.valueFromString "argument_beta"
+        }
+      )
+    , ( "Three parameters - return first"
+      , { functionInnerExpr = ElmInteractive.ReferenceExpression "param_alfa"
+        , functionParams =
+            [ [ ( "param_alfa", identity ) ]
+            , [ ( "param_beta", identity ) ]
+            , [ ( "param_gamma", identity ) ]
+            ]
+        , arguments =
+            [ Pine.valueFromString "argument_alfa"
+            , Pine.valueFromString "argument_beta"
+            , Pine.valueFromString "argument_gamma"
+            ]
+        , environmentFunctions = []
+        , expectedValue = Pine.valueFromString "argument_alfa"
+        }
+      )
+    , ( "Three parameters - return from function with one param"
+      , { functionInnerExpr =
+            ElmInteractive.FunctionApplicationExpression
+                (ReferenceExpression "repeat_three_times")
+                [ ElmInteractive.ReferenceExpression "param_alfa" ]
+        , functionParams =
+            [ [ ( "param_alfa", identity ) ]
+            , [ ( "param_beta", identity ) ]
+            , [ ( "param_gamma", identity ) ]
+            ]
+        , arguments =
+            [ Pine.valueFromString "argument_alfa"
+            , Pine.valueFromString "argument_beta"
+            , Pine.valueFromString "argument_gamma"
+            ]
+        , environmentFunctions =
+            [ ( "repeat_three_times"
+              , { functionInnerExpr =
+                    ElmInteractive.ListExpression
+                        [ ElmInteractive.ReferenceExpression "param_name"
+                        , ElmInteractive.ReferenceExpression "param_name"
+                        , ElmInteractive.ReferenceExpression "param_name"
+                        ]
+                , functionParams =
+                    [ [ ( "param_name", identity ) ] ]
+                }
+              )
+            ]
+        , expectedValue =
+            Pine.ListValue
+                [ Pine.valueFromString "argument_alfa"
+                , Pine.valueFromString "argument_alfa"
+                , Pine.valueFromString "argument_alfa"
+                ]
+        }
+      )
+    , ( "Three parameters - return from function with two param - first"
+      , { functionInnerExpr =
+            ElmInteractive.FunctionApplicationExpression
+                (ReferenceExpression "repeat_three_times")
+                [ ElmInteractive.ReferenceExpression "param_alfa"
+                , ElmInteractive.ReferenceExpression "param_beta"
+                ]
+        , functionParams =
+            [ [ ( "param_alfa", identity ) ]
+            , [ ( "param_beta", identity ) ]
+            , [ ( "param_gamma", identity ) ]
+            ]
+        , arguments =
+            [ Pine.valueFromString "argument_alfa"
+            , Pine.valueFromString "argument_beta"
+            , Pine.valueFromString "argument_gamma"
+            ]
+        , environmentFunctions =
+            [ ( "repeat_three_times"
+              , { functionInnerExpr =
+                    ElmInteractive.ListExpression
+                        [ ElmInteractive.ReferenceExpression "param_name_a"
+                        , ElmInteractive.ReferenceExpression "param_name_a"
+                        , ElmInteractive.ReferenceExpression "param_name_a"
+                        ]
+                , functionParams =
+                    [ [ ( "param_name_a", identity ) ]
+                    , [ ( "param_name_b", identity ) ]
+                    ]
+                }
+              )
+            ]
+        , expectedValue =
+            Pine.ListValue
+                [ Pine.valueFromString "argument_alfa"
+                , Pine.valueFromString "argument_alfa"
+                , Pine.valueFromString "argument_alfa"
+                ]
+        }
+      )
+    , ( "Two parameters - repeat"
+      , { functionInnerExpr =
+            ElmInteractive.FunctionApplicationExpression
+                (ReferenceExpression "repeat_help")
+                [ ElmInteractive.LiteralExpression (Pine.ListValue [])
+                , ElmInteractive.ListExpression
+                    [ ElmInteractive.ReferenceExpression "count"
+                    , ElmInteractive.ReferenceExpression "value"
+                    ]
+                ]
+        , functionParams =
+            [ [ ( "count", identity ) ]
+            , [ ( "value", identity ) ]
+            ]
+        , arguments =
+            [ Pine.valueFromBigInt (BigInt.fromInt 3)
+            , Pine.valueFromString "test_elem_two"
+            ]
+        , environmentFunctions =
+            [ ( "repeat_help"
+              , { functionInnerExpr =
+                    ElmInteractive.ConditionalExpression
+                        { condition =
+                            ElmInteractive.KernelApplicationExpression
+                                { functionName = "is_sorted_ascending_int"
+                                , argument =
+                                    ElmInteractive.ListExpression
+                                        [ ElmInteractive.ReferenceExpression "remainingCount"
+                                        , ElmInteractive.LiteralExpression (Pine.valueFromBigInt (BigInt.fromInt 0))
+                                        ]
+                                }
+                        , ifTrue = ElmInteractive.ReferenceExpression "result"
+                        , ifFalse =
+                            ElmInteractive.FunctionApplicationExpression
+                                (ReferenceExpression "repeat_help")
+                                [ ElmInteractive.KernelApplicationExpression
+                                    { functionName = "concat"
+                                    , argument =
+                                        ElmInteractive.ListExpression
+                                            [ ElmInteractive.ListExpression
+                                                [ ElmInteractive.ReferenceExpression "value"
+                                                ]
+                                            , ElmInteractive.ReferenceExpression "result"
+                                            ]
+                                    }
+                                , ElmInteractive.ListExpression
+                                    [ ElmInteractive.KernelApplicationExpression
+                                        { functionName = "sub_int"
+                                        , argument =
+                                            ElmInteractive.ListExpression
+                                                [ ElmInteractive.ReferenceExpression "remainingCount"
+                                                , ElmInteractive.LiteralExpression (Pine.valueFromBigInt (BigInt.fromInt 1))
+                                                ]
+                                        }
+                                    , ElmInteractive.ReferenceExpression "value"
+                                    ]
+                                ]
+                        }
+                , functionParams =
+                    [ [ ( "result"
+                        , identity
+                        )
+                      ]
+                    , [ ( "remainingCount"
+                        , ElmInteractive.listItemFromIndexExpression_Pine 0
+                        )
+                      , ( "value"
+                        , ElmInteractive.listItemFromIndexExpression_Pine 1
+                        )
+                      ]
+                    ]
+                }
+              )
+            ]
+        , expectedValue =
+            Pine.valueFromString "test_elem_two"
+                |> List.repeat 3
+                |> Pine.ListValue
+        }
+      )
+    , ( "Three parameters - repeat"
+      , { functionInnerExpr =
+            ElmInteractive.FunctionApplicationExpression
+                (ReferenceExpression "repeat_help")
+                (List.map ElmInteractive.LiteralExpression
+                    [ Pine.ListValue []
+                    , Pine.valueFromBigInt (BigInt.fromInt 3)
+                    , Pine.valueFromString "test_elem"
+                    ]
+                )
+        , functionParams = []
+        , arguments = []
+        , environmentFunctions =
+            [ ( "repeat_help"
+              , { functionInnerExpr =
+                    ElmInteractive.ConditionalExpression
+                        { condition =
+                            ElmInteractive.KernelApplicationExpression
+                                { functionName = "is_sorted_ascending_int"
+                                , argument =
+                                    ElmInteractive.ListExpression
+                                        [ ElmInteractive.ReferenceExpression "remainingCount"
+                                        , ElmInteractive.LiteralExpression (Pine.valueFromBigInt (BigInt.fromInt 0))
+                                        ]
+                                }
+                        , ifTrue =
+                            ElmInteractive.ReferenceExpression "result"
+                        , ifFalse =
+                            ElmInteractive.FunctionApplicationExpression
+                                (ReferenceExpression "repeat_help")
+                                [ ElmInteractive.KernelApplicationExpression
+                                    { functionName = "concat"
+                                    , argument =
+                                        ElmInteractive.ListExpression
+                                            [ ElmInteractive.ListExpression
+                                                [ ElmInteractive.ReferenceExpression "value"
+                                                ]
+                                            , ElmInteractive.ReferenceExpression "result"
+                                            ]
+                                    }
+                                , ElmInteractive.KernelApplicationExpression
+                                    { functionName = "sub_int"
+                                    , argument =
+                                        ElmInteractive.ListExpression
+                                            [ ElmInteractive.ReferenceExpression "remainingCount"
+                                            , ElmInteractive.LiteralExpression (Pine.valueFromBigInt (BigInt.fromInt 1))
+                                            ]
+                                    }
+                                , ElmInteractive.ReferenceExpression "value"
+                                ]
+                        }
+                , functionParams =
+                    [ [ ( "result", identity ) ]
+                    , [ ( "remainingCount", identity ) ]
+                    , [ ( "value", identity ) ]
+                    ]
+                }
+              )
+            ]
+        , expectedValue =
+            Pine.valueFromString "test_elem"
+                |> List.repeat 3
+                |> Pine.ListValue
+        }
+      )
+    , ( "let block returning literal"
+      , { functionInnerExpr =
+            ElmInteractive.LetBlockExpression
+                { declarations =
+                    [ ( "decl_from_let"
+                      , ElmInteractive.LiteralExpression (Pine.valueFromString "constant_in_let")
+                      )
+                    ]
+                , expression = ElmInteractive.ReferenceExpression "decl_from_let"
+                }
+        , functionParams = []
+        , arguments = []
+        , environmentFunctions = []
+        , expectedValue = Pine.valueFromString "constant_in_let"
+        }
+      )
+    , ( "let block returning from other decl in same block"
+      , { functionInnerExpr =
+            ElmInteractive.LetBlockExpression
+                { declarations =
+                    [ ( "decl_from_let"
+                      , ElmInteractive.ReferenceExpression "other_decl_from_let"
+                      )
+                    , ( "other_decl_from_let"
+                      , ElmInteractive.LiteralExpression (Pine.valueFromString "constant_in_let")
+                      )
+                    ]
+                , expression = ElmInteractive.ReferenceExpression "decl_from_let"
+                }
+        , functionParams = []
+        , arguments = []
+        , environmentFunctions = []
+        , expectedValue = Pine.valueFromString "constant_in_let"
+        }
+      )
+    , ( "let block returning only parent function arg"
+      , { functionInnerExpr =
+            ElmInteractive.LetBlockExpression
+                { declarations =
+                    [ ( "decl_from_let"
+                      , ElmInteractive.ReferenceExpression "param_0"
+                      )
+                    ]
+                , expression = ElmInteractive.ReferenceExpression "decl_from_let"
+                }
+        , functionParams =
+            [ [ ( "param_0", identity ) ]
+            ]
+        , arguments = [ Pine.valueFromString "argument_0" ]
+        , environmentFunctions = []
+        , expectedValue = Pine.valueFromString "argument_0"
+        }
+      )
+    , ( "let block in let block returning only parent function arg"
+      , { functionInnerExpr =
+            ElmInteractive.LetBlockExpression
+                { declarations =
+                    [ ( "decl_from_let"
+                      , ElmInteractive.ReferenceExpression "param_0"
+                      )
+                    ]
+                , expression =
+                    ElmInteractive.LetBlockExpression
+                        { declarations =
+                            [ ( "decl_from_let_inner"
+                              , ElmInteractive.ReferenceExpression "decl_from_let"
+                              )
+                            ]
+                        , expression = ElmInteractive.ReferenceExpression "decl_from_let_inner"
+                        }
+                }
+        , functionParams =
+            [ [ ( "param_0", identity ) ]
+            ]
+        , arguments = [ Pine.valueFromString "argument_0" ]
+        , environmentFunctions = []
+        , expectedValue = Pine.valueFromString "argument_0"
+        }
+      )
+    , ( "let block returning second parent function arg"
+      , { functionInnerExpr =
+            ElmInteractive.LetBlockExpression
+                { declarations =
+                    [ ( "decl_from_let"
+                      , ElmInteractive.ReferenceExpression "param_1"
+                      )
+                    ]
+                , expression = ElmInteractive.ReferenceExpression "decl_from_let"
+                }
+        , functionParams =
+            [ [ ( "param_0", identity ) ]
+            , [ ( "param_1", identity ) ]
+            ]
+        , arguments =
+            [ Pine.valueFromString "argument_0"
+            , Pine.valueFromString "argument_1"
+            ]
+        , environmentFunctions = []
+        , expectedValue = Pine.valueFromString "argument_1"
+        }
+      )
+    , ( "partial application only for closure - one original param"
+      , { functionInnerExpr =
+            ElmInteractive.LetBlockExpression
+                { declarations =
+                    [ ( "decl_from_let"
+                      , ElmInteractive.FunctionExpression
+                            { argumentDeconstructions = [ ( "final_func_param_0", identity ) ]
+                            , expression =
+                                ElmInteractive.FunctionApplicationExpression
+                                    (ReferenceExpression "final_func_param_0")
+                                    [ ElmInteractive.LiteralExpression (Pine.valueFromString "literal_0")
+                                    ]
+                            }
+                      )
+                    , ( "closure_func"
+                      , ElmInteractive.FunctionExpression
+                            { argumentDeconstructions = [ ( "closure_func_param_0", identity ) ]
+                            , expression =
+                                ElmInteractive.ListExpression
+                                    [ ElmInteractive.ReferenceExpression "closure_func_param_0"
+                                    , ElmInteractive.ReferenceExpression "param_0"
+                                    ]
+                            }
+                      )
+                    ]
+                , expression =
+                    ElmInteractive.FunctionApplicationExpression
+                        (ReferenceExpression "decl_from_let")
+                        [ ElmInteractive.ReferenceExpression "closure_func"
+                        ]
+                }
+        , functionParams =
+            [ [ ( "param_0", identity ) ]
+            ]
+        , arguments =
+            [ Pine.valueFromString "argument_0"
+            ]
+        , environmentFunctions = []
+        , expectedValue =
+            Pine.ListValue
+                [ Pine.valueFromString "literal_0"
+                , Pine.valueFromString "argument_0"
+                ]
+        }
+      )
+    , ( "let block returning from other outside decl"
+      , { functionInnerExpr =
+            ElmInteractive.LetBlockExpression
+                { declarations =
+                    [ ( "decl_from_let"
+                      , ElmInteractive.ReferenceExpression "env_func"
+                      )
+                    ]
+                , expression = ElmInteractive.ReferenceExpression "decl_from_let"
+                }
+        , functionParams =
+            [ [ ( "param_0", identity ) ]
+            ]
+        , arguments = [ Pine.valueFromString "argument_0" ]
+        , environmentFunctions =
+            [ ( "env_func"
+              , { functionInnerExpr = ElmInteractive.LiteralExpression (Pine.valueFromString "const_from_env_func")
+                , functionParams = []
+                }
+              )
+            ]
+        , expectedValue = Pine.valueFromString "const_from_env_func"
+        }
+      )
+    , ( "Partial application - two - return literal"
+      , { functionInnerExpr =
+            ElmInteractive.FunctionApplicationExpression
+                (ElmInteractive.ReferenceExpression "second_function_partially_applied")
+                [ ElmInteractive.LiteralExpression (Pine.valueFromString "second_arg")
+                ]
+        , functionParams = []
+        , arguments = []
+        , environmentFunctions =
+            [ ( "second_function"
+              , { functionInnerExpr = ElmInteractive.LiteralExpression (Pine.valueFromString "constant-literal")
+                , functionParams =
+                    [ [ ( "second_function_param_alfa", identity ) ]
+                    , [ ( "second_function_param_beta", identity ) ]
+                    ]
+                }
+              )
+            , ( "second_function_partially_applied"
+              , { functionInnerExpr =
+                    ElmInteractive.FunctionApplicationExpression
+                        (ElmInteractive.ReferenceExpression "second_function")
+                        [ ElmInteractive.LiteralExpression (Pine.valueFromString "first_arg")
+                        ]
+                , functionParams = []
+                }
+              )
+            ]
+        , expectedValue = Pine.valueFromString "constant-literal"
+        }
       )
     ]
         |> List.indexedMap
-            (\testCaseIndex ( testCaseName, testedExpression ) ->
+            (\testCaseIndex ( testCaseName, testCase ) ->
                 Test.test ("Case " ++ String.fromInt testCaseIndex ++ " - " ++ testCaseName) <|
                     \_ ->
                         let
-                            template =
-                                ElmInteractive.generateTemplateEvaluatingToExpression testedExpression
+                            declarationBlockOuterExprFromFunctionParamsAndInnerExpr params innerExpr =
+                                params
+                                    |> List.foldr
+                                        (\nextParam expr ->
+                                            ElmInteractive.FunctionExpression
+                                                { argumentDeconstructions = nextParam
+                                                , expression = expr
+                                                }
+                                        )
+                                        innerExpr
+
+                            environmentFunctions =
+                                testCase.environmentFunctions
+                                    |> List.map
+                                        (Tuple.mapSecond
+                                            (\functionRecord ->
+                                                declarationBlockOuterExprFromFunctionParamsAndInnerExpr
+                                                    functionRecord.functionParams
+                                                    functionRecord.functionInnerExpr
+                                            )
+                                        )
+
+                            emptyEmitStack =
+                                { declarationsDependencies = Dict.empty
+                                , environmentFunctions = []
+                                , environmentDeconstructions = Dict.empty
+                                }
+
+                            rootAsExpression =
+                                declarationBlockOuterExprFromFunctionParamsAndInnerExpr
+                                    testCase.functionParams
+                                    testCase.functionInnerExpr
+
+                            emitClosureResult =
+                                ElmInteractive.emitClosureExpression
+                                    emptyEmitStack
+                                    environmentFunctions
+                                    rootAsExpression
                         in
-                        Pine.evaluateExpression
-                            Pine.emptyEvalContext
-                            template
-                            |> Result.mapError (Pine.displayStringFromPineError >> (++) "Failed evaluate template: ")
+                        emitClosureResult
                             |> Result.andThen
-                                (\value ->
-                                    value
-                                        |> Pine.decodeExpressionFromValue
-                                        |> Result.mapError ((++) "Failed decode expression from value: ")
+                                ((\partialApplicable ->
+                                    case testCase.arguments of
+                                        [] ->
+                                            partialApplicable
+                                                |> Pine.evaluateExpression Pine.emptyEvalContext
+                                                |> Result.mapError Pine.displayStringFromPineError
+
+                                        lastArg :: otherArgs ->
+                                            let
+                                                applicationExpression =
+                                                    otherArgs
+                                                        |> List.foldl
+                                                            (\arg expr ->
+                                                                Pine.DecodeAndEvaluateExpression
+                                                                    { expression = expr
+                                                                    , environment = Pine.LiteralExpression arg
+                                                                    }
+                                                            )
+                                                            partialApplicable
+                                            in
+                                            applicationExpression
+                                                |> Pine.evaluateExpression { environment = lastArg }
+                                                |> Result.mapError Pine.displayStringFromPineError
+                                 )
+                                    >> Result.map (Expect.equal testCase.expectedValue)
                                 )
-                            |> Result.Extra.unpack
-                                Expect.fail
-                                (Expect.equal testedExpression)
+                            |> Result.Extra.unpack Expect.fail identity
             )
-        |> Test.describe "generate template evaluating to expression"
+        |> Test.describe "emit closure expression"

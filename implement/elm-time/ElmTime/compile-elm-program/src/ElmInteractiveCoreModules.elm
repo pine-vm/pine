@@ -272,7 +272,7 @@ cons element list =
 
 map : (a -> b) -> List a -> List b
 map f xs =
-    foldr (\\x acc -> cons (f x) acc) [] xs
+    foldr (\\x acc -> Pine_kernel.concat [ [ (f x) ], acc ]) [] xs
 
 
 foldl : (a -> b -> b) -> b -> List a -> b
@@ -292,7 +292,7 @@ foldr func acc list =
 
 filter : (a -> Bool) -> List a -> List a
 filter isGood list =
-    foldr (\\x xs -> if isGood x then cons x xs else xs) [] list
+    foldr (\\x xs -> if isGood x then Pine_kernel.concat [ x, xs ] else xs) [] list
 
 
 length : List a -> Int
@@ -559,43 +559,18 @@ endsWith pattern string =
 
 
 toInt : String -> Maybe Int
-toInt =
-    toIntDecimal
-
-
-toIntDecimal : String -> Maybe Int
-toIntDecimal =
-    toIntFromDigitsChars digitCharactersDecimal
+toInt string =
+    toIntFromList (toList string)
 
 
 fromInt : Int -> String
-fromInt =
-    fromIntDecimal
+fromInt int =
+    fromList (fromIntAsList int)
 
 
-fromIntDecimal : Int -> String
-fromIntDecimal int =
-    fromList (fromIntFromDigitsChars digitCharactersDecimal int)
-
-
-digitCharactersDecimal : List ( Char, Int )
-digitCharactersDecimal =
-    [ ( '0', 0 )
-    , ( '1', 1 )
-    , ( '2', 2 )
-    , ( '3', 3 )
-    , ( '4', 4 )
-    , ( '5', 5 )
-    , ( '6', 6 )
-    , ( '7', 7 )
-    , ( '8', 8 )
-    , ( '9', 9 )
-    ]
-
-
-toIntFromDigitsChars : List ( Char, Int ) -> String -> Maybe Int
-toIntFromDigitsChars digitsCharacters string =
-    case toList string of
+toIntFromList : List Char -> Maybe Int
+toIntFromList stringAsList =
+    case stringAsList of
         [] ->
             Nothing
 
@@ -610,17 +585,50 @@ toIntFromDigitsChars digitsCharacters string =
                             ( lessFirstChar, 1 )
 
                         _ ->
-                            ( toList string, 1 )
+                            ( stringAsList, 1 )
             in
             Maybe.map (\\value -> value * signMultiplier)
-                (toUnsignedIntFromDigitsChars digitsCharacters valueString)
+                (toUnsignedIntFromList valueString)
 
 
-toUnsignedIntFromDigitsChars : List ( Char, Int ) -> List Char -> Maybe Int
-toUnsignedIntFromDigitsChars digitsCharacters string =
+toUnsignedIntFromList : List Char -> Maybe Int
+toUnsignedIntFromList string =
     let
         digitValueFromCharacter char =
-            Maybe.map Tuple.second (List.head (List.filter (\\(c, _) -> c == char) digitsCharacters))
+            case char of
+                '0' ->
+                    Just 0
+
+                '1' ->
+                    Just 1
+                
+                '2' ->
+                    Just 2
+                
+                '3' ->
+                    Just 3
+                
+                '4' ->
+                    Just 4
+
+                '5' ->
+                    Just 5
+
+                '6' ->
+                    Just 6
+
+                '7' ->
+                    Just 7
+
+                '8' ->
+                    Just 8
+
+                '9' ->
+                    Just 9
+
+                _ ->
+                    Nothing
+
     in
     case string of
         [] ->
@@ -636,37 +644,77 @@ toUnsignedIntFromDigitsChars digitsCharacters string =
                                     Nothing
 
                                 Just digitValue ->
-                                    Just (aggregate * List.length digitsCharacters + digitValue)
+                                    Just (aggregate * 10 + digitValue)
                         )
                 )
                 (Just 0)
                 (List.map digitValueFromCharacter digits)
 
 
-fromIntFromDigitsChars : List ( Char, Int ) -> Int -> List Char
-fromIntFromDigitsChars digitsCharacters int =
+fromIntAsList : Int -> List Char
+fromIntAsList int =
     if int < 0 then
-        [ '-' ] ++ fromIntFromDigitsChars digitsCharacters -int
+        [ '-' ] ++ fromUnsignedIntAsList -int
 
     else
-        let
-            digitCharacterFromValue digitValue =
-                Maybe.map Tuple.first (List.head (List.filter (\\( _, c ) -> c == digitValue) digitsCharacters))
+        fromUnsignedIntAsList int
 
-            upperDigitsValue =
-                int // 10
 
-            lastDigitValue =
-                int - (upperDigitsValue * 10)
+fromUnsignedIntAsList : Int -> List Char
+fromUnsignedIntAsList int =
+    let
+        digitCharacterFromValue digitValue =
+            case digitValue of
+                0 ->
+                    Just '0'
 
-            upperDigitsString =
-                if upperDigitsValue < 1 then
-                    []
+                1 ->
+                    Just '1'
 
-                else
-                    fromIntFromDigitsChars digitsCharacters upperDigitsValue
-        in
-        upperDigitsString ++ [ Maybe.withDefault 'e' (digitCharacterFromValue lastDigitValue) ]
+                2 ->
+                    Just '2'
+
+                3 ->
+                    Just '3'
+
+                4 ->
+                    Just '4'
+
+                5 ->
+                    Just '5'
+
+                6 ->
+                    Just '6'
+
+                7 ->
+                    Just '7'
+
+                8 ->
+                    Just '8'
+
+                9 ->
+                    Just '9'
+
+                _ ->
+                    Nothing                
+
+        upperDigitsValue =
+            int // 10
+
+        lastDigitValue =
+            int - (upperDigitsValue * 10)
+
+        upperDigitsString =
+            if upperDigitsValue < 1 then
+                []
+
+            else
+                fromUnsignedIntAsList upperDigitsValue
+
+        lastDigitChar =
+            digitCharacterFromValue lastDigitValue
+    in
+    upperDigitsString ++ [ Maybe.withDefault 'e' lastDigitChar ]
 
 """
     , """

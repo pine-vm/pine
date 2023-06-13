@@ -31,7 +31,7 @@ type InteractiveSubmission
 
 type InteractiveContext
     = DefaultContext
-    | InitContextFromApp { modulesTexts : List String }
+    | CustomModulesContext { includeCoreModules : Bool, modulesTexts : List String }
 
 
 type alias SubmissionResponse =
@@ -63,6 +63,11 @@ type Expression
     | ConditionalExpression ConditionalExpressionStructure
     | ReferenceExpression String
     | FunctionExpression FunctionExpressionStruct
+      {-
+         Keeping a specialized function application model enables distinguishing cases with immediate full application.
+         The emission of specialized code for these cases reduces runtime expenses.
+      -}
+    | FunctionApplicationExpression Expression (List Expression)
     | LetBlockExpression LetBlockStruct
     | StringTagExpression String Expression
       -- TODO: Explore translate RecordAccess
@@ -95,36 +100,46 @@ type alias LetBlockStruct =
 
 
 type alias FunctionExpressionStruct =
-    { argumentDeconstructions : List ( String, Pine.Expression -> Pine.Expression )
+    { argumentDeconstructions : FunctionParam
     , expression : Expression
     }
 
 
-type EnvironmentElement
-    = LiteralEnvironmentElement Expression
-    | DeconstructionEnvironmentElement (Pine.Expression -> Pine.Expression)
-    | ForwardedEnvironmentElement
+type alias FunctionParam =
+    List ( String, Pine.Expression -> Pine.Expression )
 
 
 type alias CompilationStack =
     { moduleAliases : Dict.Dict (List String) (List String)
     , availableModules : Dict.Dict (List String) ElmModuleInCompilation
     , availableDeclarations : Dict.Dict String InternalDeclaration
-    , inliningParentDeclarations : Set.Set String
     , elmValuesToExposeToGlobal : Dict.Dict String (List String)
     }
 
 
 type alias EmitStack =
     { declarationsDependencies : Dict.Dict String (Set.Set String)
-    , environmentElementsOrder : List String
-    , declarationsExpectedEnvironment : Dict.Dict String (List String)
+
+    -- The functions in the first element of the environment list
+    , environmentFunctions : List EnvironmentFunctionEntry
+
+    -- Deconstructions we can derive from the second element of the environment list
+    , environmentDeconstructions : Dict.Dict String EnvironmentDeconstructionEntry
     }
+
+
+type alias EnvironmentFunctionEntry =
+    { functionName : String
+    , argumentsCount : Int
+    }
+
+
+type alias EnvironmentDeconstructionEntry =
+    Pine.Expression -> Pine.Expression
 
 
 type InternalDeclaration
     = CompiledDeclaration Pine.Value
-    | ElmFunctionDeclaration ElmFunctionDeclarationStruct
     | DeconstructionDeclaration Expression
 
 
@@ -406,8 +421,15 @@ compileEvalContextForElmInteractive context =
                 DefaultContext ->
                     ElmInteractiveCoreModules.elmCoreModulesTexts
 
-                InitContextFromApp { modulesTexts } ->
-                    ElmInteractiveCoreModules.elmCoreModulesTexts ++ modulesTexts
+                CustomModulesContext { includeCoreModules, modulesTexts } ->
+                    [ if includeCoreModules then
+                        ElmInteractiveCoreModules.elmCoreModulesTexts
+
+                      else
+                        []
+                    , modulesTexts
+                    ]
+                        |> List.concat
     in
     expandElmInteractiveEnvironmentWithModuleTexts Pine.emptyEvalContext.environment contextModulesTexts
         |> Result.map (\result -> { environment = result.environment })
@@ -682,9 +704,7 @@ compileElmModuleTextIntoNamedExports availableModules moduleToTranslate =
             { moduleAliases = moduleAliases
             , availableModules = availableModules
             , availableDeclarations =
-                (localFunctionDeclarations |> Dict.map (always internalDeclarationFromFunction))
-                    |> Dict.union (declarationsFromChoiceTypes |> Dict.map (always CompiledDeclaration))
-            , inliningParentDeclarations = Set.empty
+                declarationsFromChoiceTypes |> Dict.map (always CompiledDeclaration)
             , elmValuesToExposeToGlobal =
                 elmValuesToExposeToGlobalDefault
                     |> Dict.filter (always ((==) moduleName >> not))
@@ -692,8 +712,8 @@ compileElmModuleTextIntoNamedExports availableModules moduleToTranslate =
 
         initialEmitStack =
             { declarationsDependencies = Dict.empty
-            , environmentElementsOrder = []
-            , declarationsExpectedEnvironment = Dict.empty
+            , environmentFunctions = []
+            , environmentDeconstructions = Dict.empty
             }
 
         redirectsForInfix : Dict.Dict String String
@@ -753,14 +773,6 @@ compileElmModuleTextIntoNamedExports availableModules moduleToTranslate =
                     ++ functionDeclarations
                     ++ declarationsValuesForInfix
                 )
-
-
-internalDeclarationFromFunction : Elm.Syntax.Expression.Function -> InternalDeclaration
-internalDeclarationFromFunction elmFunction =
-    ElmFunctionDeclaration
-        { arguments = (Elm.Syntax.Node.value elmFunction.declaration).arguments |> List.map Elm.Syntax.Node.value
-        , expression = Elm.Syntax.Node.value (Elm.Syntax.Node.value elmFunction.declaration).expression
-        }
 
 
 moduleNamesWithoutImplicitImport : List (List String)
@@ -825,13 +837,6 @@ elmDeclarationsOverrides =
       )
     ]
         |> Dict.fromList
-
-
-addInliningParentDeclaration : String -> CompilationStack -> CompilationStack
-addInliningParentDeclaration name compilation =
-    { compilation
-        | inliningParentDeclarations = compilation.inliningParentDeclarations |> Set.insert name
-    }
 
 
 compileElmSyntaxExpression :
@@ -996,14 +1001,14 @@ compileElmSyntaxApplication stack appliedFunctionElmSyntax argumentsElmSyntax =
 
         Ok arguments ->
             let
-                continueWithNonKernelApplication =
+                continueWithNonKernelApplication () =
                     case compileElmSyntaxExpression stack appliedFunctionElmSyntax of
                         Err error ->
                             Err ("Failed to compile Elm function syntax: " ++ error)
 
                         Ok appliedFunctionSyntax ->
                             Ok
-                                (positionalApplicationExpressionFromListOfArguments
+                                (FunctionApplicationExpression
                                     appliedFunctionSyntax
                                     arguments
                                 )
@@ -1024,10 +1029,10 @@ compileElmSyntaxApplication stack appliedFunctionElmSyntax argumentsElmSyntax =
                                 Err "Invalid argument list for kernel application: Wrap arguments into a single list expression"
 
                     else
-                        continueWithNonKernelApplication
+                        continueWithNonKernelApplication ()
 
                 _ ->
-                    continueWithNonKernelApplication
+                    continueWithNonKernelApplication ()
 
 
 compileElmSyntaxLetBlock :
@@ -1039,12 +1044,8 @@ compileElmSyntaxLetBlock stackBefore letBlock =
         |> List.concatMap
             (\letDeclaration ->
                 case Elm.Syntax.Node.value letDeclaration of
-                    Elm.Syntax.Expression.LetFunction letFunction ->
-                        [ Ok
-                            ( Elm.Syntax.Node.value (Elm.Syntax.Node.value letFunction.declaration).name
-                            , internalDeclarationFromFunction letFunction
-                            )
-                        ]
+                    Elm.Syntax.Expression.LetFunction _ ->
+                        []
 
                     Elm.Syntax.Expression.LetDestructuring (Elm.Syntax.Node.Node _ pattern) (Elm.Syntax.Node.Node _ destructuredExpressionElm) ->
                         destructuredExpressionElm
@@ -1293,6 +1294,11 @@ listDependenciesOfExpression dependenciesRelations expression =
                 |> List.map Tuple.first
                 |> List.foldl Set.remove expressionDependencies
 
+        FunctionApplicationExpression functionExpression arguments ->
+            functionExpression
+                :: arguments
+                |> listDependenciesOfExpressions dependenciesRelations
+
         LetBlockExpression letBlock ->
             let
                 innerDependencies =
@@ -1311,7 +1317,6 @@ listDependenciesOfExpression dependenciesRelations expression =
             listDependenciesOfExpression dependenciesRelations recordExpression
     )
         |> getTransitiveDependenciesStep dependenciesRelations.declarationsDependencies
-        |> getTransitiveDependenciesStep (Dict.map (always Set.fromList) dependenciesRelations.declarationsExpectedEnvironment)
 
 
 getTransitiveDependenciesStep : Dict.Dict String (Set.Set String) -> Set.Set String -> Set.Set String
@@ -1413,7 +1418,11 @@ compileElmSyntaxCaseBlock stack caseBlock =
                     Ok
                         (List.foldr
                             conditionalFromCase
-                            (LiteralExpression (Pine.valueFromString "Error in case-of block: No matching branch."))
+                            (ListExpression
+                                [ LiteralExpression (Pine.valueFromString "Error in case-of block: No matching branch.")
+                                , expression
+                                ]
+                            )
                             cases
                         )
 
@@ -1452,10 +1461,14 @@ compileElmSyntaxCaseBlockCase stackBefore caseBlockValueExpression ( elmPattern,
                     (\expression ->
                         { conditionExpression = deconstruction.conditionExpression
                         , thenExpression =
-                            LetBlockExpression
-                                { declarations = deconstruction.declarations
-                                , expression = expression
-                                }
+                            if deconstruction.declarations == [] then
+                                expression
+
+                            else
+                                LetBlockExpression
+                                    { declarations = deconstruction.declarations
+                                    , expression = expression
+                                    }
                         }
                     )
 
@@ -1826,22 +1839,9 @@ buildRecursiveFunctionToLookupFieldInRecord fieldName recordFieldsExpression =
 
 compileElmFunctionOrValueLookup : String -> CompilationStack -> Result String Expression
 compileElmFunctionOrValueLookup name compilation =
-    let
-        continueWithoutLocalResolution _ =
-            compileElmFunctionOrValueLookupWithoutLocalResolution name compilation
-    in
     case compilation.availableDeclarations |> Dict.get name of
         Nothing ->
-            continueWithoutLocalResolution ()
-
-        Just (ElmFunctionDeclaration elmFunctionDeclaration) ->
-            if compilation.inliningParentDeclarations |> Set.member name then
-                continueWithoutLocalResolution ()
-
-            else
-                compileElmSyntaxFunctionWithoutName
-                    (addInliningParentDeclaration name compilation)
-                    elmFunctionDeclaration
+            compileElmFunctionOrValueLookupWithoutLocalResolution name compilation
 
         Just (CompiledDeclaration compiledDeclaration) ->
             Ok (LiteralExpression compiledDeclaration)
@@ -1861,9 +1861,6 @@ compileElmFunctionOrValueLookupWithoutLocalResolution name compilation =
 
                     Just (CompiledDeclaration compiledDeclaration) ->
                         Ok (LiteralExpression compiledDeclaration)
-
-                    Just (ElmFunctionDeclaration _) ->
-                        Err ("Unexpected value for '" ++ name ++ "': Elm function declaration")
 
                     Just (DeconstructionDeclaration deconstruction) ->
                         Ok deconstruction
@@ -1928,7 +1925,18 @@ emitExpression stack expression =
             emitReferenceExpression localReference stack
 
         FunctionExpression function ->
-            emitFunctionBindingEnvironmentToName stack function
+            emitFunctionExpression stack function
+
+        FunctionApplicationExpression functionExpression arguments ->
+            case functionExpression of
+                ReferenceExpression functionName ->
+                    emitNamedFunctionApplicationExpression functionName arguments stack
+
+                _ ->
+                    positionalApplicationExpressionFromListOfArguments
+                        functionExpression
+                        arguments
+                        |> emitExpression stack
 
         LetBlockExpression letBlock ->
             emitLetBlock stack letBlock
@@ -2206,137 +2214,51 @@ emitLetBlock stackBefore letBlock =
         letBlock.expression
 
 
-{-| Builds an expression that captures parts of the current environment into a literal and wraps that in a function application expression that will bind the next environment to the given name, together with the earlier captured context.
-In other words, it captures dependencies from the current environment and combines them with the function to enable transport to and reuse in other places.
--}
-emitFunctionBindingEnvironmentToName : EmitStack -> FunctionExpressionStruct -> Result String Pine.Expression
-emitFunctionBindingEnvironmentToName stackBefore function =
-    let
-        innerDependencies =
-            listDependenciesOfExpression stackBefore function.expression
+emitFunctionExpression :
+    EmitStack
+    -> FunctionExpressionStruct
+    -> Result String Pine.Expression
+emitFunctionExpression stack function =
+    emitExpressionInDeclarationBlock
+        stack
+        []
+        (FunctionExpression function)
+        |> Result.map
+            (\emitInClosureResult ->
+                case emitInClosureResult.closureArgumentPine of
+                    Nothing ->
+                        emitInClosureResult.expr
+                            |> Pine.encodeExpressionAsValue
+                            |> Pine.LiteralExpression
 
-        outerDependencies =
-            function.argumentDeconstructions
-                |> List.map Tuple.first
-                |> List.foldl Set.remove innerDependencies
-
-        environmentElements =
-            [ List.map (Tuple.mapSecond DeconstructionEnvironmentElement) function.argumentDeconstructions
-            , outerDependencies |> Set.toList |> List.map (Tuple.pair >> (|>) ForwardedEnvironmentElement)
-            ]
-                |> List.concat
-    in
-    emitEnvironmentCompositionExpression
-        stackBefore
-        (Dict.fromList environmentElements)
-        |> Result.andThen
-            (\( stack, argumentExpression ) ->
-                emitExpression stack function.expression
-                    |> Result.map
-                        (\functionExpression ->
-                            Pine.ListExpression
-                                [ Pine.LiteralExpression (Pine.valueFromString "DecodeAndEvaluate")
-                                , Pine.ListExpression
-                                    [ Pine.ListExpression
-                                        [ Pine.LiteralExpression (Pine.valueFromString "expression")
-                                        , functionExpression
-                                            |> Pine.encodeExpressionAsValue
-                                            |> Pine.LiteralExpression
-                                            |> Pine.encodeExpressionAsValue
-                                            |> Pine.LiteralExpression
-                                        ]
-                                    , Pine.ListExpression
-                                        [ Pine.LiteralExpression (Pine.valueFromString "environment")
-                                        , argumentExpression
-                                        ]
-                                    ]
-                                ]
-                        )
+                    Just closureArgumentPine ->
+                        Pine.DecodeAndEvaluateExpression
+                            { expression =
+                                emitInClosureResult.expr
+                                    |> Pine.encodeExpressionAsValue
+                                    |> Pine.LiteralExpression
+                            , environment = closureArgumentPine
+                            }
             )
 
 
-{-| This function returns an expression that evaluates to the encoding of the input expression. In other words, it is an inversion of `Pine.evaluateExpression emptyEnv >> Pine.decodeExpressionFromValue`
-Most expressions have multiple valid encoded representations, and the one produced here supports building templates to bind the parent environment.
-One typical use case for these templates is wrapping a function to support the partial application of the wrapped function.
--}
-generateTemplateEvaluatingToExpression : Pine.Expression -> Pine.Expression
-generateTemplateEvaluatingToExpression expression =
-    let
-        buildFromTagAndArgument tagName argument =
-            [ Pine.LiteralExpression (Pine.valueFromString tagName)
-            , argument
-            ]
-                |> Pine.ListExpression
-
-        buildRecordExpression fields =
-            fields
-                |> List.map
-                    (\( name, value ) ->
-                        [ Pine.LiteralExpression (Pine.valueFromString name)
-                        , value
-                        ]
-                            |> Pine.ListExpression
-                    )
-                |> Pine.ListExpression
-    in
-    case expression of
-        Pine.ListExpression list ->
-            buildFromTagAndArgument
-                "List"
-                (Pine.ListExpression (List.map generateTemplateEvaluatingToExpression list))
-
-        Pine.LiteralExpression literal ->
-            buildFromTagAndArgument
-                "Literal"
-                (Pine.LiteralExpression literal)
-
-        Pine.DecodeAndEvaluateExpression decodeAndEval ->
-            buildFromTagAndArgument
-                "DecodeAndEvaluate"
-                (buildRecordExpression
-                    [ ( "expression", generateTemplateEvaluatingToExpression decodeAndEval.expression )
-                    , ( "environment", generateTemplateEvaluatingToExpression decodeAndEval.environment )
-                    ]
-                )
-
-        Pine.KernelApplicationExpression kernelApp ->
-            buildFromTagAndArgument
-                "KernelApplication"
-                (buildRecordExpression
-                    [ ( "functionName", Pine.LiteralExpression (Pine.valueFromString kernelApp.functionName) )
-                    , ( "argument", generateTemplateEvaluatingToExpression kernelApp.argument )
-                    ]
-                )
-
-        Pine.ConditionalExpression conditional ->
-            buildFromTagAndArgument
-                "Conditional"
-                (buildRecordExpression
-                    [ ( "condition"
-                      , generateTemplateEvaluatingToExpression conditional.condition
-                      )
-                    , ( "ifTrue"
-                      , generateTemplateEvaluatingToExpression conditional.ifTrue
-                      )
-                    , ( "ifFalse"
-                      , generateTemplateEvaluatingToExpression conditional.ifFalse
-                      )
-                    ]
-                )
-
-        Pine.EnvironmentExpression ->
-            buildFromTagAndArgument
-                "Environment"
-                (Pine.ListExpression [])
-
-        Pine.StringTagExpression tag tagged ->
-            buildFromTagAndArgument
-                "StringTag"
-                (Pine.ListExpression
-                    [ Pine.LiteralExpression (Pine.valueFromString tag)
-                    , generateTemplateEvaluatingToExpression tagged
-                    ]
-                )
+environmentDeconstructionsFromFunctionParams : List FunctionParam -> Dict.Dict String EnvironmentDeconstructionEntry
+environmentDeconstructionsFromFunctionParams functionParams =
+    functionParams
+        |> List.indexedMap
+            (\runtimeIndex deconstructions ->
+                deconstructions
+                    |> List.map
+                        (\( elementName, deconstruction ) ->
+                            ( elementName
+                            , listItemFromIndexExpression_Pine runtimeIndex
+                                >> listItemFromIndexExpression_Pine 1
+                                >> deconstruction
+                            )
+                        )
+            )
+        |> List.concat
+        |> Dict.fromList
 
 
 emitClosureExpressions :
@@ -2350,7 +2272,18 @@ emitClosureExpressions stackBefore newDeclarations =
                     |> List.map
                         (\( declarationName, declarationExpression ) ->
                             builder declarationExpression
-                                |> Result.andThen evaluateAsIndependentExpression
+                                |> Result.andThen
+                                    (\expression ->
+                                        {-
+                                           For declaration with more arguments, this failed as the expression was not independent.
+                                           TODO: Find out where this asymmetry comes from.
+                                        -}
+                                        if pineExpressionIsIndependent expression then
+                                            evaluateAsIndependentExpression expression
+
+                                        else
+                                            Pine.encodeExpressionAsValue expression |> Ok
+                                    )
                                 |> Result.mapError ((++) ("Failed for declaration '" ++ declarationName ++ "': "))
                                 |> Result.map (Tuple.pair declarationName)
                         )
@@ -2365,234 +2298,845 @@ emitClosureExpression :
     -> List ( String, Expression )
     -> Expression
     -> Result String Pine.Expression
-emitClosureExpression stackBeforeAddingDependencies environmentDeclarations expressionInClosure =
+emitClosureExpression stackBefore environmentDeclarations expressionInClosure =
+    emitExpressionInDeclarationBlock
+        stackBefore
+        environmentDeclarations
+        expressionInClosure
+        |> Result.map .expr
+
+
+emitExpressionInDeclarationBlock :
+    EmitStack
+    -> List ( String, Expression )
+    -> Expression
+    -> Result String { expr : Pine.Expression, closureArgumentPine : Maybe Pine.Expression }
+emitExpressionInDeclarationBlock stackBeforeAddingDeps originalEnvironmentDeclarations originalMainExpression =
     let
         newReferencesDependencies =
             environmentDeclarations
-                |> List.map (Tuple.mapSecond (listDependenciesOfExpression stackBeforeAddingDependencies))
+                |> List.map (Tuple.mapSecond (listDependenciesOfExpression stackBeforeAddingDeps))
+                |> Dict.fromList
+
+        stackWithEnvironmentDeclDeps =
+            { stackBeforeAddingDeps
+                | declarationsDependencies = Dict.union newReferencesDependencies stackBeforeAddingDeps.declarationsDependencies
+            }
+
+        closureCaptures =
+            originalMainExpression
+                |> listDependenciesOfExpression stackWithEnvironmentDeclDeps
+                |> Set.intersect (Set.fromList (Dict.keys stackBeforeAddingDeps.environmentDeconstructions))
+                |> Set.toList
+
+        environmentDeclarations =
+            originalEnvironmentDeclarations
+                |> List.map
+                    (\( declarationName, declarationExpression ) ->
+                        ( declarationName
+                        , declarationExpression
+                            |> mapLocalDeclarationNamesInDescendants Set.empty
+                                ((++) >> (|>) ("____lifted_from_" ++ declarationName))
+                        )
+                    )
+
+        mainExpression =
+            originalMainExpression
+                |> mapLocalDeclarationNamesInDescendants Set.empty
+                    ((++) >> (|>) "____lifted_from_main")
+
+        environmentDeclarationsDirectDependencies =
+            environmentDeclarations
+                |> List.map (Tuple.mapSecond (listDependenciesOfExpression stackWithEnvironmentDeclDeps))
                 |> Dict.fromList
 
         stackBefore =
-            { stackBeforeAddingDependencies
-                | declarationsDependencies = Dict.union newReferencesDependencies stackBeforeAddingDependencies.declarationsDependencies
+            { stackWithEnvironmentDeclDeps
+                | declarationsDependencies =
+                    Dict.union environmentDeclarationsDirectDependencies stackWithEnvironmentDeclDeps.declarationsDependencies
             }
-
-        innerDependencies =
-            listDependenciesOfExpression stackBefore expressionInClosure
-
-        outerDependencies =
-            environmentDeclarations
-                |> List.map Tuple.first
-                |> List.foldl Set.remove innerDependencies
-
-        usedDeclarations =
-            environmentDeclarations
-                |> List.filter (Tuple.first >> Set.member >> (|>) innerDependencies)
-
-        environmentElements =
-            [ List.map (Tuple.mapSecond LiteralEnvironmentElement) usedDeclarations
-            , outerDependencies |> Set.toList |> List.map (Tuple.pair >> (|>) ForwardedEnvironmentElement)
-            ]
-                |> List.concat
     in
-    if usedDeclarations == [] then
-        emitExpression stackBefore expressionInClosure
+    if closureCaptures == [] then
+        emitExpressionInDeclarationBlockLessClosure
+            stackBefore
+            environmentDeclarations
+            mainExpression
+            |> Result.map
+                (\expr ->
+                    { expr = expr
+                    , closureArgumentPine = Nothing
+                    }
+                )
 
     else
-        emitEnvironmentCompositionExpression
-            stackBefore
-            (Dict.fromList environmentElements)
+        {- Build an expression that captures parts of the current environment into a literal.
+           In other words, capture dependencies from the current environment and combine them with the function to enable transport to and reuse in other places.
+        -}
+        let
+            closureArgument =
+                closureCaptures
+                    |> List.map ReferenceExpression
+                    |> ListExpression
+
+            closureParameterFromParameters =
+                List.indexedMap
+                    (\paramIndex functionParam ->
+                        functionParam
+                            |> List.map
+                                (\( deconsName, deconsExpr ) ->
+                                    ( deconsName
+                                    , deconsExpr
+                                        >> listItemFromIndexExpression_Pine paramIndex
+                                    )
+                                )
+                    )
+                    >> List.concat
+
+            closureFunctionParameters =
+                closureCaptures
+                    |> List.map (Tuple.pair >> (|>) identity)
+                    |> List.singleton
+
+            closureFunctionParameter =
+                closureFunctionParameters
+                    |> closureParameterFromParameters
+
+            functionParams =
+                [ closureFunctionParameter ]
+
+            stackInClosure =
+                { stackBefore
+                    | environmentDeconstructions =
+                        functionParams
+                            |> environmentDeconstructionsFromFunctionParams
+                }
+
+            mainExpressionAfterAddClosureParam =
+                FunctionExpression
+                    { argumentDeconstructions = closureFunctionParameter
+                    , expression = mainExpression
+                    }
+        in
+        closureArgument
+            |> emitExpression stackBefore
+            |> Result.mapError ((++) "Failed to emit closure argument: ")
             |> Result.andThen
-                (\( stack, argumentExpression ) ->
-                    emitExpression stack expressionInClosure
+                (\closureArgumentPine ->
+                    emitExpressionInDeclarationBlockLessClosure
+                        stackInClosure
+                        environmentDeclarations
+                        mainExpressionAfterAddClosureParam
                         |> Result.map
-                            (\expressionPine ->
-                                Pine.DecodeAndEvaluateExpression
-                                    { expression =
-                                        expressionPine
-                                            |> Pine.encodeExpressionAsValue
-                                            |> Pine.LiteralExpression
-                                    , environment =
-                                        Pine.DecodeAndEvaluateExpression
-                                            { expression = argumentExpression
-                                            , environment = Pine.ListExpression []
-                                            }
-                                    }
+                            (\expr ->
+                                { expr = expr
+                                , closureArgumentPine = Just closureArgumentPine
+                                }
                             )
                 )
 
 
-emitEnvironmentCompositionExpression :
+type alias ClosureFunctionEntry =
+    { functionName : String
+    , parameters : List FunctionParam
+    , innerExpression : Expression
+    , closureCaptures : Maybe (List String)
+    }
+
+
+emitExpressionInDeclarationBlockLessClosure :
     EmitStack
-    -> Dict.Dict String EnvironmentElement
-    -> Result String ( EmitStack, Pine.Expression )
-emitEnvironmentCompositionExpression stackBefore environmentElementsDict =
+    -> List ( String, Expression )
+    -> Expression
+    -> Result String Pine.Expression
+emitExpressionInDeclarationBlockLessClosure stackBeforeDependencies availableEnvironmentDeclarations originalMainExpression =
     let
-        environmentElementsOrderedPartForwarded =
-            stackBefore.environmentElementsOrder
-                |> List.filterMap
-                    (\name ->
-                        environmentElementsDict
-                            |> Dict.get name
-                            |> Maybe.map (\element -> ( name, element ))
-                    )
+        preprocessExpression expression =
+            let
+                ( functionParameters, functionInnerExpr ) =
+                    parseFunctionParameters expression
 
-        environmentElementsForwardedNames =
-            environmentElementsOrderedPartForwarded |> List.map Tuple.first
-
-        environmentElementsOrderedPartNew =
-            environmentElementsDict
-                |> Dict.toList
-                |> List.filter (Tuple.first >> List.member >> (|>) environmentElementsForwardedNames >> not)
-
-        environmentElementsOrdered =
-            environmentElementsOrderedPartForwarded ++ environmentElementsOrderedPartNew
-
-        environmentElementsLiteralNames =
-            environmentElementsDict
-                |> Dict.toList
-                |> List.filterMap
-                    (\( elementName, element ) ->
-                        case element of
-                            LiteralEnvironmentElement _ ->
-                                Just elementName
-
-                            _ ->
-                                Nothing
-                    )
-
-        newDeclarationsExpectedEnvironment =
-            environmentElementsLiteralNames
-                |> List.map (Tuple.pair >> (|>) (List.map Tuple.first environmentElementsOrdered))
-                |> Dict.fromList
-
-        declarationsExpectedEnvironment =
-            stackBefore.declarationsExpectedEnvironment
-                |> Dict.union newDeclarationsExpectedEnvironment
-
-        stack =
-            { stackBefore
-                | environmentElementsOrder = environmentElementsOrdered |> List.map Tuple.first
-                , declarationsExpectedEnvironment = declarationsExpectedEnvironment
+                ( liftedDeclarationsBeforeParsingFun, expressionAfterLiftingDecls ) =
+                    liftDeclsFromLetBlocksRecursively functionInnerExpr
+            in
+            { functionParameters = functionParameters
+            , liftedDeclarations =
+                liftedDeclarationsBeforeParsingFun
+                    |> List.map (Tuple.mapSecond parseFunctionParameters)
+            , expressionAfterLiftingDecls = expressionAfterLiftingDecls
             }
 
-        expressionToLookupNameInPreviousEnvironment : String -> Result String Pine.Expression
-        expressionToLookupNameInPreviousEnvironment elementName =
-            resultIndexInEnvironmentFromElementName elementName stackBefore
-                |> Result.map
-                    (\runtimeIndex ->
-                        {-
-                           (expressionToLookupNameInEnvironment elementName)
-                        -}
-                        listItemFromIndexExpression_Pine 1
-                            (listItemFromIndexExpression_Pine runtimeIndex Pine.EnvironmentExpression)
+        newReferencesDependencies =
+            availableEnvironmentDeclarations
+                |> List.map (Tuple.mapSecond (listDependenciesOfExpression stackBeforeDependencies))
+                |> Dict.fromList
+
+        stackWithDependencies =
+            { stackBeforeDependencies
+                | declarationsDependencies =
+                    Dict.union newReferencesDependencies stackBeforeDependencies.declarationsDependencies
+            }
+
+        originalMainExpressionDependencies =
+            listDependenciesOfExpression stackWithDependencies originalMainExpression
+
+        usedEnvironmentDeclarations =
+            availableEnvironmentDeclarations
+                |> List.filter (Tuple.first >> Set.member >> (|>) originalMainExpressionDependencies)
+                |> List.map (Tuple.mapSecond preprocessExpression)
+
+        closureParameterFromParameters =
+            List.indexedMap
+                (\paramIndex functionParam ->
+                    functionParam
+                        |> List.map
+                            (\( deconsName, deconsExpr ) ->
+                                ( deconsName
+                                , deconsExpr
+                                    >> listItemFromIndexExpression_Pine paramIndex
+                                )
+                            )
+                )
+                >> List.concat
+
+        envLiftedDeclarationsAsFunctions : List ClosureFunctionEntry
+        envLiftedDeclarationsAsFunctions =
+            usedEnvironmentDeclarations
+                |> List.map
+                    (\( _, envDeclaration ) ->
+                        let
+                            closureParam =
+                                closureParameterFromParameters envDeclaration.functionParameters
+                        in
+                        envDeclaration.liftedDeclarations
+                            |> List.map
+                                (\( envDeclLiftedDeclName, ( envDeclLiftedDeclParams, envDeclLiftedDeclInnerExpr ) ) ->
+                                    { functionName = envDeclLiftedDeclName
+                                    , closureCaptures =
+                                        closureParam
+                                            |> List.map Tuple.first
+                                            |> Just
+                                    , parameters = closureParam :: envDeclLiftedDeclParams
+                                    , innerExpression = envDeclLiftedDeclInnerExpr
+                                    }
+                                )
+                    )
+                |> List.concat
+
+        mainExpression :
+            { functionParameters : List FunctionParam
+            , liftedDeclarations : List ( String, ( List FunctionParam, Expression ) )
+            , expressionAfterLiftingDecls : Expression
+            }
+        mainExpression =
+            preprocessExpression originalMainExpression
+
+        liftedDeclFunctionParam =
+            mainExpression.functionParameters
+                |> closureParameterFromParameters
+
+        mainExpressionLiftedDeclarations : List ClosureFunctionEntry
+        mainExpressionLiftedDeclarations =
+            mainExpression.liftedDeclarations
+                |> List.map
+                    (\( liftedDeclName, ( liftedDeclParams, liftedDeclExpr ) ) ->
+                        { functionName = liftedDeclName
+                        , closureCaptures =
+                            liftedDeclFunctionParam
+                                |> List.map Tuple.first
+                                |> Just
+                        , parameters = liftedDeclFunctionParam :: liftedDeclParams
+                        , innerExpression = liftedDeclExpr
+                        }
                     )
 
-        buildEnvironmentElementExpression ( elementName, envExpansion ) =
-            case envExpansion of
-                LiteralEnvironmentElement literal ->
-                    emitExpression stack literal
-                        |> Result.mapError ((++) ("Failed emitting environment element '" ++ elementName ++ "': "))
-                        |> Result.map
-                            (\literalPine ->
-                                [ Pine.LiteralExpression (Pine.valueFromString elementName)
-                                , Pine.LiteralExpression (Pine.encodeExpressionAsValue literalPine)
-                                ]
-                                    |> Pine.ListExpression
-                                    |> Pine.encodeExpressionAsValue
-                                    |> Pine.LiteralExpression
-                            )
-
-                DeconstructionEnvironmentElement deconstructExpression ->
-                    [ Pine.LiteralExpression (Pine.valueFromString elementName)
-                    , Pine.ListExpression
-                        [ Pine.LiteralExpression (Pine.valueFromString "Literal")
-                        , deconstructExpression Pine.EnvironmentExpression
-                        ]
-                    ]
-                        |> Pine.ListExpression
-                        |> Pine.encodeExpressionAsValue
-                        |> Pine.LiteralExpression
-                        |> Ok
-
-                ForwardedEnvironmentElement ->
-                    expressionToLookupNameInPreviousEnvironment elementName
-                        |> Result.map
-                            (\lookupExpr ->
-                                [ Pine.LiteralExpression (Pine.valueFromString "Literal")
-                                , [ Pine.LiteralExpression (Pine.valueFromString elementName)
-
-                                  -- Below is the part we cannot express using a literal.
-                                  , lookupExpr
-                                  ]
-                                    |> Pine.ListExpression
-                                ]
-                                    |> Pine.ListExpression
-                            )
-    in
-    environmentElementsOrdered
-        |> List.map buildEnvironmentElementExpression
-        |> Result.Extra.combine
-        |> Result.map
-            (\environmentElementsExpressions ->
-                ( stack
-                , Pine.ListExpression
-                    [ Pine.LiteralExpression (Pine.valueFromString "List")
-                    , environmentElementsExpressions
-                        |> Pine.ListExpression
-                    ]
-                )
+        environmentDeclarationsAsFunctions : List ClosureFunctionEntry
+        environmentDeclarationsAsFunctions =
+            (usedEnvironmentDeclarations
+                |> List.map
+                    (\( declName, envDeclaration ) ->
+                        { functionName = declName
+                        , closureCaptures = Nothing
+                        , parameters = envDeclaration.functionParameters
+                        , innerExpression = envDeclaration.expressionAfterLiftingDecls
+                        }
+                    )
             )
+                ++ envLiftedDeclarationsAsFunctions
+                ++ mainExpressionLiftedDeclarations
+
+        liftedDeclarationsClosureCaptures =
+            environmentDeclarationsAsFunctions
+                |> List.filterMap
+                    (\functionEntry ->
+                        functionEntry.closureCaptures
+                            |> Maybe.map (Tuple.pair functionEntry.functionName)
+                    )
+                |> Dict.fromList
+
+        environmentFunctions =
+            environmentDeclarationsAsFunctions
+                |> List.map
+                    (\functionEntry ->
+                        { functionName = functionEntry.functionName
+                        , argumentsCount = List.length functionEntry.parameters
+                        }
+                    )
+
+        stackBefore =
+            { declarationsDependencies = stackWithDependencies.declarationsDependencies
+            , environmentFunctions = environmentFunctions
+            , environmentDeconstructions = Dict.empty
+            }
+
+        emitEnvironmentDeclarationsResult =
+            environmentDeclarationsAsFunctions
+                |> List.map
+                    (\envDeclAsFunction ->
+                        let
+                            envDeclarationFunctionStack =
+                                { stackBefore
+                                    | environmentDeconstructions =
+                                        envDeclAsFunction.parameters
+                                            |> environmentDeconstructionsFromFunctionParams
+                                }
+                        in
+                        envDeclAsFunction.innerExpression
+                            |> mapReferencesForClosureCaptures liftedDeclarationsClosureCaptures
+                            |> emitExpression envDeclarationFunctionStack
+                            |> Result.mapError ((++) ("Failed to emit '" ++ envDeclAsFunction.functionName ++ "': "))
+                            |> Result.map
+                                (\functionExpressionPine ->
+                                    ( envDeclAsFunction.functionName
+                                    , envDeclAsFunction.parameters
+                                    , functionExpressionPine
+                                    )
+                                )
+                    )
+                |> Result.Extra.combine
+    in
+    emitEnvironmentDeclarationsResult
+        |> Result.andThen
+            (\emitEnvironmentDeclarations ->
+                let
+                    mainExpressionFunctionStack =
+                        { stackBefore
+                            | environmentDeconstructions =
+                                mainExpression.functionParameters
+                                    |> environmentDeconstructionsFromFunctionParams
+                        }
+
+                    envFunctionsValues =
+                        emitEnvironmentDeclarations
+                            |> List.map
+                                (\( _, _, functionExpr ) ->
+                                    functionExpr |> Pine.encodeExpressionAsValue
+                                )
+                in
+                mainExpression.expressionAfterLiftingDecls
+                    |> mapReferencesForClosureCaptures liftedDeclarationsClosureCaptures
+                    |> emitExpression mainExpressionFunctionStack
+                    |> Result.andThen
+                        (\mainExpressionInnerExpressionPine ->
+                            emitWrapperForPartialApplication
+                                envFunctionsValues
+                                (List.length mainExpression.functionParameters)
+                                mainExpressionInnerExpressionPine
+                        )
+            )
+
+
+mapReferencesForClosureCaptures : Dict.Dict String (List String) -> Expression -> Expression
+mapReferencesForClosureCaptures closureCapturesByFunctionName expression =
+    case expression of
+        LiteralExpression _ ->
+            expression
+
+        ListExpression list ->
+            ListExpression (List.map (mapReferencesForClosureCaptures closureCapturesByFunctionName) list)
+
+        DecodeAndEvaluateExpression decodeAndEval ->
+            DecodeAndEvaluateExpression
+                { expression = mapReferencesForClosureCaptures closureCapturesByFunctionName decodeAndEval.expression
+                , environment = mapReferencesForClosureCaptures closureCapturesByFunctionName decodeAndEval.environment
+                }
+
+        KernelApplicationExpression kernelApplication ->
+            KernelApplicationExpression
+                { kernelApplication
+                    | argument =
+                        mapReferencesForClosureCaptures closureCapturesByFunctionName kernelApplication.argument
+                }
+
+        ConditionalExpression conditional ->
+            ConditionalExpression
+                { condition =
+                    mapReferencesForClosureCaptures closureCapturesByFunctionName conditional.condition
+                , ifTrue =
+                    mapReferencesForClosureCaptures closureCapturesByFunctionName conditional.ifTrue
+                , ifFalse =
+                    mapReferencesForClosureCaptures closureCapturesByFunctionName conditional.ifFalse
+                }
+
+        ReferenceExpression reference ->
+            case Dict.get reference closureCapturesByFunctionName of
+                Just capturedParameters ->
+                    -- Insert first argument
+                    FunctionApplicationExpression
+                        expression
+                        [ capturedParameters
+                            |> List.map ReferenceExpression
+                            |> ListExpression
+                        ]
+
+                Nothing ->
+                    expression
+
+        FunctionExpression _ ->
+            expression
+
+        FunctionApplicationExpression functionExpression arguments ->
+            let
+                mappedArguments =
+                    List.map (mapReferencesForClosureCaptures closureCapturesByFunctionName) arguments
+
+                continueWithoutClosureForFunction () =
+                    let
+                        mappedFunctionExpression =
+                            mapReferencesForClosureCaptures closureCapturesByFunctionName functionExpression
+                    in
+                    FunctionApplicationExpression
+                        mappedFunctionExpression
+                        mappedArguments
+            in
+            case functionExpression of
+                ReferenceExpression functionName ->
+                    case Dict.get functionName closureCapturesByFunctionName of
+                        Just capturedParameters ->
+                            -- Insert first argument
+                            FunctionApplicationExpression
+                                (ReferenceExpression functionName)
+                                ((capturedParameters
+                                    |> List.map ReferenceExpression
+                                    |> ListExpression
+                                 )
+                                    :: mappedArguments
+                                )
+
+                        Nothing ->
+                            continueWithoutClosureForFunction ()
+
+                _ ->
+                    continueWithoutClosureForFunction ()
+
+        LetBlockExpression _ ->
+            expression
+
+        StringTagExpression tag tagged ->
+            StringTagExpression tag (mapReferencesForClosureCaptures closureCapturesByFunctionName tagged)
+
+        RecordAccessExpression field record ->
+            RecordAccessExpression field (mapReferencesForClosureCaptures closureCapturesByFunctionName record)
+
+
+liftDeclsFromLetBlocksRecursively : Expression -> ( List ( String, Expression ), Expression )
+liftDeclsFromLetBlocksRecursively expression =
+    case expression of
+        LiteralExpression _ ->
+            ( [], expression )
+
+        ListExpression list ->
+            let
+                elements =
+                    List.map liftDeclsFromLetBlocksRecursively list
+            in
+            ( List.concatMap Tuple.first elements
+            , ListExpression (List.map Tuple.second elements)
+            )
+
+        DecodeAndEvaluateExpression decodeAndEval ->
+            let
+                ( expressionDeclarations, expressionExpression ) =
+                    liftDeclsFromLetBlocksRecursively decodeAndEval.expression
+
+                ( environmentDeclarations, environmentExpression ) =
+                    liftDeclsFromLetBlocksRecursively decodeAndEval.environment
+            in
+            ( expressionDeclarations ++ environmentDeclarations
+            , DecodeAndEvaluateExpression
+                { expression = expressionExpression
+                , environment = environmentExpression
+                }
+            )
+
+        KernelApplicationExpression kernelApplication ->
+            kernelApplication.argument
+                |> liftDeclsFromLetBlocksRecursively
+                |> Tuple.mapSecond
+                    (\argument ->
+                        KernelApplicationExpression { kernelApplication | argument = argument }
+                    )
+
+        ConditionalExpression conditional ->
+            let
+                ( conditionDeclarations, conditionExpression ) =
+                    liftDeclsFromLetBlocksRecursively conditional.condition
+
+                ( ifTrueDeclarations, ifTrueExpression ) =
+                    liftDeclsFromLetBlocksRecursively conditional.ifTrue
+
+                ( ifFalseDeclarations, ifFalseExpression ) =
+                    liftDeclsFromLetBlocksRecursively conditional.ifFalse
+            in
+            ( conditionDeclarations ++ ifTrueDeclarations ++ ifFalseDeclarations
+            , ConditionalExpression
+                { condition = conditionExpression
+                , ifTrue = ifTrueExpression
+                , ifFalse = ifFalseExpression
+                }
+            )
+
+        ReferenceExpression name ->
+            ( []
+            , ReferenceExpression name
+            )
+
+        FunctionExpression _ ->
+            ( [], expression )
+
+        FunctionApplicationExpression function arguments ->
+            let
+                ( argumentsDeclarations, argumentsExpressions ) =
+                    arguments
+                        |> List.map liftDeclsFromLetBlocksRecursively
+                        |> List.unzip
+
+                ( functionDeclarations, functionExpression ) =
+                    function
+                        |> liftDeclsFromLetBlocksRecursively
+            in
+            ( List.concat argumentsDeclarations ++ functionDeclarations
+            , FunctionApplicationExpression
+                functionExpression
+                argumentsExpressions
+            )
+
+        LetBlockExpression letBlock ->
+            let
+                ( innerDecls, mappedExpression ) =
+                    liftDeclsFromLetBlocksRecursively letBlock.expression
+            in
+            ( letBlock.declarations ++ innerDecls
+            , mappedExpression
+            )
+
+        StringTagExpression tag tagged ->
+            tagged
+                |> liftDeclsFromLetBlocksRecursively
+                |> Tuple.mapSecond (StringTagExpression tag)
+
+        RecordAccessExpression fieldName record ->
+            let
+                ( recordDeclarations, recordExpression ) =
+                    liftDeclsFromLetBlocksRecursively record
+            in
+            ( recordDeclarations
+            , RecordAccessExpression fieldName recordExpression
+            )
+
+
+mapLocalDeclarationNamesInDescendants : Set.Set String -> (String -> String) -> Expression -> Expression
+mapLocalDeclarationNamesInDescendants localSet mapDeclarationName expression =
+    case expression of
+        LiteralExpression _ ->
+            expression
+
+        ListExpression list ->
+            ListExpression (List.map (mapLocalDeclarationNamesInDescendants localSet mapDeclarationName) list)
+
+        DecodeAndEvaluateExpression decodeAndEval ->
+            DecodeAndEvaluateExpression
+                { expression =
+                    mapLocalDeclarationNamesInDescendants localSet mapDeclarationName decodeAndEval.expression
+                , environment =
+                    mapLocalDeclarationNamesInDescendants localSet mapDeclarationName decodeAndEval.environment
+                }
+
+        KernelApplicationExpression kernelApplication ->
+            KernelApplicationExpression
+                { kernelApplication
+                    | argument =
+                        mapLocalDeclarationNamesInDescendants localSet mapDeclarationName kernelApplication.argument
+                }
+
+        ConditionalExpression conditional ->
+            ConditionalExpression
+                { condition =
+                    mapLocalDeclarationNamesInDescendants localSet mapDeclarationName conditional.condition
+                , ifTrue =
+                    mapLocalDeclarationNamesInDescendants localSet mapDeclarationName conditional.ifTrue
+                , ifFalse =
+                    mapLocalDeclarationNamesInDescendants localSet mapDeclarationName conditional.ifFalse
+                }
+
+        ReferenceExpression reference ->
+            if Set.member reference localSet then
+                ReferenceExpression (mapDeclarationName reference)
+
+            else
+                expression
+
+        FunctionExpression function ->
+            let
+                localSetWithParameters =
+                    List.foldl
+                        (\( parameterName, _ ) -> Set.insert parameterName)
+                        localSet
+                        function.argumentDeconstructions
+
+                mappedParameters =
+                    List.map
+                        (Tuple.mapFirst mapDeclarationName)
+                        function.argumentDeconstructions
+            in
+            FunctionExpression
+                { argumentDeconstructions = mappedParameters
+                , expression =
+                    mapLocalDeclarationNamesInDescendants
+                        localSetWithParameters
+                        mapDeclarationName
+                        function.expression
+                }
+
+        FunctionApplicationExpression functionExpression arguments ->
+            FunctionApplicationExpression
+                (mapLocalDeclarationNamesInDescendants localSet mapDeclarationName functionExpression)
+                (List.map (mapLocalDeclarationNamesInDescendants localSet mapDeclarationName) arguments)
+
+        LetBlockExpression letBlock ->
+            let
+                localSetWithDeclarations =
+                    List.foldl
+                        (\( declarationName, _ ) ->
+                            Set.insert declarationName
+                        )
+                        localSet
+                        letBlock.declarations
+
+                mappedDeclarations =
+                    List.map
+                        (Tuple.mapFirst mapDeclarationName
+                            >> Tuple.mapSecond
+                                (mapLocalDeclarationNamesInDescendants localSetWithDeclarations mapDeclarationName)
+                        )
+                        letBlock.declarations
+            in
+            LetBlockExpression
+                { declarations = mappedDeclarations
+                , expression =
+                    mapLocalDeclarationNamesInDescendants
+                        localSetWithDeclarations
+                        mapDeclarationName
+                        letBlock.expression
+                }
+
+        StringTagExpression tag tagged ->
+            StringTagExpression
+                tag
+                (mapLocalDeclarationNamesInDescendants localSet mapDeclarationName tagged)
+
+        RecordAccessExpression field record ->
+            RecordAccessExpression
+                field
+                (mapLocalDeclarationNamesInDescendants localSet mapDeclarationName record)
+
+
+emitWrapperForPartialApplication :
+    List Pine.Value
+    -> Int
+    -> Pine.Expression
+    -> Result String Pine.Expression
+emitWrapperForPartialApplication envFunctions parameterCount innerExpression =
+    case parameterCount of
+        0 ->
+            emitWrapperForPartialApplicationZero
+                { innerExpression = innerExpression
+                , envFunctions = envFunctions
+                }
+                |> Ok
+
+        1 ->
+            emitWrapperForPartialApplicationOne
+                { innerExpression = innerExpression
+                , envFunctions = envFunctions
+                }
+                |> Ok
+
+        2 ->
+            emitWrapperForPartialApplicationTwo
+                { innerExpression = innerExpression
+                , envFunctions = envFunctions
+                }
+                |> Ok
+
+        3 ->
+            emitWrapperForPartialApplicationThree
+                { innerExpression = innerExpression
+                , envFunctions = envFunctions
+                }
+                |> Ok
+
+        _ ->
+            Err
+                ("Not implemented: parameterCount " ++ String.fromInt parameterCount)
+
+
+emitNamedFunctionApplicationExpression : String -> List Expression -> EmitStack -> Result String Pine.Expression
+emitNamedFunctionApplicationExpression functionName arguments compilation =
+    case
+        compilation.environmentFunctions
+            |> List.indexedMap Tuple.pair
+            |> List.filter (Tuple.second >> .functionName >> (==) functionName)
+            |> List.head
+    of
+        Just ( functionIndexInEnv, function ) ->
+            emitNamedFunctionReferenceExpression ( functionIndexInEnv, function ) arguments compilation
+
+        Nothing ->
+            positionalApplicationExpressionFromListOfArguments
+                (ReferenceExpression functionName)
+                arguments
+                |> emitExpression compilation
+
+
+emitNamedFunctionReferenceExpression :
+    ( Int, EnvironmentFunctionEntry )
+    -> List Expression
+    -> EmitStack
+    -> Result String Pine.Expression
+emitNamedFunctionReferenceExpression ( functionIndexInEnv, function ) arguments compilation =
+    let
+        argumentsCount =
+            List.length arguments
+    in
+    if function.argumentsCount == argumentsCount then
+        arguments
+            |> List.map
+                (emitExpression compilation
+                    >> Result.mapError ((++) ("Failed emitting argument for function " ++ function.functionName ++ ": "))
+                )
+            |> Result.Extra.combine
+            |> Result.map
+                (\argumentsPine ->
+                    let
+                        getEnvFunctionsExpression =
+                            Pine.EnvironmentExpression
+                                |> listItemFromIndexExpression_Pine 0
+
+                        getFunctionExpression =
+                            getEnvFunctionsExpression
+                                |> listItemFromIndexExpression_Pine functionIndexInEnv
+
+                        packagedArgumentsExpression =
+                            argumentsPine
+                                |> List.indexedMap
+                                    (\argIndex argument ->
+                                        Pine.ListExpression
+                                            [ Pine.valueFromString
+                                                ("this-had-been-param-name-new-" ++ String.fromInt argIndex)
+                                                |> Pine.LiteralExpression
+                                            , argument
+                                            ]
+                                    )
+                                |> Pine.ListExpression
+                    in
+                    Pine.DecodeAndEvaluateExpression
+                        { expression = getFunctionExpression
+                        , environment =
+                            Pine.ListExpression
+                                [ getEnvFunctionsExpression
+                                , packagedArgumentsExpression
+                                ]
+                        }
+                )
+
+    else
+        positionalApplicationExpressionFromListOfArguments
+            (ReferenceExpression function.functionName)
+            arguments
+            |> emitExpression compilation
 
 
 emitReferenceExpression : String -> EmitStack -> Result String Pine.Expression
 emitReferenceExpression name compilation =
-    resultIndexInEnvironmentFromElementName name compilation
-        |> Result.andThen
-            (\runtimeIndex ->
-                {-
-                   Ok
-                       (Pine.DecodeAndEvaluateExpression
-                           { expression = expressionToLookupNameInEnvironment name
-                           , environment = Pine.EnvironmentExpression
-                           }
-                       )
-                -}
-                Ok
-                    (Pine.DecodeAndEvaluateExpression
-                        { expression =
-                            listItemFromIndexExpression_Pine 1
-                                (listItemFromIndexExpression_Pine runtimeIndex Pine.EnvironmentExpression)
-                        , environment = Pine.EnvironmentExpression
-                        }
-                    )
-            )
+    let
+        continueWithDeconstruction () =
+            case Dict.get name compilation.environmentDeconstructions of
+                Nothing ->
+                    Err
+                        ("Failed getting deconstruction for '"
+                            ++ name
+                            ++ "'. "
+                            ++ String.fromInt (Dict.size compilation.environmentDeconstructions)
+                            ++ " deconstructions on the current stack: "
+                            ++ String.join ", " (Dict.keys compilation.environmentDeconstructions)
+                            ++ ". "
+                            ++ String.fromInt (List.length compilation.environmentFunctions)
+                            ++ " functions on the current stack: "
+                            ++ String.join ", " (List.map .functionName compilation.environmentFunctions)
+                        )
 
+                Just deconstruction ->
+                    Pine.EnvironmentExpression
+                        |> listItemFromIndexExpression_Pine 1
+                        |> deconstruction
+                        |> Ok
+    in
+    case
+        compilation.environmentFunctions
+            |> List.indexedMap Tuple.pair
+            |> List.filter (Tuple.second >> .functionName >> (==) name)
+            |> List.head
+    of
+        Just ( functionIndexInEnv, function ) ->
+            if function.argumentsCount == 0 then
+                emitNamedFunctionReferenceExpression ( functionIndexInEnv, function ) [] compilation
 
-resultIndexInEnvironmentFromElementName : String -> EmitStack -> Result String Int
-resultIndexInEnvironmentFromElementName name stack =
-    case maybeIndexInEnvironmentFromElementName name stack of
+            else
+                case Dict.get function.argumentsCount wrapperForPartialAppDynamicFromParameterCount of
+                    Just emitWrapper ->
+                        let
+                            getEnvFunctionsExpression =
+                                Pine.EnvironmentExpression
+                                    |> listItemFromIndexExpression_Pine 0
+
+                            getFunctionExpression =
+                                getEnvFunctionsExpression
+                                    |> listItemFromIndexExpression_Pine functionIndexInEnv
+                        in
+                        emitWrapper
+                            { getFunctionInnerExpression = getFunctionExpression
+                            , getEnvFunctionsExpression = getEnvFunctionsExpression
+                            }
+                            |> Ok
+
+                    _ ->
+                        continueWithDeconstruction ()
+
         Nothing ->
-            Err
-                ("Failed getting runtime index for '"
-                    ++ name
-                    ++ "'. "
-                    ++ String.fromInt (List.length stack.environmentElementsOrder)
-                    ++ " names on the current stack: "
-                    ++ String.join ", " stack.environmentElementsOrder
-                )
-
-        Just runtimeIndex ->
-            Ok runtimeIndex
+            continueWithDeconstruction ()
 
 
-maybeIndexInEnvironmentFromElementName : String -> EmitStack -> Maybe Int
-maybeIndexInEnvironmentFromElementName name =
-    .environmentElementsOrder
-        >> List.indexedMap Tuple.pair
-        >> List.filter (Tuple.second >> (==) name)
-        >> List.head
-        >> Maybe.map Tuple.first
+wrapperForPartialAppDynamicFromParameterCount :
+    Dict.Dict
+        Int
+        ({ getFunctionInnerExpression : Pine.Expression, getEnvFunctionsExpression : Pine.Expression }
+         -> Pine.Expression
+        )
+wrapperForPartialAppDynamicFromParameterCount =
+    [ ( 1, emitWrapperForPartialApplicationOneDynamic )
+    , ( 2, emitWrapperForPartialApplicationTwoDynamic )
+    ]
+        |> Dict.fromList
 
 
 getDeclarationValueFromCompilation : ( List String, String ) -> CompilationStack -> Result String Pine.Value
@@ -2632,19 +3176,602 @@ getDeclarationValueFromCompilation ( localModuleName, nameInModule ) compilation
                     Ok declarationValue
 
 
-expressionToLookupNameInEnvironment : String -> Pine.Expression
-expressionToLookupNameInEnvironment name =
-    expressionToLookupNameInGivenScope name Pine.EnvironmentExpression
+parseFunctionParameters : Expression -> ( List FunctionParam, Expression )
+parseFunctionParameters expression =
+    case expression of
+        FunctionExpression function ->
+            let
+                ( innerArguments, innerExpression ) =
+                    parseFunctionParameters function.expression
+            in
+            ( function.argumentDeconstructions :: innerArguments, innerExpression )
+
+        _ ->
+            ( [], expression )
 
 
-expressionToLookupNameInGivenScope : String -> Pine.Expression -> Pine.Expression
-expressionToLookupNameInGivenScope name scopeExpression =
-    pineKernel_ListHead_Pine
-        (applyKernelFunctionWithTwoArguments_Pine
-            "look_up_name_in_ListValue"
-            (Pine.LiteralExpression (Pine.valueFromString name))
-            scopeExpression
-        )
+emitWrapperForPartialApplicationZero :
+    { innerExpression : Pine.Expression
+    , envFunctions : List Pine.Value
+    }
+    -> Pine.Expression
+emitWrapperForPartialApplicationZero { innerExpression, envFunctions } =
+    Pine.DecodeAndEvaluateExpression
+        { expression =
+            innerExpression
+                |> Pine.encodeExpressionAsValue
+                |> Pine.LiteralExpression
+        , environment =
+            Pine.ListExpression
+                [ Pine.LiteralExpression (Pine.ListValue envFunctions)
+
+                -- Zero parameters
+                , Pine.ListExpression []
+                ]
+        }
+
+
+emitWrapperForPartialApplicationOne :
+    { innerExpression : Pine.Expression
+    , envFunctions : List Pine.Value
+    }
+    -> Pine.Expression
+emitWrapperForPartialApplicationOne { innerExpression, envFunctions } =
+    Pine.DecodeAndEvaluateExpression
+        { expression =
+            innerExpression
+                |> Pine.encodeExpressionAsValue
+                |> Pine.LiteralExpression
+        , environment =
+            Pine.ListExpression
+                [ Pine.LiteralExpression (Pine.ListValue envFunctions)
+                , Pine.ListExpression
+                    [ Pine.ListExpression
+                        [ Pine.LiteralExpression (Pine.valueFromString "this-had-been-param-name-old-0-in-one")
+                            |> Pine.encodeExpressionAsValue
+                            |> Pine.LiteralExpression
+                        , Pine.EnvironmentExpression
+                        ]
+                    ]
+                ]
+        }
+
+
+emitWrapperForPartialApplicationTwo :
+    { innerExpression : Pine.Expression
+    , envFunctions : List Pine.Value
+    }
+    -> Pine.Expression
+emitWrapperForPartialApplicationTwo { innerExpression, envFunctions } =
+    Pine.ListExpression
+        [ Pine.LiteralExpression (Pine.valueFromString "DecodeAndEvaluate")
+        , Pine.ListExpression
+            [ Pine.ListExpression
+                [ Pine.LiteralExpression (Pine.valueFromString "expression")
+                , innerExpression
+                    |> Pine.encodeExpressionAsValue
+                    |> Pine.LiteralExpression
+                    |> Pine.encodeExpressionAsValue
+                    |> Pine.LiteralExpression
+                ]
+            , Pine.ListExpression
+                [ Pine.LiteralExpression (Pine.valueFromString "environment")
+                , Pine.ListExpression
+                    [ Pine.LiteralExpression (Pine.valueFromString "List")
+                    , Pine.ListExpression
+                        [ Pine.ListExpression
+                            [ Pine.LiteralExpression (Pine.valueFromString "List")
+                            , envFunctions
+                                |> List.map (Pine.LiteralExpression >> Pine.encodeExpressionAsValue)
+                                |> Pine.ListValue
+                                |> Pine.LiteralExpression
+                            ]
+                        , Pine.ListExpression
+                            [ Pine.LiteralExpression (Pine.valueFromString "List")
+                            , Pine.ListExpression
+                                [ Pine.ListExpression
+                                    [ Pine.LiteralExpression (Pine.valueFromString "List")
+                                    , Pine.ListExpression
+                                        [ Pine.ListExpression
+                                            [ Pine.LiteralExpression (Pine.valueFromString "Literal")
+                                            , Pine.LiteralExpression
+                                                (Pine.ListValue
+                                                    [ Pine.valueFromString "Literal"
+                                                    , Pine.valueFromString "this-had-been-param-name-old-0-in-two"
+                                                    ]
+                                                )
+                                            ]
+                                        , Pine.ListExpression
+                                            [ Pine.LiteralExpression (Pine.valueFromString "Literal")
+                                            , Pine.EnvironmentExpression
+                                            ]
+                                        ]
+                                    ]
+                                , Pine.ListExpression
+                                    [ Pine.LiteralExpression (Pine.valueFromString "List")
+                                    , Pine.ListExpression
+                                        [ Pine.ListExpression
+                                            [ Pine.LiteralExpression (Pine.valueFromString "Literal")
+                                            , Pine.LiteralExpression
+                                                (Pine.ListValue
+                                                    [ Pine.valueFromString "Literal"
+                                                    , Pine.valueFromString "this-had-been-param-name-old-1-in-two"
+                                                    ]
+                                                )
+                                            ]
+                                        , Pine.ListExpression
+                                            [ Pine.LiteralExpression (Pine.valueFromString "Environment")
+                                            , Pine.ListExpression []
+                                            ]
+                                        ]
+                                    ]
+                                ]
+                            ]
+                        ]
+                    ]
+                ]
+            ]
+        ]
+
+
+emitWrapperForPartialApplicationThree :
+    { innerExpression : Pine.Expression
+    , envFunctions : List Pine.Value
+    }
+    -> Pine.Expression
+emitWrapperForPartialApplicationThree { innerExpression, envFunctions } =
+    Pine.ListExpression
+        [ Pine.LiteralExpression (Pine.valueFromString "List")
+        , Pine.ListExpression
+            [ Pine.ListExpression
+                [ Pine.LiteralExpression (Pine.valueFromString "Literal")
+                , Pine.LiteralExpression (Pine.valueFromString "DecodeAndEvaluate")
+                ]
+            , Pine.ListExpression
+                [ Pine.LiteralExpression (Pine.valueFromString "List")
+                , Pine.ListExpression
+                    [ Pine.ListExpression
+                        [ Pine.LiteralExpression (Pine.valueFromString "List")
+                        , Pine.ListExpression
+                            [ Pine.ListExpression
+                                [ Pine.LiteralExpression (Pine.valueFromString "Literal")
+                                , Pine.LiteralExpression (Pine.valueFromString "environment")
+                                ]
+                            , Pine.ListExpression
+                                [ Pine.LiteralExpression (Pine.valueFromString "List")
+                                , Pine.ListExpression
+                                    [ Pine.ListExpression
+                                        [ Pine.LiteralExpression (Pine.valueFromString "Literal")
+                                        , Pine.LiteralExpression (Pine.valueFromString "List")
+                                        ]
+                                    , Pine.ListExpression
+                                        [ Pine.LiteralExpression (Pine.valueFromString "List")
+                                        , Pine.ListExpression
+                                            [ Pine.ListExpression
+                                                [ Pine.LiteralExpression (Pine.valueFromString "List")
+                                                , Pine.ListExpression
+                                                    [ Pine.ListExpression
+                                                        [ Pine.LiteralExpression (Pine.valueFromString "Literal")
+                                                        , Pine.LiteralExpression (Pine.valueFromString "List")
+                                                        ]
+                                                    , envFunctions
+                                                        |> List.map (Pine.LiteralExpression >> Pine.encodeExpressionAsValue)
+                                                        |> Pine.ListValue
+                                                        |> Pine.LiteralExpression
+                                                        |> Pine.encodeExpressionAsValue
+                                                        |> Pine.LiteralExpression
+                                                    ]
+                                                ]
+                                            , Pine.ListExpression
+                                                [ Pine.LiteralExpression (Pine.valueFromString "List")
+                                                , Pine.ListExpression
+                                                    [ Pine.ListExpression
+                                                        [ Pine.LiteralExpression (Pine.valueFromString "Literal")
+                                                        , Pine.LiteralExpression (Pine.valueFromString "List")
+                                                        ]
+                                                    , Pine.ListExpression
+                                                        [ Pine.LiteralExpression (Pine.valueFromString "List")
+                                                        , Pine.ListExpression
+                                                            [ Pine.ListExpression
+                                                                [ Pine.LiteralExpression (Pine.valueFromString "List")
+                                                                , Pine.ListExpression
+                                                                    [ Pine.ListExpression
+                                                                        [ Pine.LiteralExpression (Pine.valueFromString "Literal")
+                                                                        , Pine.LiteralExpression (Pine.valueFromString "List")
+                                                                        ]
+                                                                    , Pine.ListExpression
+                                                                        [ Pine.LiteralExpression (Pine.valueFromString "List")
+                                                                        , Pine.ListExpression
+                                                                            [ Pine.ListExpression
+                                                                                [ Pine.LiteralExpression (Pine.valueFromString "List")
+                                                                                , Pine.ListExpression
+                                                                                    [ Pine.ListExpression
+                                                                                        [ Pine.LiteralExpression (Pine.valueFromString "Literal")
+                                                                                        , Pine.LiteralExpression (Pine.valueFromString "Literal")
+                                                                                        ]
+                                                                                    , Pine.ListExpression
+                                                                                        [ Pine.LiteralExpression (Pine.valueFromString "Literal")
+                                                                                        , Pine.LiteralExpression
+                                                                                            (Pine.ListValue
+                                                                                                [ Pine.valueFromString "Literal"
+                                                                                                , Pine.valueFromString "this-had-been-param-name-old-0-in-three"
+                                                                                                ]
+                                                                                            )
+                                                                                        ]
+                                                                                    ]
+                                                                                ]
+                                                                            , Pine.ListExpression
+                                                                                [ Pine.LiteralExpression (Pine.valueFromString "List")
+                                                                                , Pine.ListExpression
+                                                                                    [ Pine.ListExpression
+                                                                                        [ Pine.LiteralExpression (Pine.valueFromString "Literal")
+                                                                                        , Pine.LiteralExpression (Pine.valueFromString "Literal")
+                                                                                        ]
+                                                                                    , Pine.ListExpression
+                                                                                        [ Pine.LiteralExpression (Pine.valueFromString "Literal")
+                                                                                        , Pine.EnvironmentExpression
+                                                                                        ]
+                                                                                    ]
+                                                                                ]
+                                                                            ]
+                                                                        ]
+                                                                    ]
+                                                                ]
+                                                            , Pine.ListExpression
+                                                                [ Pine.LiteralExpression (Pine.valueFromString "List")
+                                                                , Pine.ListExpression
+                                                                    [ Pine.ListExpression
+                                                                        [ Pine.LiteralExpression (Pine.valueFromString "Literal")
+                                                                        , Pine.LiteralExpression (Pine.valueFromString "List")
+                                                                        ]
+                                                                    , Pine.ListExpression
+                                                                        [ Pine.LiteralExpression (Pine.valueFromString "List")
+                                                                        , Pine.ListExpression
+                                                                            [ Pine.ListExpression
+                                                                                [ Pine.LiteralExpression (Pine.valueFromString "List")
+                                                                                , Pine.ListExpression
+                                                                                    [ Pine.ListExpression
+                                                                                        [ Pine.LiteralExpression (Pine.valueFromString "Literal")
+                                                                                        , Pine.LiteralExpression (Pine.valueFromString "Literal")
+                                                                                        ]
+                                                                                    , Pine.ListExpression
+                                                                                        [ Pine.LiteralExpression (Pine.valueFromString "Literal")
+                                                                                        , Pine.LiteralExpression
+                                                                                            (Pine.ListValue
+                                                                                                [ Pine.valueFromString "Literal"
+                                                                                                , Pine.valueFromString "this-had-been-param-name-old-1-in-three"
+                                                                                                ]
+                                                                                            )
+                                                                                        ]
+                                                                                    ]
+                                                                                ]
+                                                                            , Pine.ListExpression
+                                                                                [ Pine.LiteralExpression (Pine.valueFromString "List")
+                                                                                , Pine.ListExpression
+                                                                                    [ Pine.ListExpression
+                                                                                        [ Pine.LiteralExpression (Pine.valueFromString "Literal")
+                                                                                        , Pine.LiteralExpression (Pine.valueFromString "Literal")
+                                                                                        ]
+                                                                                    , Pine.ListExpression
+                                                                                        [ Pine.LiteralExpression (Pine.valueFromString "Environment")
+                                                                                        , Pine.ListExpression []
+                                                                                        ]
+                                                                                    ]
+                                                                                ]
+                                                                            ]
+                                                                        ]
+                                                                    ]
+                                                                ]
+                                                            , Pine.ListExpression
+                                                                [ Pine.LiteralExpression (Pine.valueFromString "List")
+                                                                , Pine.ListExpression
+                                                                    [ Pine.ListExpression
+                                                                        [ Pine.LiteralExpression (Pine.valueFromString "Literal")
+                                                                        , Pine.LiteralExpression (Pine.valueFromString "List")
+                                                                        ]
+                                                                    , Pine.ListExpression
+                                                                        [ Pine.LiteralExpression (Pine.valueFromString "List")
+                                                                        , Pine.ListExpression
+                                                                            [ Pine.ListExpression
+                                                                                [ Pine.LiteralExpression (Pine.valueFromString "List")
+                                                                                , Pine.ListExpression
+                                                                                    [ Pine.ListExpression
+                                                                                        [ Pine.LiteralExpression (Pine.valueFromString "Literal")
+                                                                                        , Pine.LiteralExpression (Pine.valueFromString "Literal")
+                                                                                        ]
+                                                                                    , Pine.ListExpression
+                                                                                        [ Pine.LiteralExpression (Pine.valueFromString "Literal")
+                                                                                        , Pine.LiteralExpression
+                                                                                            (Pine.ListValue
+                                                                                                [ Pine.valueFromString "Literal"
+                                                                                                , Pine.valueFromString "this-had-been-param-name-old-2-in-three"
+                                                                                                ]
+                                                                                            )
+                                                                                        ]
+                                                                                    ]
+                                                                                ]
+                                                                            , Pine.ListExpression
+                                                                                [ Pine.LiteralExpression (Pine.valueFromString "List")
+                                                                                , Pine.ListExpression
+                                                                                    [ Pine.ListExpression
+                                                                                        [ Pine.LiteralExpression (Pine.valueFromString "Literal")
+                                                                                        , Pine.LiteralExpression (Pine.valueFromString "Environment")
+                                                                                        ]
+                                                                                    , Pine.ListExpression
+                                                                                        [ Pine.LiteralExpression (Pine.valueFromString "List")
+                                                                                        , Pine.ListExpression []
+                                                                                        ]
+                                                                                    ]
+                                                                                ]
+                                                                            ]
+                                                                        ]
+                                                                    ]
+                                                                ]
+                                                            ]
+                                                        ]
+                                                    ]
+                                                ]
+                                            ]
+                                        ]
+                                    ]
+                                ]
+                            ]
+                        ]
+                    , Pine.ListExpression
+                        [ Pine.LiteralExpression (Pine.valueFromString "List")
+                        , Pine.ListExpression
+                            [ Pine.ListExpression
+                                [ Pine.LiteralExpression (Pine.valueFromString "Literal")
+                                , Pine.LiteralExpression (Pine.valueFromString "expression")
+                                ]
+                            , Pine.ListExpression
+                                [ Pine.LiteralExpression (Pine.valueFromString "Literal")
+                                , Pine.ListExpression
+                                    [ Pine.LiteralExpression (Pine.valueFromString "Literal")
+                                    , innerExpression
+                                        |> Pine.encodeExpressionAsValue
+                                        |> Pine.LiteralExpression
+                                    ]
+                                ]
+                            ]
+                        ]
+                    ]
+                ]
+            ]
+        ]
+
+
+emitWrapperForPartialApplicationOneDynamic :
+    { getFunctionInnerExpression : Pine.Expression
+    , getEnvFunctionsExpression : Pine.Expression
+    }
+    -> Pine.Expression
+emitWrapperForPartialApplicationOneDynamic { getFunctionInnerExpression, getEnvFunctionsExpression } =
+    Pine.ListExpression
+        [ Pine.LiteralExpression (Pine.valueFromString "DecodeAndEvaluate")
+        , Pine.ListExpression
+            [ Pine.ListExpression
+                [ Pine.LiteralExpression (Pine.valueFromString "environment")
+                , Pine.ListExpression
+                    [ Pine.LiteralExpression (Pine.valueFromString "List")
+                    , Pine.ListExpression
+                        [ Pine.ListExpression
+                            [ Pine.LiteralExpression (Pine.valueFromString "Literal")
+                            , getEnvFunctionsExpression
+                            ]
+                        , Pine.ListExpression
+                            [ Pine.LiteralExpression (Pine.valueFromString "List")
+                            , Pine.ListExpression
+                                [ Pine.ListExpression
+                                    [ Pine.LiteralExpression (Pine.valueFromString "List")
+                                    , Pine.ListExpression
+                                        [ Pine.ListExpression
+                                            [ Pine.LiteralExpression (Pine.valueFromString "Literal")
+                                            , Pine.LiteralExpression
+                                                (Pine.ListValue
+                                                    [ Pine.valueFromString "Literal"
+                                                    , Pine.valueFromString "this-had-been-param-name-old-0-in-one-dyn"
+                                                    ]
+                                                )
+                                            ]
+                                        , Pine.ListExpression
+                                            [ Pine.LiteralExpression (Pine.valueFromString "Environment")
+                                            , Pine.ListExpression []
+                                            ]
+                                        ]
+                                    ]
+                                ]
+                            ]
+                        ]
+                    ]
+                ]
+            , Pine.ListExpression
+                [ Pine.LiteralExpression (Pine.valueFromString "expression")
+                , Pine.ListExpression
+                    [ Pine.LiteralExpression (Pine.valueFromString "Literal")
+                    , getFunctionInnerExpression
+                    ]
+                ]
+            ]
+        ]
+
+
+emitWrapperForPartialApplicationTwoDynamic :
+    { getFunctionInnerExpression : Pine.Expression
+    , getEnvFunctionsExpression : Pine.Expression
+    }
+    -> Pine.Expression
+emitWrapperForPartialApplicationTwoDynamic { getFunctionInnerExpression, getEnvFunctionsExpression } =
+    Pine.ListExpression
+        [ Pine.LiteralExpression (Pine.valueFromString "List")
+        , Pine.ListExpression
+            [ Pine.ListExpression
+                [ Pine.LiteralExpression (Pine.valueFromString "Literal")
+                , Pine.LiteralExpression (Pine.valueFromString "DecodeAndEvaluate")
+                ]
+            , Pine.ListExpression
+                [ Pine.LiteralExpression (Pine.valueFromString "List")
+                , Pine.ListExpression
+                    [ Pine.ListExpression
+                        [ Pine.LiteralExpression (Pine.valueFromString "List")
+                        , Pine.ListExpression
+                            [ Pine.ListExpression
+                                [ Pine.LiteralExpression (Pine.valueFromString "Literal")
+                                , Pine.LiteralExpression (Pine.valueFromString "environment")
+                                ]
+                            , Pine.ListExpression
+                                [ Pine.LiteralExpression (Pine.valueFromString "List")
+                                , Pine.ListExpression
+                                    [ Pine.ListExpression
+                                        [ Pine.LiteralExpression (Pine.valueFromString "Literal")
+                                        , Pine.LiteralExpression (Pine.valueFromString "List")
+                                        ]
+                                    , Pine.ListExpression
+                                        [ Pine.LiteralExpression (Pine.valueFromString "List")
+                                        , Pine.ListExpression
+                                            [ Pine.ListExpression
+                                                [ Pine.LiteralExpression (Pine.valueFromString "List")
+                                                , Pine.ListExpression
+                                                    [ Pine.ListExpression
+                                                        [ Pine.LiteralExpression (Pine.valueFromString "Literal")
+                                                        , Pine.LiteralExpression (Pine.valueFromString "Literal")
+                                                        ]
+                                                    , Pine.ListExpression
+                                                        [ Pine.LiteralExpression (Pine.valueFromString "Literal")
+                                                        , getEnvFunctionsExpression
+                                                        ]
+                                                    ]
+                                                ]
+                                            , Pine.ListExpression
+                                                [ Pine.LiteralExpression (Pine.valueFromString "List")
+                                                , Pine.ListExpression
+                                                    [ Pine.ListExpression
+                                                        [ Pine.LiteralExpression (Pine.valueFromString "Literal")
+                                                        , Pine.LiteralExpression (Pine.valueFromString "List")
+                                                        ]
+                                                    , Pine.ListExpression
+                                                        [ Pine.LiteralExpression (Pine.valueFromString "List")
+                                                        , Pine.ListExpression
+                                                            [ Pine.ListExpression
+                                                                [ Pine.LiteralExpression (Pine.valueFromString "List")
+                                                                , Pine.ListExpression
+                                                                    [ Pine.ListExpression
+                                                                        [ Pine.LiteralExpression (Pine.valueFromString "Literal")
+                                                                        , Pine.LiteralExpression (Pine.valueFromString "List")
+                                                                        ]
+                                                                    , Pine.ListExpression
+                                                                        [ Pine.LiteralExpression (Pine.valueFromString "List")
+                                                                        , Pine.ListExpression
+                                                                            [ Pine.ListExpression
+                                                                                [ Pine.LiteralExpression (Pine.valueFromString "List")
+                                                                                , Pine.ListExpression
+                                                                                    [ Pine.ListExpression
+                                                                                        [ Pine.LiteralExpression (Pine.valueFromString "Literal")
+                                                                                        , Pine.LiteralExpression (Pine.valueFromString "Literal")
+                                                                                        ]
+                                                                                    , Pine.ListExpression
+                                                                                        [ Pine.LiteralExpression (Pine.valueFromString "Literal")
+                                                                                        , Pine.LiteralExpression
+                                                                                            (Pine.ListValue
+                                                                                                [ Pine.valueFromString "Literal"
+                                                                                                , Pine.valueFromString "this-had-been-param-name-old-0-in-two-dyn"
+                                                                                                ]
+                                                                                            )
+                                                                                        ]
+                                                                                    ]
+                                                                                ]
+                                                                            , Pine.ListExpression
+                                                                                [ Pine.LiteralExpression (Pine.valueFromString "List")
+                                                                                , Pine.ListExpression
+                                                                                    [ Pine.ListExpression
+                                                                                        [ Pine.LiteralExpression (Pine.valueFromString "Literal")
+                                                                                        , Pine.LiteralExpression (Pine.valueFromString "Literal")
+                                                                                        ]
+                                                                                    , Pine.ListExpression
+                                                                                        [ Pine.LiteralExpression (Pine.valueFromString "Environment")
+                                                                                        , Pine.ListExpression []
+                                                                                        ]
+                                                                                    ]
+                                                                                ]
+                                                                            ]
+                                                                        ]
+                                                                    ]
+                                                                ]
+                                                            , Pine.ListExpression
+                                                                [ Pine.LiteralExpression (Pine.valueFromString "List")
+                                                                , Pine.ListExpression
+                                                                    [ Pine.ListExpression
+                                                                        [ Pine.LiteralExpression (Pine.valueFromString "Literal")
+                                                                        , Pine.LiteralExpression (Pine.valueFromString "List")
+                                                                        ]
+                                                                    , Pine.ListExpression
+                                                                        [ Pine.LiteralExpression (Pine.valueFromString "List")
+                                                                        , Pine.ListExpression
+                                                                            [ Pine.ListExpression
+                                                                                [ Pine.LiteralExpression (Pine.valueFromString "List")
+                                                                                , Pine.ListExpression
+                                                                                    [ Pine.ListExpression
+                                                                                        [ Pine.LiteralExpression (Pine.valueFromString "Literal")
+                                                                                        , Pine.LiteralExpression (Pine.valueFromString "Literal")
+                                                                                        ]
+                                                                                    , Pine.ListExpression
+                                                                                        [ Pine.LiteralExpression (Pine.valueFromString "Literal")
+                                                                                        , Pine.LiteralExpression
+                                                                                            (Pine.ListValue
+                                                                                                [ Pine.valueFromString "Literal"
+                                                                                                , Pine.valueFromString "this-had-been-param-name-old-1-in-two-dyn"
+                                                                                                ]
+                                                                                            )
+                                                                                        ]
+                                                                                    ]
+                                                                                ]
+                                                                            , Pine.ListExpression
+                                                                                [ Pine.LiteralExpression (Pine.valueFromString "List")
+                                                                                , Pine.ListExpression
+                                                                                    [ Pine.ListExpression
+                                                                                        [ Pine.LiteralExpression (Pine.valueFromString "Literal")
+                                                                                        , Pine.LiteralExpression (Pine.valueFromString "Environment")
+                                                                                        ]
+                                                                                    , Pine.ListExpression
+                                                                                        [ Pine.LiteralExpression (Pine.valueFromString "List")
+                                                                                        , Pine.ListExpression []
+                                                                                        ]
+                                                                                    ]
+                                                                                ]
+                                                                            ]
+                                                                        ]
+                                                                    ]
+                                                                ]
+                                                            ]
+                                                        ]
+                                                    ]
+                                                ]
+                                            ]
+                                        ]
+                                    ]
+                                ]
+                            ]
+                        ]
+                    , Pine.ListExpression
+                        [ Pine.LiteralExpression (Pine.valueFromString "List")
+                        , Pine.ListExpression
+                            [ Pine.ListExpression
+                                [ Pine.LiteralExpression (Pine.valueFromString "Literal")
+                                , Pine.LiteralExpression (Pine.valueFromString "expression")
+                                ]
+                            , Pine.ListExpression
+                                [ Pine.LiteralExpression (Pine.valueFromString "Literal")
+                                , Pine.ListExpression
+                                    [ Pine.LiteralExpression (Pine.valueFromString "Literal")
+                                    , getFunctionInnerExpression
+                                    ]
+                                ]
+                            ]
+                        ]
+                    ]
+                ]
+            ]
+        ]
 
 
 listItemFromIndexExpression_Pine : Int -> Pine.Expression -> Pine.Expression
@@ -2863,14 +3990,13 @@ compileInteractiveSubmission environment submission =
                     , availableModules = environmentDeclarations.modules
                     , availableDeclarations =
                         environmentDeclarations.otherDeclarations |> Dict.map (always CompiledDeclaration)
-                    , inliningParentDeclarations = Set.empty
                     , elmValuesToExposeToGlobal = elmValuesToExposeToGlobalDefault
                     }
 
                 emitStack =
                     { declarationsDependencies = Dict.empty
-                    , environmentElementsOrder = []
-                    , declarationsExpectedEnvironment = Dict.empty
+                    , environmentFunctions = []
+                    , environmentDeconstructions = Dict.empty
                     }
             in
             case parseInteractiveSubmissionFromString submission of
@@ -2894,9 +4020,7 @@ compileInteractiveSubmission environment submission =
                                     { defaultCompilationStack
                                         | availableDeclarations =
                                             defaultCompilationStack.availableDeclarations
-                                                |> Dict.insert
-                                                    declarationName
-                                                    (internalDeclarationFromFunction functionDeclaration)
+                                                |> Dict.remove declarationName
                                     }
                             in
                             case
@@ -2909,7 +4033,18 @@ compileInteractiveSubmission environment submission =
                                                 [ ( declarationName, functionDeclarationCompilation ) ]
                                                 functionDeclarationCompilation
                                         )
-                                    |> Result.andThen evaluateAsIndependentExpression
+                                    |> Result.andThen
+                                        (\expression ->
+                                            {-
+                                               For declaration with more arguments, this failed as the expression was not independent.
+                                               TODO: Find out where this asymmetry comes from.
+                                            -}
+                                            if pineExpressionIsIndependent expression then
+                                                evaluateAsIndependentExpression expression
+
+                                            else
+                                                Pine.encodeExpressionAsValue expression |> Ok
+                                        )
                             of
                                 Err error ->
                                     Err ("Failed to compile Elm function declaration: " ++ error)
@@ -3301,29 +4436,33 @@ json_encode_pineValue_Internal :
 json_encode_pineValue_Internal dictionary value =
     case value of
         Pine.ListValue list ->
-            case
-                dictionary.listDict
-                    |> Dict.get (pineListValueFastHash list)
-                    |> Maybe.andThen (List.Extra.find (Tuple.first >> (==) list))
-                    |> Maybe.map Tuple.second
-            of
-                Just reference ->
+            let
+                defaultListEncoding () =
                     Json.Encode.object
-                        [ ( "Reference", Json.Encode.string reference ) ]
+                        [ ( "List", Json.Encode.list (json_encode_pineValue_Internal dictionary) list ) ]
+            in
+            if list == [] then
+                defaultListEncoding ()
 
-                Nothing ->
-                    let
-                        defaultListEncoding _ =
-                            Json.Encode.object
-                                [ ( "List", Json.Encode.list (json_encode_pineValue_Internal dictionary) list ) ]
-                    in
-                    case Pine.stringFromListValue list of
-                        Err _ ->
-                            defaultListEncoding ()
+            else
+                case
+                    dictionary.listDict
+                        |> Dict.get (pineListValueFastHash list)
+                        |> Maybe.andThen (List.Extra.find (Tuple.first >> (==) list))
+                        |> Maybe.map Tuple.second
+                of
+                    Just reference ->
+                        Json.Encode.object
+                            [ ( "Reference", Json.Encode.string reference ) ]
 
-                        Ok asString ->
-                            Json.Encode.object
-                                [ ( "ListAsString", Json.Encode.string asString ) ]
+                    Nothing ->
+                        case Pine.stringFromListValue list of
+                            Err _ ->
+                                defaultListEncoding ()
+
+                            Ok asString ->
+                                Json.Encode.object
+                                    [ ( "ListAsString", Json.Encode.string asString ) ]
 
         Pine.BlobValue blob ->
             case dictionary.blobDict |> Dict.get blob of
@@ -3607,3 +4746,111 @@ estimatePineValueSize value =
 
         Pine.ListValue list ->
             10 + List.sum (List.map estimatePineValueSize list)
+
+
+expressionAsJson : Expression -> Json.Encode.Value
+expressionAsJson expression =
+    (case expression of
+        LiteralExpression literal ->
+            [ ( "Literal"
+              , case Pine.stringFromValue literal of
+                    Err _ ->
+                        Json.Encode.object []
+
+                    Ok asString ->
+                        Json.Encode.string asString
+              )
+            ]
+
+        ListExpression list ->
+            [ ( "List"
+              , list |> Json.Encode.list expressionAsJson
+              )
+            ]
+
+        DecodeAndEvaluateExpression _ ->
+            [ ( "DecodeAndEvaluate"
+              , Json.Encode.object []
+              )
+            ]
+
+        KernelApplicationExpression kernelApplication ->
+            [ ( "KernelApplication"
+              , Json.Encode.object
+                    [ ( "functionName", Json.Encode.string kernelApplication.functionName )
+                    , ( "argument", expressionAsJson kernelApplication.argument )
+                    ]
+              )
+            ]
+
+        ConditionalExpression conditional ->
+            [ ( "Conditional"
+              , [ ( "condition", .condition )
+                , ( "ifTrue", .ifTrue )
+                , ( "ifFalse", .ifFalse )
+                ]
+                    |> List.map (Tuple.mapSecond ((|>) conditional >> expressionAsJson))
+                    |> Json.Encode.object
+              )
+            ]
+
+        ReferenceExpression name ->
+            [ ( "Reference"
+              , [ ( "name", Json.Encode.string name )
+                ]
+                    |> Json.Encode.object
+              )
+            ]
+
+        FunctionExpression functionExpression ->
+            [ ( "Function"
+              , [ ( "parameters"
+                  , functionExpression.argumentDeconstructions
+                        |> Json.Encode.list (Tuple.first >> Json.Encode.string)
+                  )
+                , ( "expression"
+                  , functionExpression.expression |> expressionAsJson
+                  )
+                ]
+                    |> Json.Encode.object
+              )
+            ]
+
+        FunctionApplicationExpression functionExpression arguments ->
+            [ ( "FunctionApplication"
+              , [ ( "function"
+                  , functionExpression
+                        |> expressionAsJson
+                  )
+                , ( "arguments"
+                  , arguments
+                        |> Json.Encode.list expressionAsJson
+                  )
+                ]
+                    |> Json.Encode.object
+              )
+            ]
+
+        LetBlockExpression _ ->
+            [ ( "LetBlock"
+              , []
+                    |> Json.Encode.object
+              )
+            ]
+
+        StringTagExpression tag expr ->
+            [ ( "StringTag"
+              , Json.Encode.object
+                    [ ( "tag", Json.Encode.string tag )
+                    , ( "expr", expressionAsJson expr )
+                    ]
+              )
+            ]
+
+        RecordAccessExpression _ _ ->
+            [ ( "RecordAccess"
+              , Json.Encode.object []
+              )
+            ]
+    )
+        |> Json.Encode.object

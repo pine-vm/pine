@@ -52,7 +52,9 @@ evaluateSubmissionInInteractive argumentsJson =
                     [ ( "DecodedArguments"
                       , case
                             ElmInteractive.submissionInInteractive
-                                (ElmInteractive.InitContextFromApp { modulesTexts = args.modulesTexts })
+                                (ElmInteractive.CustomModulesContext
+                                    { includeCoreModules = True, modulesTexts = args.modulesTexts }
+                                )
                                 args.previousLocalSubmissions
                                 args.submission
                         of

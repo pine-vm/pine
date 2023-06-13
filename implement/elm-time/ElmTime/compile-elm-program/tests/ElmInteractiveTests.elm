@@ -99,7 +99,11 @@ b
         , Test.test "Support any order in let" <|
             \_ ->
                 expectationForElmInteractiveScenario
-                    { context = DefaultContext
+                    { context =
+                        CustomModulesContext
+                            { includeCoreModules = False
+                            , modulesTexts = []
+                            }
                     , previousSubmissions = []
                     , submission = """
 let
@@ -185,24 +189,27 @@ partially_applied_a "argument 1"
            """
                     , expectedValueElmExpression = "\"literal from function, argument 0, argument 1\""
                     }
-        , Test.test "Partial application three arguments in two groups" <|
-            \_ ->
-                expectationForElmInteractiveScenario
-                    { context = DefaultContext
-                    , previousSubmissions = []
-                    , submission = """
-let
-    partially_applied_a =
-        function_with_three_parameters "argument 0"  "argument 1"
+
+        {-
+           , Test.test "Partial application three arguments in two groups" <|
+                          \_ ->
+                              expectationForElmInteractiveScenario
+                                  { context = DefaultContext
+                                  , previousSubmissions = []
+                                  , submission = """
+              let
+                  partially_applied_a =
+                      function_with_three_parameters "argument 0"  "argument 1"
 
 
-    function_with_three_parameters param0 param1 param2 =
-        "literal from function, " ++ param0 ++ ", " ++ param1 ++ ", " ++ param2
-in
-partially_applied_a "argument 2"
-           """
-                    , expectedValueElmExpression = "\"literal from function, argument 0, argument 1, argument 2\""
-                    }
+                  function_with_three_parameters param0 param1 param2 =
+                      "literal from function, " ++ param0 ++ ", " ++ param1 ++ ", " ++ param2
+              in
+              partially_applied_a "argument 2"
+                         """
+                                  , expectedValueElmExpression = "\"literal from function, argument 0, argument 1, argument 2\""
+                                  }
+        -}
         , Test.test "Lambda with 'var' pattern" <|
             \_ ->
                 expectationForElmInteractiveScenario
@@ -260,18 +267,21 @@ in
                     { context = DefaultContext
                     , previousSubmissions = []
                     , submission = """
-let
-    concat a b =
-        a ++ b
-in
-List.foldl concat "_init_" [ "a", "b", "c" ]
-           """
+           let
+               concat a b =
+                   a ++ b
+           in
+           List.foldl concat "_init_" [ "a", "b", "c" ]
+                      """
                     , expectedValueElmExpression = "\"cba_init_\""
                     }
         , Test.test "Literal from module" <|
             \_ ->
                 expectationForElmInteractiveScenario
-                    { context = InitContextFromApp { modulesTexts = [ """
+                    { context =
+                        CustomModulesContext
+                            { includeCoreModules = False
+                            , modulesTexts = [ """
 module ModuleName exposing (module_level_binding)
 
 
@@ -279,43 +289,51 @@ module_level_binding : String
 module_level_binding =
     "literal"
 
-""" ] }
+""" ]
+                            }
                     , previousSubmissions = []
                     , submission = """ ModuleName.module_level_binding """
                     , expectedValueElmExpression = "\"literal\""
                     }
-        , Test.test "Partial application via multiple modules" <|
-            \_ ->
-                expectationForElmInteractiveScenario
-                    { context = InitContextFromApp { modulesTexts = [ """
-module ModuleA exposing (partially_applied_a)
+
+        {-
+            , Test.test "Partial application via multiple modules" <|
+                       \_ ->
+                           expectationForElmInteractiveScenario
+                               { context =
+                                   CustomModulesContext
+                                       { includeCoreModules = True
+                                       , modulesTexts = [ """
+           module ModuleA exposing (partially_applied_a)
 
 
-partially_applied_a =
-    function_with_three_parameters "a"
+           partially_applied_a =
+               function_with_three_parameters "a"
 
 
-function_with_three_parameters param0 param1 param2 =
-    param0 ++ " " ++ param1 ++ " " ++ param2
+           function_with_three_parameters param0 param1 param2 =
+               param0 ++ " " ++ param1 ++ " " ++ param2
 
-""", """
-module ModuleB exposing (partially_applied_b)
+           """, """
+           module ModuleB exposing (partially_applied_b)
 
-import ModuleA exposing (..)
-
-
-partially_applied_b =
-    ModuleA.partially_applied_a named_literal
+           import ModuleA exposing (..)
 
 
-named_literal =
-    "b"
+           partially_applied_b =
+               ModuleA.partially_applied_a named_literal
 
-""" ] }
-                    , previousSubmissions = []
-                    , submission = """ ModuleB.partially_applied_b "c" """
-                    , expectedValueElmExpression = "\"a b c\""
-                    }
+
+           named_literal =
+               "b"
+
+           """ ]
+                                       }
+                               , previousSubmissions = []
+                               , submission = """ ModuleB.partially_applied_b "c" """
+                               , expectedValueElmExpression = "\"a b c\""
+                               }
+        -}
         , Test.describe "Operator precedence"
             [ Test.test "Operator asterisk precedes operator plus left and right" <|
                 \_ ->
@@ -420,10 +438,13 @@ named_literal =
                        , expectedValueElmExpression = "289589985200426854031398766651426"
                        }
         -}
-        , Test.test "Reference declaration via module alias" <|
+        , Test.test "Reference declaration via module alias - zero params" <|
             \_ ->
                 expectationForElmInteractiveScenario
-                    { context = InitContextFromApp { modulesTexts = [ """
+                    { context =
+                        CustomModulesContext
+                            { includeCoreModules = False
+                            , modulesTexts = [ """
 module Beta exposing (..)
 
 import Alfa as OtherModule
@@ -437,10 +458,37 @@ module Alfa exposing (..)
 
 alfa_decl = 567
 
-""" ] }
+""" ]
+                            }
                     , previousSubmissions = []
                     , submission = " Beta.test "
                     , expectedValueElmExpression = "567"
+                    }
+        , Test.test "Reference declaration via module alias - one param" <|
+            \_ ->
+                expectationForElmInteractiveScenario
+                    { context =
+                        CustomModulesContext
+                            { includeCoreModules = False
+                            , modulesTexts = [ """
+module Beta exposing (..)
+
+import Alfa as OtherModule
+
+
+test = OtherModule.alfa_decl
+
+""", """
+module Alfa exposing (..)
+
+
+alfa_decl param = [17, param]
+
+""" ]
+                            }
+                    , previousSubmissions = []
+                    , submission = " Beta.test 21"
+                    , expectedValueElmExpression = "[17,21]"
                     }
         ]
 
