@@ -18,23 +18,23 @@ public class ClearScriptV8
             OSPlatform.Linux,
             ImmutableList.Create(
                 new DependencyFile(
-                    HashBase16: "0a1aa724e021de144d26ceb846fe13d436db95425e8d2a151ad1583aa9ce0263",
+                    HashBase16: "4524f101eceed4c6b0344a4cb67b19443f1d42e9f3e2f27b5cb68b007c947409",
                     ExpectedFileName: "ClearScriptV8.linux-x64.so",
-                    RemoteSources: new[] { "https://www.nuget.org/api/v2/package/Microsoft.ClearScript.V8.Native.linux-x64/7.4.1" })))
+                    RemoteSources: new[] { "https://www.nuget.org/api/v2/package/Microsoft.ClearScript.V8.Native.linux-x64/7.4.2" })))
         .Add(
             OSPlatform.Windows,
             ImmutableList.Create(
                 new DependencyFile(
-                    HashBase16: "eeda680f30f6f27ed57a20f41d6208f9022408e66f9e6092864586927fe6e4b4",
+                    HashBase16: "6ef8e937639a25554be8f60830c47b720d432b8ac47b7b54d82214d1d4083d34",
                     ExpectedFileName: "ClearScriptV8.win-x64.dll",
-                    RemoteSources: new[] { "https://www.nuget.org/api/v2/package/Microsoft.ClearScript.V8.Native.win-x64/7.4.1" })))
+                    RemoteSources: new[] { "https://www.nuget.org/api/v2/package/Microsoft.ClearScript.V8.Native.win-x64/7.4.2" })))
         .Add(
             OSPlatform.OSX,
             ImmutableList.Create(
                 new DependencyFile(
-                    HashBase16: "3438d1f682e119ad0df6cb37c83c7c53d103d46cc333343de2f1dd5b89ba84ad",
+                    HashBase16: "e9e13385c02554fa7c76d1df0307a0ca6825eff0b641ddf7826e3fbf9a546794",
                     ExpectedFileName: "ClearScriptV8.osx-x64.dylib",
-                    RemoteSources: new[] { "https://www.nuget.org/api/v2/package/Microsoft.ClearScript.V8.Native.osx-x64/7.4.1" })));
+                    RemoteSources: new[] { "https://www.nuget.org/api/v2/package/Microsoft.ClearScript.V8.Native.osx-x64/7.4.2" })));
 
     public static readonly Lazy<Task> SetupTask = new(() =>
     {

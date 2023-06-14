@@ -21,13 +21,13 @@
 
   <ItemGroup>
     <PackageReference Include="FluffySpoon.AspNet.LetsEncrypt" Version="1.116.0" />
-    <PackageReference Include="JavaScriptEngineSwitcher.V8" Version="3.21.1" />
+    <PackageReference Include="JavaScriptEngineSwitcher.V8" Version="3.21.3" />
     <PackageReference Include="Jint" Version="3.0.0-beta-2049" />
     <PackageReference Include="LibGit2Sharp" Version="0.27.2" />
     <PackageReference Include="McMaster.Extensions.CommandLineUtils" Version="4.0.2" />
-    <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Scripting" Version="4.5.0" />
-    <PackageReference Include="Microsoft.Extensions.FileProviders.Embedded" Version="7.0.5" />
-    <PackageReference Include="MSTest.TestFramework" Version="3.0.2" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Scripting" Version="4.6.0" />
+    <PackageReference Include="Microsoft.Extensions.FileProviders.Embedded" Version="7.0.7" />
+    <PackageReference Include="MSTest.TestFramework" Version="3.0.4" />
     <PackageReference Include="ReadLine" Version="2.0.1" />
     <PackageReference Include="SharpCompress" Version="0.33.0" />
     <PackageReference Include="TupleAsJsonArray" Version="1.0.2" />
