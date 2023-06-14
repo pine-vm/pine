@@ -2252,7 +2252,6 @@ environmentDeconstructionsFromFunctionParams functionParams =
                         (\( elementName, deconstruction ) ->
                             ( elementName
                             , listItemFromIndexExpression_Pine runtimeIndex
-                                >> listItemFromIndexExpression_Pine 1
                                 >> deconstruction
                             )
                         )
@@ -3038,15 +3037,6 @@ emitNamedFunctionReferenceExpression ( functionIndexInEnv, function ) arguments 
 
                         packagedArgumentsExpression =
                             argumentsPine
-                                |> List.indexedMap
-                                    (\argIndex argument ->
-                                        Pine.ListExpression
-                                            [ Pine.valueFromString
-                                                ("this-had-been-param-name-new-" ++ String.fromInt argIndex)
-                                                |> Pine.LiteralExpression
-                                            , argument
-                                            ]
-                                    )
                                 |> Pine.ListExpression
                     in
                     Pine.DecodeAndEvaluateExpression
@@ -3226,12 +3216,7 @@ emitWrapperForPartialApplicationOne { innerExpression, envFunctions } =
             Pine.ListExpression
                 [ Pine.LiteralExpression (Pine.ListValue envFunctions)
                 , Pine.ListExpression
-                    [ Pine.ListExpression
-                        [ Pine.LiteralExpression (Pine.valueFromString "this-had-been-param-name-old-0-in-one")
-                            |> Pine.encodeExpressionAsValue
-                            |> Pine.LiteralExpression
-                        , Pine.EnvironmentExpression
-                        ]
+                    [ Pine.EnvironmentExpression
                     ]
                 ]
         }
@@ -3270,40 +3255,12 @@ emitWrapperForPartialApplicationTwo { innerExpression, envFunctions } =
                             [ Pine.LiteralExpression (Pine.valueFromString "List")
                             , Pine.ListExpression
                                 [ Pine.ListExpression
-                                    [ Pine.LiteralExpression (Pine.valueFromString "List")
-                                    , Pine.ListExpression
-                                        [ Pine.ListExpression
-                                            [ Pine.LiteralExpression (Pine.valueFromString "Literal")
-                                            , Pine.LiteralExpression
-                                                (Pine.ListValue
-                                                    [ Pine.valueFromString "Literal"
-                                                    , Pine.valueFromString "this-had-been-param-name-old-0-in-two"
-                                                    ]
-                                                )
-                                            ]
-                                        , Pine.ListExpression
-                                            [ Pine.LiteralExpression (Pine.valueFromString "Literal")
-                                            , Pine.EnvironmentExpression
-                                            ]
-                                        ]
+                                    [ Pine.LiteralExpression (Pine.valueFromString "Literal")
+                                    , Pine.EnvironmentExpression
                                     ]
                                 , Pine.ListExpression
-                                    [ Pine.LiteralExpression (Pine.valueFromString "List")
-                                    , Pine.ListExpression
-                                        [ Pine.ListExpression
-                                            [ Pine.LiteralExpression (Pine.valueFromString "Literal")
-                                            , Pine.LiteralExpression
-                                                (Pine.ListValue
-                                                    [ Pine.valueFromString "Literal"
-                                                    , Pine.valueFromString "this-had-been-param-name-old-1-in-two"
-                                                    ]
-                                                )
-                                            ]
-                                        , Pine.ListExpression
-                                            [ Pine.LiteralExpression (Pine.valueFromString "Environment")
-                                            , Pine.ListExpression []
-                                            ]
-                                        ]
+                                    [ Pine.LiteralExpression (Pine.valueFromString "Environment")
+                                    , Pine.ListExpression []
                                     ]
                                 ]
                             ]
@@ -3377,43 +3334,11 @@ emitWrapperForPartialApplicationThree { innerExpression, envFunctions } =
                                                                 , Pine.ListExpression
                                                                     [ Pine.ListExpression
                                                                         [ Pine.LiteralExpression (Pine.valueFromString "Literal")
-                                                                        , Pine.LiteralExpression (Pine.valueFromString "List")
+                                                                        , Pine.LiteralExpression (Pine.valueFromString "Literal")
                                                                         ]
                                                                     , Pine.ListExpression
-                                                                        [ Pine.LiteralExpression (Pine.valueFromString "List")
-                                                                        , Pine.ListExpression
-                                                                            [ Pine.ListExpression
-                                                                                [ Pine.LiteralExpression (Pine.valueFromString "List")
-                                                                                , Pine.ListExpression
-                                                                                    [ Pine.ListExpression
-                                                                                        [ Pine.LiteralExpression (Pine.valueFromString "Literal")
-                                                                                        , Pine.LiteralExpression (Pine.valueFromString "Literal")
-                                                                                        ]
-                                                                                    , Pine.ListExpression
-                                                                                        [ Pine.LiteralExpression (Pine.valueFromString "Literal")
-                                                                                        , Pine.LiteralExpression
-                                                                                            (Pine.ListValue
-                                                                                                [ Pine.valueFromString "Literal"
-                                                                                                , Pine.valueFromString "this-had-been-param-name-old-0-in-three"
-                                                                                                ]
-                                                                                            )
-                                                                                        ]
-                                                                                    ]
-                                                                                ]
-                                                                            , Pine.ListExpression
-                                                                                [ Pine.LiteralExpression (Pine.valueFromString "List")
-                                                                                , Pine.ListExpression
-                                                                                    [ Pine.ListExpression
-                                                                                        [ Pine.LiteralExpression (Pine.valueFromString "Literal")
-                                                                                        , Pine.LiteralExpression (Pine.valueFromString "Literal")
-                                                                                        ]
-                                                                                    , Pine.ListExpression
-                                                                                        [ Pine.LiteralExpression (Pine.valueFromString "Literal")
-                                                                                        , Pine.EnvironmentExpression
-                                                                                        ]
-                                                                                    ]
-                                                                                ]
-                                                                            ]
+                                                                        [ Pine.LiteralExpression (Pine.valueFromString "Literal")
+                                                                        , Pine.EnvironmentExpression
                                                                         ]
                                                                     ]
                                                                 ]
@@ -3422,43 +3347,11 @@ emitWrapperForPartialApplicationThree { innerExpression, envFunctions } =
                                                                 , Pine.ListExpression
                                                                     [ Pine.ListExpression
                                                                         [ Pine.LiteralExpression (Pine.valueFromString "Literal")
-                                                                        , Pine.LiteralExpression (Pine.valueFromString "List")
+                                                                        , Pine.LiteralExpression (Pine.valueFromString "Literal")
                                                                         ]
                                                                     , Pine.ListExpression
-                                                                        [ Pine.LiteralExpression (Pine.valueFromString "List")
-                                                                        , Pine.ListExpression
-                                                                            [ Pine.ListExpression
-                                                                                [ Pine.LiteralExpression (Pine.valueFromString "List")
-                                                                                , Pine.ListExpression
-                                                                                    [ Pine.ListExpression
-                                                                                        [ Pine.LiteralExpression (Pine.valueFromString "Literal")
-                                                                                        , Pine.LiteralExpression (Pine.valueFromString "Literal")
-                                                                                        ]
-                                                                                    , Pine.ListExpression
-                                                                                        [ Pine.LiteralExpression (Pine.valueFromString "Literal")
-                                                                                        , Pine.LiteralExpression
-                                                                                            (Pine.ListValue
-                                                                                                [ Pine.valueFromString "Literal"
-                                                                                                , Pine.valueFromString "this-had-been-param-name-old-1-in-three"
-                                                                                                ]
-                                                                                            )
-                                                                                        ]
-                                                                                    ]
-                                                                                ]
-                                                                            , Pine.ListExpression
-                                                                                [ Pine.LiteralExpression (Pine.valueFromString "List")
-                                                                                , Pine.ListExpression
-                                                                                    [ Pine.ListExpression
-                                                                                        [ Pine.LiteralExpression (Pine.valueFromString "Literal")
-                                                                                        , Pine.LiteralExpression (Pine.valueFromString "Literal")
-                                                                                        ]
-                                                                                    , Pine.ListExpression
-                                                                                        [ Pine.LiteralExpression (Pine.valueFromString "Environment")
-                                                                                        , Pine.ListExpression []
-                                                                                        ]
-                                                                                    ]
-                                                                                ]
-                                                                            ]
+                                                                        [ Pine.LiteralExpression (Pine.valueFromString "Environment")
+                                                                        , Pine.ListExpression []
                                                                         ]
                                                                     ]
                                                                 ]
@@ -3467,43 +3360,11 @@ emitWrapperForPartialApplicationThree { innerExpression, envFunctions } =
                                                                 , Pine.ListExpression
                                                                     [ Pine.ListExpression
                                                                         [ Pine.LiteralExpression (Pine.valueFromString "Literal")
-                                                                        , Pine.LiteralExpression (Pine.valueFromString "List")
+                                                                        , Pine.LiteralExpression (Pine.valueFromString "Environment")
                                                                         ]
                                                                     , Pine.ListExpression
                                                                         [ Pine.LiteralExpression (Pine.valueFromString "List")
-                                                                        , Pine.ListExpression
-                                                                            [ Pine.ListExpression
-                                                                                [ Pine.LiteralExpression (Pine.valueFromString "List")
-                                                                                , Pine.ListExpression
-                                                                                    [ Pine.ListExpression
-                                                                                        [ Pine.LiteralExpression (Pine.valueFromString "Literal")
-                                                                                        , Pine.LiteralExpression (Pine.valueFromString "Literal")
-                                                                                        ]
-                                                                                    , Pine.ListExpression
-                                                                                        [ Pine.LiteralExpression (Pine.valueFromString "Literal")
-                                                                                        , Pine.LiteralExpression
-                                                                                            (Pine.ListValue
-                                                                                                [ Pine.valueFromString "Literal"
-                                                                                                , Pine.valueFromString "this-had-been-param-name-old-2-in-three"
-                                                                                                ]
-                                                                                            )
-                                                                                        ]
-                                                                                    ]
-                                                                                ]
-                                                                            , Pine.ListExpression
-                                                                                [ Pine.LiteralExpression (Pine.valueFromString "List")
-                                                                                , Pine.ListExpression
-                                                                                    [ Pine.ListExpression
-                                                                                        [ Pine.LiteralExpression (Pine.valueFromString "Literal")
-                                                                                        , Pine.LiteralExpression (Pine.valueFromString "Environment")
-                                                                                        ]
-                                                                                    , Pine.ListExpression
-                                                                                        [ Pine.LiteralExpression (Pine.valueFromString "List")
-                                                                                        , Pine.ListExpression []
-                                                                                        ]
-                                                                                    ]
-                                                                                ]
-                                                                            ]
+                                                                        , Pine.ListExpression []
                                                                         ]
                                                                     ]
                                                                 ]
@@ -3563,22 +3424,8 @@ emitWrapperForPartialApplicationOneDynamic { getFunctionInnerExpression, getEnvF
                             [ Pine.LiteralExpression (Pine.valueFromString "List")
                             , Pine.ListExpression
                                 [ Pine.ListExpression
-                                    [ Pine.LiteralExpression (Pine.valueFromString "List")
-                                    , Pine.ListExpression
-                                        [ Pine.ListExpression
-                                            [ Pine.LiteralExpression (Pine.valueFromString "Literal")
-                                            , Pine.LiteralExpression
-                                                (Pine.ListValue
-                                                    [ Pine.valueFromString "Literal"
-                                                    , Pine.valueFromString "this-had-been-param-name-old-0-in-one-dyn"
-                                                    ]
-                                                )
-                                            ]
-                                        , Pine.ListExpression
-                                            [ Pine.LiteralExpression (Pine.valueFromString "Environment")
-                                            , Pine.ListExpression []
-                                            ]
-                                        ]
+                                    [ Pine.LiteralExpression (Pine.valueFromString "Environment")
+                                    , Pine.ListExpression []
                                     ]
                                 ]
                             ]
@@ -3657,43 +3504,11 @@ emitWrapperForPartialApplicationTwoDynamic { getFunctionInnerExpression, getEnvF
                                                                 , Pine.ListExpression
                                                                     [ Pine.ListExpression
                                                                         [ Pine.LiteralExpression (Pine.valueFromString "Literal")
-                                                                        , Pine.LiteralExpression (Pine.valueFromString "List")
+                                                                        , Pine.LiteralExpression (Pine.valueFromString "Literal")
                                                                         ]
                                                                     , Pine.ListExpression
-                                                                        [ Pine.LiteralExpression (Pine.valueFromString "List")
-                                                                        , Pine.ListExpression
-                                                                            [ Pine.ListExpression
-                                                                                [ Pine.LiteralExpression (Pine.valueFromString "List")
-                                                                                , Pine.ListExpression
-                                                                                    [ Pine.ListExpression
-                                                                                        [ Pine.LiteralExpression (Pine.valueFromString "Literal")
-                                                                                        , Pine.LiteralExpression (Pine.valueFromString "Literal")
-                                                                                        ]
-                                                                                    , Pine.ListExpression
-                                                                                        [ Pine.LiteralExpression (Pine.valueFromString "Literal")
-                                                                                        , Pine.LiteralExpression
-                                                                                            (Pine.ListValue
-                                                                                                [ Pine.valueFromString "Literal"
-                                                                                                , Pine.valueFromString "this-had-been-param-name-old-0-in-two-dyn"
-                                                                                                ]
-                                                                                            )
-                                                                                        ]
-                                                                                    ]
-                                                                                ]
-                                                                            , Pine.ListExpression
-                                                                                [ Pine.LiteralExpression (Pine.valueFromString "List")
-                                                                                , Pine.ListExpression
-                                                                                    [ Pine.ListExpression
-                                                                                        [ Pine.LiteralExpression (Pine.valueFromString "Literal")
-                                                                                        , Pine.LiteralExpression (Pine.valueFromString "Literal")
-                                                                                        ]
-                                                                                    , Pine.ListExpression
-                                                                                        [ Pine.LiteralExpression (Pine.valueFromString "Environment")
-                                                                                        , Pine.ListExpression []
-                                                                                        ]
-                                                                                    ]
-                                                                                ]
-                                                                            ]
+                                                                        [ Pine.LiteralExpression (Pine.valueFromString "Environment")
+                                                                        , Pine.ListExpression []
                                                                         ]
                                                                     ]
                                                                 ]
@@ -3702,43 +3517,11 @@ emitWrapperForPartialApplicationTwoDynamic { getFunctionInnerExpression, getEnvF
                                                                 , Pine.ListExpression
                                                                     [ Pine.ListExpression
                                                                         [ Pine.LiteralExpression (Pine.valueFromString "Literal")
-                                                                        , Pine.LiteralExpression (Pine.valueFromString "List")
+                                                                        , Pine.LiteralExpression (Pine.valueFromString "Environment")
                                                                         ]
                                                                     , Pine.ListExpression
                                                                         [ Pine.LiteralExpression (Pine.valueFromString "List")
-                                                                        , Pine.ListExpression
-                                                                            [ Pine.ListExpression
-                                                                                [ Pine.LiteralExpression (Pine.valueFromString "List")
-                                                                                , Pine.ListExpression
-                                                                                    [ Pine.ListExpression
-                                                                                        [ Pine.LiteralExpression (Pine.valueFromString "Literal")
-                                                                                        , Pine.LiteralExpression (Pine.valueFromString "Literal")
-                                                                                        ]
-                                                                                    , Pine.ListExpression
-                                                                                        [ Pine.LiteralExpression (Pine.valueFromString "Literal")
-                                                                                        , Pine.LiteralExpression
-                                                                                            (Pine.ListValue
-                                                                                                [ Pine.valueFromString "Literal"
-                                                                                                , Pine.valueFromString "this-had-been-param-name-old-1-in-two-dyn"
-                                                                                                ]
-                                                                                            )
-                                                                                        ]
-                                                                                    ]
-                                                                                ]
-                                                                            , Pine.ListExpression
-                                                                                [ Pine.LiteralExpression (Pine.valueFromString "List")
-                                                                                , Pine.ListExpression
-                                                                                    [ Pine.ListExpression
-                                                                                        [ Pine.LiteralExpression (Pine.valueFromString "Literal")
-                                                                                        , Pine.LiteralExpression (Pine.valueFromString "Environment")
-                                                                                        ]
-                                                                                    , Pine.ListExpression
-                                                                                        [ Pine.LiteralExpression (Pine.valueFromString "List")
-                                                                                        , Pine.ListExpression []
-                                                                                        ]
-                                                                                    ]
-                                                                                ]
-                                                                            ]
+                                                                        , Pine.ListExpression []
                                                                         ]
                                                                     ]
                                                                 ]
