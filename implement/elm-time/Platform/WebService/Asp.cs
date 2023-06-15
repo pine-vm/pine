@@ -83,18 +83,28 @@ public static class Asp
             .Select(header => new InterfaceToHost.HttpHeader(name: header.Key, values: header.Value.ToArray().WhereNotNull().ToArray()))
             .ToArray();
 
-        using var stream = new MemoryStream();
-
-        await httpRequest.Body.CopyToAsync(stream);
-
-        var httpRequestBody = stream.ToArray();
+        var httpRequestBody = await CopyRequestBody(httpRequest);
 
         return new InterfaceToHost.HttpRequest
         (
             method: httpRequest.Method,
             uri: httpRequest.GetDisplayUrl(),
-            bodyAsBase64: Maybe.NothingFromNull(Convert.ToBase64String(httpRequestBody)),
+            bodyAsBase64: Maybe.NothingFromNull(Convert.ToBase64String(httpRequestBody.Span)),
             headers: httpHeaders
         );
+    }
+
+    public static async Task<ReadOnlyMemory<byte>> CopyRequestBody(HttpRequest httpRequest)
+    {
+        httpRequest.EnableBuffering(bufferThreshold: 100_000);
+        httpRequest.Body.Position = 0;
+
+        using var memoryStream = new MemoryStream();
+
+        await httpRequest.Body.CopyToAsync(memoryStream);
+
+        httpRequest.Body.Position = 0;
+
+        return memoryStream.ToArray();
     }
 }

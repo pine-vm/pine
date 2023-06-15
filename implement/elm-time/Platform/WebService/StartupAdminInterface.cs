@@ -334,10 +334,7 @@ public class StartupAdminInterface
 
             async System.Threading.Tasks.Task deployElmApp(bool initElmAppState)
             {
-                var memoryStream = new MemoryStream();
-                await context.Request.Body.CopyToAsync(memoryStream);
-
-                var deploymentZipArchive = memoryStream.ToArray();
+                var deploymentZipArchive = await Asp.CopyRequestBody(context.Request);
 
                 {
                     try
@@ -628,10 +625,7 @@ public class StartupAdminInterface
                         methods : ImmutableDictionary<string, Func<HttpContext, PublicHostConfiguration?, System.Threading.Tasks.Task>>.Empty
                         .Add("post", async (context, _) =>
                         {
-                            var memoryStream = new MemoryStream();
-                            await context.Request.Body.CopyToAsync(memoryStream);
-
-                            var historyZipArchive = memoryStream.ToArray();
+                            var historyZipArchive = await Asp.CopyRequestBody(context.Request);
 
                             var replacementFiles =
                                 ZipArchive.EntriesFromZipArchive(historyZipArchive)
