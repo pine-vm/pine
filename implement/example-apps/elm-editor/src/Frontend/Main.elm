@@ -1941,6 +1941,7 @@ view state =
                                                                 Ok (Err errorResponse) ->
                                                                     [ "elm-format reported an error:"
                                                                     , errorResponse.processOutput.standardError
+                                                                    , errorResponse.processOutput.standardOutput
                                                                     ]
                                                                         |> String.join "\n"
                                                                         |> continueWithErrorText
