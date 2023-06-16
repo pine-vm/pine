@@ -1,4 +1,5 @@
 using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Scripting;
 using Microsoft.CodeAnalysis.Scripting;
 using System;
@@ -243,7 +244,7 @@ public class VolatileProcess
             // TODO: Make getFileFromHashSHA256 optional after migration phase.
             Func<byte[], byte[]?> getFileFromHashSHA256)
         {
-            csharpScriptCodeSyntaxTree = CSharpScript.Create(csharpScriptCode).GetCompilation().SyntaxTrees.First();
+            csharpScriptCodeSyntaxTree = CSharpSyntaxTree.ParseText(csharpScriptCode);
 
             this.getFileFromHashSHA256 = getFileFromHashSHA256;
         }
