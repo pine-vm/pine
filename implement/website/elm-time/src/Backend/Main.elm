@@ -70,12 +70,51 @@ updateForHttpRequestEvent httpRequestEvent stateBefore =
             httpResponseOkWithStringContent (Build.frontendHtmlDocument frontendConfig)
                 (staticContentHttpHeaders { contentType = "text/html", contentEncoding = Nothing })
 
-        cachedResponse bodyAsBase64 =
+        httpHeaderContentTypeFromFilePath : List String -> Maybe String
+        httpHeaderContentTypeFromFilePath filePath =
+            case
+                filePath
+                    |> List.reverse
+                    |> List.head
+                    |> Maybe.map (String.split ".")
+                    |> Maybe.withDefault []
+                    |> List.reverse
+            of
+                [] ->
+                    Nothing
+
+                fileNameEnding :: fileNameOtherParts ->
+                    if fileNameOtherParts == [] then
+                        Nothing
+
+                    else
+                        case fileNameEnding of
+                            "css" ->
+                                Just "text/css"
+
+                            "js" ->
+                                Just "application/javascript"
+
+                            "png" ->
+                                Just "image/png"
+
+                            "svg" ->
+                                Just "image/svg+xml"
+
+                            _ ->
+                                Nothing
+
+        cachedResponse { filePath } bodyAsBase64 =
             { statusCode = 200
             , bodyAsBase64 = bodyAsBase64
             , headersToAdd =
-                [ { name = "Cache-Control", values = [ "public, max-age=3600" ] }
+                [ [ { name = "Cache-Control", values = [ "public, max-age=3600" ] }
+                  ]
+                , httpHeaderContentTypeFromFilePath filePath
+                    |> Maybe.map (\contentType -> [ { name = "Content-Type", values = [ contentType ] } ])
+                    |> Maybe.withDefault []
                 ]
+                    |> List.concat
             }
 
         response =
@@ -104,10 +143,10 @@ updateForHttpRequestEvent httpRequestEvent stateBefore =
                                 |> List.filter (Tuple.first >> (==) (String.split "/" url.path |> List.filter (String.isEmpty >> not)))
                                 |> List.head
                         of
-                            Just ( _, matchingFile ) ->
+                            Just ( filePath, matchingFile ) ->
                                 matchingFile.base64
                                     |> Just
-                                    |> cachedResponse
+                                    |> cachedResponse { filePath = filePath }
 
                             Nothing ->
                                 frontendHtmlDocumentResponse { debug = False }
