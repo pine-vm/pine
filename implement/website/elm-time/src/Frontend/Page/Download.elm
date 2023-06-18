@@ -48,9 +48,9 @@ dockerImageUrl =
 
 downloads : DownloadLinksByPlatform
 downloads =
-    { linux = "https://github.com/elm-time/elm-time/releases/download/v2023-05-25/elm-time-bin-v2023-05-25-linux-x64.zip"
-    , windows = "https://github.com/elm-time/elm-time/releases/download/v2023-05-25/elm-time-bin-v2023-05-25-win10-x64.zip"
-    , macOS = "https://github.com/elm-time/elm-time/releases/download/v2023-05-25/elm-time-bin-v2023-05-25-osx-x64.zip"
+    { linux = "https://github.com/elm-time/elm-time/releases/download/v2023-06-18/elm-time-bin-v2023-06-18-linux-x64.zip"
+    , windows = "https://github.com/elm-time/elm-time/releases/download/v2023-06-18/elm-time-bin-v2023-06-18-win10-x64.zip"
+    , macOS = "https://github.com/elm-time/elm-time/releases/download/v2023-06-18/elm-time-bin-v2023-06-18-osx-x64.zip"
     }
 
 
