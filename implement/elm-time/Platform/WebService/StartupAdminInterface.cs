@@ -662,7 +662,7 @@ public class StartupAdminInterface
                     apiRoute.methods
                     .FirstOrDefault(m => string.Equals(m.Key, context.Request.Method, StringComparison.InvariantCultureIgnoreCase));
 
-                if (matchingMethod.Value == null)
+                if (matchingMethod.Value is not { } matchingMethodDelegate)
                 {
                     var supportedMethodsNames =
                         apiRoute.methods.Keys.Select(m => m.ToUpperInvariant()).ToList();
@@ -683,7 +683,7 @@ public class StartupAdminInterface
                     return;
                 }
 
-                matchingMethod.Value?.Invoke(context, publicAppHost);
+                await matchingMethodDelegate.Invoke(context, publicAppHost);
                 return;
             }
 
