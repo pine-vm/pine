@@ -29,8 +29,8 @@ monacoHtmlDocumentFromCdnUrl cdnUrlToMin =
 
 <script>
 
-    getCompletionItemsTimeoutMilliseconds = 1000;
-    getHoverTimeoutMilliseconds = 1000;
+    getCompletionItemsTimeoutMilliseconds = 2000;
+    getHoverTimeoutMilliseconds = 1500;
     provideCompletionItemsEventFromElm = function(){};
     provideHoverEventFromElm = function(){};
 
