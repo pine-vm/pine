@@ -130,14 +130,9 @@ type alias ElmFormatStartStruct =
     }
 
 
-type CompilationState
-    = CompilationInProgress CompilationInProgressStructure
-    | CompilationCompleted ElmMakeRequestStructure CompilationCompletedState
-
-
-type alias CompilationInProgressStructure =
+type alias CompilationState =
     { origin : CompilationOrigin
-    , iterationRequest : CompilationIterationRequestStructure
+    , loweringLastIteration : LoweringIterationComplete
     , dependenciesFromCompletedIterations : List ( CompileElmApp.DependencyKey, Bytes.Bytes )
     }
 
@@ -150,20 +145,27 @@ type alias CompilationOrigin =
     }
 
 
+type LoweringIterationComplete
+    = LoweringContinue CompilationIterationRequestStructure
+    | LoweringComplete LoweringCompleteStruct
+
+
 type alias CompilationIterationRequestStructure =
-    { requestToBackend : ElmMakeRequestStructure
-    , origin : CompilationPendingRequestOrigin
+    { elmMakeRequest : ElmMakeRequestStructure
+    , forDependencyElmMakeRequest : CompileElmApp.ElmMakeRequestStructure
     }
 
 
-type CompilationPendingRequestOrigin
-    = ForUserElmMakeRequest
-    | ForDependencyElmMakeRequest CompileElmApp.ElmMakeRequestStructure
+type alias LoweringCompleteStruct =
+    { loweringResult : Result LoweringError ()
+    , elmMakeRequest : ElmMakeRequestStructure
+    , elmMakeResult : Maybe (Result (Http.Detailed.Error String) ElmMakeResultStructure)
+    }
 
 
-type CompilationCompletedState
-    = CompilationFailedLowering (List CompileElmApp.LocatedCompilationError)
-    | ElmMakeRequestCompleted (Result (Http.Detailed.Error String) ElmMakeResultStructure)
+type LoweringError
+    = LoweringError (List CompileElmApp.LocatedCompilationError)
+    | DependencyLoweringError (Http.Detailed.Error String)
 
 
 type alias SyntaxInspectionState =
@@ -725,7 +727,11 @@ updateForUserInputLoadFromGit { time } event dialogStateBefore =
                 )
 
 
-updateWorkspace : { time : Time.Posix } -> WorkspaceEventStructure -> WorkingProjectStateStructure -> ( WorkingProjectStateStructure, Cmd WorkspaceEventStructure )
+updateWorkspace :
+    { time : Time.Posix }
+    -> WorkspaceEventStructure
+    -> WorkingProjectStateStructure
+    -> ( WorkingProjectStateStructure, Cmd WorkspaceEventStructure )
 updateWorkspace updateConfig event stateBeforeApplyingEvent =
     let
         ( stateBeforeConsiderCompile, cmd ) =
@@ -759,25 +765,41 @@ updateWorkspace updateConfig event stateBeforeApplyingEvent =
 
                     else
                         case stateBeforeConsiderCompile.compilation of
-                            Just (CompilationCompleted requestIdentity (CompilationFailedLowering failedLowering)) ->
-                                failedLowering
-                                    |> editorDocumentMarkersFromFailedLowering
-                                        { compileRequest = requestIdentity
-                                        , fileOpenedInEditor = fileOpenedInEditor
-                                        }
-                                    |> setModelMarkersInMonacoEditorCmd
-                                    |> Just
+                            Just compilation ->
+                                case compilation.loweringLastIteration of
+                                    LoweringComplete loweringComplete ->
+                                        let
+                                            loweringMarkers =
+                                                case loweringComplete.loweringResult of
+                                                    Ok _ ->
+                                                        []
 
-                            Just (CompilationCompleted requestIdentity (ElmMakeRequestCompleted elmMakeResult)) ->
-                                elmMakeResult
-                                    |> Result.toMaybe
-                                    |> Maybe.andThen .reportFromJson
-                                    |> editorDocumentMarkersFromElmMakeReport
-                                        { elmMakeRequest = requestIdentity
-                                        , fileOpenedInEditor = fileOpenedInEditor
-                                        }
-                                    |> setModelMarkersInMonacoEditorCmd
-                                    |> Just
+                                                    Err (DependencyLoweringError _) ->
+                                                        []
+
+                                                    Err (LoweringError loweringErrors) ->
+                                                        loweringErrors
+                                                            |> editorDocumentMarkersFromFailedLowering
+                                                                { compileRequest = compilation.origin.requestFromUser
+                                                                , fileOpenedInEditor = fileOpenedInEditor
+                                                                }
+
+                                            elmMakeMarkers =
+                                                loweringComplete.elmMakeResult
+                                                    |> Maybe.andThen Result.toMaybe
+                                                    |> Maybe.andThen .reportFromJson
+                                                    |> editorDocumentMarkersFromElmMakeReport
+                                                        { elmMakeRequest = loweringComplete.elmMakeRequest
+                                                        , fileOpenedInEditor = fileOpenedInEditor
+                                                        }
+                                        in
+                                        [ loweringMarkers, elmMakeMarkers ]
+                                            |> List.concat
+                                            |> setModelMarkersInMonacoEditorCmd
+                                            |> Just
+
+                                    _ ->
+                                        Nothing
 
                             _ ->
                                 Nothing
@@ -829,7 +851,11 @@ fileOpenedInEditorFromWorkspace workingState =
                     Just ( filePathOpenedInEditor, fileContent )
 
 
-updateWorkspaceWithoutCmdToUpdateEditor : { time : Time.Posix } -> WorkspaceEventStructure -> WorkingProjectStateStructure -> ( WorkingProjectStateStructure, Cmd WorkspaceEventStructure )
+updateWorkspaceWithoutCmdToUpdateEditor :
+    { time : Time.Posix }
+    -> WorkspaceEventStructure
+    -> WorkingProjectStateStructure
+    -> ( WorkingProjectStateStructure, Cmd WorkspaceEventStructure )
 updateWorkspaceWithoutCmdToUpdateEditor updateConfig event stateBefore =
     case event of
         UserInputOpenFileInEditor filePath ->
@@ -981,84 +1007,20 @@ updateWorkspaceWithoutCmdToUpdateEditor updateConfig event stateBefore =
 
         BackendElmMakeResponseEvent requestIdentity httpResponse ->
             case stateBefore.compilation of
-                Just (CompilationInProgress compilationInProgressBefore) ->
-                    if compilationInProgressBefore.origin.requestFromUser /= requestIdentity then
-                        ( stateBefore, Cmd.none )
-
-                    else
-                        let
-                            elmMakeResult =
+                Just compilationBefore ->
+                    let
+                        ( compilation, cmd ) =
+                            updateCompilationForElmMakeRequestResponse
+                                requestIdentity
                                 httpResponse
-                                    |> Result.map
-                                        (\elmMakeResponse ->
-                                            let
-                                                compiledHtmlDocument =
-                                                    case elmMakeResponse.outputFileContentBase64 of
-                                                        Nothing ->
-                                                            Nothing
-
-                                                        Just outputFileContentBase64 ->
-                                                            outputFileContentBase64
-                                                                |> Common.decodeBase64ToString
-                                                                |> Maybe.withDefault ("Error decoding base64: " ++ outputFileContentBase64)
-                                                                |> Just
-
-                                                reportFromJson =
-                                                    case
-                                                        elmMakeResponse.reportJsonProcessOutput.standardError
-                                                            |> Json.Decode.decodeString Json.Decode.value
-                                                    of
-                                                        Err _ ->
-                                                            Nothing
-
-                                                        Ok elmMakeReportJson ->
-                                                            elmMakeReportJson
-                                                                |> Json.Decode.decodeValue ElmMakeExecutableFile.jsonDecodeElmMakeReport
-                                                                |> Result.mapError Json.Decode.errorToString
-                                                                |> Just
-                                            in
-                                            { response = elmMakeResponse
-                                            , compiledHtmlDocument = compiledHtmlDocument
-                                            , reportFromJson = reportFromJson
-                                            }
-                                        )
-
-                            continueWithCompilationCompleted =
-                                ( CompilationCompleted requestIdentity (ElmMakeRequestCompleted elmMakeResult)
-                                , Nothing
-                                )
-
-                            ( compilation, cmd ) =
-                                case compilationInProgressBefore.iterationRequest.origin of
-                                    ForUserElmMakeRequest ->
-                                        continueWithCompilationCompleted
-
-                                    ForDependencyElmMakeRequest elmMakeDependency ->
-                                        case elmMakeResult of
-                                            Err _ ->
-                                                continueWithCompilationCompleted
-
-                                            Ok elmMakeResponse ->
-                                                case
-                                                    compilationInProgressBefore
-                                                        |> continueCompileWithResolvedDependency ( elmMakeDependency, elmMakeResponse.response )
-                                                of
-                                                    Err loweringError ->
-                                                        ( CompilationCompleted requestIdentity (CompilationFailedLowering loweringError)
-                                                        , Nothing
-                                                        )
-
-                                                    Ok compilationInProgress ->
-                                                        ( CompilationInProgress compilationInProgress
-                                                        , Just (requestToBackendCmdFromCompilationInProgress compilationInProgress)
-                                                        )
-                        in
-                        ( { stateBefore
-                            | compilation = Just compilation
-                            , elmFormat = Nothing
-                          }
-                        , Maybe.withDefault Cmd.none cmd
-                        )
+                                compilationBefore
+                    in
+                    ( { stateBefore
+                        | compilation = Just compilation
+                        , elmFormat = Nothing
+                      }
+                    , Maybe.withDefault Cmd.none cmd
+                    )
 
                 _ ->
                     ( stateBefore, Cmd.none )
@@ -1076,6 +1038,97 @@ updateWorkspaceWithoutCmdToUpdateEditor updateConfig event stateBefore =
 
             else
                 updateWorkspaceWithoutCmdToUpdateEditor updateConfig UserInputCompile state
+
+
+updateCompilationForElmMakeRequestResponse :
+    ElmMakeRequestStructure
+    -> Result (Http.Detailed.Error String) ElmMakeResponseStructure
+    -> CompilationState
+    -> ( CompilationState, Maybe (Cmd WorkspaceEventStructure) )
+updateCompilationForElmMakeRequestResponse elmMakeRequest httpResponse compilationBefore =
+    let
+        elmMakeResult =
+            httpResponse
+                |> Result.map
+                    (\elmMakeResponse ->
+                        let
+                            compiledHtmlDocument =
+                                case elmMakeResponse.outputFileContentBase64 of
+                                    Nothing ->
+                                        Nothing
+
+                                    Just outputFileContentBase64 ->
+                                        outputFileContentBase64
+                                            |> Common.decodeBase64ToString
+                                            |> Maybe.withDefault ("Error decoding base64: " ++ outputFileContentBase64)
+                                            |> Just
+
+                            reportFromJson =
+                                case
+                                    elmMakeResponse.reportJsonProcessOutput.standardError
+                                        |> Json.Decode.decodeString Json.Decode.value
+                                of
+                                    Err _ ->
+                                        Nothing
+
+                                    Ok elmMakeReportJson ->
+                                        elmMakeReportJson
+                                            |> Json.Decode.decodeValue ElmMakeExecutableFile.jsonDecodeElmMakeReport
+                                            |> Result.mapError Json.Decode.errorToString
+                                            |> Just
+                        in
+                        { response = elmMakeResponse
+                        , compiledHtmlDocument = compiledHtmlDocument
+                        , reportFromJson = reportFromJson
+                        }
+                    )
+    in
+    case compilationBefore.loweringLastIteration of
+        LoweringComplete loweringComplete ->
+            if elmMakeRequest == loweringComplete.elmMakeRequest then
+                ( { compilationBefore
+                    | loweringLastIteration =
+                        LoweringComplete
+                            { loweringComplete
+                                | elmMakeResult = Just elmMakeResult
+                            }
+                  }
+                , Nothing
+                )
+
+            else
+                ( compilationBefore, Nothing )
+
+        LoweringContinue loweringContinue ->
+            if elmMakeRequest == loweringContinue.elmMakeRequest then
+                case elmMakeResult of
+                    Err elmMakeErr ->
+                        ( { compilationBefore
+                            | loweringLastIteration =
+                                LoweringComplete
+                                    { loweringResult = Err (DependencyLoweringError elmMakeErr)
+                                    , elmMakeRequest = compilationBefore.origin.requestFromUser
+                                    , elmMakeResult = Nothing
+                                    }
+                          }
+                        , Nothing
+                        )
+
+                    Ok elmMakeOk ->
+                        let
+                            compilation =
+                                continueLoweringWithResolvedDependency
+                                    ( loweringContinue.forDependencyElmMakeRequest
+                                    , elmMakeOk.response
+                                    )
+                                    compilationBefore
+                        in
+                        ( compilation
+                        , Just (requestToBackendCmdFromCompilationInProgress compilation)
+                        )
+
+            else
+                ( compilationBefore, Nothing )
 
 
 parseElmFormatResponse : FrontendBackendInterface.FormatElmModuleTextResponseStructure -> Result FrontendBackendInterface.FormatElmModuleTextResponseStructure String
@@ -1411,18 +1464,13 @@ compileFileOpenedInEditor stateBefore =
                     preparedCompilation.compile ()
 
                 requestToBackendCmd =
-                    case compilation of
-                        CompilationInProgress elmMakeRequestPending ->
-                            Just (requestToBackendCmdFromCompilationInProgress elmMakeRequestPending)
-
-                        CompilationCompleted _ _ ->
-                            Nothing
+                    requestToBackendCmdFromCompilationInProgress compilation
             in
             ( { stateBefore
                 | compilation = Just compilation
                 , syntaxInspection = Nothing
               }
-            , Maybe.withDefault Cmd.none requestToBackendCmd
+            , requestToBackendCmd
             )
 
 
@@ -1452,8 +1500,8 @@ syntaxInspectFileOpenedInEditor stateBefore =
             )
 
 
-requestToBackendCmdFromCompilationInProgress : CompilationInProgressStructure -> Cmd WorkspaceEventStructure
-requestToBackendCmdFromCompilationInProgress compilationInProgress =
+requestToBackendCmdFromCompilationInProgress : CompilationState -> Cmd WorkspaceEventStructure
+requestToBackendCmdFromCompilationInProgress compilation =
     let
         jsonDecoder backendResponse =
             case backendResponse of
@@ -1462,11 +1510,19 @@ requestToBackendCmdFromCompilationInProgress compilationInProgress =
 
                 _ ->
                     Json.Decode.fail "Unexpected response"
+
+        elmMakeRequest =
+            case compilation.loweringLastIteration of
+                LoweringContinue loweringContinue ->
+                    loweringContinue.elmMakeRequest
+
+                LoweringComplete loweringComplete ->
+                    loweringComplete.elmMakeRequest
     in
     requestToApiCmd
-        (FrontendBackendInterface.ElmMakeRequest compilationInProgress.iterationRequest.requestToBackend)
+        (FrontendBackendInterface.ElmMakeRequest elmMakeRequest)
         jsonDecoder
-        (Result.map Tuple.second >> BackendElmMakeResponseEvent compilationInProgress.origin.requestFromUser)
+        (Result.map Tuple.second >> BackendElmMakeResponseEvent elmMakeRequest)
 
 
 prepareCompileForFileOpenedInEditor :
@@ -1529,17 +1585,14 @@ prepareCompileForFileOpenedInEditor workspace =
                             { requestFromUser = requestFromUserIdentity
                             , loweredElmAppFromDependencies = loweredElmAppFromDependencies
                             }
-                    in
-                    case continueCompile [] compilationOrigin of
-                        Err loweringErrors ->
-                            CompilationCompleted requestFromUserIdentity (CompilationFailedLowering loweringErrors)
 
-                        Ok iterationRequest ->
-                            CompilationInProgress
-                                { origin = compilationOrigin
-                                , iterationRequest = iterationRequest
-                                , dependenciesFromCompletedIterations = []
-                                }
+                        loweringIterationComplete =
+                            continueLowering [] compilationOrigin
+                    in
+                    { origin = compilationOrigin
+                    , loweringLastIteration = loweringIterationComplete
+                    , dependenciesFromCompletedIterations = []
+                    }
             in
             Just
                 { requestFromUserIdentity = requestFromUserIdentity
@@ -1547,11 +1600,11 @@ prepareCompileForFileOpenedInEditor workspace =
                 }
 
 
-continueCompileWithResolvedDependency :
+continueLoweringWithResolvedDependency :
     ( CompileElmApp.ElmMakeRequestStructure, ElmMakeResponseStructure )
-    -> CompilationInProgressStructure
-    -> Result (List CompileElmApp.LocatedCompilationError) CompilationInProgressStructure
-continueCompileWithResolvedDependency ( elmMakeDependency, lastIterationResponse ) compilationInProgress =
+    -> CompilationState
+    -> CompilationState
+continueLoweringWithResolvedDependency ( elmMakeDependency, lastIterationResponse ) compilationInProgress =
     let
         newDependencies =
             case lastIterationResponse.outputFileContentBase64 |> Maybe.andThen Base64.toBytes of
@@ -1563,23 +1616,22 @@ continueCompileWithResolvedDependency ( elmMakeDependency, lastIterationResponse
 
         dependenciesFromCompletedIterations =
             compilationInProgress.dependenciesFromCompletedIterations ++ newDependencies
+
+        loweringIterationComplete =
+            compilationInProgress.origin
+                |> continueLowering dependenciesFromCompletedIterations
     in
-    compilationInProgress.origin
-        |> continueCompile dependenciesFromCompletedIterations
-        |> Result.map
-            (\iterationRequest ->
-                { compilationInProgress
-                    | iterationRequest = iterationRequest
-                    , dependenciesFromCompletedIterations = dependenciesFromCompletedIterations
-                }
-            )
+    { compilationInProgress
+        | loweringLastIteration = loweringIterationComplete
+        , dependenciesFromCompletedIterations = dependenciesFromCompletedIterations
+    }
 
 
-continueCompile :
+continueLowering :
     List ( CompileElmApp.DependencyKey, Bytes.Bytes )
     -> CompilationOrigin
-    -> Result (List CompileElmApp.LocatedCompilationError) CompilationIterationRequestStructure
-continueCompile dependenciesFromCompletedIterations compilationOrigin =
+    -> LoweringIterationComplete
+continueLowering dependenciesFromCompletedIterations compilationOrigin =
     let
         base64FromBytes : Bytes.Bytes -> String
         base64FromBytes =
@@ -1606,8 +1658,8 @@ continueCompile dependenciesFromCompletedIterations compilationOrigin =
             in
             case List.head errorsMissingDependencyElmMake of
                 Just missingDependencyElmMake ->
-                    Ok
-                        { requestToBackend =
+                    LoweringContinue
+                        { elmMakeRequest =
                             { files =
                                 missingDependencyElmMake.files
                                     |> Dict.toList
@@ -1617,11 +1669,15 @@ continueCompile dependenciesFromCompletedIterations compilationOrigin =
                             , makeOptionDebug = missingDependencyElmMake.enableDebug
                             , outputType = missingDependencyElmMake.outputType
                             }
-                        , origin = ForDependencyElmMakeRequest missingDependencyElmMake
+                        , forDependencyElmMakeRequest = missingDependencyElmMake
                         }
 
                 Nothing ->
-                    Err loweringErrors
+                    LoweringComplete
+                        { loweringResult = Err (LoweringError loweringErrors)
+                        , elmMakeRequest = compilationOrigin.requestFromUser
+                        , elmMakeResult = Nothing
+                        }
 
         Ok completedLowering ->
             let
@@ -1633,9 +1689,10 @@ continueCompile dependenciesFromCompletedIterations compilationOrigin =
                         |> Dict.toList
                         |> List.filter (Tuple.first >> CompileElmApp.includeFilePathInElmMakeRequest)
             in
-            Ok
-                { requestToBackend = { requestFromUser | files = mapFilesToRequestToBackendStructure base64FromBytes files }
-                , origin = ForUserElmMakeRequest
+            LoweringComplete
+                { loweringResult = Ok ()
+                , elmMakeRequest = { requestFromUser | files = mapFilesToRequestToBackendStructure base64FromBytes files }
+                , elmMakeResult = Nothing
                 }
 
 
@@ -2829,41 +2886,60 @@ viewOutputPaneContent state =
                     , header = Element.none
                     }
 
-                Just (CompilationCompleted requestIdentity compilationCompleted) ->
-                    viewOutputPaneContentFromCompilationComplete state requestIdentity compilationCompleted
-
-                Just (CompilationInProgress compilationInProgress) ->
+                Just compilation ->
                     let
-                        elmMakeRequestEntryPointFilePathAbs =
-                            compilationInProgress.origin.requestFromUser.workingDirectoryPath
-                                ++ compilationInProgress.origin.requestFromUser.entryPointFilePathFromWorkingDirectory
-                    in
-                    { mainContent =
-                        [ Element.text
-                            ("Compiling module '"
-                                ++ String.join "/" elmMakeRequestEntryPointFilePathAbs
-                                ++ "' with inspection "
-                                ++ (if compilationInProgress.origin.requestFromUser.makeOptionDebug then
-                                        "enabled"
+                        continueWithInProgress () =
+                            let
+                                elmMakeRequestEntryPointFilePathAbs =
+                                    compilation.origin.requestFromUser.workingDirectoryPath
+                                        ++ compilation.origin.requestFromUser.entryPointFilePathFromWorkingDirectory
+                            in
+                            { mainContent =
+                                [ Element.text
+                                    ("Compiling module '"
+                                        ++ String.join "/" elmMakeRequestEntryPointFilePathAbs
+                                        ++ "' with inspection "
+                                        ++ (if compilation.origin.requestFromUser.makeOptionDebug then
+                                                "enabled"
 
-                                    else
-                                        "disabled"
-                                   )
-                                ++ " ..."
-                            )
-                        ]
-                            |> Element.paragraph [ Element.padding defaultFontSize ]
-                    , header = Element.none
-                    }
+                                            else
+                                                "disabled"
+                                           )
+                                        ++ " ..."
+                                    )
+                                ]
+                                    |> Element.paragraph [ Element.padding defaultFontSize ]
+                            , header = Element.none
+                            }
+                    in
+                    case compilation.loweringLastIteration of
+                        LoweringComplete loweringComplete ->
+                            case loweringComplete.elmMakeResult of
+                                Nothing ->
+                                    continueWithInProgress ()
+
+                                Just elmMakeResult ->
+                                    viewOutputPaneContentFromCompilationComplete
+                                        state
+                                        compilation
+                                        loweringComplete
+                                        elmMakeResult
+
+                        LoweringContinue _ ->
+                            continueWithInProgress ()
 
 
 viewOutputPaneContentFromCompilationComplete :
     WorkingProjectStateStructure
-    -> ElmMakeRequestStructure
-    -> CompilationCompletedState
+    -> CompilationState
+    -> LoweringCompleteStruct
+    -> Result (Http.Detailed.Error String) ElmMakeResultStructure
     -> { mainContent : Element.Element WorkspaceEventStructure, header : Element.Element WorkspaceEventStructure }
-viewOutputPaneContentFromCompilationComplete workspace elmMakeRequest compilationCompleted =
+viewOutputPaneContentFromCompilationComplete workspace compilation loweringComplete elmMakeResult =
     let
+        elmMakeRequest =
+            compilation.origin.requestFromUser
+
         elmMakeRequestFromCurrentState =
             prepareCompileForFileOpenedInEditor workspace
 
@@ -2893,15 +2969,17 @@ viewOutputPaneContentFromCompilationComplete workspace elmMakeRequest compilatio
                 Just "⚠️ File contents changed since compiling"
 
         offerToggleInspection =
-            case compilationCompleted of
-                CompilationFailedLowering _ ->
+            case loweringComplete.loweringResult of
+                Err _ ->
                     False
 
-                ElmMakeRequestCompleted (Err _) ->
-                    True
+                Ok _ ->
+                    case elmMakeResult of
+                        Err _ ->
+                            False
 
-                ElmMakeRequestCompleted (Ok elmMakeResult) ->
-                    elmMakeResult.compiledHtmlDocument /= Nothing
+                        Ok elmMakeOk ->
+                            elmMakeOk.compiledHtmlDocument /= Nothing
 
         ( toggleInspectionLabel, toggleInspectionEvent ) =
             if elmMakeRequest.makeOptionDebug then
@@ -2940,108 +3018,94 @@ viewOutputPaneContentFromCompilationComplete workspace elmMakeRequest compilatio
                     , Element.htmlAttribute attributeMonospaceFont
                     ]
 
-        compileResultElement =
-            case compilationCompleted of
-                CompilationFailedLowering failedLowering ->
-                    [ Element.paragraph []
-                        [ Element.text
-                            ("Failed to lower the program code files with "
-                                ++ String.fromInt (List.length failedLowering)
-                                ++ " errors:"
-                            )
-                        ]
-                    , failedLowering
-                        |> List.map (viewLoweringCompileError >> List.singleton >> Element.paragraph [])
-                        |> Element.column
-                            [ Element.spacing defaultFontSize
-                            , Element.width Element.fill
-                            ]
-                    ]
-                        |> Element.column
-                            [ Element.spacing (defaultFontSize * 2)
-                            , Element.width Element.fill
-                            , Element.height Element.fill
-                            , Element.scrollbarY
-                            , Element.padding (defaultFontSize // 2)
-                            ]
+        elmMakeErrorElement elmMakeError =
+            elmMakeError
+                |> describeHttpError
+                |> String.lines
+                |> (++) [ "Error:" ]
+                |> List.map (Element.text >> List.singleton >> Element.paragraph [])
+                |> Element.textColumn [ Element.spacing 4, Element.padding defaultFontSize ]
 
-                ElmMakeRequestCompleted elmMakeResult ->
-                    case elmMakeResult of
-                        Err elmMakeError ->
-                            elmMakeError
-                                |> describeHttpError
-                                |> String.lines
-                                |> (++) [ "Error:" ]
-                                |> List.map (Element.text >> List.singleton >> Element.paragraph [])
-                                |> Element.textColumn [ Element.spacing 4, Element.padding defaultFontSize ]
+        elmMakeResultElement =
+            case elmMakeResult of
+                Err elmMakeError ->
+                    elmMakeErrorElement elmMakeError
 
-                        Ok elmMakeOk ->
-                            case elmMakeOk.compiledHtmlDocument of
-                                Nothing ->
-                                    [ if
-                                        (elmMakeOk.response.reportJsonProcessOutput.exitCode == 0)
-                                            && (elmMakeOk.response.reportJsonProcessOutput.standardError |> String.trim |> String.isEmpty)
-                                      then
-                                        ( "✔ No Errors"
-                                        , [ ("Found no errors in module '"
-                                                ++ String.join "/" elmMakeRequestEntryPointFilePathAbs
-                                                ++ "'"
-                                            )
-                                                |> Element.text
-                                          ]
-                                            |> Element.paragraph []
-                                        )
+                Ok elmMakeOk ->
+                    let
+                        continueWithProcessOutput () =
+                            [ if
+                                (elmMakeOk.response.reportJsonProcessOutput.exitCode == 0)
+                                    && (elmMakeOk.response.reportJsonProcessOutput.standardError |> String.trim |> String.isEmpty)
+                              then
+                                ( "✔ No Errors"
+                                , [ ("Found no errors in module '"
+                                        ++ String.join "/" elmMakeRequestEntryPointFilePathAbs
+                                        ++ "'"
+                                    )
+                                        |> Element.text
+                                  ]
+                                    |> Element.paragraph []
+                                )
 
-                                      else
-                                        ( "Errors"
-                                        , case elmMakeOk.reportFromJson of
-                                            Nothing ->
-                                                outputElementFromPlainText elmMakeOk.response.processOutput.standardError
+                              else
+                                ( "Errors"
+                                , case elmMakeOk.reportFromJson of
+                                    Nothing ->
+                                        outputElementFromPlainText elmMakeOk.response.processOutput.standardError
 
-                                            Just (Err decodeError) ->
-                                                outputElementFromPlainText
-                                                    ("Failed to decode JSON report: " ++ decodeError)
+                                    Just (Err decodeError) ->
+                                        outputElementFromPlainText
+                                            ("Failed to decode JSON report: " ++ decodeError)
 
-                                            Just (Ok (ElmMakeExecutableFile.CompileErrorsReport compileErrors)) ->
-                                                compileErrors
-                                                    |> List.map (viewElmMakeCompileError elmMakeRequest)
-                                                    |> Element.column
-                                                        [ Element.spacing defaultFontSize
-                                                        , Element.width Element.fill
-                                                        ]
-
-                                            Just (Ok (ElmMakeExecutableFile.ErrorReport error)) ->
-                                                [ error.title
-                                                    |> Element.text
-                                                    |> Element.el [ Element.Font.bold ]
-                                                , viewElementFromElmMakeCompileErrorMessage error.message
+                                    Just (Ok (ElmMakeExecutableFile.CompileErrorsReport compileErrors)) ->
+                                        compileErrors
+                                            |> List.map (viewElmMakeCompileError elmMakeRequest)
+                                            |> Element.column
+                                                [ Element.spacing defaultFontSize
+                                                , Element.width Element.fill
                                                 ]
-                                                    |> Element.column
-                                                        [ Element.spacing (defaultFontSize // 2)
-                                                        , Element.width Element.fill
-                                                        ]
-                                        )
-                                    , ( "Elm make standard output", outputElementFromPlainText elmMakeOk.response.processOutput.standardOutput )
+
+                                    Just (Ok (ElmMakeExecutableFile.ErrorReport error)) ->
+                                        [ error.title
+                                            |> Element.text
+                                            |> Element.el [ Element.Font.bold ]
+                                        , viewElementFromElmMakeCompileErrorMessage error.message
+                                        ]
+                                            |> Element.column
+                                                [ Element.spacing (defaultFontSize // 2)
+                                                , Element.width Element.fill
+                                                ]
+                                )
+                            , ( "Elm make standard output", outputElementFromPlainText elmMakeOk.response.processOutput.standardOutput )
+                            ]
+                                |> List.map
+                                    (\( channel, outputElement ) ->
+                                        [ channel |> Element.text |> Element.el (headingAttributes 3)
+                                        , outputElement |> indentOneLevel
+                                        ]
+                                            |> Element.column
+                                                [ Element.spacing (defaultFontSize // 2)
+                                                , Element.width Element.fill
+                                                ]
+                                    )
+                                |> Element.column
+                                    [ Element.spacing (defaultFontSize * 2)
+                                    , Element.width Element.fill
+                                    , Element.height Element.fill
+                                    , Element.padding (defaultFontSize // 2)
                                     ]
-                                        |> List.map
-                                            (\( channel, outputElement ) ->
-                                                [ channel |> Element.text |> Element.el (headingAttributes 3)
-                                                , outputElement |> indentOneLevel
-                                                ]
-                                                    |> Element.column
-                                                        [ Element.spacing (defaultFontSize // 2)
-                                                        , Element.width Element.fill
-                                                        ]
-                                            )
-                                        |> Element.column
-                                            [ Element.spacing (defaultFontSize * 2)
-                                            , Element.width Element.fill
-                                            , Element.height Element.fill
-                                            , Element.scrollbarY
-                                            , Element.padding (defaultFontSize // 2)
-                                            ]
+                    in
+                    case elmMakeOk.compiledHtmlDocument of
+                        Nothing ->
+                            continueWithProcessOutput ()
 
-                                Just compiledHtmlDocument ->
+                        Just compiledHtmlDocument ->
+                            case loweringComplete.loweringResult of
+                                Err _ ->
+                                    continueWithProcessOutput ()
+
+                                Ok _ ->
                                     Html.iframe
                                         [ HA.srcdoc compiledHtmlDocument
                                         , HA.style "height" "98%"
@@ -3052,6 +3116,64 @@ viewOutputPaneContentFromCompilationComplete workspace elmMakeRequest compilatio
                                             [ Element.width Element.fill
                                             , Element.height Element.fill
                                             ]
+
+        compileResultElement =
+            case loweringComplete.loweringResult of
+                Err loweringError ->
+                    let
+                        loweringErrorElement =
+                            case loweringError of
+                                LoweringError failedLowering ->
+                                    [ Element.paragraph []
+                                        [ Element.text
+                                            ("Failed to lower the program code files with "
+                                                ++ String.fromInt (List.length failedLowering)
+                                                ++ " errors:"
+                                            )
+                                        ]
+                                    , failedLowering
+                                        |> List.map (viewLoweringCompileError >> List.singleton >> Element.paragraph [])
+                                        |> Element.column
+                                            [ Element.spacing defaultFontSize
+                                            , Element.width Element.fill
+                                            ]
+                                    , Element.paragraph []
+                                        [ Element.text "Probably the response from 'elm make' below has more details on the error:"
+                                        ]
+                                    , elmMakeResultElement
+                                    ]
+                                        |> Element.column
+                                            [ Element.spacing (defaultFontSize * 2)
+                                            , Element.width Element.fill
+                                            , Element.height Element.fill
+                                            ]
+
+                                DependencyLoweringError elmMakeError ->
+                                    elmMakeErrorElement elmMakeError
+                    in
+                    loweringErrorElement
+                        |> elementWithScrollbarY
+
+                Ok _ ->
+                    elmMakeResultElement
+                        |> elementWithScrollbarY
+
+        elementWithScrollbarY elementsToScroll =
+            [ elementsToScroll
+                |> Element.el
+                    [ Element.width Element.fill
+                    , Element.height Element.fill
+                    , Element.scrollbarY
+                    ]
+            ]
+                |> Element.row
+                    [ Element.width Element.fill
+                    , Element.height Element.fill
+
+                    -- https://github.com/mdgriffith/elm-ui/issues/149#issuecomment-531480958
+                    , Element.clip
+                    , Element.htmlAttribute (HA.style "flex-shrink" "1")
+                    ]
     in
     { mainContent = compileResultElement
     , header = warnAboutOutdatedOrOfferModifyCompilationElement
@@ -3246,7 +3368,9 @@ editorDocumentMarkersFromFailedLowering { compileRequest, fileOpenedInEditor } c
                                     if location.filePath == filePathOpenedInEditor then
                                         Just
                                             (editorDocumentMarkerFromLoweringCompileError
-                                                ( compilationSyntaxRangeAsElmMakeReportRegion location.locationInModuleText, error )
+                                                ( compilationSyntaxRangeAsElmMakeReportRegion location.locationInModuleText
+                                                , error
+                                                )
                                             )
 
                                     else
