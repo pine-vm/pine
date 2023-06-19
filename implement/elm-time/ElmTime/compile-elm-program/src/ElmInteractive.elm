@@ -2191,7 +2191,7 @@ emitFunctionExpression stack function =
                         emitInClosureResult.expr
 
                     Just closureArgumentPine ->
-                        positionalApplicationExpressionFromListOfArguments
+                        partialApplicationExpressionFromListOfArguments
                             [ closureArgumentPine ]
                             emitInClosureResult.expr
             )
@@ -2907,9 +2907,7 @@ emitFunctionApplicationExpression functionExpression arguments compilation =
                         emitExpression compilation functionExpression
                             |> Result.mapError ((++) "Failed emitting function expression: ")
                             |> Result.map
-                                (positionalApplicationExpressionFromListOfArguments
-                                    argumentsPine
-                                )
+                                (partialApplicationExpressionFromListOfArguments argumentsPine)
                 in
                 case functionExpression of
                     ReferenceExpression functionName ->
@@ -2920,32 +2918,12 @@ emitFunctionApplicationExpression functionExpression arguments compilation =
                                 |> List.head
                         of
                             Just ( functionIndexInEnv, function ) ->
-                                if function.argumentsCount == List.length arguments then
-                                    let
-                                        getEnvFunctionsExpression =
-                                            Pine.EnvironmentExpression
-                                                |> listItemFromIndexExpression_Pine 0
-
-                                        getFunctionExpression =
-                                            getEnvFunctionsExpression
-                                                |> listItemFromIndexExpression_Pine functionIndexInEnv
-
-                                        packagedArgumentsExpression =
-                                            argumentsPine
-                                                |> Pine.ListExpression
-                                    in
-                                    Pine.DecodeAndEvaluateExpression
-                                        { expression = getFunctionExpression
-                                        , environment =
-                                            Pine.ListExpression
-                                                [ getEnvFunctionsExpression
-                                                , packagedArgumentsExpression
-                                                ]
-                                        }
-                                        |> Ok
-
-                                else
-                                    genericPartialApplication ()
+                                emitApplyFunctionFromCurrentEnvironment
+                                    { functionIndexInEnv = functionIndexInEnv
+                                    , function = function
+                                    }
+                                    argumentsPine
+                                    |> Ok
 
                             Nothing ->
                                 genericPartialApplication ()
@@ -2955,14 +2933,58 @@ emitFunctionApplicationExpression functionExpression arguments compilation =
             )
 
 
-positionalApplicationExpressionFromListOfArguments : List Pine.Expression -> Pine.Expression -> Pine.Expression
-positionalApplicationExpressionFromListOfArguments arguments function =
+emitApplyFunctionFromCurrentEnvironment :
+    { functionIndexInEnv : Int
+    , function : EnvironmentFunctionEntry
+    }
+    -> List Pine.Expression
+    -> Pine.Expression
+emitApplyFunctionFromCurrentEnvironment { functionIndexInEnv, function } arguments =
+    let
+        getEnvFunctionsExpression =
+            Pine.EnvironmentExpression
+                |> listItemFromIndexExpression_Pine 0
+
+        getFunctionExpression =
+            getEnvFunctionsExpression
+                |> listItemFromIndexExpression_Pine functionIndexInEnv
+    in
+    if function.argumentsCount == List.length arguments then
+        Pine.DecodeAndEvaluateExpression
+            { expression = getFunctionExpression
+            , environment =
+                Pine.ListExpression
+                    [ getEnvFunctionsExpression
+                    , Pine.ListExpression arguments
+                    ]
+            }
+
+    else
+        (if function.argumentsCount == 0 then
+            emitWrapperForPartialApplicationZero
+                { getFunctionInnerExpression = getFunctionExpression
+                , getEnvFunctionsExpression = getEnvFunctionsExpression
+                }
+
+         else
+            buildRecordOfPartiallyAppliedFunction
+                { getFunctionInnerExpression = getFunctionExpression
+                , getEnvFunctionsExpression = getEnvFunctionsExpression
+                , functionParameterCount = function.argumentsCount
+                , argumentsAlreadyCollected = []
+                }
+        )
+            |> partialApplicationExpressionFromListOfArguments arguments
+
+
+partialApplicationExpressionFromListOfArguments : List Pine.Expression -> Pine.Expression -> Pine.Expression
+partialApplicationExpressionFromListOfArguments arguments function =
     case arguments of
         [] ->
             function
 
         nextArgument :: followingArguments ->
-            positionalApplicationExpressionFromListOfArguments
+            partialApplicationExpressionFromListOfArguments
                 followingArguments
                 (adaptivePartialApplicationExpression
                     { function = function
@@ -2973,8 +2995,21 @@ positionalApplicationExpressionFromListOfArguments arguments function =
 
 emitReferenceExpression : String -> EmitStack -> Result String Pine.Expression
 emitReferenceExpression name compilation =
-    let
-        continueWithDeconstruction () =
+    case
+        compilation.environmentFunctions
+            |> List.indexedMap Tuple.pair
+            |> List.filter (Tuple.second >> .functionName >> (==) name)
+            |> List.head
+    of
+        Just ( functionIndexInEnv, function ) ->
+            emitApplyFunctionFromCurrentEnvironment
+                { functionIndexInEnv = functionIndexInEnv
+                , function = function
+                }
+                []
+                |> Ok
+
+        Nothing ->
             case Dict.get name compilation.environmentDeconstructions of
                 Nothing ->
                     Err
@@ -2995,41 +3030,6 @@ emitReferenceExpression name compilation =
                         |> listItemFromIndexExpression_Pine 1
                         |> deconstruction
                         |> Ok
-    in
-    case
-        compilation.environmentFunctions
-            |> List.indexedMap Tuple.pair
-            |> List.filter (Tuple.second >> .functionName >> (==) name)
-            |> List.head
-    of
-        Just ( functionIndexInEnv, function ) ->
-            let
-                getEnvFunctionsExpression =
-                    Pine.EnvironmentExpression
-                        |> listItemFromIndexExpression_Pine 0
-
-                getFunctionExpression =
-                    getEnvFunctionsExpression
-                        |> listItemFromIndexExpression_Pine functionIndexInEnv
-            in
-            if function.argumentsCount == 0 then
-                emitWrapperForPartialApplicationZero
-                    { getFunctionInnerExpression = getFunctionExpression
-                    , getEnvFunctionsExpression = getEnvFunctionsExpression
-                    }
-                    |> Ok
-
-            else
-                buildRecordOfPartiallyAppliedFunction
-                    { getFunctionInnerExpression = getFunctionExpression
-                    , getEnvFunctionsExpression = getEnvFunctionsExpression
-                    , functionParameterCount = function.argumentsCount
-                    , argumentsAlreadyCollected = []
-                    }
-                    |> Ok
-
-        Nothing ->
-            continueWithDeconstruction ()
 
 
 getDeclarationValueFromCompilation : ( List String, String ) -> CompilationStack -> Result String Pine.Value

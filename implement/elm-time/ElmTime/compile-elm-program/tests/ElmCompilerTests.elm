@@ -1072,7 +1072,7 @@ emitClosureExpressionTests =
                         emitClosureResult
                             |> Result.andThen
                                 ((\partialApplicable ->
-                                    ElmInteractive.positionalApplicationExpressionFromListOfArguments
+                                    ElmInteractive.partialApplicationExpressionFromListOfArguments
                                         (testCase.arguments |> List.map Pine.LiteralExpression)
                                         partialApplicable
                                         |> Pine.evaluateExpression { environment = Pine.ListValue [] }
