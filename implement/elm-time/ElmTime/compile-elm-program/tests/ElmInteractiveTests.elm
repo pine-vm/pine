@@ -189,31 +189,28 @@ partially_applied_a "argument 1"
            """
                     , expectedValueElmExpression = "\"literal from function, argument 0, argument 1\""
                     }
-
-        {-
-           , Test.test "Partial application three arguments in two groups" <|
-                          \_ ->
-                              expectationForElmInteractiveScenario
-                                  { context = DefaultContext
-                                  , previousSubmissions = []
-                                  , submission = """
-              let
-                  partially_applied_a =
-                      function_with_three_parameters "argument 0"  "argument 1"
-
-
-                  function_with_three_parameters param0 param1 param2 =
-                      "literal from function, " ++ param0 ++ ", " ++ param1 ++ ", " ++ param2
-              in
-              partially_applied_a "argument 2"
-                         """
-                                  , expectedValueElmExpression = "\"literal from function, argument 0, argument 1, argument 2\""
-                                  }
-        -}
-        , Test.test "Lambda with 'var' pattern" <|
+        , Test.test "Partial application three arguments in two groups" <|
             \_ ->
                 expectationForElmInteractiveScenario
                     { context = DefaultContext
+                    , previousSubmissions = []
+                    , submission = """
+let
+    partially_applied_a =
+        function_with_three_parameters "argument 0"  "argument 1"
+
+
+    function_with_three_parameters param0 param1 param2 =
+        "literal from function, " ++ param0 ++ ", " ++ param1 ++ ", " ++ param2
+in
+partially_applied_a "argument 2"
+                         """
+                    , expectedValueElmExpression = "\"literal from function, argument 0, argument 1, argument 2\""
+                    }
+        , Test.test "Lambda with 'var' pattern" <|
+            \_ ->
+                expectationForElmInteractiveScenario
+                    { context = CustomModulesContext { includeCoreModules = False, modulesTexts = [] }
                     , previousSubmissions = []
                     , submission = """ (\\x -> x) "test" """
                     , expectedValueElmExpression = "\"test\""
@@ -221,7 +218,7 @@ partially_applied_a "argument 1"
         , Test.test "Lambda with 'all' pattern" <|
             \_ ->
                 expectationForElmInteractiveScenario
-                    { context = DefaultContext
+                    { context = CustomModulesContext { includeCoreModules = False, modulesTexts = [] }
                     , previousSubmissions = []
                     , submission = """ (\\_ -> "constant") "test" """
                     , expectedValueElmExpression = "\"constant\""
@@ -295,45 +292,42 @@ module_level_binding =
                     , submission = """ ModuleName.module_level_binding """
                     , expectedValueElmExpression = "\"literal\""
                     }
-
-        {-
-            , Test.test "Partial application via multiple modules" <|
-                       \_ ->
-                           expectationForElmInteractiveScenario
-                               { context =
-                                   CustomModulesContext
-                                       { includeCoreModules = True
-                                       , modulesTexts = [ """
-           module ModuleA exposing (partially_applied_a)
+        , Test.test "Partial application via multiple modules" <|
+            \_ ->
+                expectationForElmInteractiveScenario
+                    { context =
+                        CustomModulesContext
+                            { includeCoreModules = True
+                            , modulesTexts = [ """
+module ModuleA exposing (partially_applied_a)
 
 
-           partially_applied_a =
-               function_with_three_parameters "a"
+partially_applied_a =
+    function_with_three_parameters "a"
 
 
-           function_with_three_parameters param0 param1 param2 =
-               param0 ++ " " ++ param1 ++ " " ++ param2
+function_with_three_parameters param0 param1 param2 =
+    param0 ++ " " ++ param1 ++ " " ++ param2
 
-           """, """
-           module ModuleB exposing (partially_applied_b)
+""", """
+module ModuleB exposing (partially_applied_b)
 
-           import ModuleA exposing (..)
-
-
-           partially_applied_b =
-               ModuleA.partially_applied_a named_literal
+import ModuleA exposing (..)
 
 
-           named_literal =
-               "b"
+partially_applied_b =
+    ModuleA.partially_applied_a named_literal
+
+
+named_literal =
+    "b"
 
            """ ]
-                                       }
-                               , previousSubmissions = []
-                               , submission = """ ModuleB.partially_applied_b "c" """
-                               , expectedValueElmExpression = "\"a b c\""
-                               }
-        -}
+                            }
+                    , previousSubmissions = []
+                    , submission = """ ModuleB.partially_applied_b "c" """
+                    , expectedValueElmExpression = "\"a b c\""
+                    }
         , Test.describe "Operator precedence"
             [ Test.test "Operator asterisk precedes operator plus left and right" <|
                 \_ ->

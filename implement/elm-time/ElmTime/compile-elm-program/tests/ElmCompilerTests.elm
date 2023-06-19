@@ -1072,28 +1072,11 @@ emitClosureExpressionTests =
                         emitClosureResult
                             |> Result.andThen
                                 ((\partialApplicable ->
-                                    case testCase.arguments of
-                                        [] ->
-                                            partialApplicable
-                                                |> Pine.evaluateExpression Pine.emptyEvalContext
-                                                |> Result.mapError Pine.displayStringFromPineError
-
-                                        lastArg :: otherArgs ->
-                                            let
-                                                applicationExpression =
-                                                    otherArgs
-                                                        |> List.foldl
-                                                            (\arg expr ->
-                                                                Pine.DecodeAndEvaluateExpression
-                                                                    { expression = expr
-                                                                    , environment = Pine.LiteralExpression arg
-                                                                    }
-                                                            )
-                                                            partialApplicable
-                                            in
-                                            applicationExpression
-                                                |> Pine.evaluateExpression { environment = lastArg }
-                                                |> Result.mapError Pine.displayStringFromPineError
+                                    ElmInteractive.positionalApplicationExpressionFromListOfArguments
+                                        (testCase.arguments |> List.map Pine.LiteralExpression)
+                                        partialApplicable
+                                        |> Pine.evaluateExpression { environment = Pine.ListValue [] }
+                                        |> Result.mapError Pine.displayStringFromPineError
                                  )
                                     >> Result.map (Expect.equal testCase.expectedValue)
                                 )
