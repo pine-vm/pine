@@ -2903,11 +2903,10 @@ emitFunctionApplicationExpression functionExpression arguments compilation =
         |> Result.andThen
             (\argumentsPine ->
                 let
-                    genericPartialApplication () =
+                    genericFunctionApplication () =
                         emitExpression compilation functionExpression
                             |> Result.mapError ((++) "Failed emitting function expression: ")
-                            |> Result.map
-                                (partialApplicationExpressionFromListOfArguments argumentsPine)
+                            |> Result.andThen (emitFunctionApplicationExpressionPine argumentsPine)
                 in
                 case functionExpression of
                     ReferenceExpression functionName ->
@@ -2926,11 +2925,67 @@ emitFunctionApplicationExpression functionExpression arguments compilation =
                                     |> Ok
 
                             Nothing ->
-                                genericPartialApplication ()
+                                genericFunctionApplication ()
 
                     _ ->
-                        genericPartialApplication ()
+                        genericFunctionApplication ()
             )
+
+
+emitFunctionApplicationExpressionPine : List Pine.Expression -> Pine.Expression -> Result String Pine.Expression
+emitFunctionApplicationExpressionPine arguments functionExpressionPine =
+    let
+        genericPartialApplication () =
+            partialApplicationExpressionFromListOfArguments arguments
+                functionExpressionPine
+    in
+    if not (pineExpressionIsIndependent functionExpressionPine) then
+        genericPartialApplication ()
+            |> Ok
+
+    else
+        evaluateAsIndependentExpression functionExpressionPine
+            |> Result.map
+                (\functionValue ->
+                    case parseFunctionRecordFromValueTagged functionValue of
+                        Err _ ->
+                            genericPartialApplication ()
+
+                        Ok functionRecord ->
+                            let
+                                combinedArguments =
+                                    [ List.map Pine.LiteralExpression
+                                        functionRecord.argumentsAlreadyCollected
+                                    , arguments
+                                    ]
+                                        |> List.concat
+                            in
+                            if functionRecord.functionParameterCount /= List.length combinedArguments then
+                                genericPartialApplication ()
+
+                            else
+                                let
+                                    mappedEnvironment =
+                                        Pine.ListExpression
+                                            [ functionRecord.envFunctions
+                                                |> List.map Pine.LiteralExpression
+                                                |> Pine.ListExpression
+                                            , Pine.ListExpression combinedArguments
+                                            ]
+
+                                    findReplacementForExpression expression =
+                                        if expression == Pine.EnvironmentExpression then
+                                            Just mappedEnvironment
+
+                                        else
+                                            Nothing
+                                in
+                                transformPineExpressionWithOptionalReplacement
+                                    findReplacementForExpression
+                                    functionRecord.innerFunction
+                                    |> Tuple.first
+                                    |> searchForExpressionReductionRecursive { maxDepth = 5 }
+                )
 
 
 emitApplyFunctionFromCurrentEnvironment :
@@ -3243,6 +3298,97 @@ updateRecordOfPartiallyAppliedFunction config =
             , config.argumentsAlreadyCollectedExpression
             ]
         ]
+
+
+parseFunctionRecordFromValueTagged :
+    Pine.Value
+    ->
+        Result
+            String
+            { innerFunction : Pine.Expression
+            , functionParameterCount : Int
+            , envFunctions : List Pine.Value
+            , argumentsAlreadyCollected : List Pine.Value
+            }
+parseFunctionRecordFromValueTagged value =
+    case value of
+        Pine.BlobValue _ ->
+            Err "Is not a list but a blob"
+
+        Pine.ListValue listItems ->
+            case listItems of
+                [ functionTag, functionRecord ] ->
+                    if functionTag == Pine.valueFromString "Function" then
+                        parseFunctionRecordFromValue functionRecord
+
+                    else
+                        Err "Is not tagged as 'Function'"
+
+                _ ->
+                    Err
+                        ("List does not have the expected number of items: "
+                            ++ String.fromInt (List.length listItems)
+                        )
+
+
+parseFunctionRecordFromValue :
+    Pine.Value
+    ->
+        Result
+            String
+            { innerFunction : Pine.Expression
+            , functionParameterCount : Int
+            , envFunctions : List Pine.Value
+            , argumentsAlreadyCollected : List Pine.Value
+            }
+parseFunctionRecordFromValue value =
+    case value of
+        Pine.ListValue listItems ->
+            case listItems of
+                [ innerFunctionValue, functionParameterCountValue, envFunctionsValue, argumentsAlreadyCollectedValue ] ->
+                    case Pine.decodeExpressionFromValue innerFunctionValue of
+                        Err err ->
+                            Err ("Failed to decode inner function: " ++ err)
+
+                        Ok innerFunction ->
+                            case
+                                functionParameterCountValue
+                                    |> Pine.bigIntFromValue
+                                    |> Result.andThen
+                                        (BigInt.toString
+                                            >> String.toInt
+                                            >> Result.fromMaybe "Failed to map from BigInt to Int"
+                                        )
+                            of
+                                Err err ->
+                                    Err ("Failed to decode function parameter count: " ++ err)
+
+                                Ok functionParameterCount ->
+                                    case envFunctionsValue of
+                                        Pine.ListValue envFunctions ->
+                                            case argumentsAlreadyCollectedValue of
+                                                Pine.ListValue argumentsAlreadyCollected ->
+                                                    Ok
+                                                        { innerFunction = innerFunction
+                                                        , functionParameterCount = functionParameterCount
+                                                        , envFunctions = envFunctions
+                                                        , argumentsAlreadyCollected = argumentsAlreadyCollected
+                                                        }
+
+                                                _ ->
+                                                    Err "argumentsAlreadyCollectedValue is not a list"
+
+                                        _ ->
+                                            Err "envFunctionsValue is not a list"
+
+                _ ->
+                    Err
+                        ("List does not have the expected number of items: "
+                            ++ String.fromInt (List.length listItems)
+                        )
+
+        Pine.BlobValue _ ->
+            Err "Is not a list but a blob"
 
 
 listItemFromIndexExpression_Pine : Int -> Pine.Expression -> Pine.Expression

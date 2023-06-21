@@ -49,7 +49,7 @@ public class PineVM
             return
                 ResultListMapCombine(
                     listExpression.List,
-                    elem => evalExprDelegate(elem, environment))
+                    elem => EvaluateExpression(elem, environment))
                 .MapError(err => "Failed to evaluate list element: " + err)
                 .Map(PineValue.List);
         }
