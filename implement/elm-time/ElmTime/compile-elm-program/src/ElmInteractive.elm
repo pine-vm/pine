@@ -105,7 +105,13 @@ type alias FunctionExpressionStruct =
 
 
 type alias FunctionParam =
-    List ( String, Pine.Expression -> Pine.Expression )
+    List ( String, Deconstruction )
+
+
+type Deconstruction
+    = IdentityDeconstruction
+    | ListItemDeconstruction Int Deconstruction
+    | RecordFieldDeconstruction String
 
 
 type alias CompilationStack =
@@ -1054,7 +1060,9 @@ compileElmSyntaxLetBlock stackBefore letBlock =
                                                     |> List.map
                                                         (\( declName, deconsExpr ) ->
                                                             ( declName
-                                                            , DeconstructionDeclaration (deconsExpr destructuredExpression)
+                                                            , destructuredExpression
+                                                                |> expressionForDeconstruction deconsExpr
+                                                                |> DeconstructionDeclaration
                                                             )
                                                         )
                                             )
@@ -1107,7 +1115,7 @@ compileElmSyntaxLetDeclaration stack declaration =
                     (\compiledExpression ->
                         declarationsFromPattern (Elm.Syntax.Node.value patternNode)
                             |> Result.mapError (\error -> "Failed destructuring in let block: " ++ error)
-                            |> Result.map (List.map (Tuple.mapSecond ((|>) compiledExpression)))
+                            |> Result.map (List.map (Tuple.mapSecond (expressionForDeconstruction >> (|>) compiledExpression)))
                     )
 
 
@@ -1135,7 +1143,7 @@ compileElmSyntaxFunctionWithoutName :
 compileElmSyntaxFunctionWithoutName stackBefore function =
     case
         function.arguments
-            |> List.map declarationsFromPattern_Pine
+            |> List.map declarationsFromPattern
             |> Result.Extra.combine
     of
         Err error ->
@@ -1160,20 +1168,16 @@ compileElmSyntaxFunctionWithoutName stackBefore function =
 
 declarationsFromPattern :
     Elm.Syntax.Pattern.Pattern
-    -> Result String (List ( String, Expression -> Expression ))
+    -> Result String (List ( String, Deconstruction ))
 declarationsFromPattern pattern =
     case pattern of
         Elm.Syntax.Pattern.VarPattern varName ->
-            Ok [ ( varName, \deconstructedExpression -> deconstructedExpression ) ]
+            Ok [ ( varName, IdentityDeconstruction ) ]
 
         Elm.Syntax.Pattern.AllPattern ->
             Ok []
 
         Elm.Syntax.Pattern.TuplePattern tupleElements ->
-            let
-                getTupleElementExpression =
-                    listItemFromIndexExpression
-            in
             case
                 tupleElements
                     |> List.map Elm.Syntax.Node.value
@@ -1188,10 +1192,7 @@ declarationsFromPattern pattern =
                         |> List.indexedMap
                             (\tupleElementIndex tupleElement ->
                                 tupleElement
-                                    |> List.map
-                                        (Tuple.mapSecond
-                                            (\deconstruct -> getTupleElementExpression tupleElementIndex >> deconstruct)
-                                        )
+                                    |> List.map (Tuple.mapSecond (ListItemDeconstruction tupleElementIndex))
                             )
                         |> List.concat
                         |> Ok
@@ -1199,59 +1200,39 @@ declarationsFromPattern pattern =
         Elm.Syntax.Pattern.RecordPattern fieldsElements ->
             fieldsElements
                 |> List.map Elm.Syntax.Node.value
-                |> List.map (\fieldName -> ( fieldName, RecordAccessExpression fieldName ))
+                |> List.map (\fieldName -> ( fieldName, RecordFieldDeconstruction fieldName ))
                 |> Ok
 
         _ ->
             Err ("Unsupported type of pattern: " ++ (pattern |> Elm.Syntax.Pattern.encode |> Json.Encode.encode 0))
 
 
-declarationsFromPattern_Pine :
-    Elm.Syntax.Pattern.Pattern
-    -> Result String (List ( String, Pine.Expression -> Pine.Expression ))
-declarationsFromPattern_Pine pattern =
-    case pattern of
-        Elm.Syntax.Pattern.VarPattern varName ->
-            Ok [ ( varName, \deconstructedExpression -> deconstructedExpression ) ]
+expressionForDeconstruction : Deconstruction -> Expression -> Expression
+expressionForDeconstruction deconstruction expression =
+    case deconstruction of
+        IdentityDeconstruction ->
+            expression
 
-        Elm.Syntax.Pattern.AllPattern ->
-            Ok []
+        RecordFieldDeconstruction fieldName ->
+            RecordAccessExpression fieldName expression
 
-        Elm.Syntax.Pattern.TuplePattern tupleElements ->
-            let
-                getTupleElementExpression =
-                    listItemFromIndexExpression_Pine
-            in
-            case
-                tupleElements
-                    |> List.map Elm.Syntax.Node.value
-                    |> List.map declarationsFromPattern_Pine
-                    |> Result.Extra.combine
-            of
-                Err error ->
-                    Err ("Failed to parse patterns from tuple element: " ++ error)
+        ListItemDeconstruction index inItemDecons ->
+            listItemFromIndexExpression index
+                (expressionForDeconstruction inItemDecons expression)
 
-                Ok tupleElementsDeconstructions ->
-                    tupleElementsDeconstructions
-                        |> List.indexedMap
-                            (\tupleElementIndex tupleElement ->
-                                tupleElement
-                                    |> List.map
-                                        (Tuple.mapSecond
-                                            (\deconstruct -> getTupleElementExpression tupleElementIndex >> deconstruct)
-                                        )
-                            )
-                        |> List.concat
-                        |> Ok
 
-        Elm.Syntax.Pattern.RecordPattern fieldsElements ->
-            fieldsElements
-                |> List.map Elm.Syntax.Node.value
-                |> List.map (\fieldName -> ( fieldName, pineExpressionForRecordAccess fieldName ))
-                |> Ok
+pineExpressionForDeconstruction : Deconstruction -> Pine.Expression -> Pine.Expression
+pineExpressionForDeconstruction deconstruction expression =
+    case deconstruction of
+        IdentityDeconstruction ->
+            expression
 
-        _ ->
-            Err ("Unsupported type of pattern: " ++ (pattern |> Elm.Syntax.Pattern.encode |> Json.Encode.encode 0))
+        RecordFieldDeconstruction fieldName ->
+            pineExpressionForRecordAccess fieldName expression
+
+        ListItemDeconstruction index inItemDecons ->
+            listItemFromIndexExpression_Pine index
+                (pineExpressionForDeconstruction inItemDecons expression)
 
 
 listDependenciesOfExpression : EmitStack -> Expression -> Set.Set String
@@ -2207,7 +2188,7 @@ environmentDeconstructionsFromFunctionParams functionParams =
                         (\( elementName, deconstruction ) ->
                             ( elementName
                             , listItemFromIndexExpression_Pine runtimeIndex
-                                >> deconstruction
+                                >> pineExpressionForDeconstruction deconstruction
                             )
                         )
             )
@@ -2328,8 +2309,7 @@ emitExpressionInDeclarationBlock stackBeforeAddingDeps originalEnvironmentDeclar
                             |> List.map
                                 (\( deconsName, deconsExpr ) ->
                                     ( deconsName
-                                    , deconsExpr
-                                        >> listItemFromIndexExpression_Pine paramIndex
+                                    , ListItemDeconstruction paramIndex deconsExpr
                                     )
                                 )
                     )
@@ -2337,7 +2317,7 @@ emitExpressionInDeclarationBlock stackBeforeAddingDeps originalEnvironmentDeclar
 
             closureFunctionParameters =
                 closureCaptures
-                    |> List.map (Tuple.pair >> (|>) identity)
+                    |> List.map (Tuple.pair >> (|>) IdentityDeconstruction)
                     |> List.singleton
 
             closureFunctionParameter =
@@ -2434,8 +2414,7 @@ emitExpressionInDeclarationBlockLessClosure stackBeforeDependencies availableEnv
                         |> List.map
                             (\( deconsName, deconsExpr ) ->
                                 ( deconsName
-                                , deconsExpr
-                                    >> listItemFromIndexExpression_Pine paramIndex
+                                , ListItemDeconstruction paramIndex deconsExpr
                                 )
                             )
                 )
