@@ -292,7 +292,7 @@ foldr func acc list =
 
 filter : (a -> Bool) -> List a -> List a
 filter isGood list =
-    foldr (\\x xs -> if isGood x then Pine_kernel.concat [ x, xs ] else xs) [] list
+    foldr (\\x xs -> if isGood x then Pine_kernel.concat [ [ x ], xs ] else xs) [] list
 
 
 length : List a -> Int
