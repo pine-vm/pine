@@ -272,7 +272,7 @@ cons element list =
 
 map : (a -> b) -> List a -> List b
 map f xs =
-    foldr (\\x acc -> Pine_kernel.concat [ [ (f x) ], acc ]) [] xs
+    foldr (\\x acc -> cons (f x) acc ) [] xs
 
 
 foldl : (a -> b -> b) -> b -> List a -> b
@@ -292,7 +292,7 @@ foldr func acc list =
 
 filter : (a -> Bool) -> List a -> List a
 filter isGood list =
-    foldr (\\x xs -> if isGood x then Pine_kernel.concat [ [ x ], xs ] else xs) [] list
+    foldr (\\x xs -> if isGood x then cons x xs else xs) [] list
 
 
 length : List a -> Int
@@ -307,7 +307,7 @@ reverse list =
 
 member : a -> List a -> Bool
 member x xs =
-    any (\\a -> a == x) xs
+    any ((==) x) xs
 
 
 any : (a -> Bool) -> List a -> Bool
@@ -587,7 +587,7 @@ toIntFromList stringAsList =
                         _ ->
                             ( stringAsList, 1 )
             in
-            Maybe.map (\\value -> value * signMultiplier)
+            Maybe.map ((*) signMultiplier)
                 (toUnsignedIntFromList valueString)
 
 

@@ -2302,19 +2302,6 @@ emitExpressionInDeclarationBlock stackBeforeAddingDeps originalEnvironmentDeclar
                     |> List.map ReferenceExpression
                     |> ListExpression
 
-            closureParameterFromParameters =
-                List.indexedMap
-                    (\paramIndex functionParam ->
-                        functionParam
-                            |> List.map
-                                (\( deconsName, deconsExpr ) ->
-                                    ( deconsName
-                                    , ListItemDeconstruction paramIndex deconsExpr
-                                    )
-                                )
-                    )
-                    >> List.concat
-
             closureFunctionParameters =
                 closureCaptures
                     |> List.map (Tuple.pair >> (|>) IdentityDeconstruction)
@@ -2407,19 +2394,6 @@ emitExpressionInDeclarationBlockLessClosure stackBeforeDependencies availableEnv
                 |> List.filter (Tuple.first >> Set.member >> (|>) originalMainExpressionDependencies)
                 |> List.map (Tuple.mapSecond preprocessExpression)
 
-        closureParameterFromParameters =
-            List.indexedMap
-                (\paramIndex functionParam ->
-                    functionParam
-                        |> List.map
-                            (\( deconsName, deconsExpr ) ->
-                                ( deconsName
-                                , ListItemDeconstruction paramIndex deconsExpr
-                                )
-                            )
-                )
-                >> List.concat
-
         envLiftedDeclarationsAsFunctions : List ClosureFunctionEntry
         envLiftedDeclarationsAsFunctions =
             usedEnvironmentDeclarations
@@ -2510,6 +2484,11 @@ emitExpressionInDeclarationBlockLessClosure stackBeforeDependencies availableEnv
             , environmentDeconstructions = Dict.empty
             }
 
+        closurizeFunctionExpressionsForEnvironment =
+            closurizeFunctionExpressions
+                stackBefore
+                (availableEnvironmentDeclarations |> List.map Tuple.first |> Set.fromList)
+
         emitEnvironmentDeclarationsResult =
             environmentDeclarationsAsFunctions
                 |> List.map
@@ -2524,6 +2503,7 @@ emitExpressionInDeclarationBlockLessClosure stackBeforeDependencies availableEnv
                         in
                         envDeclAsFunction.innerExpression
                             |> mapReferencesForClosureCaptures liftedDeclarationsClosureCaptures
+                            |> closurizeFunctionExpressionsForEnvironment
                             |> emitExpression envDeclarationFunctionStack
                             |> Result.mapError ((++) ("Failed to emit '" ++ envDeclAsFunction.functionName ++ "': "))
                             |> Result.map
@@ -2556,6 +2536,7 @@ emitExpressionInDeclarationBlockLessClosure stackBeforeDependencies availableEnv
                 in
                 mainExpression.expressionAfterLiftingDecls
                     |> mapReferencesForClosureCaptures liftedDeclarationsClosureCaptures
+                    |> closurizeFunctionExpressionsForEnvironment
                     |> emitExpression mainExpressionFunctionStack
                     |> Result.map
                         (emitWrapperForPartialApplication
@@ -2650,6 +2631,117 @@ mapReferencesForClosureCaptures closureCapturesByFunctionName expression =
 
         RecordAccessExpression field record ->
             RecordAccessExpression field (mapReferencesForClosureCaptures closureCapturesByFunctionName record)
+
+
+closurizeFunctionExpressions : EmitStack -> Set.Set String -> Expression -> Expression
+closurizeFunctionExpressions stack closureCaptures expression =
+    case expression of
+        LiteralExpression _ ->
+            expression
+
+        ListExpression list ->
+            ListExpression (List.map (closurizeFunctionExpressions stack closureCaptures) list)
+
+        KernelApplicationExpression kernelApplication ->
+            KernelApplicationExpression
+                { kernelApplication
+                    | argument =
+                        closurizeFunctionExpressions stack closureCaptures kernelApplication.argument
+                }
+
+        ConditionalExpression conditional ->
+            ConditionalExpression
+                { condition =
+                    closurizeFunctionExpressions stack closureCaptures conditional.condition
+                , ifTrue =
+                    closurizeFunctionExpressions stack closureCaptures conditional.ifTrue
+                , ifFalse =
+                    closurizeFunctionExpressions stack closureCaptures conditional.ifFalse
+                }
+
+        ReferenceExpression _ ->
+            expression
+
+        FunctionExpression functionExpression ->
+            let
+                dependencies =
+                    listDependenciesOfExpression stack functionExpression.expression
+
+                closureCapturesForFunction =
+                    Set.intersect closureCaptures dependencies
+                        |> Set.toList
+
+                closureFunctionParameters =
+                    closureCapturesForFunction
+                        |> List.map (Tuple.pair >> (|>) IdentityDeconstruction)
+                        |> List.singleton
+
+                closureFunctionParameter =
+                    closureFunctionParameters
+                        |> closureParameterFromParameters
+            in
+            if closureCapturesForFunction == [] then
+                FunctionExpression functionExpression
+
+            else
+                FunctionApplicationExpression
+                    (FunctionExpression
+                        { argumentDeconstructions = closureFunctionParameter
+                        , expression = expression
+                        }
+                    )
+                    [ closureCapturesForFunction
+                        |> List.map ReferenceExpression
+                        |> ListExpression
+                    ]
+
+        FunctionApplicationExpression functionExpression arguments ->
+            let
+                mappedArguments =
+                    List.map (closurizeFunctionExpressions stack closureCaptures) arguments
+
+                mappedFunctionExpression =
+                    closurizeFunctionExpressions stack closureCaptures functionExpression
+            in
+            FunctionApplicationExpression
+                mappedFunctionExpression
+                mappedArguments
+
+        LetBlockExpression letBlock ->
+            LetBlockExpression
+                { letBlock
+                    | declarations =
+                        letBlock.declarations
+                            |> List.map
+                                (\( name, declExpression ) ->
+                                    ( name
+                                    , closurizeFunctionExpressions stack closureCaptures declExpression
+                                    )
+                                )
+                    , expression =
+                        closurizeFunctionExpressions stack closureCaptures letBlock.expression
+                }
+
+        StringTagExpression tag tagged ->
+            StringTagExpression tag (closurizeFunctionExpressions stack closureCaptures tagged)
+
+        RecordAccessExpression field record ->
+            RecordAccessExpression field (closurizeFunctionExpressions stack closureCaptures record)
+
+
+closureParameterFromParameters : List (List ( String, Deconstruction )) -> List ( String, Deconstruction )
+closureParameterFromParameters =
+    List.indexedMap
+        (\paramIndex functionParam ->
+            functionParam
+                |> List.map
+                    (\( deconsName, deconsExpr ) ->
+                        ( deconsName
+                        , ListItemDeconstruction paramIndex deconsExpr
+                        )
+                    )
+        )
+        >> List.concat
 
 
 liftDeclsFromLetBlocksRecursively : Expression -> ( List ( String, Expression ), Expression )
