@@ -105,12 +105,11 @@ type alias FunctionExpressionStruct =
 
 
 type alias FunctionParam =
-    List ( String, Deconstruction )
+    List ( String, List Deconstruction )
 
 
 type Deconstruction
-    = IdentityDeconstruction
-    | ListItemDeconstruction Int Deconstruction
+    = ListItemDeconstruction Int
     | RecordFieldDeconstruction String
 
 
@@ -1061,7 +1060,7 @@ compileElmSyntaxLetBlock stackBefore letBlock =
                                                         (\( declName, deconsExpr ) ->
                                                             ( declName
                                                             , destructuredExpression
-                                                                |> expressionForDeconstruction deconsExpr
+                                                                |> expressionForDeconstructions deconsExpr
                                                                 |> DeconstructionDeclaration
                                                             )
                                                         )
@@ -1115,7 +1114,7 @@ compileElmSyntaxLetDeclaration stack declaration =
                     (\compiledExpression ->
                         declarationsFromPattern (Elm.Syntax.Node.value patternNode)
                             |> Result.mapError (\error -> "Failed destructuring in let block: " ++ error)
-                            |> Result.map (List.map (Tuple.mapSecond (expressionForDeconstruction >> (|>) compiledExpression)))
+                            |> Result.map (List.map (Tuple.mapSecond (expressionForDeconstructions >> (|>) compiledExpression)))
                     )
 
 
@@ -1168,11 +1167,11 @@ compileElmSyntaxFunctionWithoutName stackBefore function =
 
 declarationsFromPattern :
     Elm.Syntax.Pattern.Pattern
-    -> Result String (List ( String, Deconstruction ))
+    -> Result String (List ( String, List Deconstruction ))
 declarationsFromPattern pattern =
     case pattern of
         Elm.Syntax.Pattern.VarPattern varName ->
-            Ok [ ( varName, IdentityDeconstruction ) ]
+            Ok [ ( varName, [] ) ]
 
         Elm.Syntax.Pattern.AllPattern ->
             Ok []
@@ -1190,9 +1189,8 @@ declarationsFromPattern pattern =
                 Ok tupleElementsDeconstructions ->
                     tupleElementsDeconstructions
                         |> List.indexedMap
-                            (\tupleElementIndex tupleElement ->
-                                tupleElement
-                                    |> List.map (Tuple.mapSecond (ListItemDeconstruction tupleElementIndex))
+                            (\tupleElementIndex ->
+                                List.map (Tuple.mapSecond ((::) (ListItemDeconstruction tupleElementIndex)))
                             )
                         |> List.concat
                         |> Ok
@@ -1200,39 +1198,43 @@ declarationsFromPattern pattern =
         Elm.Syntax.Pattern.RecordPattern fieldsElements ->
             fieldsElements
                 |> List.map Elm.Syntax.Node.value
-                |> List.map (\fieldName -> ( fieldName, RecordFieldDeconstruction fieldName ))
+                |> List.map (\fieldName -> ( fieldName, [ RecordFieldDeconstruction fieldName ] ))
                 |> Ok
 
         _ ->
             Err ("Unsupported type of pattern: " ++ (pattern |> Elm.Syntax.Pattern.encode |> Json.Encode.encode 0))
 
 
+expressionForDeconstructions : List Deconstruction -> Expression -> Expression
+expressionForDeconstructions =
+    List.map expressionForDeconstruction
+        >> List.foldr (>>) identity
+
+
 expressionForDeconstruction : Deconstruction -> Expression -> Expression
-expressionForDeconstruction deconstruction expression =
+expressionForDeconstruction deconstruction =
     case deconstruction of
-        IdentityDeconstruction ->
-            expression
-
         RecordFieldDeconstruction fieldName ->
-            RecordAccessExpression fieldName expression
+            RecordAccessExpression fieldName
 
-        ListItemDeconstruction index inItemDecons ->
+        ListItemDeconstruction index ->
             listItemFromIndexExpression index
-                (expressionForDeconstruction inItemDecons expression)
+
+
+pineExpressionForDeconstructions : List Deconstruction -> Pine.Expression -> Pine.Expression
+pineExpressionForDeconstructions =
+    List.map pineExpressionForDeconstruction
+        >> List.foldr (>>) identity
 
 
 pineExpressionForDeconstruction : Deconstruction -> Pine.Expression -> Pine.Expression
-pineExpressionForDeconstruction deconstruction expression =
+pineExpressionForDeconstruction deconstruction =
     case deconstruction of
-        IdentityDeconstruction ->
-            expression
-
         RecordFieldDeconstruction fieldName ->
-            pineExpressionForRecordAccess fieldName expression
+            pineExpressionForRecordAccess fieldName
 
-        ListItemDeconstruction index inItemDecons ->
+        ListItemDeconstruction index ->
             listItemFromIndexExpression_Pine index
-                (pineExpressionForDeconstruction inItemDecons expression)
 
 
 listDependenciesOfExpression : EmitStack -> Expression -> Set.Set String
@@ -2178,24 +2180,6 @@ emitFunctionExpression stack function =
             )
 
 
-environmentDeconstructionsFromFunctionParams : List FunctionParam -> Dict.Dict String EnvironmentDeconstructionEntry
-environmentDeconstructionsFromFunctionParams functionParams =
-    functionParams
-        |> List.indexedMap
-            (\runtimeIndex deconstructions ->
-                deconstructions
-                    |> List.map
-                        (\( elementName, deconstruction ) ->
-                            ( elementName
-                            , listItemFromIndexExpression_Pine runtimeIndex
-                                >> pineExpressionForDeconstruction deconstruction
-                            )
-                        )
-            )
-        |> List.concat
-        |> Dict.fromList
-
-
 emitClosureExpressions :
     EmitStack
     -> List ( String, Expression )
@@ -2235,7 +2219,36 @@ emitExpressionInDeclarationBlock :
     -> List ( String, Expression )
     -> Expression
     -> Result String { expr : Pine.Expression, closureArgumentPine : Maybe Pine.Expression }
-emitExpressionInDeclarationBlock stackBeforeAddingDeps originalEnvironmentDeclarations originalMainExpression =
+emitExpressionInDeclarationBlock stack originalEnvironmentDeclarations originalMainExpression =
+    let
+        environmentDeclarations =
+            originalEnvironmentDeclarations
+                |> List.map
+                    (Tuple.mapSecond
+                        (inlineApplicationsOfEnvironmentDeclarations
+                            stack
+                            originalEnvironmentDeclarations
+                        )
+                    )
+
+        mainExpression =
+            inlineApplicationsOfEnvironmentDeclarations
+                stack
+                environmentDeclarations
+                originalMainExpression
+    in
+    emitExpressionInDeclarationBlockLessInline
+        stack
+        environmentDeclarations
+        mainExpression
+
+
+emitExpressionInDeclarationBlockLessInline :
+    EmitStack
+    -> List ( String, Expression )
+    -> Expression
+    -> Result String { expr : Pine.Expression, closureArgumentPine : Maybe Pine.Expression }
+emitExpressionInDeclarationBlockLessInline stackBeforeAddingDeps originalEnvironmentDeclarations originalMainExpression =
     let
         newReferencesDependencies =
             environmentDeclarations
@@ -2304,7 +2317,7 @@ emitExpressionInDeclarationBlock stackBeforeAddingDeps originalEnvironmentDeclar
 
             closureFunctionParameters =
                 closureCaptures
-                    |> List.map (Tuple.pair >> (|>) IdentityDeconstruction)
+                    |> List.map (Tuple.pair >> (|>) [])
                     |> List.singleton
 
             closureFunctionParameter =
@@ -2673,7 +2686,7 @@ closurizeFunctionExpressions stack closureCaptures expression =
 
                 closureFunctionParameters =
                     closureCapturesForFunction
-                        |> List.map (Tuple.pair >> (|>) IdentityDeconstruction)
+                        |> List.map (Tuple.pair >> (|>) [])
                         |> List.singleton
 
                 closureFunctionParameter =
@@ -2729,17 +2742,18 @@ closurizeFunctionExpressions stack closureCaptures expression =
             RecordAccessExpression field (closurizeFunctionExpressions stack closureCaptures record)
 
 
-closureParameterFromParameters : List (List ( String, Deconstruction )) -> List ( String, Deconstruction )
+environmentDeconstructionsFromFunctionParams : List FunctionParam -> Dict.Dict String EnvironmentDeconstructionEntry
+environmentDeconstructionsFromFunctionParams =
+    closureParameterFromParameters
+        >> List.map (Tuple.mapSecond pineExpressionForDeconstructions)
+        >> Dict.fromList
+
+
+closureParameterFromParameters : List FunctionParam -> FunctionParam
 closureParameterFromParameters =
     List.indexedMap
-        (\paramIndex functionParam ->
-            functionParam
-                |> List.map
-                    (\( deconsName, deconsExpr ) ->
-                        ( deconsName
-                        , ListItemDeconstruction paramIndex deconsExpr
-                        )
-                    )
+        (\paramIndex ->
+            List.map (Tuple.mapSecond ((::) (ListItemDeconstruction paramIndex)))
         )
         >> List.concat
 
@@ -3156,6 +3170,157 @@ emitReferenceExpression name compilation =
                         |> listItemFromIndexExpression_Pine 1
                         |> deconstruction
                         |> Ok
+
+
+inlineApplicationsOfEnvironmentDeclarations : EmitStack -> List ( String, Expression ) -> Expression -> Expression
+inlineApplicationsOfEnvironmentDeclarations stackBeforeAddingDeps environmentDeclarations =
+    let
+        newReferencesDependencies =
+            environmentDeclarations
+                |> List.map (Tuple.mapSecond (listDependenciesOfExpression stackBeforeAddingDeps))
+                |> Dict.fromList
+
+        stackWithEnvironmentDeclDeps =
+            { stackBeforeAddingDeps
+                | declarationsDependencies = Dict.union newReferencesDependencies stackBeforeAddingDeps.declarationsDependencies
+            }
+
+        environmentDeclarationsDict =
+            Dict.fromList environmentDeclarations
+
+        findReplacement expr =
+            case expr of
+                FunctionApplicationExpression (ReferenceExpression functionName) arguments ->
+                    case Dict.get functionName environmentDeclarationsDict of
+                        Nothing ->
+                            Nothing
+
+                        Just appliedFunction ->
+                            let
+                                ( appliedFunctionParams, appliedFunctionBody ) =
+                                    parseFunctionParameters appliedFunction
+
+                                dependencies =
+                                    listDependenciesOfExpression stackWithEnvironmentDeclDeps appliedFunction
+                            in
+                            if
+                                (List.length arguments /= List.length appliedFunctionParams)
+                                    || Set.member functionName dependencies
+                            then
+                                Nothing
+
+                            else
+                                let
+                                    replacementsDict : Dict.Dict String Expression
+                                    replacementsDict =
+                                        appliedFunctionParams
+                                            |> List.indexedMap
+                                                (\paramIndex paramDeconstructions ->
+                                                    arguments
+                                                        |> List.drop paramIndex
+                                                        |> List.head
+                                                        |> Maybe.map
+                                                            (\argumentExpr ->
+                                                                paramDeconstructions
+                                                                    |> List.map
+                                                                        (Tuple.mapSecond
+                                                                            (expressionForDeconstructions
+                                                                                >> (|>) argumentExpr
+                                                                            )
+                                                                        )
+                                                            )
+                                                        |> Maybe.withDefault []
+                                                )
+                                            |> List.concat
+                                            |> Dict.fromList
+
+                                    findReplacementForReference innerExpr =
+                                        case innerExpr of
+                                            ReferenceExpression innerReference ->
+                                                Dict.get innerReference replacementsDict
+
+                                            _ ->
+                                                Nothing
+                                in
+                                appliedFunctionBody
+                                    |> transformExpressionWithOptionalReplacement findReplacementForReference
+                                    |> inlineApplicationsOfEnvironmentDeclarations stackWithEnvironmentDeclDeps environmentDeclarations
+                                    |> Just
+
+                _ ->
+                    Nothing
+    in
+    transformExpressionWithOptionalReplacement findReplacement
+
+
+transformExpressionWithOptionalReplacement : (Expression -> Maybe Expression) -> Expression -> Expression
+transformExpressionWithOptionalReplacement findReplacement expression =
+    case findReplacement expression of
+        Just replacement ->
+            replacement
+
+        Nothing ->
+            case expression of
+                LiteralExpression _ ->
+                    expression
+
+                ListExpression list ->
+                    ListExpression (List.map (transformExpressionWithOptionalReplacement findReplacement) list)
+
+                KernelApplicationExpression kernelApplication ->
+                    KernelApplicationExpression
+                        { kernelApplication
+                            | argument =
+                                transformExpressionWithOptionalReplacement findReplacement kernelApplication.argument
+                        }
+
+                ConditionalExpression conditional ->
+                    ConditionalExpression
+                        { condition =
+                            transformExpressionWithOptionalReplacement findReplacement conditional.condition
+                        , ifTrue =
+                            transformExpressionWithOptionalReplacement findReplacement conditional.ifTrue
+                        , ifFalse =
+                            transformExpressionWithOptionalReplacement findReplacement conditional.ifFalse
+                        }
+
+                ReferenceExpression _ ->
+                    expression
+
+                FunctionExpression functionExpression ->
+                    FunctionExpression
+                        { functionExpression
+                            | expression =
+                                transformExpressionWithOptionalReplacement findReplacement functionExpression.expression
+                        }
+
+                FunctionApplicationExpression functionExpression arguments ->
+                    let
+                        mappedArguments =
+                            List.map (transformExpressionWithOptionalReplacement findReplacement) arguments
+
+                        mappedFunctionExpression =
+                            transformExpressionWithOptionalReplacement findReplacement functionExpression
+                    in
+                    FunctionApplicationExpression
+                        mappedFunctionExpression
+                        mappedArguments
+
+                LetBlockExpression letBlock ->
+                    LetBlockExpression
+                        { letBlock
+                            | declarations =
+                                letBlock.declarations
+                                    |> List.map (Tuple.mapSecond (transformExpressionWithOptionalReplacement findReplacement))
+                            , expression =
+                                transformExpressionWithOptionalReplacement findReplacement letBlock.expression
+                        }
+
+                StringTagExpression tag tagged ->
+                    StringTagExpression tag (transformExpressionWithOptionalReplacement findReplacement tagged)
+
+                RecordAccessExpression field record ->
+                    RecordAccessExpression field (transformExpressionWithOptionalReplacement findReplacement record)
 
 
 getDeclarationValueFromCompilation : ( List String, String ) -> CompilationStack -> Result String Pine.Value

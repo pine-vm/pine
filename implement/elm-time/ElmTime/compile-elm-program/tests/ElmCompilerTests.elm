@@ -216,7 +216,7 @@ emitClosureExpressionTests =
                         , ElmInteractive.ReferenceExpression "param_name"
                         ]
                 , functionParams =
-                    [ [ ( "param_name", ElmInteractive.IdentityDeconstruction ) ] ]
+                    [ [ ( "param_name", [] ) ] ]
                 }
               )
             ]
@@ -275,7 +275,7 @@ emitClosureExpressionTests =
     , ( "One parameter - literal"
       , { functionInnerExpr =
             ElmInteractive.LiteralExpression (Pine.valueFromString "test-literal")
-        , functionParams = [ [ ( "param-name", ElmInteractive.IdentityDeconstruction ) ] ]
+        , functionParams = [ [ ( "param-name", [] ) ] ]
         , arguments = [ Pine.valueFromString "test-123" ]
         , environmentFunctions = []
         , expectedValue = Pine.valueFromString "test-literal"
@@ -284,7 +284,7 @@ emitClosureExpressionTests =
     , ( "One parameter - reference"
       , { functionInnerExpr =
             ElmInteractive.ReferenceExpression "param-name"
-        , functionParams = [ [ ( "param-name", ElmInteractive.IdentityDeconstruction ) ] ]
+        , functionParams = [ [ ( "param-name", [] ) ] ]
         , arguments = [ Pine.valueFromString "test-345" ]
         , environmentFunctions = []
         , expectedValue = Pine.valueFromString "test-345"
@@ -295,7 +295,7 @@ emitClosureExpressionTests =
             ElmInteractive.ReferenceExpression "param-name"
         , functionParams =
             [ [ ( "param-name"
-                , ElmInteractive.ListItemDeconstruction 1 ElmInteractive.IdentityDeconstruction
+                , [ ElmInteractive.ListItemDeconstruction 1 ]
                 )
               ]
             ]
@@ -321,12 +321,10 @@ emitClosureExpressionTests =
                 ]
         , functionParams =
             [ [ ( "count"
-                , ElmInteractive.ListItemDeconstruction 0
-                    ElmInteractive.IdentityDeconstruction
+                , [ ElmInteractive.ListItemDeconstruction 0 ]
                 )
               , ( "value"
-                , ElmInteractive.ListItemDeconstruction 1
-                    ElmInteractive.IdentityDeconstruction
+                , [ ElmInteractive.ListItemDeconstruction 1 ]
                 )
               ]
             ]
@@ -379,16 +377,13 @@ emitClosureExpressionTests =
                         }
                 , functionParams =
                     [ [ ( "result"
-                        , ElmInteractive.ListItemDeconstruction 0
-                            ElmInteractive.IdentityDeconstruction
+                        , [ ElmInteractive.ListItemDeconstruction 0 ]
                         )
                       , ( "remainingCount"
-                        , ElmInteractive.ListItemDeconstruction 1
-                            ElmInteractive.IdentityDeconstruction
+                        , [ ElmInteractive.ListItemDeconstruction 1 ]
                         )
                       , ( "value"
-                        , ElmInteractive.ListItemDeconstruction 2
-                            ElmInteractive.IdentityDeconstruction
+                        , [ ElmInteractive.ListItemDeconstruction 2 ]
                         )
                       ]
                     ]
@@ -413,12 +408,10 @@ emitClosureExpressionTests =
                 ]
         , functionParams =
             [ [ ( "count"
-                , ElmInteractive.ListItemDeconstruction 0
-                    ElmInteractive.IdentityDeconstruction
+                , [ ElmInteractive.ListItemDeconstruction 0 ]
                 )
               , ( "value"
-                , ElmInteractive.ListItemDeconstruction 1
-                    ElmInteractive.IdentityDeconstruction
+                , [ ElmInteractive.ListItemDeconstruction 1 ]
                 )
               ]
             ]
@@ -440,9 +433,7 @@ emitClosureExpressionTests =
                                 ]
                         }
                 , functionParams =
-                    [ [ ( "num"
-                        , ElmInteractive.IdentityDeconstruction
-                        )
+                    [ [ ( "num", [] )
                       ]
                     ]
                 }
@@ -485,16 +476,13 @@ emitClosureExpressionTests =
                         }
                 , functionParams =
                     [ [ ( "result"
-                        , ElmInteractive.ListItemDeconstruction 0
-                            ElmInteractive.IdentityDeconstruction
+                        , [ ElmInteractive.ListItemDeconstruction 0 ]
                         )
                       , ( "remainingCount"
-                        , ElmInteractive.ListItemDeconstruction 1
-                            ElmInteractive.IdentityDeconstruction
+                        , [ ElmInteractive.ListItemDeconstruction 1 ]
                         )
                       , ( "value"
-                        , ElmInteractive.ListItemDeconstruction 2
-                            ElmInteractive.IdentityDeconstruction
+                        , [ ElmInteractive.ListItemDeconstruction 2 ]
                         )
                       ]
                     ]
@@ -510,13 +498,9 @@ emitClosureExpressionTests =
     , ( "Two parameters - return literal"
       , { functionInnerExpr = ElmInteractive.LiteralExpression (Pine.valueFromString "constant-literal")
         , functionParams =
-            [ [ ( "param_alfa"
-                , ElmInteractive.IdentityDeconstruction
-                )
+            [ [ ( "param_alfa", [] )
               ]
-            , [ ( "param_beta"
-                , ElmInteractive.IdentityDeconstruction
-                )
+            , [ ( "param_beta", [] )
               ]
             ]
         , arguments =
@@ -530,13 +514,9 @@ emitClosureExpressionTests =
     , ( "Two parameters - return second"
       , { functionInnerExpr = ElmInteractive.ReferenceExpression "param_beta"
         , functionParams =
-            [ [ ( "param_alfa"
-                , ElmInteractive.IdentityDeconstruction
-                )
+            [ [ ( "param_alfa", [] )
               ]
-            , [ ( "param_beta"
-                , ElmInteractive.IdentityDeconstruction
-                )
+            , [ ( "param_beta", [] )
               ]
             ]
         , arguments =
@@ -550,13 +530,9 @@ emitClosureExpressionTests =
     , ( "Two parameters - return first"
       , { functionInnerExpr = ElmInteractive.ReferenceExpression "param_alfa"
         , functionParams =
-            [ [ ( "param_alfa"
-                , ElmInteractive.IdentityDeconstruction
-                )
+            [ [ ( "param_alfa", [] )
               ]
-            , [ ( "param_beta"
-                , ElmInteractive.IdentityDeconstruction
-                )
+            , [ ( "param_beta", [] )
               ]
             ]
         , arguments =
@@ -570,17 +546,11 @@ emitClosureExpressionTests =
     , ( "Three parameters - return literal"
       , { functionInnerExpr = ElmInteractive.LiteralExpression (Pine.valueFromString "constant-literal")
         , functionParams =
-            [ [ ( "param_alfa"
-                , ElmInteractive.IdentityDeconstruction
-                )
+            [ [ ( "param_alfa", [] )
               ]
-            , [ ( "param_beta"
-                , ElmInteractive.IdentityDeconstruction
-                )
+            , [ ( "param_beta", [] )
               ]
-            , [ ( "param_gamma"
-                , ElmInteractive.IdentityDeconstruction
-                )
+            , [ ( "param_gamma", [] )
               ]
             ]
         , arguments =
@@ -595,17 +565,11 @@ emitClosureExpressionTests =
     , ( "Three parameters - return third"
       , { functionInnerExpr = ElmInteractive.ReferenceExpression "param_gamma"
         , functionParams =
-            [ [ ( "param_alfa"
-                , ElmInteractive.IdentityDeconstruction
-                )
+            [ [ ( "param_alfa", [] )
               ]
-            , [ ( "param_beta"
-                , ElmInteractive.IdentityDeconstruction
-                )
+            , [ ( "param_beta", [] )
               ]
-            , [ ( "param_gamma"
-                , ElmInteractive.IdentityDeconstruction
-                )
+            , [ ( "param_gamma", [] )
               ]
             ]
         , arguments =
@@ -620,9 +584,9 @@ emitClosureExpressionTests =
     , ( "Three parameters - return second"
       , { functionInnerExpr = ElmInteractive.ReferenceExpression "param_beta"
         , functionParams =
-            [ [ ( "param_alfa", ElmInteractive.IdentityDeconstruction ) ]
-            , [ ( "param_beta", ElmInteractive.IdentityDeconstruction ) ]
-            , [ ( "param_gamma", ElmInteractive.IdentityDeconstruction ) ]
+            [ [ ( "param_alfa", [] ) ]
+            , [ ( "param_beta", [] ) ]
+            , [ ( "param_gamma", [] ) ]
             ]
         , arguments =
             [ Pine.valueFromString "argument_alfa"
@@ -636,9 +600,9 @@ emitClosureExpressionTests =
     , ( "Three parameters - return first"
       , { functionInnerExpr = ElmInteractive.ReferenceExpression "param_alfa"
         , functionParams =
-            [ [ ( "param_alfa", ElmInteractive.IdentityDeconstruction ) ]
-            , [ ( "param_beta", ElmInteractive.IdentityDeconstruction ) ]
-            , [ ( "param_gamma", ElmInteractive.IdentityDeconstruction ) ]
+            [ [ ( "param_alfa", [] ) ]
+            , [ ( "param_beta", [] ) ]
+            , [ ( "param_gamma", [] ) ]
             ]
         , arguments =
             [ Pine.valueFromString "argument_alfa"
@@ -655,9 +619,9 @@ emitClosureExpressionTests =
                 (ReferenceExpression "repeat_three_times")
                 [ ElmInteractive.ReferenceExpression "param_alfa" ]
         , functionParams =
-            [ [ ( "param_alfa", ElmInteractive.IdentityDeconstruction ) ]
-            , [ ( "param_beta", ElmInteractive.IdentityDeconstruction ) ]
-            , [ ( "param_gamma", ElmInteractive.IdentityDeconstruction ) ]
+            [ [ ( "param_alfa", [] ) ]
+            , [ ( "param_beta", [] ) ]
+            , [ ( "param_gamma", [] ) ]
             ]
         , arguments =
             [ Pine.valueFromString "argument_alfa"
@@ -673,7 +637,7 @@ emitClosureExpressionTests =
                         , ElmInteractive.ReferenceExpression "param_name"
                         ]
                 , functionParams =
-                    [ [ ( "param_name", ElmInteractive.IdentityDeconstruction ) ] ]
+                    [ [ ( "param_name", [] ) ] ]
                 }
               )
             ]
@@ -693,17 +657,11 @@ emitClosureExpressionTests =
                 , ElmInteractive.ReferenceExpression "param_beta"
                 ]
         , functionParams =
-            [ [ ( "param_alfa"
-                , ElmInteractive.IdentityDeconstruction
-                )
+            [ [ ( "param_alfa", [] )
               ]
-            , [ ( "param_beta"
-                , ElmInteractive.IdentityDeconstruction
-                )
+            , [ ( "param_beta", [] )
               ]
-            , [ ( "param_gamma"
-                , ElmInteractive.IdentityDeconstruction
-                )
+            , [ ( "param_gamma", [] )
               ]
             ]
         , arguments =
@@ -720,13 +678,9 @@ emitClosureExpressionTests =
                         , ElmInteractive.ReferenceExpression "param_name_a"
                         ]
                 , functionParams =
-                    [ [ ( "param_name_a"
-                        , ElmInteractive.IdentityDeconstruction
-                        )
+                    [ [ ( "param_name_a", [] )
                       ]
-                    , [ ( "param_name_b"
-                        , ElmInteractive.IdentityDeconstruction
-                        )
+                    , [ ( "param_name_b", [] )
                       ]
                     ]
                 }
@@ -751,13 +705,9 @@ emitClosureExpressionTests =
                     ]
                 ]
         , functionParams =
-            [ [ ( "count"
-                , ElmInteractive.IdentityDeconstruction
-                )
+            [ [ ( "count", [] )
               ]
-            , [ ( "value"
-                , ElmInteractive.IdentityDeconstruction
-                )
+            , [ ( "value", [] )
               ]
             ]
         , arguments =
@@ -805,17 +755,13 @@ emitClosureExpressionTests =
                                 ]
                         }
                 , functionParams =
-                    [ [ ( "result"
-                        , ElmInteractive.IdentityDeconstruction
-                        )
+                    [ [ ( "result", [] )
                       ]
                     , [ ( "remainingCount"
-                        , ElmInteractive.ListItemDeconstruction 0
-                            ElmInteractive.IdentityDeconstruction
+                        , [ ElmInteractive.ListItemDeconstruction 0 ]
                         )
                       , ( "value"
-                        , ElmInteractive.ListItemDeconstruction 1
-                            ElmInteractive.IdentityDeconstruction
+                        , [ ElmInteractive.ListItemDeconstruction 1 ]
                         )
                       ]
                     ]
@@ -880,17 +826,11 @@ emitClosureExpressionTests =
                                 ]
                         }
                 , functionParams =
-                    [ [ ( "result"
-                        , ElmInteractive.IdentityDeconstruction
-                        )
+                    [ [ ( "result", [] )
                       ]
-                    , [ ( "remainingCount"
-                        , ElmInteractive.IdentityDeconstruction
-                        )
+                    , [ ( "remainingCount", [] )
                       ]
-                    , [ ( "value"
-                        , ElmInteractive.IdentityDeconstruction
-                        )
+                    , [ ( "value", [] )
                       ]
                     ]
                 }
@@ -948,7 +888,7 @@ emitClosureExpressionTests =
                 , expression = ElmInteractive.ReferenceExpression "decl_from_let"
                 }
         , functionParams =
-            [ [ ( "param_0", ElmInteractive.IdentityDeconstruction ) ]
+            [ [ ( "param_0", [] ) ]
             ]
         , arguments = [ Pine.valueFromString "argument_0" ]
         , environmentFunctions = []
@@ -974,7 +914,7 @@ emitClosureExpressionTests =
                         }
                 }
         , functionParams =
-            [ [ ( "param_0", ElmInteractive.IdentityDeconstruction ) ]
+            [ [ ( "param_0", [] ) ]
             ]
         , arguments = [ Pine.valueFromString "argument_0" ]
         , environmentFunctions = []
@@ -992,8 +932,8 @@ emitClosureExpressionTests =
                 , expression = ElmInteractive.ReferenceExpression "decl_from_let"
                 }
         , functionParams =
-            [ [ ( "param_0", ElmInteractive.IdentityDeconstruction ) ]
-            , [ ( "param_1", ElmInteractive.IdentityDeconstruction ) ]
+            [ [ ( "param_0", [] ) ]
+            , [ ( "param_1", [] ) ]
             ]
         , arguments =
             [ Pine.valueFromString "argument_0"
@@ -1011,7 +951,7 @@ emitClosureExpressionTests =
                       , ElmInteractive.FunctionExpression
                             { argumentDeconstructions =
                                 [ ( "final_func_param_0"
-                                  , ElmInteractive.IdentityDeconstruction
+                                  , []
                                   )
                                 ]
                             , expression =
@@ -1025,7 +965,7 @@ emitClosureExpressionTests =
                       , ElmInteractive.FunctionExpression
                             { argumentDeconstructions =
                                 [ ( "closure_func_param_0"
-                                  , ElmInteractive.IdentityDeconstruction
+                                  , []
                                   )
                                 ]
                             , expression =
@@ -1043,7 +983,7 @@ emitClosureExpressionTests =
                         ]
                 }
         , functionParams =
-            [ [ ( "param_0", ElmInteractive.IdentityDeconstruction )
+            [ [ ( "param_0", [] )
               ]
             ]
         , arguments =
@@ -1068,7 +1008,7 @@ emitClosureExpressionTests =
                 , expression = ElmInteractive.ReferenceExpression "decl_from_let"
                 }
         , functionParams =
-            [ [ ( "param_0", ElmInteractive.IdentityDeconstruction ) ]
+            [ [ ( "param_0", [] ) ]
             ]
         , arguments = [ Pine.valueFromString "argument_0" ]
         , environmentFunctions =
@@ -1093,8 +1033,8 @@ emitClosureExpressionTests =
             [ ( "second_function"
               , { functionInnerExpr = ElmInteractive.LiteralExpression (Pine.valueFromString "constant-literal")
                 , functionParams =
-                    [ [ ( "second_function_param_alfa", ElmInteractive.IdentityDeconstruction ) ]
-                    , [ ( "second_function_param_beta", ElmInteractive.IdentityDeconstruction ) ]
+                    [ [ ( "second_function_param_alfa", [] ) ]
+                    , [ ( "second_function_param_beta", [] ) ]
                     ]
                 }
               )

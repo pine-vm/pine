@@ -448,7 +448,7 @@ replace before after string =
 
 append : String -> String -> String
 append a b =
-    Pine_kernel.concat [ toList a, toList b ]
+    fromList (Pine_kernel.concat [ toList a, toList b ])
 
 
 concat : List String -> String
