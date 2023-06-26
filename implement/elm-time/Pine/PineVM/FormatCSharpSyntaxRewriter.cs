@@ -66,8 +66,14 @@ public class FormatCSharpSyntaxRewriter : CSharpSyntaxRewriter
 
         return
             node
-            .WithQuestionToken(node.QuestionToken.WithTrailingTrivia(SyntaxFactory.LineFeed, indentationTrivia))
-            .WithColonToken(node.ColonToken.WithTrailingTrivia(SyntaxFactory.LineFeed, indentationTrivia));
+            .WithQuestionToken(
+                node.QuestionToken
+                .WithLeadingTrivia(SyntaxFactory.LineFeed, indentationTrivia)
+                .WithTrailingTrivia(SyntaxFactory.LineFeed, indentationTrivia))
+            .WithColonToken(
+                node.ColonToken
+                .WithLeadingTrivia(SyntaxFactory.LineFeed, indentationTrivia)
+                .WithTrailingTrivia(SyntaxFactory.LineFeed, indentationTrivia));
     }
 
     public override SyntaxNode? VisitBlock(BlockSyntax originalNode)

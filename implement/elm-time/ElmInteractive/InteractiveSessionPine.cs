@@ -241,12 +241,21 @@ public class InteractiveSessionPine : IInteractiveSession
             decodeExpressionOverrides: ImmutableDictionary<PineValue, Func<PineVM.EvalExprDelegate, PineValue, Result<string, PineValue>>>.Empty,
             overrideEvaluateExpression: originalHandler => (expression, environment) =>
             {
-                if
-                    (expression is not Expression.EnvironmentExpression &&
-                     expression is not Expression.LiteralExpression &&
-                     expression is not Expression.DecodeAndEvaluateExpression)
+                if (expression is Expression.DecodeAndEvaluateExpression decodeAndEvaluateExpression)
                 {
-                    expressionEvaluations.Enqueue(expression);
+                    originalHandler(decodeAndEvaluateExpression.expression, environment)
+                    .AndThen(PineVM.DecodeExpressionFromValueDefault)
+                    .MapError(err =>
+                    {
+                        Console.WriteLine("Failed to decode expression: " + err);
+                        return err;
+                    })
+                    .Map(innerExpr =>
+                    {
+                        expressionEvaluations.Enqueue(innerExpr);
+
+                        return innerExpr;
+                    });
                 }
 
                 return originalHandler(expression, environment);
