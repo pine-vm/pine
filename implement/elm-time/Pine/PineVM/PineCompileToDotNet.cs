@@ -406,7 +406,11 @@ public class PineCompileToDotNet
         SyntaxContainerConfig syntaxContainerConfig,
         CompilationUnitSyntax compilationUnitSyntax)
     {
-        var syntaxTree = CSharpSyntaxTree.Create(compilationUnitSyntax);
+        var syntaxText =
+            new FormatCSharpSyntaxRewriter().Visit(compilationUnitSyntax.NormalizeWhitespace(eol: "\n"))
+            .ToFullString();
+
+        var syntaxTree = CSharpSyntaxTree.ParseText(syntaxText);
 
         var compilation = CSharpCompilation.Create("GeneratedContainer.cs")
             .WithOptions(new CSharpCompilationOptions(
@@ -425,15 +429,11 @@ public class PineCompileToDotNet
             .Where(d => d.Severity == DiagnosticSeverity.Error)
             .ToImmutableList();
 
-        var compilationErrorsAccountingForCompilerProblem =
-            compilationErrors.Where(d => !CanIgnoreErrorMessage(d))
-            .ToImmutableList();
-
-        if (!compilationResult.Success && 0 < compilationErrorsAccountingForCompilerProblem.Count)
+        if (!compilationResult.Success && 0 < compilationErrors.Count)
         {
             return Result<string, CompileToAssemblyResult>.err(
-                "Compilation failed with " + compilationErrorsAccountingForCompilerProblem.Count + " errors:\n" +
-                string.Join("\n", compilationErrorsAccountingForCompilerProblem.Select(d => d.ToString())));
+                "Compilation failed with " + compilationErrors.Count + " errors:\n" +
+                string.Join("\n", compilationErrors.Select(d => d.ToString())));
         }
 
         var assembly = codeStream.ToArray();
