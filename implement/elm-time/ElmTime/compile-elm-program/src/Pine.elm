@@ -136,7 +136,7 @@ evaluateExpression context expression =
                     Debug.log "eval expression with tag"
                         tag
             in
-            evaluateExpression context tagged
+                    evaluateExpression context tagged
                 |> Result.mapError (DescribePathNode ("Failed to evaluate tagged expression '" ++ tag ++ "': "))
 
 
@@ -713,8 +713,8 @@ encodeExpressionAsValue expression =
 
         DecodeAndEvaluateExpression decodeAndEvaluate ->
             ( "DecodeAndEvaluate"
-            , [ ( "expression", encodeExpressionAsValue decodeAndEvaluate.expression )
-              , ( "environment", encodeExpressionAsValue decodeAndEvaluate.environment )
+            , [ ( "environment", encodeExpressionAsValue decodeAndEvaluate.environment )
+              , ( "expression", encodeExpressionAsValue decodeAndEvaluate.expression )
               ]
                 |> Dict.fromList
                 |> encodeRecordToPineValue
@@ -722,8 +722,8 @@ encodeExpressionAsValue expression =
 
         KernelApplicationExpression app ->
             ( "KernelApplication"
-            , [ ( "functionName", valueFromString app.functionName )
-              , ( "argument", encodeExpressionAsValue app.argument )
+            , [ ( "argument", encodeExpressionAsValue app.argument )
+              , ( "functionName", valueFromString app.functionName )
               ]
                 |> Dict.fromList
                 |> encodeRecordToPineValue
@@ -732,8 +732,8 @@ encodeExpressionAsValue expression =
         ConditionalExpression conditional ->
             ( "Conditional"
             , [ ( "condition", conditional.condition )
-              , ( "ifTrue", conditional.ifTrue )
               , ( "ifFalse", conditional.ifFalse )
+              , ( "ifTrue", conditional.ifTrue )
               ]
                 |> List.map (Tuple.mapSecond encodeExpressionAsValue)
                 |> Dict.fromList

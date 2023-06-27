@@ -44,8 +44,8 @@ generateTemplateEvaluatingToExpression expression =
             buildFromTagAndArgument
                 "DecodeAndEvaluate"
                 (buildRecordExpression
-                    [ ( "expression", generateTemplateEvaluatingToExpression decodeAndEval.expression )
-                    , ( "environment", generateTemplateEvaluatingToExpression decodeAndEval.environment )
+                    [ ( "environment", generateTemplateEvaluatingToExpression decodeAndEval.environment )
+                    , ( "expression", generateTemplateEvaluatingToExpression decodeAndEval.expression )
                     ]
                 )
 
@@ -53,8 +53,8 @@ generateTemplateEvaluatingToExpression expression =
             buildFromTagAndArgument
                 "KernelApplication"
                 (buildRecordExpression
-                    [ ( "functionName", Pine.LiteralExpression (Pine.valueFromString kernelApp.functionName) )
-                    , ( "argument", generateTemplateEvaluatingToExpression kernelApp.argument )
+                    [ ( "argument", generateTemplateEvaluatingToExpression kernelApp.argument )
+                    , ( "functionName", Pine.LiteralExpression (Pine.valueFromString kernelApp.functionName) )
                     ]
                 )
 
@@ -65,11 +65,11 @@ generateTemplateEvaluatingToExpression expression =
                     [ ( "condition"
                       , generateTemplateEvaluatingToExpression conditional.condition
                       )
-                    , ( "ifTrue"
-                      , generateTemplateEvaluatingToExpression conditional.ifTrue
-                      )
                     , ( "ifFalse"
                       , generateTemplateEvaluatingToExpression conditional.ifFalse
+                      )
+                    , ( "ifTrue"
+                      , generateTemplateEvaluatingToExpression conditional.ifTrue
                       )
                     ]
                 )
@@ -236,12 +236,12 @@ buildPineExpressionSyntax config expression =
                     buildFromTagNameAndArguments
                         "Pine.DecodeAndEvaluateExpression"
                         [ buildRecordSyntax
-                            [ ( "expression"
-                              , buildPineExpressionSyntax config decodeAndEvaluate.expression
+                            [ ( "environment"
+                              , buildPineExpressionSyntax config decodeAndEvaluate.environment
                                     |> String.join "\n"
                               )
-                            , ( "environment"
-                              , buildPineExpressionSyntax config decodeAndEvaluate.environment
+                            , ( "expression"
+                              , buildPineExpressionSyntax config decodeAndEvaluate.expression
                                     |> String.join "\n"
                               )
                             ]
@@ -252,12 +252,12 @@ buildPineExpressionSyntax config expression =
                     buildFromTagNameAndArguments
                         "Pine.KernelApplicationExpression"
                         [ buildRecordSyntax
-                            [ ( "functionName"
-                              , "\"" ++ kernelApplication.functionName ++ "\""
-                              )
-                            , ( "argument"
+                            [ ( "argument"
                               , buildPineExpressionSyntax config kernelApplication.argument
                                     |> String.join "\n"
+                              )
+                            , ( "functionName"
+                              , "\"" ++ kernelApplication.functionName ++ "\""
                               )
                             ]
                             |> String.join "\n"
@@ -271,12 +271,12 @@ buildPineExpressionSyntax config expression =
                               , buildPineExpressionSyntax config conditional.condition
                                     |> String.join "\n"
                               )
-                            , ( "ifTrue"
-                              , buildPineExpressionSyntax config conditional.ifTrue
-                                    |> String.join "\n"
-                              )
                             , ( "ifFalse"
                               , buildPineExpressionSyntax config conditional.ifFalse
+                                    |> String.join "\n"
+                              )
+                            , ( "ifTrue"
+                              , buildPineExpressionSyntax config conditional.ifTrue
                                     |> String.join "\n"
                               )
                             ]

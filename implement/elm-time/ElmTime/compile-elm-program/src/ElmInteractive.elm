@@ -4613,8 +4613,8 @@ expressionAsJson expression =
         KernelApplicationExpression kernelApplication ->
             [ ( "KernelApplication"
               , Json.Encode.object
-                    [ ( "functionName", Json.Encode.string kernelApplication.functionName )
-                    , ( "argument", expressionAsJson kernelApplication.argument )
+                    [ ( "argument", expressionAsJson kernelApplication.argument )
+                    , ( "functionName", Json.Encode.string kernelApplication.functionName )
                     ]
               )
             ]
@@ -4622,8 +4622,8 @@ expressionAsJson expression =
         ConditionalExpression conditional ->
             [ ( "Conditional"
               , [ ( "condition", .condition )
-                , ( "ifTrue", .ifTrue )
                 , ( "ifFalse", .ifFalse )
+                , ( "ifTrue", .ifTrue )
                 ]
                     |> List.map (Tuple.mapSecond ((|>) conditional >> expressionAsJson))
                     |> Json.Encode.object

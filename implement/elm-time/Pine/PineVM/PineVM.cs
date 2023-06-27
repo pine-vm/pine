@@ -251,25 +251,25 @@ public class PineVM
         .Map(encodedEnvironment =>
         EncodeChoiceTypeVariantAsPineValue("DecodeAndEvaluate",
             EncodeRecordToPineValue(
-                (nameof(Expression.DecodeAndEvaluateExpression.expression), encodedExpression),
-                (nameof(Expression.DecodeAndEvaluateExpression.environment), encodedEnvironment)))));
+                (nameof(Expression.DecodeAndEvaluateExpression.environment), encodedEnvironment),
+                (nameof(Expression.DecodeAndEvaluateExpression.expression), encodedExpression)))));
 
     public static Result<string, Expression.DecodeAndEvaluateExpression> DecodeDecodeAndEvaluateExpression(
         Func<PineValue, Result<string, Expression>> generalDecoder,
         PineValue value) =>
         DecodeRecord2FromPineValue(
             value,
-            ("expression", generalDecoder),
             ("environment", generalDecoder),
-            (expression, environment) => new Expression.DecodeAndEvaluateExpression(expression: expression, environment: environment));
+            ("expression", generalDecoder),
+            (environment, expression) => new Expression.DecodeAndEvaluateExpression(expression: expression, environment: environment));
 
     public static Result<string, PineValue> EncodeKernelApplicationExpression(Expression.KernelApplicationExpression kernelApplicationExpression) =>
         EncodeExpressionAsValue(kernelApplicationExpression.argument)
         .Map(encodedArgument =>
         EncodeChoiceTypeVariantAsPineValue("KernelApplication",
             EncodeRecordToPineValue(
-                (nameof(Expression.KernelApplicationExpression.functionName), PineValueAsString.ValueFromString(kernelApplicationExpression.functionName)),
-                (nameof(Expression.KernelApplicationExpression.argument), encodedArgument))));
+                (nameof(Expression.KernelApplicationExpression.argument), encodedArgument),
+                (nameof(Expression.KernelApplicationExpression.functionName), PineValueAsString.ValueFromString(kernelApplicationExpression.functionName)))));
 
     public static Result<string, Expression.KernelApplicationExpression> DecodeKernelApplicationExpression(
         Func<PineValue, Result<string, Expression>> generalDecoder,
@@ -315,8 +315,8 @@ public class PineVM
         EncodeChoiceTypeVariantAsPineValue("Conditional",
             EncodeRecordToPineValue(
                 (nameof(Expression.ConditionalExpression.condition), encodedCondition),
-                (nameof(Expression.ConditionalExpression.ifTrue), encodedIfTrue),
-                (nameof(Expression.ConditionalExpression.ifFalse), encodedIfFalse))))));
+                (nameof(Expression.ConditionalExpression.ifFalse), encodedIfFalse),
+                (nameof(Expression.ConditionalExpression.ifTrue), encodedIfTrue))))));
 
     public static Result<string, Expression.ConditionalExpression> DecodeConditionalExpression(
         Func<PineValue, Result<string, Expression>> generalDecoder,
