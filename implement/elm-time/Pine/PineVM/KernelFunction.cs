@@ -14,14 +14,10 @@ public static class KernelFunction
                 value switch
                 {
                     PineValue.ListValue list =>
-                        list.Elements.Count < 1 ?
-                            true
-                            :
-                            list.Elements.All(e => e.Equals(list.Elements[0])),
+                    list.Elements.Count < 1 || list.Elements.All(e => e.Equals(list.Elements[0])),
 
                     PineValue.BlobValue blob =>
-                        blob.Bytes.Length < 1 ? true :
-                            blob.Bytes.ToArray().All(b => b == blob.Bytes.Span[0]),
+                    blob.Bytes.Length < 1 || blob.Bytes.ToArray().All(b => b == blob.Bytes.Span[0]),
 
                     _ => throw new NotImplementedException()
                 }

@@ -500,10 +500,10 @@ public class PineCompileToDotNet
         bool IsTypeResult)
     {
         public static CompiledExpression WithTypePlainValue(ExpressionSyntax syntax) =>
-            new CompiledExpression(syntax, IsTypeResult: false);
+            new(syntax, IsTypeResult: false);
 
         public static CompiledExpression WithTypeResult(ExpressionSyntax syntax) =>
-            new CompiledExpression(syntax, IsTypeResult: true);
+            new(syntax, IsTypeResult: true);
 
         public CompiledExpression MapSyntax(Func<ExpressionSyntax, ExpressionSyntax> map) =>
             this
@@ -1428,34 +1428,17 @@ public class PineCompileToDotNet
         var continueEncode = new Func<Expression, Result<string, ExpressionSyntax>>(
             descendant => EncodePineExpressionAsCSharpExpression(descendant, overrideDefaultExpressionForValue));
 
-        static ExpressionSyntax continueWithNewConstructorOfExpressionVariant(
-            string expressionVariantTypeName,
-            params ExpressionSyntax[] argumentsExpressions)
-        {
-            return
-                SyntaxFactory.ObjectCreationExpression(
-                    SyntaxFactory.QualifiedName(
-                        SyntaxFactory.QualifiedName(
-                            SyntaxFactory.QualifiedName(
-                                SyntaxFactory.IdentifierName("Pine"),
-                                    SyntaxFactory.IdentifierName("PineVM")),
-                            SyntaxFactory.IdentifierName("Expression")),
-                        SyntaxFactory.IdentifierName(expressionVariantTypeName)))
-                .WithArgumentList(
-                    SyntaxFactory.ArgumentList(SyntaxFactory.SeparatedList(argumentsExpressions.Select(SyntaxFactory.Argument))));
-        }
-
         return expression switch
         {
             Expression.LiteralExpression literal =>
             Result<string, ExpressionSyntax>.ok(
-                continueWithNewConstructorOfExpressionVariant(
+                NewConstructorOfExpressionVariant(
                     nameof(Expression.LiteralExpression),
                     CompileToCSharpLiteralExpression(literal.Value, overrideDefaultExpressionForValue))),
 
             Expression.EnvironmentExpression =>
             Result<string, ExpressionSyntax>.ok(
-                continueWithNewConstructorOfExpressionVariant(
+                NewConstructorOfExpressionVariant(
                     nameof(Expression.EnvironmentExpression))),
 
             Expression.ListExpression list =>
@@ -1463,7 +1446,7 @@ public class PineCompileToDotNet
             .ListCombine()
             .MapError(err => "Failed to encode list expression element: " + err)
             .Map(elementsSyntaxes =>
-            continueWithNewConstructorOfExpressionVariant(
+            NewConstructorOfExpressionVariant(
                 nameof(Expression.ListExpression),
                 SyntaxFactory.InvocationExpression(
                         SyntaxFactory.MemberAccessExpression(
@@ -1494,7 +1477,7 @@ public class PineCompileToDotNet
                                 continueEncode(conditionalExpression.ifFalse)
                                     .MapError(err => "Failed to encode branch if false: " + err)
                                     .Map(encodedIfFalse =>
-                                        continueWithNewConstructorOfExpressionVariant(
+                                        NewConstructorOfExpressionVariant(
                                             nameof(Expression.ConditionalExpression),
                                             encodedCondition,
                                             encodedIfTrue,
@@ -1527,7 +1510,7 @@ public class PineCompileToDotNet
             continueEncode(decodeAndEvaluate.environment)
             .MapError(err => "Failed to encode environment of decode and evaluate: " + err)
             .Map(encodedEnvironment =>
-            continueWithNewConstructorOfExpressionVariant(
+            NewConstructorOfExpressionVariant(
                 nameof(Expression.DecodeAndEvaluateExpression),
                 encodedExpression,
                 encodedEnvironment))),
@@ -1535,6 +1518,23 @@ public class PineCompileToDotNet
             _ =>
             Result<string, ExpressionSyntax>.err("Expression type not implemented: " + expression.GetType().FullName)
         };
+    }
+
+    private static ExpressionSyntax NewConstructorOfExpressionVariant(
+        string expressionVariantTypeName,
+        params ExpressionSyntax[] argumentsExpressions)
+    {
+        return
+            SyntaxFactory.ObjectCreationExpression(
+                SyntaxFactory.QualifiedName(
+                    SyntaxFactory.QualifiedName(
+                        SyntaxFactory.QualifiedName(
+                            SyntaxFactory.IdentifierName("Pine"),
+                                SyntaxFactory.IdentifierName("PineVM")),
+                        SyntaxFactory.IdentifierName("Expression")),
+                    SyntaxFactory.IdentifierName(expressionVariantTypeName)))
+            .WithArgumentList(
+                SyntaxFactory.ArgumentList(SyntaxFactory.SeparatedList(argumentsExpressions.Select(SyntaxFactory.Argument))));
     }
 
     public static IEnumerable<PineValue> OrderValuesByContainment(IEnumerable<PineValue> pineValues)
