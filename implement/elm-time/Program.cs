@@ -1080,6 +1080,16 @@ public class Program
                                 },
                                 fromOk: compileSuccess =>
                                 {
+                                    var compileToAssemblyResult =
+                                    PineCompileToDotNet.CompileToAssembly(
+                                        syntaxContainerConfig,
+                                        compileSuccess.CompilationUnitSyntax)
+                                    .Unpack(
+                                        err => "Compiling to assembly failed:\n" + err,
+                                        ok => "Compiled to assembly with " + ok.Assembly.Length + " bytes");
+
+                                    Console.WriteLine(compileToAssemblyResult);
+
                                     var outputPath = Path.GetFullPath(compileTo);
 
                                     var outputDirectory = Path.GetDirectoryName(outputPath);
@@ -1087,7 +1097,7 @@ public class Program
                                     if (outputDirectory is not null)
                                         Directory.CreateDirectory(outputDirectory);
 
-                                    File.WriteAllText(outputPath, compileSuccess);
+                                    File.WriteAllText(outputPath, compileSuccess.FileText);
                                     console.WriteLine("Saved the compiled code to " + outputPath, color: Pine.IConsole.TextColor.Green);
 
                                     return 0;
@@ -1101,7 +1111,7 @@ public class Program
                 var elmEngineType = elmEngineOption.parseElmEngineTypeFromOption();
 
                 Console.WriteLine(
-                    "---- Elm Interactive v" + AppVersionId + " using engine based on " + elmEngineType + " ----");
+                                    "---- Elm Interactive v" + AppVersionId + " using engine based on " + elmEngineType + " ----");
 
                 var contextAppPath = contextAppOption.Value();
 

@@ -23,7 +23,7 @@ public partial class PineVMConfiguration
 
     static partial void LinkGeneratedOptimizations();
 
-    public static Result<string, string> GenerateCSharpFile(
+    public static Result<string, PineCompileToDotNet.GenerateCSharpFileResult> GenerateCSharpFile(
         PineCompileToDotNet.SyntaxContainerConfig syntaxContainerConfig,
         PineCompileToDotNet.CompileCSharpClassResult compileCSharpClassResult)
     {
@@ -78,6 +78,8 @@ public partial class PineVMConfiguration
 
         var formattedNode = new FormatCSharpSyntaxRewriter().Visit(compilationUnitSyntax.NormalizeWhitespace(eol: "\n"));
 
-        return Result<string, string>.ok(formattedNode.ToFullString());
+        return Result<string, PineCompileToDotNet.GenerateCSharpFileResult>.ok(
+            new PineCompileToDotNet.GenerateCSharpFileResult(
+                (CompilationUnitSyntax)formattedNode, FileText: formattedNode.ToFullString()));
     }
 }

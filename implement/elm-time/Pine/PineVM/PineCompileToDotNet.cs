@@ -23,6 +23,10 @@ public class PineCompileToDotNet
         ClassDeclarationSyntax ClassDeclarationSyntax,
         IReadOnlyList<UsingDirectiveSyntax> UsingDirectives);
 
+    public record GenerateCSharpFileResult(
+        CompilationUnitSyntax CompilationUnitSyntax,
+        string FileText);
+
     public static Result<string, CompileCSharpClassResult> CompileExpressionsToCSharpClass(
         IReadOnlyList<Expression> expressions,
         SyntaxContainerConfig containerConfig)
