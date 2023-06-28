@@ -23,7 +23,7 @@ public partial class PineVMConfiguration
 
     static partial void LinkGeneratedOptimizations();
 
-    public static Result<string, PineCompileToDotNet.GenerateCSharpFileResult> GenerateCSharpFile(
+    public static PineCompileToDotNet.GenerateCSharpFileResult GenerateCSharpFile(
         PineCompileToDotNet.SyntaxContainerConfig syntaxContainerConfig,
         PineCompileToDotNet.CompileCSharpClassResult compileCSharpClassResult)
     {
@@ -65,21 +65,9 @@ public partial class PineVMConfiguration
                         SyntaxFactory.IdentifierName("PineVM")))
                 .WithMembers(SyntaxFactory.SingletonList<MemberDeclarationSyntax>(configurationClassDeclaration));
 
-        var compilationUnitSyntax =
-            SyntaxFactory.CompilationUnit()
-                .WithUsings(new SyntaxList<UsingDirectiveSyntax>(compileCSharpClassResult.UsingDirectives))
-                .WithMembers(
-                    SyntaxFactory.List(
-                        new MemberDeclarationSyntax[]
-                        {
-                            configurationClassDeclarationInNamespace,
-                            compileCSharpClassResult.ClassDeclarationSyntax
-                        }));
-
-        var formattedNode = new FormatCSharpSyntaxRewriter().Visit(compilationUnitSyntax.NormalizeWhitespace(eol: "\n"));
-
-        return Result<string, PineCompileToDotNet.GenerateCSharpFileResult>.ok(
-            new PineCompileToDotNet.GenerateCSharpFileResult(
-                (CompilationUnitSyntax)formattedNode, FileText: formattedNode.ToFullString()));
+        return
+            PineCompileToDotNet.GenerateCSharpFile(
+                compileCSharpClassResult,
+                additionalMembers: new[] { configurationClassDeclarationInNamespace });
     }
 }

@@ -17,7 +17,7 @@ namespace ElmTime;
 
 public class Program
 {
-    public static string AppVersionId => "2023-06-27";
+    public static string AppVersionId => "2023-06-28";
 
     private static int AdminInterfaceDefaultPort => 4000;
 
@@ -958,89 +958,22 @@ public class Program
                                 keySelector: scenario => scenario.loadedScenario.name + "-" + scenario.hashBase16[..10],
                                 elementSelector: scenario => scenario);
 
+                        var elmEngineType = elmEngineOption.parseElmEngineTypeFromOption();
+
+                        ElmInteractive.IInteractiveSession newInteractiveSessionFromAppCode(TreeNodeWithStringPath? appCodeTree)
+                        {
+                            return ElmInteractive.IInteractiveSession.Create(appCodeTree: appCodeTree, elmEngineType);
+                        }
+
                         var aggregateCompositionTree =
-                            namedDistinctScenarios.Count == 1
-                            ?
-                            namedDistinctScenarios.Single().Value.loadedScenario.component
-                            :
                             TreeNodeWithStringPath.SortedTree(
                                 namedDistinctScenarios.Select(scenario => (scenario.Key, scenario.Value.loadedScenario.component)).ToImmutableList());
 
-                        var aggregateComposition =
-                            PineValueComposition.FromTreeWithStringPath(aggregateCompositionTree);
-
-                        var aggregateCompositionHash =
-                            CommonConversion.StringBase16(PineValueHashTree.ComputeHash(aggregateComposition));
-
-                        console.WriteLine(
-                            "Successfully loaded " + namedDistinctScenarios.Count +
-                            " distinct scenario(s) with an aggregate hash of " + aggregateCompositionHash + ".");
-
-                        var exceptLoadingStopwatch = System.Diagnostics.Stopwatch.StartNew();
-
                         var scenariosResults =
-                            ElmInteractive.TestElmInteractive.TestElmInteractiveScenarios(
-                                namedDistinctScenarios,
-                                namedScenario => namedScenario.Value.loadedScenario.component,
-                                elmEngineOption.parseElmEngineTypeFromOption());
-
-                        var allSteps =
-                            scenariosResults
-                            .SelectMany(scenario => scenario.Value.stepsReports.Select(step => (scenario, step)))
-                            .ToImmutableList();
-
-                        console.WriteLine(scenariosResults.Count + " scenario(s) resulted in " + allSteps.Count + " steps.");
-
-                        var passedSteps =
-                            allSteps.Where(step => step.step.result.IsOk()).ToImmutableList();
-
-                        var failedSteps =
-                            allSteps.Where(step => !step.step.result.IsOk()).ToImmutableList();
-
-                        var aggregateDuration =
-                            scenariosResults
-                            .Select(scenario => scenario.Value.elapsedTime)
-                            .Aggregate(seed: TimeSpan.Zero, func: (aggregate, scenarioTime) => aggregate + scenarioTime);
-
-                        var overallStats = new[]
-                        {
-                            (label : "Failed", value : failedSteps.Count.ToString()),
-                            (label : "Passed", value : passedSteps.Count.ToString()),
-                            (label : "Total", value : allSteps.Count.ToString()),
-                            (label : "Duration", value : CommandLineInterface.FormatIntegerForDisplay((long)aggregateDuration.TotalMilliseconds) + " ms"),
-                        };
-
-                        console.WriteLine(
-                            string.Join(
-                                " - ",
-                                (failedSteps.Any() ? "Failed" : "Passed") + "!",
-                                string.Join(", ", overallStats.Select(stat => stat.label + ": " + stat.value)),
-                                aggregateCompositionHash[..10] + " (elm-time " + AppVersionId + ")"),
-                            color: failedSteps.Any() ? Pine.IConsole.TextColor.Red : Pine.IConsole.TextColor.Green);
-
-                        var failedScenarios =
-                            failedSteps
-                            .GroupBy(failedStep => failedStep.scenario.Key.Key)
-                            .ToImmutableSortedDictionary(
-                                keySelector: failedScenario => failedScenario.Key,
-                                elementSelector: failedScenario => failedScenario);
-
-                        foreach (var failedScenario in failedScenarios)
-                        {
-                            var scenarioId = failedScenario.Value.Key;
-
-                            console.WriteLine(
-                                "Failed " + failedScenario.Value.Count() + " step(s) in scenario " + scenarioId + ":",
-                                color: Pine.IConsole.TextColor.Red);
-
-                            foreach (var failedStep in failedScenario.Value)
-                            {
-                                console.WriteLine(
-                                    "Failed step '" + failedStep.step.name + "':\n" +
-                                    failedStep.step.result.Unpack(fromErr: error => error, fromOk: _ => throw new Exception()).errorAsText,
-                                    color: Pine.IConsole.TextColor.Red);
-                            }
-                        }
+                        ElmInteractive.TestElmInteractive.TestElmInteractiveScenarios(
+                            aggregateCompositionTree,
+                            newInteractiveSessionFromAppCode,
+                            console: console);
 
                         if (compileToOption.Value() is { } compileTo)
                         {
@@ -1064,7 +997,7 @@ public class Program
 
                             var compileToFileResult =
                             compileResult
-                            .AndThen(compiledClass =>
+                            .Map(compiledClass =>
                             PineVMConfiguration.GenerateCSharpFile(
                                 syntaxContainerConfig: syntaxContainerConfig,
                                 compileCSharpClassResult: compiledClass));
@@ -1080,16 +1013,6 @@ public class Program
                                 },
                                 fromOk: compileSuccess =>
                                 {
-                                    var compileToAssemblyResult =
-                                    PineCompileToDotNet.CompileToAssembly(
-                                        syntaxContainerConfig,
-                                        compileSuccess.CompilationUnitSyntax)
-                                    .Unpack(
-                                        err => "Compiling to assembly failed:\n" + err,
-                                        ok => "Compiled to assembly with " + ok.Assembly.Length + " bytes");
-
-                                    Console.WriteLine(compileToAssemblyResult);
-
                                     var outputPath = Path.GetFullPath(compileTo);
 
                                     var outputDirectory = Path.GetDirectoryName(outputPath);
@@ -1100,7 +1023,64 @@ public class Program
                                     File.WriteAllText(outputPath, compileSuccess.FileText);
                                     console.WriteLine("Saved the compiled code to " + outputPath, color: Pine.IConsole.TextColor.Green);
 
-                                    return 0;
+                                    var compileToAssemblyResult =
+                                    compileResult
+                                    .AndThen(compileOk => PineCompileToDotNet.CompileToAssembly(syntaxContainerConfig, compileOk));
+
+                                    return
+                                    compileToAssemblyResult
+                                    .MapError(err => "Compiling to assembly failed:\n" + err)
+                                    .AndThen(
+                                        compileToAssemblyOk =>
+                                        {
+                                            console.WriteLine(
+                                                "Compiled to assembly with " + compileToAssemblyOk.Assembly.Length + " bytes");
+
+                                            return
+                                            compileToAssemblyOk
+                                            .BuildCompiledExpressionsDictionary()
+                                            .MapError(err => "Building compiled expressions dictionary failed:\n" + err)
+                                            .Map(buildDictionaryOk =>
+                                            {
+                                                console.WriteLine(
+                                                    "Dictionary of compiled expressions contains " +
+                                                    buildDictionaryOk.Count + " entries.");
+
+                                                ElmInteractive.IInteractiveSession newInteractiveSessionWithCompiledAssembly(
+                                                    TreeNodeWithStringPath? appCodeTree)
+                                                {
+                                                    var pineVMWithCompiledAssembly =
+                                                        new PineVM(
+                                                            decodeExpressionOverrides: buildDictionaryOk,
+                                                            overrideEvaluateExpression: null);
+
+                                                    return new ElmInteractive.InteractiveSessionPine(
+                                                        appCodeTree: appCodeTree,
+                                                        pineVMWithCompiledAssembly);
+                                                }
+
+                                                console.WriteLine("Running tests with compiled assembly...");
+
+                                                var compiledScenariosResults =
+                                                    ElmInteractive.TestElmInteractive.TestElmInteractiveScenarios(
+                                                        aggregateCompositionTree,
+                                                        newInteractiveSessionWithCompiledAssembly,
+                                                        console: console);
+
+                                                return "Compiled to assembly with " + compileToAssemblyOk.Assembly.Length + " bytes";
+                                            });
+                                        })
+                                    .Unpack(
+                                        fromErr: err =>
+                                        {
+                                            console.WriteLine(err, color: Pine.IConsole.TextColor.Red);
+                                            return 1;
+                                        },
+                                        fromOk: ok =>
+                                        {
+                                            console.WriteLine(ok, color: Pine.IConsole.TextColor.Green);
+                                            return 0;
+                                        });
                                 });
                         }
                     });
@@ -2151,7 +2131,7 @@ public class Program
         {
             httpClient.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue(
                 "Basic",
-                Convert.ToBase64String(Encoding.UTF8.GetBytes(Platform.WebService.Configuration.BasicAuthenticationForAdmin(password))));
+                Convert.ToBase64String(Encoding.UTF8.GetBytes(BasicAuthenticationForAdmin(password))));
         }
 
         setHttpClientPassword(defaultPassword);

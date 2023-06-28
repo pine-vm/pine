@@ -1,4 +1,4 @@
-﻿using Microsoft.VisualStudio.TestTools.UnitTesting;
+using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Pine;
 using System;
 using System.Collections.Generic;
@@ -30,22 +30,118 @@ public class TestElmInteractive
         string submission,
         string errorAsText);
 
+    public static ImmutableDictionary<string, InteractiveScenarioTestReport> TestElmInteractiveScenarios(
+        TreeNodeWithStringPath scenariosTree,
+        Func<TreeNodeWithStringPath?, IInteractiveSession> interactiveSessionFromAppCode,
+        IConsole console)
+    {
+        var scenariosTreeComposition =
+            PineValueComposition.FromTreeWithStringPath(scenariosTree);
+
+        var scenariosTreeCompositionHash =
+            CommonConversion.StringBase16(PineValueHashTree.ComputeHash(scenariosTreeComposition));
+
+        var namedDistinctScenarios =
+            scenariosTree switch
+            {
+                TreeNodeWithStringPath.TreeNode treeNode => treeNode.Elements,
+
+                _ => throw new InvalidOperationException("Unexpected scenarios tree type: " + scenariosTree.GetType().FullName),
+            };
+
+        console.WriteLine(
+            "Successfully loaded " + namedDistinctScenarios.Count +
+            " distinct scenario(s) from composition " + scenariosTreeCompositionHash + ".");
+
+        var exceptLoadingStopwatch = System.Diagnostics.Stopwatch.StartNew();
+
+        var scenariosResults =
+            TestElmInteractiveScenarios(
+                namedDistinctScenarios,
+                namedScenario => namedScenario.component,
+                interactiveSessionFromAppCode);
+
+        var allSteps =
+            scenariosResults
+            .SelectMany(scenario => scenario.Value.stepsReports.Select(step => (scenario, step)))
+        .ToImmutableList();
+
+        console.WriteLine(scenariosResults.Count + " scenario(s) resulted in " + allSteps.Count + " steps.");
+
+        var passedSteps =
+            allSteps.Where(step => step.step.result.IsOk()).ToImmutableList();
+
+        var failedSteps =
+            allSteps.Where(step => !step.step.result.IsOk()).ToImmutableList();
+
+        var aggregateDuration =
+            scenariosResults
+            .Select(scenario => scenario.Value.elapsedTime)
+            .Aggregate(seed: TimeSpan.Zero, func: (aggregate, scenarioTime) => aggregate + scenarioTime);
+
+        var overallStats = new[]
+        {
+            (label : "Failed", value : failedSteps.Count.ToString()),
+            (label : "Passed", value : passedSteps.Count.ToString()),
+            (label : "Total", value : allSteps.Count.ToString()),
+            (label : "Duration", value : CommandLineInterface.FormatIntegerForDisplay((long)aggregateDuration.TotalMilliseconds) + " ms"),
+        };
+
+        console.WriteLine(
+            string.Join(
+                " - ",
+                (failedSteps.Any() ? "Failed" : "Passed") + "!",
+                string.Join(", ", overallStats.Select(stat => stat.label + ": " + stat.value)),
+                scenariosTreeCompositionHash[..10] + " (elm-time " + Program.AppVersionId + ")"),
+            color: failedSteps.Any() ? IConsole.TextColor.Red : IConsole.TextColor.Green);
+
+        var failedScenarios =
+            failedSteps
+            .GroupBy(failedStep => failedStep.scenario.Key.name)
+            .ToImmutableSortedDictionary(
+                keySelector: failedScenario => failedScenario.Key,
+                elementSelector: failedScenario => failedScenario);
+
+        foreach (var failedScenario in failedScenarios)
+        {
+            var scenarioId = failedScenario.Value.Key;
+
+            console.WriteLine(
+                "Failed " + failedScenario.Value.Count() + " step(s) in scenario " + scenarioId + ":",
+                color: IConsole.TextColor.Red);
+
+            foreach (var failedStep in failedScenario.Value)
+            {
+                console.WriteLine(
+                    "Failed step '" + failedStep.step.name + "':\n" +
+                    failedStep.step.result.Unpack(fromErr: error => error, fromOk: _ => throw new Exception()).errorAsText,
+                    color: IConsole.TextColor.Red);
+            }
+        }
+
+        return
+            scenariosResults
+            .ToImmutableDictionary(
+                i => i.Key.name,
+                i => i.Value);
+    }
+
     public static ImmutableDictionary<TContainer, InteractiveScenarioTestReport> TestElmInteractiveScenarios<TContainer>(
         IReadOnlyCollection<TContainer> scenarioContainers,
         Func<TContainer, TreeNodeWithStringPath> getScenario,
-        ElmEngineType implementationType) where TContainer : notnull =>
+        Func<TreeNodeWithStringPath?, IInteractiveSession> interactiveSessionFromAppCode) where TContainer : notnull =>
         scenarioContainers
         .AsParallel()
         .WithDegreeOfParallelism(3)
         .Select(scenarioContainer =>
-        (scenarioContainer, testReport: TestElmInteractiveScenario(getScenario(scenarioContainer), implementationType)))
+        (scenarioContainer, testReport: TestElmInteractiveScenario(getScenario(scenarioContainer), interactiveSessionFromAppCode)))
         .ToImmutableDictionary(
             s => s.scenarioContainer,
             elementSelector: s => s.testReport);
 
     public static InteractiveScenarioTestReport TestElmInteractiveScenario(
         TreeNodeWithStringPath scenarioTree,
-        ElmEngineType implementationType)
+        Func<TreeNodeWithStringPath?, IInteractiveSession> interactiveSessionFromAppCode)
     {
         var totalStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
@@ -53,7 +149,7 @@ public class TestElmInteractive
             ParseScenario(scenarioTree)
             .Extract(err => throw new Exception("Failed parsing scenario: " + err));
 
-        using var interactiveSession = IInteractiveSession.Create(appCodeTree: parsedScenario.appCodeTree, implementationType);
+        using var interactiveSession = interactiveSessionFromAppCode(parsedScenario.appCodeTree);
 
         var stepsReports =
             parsedScenario.steps

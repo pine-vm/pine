@@ -27,6 +27,29 @@ public class PineCompileToDotNet
         CompilationUnitSyntax CompilationUnitSyntax,
         string FileText);
 
+    public static GenerateCSharpFileResult GenerateCSharpFile(
+        CompileCSharpClassResult compileCSharpClassResult,
+        IReadOnlyList<MemberDeclarationSyntax>? additionalMembers = null)
+    {
+        var compilationUnitSyntax =
+            SyntaxFactory.CompilationUnit()
+                .WithUsings(new SyntaxList<UsingDirectiveSyntax>(compileCSharpClassResult.UsingDirectives))
+                .WithMembers(
+                    SyntaxFactory.List(
+                        (additionalMembers ?? Array.Empty<MemberDeclarationSyntax>())
+                        .Concat(
+                            new MemberDeclarationSyntax[]
+                            {
+                                compileCSharpClassResult.ClassDeclarationSyntax
+                            })));
+
+        var formattedNode = new FormatCSharpSyntaxRewriter().Visit(compilationUnitSyntax.NormalizeWhitespace(eol: "\n"));
+
+        return
+            new GenerateCSharpFileResult(
+                (CompilationUnitSyntax)formattedNode, FileText: formattedNode.ToFullString());
+    }
+
     public static Result<string, CompileCSharpClassResult> CompileExpressionsToCSharpClass(
         IReadOnlyList<Expression> expressions,
         SyntaxContainerConfig containerConfig)
@@ -400,19 +423,18 @@ public class PineCompileToDotNet
 
     public record CompileToAssemblyResult(
         byte[] Assembly,
-        Func<IReadOnlyDictionary<PineValue, Func<PineValue, Result<string, PineValue>>>> BuildCompiledExpressionsDictionary);
+        Func<Result<string, IReadOnlyDictionary<PineValue, Func<PineVM.EvalExprDelegate, PineValue, Result<string, PineValue>>>>>
+        BuildCompiledExpressionsDictionary);
 
     public static Result<string, CompileToAssemblyResult> CompileToAssembly(
         SyntaxContainerConfig syntaxContainerConfig,
-        CompilationUnitSyntax compilationUnitSyntax)
+        CompileCSharpClassResult compileCSharpClassResult)
     {
-        var syntaxText =
-            new FormatCSharpSyntaxRewriter().Visit(compilationUnitSyntax.NormalizeWhitespace(eol: "\n"))
-            .ToFullString();
+        var syntaxText = GenerateCSharpFile(compileCSharpClassResult, additionalMembers: null).FileText;
 
         var syntaxTree = CSharpSyntaxTree.ParseText(syntaxText);
 
-        var compilation = CSharpCompilation.Create("GeneratedContainer.cs")
+        var compilation = CSharpCompilation.Create("assembly-name")
             .WithOptions(new CSharpCompilationOptions(
                 OutputKind.DynamicallyLinkedLibrary,
                 optimizationLevel: OptimizationLevel.Release)
@@ -438,32 +460,33 @@ public class PineCompileToDotNet
 
         var assembly = codeStream.ToArray();
 
-        IReadOnlyDictionary<PineValue, Func<PineValue, Result<string, PineValue>>> buildDictionary()
+        Result<string, IReadOnlyDictionary<PineValue, Func<PineVM.EvalExprDelegate, PineValue, Result<string, PineValue>>>> buildDictionary()
         {
             var loadedAssembly = Assembly.Load(assembly);
 
             var compiledType = loadedAssembly.GetType(syntaxContainerConfig.containerTypeName);
 
-            var dictionaryMember = compiledType.GetField(syntaxContainerConfig.containerTypeName, BindingFlags.Public | BindingFlags.Static);
+            if (compiledType is null)
+                return Result<string, IReadOnlyDictionary<PineValue, Func<PineVM.EvalExprDelegate, PineValue, Result<string, PineValue>>>>.err(
+                    "Did not find type " + syntaxContainerConfig.containerTypeName + " in assembly " + loadedAssembly.FullName);
 
-            return (IReadOnlyDictionary<PineValue, Func<PineValue, Result<string, PineValue>>>)dictionaryMember.GetValue(null);
+            var dictionaryMember =
+                compiledType.GetMethod(syntaxContainerConfig.dictionaryMemberName, BindingFlags.Public | BindingFlags.Static);
+
+            if (dictionaryMember is null)
+                return Result<string, IReadOnlyDictionary<PineValue, Func<PineVM.EvalExprDelegate, PineValue, Result<string, PineValue>>>>.err(
+                    "Did not find method " + syntaxContainerConfig.dictionaryMemberName + " in type " + compiledType.FullName);
+
+            return
+                Result<string, IReadOnlyDictionary<PineValue, Func<PineVM.EvalExprDelegate, PineValue, Result<string, PineValue>>>>.ok(
+                    (IReadOnlyDictionary<PineValue, Func<PineVM.EvalExprDelegate, PineValue, Result<string, PineValue>>>)
+                    dictionaryMember.Invoke(null, null));
         }
 
         return Result<string, CompileToAssemblyResult>.ok(
             new CompileToAssemblyResult(
                 Assembly: assembly,
                 BuildCompiledExpressionsDictionary: buildDictionary));
-    }
-
-    private static bool CanIgnoreErrorMessage(Diagnostic diagnostic)
-    {
-        if (diagnostic.ToString().Contains("error CS0246: The type or namespace name 'System.Collections.Immutable' could not be found"))
-        {
-            // It is unclear why the compiler creates this error message, despite the references containing the assembly.
-            return true;
-        }
-
-        return false;
     }
 
     private static readonly Lazy<IImmutableList<MetadataReference>> MetadataReferences =
