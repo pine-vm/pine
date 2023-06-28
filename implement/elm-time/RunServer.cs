@@ -238,7 +238,7 @@ public class RunServer
             ListFilesInDirectoryDelegate: directoryPath =>
             {
                 var httpRequestPath =
-                    Platform.WebService.StartupAdminInterface.PathApiProcessHistoryFileStoreListFilesInDirectory + "/" +
+                    StartupAdminInterface.PathApiProcessHistoryFileStoreListFilesInDirectory + "/" +
                     string.Join("/", directoryPath);
 
                 var response = sourceHttpClient.GetAsync(httpRequestPath).Result;
@@ -253,7 +253,7 @@ public class RunServer
             GetFileContentDelegate: filePath =>
             {
                 var httpRequestPath =
-                    Platform.WebService.StartupAdminInterface.PathApiProcessHistoryFileStoreGetFileContent + "/" +
+                    StartupAdminInterface.PathApiProcessHistoryFileStoreGetFileContent + "/" +
                     string.Join("/", filePath);
 
                 var response = sourceHttpClient.GetAsync(httpRequestPath).Result;

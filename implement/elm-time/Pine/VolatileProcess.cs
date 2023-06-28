@@ -559,8 +559,8 @@ public class VolatileProcess
     }
 
     public static bool IsComment(SyntaxTrivia trivia) =>
-        trivia.IsKind(Microsoft.CodeAnalysis.CSharp.SyntaxKind.SingleLineCommentTrivia) ||
-        trivia.IsKind(Microsoft.CodeAnalysis.CSharp.SyntaxKind.MultiLineCommentTrivia);
+        trivia.IsKind(SyntaxKind.SingleLineCommentTrivia) ||
+        trivia.IsKind(SyntaxKind.MultiLineCommentTrivia);
 
     public static IEnumerable<Uri> EnumerateUrlsFromText(string text)
     {
