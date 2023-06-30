@@ -1,0 +1,51 @@
+name: build-native-tools
+
+on: [push,workflow_dispatch]
+
+jobs:
+  build:
+
+    strategy:
+      fail-fast: false
+      matrix:
+        environment: [ubuntu-22.04, windows-2022, macos-13]
+        include:
+          - environment: ubuntu-22.04
+            publish-runtime-id: linux-x64
+          - environment: windows-2022
+            publish-runtime-id: win10-x64
+          - environment: macos-13
+            publish-runtime-id: osx-x64
+
+    runs-on: ${{ matrix.environment }}
+
+    steps:
+
+    - name: Avoid git mutating files on checkout
+      run: |
+        git config --global core.autocrlf false
+    - uses: actions/checkout@v3
+    - uses: actions/setup-dotnet@v3
+      with:
+        dotnet-version: '7.0.304'
+
+    - name: Try use dotnet
+      run: dotnet --info
+
+    - name: Clean package cache as a temporary workaround for https://github.com/actions/setup-dotnet/issues/155
+      run: dotnet clean ./implement/native-tools/native-tools.csproj && dotnet nuget locals all --clear
+
+    - name: dotnet publish
+      run: dotnet publish -c Debug -r ${{ matrix.publish-runtime-id }}  --output ./dotnet-build  ./implement/native-tools
+
+    - name: Copy artifacts to publish
+      shell: pwsh
+      run: |
+        New-Item -ItemType Directory -Force -Path "./publish";
+        Get-ChildItem -Path "./dotnet-build/" -Filter "native-tools*" | ForEach-Object { Copy-Item -Path $_.FullName -Destination "./publish/" }
+
+    - name: Publish artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: native-tools-bin-${{ github.sha }}-${{ matrix.publish-runtime-id }}
+        path: ./publish
