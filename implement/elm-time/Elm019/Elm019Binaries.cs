@@ -224,10 +224,7 @@ public static class Elm019Binaries
                 return Result<string, ElmMakeOk>.ok(new ElmMakeOk(outputFiles.First().content));
             }
 
-            var errorQualifiesForRetry =
-                commandResults.processOutput.StandardError?.Contains("openBinaryFile: resource busy (file is locked)") ?? false;
-
-            if (!errorQualifiesForRetry)
+            if (!ElmMakeOutputQualifiesForRetry(standardErrorText: commandResults.processOutput.StandardError))
                 break;
 
         } while (attemptsResults.Count <= maxRetryCount);
@@ -239,6 +236,33 @@ public static class Elm019Binaries
             "\nExit Code: " + lastAttemptResults.processOutput.ExitCode +
             "\nStandard Output:\n'" + lastAttemptResults.processOutput.StandardOutput + "'" +
             "\nStandard Error:\n'" + lastAttemptResults.processOutput.StandardError + "'");
+    }
+
+    public static bool ElmMakeOutputQualifiesForRetry(string standardErrorText)
+    {
+        if (standardErrorText.Contains("openBinaryFile: resource busy (file is locked)"))
+            return true;
+
+        /*
+         * Elm make sporadically fails with this error:
+         * 
+            -- PROBLEM BUILDING DEPENDENCIES -----------------------------------------------
+
+             I ran into a compilation error when trying to build the following package:
+
+                 elm/core 1.0.5
+
+             This probably means it has package constraints that are too wide. It may be
+             possible to tweak your elm.json to avoid the root problem as a stopgap. Head
+             over to https://elm-lang.org/community to get help figuring out how to take this
+             path!
+         * */
+
+        if (standardErrorText.Contains("I ran into a compilation error when trying to build the following package:") &&
+            standardErrorText.Contains("This probably means it has package constraints that are too wide."))
+            return true;
+
+        return false;
     }
 
     public static ReadOnlyMemory<byte> GetElmExecutableFile =>
