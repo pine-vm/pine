@@ -60,6 +60,9 @@ public class TestSetup
     public static IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> HttpProxyWebApp =
        GetElmAppFromExampleName("http-proxy");
 
+    public static IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> VolatileProcessNativeWebApp =>
+       GetElmAppFromExampleName("volatile-process-native");
+
     public static IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> WithWebServiceConfigJson(
         IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> originalDeploymentFiles,
         WebServiceConfigJson jsonStructure)

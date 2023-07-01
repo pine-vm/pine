@@ -79,6 +79,14 @@ exposeFunctionsToAdminModuleName =
     [ "Backend", "ExposeFunctionsToAdmin" ]
 
 
+platformModuleNameCandidates : Set.Set (List String)
+platformModuleNameCandidates =
+    [ [ "Platform", "WebService" ]
+    , [ "Platform", "WebServer" ]
+    ]
+        |> Set.fromList
+
+
 entryPoints : List EntryPointClass
 entryPoints =
     [ entryPointClassFromSetOfEquallyProcessedFunctionNames
@@ -310,50 +318,54 @@ Backend.Generated.StateShim.exposedFunctionExpectingSingleArgumentAndAppState
 , initAppShimState = Backend.Generated.WebServiceShim.initWebServiceShimState
 , appStateLessShim = .stateLessFramework
 }"""
-
-                                                        platformModuleName =
-                                                            [ [ "Platform", "WebService" ]
-                                                            , [ "Platform", "WebServer" ]
-                                                            ]
-                                                                |> Set.fromList
-                                                                |> Set.intersect
-                                                                    (config.originalSourceModules
-                                                                        |> Dict.values
-                                                                        |> List.map .moduleName
-                                                                        |> Set.fromList
-                                                                    )
-                                                                |> Set.toList
-                                                                |> List.head
-                                                                |> Maybe.withDefault [ "Platform", "WebService" ]
-                                                                |> String.join "."
-
-                                                        stateShimConfig : StateShimConfig
-                                                        stateShimConfig =
-                                                            { jsonConverterDeclarationsConfigs = jsonConverterDeclarationsConfigs
-                                                            , jsonConverterDeclarations = jsonConverterDeclarations
-                                                            , appStateType =
-                                                                { typeAnnotation = appStateType.stateTypeAnnotation
-                                                                , dependencies = appStateType.dependencies
-                                                                }
-                                                            , initAppShimStateExpression = ""
-                                                            , appStateLessShimExpression = ""
-                                                            , exposedFunctions = exposedFunctions
-                                                            , supportingModules =
-                                                                [ webServiceShimModuleText { platformModuleName = platformModuleName }
-                                                                , webServiceShimTypesModuleText { platformModuleName = platformModuleName }
-                                                                ]
-                                                            , rootModuleSupportingFunctions = rootModuleSupportingFunctions
-                                                            , modulesToImport = modulesToImportMigrate ++ modulesToImportExposeFunctionsToAdmin
-                                                            , appStateWithPlatformShimTypeAnnotationFromAppStateAnnotation =
-                                                                (++) "Backend.Generated.WebServiceShimTypes.WebServiceShimState "
-                                                            , stateShimConfigExpression = stateShimConfigExpression
-                                                            }
                                                     in
-                                                    loweredForAppInStateManagementShim
-                                                        sourceDirs
-                                                        stateShimConfig
-                                                        config
-                                                        sourceFiles
+                                                    case
+                                                        config.originalSourceModules
+                                                            |> Dict.values
+                                                            |> List.filter (.moduleName >> Set.member >> (|>) platformModuleNameCandidates)
+                                                            |> List.head
+                                                    of
+                                                        Nothing ->
+                                                            Err
+                                                                [ LocatedInSourceFiles
+                                                                    { filePath = config.compilationRootFilePath
+                                                                    , locationInModuleText = Elm.Syntax.Range.emptyRange
+                                                                    }
+                                                                    (OtherCompilationError "Did not find platform module")
+                                                                ]
+
+                                                        Just platformModule ->
+                                                            let
+                                                                platformSupportingModules =
+                                                                    webServiceShimVersionModules platformModule
+
+                                                                stateShimConfig : StateShimConfig
+                                                                stateShimConfig =
+                                                                    { jsonConverterDeclarationsConfigs = jsonConverterDeclarationsConfigs
+                                                                    , jsonConverterDeclarations = jsonConverterDeclarations
+                                                                    , appStateType =
+                                                                        { typeAnnotation = appStateType.stateTypeAnnotation
+                                                                        , dependencies = appStateType.dependencies
+                                                                        }
+                                                                    , initAppShimStateExpression = ""
+                                                                    , appStateLessShimExpression = ""
+                                                                    , exposedFunctions = exposedFunctions
+                                                                    , supportingModules =
+                                                                        [ platformSupportingModules.webServiceShimModuleText
+                                                                        , platformSupportingModules.webServiceShimTypesModuleText
+                                                                        ]
+                                                                    , rootModuleSupportingFunctions = rootModuleSupportingFunctions
+                                                                    , modulesToImport = modulesToImportMigrate ++ modulesToImportExposeFunctionsToAdmin
+                                                                    , appStateWithPlatformShimTypeAnnotationFromAppStateAnnotation =
+                                                                        (++) "Backend.Generated.WebServiceShimTypes.WebServiceShimState "
+                                                                    , stateShimConfigExpression = stateShimConfigExpression
+                                                                    }
+                                                            in
+                                                            loweredForAppInStateManagementShim
+                                                                sourceDirs
+                                                                stateShimConfig
+                                                                config
+                                                                sourceFiles
                                                 )
                                     )
                         )
@@ -885,8 +897,577 @@ buildExposedFunctionHandlerExpression config =
             }
 
 
-webServiceShimModuleText : { platformModuleName : String } -> String
-webServiceShimModuleText { platformModuleName } =
+type alias WebServiceShimVersionModules =
+    { webServiceShimModuleText : String
+    , webServiceShimTypesModuleText : String
+    }
+
+
+webServiceShimVersionModules : SourceParsedElmModule -> WebServiceShimVersionModules
+webServiceShimVersionModules platformModule =
+    let
+        declarationsTexts =
+            platformModule.parsedSyntax.declarations
+                |> List.map
+                    (\declarationNode ->
+                        getTextLinesFromRange
+                            (Elm.Syntax.Node.range declarationNode)
+                            platformModule.fileText
+                    )
+                |> List.map (String.join "\n")
+
+        declarationsTextsContains string =
+            declarationsTexts |> List.any (String.contains string)
+    in
+    if declarationsTextsContains "CreateVolatileProcessNative" then
+        { webServiceShimModuleText =
+            webServiceShimModuleText_2023_06
+                { platformModuleName = String.join "." platformModule.moduleName }
+        , webServiceShimTypesModuleText =
+            webServiceShimTypesModuleText_2023_06
+                { platformModuleName = String.join "." platformModule.moduleName }
+        }
+
+    else
+        { webServiceShimModuleText =
+            webServiceShimModuleText_2023_05
+                { platformModuleName = String.join "." platformModule.moduleName }
+        , webServiceShimTypesModuleText =
+            webServiceShimTypesModuleText_2023_05
+                { platformModuleName = String.join "." platformModule.moduleName }
+        }
+
+
+webServiceShimModuleText_2023_06 : { platformModuleName : String } -> String
+webServiceShimModuleText_2023_06 { platformModuleName } =
+    String.trimLeft """
+module Backend.Generated.WebServiceShim exposing (..)
+
+import Backend.Generated.WebServiceShimTypes exposing (..)
+import Dict
+import """ ++ platformModuleName ++ """ as PlatformWebService
+
+
+initWebServiceShimState : appState -> WebServiceShimState appState
+initWebServiceShimState stateLessFramework =
+    { stateLessFramework = stateLessFramework
+    , nextTaskIndex = 0
+    , posixTimeMilli = 0
+    , readRuntimeIdentifierTasks = Dict.empty
+    , createVolatileProcessTasks = Dict.empty
+    , requestToVolatileProcessTasks = Dict.empty
+    , writeToVolatileProcessNativeStdInTasks = Dict.empty
+    , readAllFromVolatileProcessNativeTasks = Dict.empty
+    , terminateVolatileProcessTasks = Dict.empty
+    }
+
+
+processWebServiceEvent :
+    (appState -> PlatformWebService.Subscriptions appState)
+    -> Backend.Generated.WebServiceShimTypes.BackendEvent
+    -> WebServiceShimState appState
+    -> ( WebServiceShimState appState, Backend.Generated.WebServiceShimTypes.BackendEventResponseStruct )
+processWebServiceEvent subscriptions hostEvent stateBefore =
+    let
+        maybeEventPosixTimeMilli =
+            case hostEvent of
+                HttpRequestEvent httpRequestEvent ->
+                    Just httpRequestEvent.posixTimeMilli
+
+                PosixTimeHasArrivedEvent posixTimeHasArrivedEvent ->
+                    Just posixTimeHasArrivedEvent.posixTimeMilli
+
+                _ ->
+                    Nothing
+
+        state =
+            case maybeEventPosixTimeMilli of
+                Nothing ->
+                    stateBefore
+
+                Just eventPosixTimeMilli ->
+                    { stateBefore | posixTimeMilli = max stateBefore.posixTimeMilli eventPosixTimeMilli }
+    in
+    processWebServiceEventLessRememberTime subscriptions hostEvent state
+
+
+processWebServiceEventLessRememberTime :
+    (appState -> PlatformWebService.Subscriptions appState)
+    -> Backend.Generated.WebServiceShimTypes.BackendEvent
+    -> WebServiceShimState appState
+    -> ( WebServiceShimState appState, Backend.Generated.WebServiceShimTypes.BackendEventResponseStruct )
+processWebServiceEventLessRememberTime subscriptions hostEvent stateBefore =
+    let
+        continueWithState newState =
+            ( newState
+            , backendEventResponseFromSubscriptions (subscriptions newState.stateLessFramework)
+            )
+
+        discardEvent =
+            continueWithState stateBefore
+
+        continueWithUpdateToTasks updateToTasks stateBeforeUpdateToTasks =
+            let
+                ( stateLessFramework, runtimeTasks ) =
+                    updateToTasks stateBeforeUpdateToTasks.stateLessFramework
+            in
+            backendEventResponseFromRuntimeTasksAndSubscriptions
+                subscriptions
+                runtimeTasks
+                { stateBeforeUpdateToTasks | stateLessFramework = stateLessFramework }
+    in
+    case hostEvent of
+        HttpRequestEvent httpRequestEvent ->
+            continueWithUpdateToTasks
+                ((subscriptions stateBefore.stateLessFramework).httpRequest httpRequestEvent)
+                stateBefore
+
+        PosixTimeHasArrivedEvent posixTimeHasArrivedEvent ->
+            case (subscriptions stateBefore.stateLessFramework).posixTimeIsPast of
+                Nothing ->
+                    discardEvent
+
+                Just posixTimeIsPastSub ->
+                    if posixTimeHasArrivedEvent.posixTimeMilli < posixTimeIsPastSub.minimumPosixTimeMilli then
+                        discardEvent
+
+                    else
+                        continueWithUpdateToTasks
+                            (posixTimeIsPastSub.update { currentPosixTimeMilli = posixTimeHasArrivedEvent.posixTimeMilli })
+                            stateBefore
+
+        TaskCompleteEvent taskCompleteEvent ->
+            case taskCompleteEvent.taskResult of
+                ReadRuntimeInformationResponse result ->
+                    case Dict.get taskCompleteEvent.taskId stateBefore.readRuntimeIdentifierTasks of
+                        Nothing ->
+                            discardEvent
+
+                        Just taskEntry ->
+                            continueWithUpdateToTasks
+                                (taskEntry result)
+                                { stateBefore
+                                    | readRuntimeIdentifierTasks =
+                                        stateBefore.readRuntimeIdentifierTasks |> Dict.remove taskCompleteEvent.taskId
+                                }
+
+                CreateVolatileProcessResponse createVolatileProcessResponse ->
+                    case Dict.get taskCompleteEvent.taskId stateBefore.createVolatileProcessTasks of
+                        Nothing ->
+                            discardEvent
+
+                        Just taskEntry ->
+                            continueWithUpdateToTasks
+                                (taskEntry createVolatileProcessResponse)
+                                { stateBefore
+                                    | createVolatileProcessTasks =
+                                        stateBefore.createVolatileProcessTasks |> Dict.remove taskCompleteEvent.taskId
+                                }
+
+                RequestToVolatileProcessResponse requestToVolatileProcessResponse ->
+                    case Dict.get taskCompleteEvent.taskId stateBefore.requestToVolatileProcessTasks of
+                        Nothing ->
+                            discardEvent
+
+                        Just taskEntry ->
+                            continueWithUpdateToTasks
+                                (taskEntry requestToVolatileProcessResponse)
+                                { stateBefore
+                                    | requestToVolatileProcessTasks =
+                                        stateBefore.requestToVolatileProcessTasks |> Dict.remove taskCompleteEvent.taskId
+                                }
+
+                WriteToVolatileProcessNativeStdInTaskResponse writeResult ->
+                    case Dict.get taskCompleteEvent.taskId stateBefore.writeToVolatileProcessNativeStdInTasks of
+                        Nothing ->
+                            discardEvent
+
+                        Just taskEntry ->
+                            continueWithUpdateToTasks
+                                (taskEntry writeResult)
+                                stateBefore
+
+                ReadAllFromVolatileProcessNativeTaskResponse readResult ->
+                    case Dict.get taskCompleteEvent.taskId stateBefore.readAllFromVolatileProcessNativeTasks of
+                        Nothing ->
+                            discardEvent
+
+                        Just taskEntry ->
+                            continueWithUpdateToTasks
+                                (taskEntry readResult)
+                                stateBefore
+
+                CompleteWithoutResult ->
+                    continueWithState
+                        { stateBefore
+                            | terminateVolatileProcessTasks =
+                                stateBefore.terminateVolatileProcessTasks |> Dict.remove taskCompleteEvent.taskId
+                        }
+
+
+backendEventResponseFromRuntimeTasksAndSubscriptions :
+    (appState -> PlatformWebService.Subscriptions appState)
+    -> List (PlatformWebService.Command appState)
+    -> WebServiceShimState appState
+    -> ( WebServiceShimState appState, BackendEventResponseStruct )
+backendEventResponseFromRuntimeTasksAndSubscriptions subscriptions tasks stateBefore =
+    tasks
+        |> List.foldl
+            (\\task ( previousState, previousResponse ) ->
+                let
+                    ( newState, newResponse ) =
+                        backendEventResponseFromRuntimeTask task previousState
+                in
+                ( newState, newResponse :: previousResponse )
+            )
+            ( stateBefore
+            , [ backendEventResponseFromSubscriptions (subscriptions stateBefore.stateLessFramework) ]
+            )
+        |> Tuple.mapSecond concatBackendEventResponse
+
+
+backendEventResponseFromRuntimeTask :
+    PlatformWebService.Command appState
+    -> WebServiceShimState appState
+    -> ( WebServiceShimState appState, BackendEventResponseStruct )
+backendEventResponseFromRuntimeTask task stateBefore =
+    let
+        createTaskId stateBeforeCreateTaskId =
+            let
+                taskId =
+                    String.join "-"
+                        [ String.fromInt stateBeforeCreateTaskId.posixTimeMilli
+                        , String.fromInt stateBeforeCreateTaskId.nextTaskIndex
+                        ]
+            in
+            ( { stateBeforeCreateTaskId
+                | nextTaskIndex = stateBeforeCreateTaskId.nextTaskIndex + 1
+              }
+            , taskId
+            )
+    in
+    case task of
+        PlatformWebService.RespondToHttpRequest respondToHttpRequest ->
+            ( stateBefore
+            , passiveBackendEventResponse
+                |> withCompleteHttpResponsesAdded [ respondToHttpRequest ]
+            )
+
+        PlatformWebService.ReadRuntimeInformationCommand update ->
+            let
+                ( stateAfterCreateTaskId, taskId ) =
+                    createTaskId stateBefore
+            in
+            ( { stateAfterCreateTaskId
+                | readRuntimeIdentifierTasks =
+                    stateAfterCreateTaskId.readRuntimeIdentifierTasks
+                        |> Dict.insert taskId update
+              }
+            , passiveBackendEventResponse
+                |> withStartTasksAdded
+                    [ { taskId = taskId
+                      , task = ReadRuntimeInformationTask
+                      }
+                    ]
+            )
+
+        PlatformWebService.CreateVolatileProcess createVolatileProcess ->
+            let
+                ( stateAfterCreateTaskId, taskId ) =
+                    createTaskId stateBefore
+            in
+            ( { stateAfterCreateTaskId
+                | createVolatileProcessTasks =
+                    stateAfterCreateTaskId.createVolatileProcessTasks
+                        |> Dict.insert taskId createVolatileProcess.update
+              }
+            , passiveBackendEventResponse
+                |> withStartTasksAdded
+                    [ { taskId = taskId
+                      , task = CreateVolatileProcess { programCode = createVolatileProcess.programCode }
+                      }
+                    ]
+            )
+
+        PlatformWebService.CreateVolatileProcessNativeCommand createCommand ->
+            let
+                ( stateAfterCreateTaskId, taskId ) =
+                    createTaskId stateBefore
+            in
+            ( { stateAfterCreateTaskId
+                | createVolatileProcessTasks =
+                    stateAfterCreateTaskId.createVolatileProcessTasks
+                        |> Dict.insert taskId createCommand.update
+              }
+            , passiveBackendEventResponse
+                |> withStartTasksAdded
+                    [ { taskId = taskId
+                      , task = CreateVolatileProcessNativeTask createCommand.request
+                      }
+                    ]
+            )
+
+        PlatformWebService.RequestToVolatileProcess requestToVolatileProcess ->
+            let
+                ( stateAfterCreateTaskId, taskId ) =
+                    createTaskId stateBefore
+            in
+            ( { stateAfterCreateTaskId
+                | requestToVolatileProcessTasks =
+                    stateAfterCreateTaskId.requestToVolatileProcessTasks
+                        |> Dict.insert taskId requestToVolatileProcess.update
+              }
+            , passiveBackendEventResponse
+                |> withStartTasksAdded
+                    [ { taskId = taskId
+                      , task =
+                            RequestToVolatileProcess
+                                { processId = requestToVolatileProcess.processId
+                                , request = requestToVolatileProcess.request
+                                }
+                      }
+                    ]
+            )
+
+        PlatformWebService.WriteToVolatileProcessNativeStdInCommand writeCommand ->
+            let
+                ( stateAfterCreateTaskId, taskId ) =
+                    createTaskId stateBefore
+            in
+            ( { stateAfterCreateTaskId
+                | writeToVolatileProcessNativeStdInTasks =
+                    stateAfterCreateTaskId.writeToVolatileProcessNativeStdInTasks
+                        |> Dict.insert taskId writeCommand.update
+              }
+            , passiveBackendEventResponse
+                |> withStartTasksAdded
+                    [ { taskId = taskId
+                      , task =
+                            WriteToVolatileProcessNativeStdInTask
+                                { processId = writeCommand.processId
+                                , stdInBase64 = writeCommand.stdInBase64
+                                }
+                      }
+                    ]
+            )
+
+        PlatformWebService.ReadAllFromVolatileProcessNativeCommand readCommand ->
+            let
+                ( stateAfterCreateTaskId, taskId ) =
+                    createTaskId stateBefore
+            in
+            ( { stateAfterCreateTaskId
+                | readAllFromVolatileProcessNativeTasks =
+                    stateAfterCreateTaskId.readAllFromVolatileProcessNativeTasks
+                        |> Dict.insert taskId readCommand.update
+              }
+            , passiveBackendEventResponse
+                |> withStartTasksAdded
+                    [ { taskId = taskId
+                      , task = ReadAllFromVolatileProcessNativeTask readCommand.processId
+                      }
+                    ]
+            )
+
+        PlatformWebService.TerminateVolatileProcess terminateVolatileProcess ->
+            let
+                ( stateAfterCreateTaskId, taskId ) =
+                    createTaskId stateBefore
+            in
+            ( { stateAfterCreateTaskId
+                | terminateVolatileProcessTasks =
+                    stateAfterCreateTaskId.terminateVolatileProcessTasks |> Dict.insert taskId ()
+              }
+            , passiveBackendEventResponse
+                |> withStartTasksAdded
+                    [ { taskId = taskId
+                      , task = TerminateVolatileProcess terminateVolatileProcess
+                      }
+                    ]
+            )
+
+
+backendEventResponseFromSubscriptions : PlatformWebService.Subscriptions appState -> BackendEventResponseStruct
+backendEventResponseFromSubscriptions subscriptions =
+    { startTasks = []
+    , completeHttpResponses = []
+    , notifyWhenPosixTimeHasArrived =
+        subscriptions.posixTimeIsPast
+            |> Maybe.map (\\posixTimeIsPast -> { minimumPosixTimeMilli = posixTimeIsPast.minimumPosixTimeMilli })
+    }
+
+
+passiveBackendEventResponse : BackendEventResponseStruct
+passiveBackendEventResponse =
+    { startTasks = []
+    , completeHttpResponses = []
+    , notifyWhenPosixTimeHasArrived = Nothing
+    }
+
+
+withStartTasksAdded : List StartTaskStructure -> BackendEventResponseStruct -> BackendEventResponseStruct
+withStartTasksAdded startTasksToAdd responseBefore =
+    { responseBefore | startTasks = responseBefore.startTasks ++ startTasksToAdd }
+
+
+withCompleteHttpResponsesAdded :
+    List PlatformWebService.RespondToHttpRequestStruct
+    -> BackendEventResponseStruct
+    -> BackendEventResponseStruct
+withCompleteHttpResponsesAdded httpResponsesToAdd responseBefore =
+    { responseBefore | completeHttpResponses = responseBefore.completeHttpResponses ++ httpResponsesToAdd }
+
+
+concatBackendEventResponse : List BackendEventResponseStruct -> BackendEventResponseStruct
+concatBackendEventResponse responses =
+    let
+        notifyWhenPosixTimeHasArrived =
+            responses
+                |> List.filterMap .notifyWhenPosixTimeHasArrived
+                |> List.map .minimumPosixTimeMilli
+                |> List.minimum
+                |> Maybe.map (\\posixTimeMilli -> { minimumPosixTimeMilli = posixTimeMilli })
+
+        startTasks =
+            responses |> List.concatMap .startTasks
+
+        completeHttpResponses =
+            responses |> List.concatMap .completeHttpResponses
+    in
+    { notifyWhenPosixTimeHasArrived = notifyWhenPosixTimeHasArrived
+    , startTasks = startTasks
+    , completeHttpResponses = completeHttpResponses
+    }
+
+"""
+
+
+webServiceShimTypesModuleText_2023_06 : { platformModuleName : String } -> String
+webServiceShimTypesModuleText_2023_06 { platformModuleName } =
+    String.trimLeft """
+module Backend.Generated.WebServiceShimTypes exposing (..)
+
+import Dict
+import """ ++ platformModuleName ++ """ as PlatformWebService
+
+
+type alias WebServiceShimState appState =
+    { stateLessFramework : appState
+    , nextTaskIndex : Int
+    , posixTimeMilli : Int
+    , readRuntimeIdentifierTasks :
+        Dict.Dict
+            TaskId
+            (Result String PlatformWebService.RuntimeInformationRecord
+             -> appState
+             -> ( appState, PlatformWebService.Commands appState )
+            )
+    , createVolatileProcessTasks :
+        Dict.Dict
+            TaskId
+            (PlatformWebService.CreateVolatileProcessResult
+             -> appState
+             -> ( appState, PlatformWebService.Commands appState )
+            )
+    , requestToVolatileProcessTasks :
+        Dict.Dict
+            TaskId
+            (PlatformWebService.RequestToVolatileProcessResult
+             -> appState
+             -> ( appState, PlatformWebService.Commands appState )
+            )
+    , writeToVolatileProcessNativeStdInTasks :
+        Dict.Dict
+            TaskId
+            (Result PlatformWebService.RequestToVolatileProcessError ()
+             -> appState
+             -> ( appState, PlatformWebService.Commands appState )
+            )
+    , readAllFromVolatileProcessNativeTasks :
+        Dict.Dict
+            TaskId
+            (Result PlatformWebService.RequestToVolatileProcessError PlatformWebService.ReadAllFromVolatileProcessNativeSuccessStruct
+             -> appState
+             -> ( appState, PlatformWebService.Commands appState )
+            )
+    , terminateVolatileProcessTasks : Dict.Dict TaskId ()
+    }
+
+
+type alias ExposedFunctionArguments =
+    { serializedArguments : List String
+    }
+
+
+type BackendEvent
+    = HttpRequestEvent PlatformWebService.HttpRequestEventStruct
+    | TaskCompleteEvent TaskCompleteEventStruct
+    | PosixTimeHasArrivedEvent { posixTimeMilli : Int }
+
+
+type alias BackendEventResponseStruct =
+    { startTasks : List StartTaskStructure
+    , notifyWhenPosixTimeHasArrived : Maybe { minimumPosixTimeMilli : Int }
+    , completeHttpResponses : List PlatformWebService.RespondToHttpRequestStruct
+    }
+
+
+type alias TaskCompleteEventStruct =
+    { taskId : TaskId
+    , taskResult : TaskResultStructure
+    }
+
+
+type TaskResultStructure
+    = ReadRuntimeInformationResponse (Result String PlatformWebService.RuntimeInformationRecord)
+    | CreateVolatileProcessResponse (Result PlatformWebService.CreateVolatileProcessErrorStruct PlatformWebService.CreateVolatileProcessComplete)
+    | RequestToVolatileProcessResponse (Result PlatformWebService.RequestToVolatileProcessError PlatformWebService.RequestToVolatileProcessComplete)
+    | WriteToVolatileProcessNativeStdInTaskResponse (Result PlatformWebService.RequestToVolatileProcessError ())
+    | ReadAllFromVolatileProcessNativeTaskResponse (Result PlatformWebService.RequestToVolatileProcessError PlatformWebService.ReadAllFromVolatileProcessNativeSuccessStruct)
+    | CompleteWithoutResult
+
+
+type alias StartTaskStructure =
+    { taskId : TaskId
+    , task : Task
+    }
+
+
+type Task
+    = ReadRuntimeInformationTask
+    | CreateVolatileProcess CreateVolatileProcessLessUpdateStruct
+    | CreateVolatileProcessNativeTask PlatformWebService.CreateVolatileProcessNativeRequestStruct
+    | WriteToVolatileProcessNativeStdInTask WriteToVolatileProcessNativeStdInStruct
+    | ReadAllFromVolatileProcessNativeTask String
+    | RequestToVolatileProcess RequestToVolatileProcessLessUpdateStruct
+    | TerminateVolatileProcess PlatformWebService.TerminateVolatileProcessStruct
+
+
+type alias CreateVolatileProcessLessUpdateStruct =
+    { programCode : String
+    }
+
+
+type alias RequestToVolatileProcessLessUpdateStruct =
+    { processId : String
+    , request : String
+    }
+
+
+type alias WriteToVolatileProcessNativeStdInStruct =
+    { processId : String
+    , stdInBase64 : String
+    }
+
+
+type alias TaskId =
+    String
+
+"""
+
+
+webServiceShimModuleText_2023_05 : { platformModuleName : String } -> String
+webServiceShimModuleText_2023_05 { platformModuleName } =
     String.trimLeft """
 module Backend.Generated.WebServiceShim exposing (..)
 
@@ -1177,8 +1758,8 @@ concatBackendEventResponse responses =
 """
 
 
-webServiceShimTypesModuleText : { platformModuleName : String } -> String
-webServiceShimTypesModuleText { platformModuleName } =
+webServiceShimTypesModuleText_2023_05 : { platformModuleName : String } -> String
+webServiceShimTypesModuleText_2023_05 { platformModuleName } =
     String.trimLeft """
 module Backend.Generated.WebServiceShimTypes exposing (..)
 

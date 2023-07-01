@@ -162,7 +162,7 @@ public class ExecutableFile
     public static void CreateAndWriteFileToPath(
         string filePath,
         ReadOnlyMemory<byte> fileContent,
-        bool executable)
+        bool makeExecutable)
     {
         var directory = Path.GetDirectoryName(filePath);
 
@@ -170,7 +170,7 @@ public class ExecutableFile
             Directory.CreateDirectory(directory);
 
         var unixCreateMode =
-            executable
+            makeExecutable
             ?
             (UnixFileMode?)UnixFileModeForExecutableFile
             :

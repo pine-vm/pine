@@ -38,6 +38,6 @@ public class NativeDependencies
                 "Did not find dependency " + dependency.HashBase16 + " (" + dependency.ExpectedFileName + ") in any of the " +
                 dependency.RemoteSources.Count + " remote sources");
 
-        ExecutableFile.CreateAndWriteFileToPath(fileAbsolutePath, file, executable: true);
+        ExecutableFile.CreateAndWriteFileToPath(fileAbsolutePath, file, makeExecutable: true);
     }
 }

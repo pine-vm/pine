@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Linq;
@@ -148,5 +149,13 @@ public static class EnumerableExtension
             yield return separator;
             yield return enumerator.Current;
         }
+    }
+
+    public static IEnumerable<T> DequeueEnumerable<T>(this ConcurrentQueue<T> queue)
+    {
+        if (!queue.TryDequeue(out var item))
+            yield break;
+
+        yield return item;
     }
 }

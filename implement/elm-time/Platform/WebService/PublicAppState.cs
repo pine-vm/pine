@@ -367,24 +367,46 @@ public class PublicAppState
     private InterfaceToHost.TaskResult PerformProcessTask(InterfaceToHost.Task task) =>
         task switch
         {
+            InterfaceToHost.Task.ReadRuntimeInformationTask =>
+            new InterfaceToHost.TaskResult.ReadRuntimeInformationResponse(
+                ReadRuntimeInformation()),
+
             InterfaceToHost.Task.CreateVolatileProcess create =>
             PerformProcessTaskCreateVolatileProcess(create.Create),
 
+            InterfaceToHost.Task.CreateVolatileProcessNativeTask create =>
+            new InterfaceToHost.TaskResult.CreateVolatileProcessResponse(
+                CreateVolatileProcessNative(create.Create)),
+
             InterfaceToHost.Task.RequestToVolatileProcess requestTo =>
-            new InterfaceToHost.TaskResult.RequestToVolatileProcessResponse(PerformProcessTaskRequestToVolatileProcess(requestTo.RequestTo)),
+            new InterfaceToHost.TaskResult.RequestToVolatileProcessResponse(
+                PerformProcessTaskRequestToVolatileProcess(requestTo.RequestTo)),
 
-            InterfaceToHost.Task.TerminateVolatileProcess terminate => PerformProcessTaskTerminateVolatileProcess(terminate.Terminate),
+            InterfaceToHost.Task.WriteToVolatileProcessNativeStdInTask requestTo =>
+            new InterfaceToHost.TaskResult.WriteToVolatileProcessNativeStdInTaskResponse(
+                WriteToVolatileProcessStdIn(requestTo.WriteToProcess)),
 
-            _ => throw new NotImplementedException("Unexpected task structure.")
+            InterfaceToHost.Task.ReadAllFromVolatileProcessNativeTask request =>
+            new InterfaceToHost.TaskResult.ReadAllFromVolatileProcessNativeTaskResponse(
+                ReadAllFromVolatileProcessNative(request)),
+
+            InterfaceToHost.Task.TerminateVolatileProcess terminate =>
+            PerformProcessTaskTerminateVolatileProcess(terminate.Terminate),
+
+            _ =>
+            throw new NotImplementedException("Unexpected task type: " + task?.GetType().FullName)
         };
 
     private byte[]? GetBlobWithSHA256(byte[] sha256)
     {
         var matchFromSourceComposition =
-            serverAndElmAppConfig?.SourceComposition == null ? null :
-                PineValueHashTree.FindNodeByHash(serverAndElmAppConfig.SourceComposition, sha256);
+            serverAndElmAppConfig?.SourceComposition is null
+            ?
+            null
+            :
+            PineValueHashTree.FindNodeByHash(serverAndElmAppConfig.SourceComposition, sha256);
 
-        if (matchFromSourceComposition != null)
+        if (matchFromSourceComposition is not null)
         {
             if (matchFromSourceComposition is not PineValue.BlobValue matchFromSourceCompositionBlobs)
                 throw new Exception(CommonConversion.StringBase16FromByteArray(sha256) + " is not a blob");
@@ -395,11 +417,41 @@ public class PublicAppState
         return BlobLibrary.GetBlobWithSHA256(sha256)?.ToArray();
     }
 
-    private InterfaceToHost.TaskResult PerformProcessTaskCreateVolatileProcess(InterfaceToHost.CreateVolatileProcessStruct createVolatileProcess)
+    private static Result<string, InterfaceToHost.RuntimeInformationRecord> ReadRuntimeInformation()
     {
         try
         {
-            var volatileProcess = new VolatileProcess(GetBlobWithSHA256, createVolatileProcess.programCode, scriptGlobals: null);
+            var osPlatform =
+                Maybe.NothingFromNull(
+                    new[]
+                    {
+                        System.Runtime.InteropServices.OSPlatform.Windows,
+                        System.Runtime.InteropServices.OSPlatform.Linux,
+                        System.Runtime.InteropServices.OSPlatform.OSX,
+                    }
+                    .Where(System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform)
+                    .Cast<System.Runtime.InteropServices.OSPlatform?>()
+                    .FirstOrDefault()?.ToString());
+
+            return
+                Result<string, InterfaceToHost.RuntimeInformationRecord>.ok(
+                    new InterfaceToHost.RuntimeInformationRecord(
+                        runtimeIdentifier: System.Runtime.InteropServices.RuntimeInformation.RuntimeIdentifier,
+                        osPlatform: osPlatform));
+        }
+        catch (Exception exception)
+        {
+            return
+                Result<string, InterfaceToHost.RuntimeInformationRecord>.err(exception.ToString());
+        }
+    }
+
+    private InterfaceToHost.TaskResult PerformProcessTaskCreateVolatileProcess(
+        InterfaceToHost.CreateVolatileProcessStruct createVolatileProcess)
+    {
+        try
+        {
+            var volatileProcess = new VolatileProcessCSharp(GetBlobWithSHA256, createVolatileProcess.programCode, scriptGlobals: null);
 
             var volatileProcessId = System.Threading.Interlocked.Increment(ref createVolatileProcessAttempts).ToString();
 
@@ -430,6 +482,39 @@ public class PublicAppState
         }
     }
 
+    private Result<InterfaceToHost.CreateVolatileProcessErrorStructure, InterfaceToHost.CreateVolatileProcessComplete>
+        CreateVolatileProcessNative(
+        InterfaceToHost.CreateVolatileProcessNativeStruct createVolatileProcess)
+    {
+        try
+        {
+            var volatileProcess = new VolatileProcessNative(GetBlobWithSHA256, createVolatileProcess);
+
+            var volatileProcessId = System.Threading.Interlocked.Increment(ref createVolatileProcessAttempts).ToString();
+
+            volatileProcesses[volatileProcessId] = volatileProcess;
+
+            var completeStructure = new InterfaceToHost.CreateVolatileProcessComplete
+            (
+                processId: volatileProcessId
+            );
+
+            return
+                Result<InterfaceToHost.CreateVolatileProcessErrorStructure, InterfaceToHost.CreateVolatileProcessComplete>.ok(completeStructure);
+        }
+        catch (Exception exception)
+        {
+            return
+                Result<InterfaceToHost.CreateVolatileProcessErrorStructure, InterfaceToHost.CreateVolatileProcessComplete>.err
+                (
+                    new InterfaceToHost.CreateVolatileProcessErrorStructure
+                    (
+                        exceptionToString: exception.ToString()
+                    )
+                );
+        }
+    }
+
     private Result<InterfaceToHost.RequestToVolatileProcessError, InterfaceToHost.RequestToVolatileProcessComplete>
         PerformProcessTaskRequestToVolatileProcess(
         InterfaceToHost.RequestToVolatileProcessStruct requestToVolatileProcess)
@@ -440,14 +525,26 @@ public class PublicAppState
             (
                 new InterfaceToHost.RequestToVolatileProcessError
                 (
-                    ProcessNotFound: new object()
+                    ProcessNotFound: new object(),
+                    RequestToVolatileProcessOtherError: null
                 )
             );
         }
 
+        if (volatileProcess is not VolatileProcessCSharp { } volatileProcessCSharp)
+            return Result<InterfaceToHost.RequestToVolatileProcessError, InterfaceToHost.RequestToVolatileProcessComplete>.err
+            (
+                new InterfaceToHost.RequestToVolatileProcessError
+                (
+                    ProcessNotFound: null,
+                    RequestToVolatileProcessOtherError:
+                    "Process " + requestToVolatileProcess.processId + " is not a C# process: " + volatileProcess.GetType().FullName
+                )
+            );
+
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
 
-        var fromVolatileProcessResult = volatileProcess.ProcessRequest(requestToVolatileProcess.request);
+        var fromVolatileProcessResult = volatileProcessCSharp.ProcessRequest(requestToVolatileProcess.request);
 
         stopwatch.Stop();
 
@@ -462,9 +559,99 @@ public class PublicAppState
         );
     }
 
-    private InterfaceToHost.TaskResult PerformProcessTaskTerminateVolatileProcess(InterfaceToHost.TerminateVolatileProcessStruct terminateVolatileProcess)
+    private Result<InterfaceToHost.RequestToVolatileProcessError, object>
+        WriteToVolatileProcessStdIn(
+        InterfaceToHost.WriteToVolatileProcessNativeStdInStruct writeToVolatileProcess)
+    {
+        if (!volatileProcesses.TryGetValue(writeToVolatileProcess.processId, out var volatileProcess))
+        {
+            return Result<InterfaceToHost.RequestToVolatileProcessError, object>.err
+            (
+                new InterfaceToHost.RequestToVolatileProcessError
+                (
+                    ProcessNotFound: new object(),
+                    RequestToVolatileProcessOtherError: null
+                )
+            );
+        }
+
+        if (volatileProcess is not VolatileProcessNative { } volatileProcessNative)
+            return Result<InterfaceToHost.RequestToVolatileProcessError, object>.err
+            (
+                new InterfaceToHost.RequestToVolatileProcessError
+                (
+                    ProcessNotFound: null,
+                    RequestToVolatileProcessOtherError:
+                    "Process " + writeToVolatileProcess.processId + " is not a native process: " + volatileProcess.GetType().FullName
+                )
+            );
+
+        byte[] inputBytes;
+
+        try
+        {
+            inputBytes = Convert.FromBase64String(writeToVolatileProcess.stdInBase64);
+        }
+        catch (Exception exception)
+        {
+            return Result<InterfaceToHost.RequestToVolatileProcessError, object>.err
+                (
+                new InterfaceToHost.RequestToVolatileProcessError
+                (
+                    ProcessNotFound: null,
+                    RequestToVolatileProcessOtherError:
+                    "Could not convert stdInBase64 to bytes: " + exception
+                    )
+                );
+        }
+
+        volatileProcessNative.WriteToStdIn(inputBytes);
+
+        return Result<InterfaceToHost.RequestToVolatileProcessError, object>.ok(new object());
+    }
+
+    private Result<InterfaceToHost.RequestToVolatileProcessError, InterfaceToHost.ReadAllFromVolatileProcessNativeSuccessStruct>
+        ReadAllFromVolatileProcessNative(
+        InterfaceToHost.Task.ReadAllFromVolatileProcessNativeTask request)
+    {
+        if (!volatileProcesses.TryGetValue(request.ProcessId, out var volatileProcess))
+        {
+            return Result<InterfaceToHost.RequestToVolatileProcessError, InterfaceToHost.ReadAllFromVolatileProcessNativeSuccessStruct>.err
+            (
+                new InterfaceToHost.RequestToVolatileProcessError
+                (
+                    ProcessNotFound: new object(),
+                    RequestToVolatileProcessOtherError: null
+                )
+            );
+        }
+
+        if (volatileProcess is not VolatileProcessNative { } volatileProcessNative)
+            return Result<InterfaceToHost.RequestToVolatileProcessError, InterfaceToHost.ReadAllFromVolatileProcessNativeSuccessStruct>.err
+            (
+                new InterfaceToHost.RequestToVolatileProcessError
+                (
+                    ProcessNotFound: null,
+                    RequestToVolatileProcessOtherError:
+                    "Process " + request.ProcessId + " is not a native process: " + volatileProcess.GetType().FullName
+                )
+            );
+
+        var read = volatileProcessNative.ReadAll();
+
+        return Result<InterfaceToHost.RequestToVolatileProcessError, InterfaceToHost.ReadAllFromVolatileProcessNativeSuccessStruct>.ok(
+            new InterfaceToHost.ReadAllFromVolatileProcessNativeSuccessStruct(
+                stdOutBase64: Convert.ToBase64String(read.StdOut.Span),
+                stdErrBase64: Convert.ToBase64String(read.StdErr.Span),
+                exitCode: Maybe.NothingFromNull(read.ExitCode)));
+    }
+
+    private InterfaceToHost.TaskResult PerformProcessTaskTerminateVolatileProcess(
+        InterfaceToHost.TerminateVolatileProcessStruct terminateVolatileProcess)
     {
         volatileProcesses.TryRemove(terminateVolatileProcess.processId, out var volatileProcess);
+
+        (volatileProcess as IDisposable)?.Dispose();
 
         return new InterfaceToHost.TaskResult.CompleteWithoutResult();
     }

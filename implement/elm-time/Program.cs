@@ -17,7 +17,7 @@ namespace ElmTime;
 
 public class Program
 {
-    public static string AppVersionId => "2023-06-29";
+    public static string AppVersionId => "2023-06-30";
 
     private static int AdminInterfaceDefaultPort => 4000;
 
@@ -2536,7 +2536,7 @@ public class Program
                     ExecutableFile.CreateAndWriteFileToPath(
                         destinationExecutableFilePath,
                         currentExecuableFileContent,
-                        executable: true);
+                        makeExecutable: true);
 
                     Console.WriteLine(
                         "I copied the executable file to '" + destinationExecutableFilePath +
