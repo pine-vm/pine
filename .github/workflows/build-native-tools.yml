@@ -1,6 +1,11 @@
 name: build-native-tools
 
-on: [push,workflow_dispatch]
+on:
+  workflow_dispatch:
+  push:
+    paths:
+    - "implement/native-tools/**"
+    - ".github/workflows/build-native-tools.yml"
 
 jobs:
   build:
