@@ -26,6 +26,8 @@ public class VolatileProcessNative : VolatileProcess, IDisposable
 
     private readonly ConcurrentQueue<ReadOnlyMemory<byte>> stdErrQueue = new();
 
+    private readonly CancellationTokenSource disposedCancellationTokenSource = new();
+
     public VolatileProcessNative(
         Func<byte[], byte[]?>? getFileFromHashSHA256,
         ElmTime.Platform.WebService.InterfaceToHost.CreateVolatileProcessNativeStruct createRequest)
@@ -70,8 +72,15 @@ public class VolatileProcessNative : VolatileProcess, IDisposable
 
         process.Start();
 
-        Task.Run(() => ReadFromStreamToQueue(stdOutQueue, process.StandardOutput.BaseStream));
-        Task.Run(() => ReadFromStreamToQueue(stdErrQueue, process.StandardError.BaseStream));
+        Task.Run(() => ReadFromStreamToQueueLoopAsync(
+            stdOutQueue,
+            process.StandardOutput.BaseStream,
+            cancellationToken: disposedCancellationTokenSource.Token));
+
+        Task.Run(() => ReadFromStreamToQueueLoopAsync(
+            stdErrQueue,
+            process.StandardError.BaseStream,
+            cancellationToken: disposedCancellationTokenSource.Token));
     }
 
     public void WriteToStdIn(ReadOnlyMemory<byte> data)
@@ -111,17 +120,25 @@ public class VolatileProcessNative : VolatileProcess, IDisposable
         return CommonConversion.Concat(buffers);
     }
 
-    public static long ReadFromStreamToQueue(ConcurrentQueue<ReadOnlyMemory<byte>> queue, Stream stream)
+    public static async Task<long> ReadFromStreamToQueueLoopAsync(
+        ConcurrentQueue<ReadOnlyMemory<byte>> queue,
+        Stream stream,
+        CancellationToken cancellationToken)
     {
         long aggregateBytesRead = 0;
 
         try
         {
-            while (true)
+            while (!cancellationToken.IsCancellationRequested)
             {
-                var buffer = new byte[0x10_000];
+                var buffer = new byte[0x100_000];
 
-                var bytesRead = stream.ReadAtLeast(buffer, minimumBytes: 1, throwOnEndOfStream: true);
+                var bytesRead =
+                    await stream.ReadAtLeastAsync(
+                        buffer,
+                        minimumBytes: 1,
+                        throwOnEndOfStream: true,
+                        cancellationToken: cancellationToken);
 
                 if (bytesRead == 0)
                     continue;
@@ -133,14 +150,17 @@ public class VolatileProcessNative : VolatileProcess, IDisposable
         }
         catch (EndOfStreamException)
         {
-            return aggregateBytesRead;
         }
+
+        return aggregateBytesRead;
     }
 
     public void Dispose()
     {
         try
         {
+            disposedCancellationTokenSource.Cancel();
+
             if (process is not null && !process.HasExited)
                 process.Kill();
 

@@ -136,6 +136,7 @@ public class PublicAppState
         {
             applicationStoppingCancellationTokenSource.Cancel();
             app.Logger?.LogInformation("Public app noticed ApplicationStopping.");
+            DisposeAsync().Wait();
         });
 
         app.UseResponseCompression();
@@ -149,6 +150,17 @@ public class PublicAppState
         });
 
         return app;
+    }
+
+    async System.Threading.Tasks.Task DisposeAsync()
+    {
+        await
+            System.Threading.Tasks.Task.WhenAll(
+                volatileProcesses.Select(kvp =>
+                System.Threading.Tasks.Task.Run(() =>
+                {
+                    (kvp.Value as IDisposable)?.Dispose();
+                })));
     }
 
     private void ConfigureServices(
