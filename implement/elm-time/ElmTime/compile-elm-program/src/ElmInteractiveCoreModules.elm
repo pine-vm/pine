@@ -33,6 +33,12 @@ type String
     = String (List Char.Char)
 
 
+{-| Represents the relative ordering of two things.
+The relations are less than, equal to, and greater than.
+-}
+type Order = LT | EQ | GT
+
+
 eq : a -> a -> Bool
 eq a b =
     Pine_kernel.equal [ a, b ]
@@ -146,6 +152,89 @@ not bool =
         False
     else
         True
+
+
+{-| Compare any two comparable values. Comparable values include `String`,
+`Char`, `Int`, `Float`, or a list or tuple containing comparable values. These
+are also the only values that work as `Dict` keys or `Set` members.
+
+    compare 3 4 == LT
+    compare 4 4 == EQ
+    compare 5 4 == GT
+-}
+compare : comparable -> comparable -> Order
+compare a b =
+    if Pine_kernel.equal [ a, b ]
+    then
+        EQ
+    else
+        case a of
+        String stringA ->
+            case b of
+            String stringB ->
+                compareList
+                    (stringCharsToSignedInts stringA)
+                    (stringCharsToSignedInts stringB)
+
+            _ ->
+                compareIgnoringString a b
+
+        _ -> compareIgnoringString a b
+
+
+compareIgnoringString : comparable -> comparable -> Order
+compareIgnoringString a b =
+    if isPineList a
+    then
+        compareList a b
+    else if Pine_kernel.is_sorted_ascending_int [ a, b ]
+    then
+        LT
+    else
+        GT
+
+
+compareList : List comparable -> List comparable -> Order
+compareList listA listB =
+    let
+        compareListEmpty =
+            compare (Pine_kernel.length listA) (Pine_kernel.length listB)
+    in
+    case listA of
+    headA :: tailA ->
+        case listB of
+        headB :: tailB ->
+            let
+                headOrder =
+                    compare headA headB
+            in
+                if eq headOrder EQ
+                then
+                    compareList tailA tailB
+                else
+                    headOrder
+        _ ->
+            compareListEmpty
+
+    _ ->
+        compareListEmpty
+
+
+stringCharsToSignedInts : List Char -> List Int
+stringCharsToSignedInts chars =
+    case chars of
+    head :: tail ->
+        -- Add the sign prefix byte
+        Pine_kernel.concat
+            [ [ Pine_kernel.concat [ Pine_kernel.take [ 1, 0 ], head ] ]
+            , stringCharsToSignedInts tail
+            ]
+    _ ->
+        []
+
+
+isPineList a =
+    Pine_kernel.equal [ Pine_kernel.take [ 0, a ], [] ]
 
 """
     , """

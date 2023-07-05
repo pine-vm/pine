@@ -1,0 +1,1 @@
+Basics.compare 3 4
