@@ -80,14 +80,11 @@ or a b =
 
 
 append : appendable -> appendable -> appendable
-append a_in_append b_in_append =
-    case a_in_append of
-    String stringA ->
-        case b_in_append of
-        String stringB ->
-            String (Pine_kernel.concat [ stringA, stringB ])
-        _ -> Pine_kernel.concat [ a_in_append, b_in_append ]
-    _ -> Pine_kernel.concat [ a_in_append, b_in_append ]
+append a b =
+    case (a, b) of
+    (String stringA, String stringB) ->
+        String (Pine_kernel.concat [ stringA, stringB ])
+    _ -> Pine_kernel.concat [ a, b ]
 
 
 lt : comparable -> comparable -> Bool
@@ -164,60 +161,43 @@ are also the only values that work as `Dict` keys or `Set` members.
 -}
 compare : comparable -> comparable -> Order
 compare a b =
-    if Pine_kernel.equal [ a, b ]
+    if eq a b
     then
         EQ
     else
-        case a of
-        String stringA ->
-            case b of
-            String stringB ->
-                compareList
-                    (stringCharsToSignedInts stringA)
-                    (stringCharsToSignedInts stringB)
+        case (a, b) of
+        (String stringA, String stringB) ->
+            compareList
+                (stringCharsToSignedInts stringA)
+                (stringCharsToSignedInts stringB)
 
-            _ ->
-                compareIgnoringString a b
-
-        _ -> compareIgnoringString a b
-
-
-compareIgnoringString : comparable -> comparable -> Order
-compareIgnoringString a b =
-    if isPineList a
-    then
-        compareList a b
-    else if Pine_kernel.is_sorted_ascending_int [ a, b ]
-    then
-        LT
-    else
-        GT
+        _ ->
+            if isPineList a
+            then
+                compareList a b
+            else if le a b
+            then
+                LT
+            else
+                GT
 
 
 compareList : List comparable -> List comparable -> Order
 compareList listA listB =
-    let
-        compareListEmpty =
-            compare (Pine_kernel.length listA) (Pine_kernel.length listB)
-    in
-    case listA of
-    headA :: tailA ->
-        case listB of
-        headB :: tailB ->
-            let
-                headOrder =
-                    compare headA headB
-            in
-                if eq headOrder EQ
-                then
-                    compareList tailA tailB
-                else
-                    headOrder
-        _ ->
-            compareListEmpty
+    case (listA, listB) of
+    (headA :: tailA, headB :: tailB) ->
+        let
+            headOrder =
+                compare headA headB
+        in
+            if eq headOrder EQ
+            then
+                compareList tailA tailB
+            else
+                headOrder
 
     _ ->
-        compareListEmpty
+        compare (Pine_kernel.length listA) (Pine_kernel.length listB)
 
 
 stringCharsToSignedInts : List Char -> List Int

@@ -1349,11 +1349,16 @@ compileElmSyntaxCaseBlock stack caseBlock =
                 Ok cases ->
                     let
                         conditionalFromCase deconstructedCase nextBlockExpression =
-                            ConditionalExpression
-                                { condition = deconstructedCase.conditionExpression
-                                , ifTrue = deconstructedCase.thenExpression
-                                , ifFalse = nextBlockExpression
-                                }
+                            deconstructedCase.conditionExpressions
+                                |> List.foldl
+                                    (\conditionExpression nextConditionExpression ->
+                                        ConditionalExpression
+                                            { condition = conditionExpression
+                                            , ifTrue = nextConditionExpression
+                                            , ifFalse = nextBlockExpression
+                                            }
+                                    )
+                                    deconstructedCase.thenExpression
                     in
                     Ok
                         (List.foldr
@@ -1374,7 +1379,7 @@ compileElmSyntaxCaseBlockCase :
     ->
         Result
             String
-            { conditionExpression : Expression
+            { conditionExpressions : List Expression
             , thenExpression : Expression
             }
 compileElmSyntaxCaseBlockCase stackBefore caseBlockValueExpression ( elmPatternNode, elmExpression ) =
@@ -1408,7 +1413,7 @@ compileElmSyntaxCaseBlockCase stackBefore caseBlockValueExpression ( elmPatternN
                 |> compileElmSyntaxExpression stack
                 |> Result.map
                     (\expression ->
-                        { conditionExpression = deconstruction.conditionExpression caseBlockValueExpression
+                        { conditionExpressions = deconstruction.conditionExpressions caseBlockValueExpression
                         , thenExpression =
                             if deconstruction.declarations == [] then
                                 expression
@@ -1427,16 +1432,16 @@ compileElmSyntaxPattern :
     ->
         Result
             String
-            { conditionExpression : Expression -> Expression
+            { conditionExpressions : Expression -> List Expression
             , declarations : List ( String, List Deconstruction )
             }
 compileElmSyntaxPattern elmPattern =
     let
         continueWithOnlyEqualsCondition valueToCompare =
             Ok
-                { conditionExpression =
+                { conditionExpressions =
                     \deconstructedExpression ->
-                        equalCondition [ deconstructedExpression, valueToCompare ]
+                        [ equalCondition [ deconstructedExpression, valueToCompare ] ]
                 , declarations = []
                 }
 
@@ -1447,9 +1452,8 @@ compileElmSyntaxPattern elmPattern =
                         >> Result.map
                             (\listElementResult ->
                                 { conditions =
-                                    [ listItemFromIndexExpression itemIndex
-                                        >> listElementResult.conditionExpression
-                                    ]
+                                    listItemFromIndexExpression itemIndex
+                                        >> listElementResult.conditionExpressions
                                 , declarations =
                                     listElementResult.declarations
                                         |> List.map (Tuple.mapSecond ((::) (ListItemDeconstruction itemIndex)))
@@ -1463,6 +1467,7 @@ compileElmSyntaxPattern elmPattern =
                 |> Result.map
                     (\itemsResults ->
                         let
+                            matchesLengthCondition : Expression -> Expression
                             matchesLengthCondition =
                                 \deconstructedExpression ->
                                     equalCondition
@@ -1473,15 +1478,13 @@ compileElmSyntaxPattern elmPattern =
                                         , countListElementsExpression deconstructedExpression
                                         ]
 
-                            conditionExpression =
+                            conditionExpressions : Expression -> List Expression
+                            conditionExpressions =
                                 \deconstructedExpression ->
-                                    matchesLengthCondition
-                                        :: List.concatMap .conditions itemsResults
-                                        |> List.map ((|>) deconstructedExpression)
-                                        |> booleanConjunctionExpressionFromList
-                                            (equalCondition [ deconstructedExpression, ListExpression [] ])
+                                    matchesLengthCondition deconstructedExpression
+                                        :: List.concatMap (.conditions >> (|>) deconstructedExpression) itemsResults
                         in
-                        { conditionExpression = conditionExpression
+                        { conditionExpressions = conditionExpressions
                         , declarations = itemsResults |> List.concatMap .declarations
                         }
                     )
@@ -1489,7 +1492,7 @@ compileElmSyntaxPattern elmPattern =
     case elmPattern of
         Elm.Syntax.Pattern.AllPattern ->
             Ok
-                { conditionExpression = always (LiteralExpression Pine.trueValue)
+                { conditionExpressions = always []
                 , declarations = []
                 }
 
@@ -1512,9 +1515,9 @@ compileElmSyntaxPattern elmPattern =
                               )
                             ]
 
-                        conditionExpression =
+                        conditionExpressions =
                             \deconstructedExpression ->
-                                KernelApplicationExpression
+                                [ KernelApplicationExpression
                                     { functionName = "logical_not"
                                     , argument =
                                         equalCondition
@@ -1522,9 +1525,10 @@ compileElmSyntaxPattern elmPattern =
                                             , listSkipExpression 1 deconstructedExpression
                                             ]
                                     }
+                                ]
                     in
                     Ok
-                        { conditionExpression = conditionExpression
+                        { conditionExpressions = conditionExpressions
                         , declarations = declarations
                         }
 
@@ -1549,12 +1553,13 @@ compileElmSyntaxPattern elmPattern =
                                         Err ("Unsupported type of pattern: " ++ (argumentPattern |> Elm.Syntax.Pattern.encode |> Json.Encode.encode 0))
                             )
 
-                conditionExpression =
+                conditionExpressions =
                     \deconstructedExpression ->
-                        equalCondition
+                        [ equalCondition
                             [ LiteralExpression (Pine.valueFromString qualifiedName.name)
                             , pineKernel_ListHead deconstructedExpression
                             ]
+                        ]
             in
             case mapArgumentsToOnlyNameResults |> Result.Extra.combine of
                 Err error ->
@@ -1574,7 +1579,7 @@ compileElmSyntaxPattern elmPattern =
                                     )
                     in
                     Ok
-                        { conditionExpression = conditionExpression
+                        { conditionExpressions = conditionExpressions
                         , declarations = declarations
                         }
 
@@ -1586,7 +1591,7 @@ compileElmSyntaxPattern elmPattern =
 
         Elm.Syntax.Pattern.VarPattern name ->
             Ok
-                { conditionExpression = always (LiteralExpression Pine.trueValue)
+                { conditionExpressions = always []
                 , declarations =
                     [ ( name
                       , []
@@ -1596,7 +1601,7 @@ compileElmSyntaxPattern elmPattern =
 
         Elm.Syntax.Pattern.RecordPattern fieldsElements ->
             Ok
-                { conditionExpression = always (LiteralExpression Pine.trueValue)
+                { conditionExpressions = always []
                 , declarations =
                     fieldsElements
                         |> List.map Elm.Syntax.Node.value
