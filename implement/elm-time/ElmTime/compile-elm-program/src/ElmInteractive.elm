@@ -1445,21 +1445,20 @@ compileElmSyntaxPattern elmPattern =
                 , declarations = []
                 }
 
+        conditionsAndDeclarationsFromItemPattern itemIndex =
+            compileElmSyntaxPattern
+                >> Result.map
+                    (\listElementResult ->
+                        { conditions =
+                            listItemFromIndexExpression itemIndex
+                                >> listElementResult.conditionExpressions
+                        , declarations =
+                            listElementResult.declarations
+                                |> List.map (Tuple.mapSecond ((::) (ListItemDeconstruction itemIndex)))
+                        }
+                    )
+
         continueWithListOrTupleItems listItems =
-            let
-                conditionsAndDeclarationsFromItemPattern itemIndex =
-                    compileElmSyntaxPattern
-                        >> Result.map
-                            (\listElementResult ->
-                                { conditions =
-                                    listItemFromIndexExpression itemIndex
-                                        >> listElementResult.conditionExpressions
-                                , declarations =
-                                    listElementResult.declarations
-                                        |> List.map (Tuple.mapSecond ((::) (ListItemDeconstruction itemIndex)))
-                                }
-                            )
-            in
             listItems
                 |> List.map Elm.Syntax.Node.value
                 |> List.indexedMap conditionsAndDeclarationsFromItemPattern
@@ -1536,52 +1535,51 @@ compileElmSyntaxPattern elmPattern =
                     Err "Unsupported shape of uncons pattern."
 
         Elm.Syntax.Pattern.NamedPattern qualifiedName choiceTypeArgumentPatterns ->
-            let
-                mapArgumentsToOnlyNameResults =
-                    choiceTypeArgumentPatterns
-                        |> List.map Elm.Syntax.Node.value
-                        |> List.map
-                            (\argumentPattern ->
-                                case argumentPattern of
-                                    Elm.Syntax.Pattern.VarPattern argumentName ->
-                                        Ok argumentName
-
-                                    Elm.Syntax.Pattern.AllPattern ->
-                                        Ok "unused_from_elm_all_pattern"
-
-                                    _ ->
-                                        Err ("Unsupported type of pattern: " ++ (argumentPattern |> Elm.Syntax.Pattern.encode |> Json.Encode.encode 0))
-                            )
-
-                conditionExpressions =
-                    \deconstructedExpression ->
-                        [ equalCondition
-                            [ LiteralExpression (Pine.valueFromString qualifiedName.name)
-                            , pineKernel_ListHead deconstructedExpression
-                            ]
-                        ]
-            in
-            case mapArgumentsToOnlyNameResults |> Result.Extra.combine of
-                Err error ->
-                    Err ("Failed to compile pattern in case block: " ++ error)
-
-                Ok declarationsNames ->
-                    let
-                        declarations =
-                            declarationsNames
-                                |> List.indexedMap
-                                    (\argumentIndex declarationName ->
-                                        ( declarationName
-                                        , [ ListItemDeconstruction 1
-                                          , ListItemDeconstruction argumentIndex
-                                          ]
-                                        )
+            choiceTypeArgumentPatterns
+                |> List.map Elm.Syntax.Node.value
+                |> List.indexedMap
+                    (\argIndex argPattern ->
+                        conditionsAndDeclarationsFromItemPattern argIndex argPattern
+                            |> Result.mapError
+                                ((++)
+                                    ("Failed for named pattern argument "
+                                        ++ String.fromInt argIndex
+                                        ++ ": "
                                     )
-                    in
-                    Ok
+                                )
+                    )
+                |> Result.Extra.combine
+                |> Result.map
+                    (\itemsResults ->
+                        let
+                            conditionExpressions : Expression -> List Expression
+                            conditionExpressions =
+                                \deconstructedExpression ->
+                                    let
+                                        matchingTagCondition =
+                                            equalCondition
+                                                [ LiteralExpression (Pine.valueFromString qualifiedName.name)
+                                                , pineKernel_ListHead deconstructedExpression
+                                                ]
+
+                                        argumentsConditions =
+                                            itemsResults
+                                                |> List.concatMap
+                                                    (.conditions
+                                                        >> (|>) (listItemFromIndexExpression 1 deconstructedExpression)
+                                                    )
+                                    in
+                                    matchingTagCondition :: argumentsConditions
+
+                            declarations =
+                                itemsResults
+                                    |> List.concatMap .declarations
+                                    |> List.map (Tuple.mapSecond ((::) (ListItemDeconstruction 1)))
+                        in
                         { conditionExpressions = conditionExpressions
                         , declarations = declarations
                         }
+                    )
 
         Elm.Syntax.Pattern.CharPattern char ->
             continueWithOnlyEqualsCondition (LiteralExpression (Pine.valueFromChar char))
@@ -1607,6 +1605,9 @@ compileElmSyntaxPattern elmPattern =
                         |> List.map Elm.Syntax.Node.value
                         |> List.map (\fieldName -> ( fieldName, [ RecordFieldDeconstruction fieldName ] ))
                 }
+
+        Elm.Syntax.Pattern.ParenthesizedPattern parenthesized ->
+            compileElmSyntaxPattern (Elm.Syntax.Node.value parenthesized)
 
         _ ->
             Err
