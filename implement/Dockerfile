@@ -1,5 +1,5 @@
 # Build dotnet build image
-FROM mcr.microsoft.com/dotnet/sdk:7.0.304 AS build-env
+FROM mcr.microsoft.com/dotnet/sdk:7.0.306 AS build-env
 WORKDIR /app
 
 # Copy everything and build
@@ -8,7 +8,7 @@ WORKDIR /app/elm-time
 RUN dotnet publish -c Debug -o out
 
 # Build runtime image
-FROM mcr.microsoft.com/dotnet/aspnet:7.0.7 AS binaries
+FROM mcr.microsoft.com/dotnet/aspnet:7.0.9 AS binaries
 
 COPY --from=build-env /app/elm-time/out /elm-time/dotnet/
 
