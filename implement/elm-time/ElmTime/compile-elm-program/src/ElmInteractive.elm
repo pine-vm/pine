@@ -216,36 +216,69 @@ submissionResponseFromResponsePineValue responseValue =
             Err ("Failed to encode as Elm value: " ++ error)
 
         Ok valueAsElmValue ->
-            Ok { displayText = elmValueAsExpression valueAsElmValue }
+            Ok { displayText = Tuple.first (elmValueAsExpression valueAsElmValue) }
 
 
-elmValueAsExpression : ElmValue -> String
+elmValueAsExpression : ElmValue -> ( String, { needsParens : Bool } )
 elmValueAsExpression elmValue =
-    case elmValue of
-        ElmList list ->
-            "[" ++ (list |> List.map elmValueAsExpression |> String.join ",") ++ "]"
-
-        ElmInteger integer ->
-            integer |> BigInt.toString
-
-        ElmChar char ->
-            "'" ++ (char |> String.fromChar) ++ "'"
-
-        ElmString string ->
-            string |> Json.Encode.string |> Json.Encode.encode 0
-
-        ElmRecord fields ->
-            if fields == [] then
-                "{}"
+    let
+        applyNeedsParens : ( String, { needsParens : Bool } ) -> String
+        applyNeedsParens ( expressionString, { needsParens } ) =
+            if needsParens then
+                "(" ++ expressionString ++ ")"
 
             else
-                "{ " ++ (fields |> List.map (\( fieldName, fieldValue ) -> fieldName ++ " = " ++ elmValueAsExpression fieldValue) |> String.join ", ") ++ " }"
+                expressionString
+    in
+    case elmValue of
+        ElmList list ->
+            ( "[" ++ (list |> List.map (elmValueAsExpression >> Tuple.first) |> String.join ",") ++ "]"
+            , { needsParens = False }
+            )
+
+        ElmInteger integer ->
+            ( integer |> BigInt.toString
+            , { needsParens = False }
+            )
+
+        ElmChar char ->
+            ( "'" ++ (char |> String.fromChar) ++ "'"
+            , { needsParens = False }
+            )
+
+        ElmString string ->
+            ( string |> Json.Encode.string |> Json.Encode.encode 0
+            , { needsParens = False }
+            )
+
+        ElmRecord fields ->
+            ( if fields == [] then
+                "{}"
+
+              else
+                "{ "
+                    ++ (fields
+                            |> List.map
+                                (\( fieldName, fieldValue ) ->
+                                    fieldName ++ " = " ++ Tuple.first (elmValueAsExpression fieldValue)
+                                )
+                            |> String.join ", "
+                       )
+                    ++ " }"
+            , { needsParens = False }
+            )
 
         ElmTag tagName tagArguments ->
-            tagName :: (tagArguments |> List.map elmValueAsExpression) |> String.join " "
+            ( tagName
+                :: (tagArguments |> List.map (elmValueAsExpression >> applyNeedsParens))
+                |> String.join " "
+            , { needsParens = tagArguments /= [] }
+            )
 
         ElmInternal desc ->
-            "<" ++ desc ++ ">"
+            ( "<" ++ desc ++ ">"
+            , { needsParens = False }
+            )
 
 
 elmValueAsJson : ElmValue -> Json.Encode.Value
@@ -272,7 +305,7 @@ elmValueAsJson elmValue =
             Json.Encode.list identity [ Json.Encode.string tagName, Json.Encode.list elmValueAsJson tagArguments ]
 
         ElmInternal _ ->
-            Json.Encode.string (elmValueAsExpression elmValue)
+            Json.Encode.string (Tuple.first (elmValueAsExpression elmValue))
 
 
 pineValueAsElmValue : Pine.Value -> Result String ElmValue
@@ -1605,6 +1638,15 @@ compileElmSyntaxPattern elmPattern =
                         |> List.map Elm.Syntax.Node.value
                         |> List.map (\fieldName -> ( fieldName, [ RecordFieldDeconstruction fieldName ] ))
                 }
+
+        Elm.Syntax.Pattern.AsPattern (Elm.Syntax.Node.Node _ aliasedPattern) (Elm.Syntax.Node.Node _ alias) ->
+            compileElmSyntaxPattern aliasedPattern
+                |> Result.map
+                    (\aliasedResult ->
+                        { aliasedResult
+                            | declarations = ( alias, [] ) :: aliasedResult.declarations
+                        }
+                    )
 
         Elm.Syntax.Pattern.ParenthesizedPattern parenthesized ->
             compileElmSyntaxPattern (Elm.Syntax.Node.value parenthesized)

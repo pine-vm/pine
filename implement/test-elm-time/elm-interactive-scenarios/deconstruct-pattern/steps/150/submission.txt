@@ -1,0 +1,18 @@
+let
+    deconsMaybeMaybe maybeMaybe =
+        case maybeMaybe of
+            Nothing ->
+                [ [] ]
+
+            (Just Nothing) as justNothing ->
+                [ [], [ justNothing ] ]
+
+            (Just (Just x)) as justJust ->
+                [ [ justJust ]
+                , [ Just (Just (x + 1)) ]
+                ]
+in
+[ deconsMaybeMaybe Nothing
+, deconsMaybeMaybe (Just Nothing)
+, deconsMaybeMaybe (Just (Just 4))
+]
