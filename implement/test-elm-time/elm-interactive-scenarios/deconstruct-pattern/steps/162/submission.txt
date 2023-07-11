@@ -1,0 +1,17 @@
+let
+    decons list =
+        case list of
+            ( alfa, beta ) :: [ ( gamma, delta ) ] ->
+                [ [ 102 ], [ beta, gamma ], [ alfa, delta ] ]
+
+            ( alfa, beta ) :: _ ->
+                [ [ 103 ], [ beta, alfa ] ]
+
+            _ ->
+                [ [ 100 ] ]
+in
+[ decons [ ]
+, decons [ ( 101, 102 ) ]
+, decons [ ( 110, 111 ), ( 112, 113 ) ]
+, decons [ ( 120, 121 ), ( 122, 123 ), ( 124, 125 ) ]
+]

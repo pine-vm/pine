@@ -1535,37 +1535,48 @@ compileElmSyntaxPattern elmPattern =
             continueWithListOrTupleItems tupleElements
 
         Elm.Syntax.Pattern.UnConsPattern unconsLeft unconsRight ->
-            case ( Elm.Syntax.Node.value unconsLeft, Elm.Syntax.Node.value unconsRight ) of
-                ( Elm.Syntax.Pattern.VarPattern unconsLeftName, Elm.Syntax.Pattern.VarPattern unconsRightName ) ->
-                    let
-                        declarations =
-                            [ ( unconsLeftName
-                              , [ ListItemDeconstruction 0 ]
-                              )
-                            , ( unconsRightName
-                              , [ SkipItemsDeconstruction 1 ]
-                              )
-                            ]
+            unconsLeft
+                |> Elm.Syntax.Node.value
+                |> compileElmSyntaxPattern
+                |> Result.andThen
+                    (\leftSide ->
+                        unconsRight
+                            |> Elm.Syntax.Node.value
+                            |> compileElmSyntaxPattern
+                            |> Result.map
+                                (\rightSide ->
+                                    let
+                                        conditionExpressions =
+                                            \deconstructedExpression ->
+                                                [ [ KernelApplicationExpression
+                                                        { functionName = "logical_not"
+                                                        , argument =
+                                                            equalCondition
+                                                                [ deconstructedExpression
+                                                                , listSkipExpression 1 deconstructedExpression
+                                                                ]
+                                                        }
+                                                  ]
+                                                , leftSide.conditionExpressions
+                                                    (listItemFromIndexExpression 0 deconstructedExpression)
+                                                , rightSide.conditionExpressions
+                                                    (listSkipExpression 1 deconstructedExpression)
+                                                ]
+                                                    |> List.concat
 
-                        conditionExpressions =
-                            \deconstructedExpression ->
-                                [ KernelApplicationExpression
-                                    { functionName = "logical_not"
-                                    , argument =
-                                        equalCondition
-                                            [ deconstructedExpression
-                                            , listSkipExpression 1 deconstructedExpression
+                                        declarations =
+                                            [ leftSide.declarations
+                                                |> List.map (Tuple.mapSecond ((::) (ListItemDeconstruction 0)))
+                                            , rightSide.declarations
+                                                |> List.map (Tuple.mapSecond ((::) (SkipItemsDeconstruction 1)))
                                             ]
+                                                |> List.concat
+                                    in
+                                    { conditionExpressions = conditionExpressions
+                                    , declarations = declarations
                                     }
-                                ]
-                    in
-                    Ok
-                        { conditionExpressions = conditionExpressions
-                        , declarations = declarations
-                        }
-
-                _ ->
-                    Err "Unsupported shape of uncons pattern."
+                                )
+                    )
 
         Elm.Syntax.Pattern.NamedPattern qualifiedName choiceTypeArgumentPatterns ->
             choiceTypeArgumentPatterns

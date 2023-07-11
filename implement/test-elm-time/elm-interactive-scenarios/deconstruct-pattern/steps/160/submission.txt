@@ -1,0 +1,12 @@
+let
+    decons list =
+        case list of
+            first :: second :: third :: _ ->
+                [ [ 103 ], [ third, second, first ] ]
+
+            _ ->
+                [ [ 100 ] ]
+in
+[ decons [ 10, 20 ]
+, decons [ 110, 120, 130 ]
+]
