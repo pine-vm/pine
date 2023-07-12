@@ -10,7 +10,7 @@ namespace TestElmTime;
 [TestClass]
 public class TestElmInteractive
 {
-    private static string pathToScenariosDirectory => @"./../../../elm-interactive-scenarios";
+    private static string pathToScenariosDirectory => @"./../../../../test-and-train/elm-interactive-scenarios-core";
 
     [TestMethod]
     public void TestElmInteractiveScenarios()
