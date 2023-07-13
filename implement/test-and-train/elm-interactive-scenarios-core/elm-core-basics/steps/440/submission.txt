@@ -1,0 +1,1 @@
+Basics.clamp 3 5 7

@@ -113,6 +113,26 @@ ge a b =
     Pine_kernel.is_sorted_ascending_int [b, a]
 
 
+{-| Find the smaller of two comparables.
+
+    min 42 12345678 == 42
+    min "abc" "xyz" == "abc"
+-}
+min : comparable -> comparable -> comparable
+min x y =
+    if lt x y then x else y
+
+
+{-| Find the larger of two comparables.
+
+    max 42 12345678 == 12345678
+    max "abc" "xyz" == "xyz"
+-}
+max : comparable -> comparable -> comparable
+max x y =
+    if gt x y then x else y
+
+
 apR : a -> (a -> b) -> b
 apR x f =
     f x
@@ -212,6 +232,63 @@ stringCharsToSignedInts chars =
     _ ->
         []
 
+
+modBy : Int -> Int -> Int
+modBy divisor dividend =
+    let
+        remainder = remainderBy divisor dividend
+    in
+        if lt remainder 0 then
+            add remainder divisor
+        else
+            remainder
+
+
+remainderBy : Int -> Int -> Int
+remainderBy divisor dividend =
+    sub dividend (mul divisor (idiv dividend divisor))
+
+
+{-| Negate a number.
+
+    negate 42 == -42
+    negate -42 == 42
+    negate 0 == 0
+-}
+negate : number -> number
+negate n =
+  -n
+
+
+{-| Get the [absolute value][abs] of a number.
+
+    abs 16   == 16
+    abs -4   == 4
+    abs -8.5 == 8.5
+    abs 3.14 == 3.14
+
+[abs]: https://en.wikipedia.org/wiki/Absolute_value
+-}
+abs : number -> number
+abs n =
+  if lt n 0 then -n else n
+
+
+{-| Clamps a number within a given range. With the expression
+`clamp 100 200 x` the results are as follows:
+
+    100     if x < 100
+     x      if 100 <= x < 200
+    200     if 200 <= x
+-}
+clamp : number -> number -> number -> number
+clamp low high number =
+  if lt number low then
+    low
+  else if gt number high then
+    high
+  else
+    number
 
 isPineList a =
     Pine_kernel.equal [ Pine_kernel.take [ 0, a ], [] ]
