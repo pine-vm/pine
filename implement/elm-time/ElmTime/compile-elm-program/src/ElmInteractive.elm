@@ -659,8 +659,17 @@ getDirectDependenciesFromModule file =
 parsedElmFileFromOnlyFileText : String -> Result String ProjectParsedElmFile
 parsedElmFileFromOnlyFileText fileText =
     case parseElmModuleText fileText of
-        Err _ ->
-            Err ("Failed to parse the module text: " ++ fileText)
+        Err parseError ->
+            [ [ "Failed to parse the module text with " ++ String.fromInt (List.length parseError) ++ " errors:" ]
+            , parseError
+                |> List.map parserDeadEndToString
+            , [ "Module text was as follows:"
+              , fileText
+              ]
+            ]
+                |> List.concat
+                |> String.join "\n"
+                |> Err
 
         Ok parsedModule ->
             Ok
@@ -832,9 +841,15 @@ autoImportedModulesNames =
 
 elmValuesToExposeToGlobalDefault : Dict.Dict String (List String)
 elmValuesToExposeToGlobalDefault =
-    [ ( "identity", [ "Basics" ] )
+    [ ( "LT", [ "Basics" ] )
+    , ( "EQ", [ "Basics" ] )
+    , ( "GT", [ "Basics" ] )
+    , ( "True", [ "Basics" ] )
+    , ( "False", [ "Basics" ] )
+    , ( "identity", [ "Basics" ] )
     , ( "always", [ "Basics" ] )
     , ( "not", [ "Basics" ] )
+    , ( "compare", [ "Basics" ] )
     , ( "(==)", [ "Basics" ] )
     , ( "(/=)", [ "Basics" ] )
     , ( "(&&)", [ "Basics" ] )
@@ -852,8 +867,6 @@ elmValuesToExposeToGlobalDefault =
     , ( "(<|)", [ "Basics" ] )
     , ( "(>>)", [ "Basics" ] )
     , ( "(<<)", [ "Basics" ] )
-    , ( "True", [ "Basics" ] )
-    , ( "False", [ "Basics" ] )
     , ( "min", [ "Basics" ] )
     , ( "max", [ "Basics" ] )
     , ( "modBy", [ "Basics" ] )
