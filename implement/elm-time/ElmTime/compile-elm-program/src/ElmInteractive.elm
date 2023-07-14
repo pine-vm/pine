@@ -2295,12 +2295,11 @@ emitClosureExpression :
     -> List ( String, Expression )
     -> Expression
     -> Result String Pine.Expression
-emitClosureExpression stackBefore environmentDeclarations expressionInClosure =
+emitClosureExpression stackBefore environmentDeclarations =
     emitExpressionInDeclarationBlock
         stackBefore
         environmentDeclarations
-        expressionInClosure
-        |> Result.map .expr
+        >> Result.map .expr
 
 
 emitExpressionInDeclarationBlock :
@@ -2308,7 +2307,7 @@ emitExpressionInDeclarationBlock :
     -> List ( String, Expression )
     -> Expression
     -> Result String { expr : Pine.Expression, closureArgumentPine : Maybe Pine.Expression }
-emitExpressionInDeclarationBlock stack originalEnvironmentDeclarations originalMainExpression =
+emitExpressionInDeclarationBlock stack originalEnvironmentDeclarations =
     let
         environmentDeclarations =
             originalEnvironmentDeclarations
@@ -2319,17 +2318,19 @@ emitExpressionInDeclarationBlock stack originalEnvironmentDeclarations originalM
                             originalEnvironmentDeclarations
                         )
                     )
-
-        mainExpression =
-            inlineApplicationsOfEnvironmentDeclarations
-                stack
-                environmentDeclarations
-                originalMainExpression
     in
-    emitExpressionInDeclarationBlockLessInline
-        stack
-        environmentDeclarations
-        mainExpression
+    \originalMainExpression ->
+        let
+            mainExpression =
+                inlineApplicationsOfEnvironmentDeclarations
+                    stack
+                    environmentDeclarations
+                    originalMainExpression
+        in
+        emitExpressionInDeclarationBlockLessInline
+            stack
+            environmentDeclarations
+            mainExpression
 
 
 emitExpressionInDeclarationBlockLessInline :
