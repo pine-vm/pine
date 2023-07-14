@@ -1377,7 +1377,21 @@ compileElmSyntaxValueConstructor valueConstructor =
                 |> Pine.encodeExpressionAsValue
 
         argumentsCount ->
-            Pine.valueFromString ("Compilation not implemented for this number of arguments: " ++ String.fromInt argumentsCount)
+            Pine.ListExpression
+                [ Pine.LiteralExpression (Pine.valueFromString constructorName)
+                , List.range 0 (argumentsCount - 1)
+                    |> List.map
+                        (\paramIndex ->
+                            Pine.EnvironmentExpression
+                                |> listItemFromIndexExpression_Pine 1
+                                |> listItemFromIndexExpression_Pine paramIndex
+                        )
+                    |> Pine.ListExpression
+                ]
+                |> emitWrapperForPartialApplication [] argumentsCount
+                |> evaluateAsIndependentExpression
+                |> Result.withDefault
+                    (Pine.valueFromString "Failed to compile choice type tag constructor")
     )
 
 
@@ -1903,15 +1917,7 @@ compileElmFunctionOrValueLookupWithoutLocalResolution name compilation =
     case Dict.get name compilation.elmValuesToExposeToGlobal of
         Nothing ->
             if stringStartsWithUpper name then
-                case Dict.get name compilation.availableDeclarations of
-                    Nothing ->
-                        Err ("Missing declaration for '" ++ name ++ "'")
-
-                    Just (CompiledDeclaration compiledDeclaration) ->
-                        Ok (LiteralExpression compiledDeclaration)
-
-                    Just (DeconstructionDeclaration deconstruction) ->
-                        Ok deconstruction
+                Err ("Missing declaration for '" ++ name ++ "'")
 
             else
                 Ok (ReferenceExpression name)
