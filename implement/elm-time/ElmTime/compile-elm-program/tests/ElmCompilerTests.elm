@@ -1091,7 +1091,7 @@ emitClosureExpressionTests =
                                     testCase.functionInnerExpr
 
                             emitClosureResult =
-                                ElmInteractive.emitClosureExpression
+                                ElmInteractive.emitExpressionInDeclarationBlock
                                     emptyEmitStack
                                     environmentFunctions
                                     rootAsExpression

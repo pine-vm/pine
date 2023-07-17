@@ -787,6 +787,7 @@ compileElmModuleTextIntoNamedExports availableModules moduleToTranslate =
                     )
                 |> Dict.fromList
 
+        localFunctionsResult : Result String (List ( String, Pine.Value ))
         localFunctionsResult =
             localFunctionDeclarations
                 |> Dict.toList
@@ -796,7 +797,7 @@ compileElmModuleTextIntoNamedExports availableModules moduleToTranslate =
                             |> Result.mapError ((++) ("Failed to compile function '" ++ functionName ++ "': "))
                     )
                 |> Result.Extra.combine
-                |> Result.andThen (emitClosureExpressions initialEmitStack)
+                |> Result.andThen (emitModuleDeclarations initialEmitStack)
     in
     case localFunctionsResult of
         Err error ->
@@ -2239,42 +2240,12 @@ transformPineExpressionWithOptionalReplacement findReplacement expression =
                             )
 
 
-emitLetBlock : EmitStack -> LetBlockStruct -> Result String Pine.Expression
-emitLetBlock stackBefore letBlock =
-    emitClosureExpression
-        stackBefore
-        letBlock.declarations
-        letBlock.expression
-
-
-emitFunctionExpression :
-    EmitStack
-    -> FunctionExpressionStruct
-    -> Result String Pine.Expression
-emitFunctionExpression stack function =
-    emitExpressionInDeclarationBlock
-        stack
-        []
-        (FunctionExpression function)
-        |> Result.map
-            (\emitInClosureResult ->
-                case emitInClosureResult.closureArgumentPine of
-                    Nothing ->
-                        emitInClosureResult.expr
-
-                    Just closureArgumentPine ->
-                        partialApplicationExpressionFromListOfArguments
-                            [ closureArgumentPine ]
-                            emitInClosureResult.expr
-            )
-
-
-emitClosureExpressions :
+emitModuleDeclarations :
     EmitStack
     -> List ( String, Expression )
     -> Result String (List ( String, Pine.Value ))
-emitClosureExpressions stackBefore newDeclarations =
-    emitClosureExpression stackBefore newDeclarations
+emitModuleDeclarations stackBefore newDeclarations =
+    emitExpressionInDeclarationBlock stackBefore newDeclarations
         |> (\builder ->
                 newDeclarations
                     |> List.map
@@ -2288,25 +2259,27 @@ emitClosureExpressions stackBefore newDeclarations =
            )
 
 
-{-| Covers a block with declarations that might contain recursive functions, like a let-in block or an entire module.
--}
-emitClosureExpression :
-    EmitStack
-    -> List ( String, Expression )
-    -> Expression
-    -> Result String Pine.Expression
-emitClosureExpression stackBefore environmentDeclarations =
+emitFunctionExpression : EmitStack -> FunctionExpressionStruct -> Result String Pine.Expression
+emitFunctionExpression stack function =
+    emitExpressionInDeclarationBlock
+        stack
+        []
+        (FunctionExpression function)
+
+
+emitLetBlock : EmitStack -> LetBlockStruct -> Result String Pine.Expression
+emitLetBlock stackBefore letBlock =
     emitExpressionInDeclarationBlock
         stackBefore
-        environmentDeclarations
-        >> Result.map .expr
+        letBlock.declarations
+        letBlock.expression
 
 
 emitExpressionInDeclarationBlock :
     EmitStack
     -> List ( String, Expression )
     -> Expression
-    -> Result String { expr : Pine.Expression, closureArgumentPine : Maybe Pine.Expression }
+    -> Result String Pine.Expression
 emitExpressionInDeclarationBlock stack originalEnvironmentDeclarations =
     let
         environmentDeclarations =
@@ -2331,13 +2304,30 @@ emitExpressionInDeclarationBlock stack originalEnvironmentDeclarations =
             stack
             environmentDeclarations
             mainExpression
+            |> Result.andThen
+                (\emitInClosureResult ->
+                    case emitInClosureResult.closureCaptures of
+                        Nothing ->
+                            Ok emitInClosureResult.expr
+
+                        Just closureCaptures ->
+                            { closureCaptures = closureCaptures }
+                                |> emitClosureArgument stack
+                                |> Result.mapError ((++) "Failed to emit closure argument for declaration block: ")
+                                |> Result.map
+                                    (\closureArgumentPine ->
+                                        partialApplicationExpressionFromListOfArguments
+                                            [ closureArgumentPine ]
+                                            emitInClosureResult.expr
+                                    )
+                )
 
 
 emitExpressionInDeclarationBlockLessInline :
     EmitStack
     -> List ( String, Expression )
     -> Expression
-    -> Result String { expr : Pine.Expression, closureArgumentPine : Maybe Pine.Expression }
+    -> Result String { expr : Pine.Expression, closureCaptures : Maybe (List String) }
 emitExpressionInDeclarationBlockLessInline stackBeforeAddingDeps originalEnvironmentDeclarations originalMainExpression =
     let
         newReferencesDependencies =
@@ -2350,10 +2340,13 @@ emitExpressionInDeclarationBlockLessInline stackBeforeAddingDeps originalEnviron
                 | declarationsDependencies = Dict.union newReferencesDependencies stackBeforeAddingDeps.declarationsDependencies
             }
 
+        originalMainExpressionDependencies =
+            listDependenciesOfExpression stackWithEnvironmentDeclDeps originalMainExpression
+
         closureCaptures =
-            originalMainExpression
-                |> listDependenciesOfExpression stackWithEnvironmentDeclDeps
-                |> Set.intersect (Set.fromList (Dict.keys stackBeforeAddingDeps.environmentDeconstructions))
+            environmentDeclarations
+                |> List.map Tuple.first
+                |> List.foldl Set.remove originalMainExpressionDependencies
                 |> Set.toList
 
         environmentDeclarations =
@@ -2391,7 +2384,7 @@ emitExpressionInDeclarationBlockLessInline stackBeforeAddingDeps originalEnviron
             |> Result.map
                 (\expr ->
                     { expr = expr
-                    , closureArgumentPine = Nothing
+                    , closureCaptures = Nothing
                     }
                 )
 
@@ -2400,11 +2393,6 @@ emitExpressionInDeclarationBlockLessInline stackBeforeAddingDeps originalEnviron
            In other words, capture dependencies from the current environment and combine them with the function to enable transport to and reuse in other places.
         -}
         let
-            closureArgument =
-                closureCaptures
-                    |> List.map ReferenceExpression
-                    |> ListExpression
-
             closureFunctionParameters =
                 closureCaptures
                     |> List.map (Tuple.pair >> (|>) [])
@@ -2430,22 +2418,40 @@ emitExpressionInDeclarationBlockLessInline stackBeforeAddingDeps originalEnviron
                     , expression = mainExpression
                     }
         in
-        closureArgument
-            |> emitExpression stackBefore
-            |> Result.mapError ((++) "Failed to emit closure argument: ")
-            |> Result.andThen
-                (\closureArgumentPine ->
-                    emitExpressionInDeclarationBlockLessClosure
-                        stackInClosure
-                        environmentDeclarations
-                        mainExpressionAfterAddClosureParam
-                        |> Result.map
-                            (\expr ->
-                                { expr = expr
-                                , closureArgumentPine = Just closureArgumentPine
-                                }
-                            )
+        emitExpressionInDeclarationBlockLessClosure
+            stackInClosure
+            environmentDeclarations
+            mainExpressionAfterAddClosureParam
+            |> Result.map
+                (\expr ->
+                    { expr = expr
+                    , closureCaptures = Just closureCaptures
+                    }
                 )
+
+
+emitClosureArgument : EmitStack -> { closureCaptures : List String } -> Result String Pine.Expression
+emitClosureArgument stack { closureCaptures } =
+    let
+        emitForName name =
+            case Dict.get name stack.environmentDeconstructions of
+                Nothing ->
+                    Err
+                        ("Failed to find declaration for closure capture '"
+                            ++ name
+                            ++ "'. There are "
+                            ++ String.fromInt (Dict.size stack.environmentDeconstructions)
+                            ++ " environment deconstructions in scope: "
+                            ++ String.join ", " (Dict.keys stack.environmentDeconstructions)
+                        )
+
+                Just _ ->
+                    Ok (ReferenceExpression name)
+    in
+    closureCaptures
+        |> List.map emitForName
+        |> Result.Extra.combine
+        |> Result.andThen (ListExpression >> emitExpression stack)
 
 
 type alias ClosureFunctionEntry =
@@ -3971,7 +3977,7 @@ compileInteractiveSubmission environment submission =
                                     |> Result.map Tuple.second
                                     |> Result.andThen
                                         (\functionDeclarationCompilation ->
-                                            emitClosureExpression
+                                            emitExpressionInDeclarationBlock
                                                 emitStack
                                                 [ ( declarationName, functionDeclarationCompilation ) ]
                                                 functionDeclarationCompilation
