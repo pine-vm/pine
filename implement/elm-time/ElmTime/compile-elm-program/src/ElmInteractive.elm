@@ -2323,44 +2323,28 @@ emitExpressionInDeclarationBlock :
     -> List ( String, Expression )
     -> Expression
     -> Result String Pine.Expression
-emitExpressionInDeclarationBlock stack originalEnvironmentDeclarations =
-    let
-        environmentDeclarations =
-            originalEnvironmentDeclarations
-                |> List.map
-                    (Tuple.mapSecond
-                        (inlineApplicationsOfEnvironmentDeclarations stack originalEnvironmentDeclarations)
-                    )
-    in
-    \originalMainExpression ->
-        let
-            mainExpression =
-                inlineApplicationsOfEnvironmentDeclarations
-                    stack
-                    environmentDeclarations
-                    originalMainExpression
-        in
-        emitExpressionInDeclarationBlockLessClosureArgument
-            stack
-            environmentDeclarations
-            mainExpression
-            |> Result.andThen
-                (\emitInClosureResult ->
-                    case emitInClosureResult.closureCaptures of
-                        Nothing ->
-                            Ok emitInClosureResult.expr
+emitExpressionInDeclarationBlock stack environmentDeclarations mainExpression =
+    emitExpressionInDeclarationBlockLessClosureArgument
+        stack
+        environmentDeclarations
+        mainExpression
+        |> Result.andThen
+            (\emitInClosureResult ->
+                case emitInClosureResult.closureCaptures of
+                    Nothing ->
+                        Ok emitInClosureResult.expr
 
-                        Just closureCaptures ->
-                            { closureCaptures = closureCaptures }
-                                |> emitClosureArgument stack
-                                |> Result.mapError ((++) "Failed to emit closure argument for declaration block: ")
-                                |> Result.map
-                                    (\closureArgumentPine ->
-                                        partialApplicationExpressionFromListOfArguments
-                                            [ closureArgumentPine ]
-                                            emitInClosureResult.expr
-                                    )
-                )
+                    Just closureCaptures ->
+                        { closureCaptures = closureCaptures }
+                            |> emitClosureArgument stack
+                            |> Result.mapError ((++) "Failed to emit closure argument for declaration block: ")
+                            |> Result.map
+                                (\closureArgumentPine ->
+                                    partialApplicationExpressionFromListOfArguments
+                                        [ closureArgumentPine ]
+                                        emitInClosureResult.expr
+                                )
+            )
 
 
 emitExpressionInDeclarationBlockLessClosureArgument :
