@@ -5,8 +5,10 @@ import Dict
 import Elm.Parser
 import Elm.Processing
 import Elm.Syntax.Declaration
+import Elm.Syntax.Exposing
 import Elm.Syntax.Expression
 import Elm.Syntax.File
+import Elm.Syntax.Import
 import Elm.Syntax.Module
 import Elm.Syntax.ModuleName
 import Elm.Syntax.Node
@@ -123,13 +125,20 @@ type alias CompilationStack =
 
 
 type alias EmitStack =
-    { declarationsDependencies : Dict.Dict String (Set.Set String)
+    { moduleImports : ModuleImports
+    , declarationsDependencies : Dict.Dict String (Set.Set String)
 
     -- The functions in the first element of the environment list
     , environmentFunctions : List EnvironmentFunctionEntry
 
     -- Deconstructions we can derive from the second element of the environment list
     , environmentDeconstructions : Dict.Dict String EnvironmentDeconstructionEntry
+    }
+
+
+type alias ModuleImports =
+    { importedModules : Dict.Dict (List String) ElmModuleInCompilation
+    , importedDeclarations : ElmModuleInCompilation
     }
 
 
@@ -140,7 +149,7 @@ type alias EnvironmentFunctionEntry =
 
 
 type alias EnvironmentDeconstructionEntry =
-    Pine.Expression -> Pine.Expression
+    List Deconstruction
 
 
 type InternalDeclaration
@@ -757,8 +766,16 @@ compileElmModuleTextIntoNamedExports availableModules moduleToTranslate =
                     |> Dict.filter (always ((==) moduleName >> not))
             }
 
+        parsedImports =
+            moduleToTranslate.parsedModule.imports
+                |> List.map (Elm.Syntax.Node.value >> parseElmSyntaxImport)
+
         initialEmitStack =
-            { declarationsDependencies = Dict.empty
+            { moduleImports =
+                moduleImportsFromCompilationStack
+                    parsedImports
+                    initialCompilationStack
+            , declarationsDependencies = Dict.empty
             , environmentFunctions = []
             , environmentDeconstructions = Dict.empty
             }
@@ -930,12 +947,7 @@ compileElmSyntaxExpression stack elmExpression =
                         )
 
         Elm.Syntax.Expression.FunctionOrValue moduleName localName ->
-            if moduleName == [] then
-                compileElmFunctionOrValueLookup localName stack
-
-            else
-                getDeclarationValueFromCompilation ( moduleName, localName ) stack
-                    |> Result.map LiteralExpression
+            compileElmFunctionOrValueLookup ( moduleName, localName ) stack
 
         Elm.Syntax.Expression.Application application ->
             case application |> List.map Elm.Syntax.Node.value of
@@ -962,7 +974,7 @@ compileElmSyntaxExpression stack elmExpression =
                                 |> Result.mapError ((++) "Failed to compile right expression: ")
                                 |> Result.andThen
                                     (\rightExpression ->
-                                        compileElmFunctionOrValueLookup ("(" ++ operator ++ ")") stack
+                                        compileElmFunctionOrValueLookup ( [], "(" ++ operator ++ ")" ) stack
                                             |> Result.map
                                                 (\operationFunction ->
                                                     FunctionApplicationExpression
@@ -974,7 +986,7 @@ compileElmSyntaxExpression stack elmExpression =
                     |> Result.mapError ((++) ("Failed to compile OperatorApplication '" ++ operator ++ "': "))
 
         Elm.Syntax.Expression.PrefixOperator operator ->
-            compileElmFunctionOrValueLookup ("(" ++ operator ++ ")") stack
+            compileElmFunctionOrValueLookup ( [], "(" ++ operator ++ ")" ) stack
 
         Elm.Syntax.Expression.IfBlock elmCondition elmExpressionIfTrue elmExpressionIfFalse ->
             case compileElmSyntaxExpression stack (Elm.Syntax.Node.value elmCondition) of
@@ -1900,32 +1912,63 @@ buildRecursiveFunctionToLookupFieldInRecord fieldName recordFieldsExpression =
         }
 
 
-compileElmFunctionOrValueLookup : String -> CompilationStack -> Result String Expression
-compileElmFunctionOrValueLookup name compilation =
-    case compilation.availableDeclarations |> Dict.get name of
-        Nothing ->
-            compileElmFunctionOrValueLookupWithoutLocalResolution name compilation
+compileElmFunctionOrValueLookup : ( List String, String ) -> CompilationStack -> Result String Expression
+compileElmFunctionOrValueLookup ( moduleName, localName ) compilation =
+    if moduleName == [] then
+        case compilation.availableDeclarations |> Dict.get localName of
+            Nothing ->
+                compileElmFunctionOrValueLookupWithoutLocalResolution ( moduleName, localName ) compilation
 
-        Just (CompiledDeclaration compiledDeclaration) ->
-            Ok (LiteralExpression compiledDeclaration)
+            Just (CompiledDeclaration compiledDeclaration) ->
+                Ok (compileLookupForInlineableDeclaration ( moduleName, localName ) compiledDeclaration)
 
-        Just (DeconstructionDeclaration deconstruction) ->
-            Ok deconstruction
+            Just (DeconstructionDeclaration deconstruction) ->
+                Ok deconstruction
+
+    else
+        getDeclarationValueFromCompilation ( moduleName, localName ) compilation
+            |> Result.map (compileLookupForInlineableDeclaration ( moduleName, localName ))
 
 
-compileElmFunctionOrValueLookupWithoutLocalResolution : String -> CompilationStack -> Result String Expression
-compileElmFunctionOrValueLookupWithoutLocalResolution name compilation =
+compileElmFunctionOrValueLookupWithoutLocalResolution : ( List String, String ) -> CompilationStack -> Result String Expression
+compileElmFunctionOrValueLookupWithoutLocalResolution ( moduleName, name ) compilation =
+    let
+        fusedName =
+            String.join "." (moduleName ++ [ name ])
+    in
     case Dict.get name compilation.elmValuesToExposeToGlobal of
         Nothing ->
             if stringStartsWithUpper name then
-                Err ("Missing declaration for '" ++ name ++ "'")
+                Err ("Missing declaration for '" ++ fusedName ++ "'")
 
             else
-                Ok (ReferenceExpression name)
+                Ok (ReferenceExpression fusedName)
 
-        Just moduleName ->
-            getDeclarationValueFromCompilation ( moduleName, name ) compilation
-                |> Result.map LiteralExpression
+        Just sourceModuleName ->
+            getDeclarationValueFromCompilation ( sourceModuleName, name ) compilation
+                |> Result.map (compileLookupForInlineableDeclaration ( moduleName, name ))
+
+
+compileLookupForInlineableDeclaration : ( List String, String ) -> Pine.Value -> Expression
+compileLookupForInlineableDeclaration ( moduleName, name ) value =
+    let
+        fusedName =
+            String.join "." (moduleName ++ [ name ])
+    in
+    if shouldInlineDeclaration name value then
+        LiteralExpression value
+
+    else
+        ReferenceExpression fusedName
+
+
+shouldInlineDeclaration : String -> Pine.Value -> Bool
+shouldInlineDeclaration name value =
+    if stringStartsWithUpper name then
+        True
+
+    else
+        estimatePineValueSize value < 30 * 1000
 
 
 emitExpression : EmitStack -> Expression -> Result String Pine.Expression
@@ -2286,10 +2329,7 @@ emitExpressionInDeclarationBlock stack originalEnvironmentDeclarations =
             originalEnvironmentDeclarations
                 |> List.map
                     (Tuple.mapSecond
-                        (inlineApplicationsOfEnvironmentDeclarations
-                            stack
-                            originalEnvironmentDeclarations
-                        )
+                        (inlineApplicationsOfEnvironmentDeclarations stack originalEnvironmentDeclarations)
                     )
     in
     \originalMainExpression ->
@@ -2300,7 +2340,7 @@ emitExpressionInDeclarationBlock stack originalEnvironmentDeclarations =
                     environmentDeclarations
                     originalMainExpression
         in
-        emitExpressionInDeclarationBlockLessInline
+        emitExpressionInDeclarationBlockLessClosureArgument
             stack
             environmentDeclarations
             mainExpression
@@ -2323,34 +2363,15 @@ emitExpressionInDeclarationBlock stack originalEnvironmentDeclarations =
                 )
 
 
-emitExpressionInDeclarationBlockLessInline :
+emitExpressionInDeclarationBlockLessClosureArgument :
     EmitStack
     -> List ( String, Expression )
     -> Expression
     -> Result String { expr : Pine.Expression, closureCaptures : Maybe (List String) }
-emitExpressionInDeclarationBlockLessInline stackBeforeAddingDeps originalEnvironmentDeclarations originalMainExpression =
+emitExpressionInDeclarationBlockLessClosureArgument stackBeforeAddingDeps originalBlockDeclarations originalMainExpression =
     let
-        newReferencesDependencies =
-            environmentDeclarations
-                |> List.map (Tuple.mapSecond (listDependenciesOfExpression stackBeforeAddingDeps))
-                |> Dict.fromList
-
-        stackWithEnvironmentDeclDeps =
-            { stackBeforeAddingDeps
-                | declarationsDependencies = Dict.union newReferencesDependencies stackBeforeAddingDeps.declarationsDependencies
-            }
-
-        originalMainExpressionDependencies =
-            listDependenciesOfExpression stackWithEnvironmentDeclDeps originalMainExpression
-
-        closureCaptures =
-            environmentDeclarations
-                |> List.map Tuple.first
-                |> List.foldl Set.remove originalMainExpressionDependencies
-                |> Set.toList
-
-        environmentDeclarations =
-            originalEnvironmentDeclarations
+        blockDeclarations =
+            originalBlockDeclarations
                 |> List.map
                     (\( declarationName, declarationExpression ) ->
                         ( declarationName
@@ -2365,21 +2386,66 @@ emitExpressionInDeclarationBlockLessInline stackBeforeAddingDeps originalEnviron
                 |> mapLocalDeclarationNamesInDescendants Set.empty
                     ((++) >> (|>) "____lifted_from_main")
 
-        environmentDeclarationsDirectDependencies =
-            environmentDeclarations
+        importedModulesDeclarationsFlat : List ( String, Expression )
+        importedModulesDeclarationsFlat =
+            stackBeforeAddingDeps.moduleImports.importedModules
+                |> Dict.toList
+                |> List.concatMap
+                    (\( moduleName, moduleDeclarations ) ->
+                        moduleDeclarations
+                            |> Dict.toList
+                            |> List.map
+                                (\( declName, declValue ) ->
+                                    ( String.join "." (moduleName ++ [ declName ])
+                                    , declValue
+                                    )
+                                )
+                    )
+                |> List.map (Tuple.mapSecond LiteralExpression)
+
+        importedDeclarations : List ( String, Expression )
+        importedDeclarations =
+            stackBeforeAddingDeps.moduleImports.importedDeclarations
+                |> Dict.toList
+                |> List.map (Tuple.mapSecond LiteralExpression)
+
+        environmentDeclarationsIncludingImports =
+            blockDeclarations ++ importedDeclarations ++ importedModulesDeclarationsFlat
+
+        newReferencesDependencies =
+            blockDeclarations
+                |> List.map (Tuple.mapSecond (listDependenciesOfExpression stackBeforeAddingDeps))
+                |> Dict.fromList
+
+        stackWithEnvironmentDeclDeps =
+            { stackBeforeAddingDeps
+                | declarationsDependencies = Dict.union newReferencesDependencies stackBeforeAddingDeps.declarationsDependencies
+            }
+
+        originalMainExpressionDependencies =
+            listDependenciesOfExpression stackWithEnvironmentDeclDeps originalMainExpression
+
+        closureCaptures =
+            environmentDeclarationsIncludingImports
+                |> List.map Tuple.first
+                |> List.foldl Set.remove originalMainExpressionDependencies
+                |> Set.toList
+
+        blockDeclarationsDirectDependencies =
+            blockDeclarations
                 |> List.map (Tuple.mapSecond (listDependenciesOfExpression stackWithEnvironmentDeclDeps))
                 |> Dict.fromList
 
         stackBefore =
             { stackWithEnvironmentDeclDeps
                 | declarationsDependencies =
-                    Dict.union environmentDeclarationsDirectDependencies stackWithEnvironmentDeclDeps.declarationsDependencies
+                    Dict.union blockDeclarationsDirectDependencies stackWithEnvironmentDeclDeps.declarationsDependencies
             }
     in
     if closureCaptures == [] then
         emitExpressionInDeclarationBlockLessClosure
             stackBefore
-            environmentDeclarations
+            environmentDeclarationsIncludingImports
             mainExpression
             |> Result.map
                 (\expr ->
@@ -2420,7 +2486,7 @@ emitExpressionInDeclarationBlockLessInline stackBeforeAddingDeps originalEnviron
         in
         emitExpressionInDeclarationBlockLessClosure
             stackInClosure
-            environmentDeclarations
+            environmentDeclarationsIncludingImports
             mainExpressionAfterAddClosureParam
             |> Result.map
                 (\expr ->
@@ -2588,7 +2654,8 @@ emitExpressionInDeclarationBlockLessClosure stackBeforeDependencies availableEnv
                     )
 
         stackBefore =
-            { declarationsDependencies = stackWithDependencies.declarationsDependencies
+            { moduleImports = stackWithDependencies.moduleImports
+            , declarationsDependencies = stackWithDependencies.declarationsDependencies
             , environmentFunctions = environmentFunctions
             , environmentDeconstructions = Dict.empty
             }
@@ -2636,11 +2703,14 @@ emitExpressionInDeclarationBlockLessClosure stackBeforeDependencies availableEnv
                                     |> environmentDeconstructionsFromFunctionParams
                         }
 
+                    envFunctionsValues : List ( String, Pine.Value )
                     envFunctionsValues =
                         emitEnvironmentDeclarations
                             |> List.map
-                                (\( _, _, functionExpr ) ->
-                                    functionExpr |> Pine.encodeExpressionAsValue
+                                (\( functionName, _, functionExpr ) ->
+                                    ( functionName
+                                    , functionExpr |> Pine.encodeExpressionAsValue
+                                    )
                                 )
                 in
                 mainExpression.expressionAfterLiftingDecls
@@ -2649,7 +2719,7 @@ emitExpressionInDeclarationBlockLessClosure stackBeforeDependencies availableEnv
                     |> emitExpression mainExpressionFunctionStack
                     |> Result.map
                         (emitWrapperForPartialApplication
-                            envFunctionsValues
+                            (List.map Tuple.second envFunctionsValues)
                             (List.length mainExpression.functionParameters)
                         )
             )
@@ -2841,7 +2911,6 @@ closurizeFunctionExpressions stack closureCaptures expression =
 environmentDeconstructionsFromFunctionParams : List FunctionParam -> Dict.Dict String EnvironmentDeconstructionEntry
 environmentDeconstructionsFromFunctionParams =
     closureParameterFromParameters
-        >> List.map (Tuple.mapSecond pineExpressionForDeconstructions)
         >> Dict.fromList
 
 
@@ -3264,7 +3333,7 @@ emitReferenceExpression name compilation =
                 Just deconstruction ->
                     Pine.EnvironmentExpression
                         |> listItemFromIndexExpression_Pine 1
-                        |> deconstruction
+                        |> pineExpressionForDeconstructions deconstruction
                         |> Ok
 
 
@@ -3934,19 +4003,8 @@ compileInteractiveSubmission environment submission =
                         , config.responseExpression
                         ]
 
-                defaultCompilationStack =
-                    { moduleAliases = Dict.empty
-                    , availableModules = environmentDeclarations.modules
-                    , availableDeclarations =
-                        environmentDeclarations.otherDeclarations |> Dict.map (always CompiledDeclaration)
-                    , elmValuesToExposeToGlobal = elmValuesToExposeToGlobalDefault
-                    }
-
-                emitStack =
-                    { declarationsDependencies = Dict.empty
-                    , environmentFunctions = []
-                    , environmentDeconstructions = Dict.empty
-                    }
+                ( defaultCompilationStack, emitStack ) =
+                    compilationAndEmitStackFromInteractiveEnvironment environmentDeclarations
             in
             case parseInteractiveSubmissionFromString submission of
                 Err error ->
@@ -4029,7 +4087,7 @@ compileInteractiveSubmission environment submission =
                 Ok (ExpressionSubmission elmExpression) ->
                     case
                         compileElmSyntaxExpression defaultCompilationStack elmExpression
-                            |> Result.andThen (emitExpression emitStack)
+                            |> Result.andThen (emitExpressionInDeclarationBlock emitStack [])
                     of
                         Err error ->
                             Err ("Failed to compile Elm to Pine expression: " ++ error)
@@ -4041,6 +4099,183 @@ compileInteractiveSubmission environment submission =
                                     , responseExpression = pineExpression
                                     }
                                 )
+
+
+compilationAndEmitStackFromInteractiveEnvironment :
+    { modules : Dict.Dict Elm.Syntax.ModuleName.ModuleName ElmModuleInCompilation
+    , otherDeclarations : Dict.Dict String Pine.Value
+    }
+    -> ( CompilationStack, EmitStack )
+compilationAndEmitStackFromInteractiveEnvironment environmentDeclarations =
+    let
+        defaultCompilationStack =
+            { moduleAliases = Dict.empty
+            , availableModules = environmentDeclarations.modules
+            , availableDeclarations =
+                environmentDeclarations.otherDeclarations |> Dict.map (always CompiledDeclaration)
+            , elmValuesToExposeToGlobal = elmValuesToExposeToGlobalDefault
+            }
+
+        implicitImportStatements =
+            environmentDeclarations.modules
+                |> Dict.keys
+                |> List.map
+                    (\moduleName ->
+                        { canonicalModuleName = moduleName
+                        , localModuleName = moduleName
+                        , exposingList = Nothing
+                        }
+                    )
+
+        moduleImports =
+            moduleImportsFromCompilationStack implicitImportStatements defaultCompilationStack
+
+        importedDeclarations =
+            moduleImports.importedDeclarations
+                |> Dict.union environmentDeclarations.otherDeclarations
+
+        compilationStack =
+            { moduleAliases = Dict.empty
+            , availableModules = environmentDeclarations.modules
+            , availableDeclarations =
+                environmentDeclarations.otherDeclarations |> Dict.map (always CompiledDeclaration)
+            , elmValuesToExposeToGlobal = elmValuesToExposeToGlobalDefault
+            }
+
+        emitStack =
+            { moduleImports =
+                { moduleImports
+                    | importedDeclarations = importedDeclarations
+                }
+            , declarationsDependencies = Dict.empty
+            , environmentFunctions = []
+            , environmentDeconstructions = Dict.empty
+            }
+    in
+    ( compilationStack, emitStack )
+
+
+moduleImportsFromCompilationStack :
+    List ModuleImportStatement
+    -> CompilationStack
+    -> ModuleImports
+moduleImportsFromCompilationStack explicitImports compilation =
+    let
+        importedModulesImplicit =
+            compilation.availableModules
+                |> Dict.filter (List.member >> (|>) autoImportedModulesNames >> always)
+
+        importedDeclarations =
+            compilation.elmValuesToExposeToGlobal
+                |> Dict.toList
+                |> List.filterMap
+                    (\( name, moduleName ) ->
+                        compilation.availableModules
+                            |> Dict.get moduleName
+                            |> Maybe.andThen (Dict.get name)
+                            |> Maybe.map (Tuple.pair name)
+                    )
+                |> Dict.fromList
+
+        parsedExplicitImports =
+            explicitImports
+                |> List.filterMap
+                    (\explicitImport ->
+                        compilation.availableModules
+                            |> Dict.get explicitImport.canonicalModuleName
+                            |> Maybe.map
+                                (\moduleDeclarations ->
+                                    let
+                                        exposedDeclarations =
+                                            case explicitImport.exposingList of
+                                                Nothing ->
+                                                    Dict.empty
+
+                                                Just ExposingAll ->
+                                                    moduleDeclarations
+
+                                                Just (ExposingSelectedNames exposedNames) ->
+                                                    exposedNames
+                                                        |> List.filterMap
+                                                            (\exposedName ->
+                                                                moduleDeclarations
+                                                                    |> Dict.get exposedName
+                                                                    |> Maybe.map (Tuple.pair exposedName)
+                                                            )
+                                                        |> Dict.fromList
+                                    in
+                                    ( ( explicitImport.localModuleName
+                                      , moduleDeclarations
+                                      )
+                                    , exposedDeclarations
+                                    )
+                                )
+                    )
+
+        importedModules =
+            parsedExplicitImports
+                |> List.map Tuple.first
+                |> Dict.fromList
+                |> Dict.union importedModulesImplicit
+    in
+    { importedModules = importedModules
+    , importedDeclarations = importedDeclarations
+    }
+
+
+parseElmSyntaxImport : Elm.Syntax.Import.Import -> ModuleImportStatement
+parseElmSyntaxImport importSyntax =
+    let
+        localModuleName =
+            importSyntax.moduleAlias
+                |> Maybe.withDefault importSyntax.moduleName
+                |> Elm.Syntax.Node.value
+
+        exposedNamesFromTopLevelItem : Elm.Syntax.Exposing.TopLevelExpose -> List String
+        exposedNamesFromTopLevelItem topLevelItem =
+            case topLevelItem of
+                Elm.Syntax.Exposing.InfixExpose infixExpose ->
+                    [ infixExpose ]
+
+                Elm.Syntax.Exposing.FunctionExpose functionExpose ->
+                    [ functionExpose ]
+
+                Elm.Syntax.Exposing.TypeOrAliasExpose typeOrAlias ->
+                    [ typeOrAlias ]
+
+                Elm.Syntax.Exposing.TypeExpose typeExpose ->
+                    [ typeExpose.name ]
+
+        exposingList =
+            case importSyntax.exposingList |> Maybe.map Elm.Syntax.Node.value of
+                Nothing ->
+                    Nothing
+
+                Just (Elm.Syntax.Exposing.All _) ->
+                    Just ExposingAll
+
+                Just (Elm.Syntax.Exposing.Explicit topLevelList) ->
+                    topLevelList
+                        |> List.concatMap (Elm.Syntax.Node.value >> exposedNamesFromTopLevelItem)
+                        |> ExposingSelectedNames
+                        |> Just
+    in
+    { canonicalModuleName = Elm.Syntax.Node.value importSyntax.moduleName
+    , localModuleName = localModuleName
+    , exposingList = exposingList
+    }
+
+
+type alias ModuleImportStatement =
+    { canonicalModuleName : List String
+    , localModuleName : List String
+    , exposingList : Maybe ModuleImportExposing
+    }
+
+
+type ModuleImportExposing
+    = ExposingAll
+    | ExposingSelectedNames (List String)
 
 
 evaluateAsIndependentExpression : Pine.Expression -> Result String Pine.Value

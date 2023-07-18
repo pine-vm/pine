@@ -1079,8 +1079,16 @@ emitClosureExpressionTests =
                                             )
                                         )
 
+                            compilationConfig =
+                                { moduleAliases = Dict.empty
+                                , availableModules = Dict.empty
+                                , availableDeclarations = Dict.empty
+                                , elmValuesToExposeToGlobal = Dict.empty
+                                }
+
                             emptyEmitStack =
-                                { declarationsDependencies = Dict.empty
+                                { moduleImports = ElmInteractive.moduleImportsFromCompilationStack [] compilationConfig
+                                , declarationsDependencies = Dict.empty
                                 , environmentFunctions = []
                                 , environmentDeconstructions = Dict.empty
                                 }

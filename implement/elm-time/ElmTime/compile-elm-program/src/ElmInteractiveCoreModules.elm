@@ -782,16 +782,13 @@ toUnsignedIntFromList string =
 
         digits ->
             List.foldl
-                (\\maybeDigitValue ->
-                    Maybe.andThen
-                        (\\aggregate ->
-                            case maybeDigitValue of
-                                Nothing ->
-                                    Nothing
-
-                                Just digitValue ->
-                                    Just (aggregate * 10 + digitValue)
-                        )
+                (\\maybeDigitValue maybeAggregate ->
+                    case (maybeDigitValue, maybeAggregate) of
+                        (Just digitValue, Just aggregate) ->
+                            Just (aggregate * 10 + digitValue)
+                        
+                        _ ->
+                            Nothing
                 )
                 (Just 0)
                 (List.map digitValueFromCharacter digits)
