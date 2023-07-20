@@ -2482,26 +2482,10 @@ emitExpressionInDeclarationBlockLessClosureArgument stackBeforeAddingDeps origin
 
 emitClosureArgument : EmitStack -> { closureCaptures : List String } -> Result String Pine.Expression
 emitClosureArgument stack { closureCaptures } =
-    let
-        emitForName name =
-            case Dict.get name stack.environmentDeconstructions of
-                Nothing ->
-                    Err
-                        ("Failed to find declaration for closure capture '"
-                            ++ name
-                            ++ "'. There are "
-                            ++ String.fromInt (Dict.size stack.environmentDeconstructions)
-                            ++ " environment deconstructions in scope: "
-                            ++ String.join ", " (Dict.keys stack.environmentDeconstructions)
-                        )
-
-                Just _ ->
-                    Ok (ReferenceExpression name)
-    in
     closureCaptures
-        |> List.map emitForName
+        |> List.map (emitReferenceExpression >> (|>) stack)
         |> Result.Extra.combine
-        |> Result.andThen (ListExpression >> emitExpression stack)
+        |> Result.map Pine.ListExpression
 
 
 type alias ClosureFunctionEntry =
@@ -3302,15 +3286,15 @@ emitReferenceExpression name compilation =
             case Dict.get name compilation.environmentDeconstructions of
                 Nothing ->
                     Err
-                        ("Failed getting deconstruction for '"
+                        ("Failed referencing '"
                             ++ name
                             ++ "'. "
                             ++ String.fromInt (Dict.size compilation.environmentDeconstructions)
-                            ++ " deconstructions on the current stack: "
+                            ++ " deconstructions in scope: "
                             ++ String.join ", " (Dict.keys compilation.environmentDeconstructions)
                             ++ ". "
                             ++ String.fromInt (List.length compilation.environmentFunctions)
-                            ++ " functions on the current stack: "
+                            ++ " functions in scope: "
                             ++ String.join ", " (List.map .functionName compilation.environmentFunctions)
                         )
 
