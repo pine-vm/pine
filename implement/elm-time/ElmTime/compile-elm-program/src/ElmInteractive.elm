@@ -2288,7 +2288,7 @@ emitModuleDeclarations :
     -> List ( String, Expression )
     -> Result String (List ( String, Pine.Value ))
 emitModuleDeclarations stackBefore newDeclarations =
-    emitExpressionInDeclarationBlock stackBefore newDeclarations
+    emitExpressionInDeclarationBlock stackBefore (Dict.fromList newDeclarations)
         |> (\builder ->
                 newDeclarations
                     |> List.map
@@ -2306,7 +2306,7 @@ emitFunctionExpression : EmitStack -> FunctionExpressionStruct -> Result String 
 emitFunctionExpression stack function =
     emitExpressionInDeclarationBlock
         stack
-        []
+        Dict.empty
         (FunctionExpression function)
 
 
@@ -2314,21 +2314,20 @@ emitLetBlock : EmitStack -> LetBlockStruct -> Result String Pine.Expression
 emitLetBlock stackBefore letBlock =
     emitExpressionInDeclarationBlock
         stackBefore
-        letBlock.declarations
+        (Dict.fromList letBlock.declarations)
         letBlock.expression
 
 
 emitExpressionInDeclarationBlock :
     EmitStack
-    -> List ( String, Expression )
+    -> Dict.Dict String Expression
     -> Expression
     -> Result String Pine.Expression
-emitExpressionInDeclarationBlock stack environmentDeclarations mainExpression =
+emitExpressionInDeclarationBlock stack environmentDeclarations =
     emitExpressionInDeclarationBlockLessClosureArgument
         stack
         environmentDeclarations
-        mainExpression
-        |> Result.andThen
+        >> Result.andThen
             (\emitInClosureResult ->
                 case emitInClosureResult.closureCaptures of
                     Nothing ->
@@ -2349,20 +2348,18 @@ emitExpressionInDeclarationBlock stack environmentDeclarations mainExpression =
 
 emitExpressionInDeclarationBlockLessClosureArgument :
     EmitStack
-    -> List ( String, Expression )
+    -> Dict.Dict String Expression
     -> Expression
     -> Result String { expr : Pine.Expression, closureCaptures : Maybe (List String) }
 emitExpressionInDeclarationBlockLessClosureArgument stackBeforeAddingDeps originalBlockDeclarations originalMainExpression =
     let
         blockDeclarations =
             originalBlockDeclarations
-                |> List.map
-                    (\( declarationName, declarationExpression ) ->
-                        ( declarationName
-                        , declarationExpression
+                |> Dict.map
+                    (\declarationName declarationExpression ->
+                        declarationExpression
                             |> mapLocalDeclarationNamesInDescendants Set.empty
                                 ((++) >> (|>) ("____lifted_from_" ++ declarationName))
-                        )
                     )
 
         mainExpression =
@@ -2370,7 +2367,7 @@ emitExpressionInDeclarationBlockLessClosureArgument stackBeforeAddingDeps origin
                 |> mapLocalDeclarationNamesInDescendants Set.empty
                     ((++) >> (|>) "____lifted_from_main")
 
-        importedModulesDeclarationsFlat : List ( String, Expression )
+        importedModulesDeclarationsFlat : Dict.Dict String Expression
         importedModulesDeclarationsFlat =
             stackBeforeAddingDeps.moduleImports.importedModules
                 |> Dict.toList
@@ -2381,25 +2378,25 @@ emitExpressionInDeclarationBlockLessClosureArgument stackBeforeAddingDeps origin
                             |> List.map
                                 (\( declName, declValue ) ->
                                     ( String.join "." (moduleName ++ [ declName ])
-                                    , declValue
+                                    , LiteralExpression declValue
                                     )
                                 )
                     )
-                |> List.map (Tuple.mapSecond LiteralExpression)
+                |> Dict.fromList
 
-        importedDeclarations : List ( String, Expression )
+        importedDeclarations : Dict.Dict String Expression
         importedDeclarations =
             stackBeforeAddingDeps.moduleImports.importedDeclarations
-                |> Dict.toList
-                |> List.map (Tuple.mapSecond LiteralExpression)
+                |> Dict.map (always LiteralExpression)
 
         environmentDeclarationsIncludingImports =
-            blockDeclarations ++ importedDeclarations ++ importedModulesDeclarationsFlat
+            importedModulesDeclarationsFlat
+                |> Dict.union importedDeclarations
+                |> Dict.union blockDeclarations
 
         newReferencesDependencies =
             blockDeclarations
-                |> List.map (Tuple.mapSecond (listDependenciesOfExpression stackBeforeAddingDeps))
-                |> Dict.fromList
+                |> Dict.map (always (listDependenciesOfExpression stackBeforeAddingDeps))
 
         stackWithEnvironmentDeclDeps =
             { stackBeforeAddingDeps
@@ -2411,14 +2408,13 @@ emitExpressionInDeclarationBlockLessClosureArgument stackBeforeAddingDeps origin
 
         closureCaptures =
             environmentDeclarationsIncludingImports
-                |> List.map Tuple.first
+                |> Dict.keys
                 |> List.foldl Set.remove originalMainExpressionDependencies
                 |> Set.toList
 
         blockDeclarationsDirectDependencies =
             blockDeclarations
-                |> List.map (Tuple.mapSecond (listDependenciesOfExpression stackWithEnvironmentDeclDeps))
-                |> Dict.fromList
+                |> Dict.map (always (listDependenciesOfExpression stackWithEnvironmentDeclDeps))
 
         stackBefore =
             { stackWithEnvironmentDeclDeps
@@ -2439,18 +2435,13 @@ emitExpressionInDeclarationBlockLessClosureArgument stackBeforeAddingDeps origin
                 )
 
     else
-        {- Build an expression that captures parts of the current environment into a literal.
-           In other words, capture dependencies from the current environment and combine them with the function to enable transport to and reuse in other places.
-        -}
         let
             closureFunctionParameters =
                 closureCaptures
-                    |> List.map (Tuple.pair >> (|>) [])
-                    |> List.singleton
+                    |> List.map (Tuple.pair >> (|>) [] >> List.singleton)
 
             closureFunctionParameter =
-                closureFunctionParameters
-                    |> closureParameterFromParameters
+                closureParameterFromParameters closureFunctionParameters
 
             functionParams =
                 [ closureFunctionParameter ]
@@ -2489,8 +2480,7 @@ emitClosureArgument stack { closureCaptures } =
 
 
 type alias ClosureFunctionEntry =
-    { functionName : String
-    , parameters : List FunctionParam
+    { parameters : List FunctionParam
     , innerExpression : Expression
     , closureCaptures : Maybe (List String)
     }
@@ -2498,7 +2488,7 @@ type alias ClosureFunctionEntry =
 
 emitExpressionInDeclarationBlockLessClosure :
     EmitStack
-    -> List ( String, Expression )
+    -> Dict.Dict String Expression
     -> Expression
     -> Result String Pine.Expression
 emitExpressionInDeclarationBlockLessClosure stackBeforeDependencies availableEnvironmentDeclarations originalMainExpression =
@@ -2518,29 +2508,32 @@ emitExpressionInDeclarationBlockLessClosure stackBeforeDependencies availableEnv
             , expressionAfterLiftingDecls = expressionAfterLiftingDecls
             }
 
+        newReferencesDependencies : Dict.Dict String (Set.Set String)
         newReferencesDependencies =
             availableEnvironmentDeclarations
-                |> List.map (Tuple.mapSecond (listDependenciesOfExpression stackBeforeDependencies))
-                |> Dict.fromList
+                |> Dict.map (always (listDependenciesOfExpression stackBeforeDependencies))
 
+        stackWithDependencies : EmitStack
         stackWithDependencies =
             { stackBeforeDependencies
                 | declarationsDependencies =
                     Dict.union newReferencesDependencies stackBeforeDependencies.declarationsDependencies
             }
 
+        originalMainExpressionDependencies : Set.Set String
         originalMainExpressionDependencies =
             listDependenciesOfExpression stackWithDependencies originalMainExpression
 
         usedEnvironmentDeclarations =
             availableEnvironmentDeclarations
-                |> List.filter (Tuple.first >> Set.member >> (|>) originalMainExpressionDependencies)
-                |> List.map (Tuple.mapSecond preprocessExpression)
+                |> Dict.filter (Set.member >> (|>) originalMainExpressionDependencies >> always)
+                |> Dict.map (always preprocessExpression)
 
-        envLiftedDeclarationsAsFunctions : List ClosureFunctionEntry
+        envLiftedDeclarationsAsFunctions : List ( String, ClosureFunctionEntry )
         envLiftedDeclarationsAsFunctions =
             usedEnvironmentDeclarations
-                |> List.map
+                |> Dict.toList
+                |> List.concatMap
                     (\( _, envDeclaration ) ->
                         let
                             closureParam =
@@ -2549,114 +2542,85 @@ emitExpressionInDeclarationBlockLessClosure stackBeforeDependencies availableEnv
                         envDeclaration.liftedDeclarations
                             |> List.map
                                 (\( envDeclLiftedDeclName, ( envDeclLiftedDeclParams, envDeclLiftedDeclInnerExpr ) ) ->
-                                    { functionName = envDeclLiftedDeclName
-                                    , closureCaptures =
-                                        closureParam
-                                            |> List.map Tuple.first
-                                            |> Just
-                                    , parameters = closureParam :: envDeclLiftedDeclParams
-                                    , innerExpression = envDeclLiftedDeclInnerExpr
-                                    }
+                                    ( envDeclLiftedDeclName
+                                    , { closureCaptures =
+                                            closureParam
+                                                |> List.map Tuple.first
+                                                |> Just
+                                      , parameters = closureParam :: envDeclLiftedDeclParams
+                                      , innerExpression = envDeclLiftedDeclInnerExpr
+                                      }
+                                    )
                                 )
                     )
-                |> List.concat
 
-        mainExpression :
-            { functionParameters : List FunctionParam
-            , liftedDeclarations : List ( String, ( List FunctionParam, Expression ) )
-            , expressionAfterLiftingDecls : Expression
-            }
-        mainExpression =
-            preprocessExpression originalMainExpression
-
-        liftedDeclFunctionParam =
-            mainExpression.functionParameters
-                |> closureParameterFromParameters
-
-        mainExpressionLiftedDeclarations : List ClosureFunctionEntry
-        mainExpressionLiftedDeclarations =
-            mainExpression.liftedDeclarations
-                |> List.map
-                    (\( liftedDeclName, ( liftedDeclParams, liftedDeclExpr ) ) ->
-                        { functionName = liftedDeclName
-                        , closureCaptures =
-                            liftedDeclFunctionParam
-                                |> List.map Tuple.first
-                                |> Just
-                        , parameters = liftedDeclFunctionParam :: liftedDeclParams
-                        , innerExpression = liftedDeclExpr
-                        }
-                    )
-
-        environmentDeclarationsAsFunctions : List ClosureFunctionEntry
-        environmentDeclarationsAsFunctions =
+        environmentDeclarationsAsFunctionsCommon : List ( String, ClosureFunctionEntry )
+        environmentDeclarationsAsFunctionsCommon =
             (usedEnvironmentDeclarations
-                |> List.map
-                    (\( declName, envDeclaration ) ->
-                        { functionName = declName
-                        , closureCaptures = Nothing
+                |> Dict.map
+                    (\_ envDeclaration ->
+                        { closureCaptures = Nothing
                         , parameters = envDeclaration.functionParameters
                         , innerExpression = envDeclaration.expressionAfterLiftingDecls
                         }
                     )
+                |> Dict.toList
             )
                 ++ envLiftedDeclarationsAsFunctions
-                ++ mainExpressionLiftedDeclarations
 
-        liftedDeclarationsClosureCaptures =
-            environmentDeclarationsAsFunctions
-                |> List.filterMap
-                    (\functionEntry ->
-                        functionEntry.closureCaptures
-                            |> Maybe.map (Tuple.pair functionEntry.functionName)
-                    )
-                |> Dict.fromList
+        emitFunction :
+            List ( String, ClosureFunctionEntry )
+            -> ClosureFunctionEntry
+            -> Result String Pine.Expression
+        emitFunction environmentDeclarationsAsFunctionsAdditional closureFunctionEntry =
+            let
+                environmentDeclarationsAsFunctions =
+                    environmentDeclarationsAsFunctionsCommon ++ environmentDeclarationsAsFunctionsAdditional
 
-        environmentFunctions =
-            environmentDeclarationsAsFunctions
-                |> List.map
-                    (\functionEntry ->
-                        { functionName = functionEntry.functionName
-                        , argumentsCount = List.length functionEntry.parameters
-                        }
-                    )
+                liftedDeclarationsClosureCaptures =
+                    environmentDeclarationsAsFunctions
+                        |> List.filterMap
+                            (\( functionName, functionEntry ) ->
+                                functionEntry.closureCaptures
+                                    |> Maybe.map (Tuple.pair functionName)
+                            )
+                        |> Dict.fromList
 
-        stackBefore =
-            { moduleImports = stackWithDependencies.moduleImports
-            , declarationsDependencies = stackWithDependencies.declarationsDependencies
-            , environmentFunctions = environmentFunctions
-            , environmentDeconstructions = Dict.empty
-            }
-
-        closurizeFunctionExpressionsForEnvironment =
-            closurizeFunctionExpressions
-                stackBefore
-                (availableEnvironmentDeclarations |> List.map Tuple.first |> Set.fromList)
-
-        emitEnvironmentDeclarationsResult =
-            environmentDeclarationsAsFunctions
-                |> List.map
-                    (\envDeclAsFunction ->
-                        let
-                            envDeclarationFunctionStack =
-                                { stackBefore
-                                    | environmentDeconstructions =
-                                        envDeclAsFunction.parameters
-                                            |> environmentDeconstructionsFromFunctionParams
+                environmentFunctions : List EnvironmentFunctionEntry
+                environmentFunctions =
+                    environmentDeclarationsAsFunctions
+                        |> List.map
+                            (\( functionName, functionEntry ) ->
+                                { functionName = functionName
+                                , argumentsCount = List.length functionEntry.parameters
                                 }
-                        in
-                        envDeclAsFunction.innerExpression
-                            |> mapReferencesForClosureCaptures liftedDeclarationsClosureCaptures
-                            |> closurizeFunctionExpressionsForEnvironment
-                            |> emitExpression envDeclarationFunctionStack
-                            |> Result.mapError ((++) ("Failed to emit '" ++ envDeclAsFunction.functionName ++ "': "))
-                            |> Result.map
-                                (\functionExpressionPine ->
-                                    ( envDeclAsFunction.functionName
-                                    , envDeclAsFunction.parameters
-                                    , functionExpressionPine
-                                    )
-                                )
+                            )
+
+                emitStack =
+                    { moduleImports = stackWithDependencies.moduleImports
+                    , declarationsDependencies = stackWithDependencies.declarationsDependencies
+                    , environmentFunctions = environmentFunctions
+                    , environmentDeconstructions =
+                        closureFunctionEntry.parameters
+                            |> environmentDeconstructionsFromFunctionParams
+                    }
+            in
+            closureFunctionEntry.innerExpression
+                |> mapReferencesForClosureCaptures liftedDeclarationsClosureCaptures
+                |> closurizeFunctionExpressions
+                    emitStack
+                    (environmentDeclarationsAsFunctions |> List.map Tuple.first |> Set.fromList)
+                |> emitExpression emitStack
+
+        emitEnvironmentDeclarationsResult : Result String (List ( String, Pine.Expression ))
+        emitEnvironmentDeclarationsResult =
+            environmentDeclarationsAsFunctionsCommon
+                |> List.map
+                    (\( functionName, envDeclAsFunction ) ->
+                        envDeclAsFunction
+                            |> emitFunction []
+                            |> Result.mapError ((++) ("Failed to emit '" ++ functionName ++ "': "))
+                            |> Result.map (Tuple.pair functionName)
                     )
                 |> Result.Extra.combine
     in
@@ -2664,31 +2628,79 @@ emitExpressionInDeclarationBlockLessClosure stackBeforeDependencies availableEnv
         |> Result.andThen
             (\emitEnvironmentDeclarations ->
                 let
-                    mainExpressionFunctionStack =
-                        { stackBefore
-                            | environmentDeconstructions =
-                                mainExpression.functionParameters
-                                    |> environmentDeconstructionsFromFunctionParams
-                        }
-
-                    envFunctionsValues : List ( String, Pine.Value )
-                    envFunctionsValues =
+                    envFunctionsValuesCommon =
                         emitEnvironmentDeclarations
+                            |> List.map (Tuple.mapSecond Pine.encodeExpressionAsValue)
+
+                    mainExpression :
+                        { functionParameters : List FunctionParam
+                        , liftedDeclarations : List ( String, ( List FunctionParam, Expression ) )
+                        , expressionAfterLiftingDecls : Expression
+                        }
+                    mainExpression =
+                        preprocessExpression originalMainExpression
+
+                    functionParametersFromLifted : List FunctionParam
+                    functionParametersFromLifted =
+                        mainExpression.liftedDeclarations
+                            |> List.map (Tuple.mapSecond (always []) >> List.singleton)
+
+                    functionParametersIncludingLifted : List FunctionParam
+                    functionParametersIncludingLifted =
+                        mainExpression.functionParameters ++ functionParametersFromLifted
+
+                    closureParameter =
+                        closureParameterFromParameters functionParametersIncludingLifted
+
+                    mainExpressionLiftedDeclarations : List ( String, ClosureFunctionEntry )
+                    mainExpressionLiftedDeclarations =
+                        mainExpression.liftedDeclarations
                             |> List.map
-                                (\( functionName, _, functionExpr ) ->
-                                    ( functionName
-                                    , functionExpr |> Pine.encodeExpressionAsValue
+                                (\( liftedDeclName, ( liftedDeclParams, liftedDeclExpr ) ) ->
+                                    ( liftedDeclName
+                                    , { parameters = closureParameter :: liftedDeclParams
+                                      , innerExpression = liftedDeclExpr
+                                      , closureCaptures =
+                                            closureParameter
+                                                |> List.map Tuple.first
+                                                |> Just
+                                      }
                                     )
                                 )
                 in
-                mainExpression.expressionAfterLiftingDecls
-                    |> mapReferencesForClosureCaptures liftedDeclarationsClosureCaptures
-                    |> closurizeFunctionExpressionsForEnvironment
-                    |> emitExpression mainExpressionFunctionStack
-                    |> Result.map
-                        (emitWrapperForPartialApplication
-                            (List.map Tuple.second envFunctionsValues)
-                            (List.length mainExpression.functionParameters)
+                mainExpressionLiftedDeclarations
+                    |> List.map
+                        (\( declName, liftedFromMain ) ->
+                            liftedFromMain
+                                |> emitFunction mainExpressionLiftedDeclarations
+                                |> Result.map (Tuple.pair declName)
+                                |> Result.mapError
+                                    (\err -> "Failed to emit lifted declaration '" ++ declName ++ "': " ++ err)
+                        )
+                    |> Result.Extra.combine
+                    |> Result.andThen
+                        (\liftedFromMainEmitted ->
+                            { parameters = mainExpression.functionParameters
+                            , innerExpression = mainExpression.expressionAfterLiftingDecls
+                            , closureCaptures =
+                                closureParameter
+                                    |> List.map Tuple.first
+                                    |> Just
+                            }
+                                |> emitFunction mainExpressionLiftedDeclarations
+                                |> Result.map
+                                    (let
+                                        envFunctionsValuesLiftedFromMain =
+                                            liftedFromMainEmitted
+                                                |> List.map (Tuple.mapSecond Pine.encodeExpressionAsValue)
+
+                                        envFunctionsValues =
+                                            envFunctionsValuesCommon ++ envFunctionsValuesLiftedFromMain
+                                     in
+                                     emitWrapperForPartialApplication
+                                        (List.map Tuple.second envFunctionsValues)
+                                        (List.length mainExpression.functionParameters)
+                                    )
                         )
             )
 
@@ -2824,8 +2836,7 @@ closurizeFunctionExpressions stack closureCaptures expression =
                         |> List.singleton
 
                 closureFunctionParameter =
-                    closureFunctionParameters
-                        |> closureParameterFromParameters
+                    closureParameterFromParameters closureFunctionParameters
             in
             if closureCapturesForFunction == [] then
                 FunctionExpression functionExpression
@@ -4005,7 +4016,7 @@ compileInteractiveSubmission environment submission =
                                         (\functionDeclarationCompilation ->
                                             emitExpressionInDeclarationBlock
                                                 emitStack
-                                                [ ( declarationName, functionDeclarationCompilation ) ]
+                                                (Dict.singleton declarationName functionDeclarationCompilation)
                                                 functionDeclarationCompilation
                                         )
                                     |> Result.andThen evaluateAsIndependentExpression
@@ -4055,7 +4066,7 @@ compileInteractiveSubmission environment submission =
                 Ok (ExpressionSubmission elmExpression) ->
                     case
                         compileElmSyntaxExpression defaultCompilationStack elmExpression
-                            |> Result.andThen (emitExpressionInDeclarationBlock emitStack [])
+                            |> Result.andThen (emitExpressionInDeclarationBlock emitStack Dict.empty)
                     of
                         Err error ->
                             Err ("Failed to compile Elm to Pine expression: " ++ error)

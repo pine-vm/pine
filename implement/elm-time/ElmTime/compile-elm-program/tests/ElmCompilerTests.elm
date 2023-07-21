@@ -1101,7 +1101,7 @@ emitClosureExpressionTests =
                             emitClosureResult =
                                 ElmInteractive.emitExpressionInDeclarationBlock
                                     emptyEmitStack
-                                    environmentFunctions
+                                    (Dict.fromList environmentFunctions)
                                     rootAsExpression
                         in
                         emitClosureResult
