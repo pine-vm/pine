@@ -1,0 +1,12 @@
+let
+    is_even n_in_is_even =
+        if Pine_kernel.equal [ n_in_is_even, 0 ]
+        then 4
+        else is_odd (Pine_kernel.sub_int [ n_in_is_even, 1 ])
+
+    is_odd n_in_is_odd =
+        if Pine_kernel.equal [ n_in_is_odd, 0 ]
+        then 2
+        else is_even (Pine_kernel.sub_int [ n_in_is_odd, 1 ])
+in
+[ is_even 4, is_odd 6 ]
