@@ -4,7 +4,21 @@ module ElmInteractiveCoreModules exposing (..)
 elmCoreModulesTexts : List String
 elmCoreModulesTexts =
     [ """
-module Basics exposing (..)
+module Basics exposing
+  ( Int, Float
+  , (+), (-), (*), (/), (//), (^)
+  , toFloat, round, floor, ceiling, truncate
+  , (==), (/=)
+  , (<), (>), (<=), (>=), max, min, compare, Order(..)
+  , Bool(..), not, (&&), (||), xor
+  , (++)
+  , modBy, remainderBy, negate, abs, clamp, sqrt, logBase, e
+  , pi, cos, sin, tan, acos, asin, atan, atan2
+  , degrees, radians, turns
+  , toPolar, fromPolar
+  , isNaN, isInfinite
+  , identity, always, (<|), (|>), (<<), (>>), Never, never
+  )
 
 
 infix right 0 (<|) = apL
@@ -370,7 +384,14 @@ andThen callback maybeValue =
 """
     , -- https://github.com/elm/core/blob/84f38891468e8e153fc85a9b63bdafd81b24664e/src/List.elm
       """
-module List exposing (..)
+module List exposing
+  ( singleton, repeat, range, (::)
+  , map, indexedMap, foldl, foldr, filter, filterMap
+  , length, reverse, member, all, any, maximum, minimum, sum, product
+  , append, concat, concatMap, intersperse, map2, map3, map4, map5
+  , sort, sortBy, sortWith
+  , isEmpty, head, tail, take, drop, partition, unzip
+  )
 
 
 import Basics exposing (..)
@@ -538,7 +559,20 @@ toCode char =
 
 """
     , """
-module String exposing (..)
+module String exposing
+  ( String
+  , isEmpty, length, reverse, repeat, replace
+  , append, concat, split, join, words, lines
+  , slice, left, right, dropLeft, dropRight
+  , contains, startsWith, endsWith, indexes, indices
+  , toInt, fromInt
+  , toFloat, fromFloat
+  , fromChar, cons, uncons
+  , toList, fromList
+  , toUpper, toLower, pad, padLeft, padRight, trim, trimLeft, trimRight
+  , map, filter, foldl, foldr, any, all
+  )
+
 
 import Basics exposing (..)
 import Char
