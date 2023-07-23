@@ -1,0 +1,5 @@
+let
+   insert a b =
+      a :: b
+in
+List.foldl (\item list -> insert item list) [] [ 17, 19 ]

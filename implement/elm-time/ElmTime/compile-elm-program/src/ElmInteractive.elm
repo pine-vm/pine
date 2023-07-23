@@ -2781,8 +2781,12 @@ mapReferencesForClosureCaptures closureCapturesByFunctionName expression =
                 Nothing ->
                     expression
 
-        FunctionExpression _ ->
-            expression
+        FunctionExpression function ->
+            FunctionExpression
+                { function
+                    | expression =
+                        mapReferencesForClosureCaptures closureCapturesByFunctionName function.expression
+                }
 
         FunctionApplicationExpression functionExpression arguments ->
             let
@@ -2873,15 +2877,23 @@ closurizeFunctionExpressions stack closureCaptures expression =
 
                 closureFunctionParameter =
                     closureParameterFromParameters closureFunctionParameters
+
+                expressionMapped =
+                    FunctionExpression
+                        { functionExpression
+                            | expression =
+                                functionExpression.expression
+                                    |> closurizeFunctionExpressions stack closureCaptures
+                        }
             in
             if closureCapturesForFunction == [] then
-                FunctionExpression functionExpression
+                expressionMapped
 
             else
                 FunctionApplicationExpression
                     (FunctionExpression
                         { argumentDeconstructions = closureFunctionParameter
-                        , expression = expression
+                        , expression = expressionMapped
                         }
                     )
                     [ closureCapturesForFunction
