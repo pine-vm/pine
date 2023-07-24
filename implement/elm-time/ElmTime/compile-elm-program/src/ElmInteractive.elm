@@ -278,11 +278,36 @@ elmValueAsExpression elmValue =
             )
 
         ElmTag tagName tagArguments ->
-            ( tagName
-                :: (tagArguments |> List.map (elmValueAsExpression >> applyNeedsParens))
-                |> String.join " "
-            , { needsParens = tagArguments /= [] }
-            )
+            if tagName == "RBEmpty_elm_builtin" then
+                ( "Dict.empty"
+                , { needsParens = False }
+                )
+
+            else
+                case elmValueDictToList elmValue of
+                    [] ->
+                        ( tagName
+                            :: (tagArguments |> List.map (elmValueAsExpression >> applyNeedsParens))
+                            |> String.join " "
+                        , { needsParens = tagArguments /= [] }
+                        )
+
+                    dictToList ->
+                        ( "Dict.fromList ["
+                            ++ String.join ","
+                                (dictToList
+                                    |> List.map
+                                        (\( key, value ) ->
+                                            "("
+                                                ++ Tuple.first (elmValueAsExpression key)
+                                                ++ ","
+                                                ++ Tuple.first (elmValueAsExpression value)
+                                                ++ ")"
+                                        )
+                                )
+                            ++ "]"
+                        , { needsParens = True }
+                        )
 
         ElmInternal desc ->
             ( "<" ++ desc ++ ">"
@@ -458,6 +483,38 @@ elmValueAsElmRecord elmValue =
 
         _ ->
             Err "Value is not a list."
+
+
+elmValueDictToList : ElmValue -> List ( ElmValue, ElmValue )
+elmValueDictToList =
+    elmValueDictFoldr
+        (\key value acc -> ( key, value ) :: acc)
+        []
+
+
+{-| Analog to <https://github.com/elm/core/blob/65cea00afa0de03d7dda0487d964a305fc3d58e3/src/Dict.elm#L547-L554>
+
+    foldr : (k -> v -> b -> b) -> b -> Dict k v -> b
+    foldr func acc t =
+        case t of
+            RBEmpty_elm_builtin ->
+                acc
+
+            RBNode_elm_builtin _ key value left right ->
+                foldr func (func key value (foldr func acc right)) left
+
+-}
+elmValueDictFoldr : (ElmValue -> ElmValue -> b -> b) -> b -> ElmValue -> b
+elmValueDictFoldr func acc dict =
+    case dict of
+        ElmTag "RBEmpty_elm_builtin" _ ->
+            acc
+
+        ElmTag "RBNode_elm_builtin" [ _, key, value, left, right ] ->
+            elmValueDictFoldr func (func key value (elmValueDictFoldr func acc right)) left
+
+        _ ->
+            acc
 
 
 compileEvalContextForElmInteractive : InteractiveContext -> Result String Pine.EvalContext

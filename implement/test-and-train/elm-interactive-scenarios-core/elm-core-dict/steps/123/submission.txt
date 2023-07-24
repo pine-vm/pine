@@ -1,0 +1,1 @@
+Dict.insert 31 71 (Dict.insert 21 23 (Dict.insert 31 11 Dict.empty))
