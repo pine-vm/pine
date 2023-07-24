@@ -2872,8 +2872,7 @@ closurizeFunctionExpressions stack closureCaptures expression =
 
                 closureFunctionParameters =
                     closureCapturesForFunction
-                        |> List.map (Tuple.pair >> (|>) [])
-                        |> List.singleton
+                        |> List.map (Tuple.pair >> (|>) [] >> List.singleton)
 
                 closureFunctionParameter =
                     closureParameterFromParameters closureFunctionParameters

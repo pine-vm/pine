@@ -1,0 +1,10 @@
+let
+   factorial a =
+      if a < 1
+      then 1
+      else a * factorial (a - 1)
+
+   insert a b =
+      a :: b
+in
+List.foldl (\item list -> insert item list) [] [ 21, 23 ]
