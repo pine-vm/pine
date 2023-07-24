@@ -2675,12 +2675,14 @@ emitExpressionInDeclarationBlockLessClosure stackBeforeAddingDeps originalBlockD
                         mainExpressionAfterLift.liftedDeclarations
                             |> List.map (Tuple.mapSecond (always []) >> List.singleton)
 
-                    functionParametersIncludingLifted : List FunctionParam
-                    functionParametersIncludingLifted =
-                        mainExpressionAfterLift.functionParameters ++ functionParametersFromLifted
-
                     commonClosureParameter =
-                        closureParameterFromParameters functionParametersIncludingLifted
+                        mainExpressionAfterLift.functionParameters
+                            ++ functionParametersFromLifted
+                            |> List.concatMap (List.map Tuple.first)
+                            |> Set.fromList
+                            |> Set.toList
+                            |> List.map (Tuple.pair >> (|>) [] >> List.singleton)
+                            |> closureParameterFromParameters
 
                     mainExpressionLiftedDeclarations : List ( String, ClosureFunctionEntry )
                     mainExpressionLiftedDeclarations =
