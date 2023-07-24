@@ -63,7 +63,7 @@ type Expression
     | KernelApplicationExpression KernelApplicationExpressionStructure
     | ConditionalExpression ConditionalExpressionStructure
     | ReferenceExpression String
-    | FunctionExpression FunctionExpressionStruct
+    | FunctionExpression (List FunctionParam) Expression
       {-
          Keeping a specialized function application model enables distinguishing cases with immediate full application.
          The emission of specialized code for these cases reduces runtime expenses.
@@ -96,12 +96,6 @@ type alias ConditionalExpressionStructure =
 
 type alias LetBlockStruct =
     { declarations : List ( String, Expression )
-    , expression : Expression
-    }
-
-
-type alias FunctionExpressionStruct =
-    { argumentDeconstructions : FunctionParam
     , expression : Expression
     }
 
@@ -1308,23 +1302,12 @@ compileElmSyntaxFunctionWithoutName stackBefore function =
             |> Result.Extra.combine
     of
         Err error ->
-            Err ("Failed to compile function argument pattern: " ++ error)
+            Err ("Failed to compile function parameter pattern: " ++ error)
 
         Ok argumentsDeconstructDeclarationsBuilders ->
             function.expression
                 |> compileElmSyntaxExpression stackBefore
-                |> Result.map
-                    (\expression ->
-                        argumentsDeconstructDeclarationsBuilders
-                            |> List.foldr
-                                (\nextFunctionDeconstructions prevExpression ->
-                                    FunctionExpression
-                                        { argumentDeconstructions = nextFunctionDeconstructions
-                                        , expression = prevExpression
-                                        }
-                                )
-                                expression
-                    )
+                |> Result.map (FunctionExpression argumentsDeconstructDeclarationsBuilders)
 
 
 expressionForDeconstructions : List Deconstruction -> Expression -> Expression
@@ -1386,13 +1369,13 @@ listDependenciesOfExpression dependenciesRelations expression =
         ReferenceExpression reference ->
             Set.singleton reference
 
-        FunctionExpression function ->
+        FunctionExpression functionParam functionBody ->
             let
                 expressionDependencies =
-                    listDependenciesOfExpression dependenciesRelations function.expression
+                    listDependenciesOfExpression dependenciesRelations functionBody
             in
-            function.argumentDeconstructions
-                |> List.map Tuple.first
+            functionParam
+                |> List.concatMap (List.map Tuple.first)
                 |> List.foldl Set.remove expressionDependencies
 
         FunctionApplicationExpression functionExpression arguments ->
@@ -2114,8 +2097,8 @@ emitExpression stack expression =
         ReferenceExpression localReference ->
             emitReferenceExpression localReference stack
 
-        FunctionExpression function ->
-            emitFunctionExpression stack function
+        FunctionExpression functionParams functionBody ->
+            emitFunctionExpression stack functionParams functionBody
 
         FunctionApplicationExpression functionExpression arguments ->
             emitFunctionApplicationExpression functionExpression arguments stack
@@ -2403,12 +2386,12 @@ emitModuleDeclarations stackBefore declarations =
            )
 
 
-emitFunctionExpression : EmitStack -> FunctionExpressionStruct -> Result String Pine.Expression
-emitFunctionExpression stack function =
+emitFunctionExpression : EmitStack -> List FunctionParam -> Expression -> Result String Pine.Expression
+emitFunctionExpression stack functionParams functionBody =
     emitExpressionInDeclarationBlock
         stack
         Dict.empty
-        (FunctionExpression function)
+        (FunctionExpression functionParams functionBody)
 
 
 emitLetBlock : EmitStack -> LetBlockStruct -> Result String Pine.Expression
@@ -2558,10 +2541,7 @@ emitExpressionInDeclarationBlockLessClosure stackBeforeAddingDeps originalBlockD
                         functionParams
                             |> environmentDeconstructionsFromFunctionParams
                   }
-                , FunctionExpression
-                    { argumentDeconstructions = closureFunctionParameter
-                    , expression = originalMainExpression
-                    }
+                , FunctionExpression [ closureFunctionParameter ] originalMainExpression
                 , Just closureCaptures
                 )
 
@@ -2840,12 +2820,10 @@ mapReferencesForClosureCaptures closureCapturesByFunctionName expression =
                 Nothing ->
                     expression
 
-        FunctionExpression function ->
+        FunctionExpression functionParam functionBody ->
             FunctionExpression
-                { function
-                    | expression =
-                        mapReferencesForClosureCaptures closureCapturesByFunctionName function.expression
-                }
+                functionParam
+                (mapReferencesForClosureCaptures closureCapturesByFunctionName functionBody)
 
         FunctionApplicationExpression functionExpression arguments ->
             let
@@ -2920,10 +2898,10 @@ closurizeFunctionExpressions stack closureCaptures expression =
         ReferenceExpression _ ->
             expression
 
-        FunctionExpression functionExpression ->
+        FunctionExpression functionParams functionBody ->
             let
                 dependencies =
-                    listDependenciesOfExpression stack functionExpression.expression
+                    listDependenciesOfExpression stack functionBody
 
                 closureCapturesForFunction =
                     Set.intersect closureCaptures dependencies
@@ -2936,23 +2914,17 @@ closurizeFunctionExpressions stack closureCaptures expression =
                 closureFunctionParameter =
                     closureParameterFromParameters closureFunctionParameters
 
-                expressionMapped =
-                    FunctionExpression
-                        { functionExpression
-                            | expression =
-                                functionExpression.expression
-                                    |> closurizeFunctionExpressions stack closureCaptures
-                        }
+                functionBodyMapped =
+                    functionBody |> closurizeFunctionExpressions stack closureCaptures
             in
             if closureCapturesForFunction == [] then
-                expressionMapped
+                FunctionExpression functionParams functionBodyMapped
 
             else
                 FunctionApplicationExpression
                     (FunctionExpression
-                        { argumentDeconstructions = closureFunctionParameter
-                        , expression = expressionMapped
-                        }
+                        (closureFunctionParameter :: functionParams)
+                        functionBodyMapped
                     )
                     [ closureCapturesForFunction
                         |> List.map ReferenceExpression
@@ -3055,7 +3027,7 @@ liftDeclsFromLetBlocksRecursively expression =
             , ReferenceExpression name
             )
 
-        FunctionExpression _ ->
+        FunctionExpression _ _ ->
             ( [], expression )
 
         FunctionApplicationExpression function arguments ->
@@ -3132,27 +3104,26 @@ mapLocalDeclarationNamesInDescendants localSet mapDeclarationName expression =
             else
                 expression
 
-        FunctionExpression function ->
+        FunctionExpression functionParams functionBody ->
             let
                 localSetWithParameters =
-                    List.foldl
-                        (Tuple.first >> Set.insert)
-                        localSet
-                        function.argumentDeconstructions
+                    functionParams
+                        |> List.concatMap (List.map Tuple.first)
+                        |> List.foldl
+                            Set.insert
+                            localSet
 
                 mappedParameters =
-                    List.map
-                        (Tuple.mapFirst mapDeclarationName)
-                        function.argumentDeconstructions
+                    functionParams
+                        |> List.map (List.map (Tuple.mapFirst mapDeclarationName))
             in
             FunctionExpression
-                { argumentDeconstructions = mappedParameters
-                , expression =
-                    mapLocalDeclarationNamesInDescendants
-                        localSetWithParameters
-                        mapDeclarationName
-                        function.expression
-                }
+                mappedParameters
+                (mapLocalDeclarationNamesInDescendants
+                    localSetWithParameters
+                    mapDeclarationName
+                    functionBody
+                )
 
         FunctionApplicationExpression functionExpression arguments ->
             FunctionApplicationExpression
@@ -3537,12 +3508,10 @@ transformExpressionWithOptionalReplacement findReplacement expression =
                 ReferenceExpression _ ->
                     expression
 
-                FunctionExpression functionExpression ->
+                FunctionExpression functionParam functionBody ->
                     FunctionExpression
-                        { functionExpression
-                            | expression =
-                                transformExpressionWithOptionalReplacement findReplacement functionExpression.expression
-                        }
+                        functionParam
+                        (transformExpressionWithOptionalReplacement findReplacement functionBody)
 
                 FunctionApplicationExpression functionExpression arguments ->
                     let
@@ -3613,12 +3582,12 @@ getDeclarationValueFromCompilation ( localModuleName, nameInModule ) compilation
 parseFunctionParameters : Expression -> ( List FunctionParam, Expression )
 parseFunctionParameters expression =
     case expression of
-        FunctionExpression function ->
+        FunctionExpression functionParams functionBody ->
             let
-                ( innerArguments, innerExpression ) =
-                    parseFunctionParameters function.expression
+                ( innerParams, innerBody ) =
+                    parseFunctionParameters functionBody
             in
-            ( function.argumentDeconstructions :: innerArguments, innerExpression )
+            ( functionParams ++ innerParams, innerBody )
 
         _ ->
             ( [], expression )
@@ -5054,14 +5023,14 @@ expressionAsJson expression =
               )
             ]
 
-        FunctionExpression functionExpression ->
+        FunctionExpression functionParam functionBody ->
             [ ( "Function"
               , [ ( "parameters"
-                  , functionExpression.argumentDeconstructions
-                        |> Json.Encode.list (Tuple.first >> Json.Encode.string)
+                  , functionParam
+                        |> Json.Encode.list (Json.Encode.list (Tuple.first >> Json.Encode.string))
                   )
-                , ( "expression"
-                  , functionExpression.expression |> expressionAsJson
+                , ( "body"
+                  , functionBody |> expressionAsJson
                   )
                 ]
                     |> Json.Encode.object

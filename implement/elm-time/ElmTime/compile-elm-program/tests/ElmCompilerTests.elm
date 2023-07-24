@@ -949,31 +949,29 @@ emitClosureExpressionTests =
                 { declarations =
                     [ ( "decl_from_let"
                       , ElmInteractive.FunctionExpression
-                            { argumentDeconstructions =
-                                [ ( "final_func_param_0"
-                                  , []
-                                  )
+                            [ [ ( "final_func_param_0"
+                                , []
+                                )
+                              ]
+                            ]
+                            (ElmInteractive.FunctionApplicationExpression
+                                (ReferenceExpression "final_func_param_0")
+                                [ ElmInteractive.LiteralExpression (Pine.valueFromString "literal_0")
                                 ]
-                            , expression =
-                                ElmInteractive.FunctionApplicationExpression
-                                    (ReferenceExpression "final_func_param_0")
-                                    [ ElmInteractive.LiteralExpression (Pine.valueFromString "literal_0")
-                                    ]
-                            }
+                            )
                       )
                     , ( "closure_func"
                       , ElmInteractive.FunctionExpression
-                            { argumentDeconstructions =
-                                [ ( "closure_func_param_0"
-                                  , []
-                                  )
+                            [ [ ( "closure_func_param_0"
+                                , []
+                                )
+                              ]
+                            ]
+                            (ElmInteractive.ListExpression
+                                [ ElmInteractive.ReferenceExpression "closure_func_param_0"
+                                , ElmInteractive.ReferenceExpression "param_0"
                                 ]
-                            , expression =
-                                ElmInteractive.ListExpression
-                                    [ ElmInteractive.ReferenceExpression "closure_func_param_0"
-                                    , ElmInteractive.ReferenceExpression "param_0"
-                                    ]
-                            }
+                            )
                       )
                     ]
                 , expression =
@@ -1058,15 +1056,7 @@ emitClosureExpressionTests =
                     \_ ->
                         let
                             declarationBlockOuterExprFromFunctionParamsAndInnerExpr params innerExpr =
-                                params
-                                    |> List.foldr
-                                        (\nextParam expr ->
-                                            ElmInteractive.FunctionExpression
-                                                { argumentDeconstructions = nextParam
-                                                , expression = expr
-                                                }
-                                        )
-                                        innerExpr
+                                ElmInteractive.FunctionExpression params innerExpr
 
                             environmentFunctions =
                                 testCase.environmentFunctions
