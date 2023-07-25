@@ -1,0 +1,4 @@
+if True then
+    "condition is true"
+else
+    "condition is false"

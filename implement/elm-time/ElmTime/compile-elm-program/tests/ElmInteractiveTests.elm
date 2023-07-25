@@ -14,7 +14,8 @@ interactiveScenarios =
         [ Test.test "Just a literal String" <|
             \_ ->
                 expectationForElmInteractiveScenario
-                    { context = DefaultContext
+                    { context =
+                        CustomModulesContext { includeCoreModules = False, modulesTexts = [] }
                     , previousSubmissions = []
                     , submission = """  "just a literal ✔️"  """
                     , expectedValueElmExpression = "\"just a literal ✔️\""
@@ -22,7 +23,8 @@ interactiveScenarios =
         , Test.test "Just a literal List String" <|
             \_ ->
                 expectationForElmInteractiveScenario
-                    { context = DefaultContext
+                    { context =
+                        CustomModulesContext { includeCoreModules = False, modulesTexts = [] }
                     , previousSubmissions = []
                     , submission = """  [ "just a literal ✔️", "another string" ]  """
                     , expectedValueElmExpression = """["just a literal ✔️","another string"]"""
@@ -43,48 +45,26 @@ interactiveScenarios =
                     , submission = " String.fromInt 123 "
                     , expectedValueElmExpression = "\"123\""
                     }
-        , Test.test "Add and apply String.fromInt" <|
+        , Test.test "Add integers" <|
             \_ ->
                 expectationForElmInteractiveScenario
                     { context = DefaultContext
                     , previousSubmissions = []
-                    , submission = " String.fromInt (1 + 3) "
-                    , expectedValueElmExpression = "\"4\""
+                    , submission = " 1 + 3 "
+                    , expectedValueElmExpression = "4"
                     }
-        , Test.test "Multiply and apply String.fromInt" <|
+        , Test.test "Multiply integers" <|
             \_ ->
                 expectationForElmInteractiveScenario
                     { context = DefaultContext
                     , previousSubmissions = []
-                    , submission = " String.fromInt (17 * 41) "
-                    , expectedValueElmExpression = "\"697\""
-                    }
-        , Test.test "Divide and apply String.fromInt" <|
-            \_ ->
-                expectationForElmInteractiveScenario
-                    { context = DefaultContext
-                    , previousSubmissions = []
-                    , submission = " String.fromInt (31 // 5) "
-                    , expectedValueElmExpression = "\"6\""
-                    }
-        , Test.test "Concat string via let" <|
-            \_ ->
-                expectationForElmInteractiveScenario
-                    { context = DefaultContext
-                    , previousSubmissions = []
-                    , submission = """
-let
-    binding_from_let =
-        "literal from let "
-in
-binding_from_let ++ " second literal ✔️"
-"""
-                    , expectedValueElmExpression = "\"literal from let  second literal ✔️\""
+                    , submission = " 17 * 41 "
+                    , expectedValueElmExpression = "697"
                     }
         , Test.test "Dependency within let" <|
             \_ ->
                 expectationForElmInteractiveScenario
-                    { context = DefaultContext
+                    { context = CustomModulesContext { includeCoreModules = False, modulesTexts = [] }
                     , previousSubmissions = []
                     , submission = """
 let
@@ -100,10 +80,7 @@ b
             \_ ->
                 expectationForElmInteractiveScenario
                     { context =
-                        CustomModulesContext
-                            { includeCoreModules = False
-                            , modulesTexts = []
-                            }
+                        CustomModulesContext { includeCoreModules = False, modulesTexts = [] }
                     , previousSubmissions = []
                     , submission = """
 let
@@ -119,57 +96,35 @@ d
 """
                     , expectedValueElmExpression = "\"just a literal\""
                     }
-        , Test.test "Branch using if and literal True" <|
-            \_ ->
-                expectationForElmInteractiveScenario
-                    { context = DefaultContext
-                    , previousSubmissions = []
-                    , submission = """ if True then "condition is true" else "condition is false" """
-                    , expectedValueElmExpression = "\"condition is true\""
-                    }
-        , Test.test "Branch using if and literal False" <|
-            \_ ->
-                expectationForElmInteractiveScenario
-                    { context = DefaultContext
-                    , previousSubmissions = []
-                    , submission = """ if False then "condition is true" else "condition is false" """
-                    , expectedValueElmExpression = "\"condition is false\""
-                    }
-        , Test.test "Branch using if and (not False)" <|
-            \_ ->
-                expectationForElmInteractiveScenario
-                    { context = DefaultContext
-                    , previousSubmissions = []
-                    , submission = """ if not False then "condition is true" else "condition is false" """
-                    , expectedValueElmExpression = "\"condition is true\""
-                    }
         , Test.test "Function application one argument" <|
             \_ ->
                 expectationForElmInteractiveScenario
-                    { context = DefaultContext
+                    { context =
+                        CustomModulesContext { includeCoreModules = False, modulesTexts = [] }
                     , previousSubmissions = []
                     , submission = """
 let
     function_with_one_parameter param0 =
-        "literal from function " ++ param0
+        [ "literal from function", param0 ]
 in
 function_with_one_parameter "argument"
 """
-                    , expectedValueElmExpression = "\"literal from function argument\""
+                    , expectedValueElmExpression = """["literal from function","argument"]"""
                     }
         , Test.test "Function application two arguments" <|
             \_ ->
                 expectationForElmInteractiveScenario
-                    { context = DefaultContext
+                    { context =
+                        CustomModulesContext { includeCoreModules = False, modulesTexts = [] }
                     , previousSubmissions = []
                     , submission = """
 let
     function_with_two_parameters param0 param1 =
-        "literal from function, " ++ param0 ++ ", " ++ param1
+        [ "literal from function", param0, param1 ]
 in
 function_with_two_parameters "argument 0" "argument 1"
 """
-                    , expectedValueElmExpression = "\"literal from function, argument 0, argument 1\""
+                    , expectedValueElmExpression = """["literal from function","argument 0","argument 1"]"""
                     }
         , Test.test "Partial application two arguments" <|
             \_ ->
@@ -222,22 +177,6 @@ partially_applied_a "argument 2"
                     , previousSubmissions = []
                     , submission = """ (\\_ -> "constant") "test" """
                     , expectedValueElmExpression = "\"constant\""
-                    }
-        , Test.test "List.drop 0" <|
-            \_ ->
-                expectationForElmInteractiveScenario
-                    { context = DefaultContext
-                    , previousSubmissions = []
-                    , submission = """ List.drop 0 ["a", "b", "c", "d"]  """
-                    , expectedValueElmExpression = """["a","b","c","d"]"""
-                    }
-        , Test.test "List.drop 2" <|
-            \_ ->
-                expectationForElmInteractiveScenario
-                    { context = DefaultContext
-                    , previousSubmissions = []
-                    , submission = """ List.drop 2 ["a", "b", "c", "d"]  """
-                    , expectedValueElmExpression = """["c","d"]"""
                     }
         , Test.test "Case of expression deconstructing List into empty and non-empty" <|
             \_ ->
@@ -328,63 +267,13 @@ named_literal =
                     , submission = """ ModuleB.partially_applied_b "c" """
                     , expectedValueElmExpression = "\"a b c\""
                     }
-        , Test.describe "Operator precedence"
-            [ Test.test "Operator asterisk precedes operator plus left and right" <|
-                \_ ->
-                    expectationForElmInteractiveScenario
-                        { context = DefaultContext
-                        , previousSubmissions = []
-                        , submission = """ 4 + 4 * 3 + 1 """
-                        , expectedValueElmExpression = 17 |> Json.Encode.int |> Json.Encode.encode 0
-                        }
-            , Test.test "Operator asterisk precedes operator plus left" <|
-                \_ ->
-                    expectationForElmInteractiveScenario
-                        { context = DefaultContext
-                        , previousSubmissions = []
-                        , submission = """ 5 + 3 * 4 """
-                        , expectedValueElmExpression = 17 |> Json.Encode.int |> Json.Encode.encode 0
-                        }
-            , Test.test "Parentheses override operator precedence" <|
-                \_ ->
-                    expectationForElmInteractiveScenario
-                        { context = DefaultContext
-                        , previousSubmissions = []
-                        , submission = """ (1 + 2) * (3 + 1) """
-                        , expectedValueElmExpression = 12 |> Json.Encode.int |> Json.Encode.encode 0
-                        }
-            , Test.test "Multiplication and division operators have same priority and are applied left to right" <|
-                \_ ->
-                    expectationForElmInteractiveScenario
-                        { context = DefaultContext
-                        , previousSubmissions = []
-                        , submission = """ 20 * 20 // 30  """
-                        , expectedValueElmExpression = 13 |> Json.Encode.int |> Json.Encode.encode 0
-                        }
-            , Test.test "Use value from previous submission" <|
-                \_ ->
-                    expectationForElmInteractiveScenario
-                        { context = DefaultContext
-                        , previousSubmissions = [ """custom_name = "hello" """ ]
-                        , submission = """ custom_name ++ " world!" """
-                        , expectedValueElmExpression = "hello world!" |> Json.Encode.string |> Json.Encode.encode 0
-                        }
-            ]
-        , Test.test "Char.toCode" <|
+        , Test.test "Use value from previous submission" <|
             \_ ->
                 expectationForElmInteractiveScenario
                     { context = DefaultContext
-                    , previousSubmissions = []
-                    , submission = """ String.fromInt (Char.toCode '😃') """
-                    , expectedValueElmExpression = "128515" |> Json.Encode.string |> Json.Encode.encode 0
-                    }
-        , Test.test "Literal False" <|
-            \_ ->
-                expectationForElmInteractiveScenario
-                    { context = DefaultContext
-                    , previousSubmissions = []
-                    , submission = """ False """
-                    , expectedValueElmExpression = "False"
+                    , previousSubmissions = [ """custom_name = "hello" """ ]
+                    , submission = """ custom_name ++ " world!" """
+                    , expectedValueElmExpression = "hello world!" |> Json.Encode.string |> Json.Encode.encode 0
                     }
         , Test.test "1 < 3 evaluates to True" <|
             \_ ->
@@ -393,30 +282,6 @@ named_literal =
                     , previousSubmissions = []
                     , submission = """ 1 < 3 """
                     , expectedValueElmExpression = "True"
-                    }
-        , Test.test "Record syntax with two fields" <|
-            \_ ->
-                expectationForElmInteractiveScenario
-                    { context = DefaultContext
-                    , previousSubmissions = []
-                    , submission = """ { beta =  "1",  alpha = "0" } """
-                    , expectedValueElmExpression = """{ alpha = "0", beta = "1" }"""
-                    }
-        , Test.test "Empty record syntax" <|
-            \_ ->
-                expectationForElmInteractiveScenario
-                    { context = DefaultContext
-                    , previousSubmissions = []
-                    , submission = """ {   } """
-                    , expectedValueElmExpression = """{}"""
-                    }
-        , Test.test "Multiply integers with result not fitting into 64 bits" <|
-            \_ ->
-                expectationForElmInteractiveScenario
-                    { context = DefaultContext
-                    , previousSubmissions = []
-                    , submission = "1234567890 * 3456789012 * 5678901234 * 7890123456"
-                    , expectedValueElmExpression = "191221166964169353263730685698459294720"
                     }
 
         {-
