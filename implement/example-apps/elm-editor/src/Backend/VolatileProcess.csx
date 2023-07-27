@@ -449,16 +449,16 @@ static public class ElmFormat
         ImmutableDictionary<System.Runtime.InteropServices.OSPlatform, (string hash, string remoteSource)>.Empty
         .Add(
             System.Runtime.InteropServices.OSPlatform.Linux,
-            ("f3d3e4765bd2a895e63fa4b24232d14cc458dcf6aa3392fd7c5481dfc3dd5d44",
-            @"https://github.com/avh4/elm-format/releases/download/0.8.5/elm-format-0.8.5-linux-x64.tgz"))
+            ("9acdd1006b9e4720f48cdbbb12f16262625c2a56145d56239f9c7b9a50ed0db4",
+            @"https://github.com/avh4/elm-format/releases/download/0.8.7/elm-format-0.8.7-linux-x64.tgz"))
         .Add(
             System.Runtime.InteropServices.OSPlatform.Windows,
-            ("277a57429a810a70a432f7a0a64b0eba4f0213d5ea86f60103ad6b17d80b0381",
-            @"https://github.com/avh4/elm-format/releases/download/0.8.5/elm-format-0.8.5-win-x64.zip"))
+            ("57b8f899f16e879338a6f0d898a13e28c440ab3947b173197de82048e3b520d6",
+            @"https://github.com/avh4/elm-format/releases/download/0.8.7/elm-format-0.8.7-win-x64.zip"))
         .Add(
             System.Runtime.InteropServices.OSPlatform.OSX,
-            ("46256d56d798a9fa2989ed8138c0c5198224a4e3b206dba28314cbc0e15fe163",
-            @"https://github.com/avh4/elm-format/releases/download/0.8.5/elm-format-0.8.5-mac-x64.tgz"));
+            ("364469d9b64866e0595c9c2837eb330eeb1c58269d31567085fa24886b5a46d7",
+            @"https://github.com/avh4/elm-format/releases/download/0.8.7/elm-format-0.8.7-mac-x64.tgz"));
 
 }
 
