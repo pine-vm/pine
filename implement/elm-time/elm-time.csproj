@@ -11,6 +11,20 @@
     <GenerateEmbeddedFilesManifest>true</GenerateEmbeddedFilesManifest>
   </PropertyGroup>
 
+  <PropertyGroup>
+    <Description>Runtime environment for the Elm programming language</Description>
+    <PackageTags>Elm;Runtime;DBMS</PackageTags>
+    <RepositoryUrl>https://github.com/elm-time/elm-time.git</RepositoryUrl>
+    <PackageProjectUrl>https://elm-time.org/</PackageProjectUrl>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <Authors>Viir</Authors>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="\"/>
+  </ItemGroup>
+
   <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
   </ItemGroup>
