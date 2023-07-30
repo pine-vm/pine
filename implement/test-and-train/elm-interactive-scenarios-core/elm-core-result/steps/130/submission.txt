@@ -1,0 +1,1 @@
+Result.map (\ok -> [ ok, "world" ]) (Result.Ok "hello")

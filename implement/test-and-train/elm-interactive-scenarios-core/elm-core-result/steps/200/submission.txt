@@ -1,0 +1,1 @@
+Result.andThen (\ok -> Result.Ok [ ok, "world" ]) (Result.Ok "hello")

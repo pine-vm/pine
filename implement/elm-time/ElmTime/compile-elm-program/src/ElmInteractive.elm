@@ -984,6 +984,8 @@ elmValuesToExposeToGlobalDefault =
     , ( "(::)", [ "List" ] )
     , ( "Nothing", [ "Maybe" ] )
     , ( "Just", [ "Maybe" ] )
+    , ( "Err", [ "Result" ] )
+    , ( "Ok", [ "Result" ] )
     ]
         |> Dict.fromList
 

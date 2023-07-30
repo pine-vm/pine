@@ -1,0 +1,1 @@
+Result.mapError (\test -> [ "prefix", test ]) (Result.Ok "hello")

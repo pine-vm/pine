@@ -1,0 +1,1 @@
+Result.toMaybe (Result.Ok "success text")

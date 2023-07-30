@@ -1,0 +1,4 @@
+[ Result.andThen (\ok -> Result.Ok [ ok, "world" ]) (Result.Err "Inner error alfa")
+, Result.andThen (\ok -> Result.Err "Outer error beta") (Result.Err "Inner error beta")
+, Result.andThen (\ok -> Result.Err "Outer error gamma") (Result.Ok "hello")
+]

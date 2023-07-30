@@ -1,0 +1,1 @@
+[Ok "alfa",Err "error text"]
