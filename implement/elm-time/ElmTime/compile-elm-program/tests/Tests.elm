@@ -156,6 +156,14 @@ subscriptions _ =
                                             ]
                                                 |> Dict.fromList
                                                 |> CompileElmApp.elmModulesDictFromAppFiles
+                                                |> Dict.toList
+                                                |> List.filterMap
+                                                    (\( filePath, moduleResult ) ->
+                                                        moduleResult
+                                                            |> Result.toMaybe
+                                                            |> Maybe.map (Tuple.pair filePath)
+                                                    )
+                                                |> Dict.fromList
                                     in
                                     CompileBackendApp.parseAppStateElmTypeAndDependenciesRecursively
                                         rootFunctionDeclaration

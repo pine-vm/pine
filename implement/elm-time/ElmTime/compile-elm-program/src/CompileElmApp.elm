@@ -336,7 +336,16 @@ asCompletelyLoweredElmApp entryPointClasses arguments =
         Ok sourceDirs ->
             let
                 sourceModules =
-                    elmModulesDictFromAppFiles arguments.sourceFiles
+                    arguments.sourceFiles
+                        |> elmModulesDictFromAppFiles
+                        |> Dict.toList
+                        |> List.filterMap
+                            (\( filePath, moduleResult ) ->
+                                moduleResult
+                                    |> Result.toMaybe
+                                    |> Maybe.map (Tuple.pair filePath)
+                            )
+                        |> Dict.fromList
 
                 compilationInterfaceModuleDependencies : Dict.Dict String (List String)
                 compilationInterfaceModuleDependencies =
@@ -2554,36 +2563,33 @@ findModuleByName moduleName =
     Dict.toList >> List.filter (Tuple.second >> .moduleName >> (==) moduleName) >> List.head
 
 
-elmModulesDictFromAppFiles : AppFiles -> Dict.Dict (List String) SourceParsedElmModule
+elmModulesDictFromAppFiles : AppFiles -> Dict.Dict (List String) (Result String SourceParsedElmModule)
 elmModulesDictFromAppFiles =
-    Dict.toList
-        >> List.filter
-            (Tuple.first
-                >> List.reverse
-                >> List.head
-                >> Maybe.map (String.toLower >> String.endsWith ".elm")
-                >> Maybe.withDefault False
-            )
-        >> List.filterMap
-            (\( filePath, fileContent ) ->
-                stringFromFileContent fileContent
-                    |> Maybe.andThen
+    Dict.filter
+        (List.reverse
+            >> List.head
+            >> Maybe.map (String.toLower >> String.endsWith ".elm")
+            >> Maybe.withDefault False
+            >> always
+        )
+        >> Dict.map
+            (\_ ->
+                stringFromFileContent
+                    >> Maybe.map Ok
+                    >> Maybe.withDefault (Err "Failed to decode file content as string")
+                    >> Result.andThen
                         (\fileContentAsString ->
-                            case parseElmModuleText fileContentAsString of
-                                Err _ ->
-                                    Nothing
-
-                                Ok elmFile ->
-                                    Just
-                                        ( filePath
-                                        , { fileText = fileContentAsString
-                                          , parsedSyntax = elmFile
-                                          , moduleName = Elm.Syntax.Module.moduleName (Elm.Syntax.Node.value elmFile.moduleDefinition)
-                                          }
-                                        )
+                            parseElmModuleText fileContentAsString
+                                |> Result.mapError Parser.deadEndsToString
+                                |> Result.map
+                                    (\parsedSyntax ->
+                                        { fileText = fileContentAsString
+                                        , parsedSyntax = parsedSyntax
+                                        , moduleName = Elm.Syntax.Module.moduleName (Elm.Syntax.Node.value parsedSyntax.moduleDefinition)
+                                        }
+                                    )
                         )
             )
-        >> Dict.fromList
 
 
 elmModulesDictFromModuleTexts : (List String -> List String) -> List String -> Result String (Dict.Dict (List String) SourceParsedElmModule)
