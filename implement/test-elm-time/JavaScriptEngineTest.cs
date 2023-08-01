@@ -1,4 +1,4 @@
-﻿using ElmTime;
+﻿using ElmTime.JavaScript;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace TestElmTime;

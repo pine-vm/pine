@@ -6,7 +6,7 @@ using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Runtime.CompilerServices;
 
-namespace ElmTime;
+namespace ElmTime.JavaScript;
 
 public class JsEngineJint : IJsEngine
 {

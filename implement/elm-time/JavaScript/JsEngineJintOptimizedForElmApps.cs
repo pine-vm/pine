@@ -7,9 +7,9 @@ using System.Collections.Immutable;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
-using static ElmTime.JsEngineJint;
+using static ElmTime.JavaScript.JsEngineJint;
 
-namespace ElmTime;
+namespace ElmTime.JavaScript;
 
 public class JsEngineJintOptimizedForElmApps
 {

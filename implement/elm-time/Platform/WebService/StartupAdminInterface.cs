@@ -1,3 +1,4 @@
+using ElmTime.JavaScript;
 using ElmTime.Platform.WebService.ProcessStoreSupportingMigrations;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;

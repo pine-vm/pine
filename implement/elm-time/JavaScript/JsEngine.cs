@@ -1,8 +1,7 @@
-﻿using ElmTime.JavaScript;
-using JavaScriptEngineSwitcher.V8;
+﻿using JavaScriptEngineSwitcher.V8;
 using System;
 
-namespace ElmTime;
+namespace ElmTime.JavaScript;
 
 public interface IJsEngine : IDisposable
 {

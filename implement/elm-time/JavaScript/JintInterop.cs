@@ -4,7 +4,7 @@ using Jint.Native.Object;
 using System;
 using System.Reflection;
 
-namespace ElmTime;
+namespace ElmTime.JavaScript;
 
 internal class JintInterop
 {

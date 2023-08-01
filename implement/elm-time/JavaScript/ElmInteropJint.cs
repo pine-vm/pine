@@ -2,7 +2,7 @@
 using Jint.Native;
 using Pine;
 
-namespace ElmTime;
+namespace ElmTime.JavaScript;
 
 public class ElmInteropJint
 {
