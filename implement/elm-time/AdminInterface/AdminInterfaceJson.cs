@@ -9,4 +9,5 @@ public record ApplyDatabaseFunctionRequest(
 
 public record ApplyDatabaseFunctionSuccess(
     StateShim.InterfaceToHost.FunctionApplicationResult functionApplicationResult,
+    StateShim.ProcessStateShimRequestReport processStateShimRequestReport,
     bool committedResultingState);

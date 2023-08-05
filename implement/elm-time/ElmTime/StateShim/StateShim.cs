@@ -3,6 +3,7 @@ using Pine;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
+using System.Diagnostics;
 using System.Linq;
 using System.Text.Json;
 
@@ -29,7 +30,7 @@ public class StateShim
                 process,
                 new StateShimRequestStruct.SetBranchesStateShimRequest(
                     new StateSource.JsonStateSource(stateJson), Branches: ImmutableList.Create(branchName)))
-            .AndThen(decodeOk => decodeOk switch
+            .AndThen(decodeOk => decodeOk.Response switch
             {
                 StateShimResponseStruct.SetBranchesStateShimResponse setBranchesResponse =>
                 setBranchesResponse.Result,
@@ -51,7 +52,7 @@ public class StateShim
             ProcessStateShimRequest(
                 process,
                 new StateShimRequestStruct.SerializeStateShimRequest(new StateSource.BranchStateSource(branchName)))
-            .AndThen(decodeOk => decodeOk switch
+            .AndThen(decodeOk => decodeOk.Response switch
             {
                 StateShimResponseStruct.SerializeStateShimResponse serializeStateResponse =>
                 serializeStateResponse.Result,
@@ -68,7 +69,7 @@ public class StateShim
             ProcessStateShimRequest(
                 process,
                 new StateShimRequestStruct.ListExposedFunctionsShimRequest())
-            .AndThen(decodeOk => decodeOk switch
+            .AndThen(decodeOk => decodeOk.Response switch
             {
                 StateShimResponseStruct.ListExposedFunctionsShimResponse listExposedFunctionsResponse =>
                 Result<string, IReadOnlyList<NamedExposedFunction>>.ok(listExposedFunctionsResponse.Functions),
@@ -129,19 +130,20 @@ public class StateShim
                         ProcessStateShimRequest(
                             process,
                             new StateShimRequestStruct.ApplyFunctionShimRequest(applyFunctionRequest))
-                        .AndThen(responseOk => responseOk switch
+                        .AndThen(responseOk => responseOk.Response switch
                         {
                             StateShimResponseStruct.ApplyFunctionShimResponse applyFunctionResponse =>
                             applyFunctionResponse.Result
-                            .MapError(err => "Failed to apply function " + request.functionName + ": " + err),
+                            .MapError(err => "Failed to apply function " + request.functionName + ": " + err)
+                            .Map(applyFunctionOk => new AdminInterface.ApplyDatabaseFunctionSuccess(
+                                applyFunctionOk,
+                                processStateShimRequestReport: responseOk,
+                                committedResultingState: stateDestinationBranches.Contains(MainBranchName))),
 
                             _ =>
-                            Result<string, FunctionApplicationResult>.err(
+                            Result<string, AdminInterface.ApplyDatabaseFunctionSuccess>.err(
                                 "Unexpected type of response: " + JsonSerializer.Serialize(responseOk))
-                        })
-                        .Map(applyFunctionOk => new AdminInterface.ApplyDatabaseFunctionSuccess(
-                            applyFunctionOk,
-                            committedResultingState: stateDestinationBranches.Contains(MainBranchName)));
+                        });
                 }
                 catch (Exception e)
                 {
@@ -158,7 +160,7 @@ public class StateShim
             ProcessStateShimRequest(
                 process,
                 new StateShimRequestStruct.EstimateSerializedStateLengthShimRequest(MainStateBranch))
-            .AndThen(responseOk => responseOk switch
+            .AndThen(responseOk => responseOk.Response switch
             {
                 StateShimResponseStruct.EstimateSerializedStateLengthShimResponse estimateResponse =>
                 estimateResponse.Result
@@ -177,7 +179,7 @@ public class StateShim
             ProcessStateShimRequest(
                 process,
                 new StateShimRequestStruct.ListBranchesShimRequest())
-            .AndThen(responseOk => responseOk switch
+            .AndThen(responseOk => responseOk.Response switch
             {
                 StateShimResponseStruct.ListBranchesShimResponse listBranchesResponse =>
                 Result<string, IReadOnlyList<string>>.ok(listBranchesResponse.BranchesNames),
@@ -197,7 +199,7 @@ public class StateShim
             ProcessStateShimRequest(
                 process,
                 new StateShimRequestStruct.SetBranchesStateShimRequest(StateSource: stateSource, Branches: branches))
-            .AndThen(responseOk => responseOk switch
+            .AndThen(responseOk => responseOk.Response switch
             {
                 StateShimResponseStruct.SetBranchesStateShimResponse setBranchesResponse =>
                 setBranchesResponse.Result,
@@ -217,7 +219,7 @@ public class StateShim
             ProcessStateShimRequest(
                 process,
                 new StateShimRequestStruct.RemoveBranchesShimRequest(BranchesNames: branches))
-            .AndThen(responseOk => responseOk switch
+            .AndThen(responseOk => responseOk.Response switch
             {
                 StateShimResponseStruct.RemoveBranchesShimResponse removeBranchesResponse =>
                 Result<string, RemoveBranchesShimResponseStruct>.ok(removeBranchesResponse.ResponseStruct),
@@ -228,21 +230,37 @@ public class StateShim
             });
     }
 
-    public static Result<string, StateShimResponseStruct> ProcessStateShimRequest(
+    public static Result<string, ProcessStateShimRequestReport> ProcessStateShimRequest(
        IProcess<string, string> process,
        StateShimRequestStruct stateShimRequest)
     {
+        var serializeStopwatch = Stopwatch.StartNew();
+
         var serializedInterfaceEvent = stateShimRequest.SerializeToJsonString();
+
+        serializeStopwatch.Stop();
+
+        var processEventAndSerializeStopwatch = Stopwatch.StartNew();
 
         var responseString = process!.ProcessEvent(serializedInterfaceEvent);
 
+        processEventAndSerializeStopwatch.Stop();
+
         try
         {
-            return JsonSerializer.Deserialize<Result<string, StateShimResponseStruct>>(responseString);
+            return
+                JsonSerializer.Deserialize<Result<string, StateShimResponseStruct>>(responseString)
+                .Map(responseOk =>
+                new ProcessStateShimRequestReport(
+                SerializeTimeInMilliseconds: (int)serializeStopwatch.ElapsedMilliseconds,
+                SerializedRequest: serializedInterfaceEvent,
+                SerializedResponse: responseString,
+                Response: responseOk,
+                ProcessEventAndSerializeTimeInMilliseconds: (int)processEventAndSerializeStopwatch.ElapsedMilliseconds));
         }
         catch (Exception e)
         {
-            return Result<string, StateShimResponseStruct>.err(
+            return Result<string, ProcessStateShimRequestReport>.err(
                 "Failed to parse response string: " + e);
         }
     }
