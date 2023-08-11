@@ -72,7 +72,7 @@ updateForCurrentPosixTimeMilli { currentPosixTimeMilli } stateBefore =
             []
 
         Just ( pendingHttpRequestContext, pendingHttpRequest ) ->
-            if currentPosixTimeMilli < pendingHttpRequestContext.timeMilli + 1000 then
+            if currentPosixTimeMilli < pendingHttpRequestContext.timeMilli + 1100 then
                 []
 
             else
