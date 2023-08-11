@@ -111,7 +111,7 @@ public class ProcessStoreReaderInFileStore : ProcessStoreInFileStore, IProcessSt
                 var fileContent = compositionFileStoreReader.GetFileContent(compositionFilePath)!;
 
                 return
-                    Encoding.UTF8.GetString(fileContent as byte[] ?? fileContent.ToArray())
+                    Encoding.UTF8.GetString(fileContent.Value.Span)
                     .Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries).Reverse()
                     .Select(compositionRecord => Encoding.UTF8.GetBytes(compositionRecord));
             });
@@ -124,7 +124,7 @@ public class ProcessStoreReaderInFileStore : ProcessStoreInFileStore, IProcessSt
 
         var fileContent = reductionFileStoreReader.GetFileContent(filePath);
 
-        if (fileContent == null)
+        if (fileContent is null)
             return null;
 
         try
@@ -135,15 +135,14 @@ public class ProcessStoreReaderInFileStore : ProcessStoreInFileStore, IProcessSt
                 https://github.com/elm-time/elm-time/blob/1cd3f00bdf5a05e9bda479c534b0458b2496393c/implement/PersistentProcess/PersistentProcess.Common/ProcessStore.cs#L183
                 Looking at the files from stores in production, it seems like that caused addition of BOM.
                 */
-                fileContent.Take(3).SequenceEqual(new byte[] { 0xEF, 0xBB, 0xBF })
+                fileContent.Value.Span.StartsWith(new byte[] { 0xEF, 0xBB, 0xBF })
                 ?
                 3
                 :
                 0;
 
             var reductionRecordFromFile =
-                JsonSerializer.Deserialize<ReductionRecordInFile>(
-                    Encoding.UTF8.GetString((fileContent as byte[] ?? fileContent.ToArray()).AsSpan(payloadStartIndex)))!;
+                JsonSerializer.Deserialize<ReductionRecordInFile>(fileContent.Value[payloadStartIndex..].Span)!;
 
             if (reducedCompositionHashBase16 != reductionRecordFromFile.ReducedCompositionHashBase16)
                 throw new Exception("Unexpected content in file " + string.Join("/", filePath) + ", composition hash does not match.");
@@ -156,7 +155,9 @@ public class ProcessStoreReaderInFileStore : ProcessStoreInFileStore, IProcessSt
         }
         catch (Exception e)
         {
-            throw new Exception("Failed to read reduction from file '" + string.Join("/", filePath) + "'.", e);
+            throw new Exception(
+                "Failed to read reduction from file '" + string.Join("/", filePath) + "' (" + fileContent.Value.Length + " bytes)",
+                e);
         }
     }
 

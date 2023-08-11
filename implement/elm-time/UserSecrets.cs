@@ -31,6 +31,6 @@ public static class UserSecrets
         if (fileContent == null)
             return null;
 
-        return Encoding.UTF8.GetString(fileContent as byte[] ?? fileContent.ToArray());
+        return Encoding.UTF8.GetString(fileContent.Value.Span);
     }
 }

@@ -104,9 +104,9 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
             {
                 var fileContent = fileStoreReader.GetFileContent(filePath);
 
-                if (fileContent != null)
+                if (fileContent is not null)
                 {
-                    filesForProcessRestore[filePath] = fileContent.ToArray();
+                    filesForProcessRestore[filePath] = fileContent.Value;
                 }
 
                 return fileContent;

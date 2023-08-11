@@ -9,45 +9,45 @@ namespace Pine;
 
 public interface IFileStoreReader
 {
-    IReadOnlyList<byte>? GetFileContent(IImmutableList<string> path);
+    ReadOnlyMemory<byte>? GetFileContent(IImmutableList<string> path);
 
     IEnumerable<IImmutableList<string>> ListFilesInDirectory(IImmutableList<string> directoryPath);
 }
 
 public interface IFileStoreWriter
 {
-    void SetFileContent(IImmutableList<string> path, IReadOnlyList<byte> fileContent);
+    void SetFileContent(IImmutableList<string> path, ReadOnlyMemory<byte> fileContent);
 
     // TODO: Simplify IFileStoreWriter: Do we still need AppendFileContent there?
-    void AppendFileContent(IImmutableList<string> path, IReadOnlyList<byte> fileContent);
+    void AppendFileContent(IImmutableList<string> path, ReadOnlyMemory<byte> fileContent);
 
     void DeleteFile(IImmutableList<string> path);
 }
 
 public record DelegatingFileStoreReader(
-    Func<IImmutableList<string>, IReadOnlyList<byte>?> GetFileContentDelegate,
+    Func<IImmutableList<string>, ReadOnlyMemory<byte>?> GetFileContentDelegate,
     Func<IImmutableList<string>, IEnumerable<IImmutableList<string>>> ListFilesInDirectoryDelegate)
     : IFileStoreReader
 {
-    public IReadOnlyList<byte>? GetFileContent(IImmutableList<string> path) => GetFileContentDelegate(path);
+    public ReadOnlyMemory<byte>? GetFileContent(IImmutableList<string> path) => GetFileContentDelegate(path);
 
     public IEnumerable<IImmutableList<string>> ListFilesInDirectory(IImmutableList<string> directoryPath) =>
         ListFilesInDirectoryDelegate(directoryPath);
 }
 
 public record DelegatingFileStoreWriter(
-    Action<(IImmutableList<string> path, IReadOnlyList<byte> fileContent)> AppendFileContentDelegate,
+    Action<(IImmutableList<string> path, ReadOnlyMemory<byte> fileContent)> AppendFileContentDelegate,
     Action<IImmutableList<string>> DeleteFileDelegate,
-    Action<(IImmutableList<string> path, IReadOnlyList<byte> fileContent)> SetFileContentDelegate)
+    Action<(IImmutableList<string> path, ReadOnlyMemory<byte> fileContent)> SetFileContentDelegate)
     : IFileStoreWriter
 {
-    public void AppendFileContent(IImmutableList<string> path, IReadOnlyList<byte> fileContent) =>
+    public void AppendFileContent(IImmutableList<string> path, ReadOnlyMemory<byte> fileContent) =>
         AppendFileContentDelegate((path, fileContent));
 
     public void DeleteFile(IImmutableList<string> path) =>
         DeleteFileDelegate(path);
 
-    public void SetFileContent(IImmutableList<string> path, IReadOnlyList<byte> fileContent) =>
+    public void SetFileContent(IImmutableList<string> path, ReadOnlyMemory<byte> fileContent) =>
         SetFileContentDelegate((path, fileContent));
 }
 
@@ -89,7 +89,7 @@ public class FileStoreFromSystemIOFile : IFileStore
             Directory.CreateDirectory(directoryPath);
     }
 
-    public void SetFileContent(IImmutableList<string> path, IReadOnlyList<byte> fileContent)
+    public void SetFileContent(IImmutableList<string> path, ReadOnlyMemory<byte> fileContent)
     {
         var filePath = CombinePath(path);
 
@@ -98,10 +98,14 @@ public class FileStoreFromSystemIOFile : IFileStore
         if (directoryPath != null)
             EnsureDirectoryExists(directoryPath);
 
-        File.WriteAllBytes(filePath, fileContent as byte[] ?? fileContent.ToArray());
+        using var fileStream = new FileStream(filePath, FileMode.Create, FileAccess.Write);
+
+        fileStream.Write(fileContent.Span);
+
+        fileStream.Flush();
     }
 
-    public void AppendFileContent(IImmutableList<string> path, IReadOnlyList<byte> fileContent)
+    public void AppendFileContent(IImmutableList<string> path, ReadOnlyMemory<byte> fileContent)
     {
         var filePath = CombinePath(path);
 
@@ -112,10 +116,12 @@ public class FileStoreFromSystemIOFile : IFileStore
 
         using var fileStream = new FileStream(filePath, FileMode.Append, FileAccess.Write);
 
-        fileStream.Write(fileContent as byte[] ?? fileContent.ToArray());
+        fileStream.Write(fileContent.Span);
+
+        fileStream.Flush();
     }
 
-    public IReadOnlyList<byte>? GetFileContent(IImmutableList<string> path)
+    public ReadOnlyMemory<byte>? GetFileContent(IImmutableList<string> path)
     {
         var filePath = CombinePath(path);
 
@@ -161,16 +167,16 @@ public class FileStoreFromWriterAndReader : IFileStore
         this.reader = reader;
     }
 
-    public void AppendFileContent(IImmutableList<string> path, IReadOnlyList<byte> fileContent) =>
+    public void AppendFileContent(IImmutableList<string> path, ReadOnlyMemory<byte> fileContent) =>
         writer.AppendFileContent(path, fileContent);
 
     public void DeleteFile(IImmutableList<string> path) =>
         writer.DeleteFile(path);
 
-    public void SetFileContent(IImmutableList<string> path, IReadOnlyList<byte> fileContent) =>
+    public void SetFileContent(IImmutableList<string> path, ReadOnlyMemory<byte> fileContent) =>
         writer.SetFileContent(path, fileContent);
 
-    public IReadOnlyList<byte>? GetFileContent(IImmutableList<string> path) =>
+    public ReadOnlyMemory<byte>? GetFileContent(IImmutableList<string> path) =>
         reader.GetFileContent(path);
 
     public IEnumerable<IImmutableList<string>> ListFilesInDirectory(IImmutableList<string> directoryPath) =>
@@ -187,8 +193,8 @@ public class RecordingFileStoreWriter : IFileStoreWriter
         WriteOperation.Apply(history, fileStoreReader);
 
     public record WriteOperation(
-        (IImmutableList<string> path, IReadOnlyList<byte> fileContent)? SetFileContent = null,
-        (IImmutableList<string> path, IReadOnlyList<byte> fileContent)? AppendFileContent = null,
+        (IImmutableList<string> path, ReadOnlyMemory<byte> fileContent)? SetFileContent = null,
+        (IImmutableList<string> path, ReadOnlyMemory<byte> fileContent)? AppendFileContent = null,
         IImmutableList<string>? DeleteFile = null)
     {
         public static IFileStoreReader Apply(IEnumerable<WriteOperation> writeOperations, IFileStoreReader fileStoreReader) =>
@@ -235,7 +241,9 @@ public class RecordingFileStoreWriter : IFileStoreWriter
 
                         if (filePath.SequenceEqual(AppendFileContent.Value.path))
                         {
-                            return (previousFileContent ?? Array.Empty<byte>()).Concat(AppendFileContent.Value.fileContent).ToList();
+                            return CommonConversion.Concat(
+                                (previousFileContent ?? ReadOnlyMemory<byte>.Empty).Span,
+                                AppendFileContent.Value.fileContent.Span);
                         }
 
                         return previousFileContent;
@@ -276,10 +284,10 @@ public class RecordingFileStoreWriter : IFileStoreWriter
         }
     }
 
-    public void SetFileContent(IImmutableList<string> path, IReadOnlyList<byte> fileContent) =>
+    public void SetFileContent(IImmutableList<string> path, ReadOnlyMemory<byte> fileContent) =>
         history.Enqueue(new WriteOperation { SetFileContent = (path, fileContent) });
 
-    public void AppendFileContent(IImmutableList<string> path, IReadOnlyList<byte> fileContent) =>
+    public void AppendFileContent(IImmutableList<string> path, ReadOnlyMemory<byte> fileContent) =>
         history.Enqueue(new WriteOperation { AppendFileContent = (path, fileContent) });
 
     public void DeleteFile(IImmutableList<string> path) =>
@@ -288,7 +296,7 @@ public class RecordingFileStoreWriter : IFileStoreWriter
 
 public class EmptyFileStoreReader : IFileStoreReader
 {
-    public IReadOnlyList<byte>? GetFileContent(IImmutableList<string> path) => null;
+    public ReadOnlyMemory<byte>? GetFileContent(IImmutableList<string> path) => null;
 
     public IEnumerable<IImmutableList<string>> ListFilesInDirectory(IImmutableList<string> directoryPath) =>
         ImmutableList<IImmutableList<string>>.Empty;

@@ -847,7 +847,7 @@ public class StartupAdminInterface
 
                     context.Response.StatusCode = 200;
                     context.Response.ContentType = "application/octet-stream";
-                    await context.Response.Body.WriteAsync(fileContent as byte[] ?? fileContent.ToArray());
+                    await context.Response.Body.WriteAsync(fileContent.Value);
                     return;
                 }
             }

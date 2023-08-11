@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Immutable;
-using System.Linq;
 
 namespace Pine;
 
@@ -16,7 +15,7 @@ public record CacheByFileName(IFileStore FileStore)
         var fromCache = FileStore.GetFileContent(entryPath);
 
         if (fromCache is not null)
-            return new ReadOnlyMemory<byte>(fromCache.ToArray());
+            return fromCache;
 
         var file = tryBuild();
 

@@ -587,12 +587,12 @@ public class WebServiceTests
             processStoreFileStoreMap: originalFileStore =>
             {
                 return new FileStoreFromDelegates(
-                    setFileContent: new Action<IImmutableList<string>, IReadOnlyList<byte>>((path, fileContent) =>
+                    setFileContent: new Action<IImmutableList<string>, ReadOnlyMemory<byte>>((path, fileContent) =>
                     {
                         runBeforeMutateInFileStore?.Invoke();
                         originalFileStore.SetFileContent(path, fileContent);
                     }),
-                    appendFileContent: new Action<IImmutableList<string>, IReadOnlyList<byte>>((path, fileContent) =>
+                    appendFileContent: new Action<IImmutableList<string>, ReadOnlyMemory<byte>>((path, fileContent) =>
                     {
                         runBeforeMutateInFileStore?.Invoke();
                         originalFileStore.AppendFileContent(path, fileContent);
@@ -1310,7 +1310,7 @@ public class WebServiceTests
         var storeHistoryWithCrash =
             storeOriginalHistory.SkipLast(1).Append(new RecordingFileStoreWriter.WriteOperation
             {
-                AppendFileContent = (lastWriteOperation.AppendFileContent.Value.path, Enumerable.Repeat((byte)4, 123).ToImmutableList()),
+                AppendFileContent = (lastWriteOperation.AppendFileContent.Value.path, Enumerable.Repeat((byte)4, 123).ToArray()),
             });
 
         var fileStoreReaderAfterCrash = RecordingFileStoreWriter.WriteOperation.Apply(storeHistoryWithCrash, new EmptyFileStoreReader());
@@ -1423,21 +1423,21 @@ public class WebServiceTests
 
     private class FileStoreFromDelegates : IFileStore
     {
-        private readonly Action<IImmutableList<string>, IReadOnlyList<byte>> setFileContent;
+        private readonly Action<IImmutableList<string>, ReadOnlyMemory<byte>> setFileContent;
 
-        private readonly Action<IImmutableList<string>, IReadOnlyList<byte>> appendFileContent;
+        private readonly Action<IImmutableList<string>, ReadOnlyMemory<byte>> appendFileContent;
 
         private readonly Action<IImmutableList<string>> deleteFile;
 
-        private readonly Func<IImmutableList<string>, IReadOnlyList<byte>?> getFileContent;
+        private readonly Func<IImmutableList<string>, ReadOnlyMemory<byte>?> getFileContent;
 
         private readonly Func<IImmutableList<string>, IEnumerable<IImmutableList<string>>> listFilesInDirectory;
 
         public FileStoreFromDelegates(
-            Action<IImmutableList<string>, IReadOnlyList<byte>> setFileContent,
-            Action<IImmutableList<string>, IReadOnlyList<byte>> appendFileContent,
+            Action<IImmutableList<string>, ReadOnlyMemory<byte>> setFileContent,
+            Action<IImmutableList<string>, ReadOnlyMemory<byte>> appendFileContent,
             Action<IImmutableList<string>> deleteFile,
-            Func<IImmutableList<string>, IReadOnlyList<byte>?> getFileContent,
+            Func<IImmutableList<string>, ReadOnlyMemory<byte>?> getFileContent,
             Func<IImmutableList<string>, IEnumerable<IImmutableList<string>>> listFilesInDirectory)
         {
             this.setFileContent = setFileContent;
@@ -1447,19 +1447,19 @@ public class WebServiceTests
             this.listFilesInDirectory = listFilesInDirectory;
         }
 
-        public void AppendFileContent(IImmutableList<string> path, IReadOnlyList<byte> fileContent) =>
+        public void AppendFileContent(IImmutableList<string> path, ReadOnlyMemory<byte> fileContent) =>
             appendFileContent(path, fileContent);
 
         public void DeleteFile(IImmutableList<string> path) =>
             deleteFile(path);
 
-        public IReadOnlyList<byte>? GetFileContent(IImmutableList<string> path) =>
+        public ReadOnlyMemory<byte>? GetFileContent(IImmutableList<string> path) =>
             getFileContent(path);
 
         public IEnumerable<IImmutableList<string>> ListFilesInDirectory(IImmutableList<string> directoryPath) =>
             listFilesInDirectory(directoryPath);
 
-        public void SetFileContent(IImmutableList<string> path, IReadOnlyList<byte> fileContent) =>
+        public void SetFileContent(IImmutableList<string> path, ReadOnlyMemory<byte> fileContent) =>
             setFileContent(path, fileContent);
     }
 

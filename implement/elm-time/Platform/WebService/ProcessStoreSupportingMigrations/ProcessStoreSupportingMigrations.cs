@@ -10,7 +10,7 @@ using System.Text.Json.Serialization;
 namespace ElmTime.Platform.WebService.ProcessStoreSupportingMigrations;
 
 public record FileStoreReaderProjectionResult(
-    IEnumerable<(IImmutableList<string> filePath, IReadOnlyList<byte> fileContent)> projectedFiles,
+    IEnumerable<(IImmutableList<string> filePath, ReadOnlyMemory<byte> fileContent)> projectedFiles,
     IFileStoreReader projectedReader);
 
 public interface IProcessStoreWriter
@@ -36,7 +36,7 @@ public interface IProcessStoreReader
         CompositionLogRecordInFile.CompositionEvent compositionLogEvent)
     {
         var projectedFiles =
-            new System.Collections.Concurrent.ConcurrentDictionary<IImmutableList<string>, IReadOnlyList<byte>>(
+            new System.Collections.Concurrent.ConcurrentDictionary<IImmutableList<string>, ReadOnlyMemory<byte>>(
                 comparer: EnumerableExtension.EqualityComparer<IImmutableList<string>>());
 
         var fileStoreWriter = new DelegatingFileStoreWriter
@@ -45,9 +45,10 @@ public interface IProcessStoreReader
             AppendFileContentDelegate: pathAndFileContent =>
             {
                 if (!projectedFiles.TryGetValue(pathAndFileContent.path, out var fileContentBefore))
-                    fileContentBefore = originalFileStore.GetFileContent(pathAndFileContent.path);
+                    fileContentBefore = originalFileStore.GetFileContent(pathAndFileContent.path) ?? ReadOnlyMemory<byte>.Empty;
 
-                projectedFiles[pathAndFileContent.path] = (fileContentBefore ?? Array.Empty<byte>()).Concat(pathAndFileContent.fileContent).ToArray();
+                projectedFiles[pathAndFileContent.path] =
+                CommonConversion.Concat(fileContentBefore.Span, pathAndFileContent.fileContent.Span);
             },
             DeleteFileDelegate: _ => throw new Exception("Unexpected operation delete file.")
         );
@@ -193,7 +194,7 @@ public record ProvisionalReductionRecordInFile(
 
 public class ProcessStoreInFileStore
 {
-    protected static readonly IEnumerable<byte> compositionLogEntryDelimiter = new byte[] { 10 };
+    protected static readonly ReadOnlyMemory<byte> compositionLogEntryDelimiter = "\n"u8.ToArray();
 
     public static JsonSerializerOptions RecordSerializationSettings => new()
     {
@@ -268,11 +269,11 @@ public class ProcessStoreReaderInFileStore : ProcessStoreInFileStore, IProcessSt
         {
             var deflatedFile = DeflatedLiteralElementFileStore.GetFileContent(filePath);
 
-            if (deflatedFile != null)
-                return CommonConversion.Inflate(deflatedFile);
+            if (deflatedFile is not null)
+                return CommonConversion.Inflate(deflatedFile.Value);
         }
 
-        return originalFile!.ToArray();
+        return originalFile;
     }
 
     public PineValue? LoadComponent(string componentHashBase16)
@@ -301,7 +302,7 @@ public class ProcessStoreReaderInFileStore : ProcessStoreInFileStore, IProcessSt
 
         var fileContent = ProvisionalReductionFileStore.GetFileContent(filePath);
 
-        if (fileContent == null)
+        if (fileContent is null)
             return null;
 
         try
@@ -312,15 +313,14 @@ public class ProcessStoreReaderInFileStore : ProcessStoreInFileStore, IProcessSt
                 https://github.com/elm-time/elm-time/blob/1cd3f00bdf5a05e9bda479c534b0458b2496393c/implement/PersistentProcess/PersistentProcess.Common/ProcessStore.cs#L183
                 Looking at the files from stores in production, it seems like that caused addition of BOM.
                 */
-                fileContent.Take(3).SequenceEqual(new byte[] { 0xEF, 0xBB, 0xBF })
+                fileContent.Value.Span.StartsWith(new byte[] { 0xEF, 0xBB, 0xBF })
                 ?
                 3
                 :
                 0;
 
             var reductionRecordFromFile =
-                JsonSerializer.Deserialize<ProvisionalReductionRecordInFile>(
-                    Encoding.UTF8.GetString((fileContent as byte[] ?? fileContent.ToArray()).AsSpan(payloadStartIndex)))!;
+                JsonSerializer.Deserialize<ProvisionalReductionRecordInFile>(fileContent.Value[payloadStartIndex..].Span)!;
 
             if (reducedCompositionHash != reductionRecordFromFile.reducedCompositionHashBase16)
                 throw new Exception("Unexpected content in file " + string.Join("/", filePath) + ", composition hash does not match.");
@@ -329,7 +329,9 @@ public class ProcessStoreReaderInFileStore : ProcessStoreInFileStore, IProcessSt
         }
         catch (Exception e)
         {
-            throw new Exception("Failed to read reduction from file '" + string.Join("/", filePath) + "'.", e);
+            throw new Exception(
+                "Failed to read reduction from file '" + string.Join("/", filePath) + "' (" + fileContent.Value.Length + " bytes)",
+                e);
         }
     }
 
@@ -358,10 +360,10 @@ public class ProcessStoreReaderInFileStore : ProcessStoreInFileStore, IProcessSt
                 var fileContent = CompositionLogLiteralFileStore.GetFileContent(filePath);
 
                 if (fileContent == null)
-                    return ImmutableList<(IImmutableList<string>, IReadOnlyList<byte>)>.Empty;
+                    return ImmutableList<(IImmutableList<string>, ReadOnlyMemory<byte>)>.Empty;
 
                 return
-                    SplitFileContentIntoCompositionLogRecords(fileContent).Select(record => (filePath, record)).Reverse();
+                    SplitFileContentIntoCompositionLogRecords(fileContent.Value).Select(record => (filePath, record)).Reverse();
             });
 
         string? revertToHashBase16 = null;
@@ -395,22 +397,19 @@ public class ProcessStoreReaderInFileStore : ProcessStoreInFileStore, IProcessSt
     /// <summary>
     /// Drop content after the last occurrence of delimiter sequence to account for the possible partial write of the last composition record.
     /// </summary>
-    private static IEnumerable<IReadOnlyList<byte>> SplitFileContentIntoCompositionLogRecords(IReadOnlyList<byte> fileContent)
+    private static IEnumerable<ReadOnlyMemory<byte>> SplitFileContentIntoCompositionLogRecords(ReadOnlyMemory<byte> fileContent)
     {
-        if (fileContent == null)
-            yield break;
-
         var recordBegin = 0;
 
-        for (var i = 0; i < fileContent.Count; ++i)
+        for (var i = 0; i < fileContent.Length; ++i)
         {
-            if (compositionLogEntryDelimiter.SequenceEqual(fileContent.Skip(i).Take(compositionLogEntryDelimiter.Count())))
+            if (fileContent[i..].Span.StartsWith(compositionLogEntryDelimiter.Span))
             {
-                var recordBytes = fileContent.Take(i).Skip(recordBegin).ToArray();
+                var recordBytes = fileContent[recordBegin..i];
 
                 yield return recordBytes;
 
-                i += compositionLogEntryDelimiter.Count();
+                i += compositionLogEntryDelimiter.Length;
 
                 recordBegin = i;
             }
@@ -424,10 +423,10 @@ public class ProcessStoreReaderInFileStore : ProcessStoreInFileStore, IProcessSt
         if (compositionHeadHash == null)
             yield break;
 
-        if (1000 < compositionHeadHash.Count)
-            throw new Exception("Content of file for head hash is corrupted: File length is " + compositionHeadHash.Count);
+        if (1000 < compositionHeadHash.Value.Length)
+            throw new Exception("Content of file for head hash is corrupted: File length is " + compositionHeadHash.Value.Length);
 
-        var nextHashBase16 = CommonConversion.StringBase16FromByteArray(compositionHeadHash);
+        var nextHashBase16 = CommonConversion.StringBase16(compositionHeadHash.Value);
 
         while (nextHashBase16 != CompositionLogRecordInFile.CompositionLogFirstRecordParentHashBase16 && nextHashBase16 != null)
         {
@@ -530,8 +529,9 @@ public class ProcessStoreWriterInFileStore : ProcessStoreInFileStore, IProcessSt
             var recordHashBase16 = CommonConversion.StringBase16(recordHash);
 
             var compositionLogRecordSerializedWithDelimiter =
-                compositionLogRecordSerialized.Concat(compositionLogEntryDelimiter)
-                .ToImmutableList();
+                CommonConversion.Concat(
+                    compositionLogRecordSerialized,
+                    compositionLogEntryDelimiter.Span);
 
             CompositionLogLiteralFileStore.AppendFileContent(filePath, compositionLogRecordSerializedWithDelimiter);
 

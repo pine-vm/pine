@@ -41,14 +41,14 @@ public class RunServer
 
             Console.WriteLine("I got no path to a persistent store for the process. This process will not be persisted!");
 
-            var files = new System.Collections.Concurrent.ConcurrentDictionary<IImmutableList<string>, IReadOnlyList<byte>>(EnumerableExtension.EqualityComparer<IImmutableList<string>>());
+            var files = new System.Collections.Concurrent.ConcurrentDictionary<IImmutableList<string>, ReadOnlyMemory<byte>>(EnumerableExtension.EqualityComparer<IImmutableList<string>>());
 
             var fileStoreWriter = new DelegatingFileStoreWriter
             (
                 SetFileContentDelegate: file => files[file.path] = file.fileContent,
                 AppendFileContentDelegate: file => files.AddOrUpdate(
                     file.path, _ => file.fileContent,
-                    (_, fileBefore) => fileBefore.Concat(file.fileContent).ToArray()),
+                    (_, fileBefore) => CommonConversion.Concat(fileBefore.Span, file.fileContent.Span)),
                 DeleteFileDelegate: path => files.Remove(path, out var _)
             );
 
@@ -56,14 +56,15 @@ public class RunServer
             (
                 ListFilesInDirectoryDelegate: path =>
                     files.Select(file =>
-                        !file.Key.Take(path.Count).SequenceEqual(path) 
-                            ? 
+                        !file.Key.Take(path.Count).SequenceEqual(path)
+                            ?
                             null
                             :
                             file.Key.Skip(path.Count).ToImmutableList()).WhereNotNull(),
                 GetFileContentDelegate: path =>
                 {
-                    files.TryGetValue(path, out var fileContent);
+                    if (!files.TryGetValue(path, out var fileContent))
+                        return null;
 
                     return fileContent;
                 }

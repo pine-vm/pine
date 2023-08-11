@@ -96,7 +96,7 @@ public static class Elm019Binaries
             if (cacheEntryFile is not null)
             {
                 var resultFromCache =
-                    System.Text.Json.JsonSerializer.Deserialize<Result<string, ElmMakeOkJsonStructure>>(cacheEntryFile!.ToArray())
+                    System.Text.Json.JsonSerializer.Deserialize<Result<string, ElmMakeOkJsonStructure>>(cacheEntryFile.Value.Span)
                     ?.Map(AsElmMakeOk);
 
                 if (resultFromCache is Result<string, ElmMakeOk>.Ok resultOk)

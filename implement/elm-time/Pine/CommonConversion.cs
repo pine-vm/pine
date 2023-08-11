@@ -54,12 +54,12 @@ public class CommonConversion
         return deflatedStream.ToArray();
     }
 
-    public static ReadOnlyMemory<byte> Inflate(IReadOnlyList<byte> input)
+    public static ReadOnlyMemory<byte> Inflate(ReadOnlyMemory<byte> input)
     {
         using var inflatedStream = new System.IO.MemoryStream();
 
         using var deflateStream = new System.IO.Compression.DeflateStream(
-            new System.IO.MemoryStream(input as byte[] ?? input.ToArray()), System.IO.Compression.CompressionMode.Decompress);
+            new System.IO.MemoryStream(input.ToArray()), System.IO.Compression.CompressionMode.Decompress);
 
         deflateStream.CopyTo(inflatedStream);
 
