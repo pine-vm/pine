@@ -30,6 +30,9 @@ public abstract record StateShimRequestStruct
     public record RemoveBranchesShimRequest(IReadOnlyList<string> BranchesNames)
         : StateShimRequestStruct;
 
+    public record TestAreStatesEqualRequest(IReadOnlyList<StateSource> StatesSources)
+        : StateShimRequestStruct;
+
     public string SerializeToJsonString() =>
         JsonSerializer.Serialize(this);
 }
@@ -59,6 +62,9 @@ public abstract record StateShimResponseStruct
         : StateShimResponseStruct;
 
     public record RemoveBranchesShimResponse(RemoveBranchesShimResponseStruct ResponseStruct)
+        : StateShimResponseStruct;
+
+    public record TestAreStatesEqualResponse(Result<string, bool> Result)
         : StateShimResponseStruct;
 }
 

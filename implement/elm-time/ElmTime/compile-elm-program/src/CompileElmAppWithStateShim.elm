@@ -779,6 +779,21 @@ processEvent config hostEvent stateBefore =
             , RemoveBranchesShimResponse { removedCount = removedCount }
             )
 
+        TestAreStatesEqualRequest statesSources ->
+            statesSources
+                |> List.map (resolveStateSource config stateBefore)
+                |> List.foldr (Result.map2 (::)) (Ok [])
+                |> Result.mapError ((++) "Failed to resolve state source: ")
+                |> Result.map (\\states ->
+                    case states of
+                        [] ->
+                            True
+
+                        first :: others ->
+                            List.all ((==) first) others)
+                |> TestAreStatesEqualResponse
+                |> Tuple.pair stateBefore
+
 
 setStateOnBranches : List String -> appState -> StateShimState appState -> StateShimState appState
 setStateOnBranches branches appState stateBefore =
@@ -880,6 +895,7 @@ type StateShimRequest
     | EstimateSerializedStateLengthShimRequest StateSource
     | ListBranchesShimRequest
     | RemoveBranchesShimRequest (List String)
+    | TestAreStatesEqualRequest (List StateSource)
 
 
 type StateShimResponse
@@ -890,6 +906,7 @@ type StateShimResponse
     | EstimateSerializedStateLengthShimResponse (Result String Int)
     | ListBranchesShimResponse (List String)
     | RemoveBranchesShimResponse { removedCount : Int }
+    | TestAreStatesEqualResponse (Result String Bool)
 
 
 type alias ApplyFunctionShimRequestStruct =

@@ -495,15 +495,9 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
 
             var newElmAppProcess = prepareProcessResult.startProcess();
 
-            var applyInitSerialInterfaceResult = AttemptProcessRequest(
+            var applyInitSerialInterfaceResult = InitBranchesInElmInJsProcess(
                 newElmAppProcess,
-                new StateShim.InterfaceToHost.StateShimRequestStruct.ApplyFunctionShimRequest(
-                    new StateShim.InterfaceToHost.ApplyFunctionShimRequestStruct(
-                        functionName: "init",
-                        arguments: new StateShim.InterfaceToHost.ApplyFunctionArguments<Maybe<StateShim.InterfaceToHost.StateSource>>(
-                            stateArgument: Maybe<StateShim.InterfaceToHost.StateSource>.nothing(),
-                            serializedArgumentsJson: ImmutableList<JsonElement>.Empty),
-                        stateDestinationBranches: ImmutableList.Create("main"))));
+                stateDestinationBranches: ImmutableList.Create("main"));
 
             return
                 applyInitSerialInterfaceResult
@@ -540,6 +534,19 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
         return Result<string, PersistentProcessLiveRepresentationDuringRestore>.err(
             "Unexpected shape of composition event: " + JsonSerializer.Serialize(compositionEvent));
     }
+
+    public static Result<string, StateShim.InterfaceToHost.StateShimResponseStruct> InitBranchesInElmInJsProcess(
+        IProcessWithStringInterface elmInJsProcess,
+        IReadOnlyList<string> stateDestinationBranches) =>
+        AttemptProcessRequest(
+            elmInJsProcess,
+            new StateShim.InterfaceToHost.StateShimRequestStruct.ApplyFunctionShimRequest(
+                new StateShim.InterfaceToHost.ApplyFunctionShimRequestStruct(
+                    functionName: "init",
+                    arguments: new StateShim.InterfaceToHost.ApplyFunctionArguments<Maybe<StateShim.InterfaceToHost.StateSource>>(
+                        stateArgument: Maybe<StateShim.InterfaceToHost.StateSource>.nothing(),
+                        serializedArgumentsJson: ImmutableList<JsonElement>.Empty),
+                    stateDestinationBranches: stateDestinationBranches)));
 
     private record UpdateElmAppStateForEvent(
         string functionName,

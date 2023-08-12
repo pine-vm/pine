@@ -82,7 +82,18 @@ public class StateShim
 
     public static Result<string, AdminInterface.ApplyDatabaseFunctionSuccess> ApplyFunctionOnMainBranch(
         IProcess<string, string> process,
-        AdminInterface.ApplyDatabaseFunctionRequest request)
+        AdminInterface.ApplyDatabaseFunctionRequest request) =>
+        ApplyFunction(
+            process,
+            request: request,
+            stateSource: Maybe<StateSource>.just(MainStateBranch),
+            stateDestinationBranches:request.commitResultingState ? ImmutableList.Create(MainBranchName) : ImmutableList<string>.Empty);
+
+    public static Result<string, AdminInterface.ApplyDatabaseFunctionSuccess> ApplyFunction(
+        IProcess<string, string> process,
+        AdminInterface.ApplyDatabaseFunctionRequest request,
+        Maybe<StateSource> stateSource,
+        IReadOnlyList<string> stateDestinationBranches)
     {
         return
             request.serializedArgumentsJson
@@ -110,11 +121,8 @@ public class StateShim
             {
                 var stateArgument =
                 matchingFunction.functionDescription.parameters.Any(param => param.typeIsAppStateType) ?
-                Maybe<StateSource>.just(MainStateBranch) :
+                stateSource :
                 Maybe<StateSource>.nothing();
-
-                var stateDestinationBranches =
-                    request.commitResultingState ? ImmutableList.Create(MainBranchName) : ImmutableList<string>.Empty;
 
                 var applyFunctionRequest =
                 new ApplyFunctionShimRequestStruct(
@@ -210,7 +218,6 @@ public class StateShim
             });
     }
 
-
     public static Result<string, RemoveBranchesShimResponseStruct> RemoveBranches(
         IProcess<string, string> process,
         IReadOnlyList<string> branches)
@@ -226,6 +233,32 @@ public class StateShim
 
                 _ =>
                 Result<string, RemoveBranchesShimResponseStruct>.err(
+                    "Unexpected type of response: " + JsonSerializer.Serialize(responseOk))
+            });
+    }
+
+    public static Result<string, bool> TestAreBranchesEqual(
+        IProcess<string, string> process,
+        IReadOnlyList<string> branches) =>
+        TestAreStatesEqual(
+            process,
+            branches.Select(branch => new StateSource.BranchStateSource(branch)).ToImmutableList());
+
+    public static Result<string, bool> TestAreStatesEqual(
+        IProcess<string, string> process,
+        IReadOnlyList<StateSource> statesSources)
+    {
+        return
+            ProcessStateShimRequest(
+                process,
+                new StateShimRequestStruct.TestAreStatesEqualRequest(statesSources))
+            .AndThen(responseOk => responseOk.Response switch
+            {
+                StateShimResponseStruct.TestAreStatesEqualResponse testAreEqualResponse =>
+                testAreEqualResponse.Result,
+
+                _ =>
+                Result<string, bool>.err(
                     "Unexpected type of response: " + JsonSerializer.Serialize(responseOk))
             });
     }

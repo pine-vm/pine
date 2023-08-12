@@ -10,7 +10,7 @@ using System.Text.Json;
 namespace TestElmTime;
 
 [TestClass]
-public class TestStateShim
+public class StateShimTests
 {
     [TestMethod]
     public void Test_state_shim_with_calculator_app()
@@ -87,6 +87,89 @@ public class TestStateShim
                 Assert.AreEqual(1 + newBranchesNames.Count - 1, branchesNames.Count);
             }
         }
+    }
+
+    [TestMethod]
+    public void Test_state_shim_are_states_equal_with_calculator_app()
+    {
+        var deployment =
+            PineValueComposition.ParseAsTreeWithStringPath(TestElmWebAppHttpServer.CalculatorWebApp)
+            .Extract(err => throw new Exception(err.ToString()));
+
+        var preparedProcess =
+            ElmTime.Platform.WebService.PersistentProcessLiveRepresentation.ProcessFromDeployment(deployment);
+
+        using var calculatorProcess = preparedProcess.startProcess();
+
+        Result<string, ElmTime.AdminInterface.ApplyDatabaseFunctionSuccess> applyCalculatorOperationOnBranch(
+            string branchName,
+            CalculatorOperation calculatorOperation)
+        {
+            return
+                ElmTime.StateShim.StateShim.ApplyFunction(
+                    calculatorProcess,
+                    new ElmTime.AdminInterface.ApplyDatabaseFunctionRequest(
+                        functionName: "Backend.ExposeFunctionsToAdmin.applyCalculatorOperation",
+                        serializedArgumentsJson: ImmutableList.Create(
+                            JsonSerializer.Serialize(calculatorOperation)),
+                        commitResultingState: true),
+                    stateSource: Maybe.NothingFromNull<StateSource>(new StateSource.BranchStateSource(branchName)),
+                    stateDestinationBranches: ImmutableList.Create(branchName));
+        }
+
+        ElmTime.Platform.WebService.PersistentProcessLiveRepresentation.InitBranchesInElmInJsProcess(
+            calculatorProcess,
+            ImmutableList.Create("alfa", "beta"))
+            .Extract(err => throw new Exception(err));
+
+        Assert.IsTrue(
+            ElmTime.StateShim.StateShim.TestAreBranchesEqual(calculatorProcess, ImmutableList.Create("alfa", "beta"))
+            .Extract(err => throw new Exception(err)));
+
+        {
+            var applyOperationResult =
+                applyCalculatorOperationOnBranch(
+                    "alfa",
+                    new CalculatorOperation.AddOperation(1));
+
+            applyOperationResult.Extract(err => throw new Exception(err));
+        }
+
+        {
+            var applyOperationResult =
+                applyCalculatorOperationOnBranch(
+                    "alfa",
+                    new CalculatorOperation.AddOperation(3));
+
+            applyOperationResult.Extract(err => throw new Exception(err));
+        }
+
+        Assert.IsFalse(
+            ElmTime.StateShim.StateShim.TestAreBranchesEqual(calculatorProcess, ImmutableList.Create("alfa", "beta"))
+            .Extract(err => throw new Exception(err)));
+
+
+        {
+            var applyOperationResult =
+                applyCalculatorOperationOnBranch(
+                    "beta",
+                    new CalculatorOperation.AddOperation(5));
+
+            applyOperationResult.Extract(err => throw new Exception(err));
+        }
+
+        {
+            var applyOperationResult =
+                applyCalculatorOperationOnBranch(
+                    "beta",
+                    new CalculatorOperation.AddOperation(-1));
+
+            applyOperationResult.Extract(err => throw new Exception(err));
+        }
+
+        Assert.IsTrue(
+            ElmTime.StateShim.StateShim.TestAreBranchesEqual(calculatorProcess, ImmutableList.Create("alfa", "beta"))
+            .Extract(err => throw new Exception(err)));
     }
 
     [System.Text.Json.Serialization.JsonConverter(typeof(JsonConverterForChoiceType))]
