@@ -336,7 +336,16 @@ asCompletelyLoweredElmApp entryPointClasses arguments =
         Ok sourceDirs ->
             let
                 sourceModules =
-                    elmModulesDictFromAppFiles arguments.sourceFiles
+                    arguments.sourceFiles
+                        |> elmModulesDictFromAppFiles
+                        |> Dict.toList
+                        |> List.filterMap
+                            (\( filePath, moduleResult ) ->
+                                moduleResult
+                                    |> Result.toMaybe
+                                    |> Maybe.map (Tuple.pair filePath)
+                            )
+                        |> Dict.fromList
 
                 compilationInterfaceModuleDependencies : Dict.Dict String (List String)
                 compilationInterfaceModuleDependencies =
@@ -380,7 +389,7 @@ asCompletelyLoweredElmApp entryPointClasses arguments =
             arguments.sourceFiles
                 |> addModulesFromTextToAppFiles sourceDirs modulesToAdd
                 |> loweredForSourceFiles sourceDirs arguments.compilationInterfaceElmModuleNamePrefixes
-                |> Result.andThen (loweredForJsonCoders { originalSourceModules = sourceModules, sourceDirs = sourceDirs } arguments.compilationInterfaceElmModuleNamePrefixes)
+                |> Result.andThen (loweredForJsonConverters { originalSourceModules = sourceModules, sourceDirs = sourceDirs } arguments.compilationInterfaceElmModuleNamePrefixes)
                 |> Result.mapError (mapLocatedInSourceFiles OtherCompilationError >> List.singleton)
                 |> Result.andThen (loweredForElmMake sourceDirs arguments.compilationInterfaceElmModuleNamePrefixes arguments.dependencies)
                 |> Result.andThen
@@ -458,14 +467,14 @@ loweredForSourceFiles sourceDirs compilationInterfaceElmModuleNamePrefixes sourc
             (Ok sourceFiles)
 
 
-loweredForJsonCoders :
+loweredForJsonConverters :
     { originalSourceModules : Dict.Dict (List String) SourceParsedElmModule
     , sourceDirs : SourceDirectories
     }
     -> List String
     -> AppFiles
     -> Result (LocatedInSourceFiles String) AppFiles
-loweredForJsonCoders context compilationInterfaceElmModuleNamePrefixes sourceFiles =
+loweredForJsonConverters context compilationInterfaceElmModuleNamePrefixes sourceFiles =
     compilationInterfaceElmModuleNamePrefixes
         |> listFoldlToAggregateResult
             (\compilationInterfaceElmModuleNamePrefix files ->
@@ -473,14 +482,14 @@ loweredForJsonCoders context compilationInterfaceElmModuleNamePrefixes sourceFil
                     context.sourceDirs
                     locatedInSourceFilesFromJustFilePath
                     (compilationInterfaceElmModuleNamePrefix ++ ".GenerateJsonCoders")
-                    (mapJsonCodersModuleText context)
+                    (mapJsonConvertersModuleText context)
                     files
                     |> Result.andThen
                         (mapElmModuleWithNameIfExists
                             context.sourceDirs
                             locatedInSourceFilesFromJustFilePath
                             (compilationInterfaceElmModuleNamePrefix ++ ".GenerateJsonConverters")
-                            (mapJsonCodersModuleText context)
+                            (mapJsonConvertersModuleText context)
                         )
             )
             (Ok sourceFiles)
@@ -641,13 +650,13 @@ functionNameFlagsSeparator =
     "____"
 
 
-mapJsonCodersModuleText :
+mapJsonConvertersModuleText :
     { originalSourceModules : Dict.Dict (List String) SourceParsedElmModule
     , sourceDirs : SourceDirectories
     }
     -> ( AppFiles, List String, String )
     -> Result (LocatedInSourceFiles String) ( AppFiles, String )
-mapJsonCodersModuleText { originalSourceModules, sourceDirs } ( sourceFiles, moduleFilePath, moduleText ) =
+mapJsonConvertersModuleText { originalSourceModules, sourceDirs } ( sourceFiles, moduleFilePath, moduleText ) =
     parseElmModuleText moduleText
         |> Result.mapError
             (parserDeadEndsToString moduleText
@@ -689,7 +698,7 @@ mapJsonCodersModuleText { originalSourceModules, sourceDirs } ( sourceFiles, mod
                                         functionName =
                                             Elm.Syntax.Node.value (Elm.Syntax.Node.value functionSignature).name
                                     in
-                                    case parseJsonCodingFunctionType (Elm.Syntax.Node.value functionSignature) of
+                                    case parseJsonConverterDeclarationType (Elm.Syntax.Node.value functionSignature) of
                                         Err error ->
                                             Err
                                                 (LocatedInSourceFiles
@@ -721,7 +730,7 @@ mapJsonCodersModuleText { originalSourceModules, sourceDirs } ( sourceFiles, mod
                         (\functionsToReplace ->
                             let
                                 ( appFiles, { generatedModuleName, modulesToImport } ) =
-                                    mapAppFilesToSupportJsonCoding
+                                    mapAppFilesToSupportJsonConversion
                                         { generatedModuleNamePrefix = interfaceModuleName
                                         , sourceDirs = sourceDirs
                                         }
@@ -737,7 +746,8 @@ mapJsonCodersModuleText { originalSourceModules, sourceDirs } ( sourceFiles, mod
                                                 functionToReplace.functionName
 
                                             functionsNamesInGeneratedModules =
-                                                buildJsonCodingFunctionsForTypeAnnotation functionToReplace.parsedTypeAnnotation
+                                                buildJsonConverterFunctionsForTypeAnnotation
+                                                    functionToReplace.parsedTypeAnnotation
 
                                             newFunction =
                                                 functionName
@@ -777,7 +787,7 @@ mapJsonCodersModuleText { originalSourceModules, sourceDirs } ( sourceFiles, mod
             )
 
 
-mapAppFilesToSupportJsonCoding :
+mapAppFilesToSupportJsonConversion :
     { generatedModuleNamePrefix : List String
     , sourceDirs : SourceDirectories
     }
@@ -785,7 +795,7 @@ mapAppFilesToSupportJsonCoding :
     -> Dict.Dict String ElmChoiceTypeStruct
     -> AppFiles
     -> ( AppFiles, { generatedModuleName : List String, modulesToImport : List (List String) } )
-mapAppFilesToSupportJsonCoding { generatedModuleNamePrefix, sourceDirs } typeAnnotationsBeforeDeduplicating choiceTypes appFilesBefore =
+mapAppFilesToSupportJsonConversion { generatedModuleNamePrefix, sourceDirs } typeAnnotationsBeforeDeduplicating choiceTypes appFilesBefore =
     let
         modulesToImportForChoiceTypes =
             choiceTypes
@@ -817,7 +827,7 @@ mapAppFilesToSupportJsonCoding { generatedModuleNamePrefix, sourceDirs } typeAnn
         typeAnnotationsFunctions =
             typeAnnotationsBeforeDeduplicating
                 |> listRemoveDuplicates
-                |> List.map buildJsonCodingFunctionsForTypeAnnotation
+                |> List.map buildJsonConverterFunctionsForTypeAnnotation
 
         typeAnnotationsFunctionsForGeneratedModule =
             typeAnnotationsFunctions
@@ -832,7 +842,7 @@ mapAppFilesToSupportJsonCoding { generatedModuleNamePrefix, sourceDirs } typeAnn
                 |> Dict.toList
                 |> List.map
                     (\( choiceTypeName, choiceType ) ->
-                        jsonCodingFunctionFromChoiceType
+                        jsonConverterFunctionFromChoiceType
                             { choiceTypeName = choiceTypeName
                             , encodeValueExpression = jsonEncodeParamName
                             , typeArgLocalName = "type_arg"
@@ -890,13 +900,13 @@ mapAppFilesToSupportJsonCoding { generatedModuleNamePrefix, sourceDirs } typeAnn
     )
 
 
-buildJsonCodingFunctionsForTypeAnnotation :
+buildJsonConverterFunctionsForTypeAnnotation :
     ElmTypeAnnotation
     -> { encodeFunction : { name : String, text : String }, decodeFunction : { name : String, text : String } }
-buildJsonCodingFunctionsForTypeAnnotation typeAnnotation =
+buildJsonConverterFunctionsForTypeAnnotation typeAnnotation =
     let
-        jsonCodingExpressions =
-            jsonCodingExpressionFromType
+        jsonConverterExpressions =
+            jsonConverterExpressionFromType
                 { encodeValueExpression = jsonEncodeParamName
                 , typeArgLocalName = "type_arg"
                 }
@@ -922,12 +932,12 @@ buildJsonCodingFunctionsForTypeAnnotation typeAnnotation =
                 ++ " "
                 ++ jsonEncodeParamName
                 ++ " =\n"
-                ++ indentElmCodeLines 1 jsonCodingExpressions.encodeExpression
+                ++ indentElmCodeLines 1 jsonConverterExpressions.encodeExpression
 
         decodeFunctionText =
             decodeFunctionName
                 ++ " =\n"
-                ++ indentElmCodeLines 1 jsonCodingExpressions.decodeExpression
+                ++ indentElmCodeLines 1 jsonConverterExpressions.decodeExpression
     in
     { encodeFunction = { name = encodeFunctionName, text = encodeFunctionText }
     , decodeFunction = { name = decodeFunctionName, text = decodeFunctionText }
@@ -960,7 +970,7 @@ mapSourceFilesModuleText sourceDirs ( sourceFiles, moduleFilePath, moduleText ) 
         |> Result.andThen
             (\parsedModule ->
                 parsedModule.declarations
-                    -- TODO: Also share the 'map all functions' part with `mapJsonCodersModuleText`
+                    -- TODO: Also share the 'map all functions' part with `mapJsonConvertersModuleText`
                     -- Remember: The module to interface with git services will probably use similar functionality.
                     |> List.filterMap declarationWithRangeAsFunctionDeclaration
                     |> List.filter
@@ -1100,7 +1110,7 @@ mapElmMakeModuleText sourceDirs dependencies ( sourceFiles, moduleFilePath, modu
         |> Result.andThen
             (\parsedModule ->
                 parsedModule.declarations
-                    -- TODO: Also share the 'map all functions' part with `mapJsonCodersModuleText`
+                    -- TODO: Also share the 'map all functions' part with `mapJsonConvertersModuleText`
                     |> List.filterMap declarationWithRangeAsFunctionDeclaration
                     |> List.map
                         (\declaration ->
@@ -1746,11 +1756,11 @@ tryConcretizeRecordInstance typeArguments recordType =
         |> Result.map (\fields -> { fields = fields })
 
 
-jsonCodingExpressionFromType :
+jsonConverterExpressionFromType :
     { encodeValueExpression : String, typeArgLocalName : String }
     -> ( ElmTypeAnnotation, List ElmTypeAnnotation )
     -> { encodeExpression : String, decodeExpression : String }
-jsonCodingExpressionFromType { encodeValueExpression, typeArgLocalName } ( typeAnnotation, typeArguments ) =
+jsonConverterExpressionFromType { encodeValueExpression, typeArgLocalName } ( typeAnnotation, typeArguments ) =
     let
         typeArgumentsExpressions =
             typeArguments
@@ -1758,7 +1768,7 @@ jsonCodingExpressionFromType { encodeValueExpression, typeArgLocalName } ( typeA
                     (\typeArgument ->
                         let
                             typeArgumentExpressions =
-                                jsonCodingExpressionFromType
+                                jsonConverterExpressionFromType
                                     { encodeValueExpression = typeArgLocalName
                                     , typeArgLocalName = typeArgLocalName ++ "_"
                                     }
@@ -1819,7 +1829,7 @@ jsonCodingExpressionFromType { encodeValueExpression, typeArgLocalName } ( typeA
         ChoiceElmType choice ->
             let
                 typeNameRepresentation =
-                    jsonCodingFunctionNameCommonPartFromTypeName choice
+                    jsonConverterFunctionNameCommonPartFromTypeName choice
             in
             { encodeExpression =
                 [ jsonEncodeFunctionNamePrefix ++ typeNameRepresentation
@@ -1851,7 +1861,7 @@ jsonCodingExpressionFromType { encodeValueExpression, typeArgLocalName } ( typeA
                                 (\( fieldName, fieldType ) ->
                                     let
                                         fieldExpression =
-                                            jsonCodingExpressionFromType
+                                            jsonConverterExpressionFromType
                                                 { encodeValueExpression = encodeValueExpression ++ "." ++ fieldName
                                                 , typeArgLocalName = typeArgLocalName
                                                 }
@@ -1918,7 +1928,7 @@ jsonCodingExpressionFromType { encodeValueExpression, typeArgLocalName } ( typeA
                 }
 
         InstanceElmType instance ->
-            jsonCodingExpressionFromType
+            jsonConverterExpressionFromType
                 { encodeValueExpression = encodeValueExpression, typeArgLocalName = typeArgLocalName }
                 ( instance.instantiated, instance.arguments )
 
@@ -1946,7 +1956,7 @@ jsonCodingExpressionFromType { encodeValueExpression, typeArgLocalName } ( typeA
                                         getItemFunctionFromIndex i
 
                                     itemExpression =
-                                        jsonCodingExpressionFromType
+                                        jsonConverterExpressionFromType
                                             { encodeValueExpression =
                                                 "("
                                                     ++ getItemFunction
@@ -1990,7 +2000,7 @@ jsonCodingExpressionFromType { encodeValueExpression, typeArgLocalName } ( typeA
         GenericType name ->
             let
                 functionsNames =
-                    jsonCodingFunctionNameFromTypeParameterName name
+                    jsonConverterFunctionNameFromTypeParameterName name
             in
             { encodeExpression = functionsNames.encodeName ++ " " ++ encodeValueExpression
             , decodeExpression = functionsNames.decodeName
@@ -2021,22 +2031,22 @@ jsonCodingExpressionFromType { encodeValueExpression, typeArgLocalName } ( typeA
                     }
 
                 ListLeaf ->
-                    continueWithLocalNameAndCommonPrefix jsonCodeListFunctionNameCommonPart
+                    continueWithLocalNameAndCommonPrefix jsonConvertListFunctionNameCommonPart
 
                 ArrayLeaf ->
-                    continueWithLocalNameAndCommonPrefix jsonCodeArrayFunctionNameCommonPart
+                    continueWithLocalNameAndCommonPrefix jsonConvertArrayFunctionNameCommonPart
 
                 SetLeaf ->
-                    continueWithLocalNameAndCommonPrefix jsonCodeSetFunctionNameCommonPart
+                    continueWithLocalNameAndCommonPrefix jsonConvertSetFunctionNameCommonPart
 
                 ResultLeaf ->
-                    continueWithLocalNameAndCommonPrefix jsonCodeResultFunctionNameCommonPart
+                    continueWithLocalNameAndCommonPrefix jsonConvertResultFunctionNameCommonPart
 
                 MaybeLeaf ->
-                    continueWithLocalNameAndCommonPrefix jsonCodeMaybeFunctionNameCommonPart
+                    continueWithLocalNameAndCommonPrefix jsonConvertMaybeFunctionNameCommonPart
 
                 DictLeaf ->
-                    continueWithLocalNameAndCommonPrefix jsonCodeDictFunctionNameCommonPart
+                    continueWithLocalNameAndCommonPrefix jsonConvertDictFunctionNameCommonPart
 
                 JsonEncodeValueLeaf ->
                     { encodeExpression = encodeValueExpression
@@ -2044,27 +2054,27 @@ jsonCodingExpressionFromType { encodeValueExpression, typeArgLocalName } ( typeA
                     }
 
 
-jsonCodingFunctionFromChoiceType :
+jsonConverterFunctionFromChoiceType :
     { choiceTypeName : String, encodeValueExpression : String, typeArgLocalName : String }
     -> ElmChoiceTypeStruct
     -> { encodeFunction : { name : String, text : String }, decodeFunction : { name : String, text : String } }
-jsonCodingFunctionFromChoiceType { choiceTypeName, encodeValueExpression, typeArgLocalName } choiceType =
+jsonConverterFunctionFromChoiceType { choiceTypeName, encodeValueExpression, typeArgLocalName } choiceType =
     let
         encodeParametersText =
             choiceType.parameters
-                |> List.map (jsonCodingFunctionNameFromTypeParameterName >> .encodeName)
+                |> List.map (jsonConverterFunctionNameFromTypeParameterName >> .encodeName)
                 |> String.join " "
 
         decodeParametersText =
             choiceType.parameters
-                |> List.map (jsonCodingFunctionNameFromTypeParameterName >> .decodeName)
+                |> List.map (jsonConverterFunctionNameFromTypeParameterName >> .decodeName)
                 |> String.join " "
 
         moduleName =
             moduleNameFromTypeName choiceTypeName
 
         typeNameRepresentation =
-            jsonCodingFunctionNameCommonPartFromTypeName choiceTypeName
+            jsonConverterFunctionNameCommonPartFromTypeName choiceTypeName
 
         tagsExpressions =
             choiceType.tags
@@ -2082,7 +2092,7 @@ jsonCodingFunctionFromChoiceType { choiceTypeName, encodeValueExpression, typeAr
                                                     "tagArgument" ++ String.fromInt i
 
                                                 tagParamExpr =
-                                                    jsonCodingExpressionFromType
+                                                    jsonConverterExpressionFromType
                                                         { encodeValueExpression = argumentLocalName
                                                         , typeArgLocalName = typeArgLocalName
                                                         }
@@ -2222,15 +2232,15 @@ jsonCodingFunctionFromChoiceType { choiceTypeName, encodeValueExpression, typeAr
     }
 
 
-jsonCodingFunctionNameFromTypeParameterName : String -> { encodeName : String, decodeName : String }
-jsonCodingFunctionNameFromTypeParameterName paramName =
+jsonConverterFunctionNameFromTypeParameterName : String -> { encodeName : String, decodeName : String }
+jsonConverterFunctionNameFromTypeParameterName paramName =
     { encodeName = jsonEncodeFunctionNamePrefix ++ "type_parameter_" ++ paramName
     , decodeName = jsonDecodeFunctionNamePrefix ++ "type_parameter_" ++ paramName
     }
 
 
-jsonCodingFunctionNameCommonPartFromTypeName : String -> String
-jsonCodingFunctionNameCommonPartFromTypeName =
+jsonConverterFunctionNameCommonPartFromTypeName : String -> String
+jsonConverterFunctionNameCommonPartFromTypeName =
     String.toList
         >> List.map
             (\char ->
@@ -2422,7 +2432,7 @@ generalSupportingFunctionsTextsWithCommonNamePattern :
         , decodeSyntax : String
         }
 generalSupportingFunctionsTextsWithCommonNamePattern =
-    [ { functionNameCommonPart = jsonCodeMaybeFunctionNameCommonPart
+    [ { functionNameCommonPart = jsonConvertMaybeFunctionNameCommonPart
       , encodeSyntax = """encodeJust valueToEncode =
     case valueToEncode of
         Nothing ->
@@ -2440,28 +2450,28 @@ generalSupportingFunctionsTextsWithCommonNamePattern =
         ]
      """
       }
-    , { functionNameCommonPart = jsonCodeListFunctionNameCommonPart
+    , { functionNameCommonPart = jsonConvertListFunctionNameCommonPart
       , encodeSyntax = """ = Json.Encode.list"""
       , decodeSyntax = """ = Json.Decode.list"""
       }
-    , { functionNameCommonPart = jsonCodeArrayFunctionNameCommonPart
+    , { functionNameCommonPart = jsonConvertArrayFunctionNameCommonPart
       , encodeSyntax = """ = Json.Encode.array"""
       , decodeSyntax = """ = Json.Decode.array"""
       }
-    , { functionNameCommonPart = jsonCodeSetFunctionNameCommonPart
+    , { functionNameCommonPart = jsonConvertSetFunctionNameCommonPart
       , encodeSyntax = """encoder =
     Set.toList >> Json.Encode.list encoder"""
       , decodeSyntax = """decoder =
     Json.Decode.list decoder |> Json.Decode.map Set.fromList"""
       }
-    , { functionNameCommonPart = jsonCodeDictFunctionNameCommonPart
+    , { functionNameCommonPart = jsonConvertDictFunctionNameCommonPart
       , encodeSyntax = """encodeKey encodeValue =
-    Dict.toList >> Json.Encode.list (""" ++ jsonEncodeFunctionNamePrefix ++ jsonCodeTupleFunctionNameCommonPart ++ "2 encodeKey encodeValue)"
+    Dict.toList >> Json.Encode.list (""" ++ jsonEncodeFunctionNamePrefix ++ jsonConvertTupleFunctionNameCommonPart ++ "2 encodeKey encodeValue)"
       , decodeSyntax = """decodeKey decodeValue =
-        (Json.Decode.list (""" ++ jsonDecodeFunctionNamePrefix ++ jsonCodeTupleFunctionNameCommonPart ++ """2 decodeKey decodeValue))
+        (Json.Decode.list (""" ++ jsonDecodeFunctionNamePrefix ++ jsonConvertTupleFunctionNameCommonPart ++ """2 decodeKey decodeValue))
             |> Json.Decode.map Dict.fromList"""
       }
-    , { functionNameCommonPart = jsonCodeResultFunctionNameCommonPart
+    , { functionNameCommonPart = jsonConvertResultFunctionNameCommonPart
       , encodeSyntax = """encodeErr encodeOk valueToEncode =
     case valueToEncode of
         Err valueToEncodeError ->
@@ -2477,7 +2487,7 @@ generalSupportingFunctionsTextsWithCommonNamePattern =
         , Json.Decode.field "Ok" decodeOk |> Json.Decode.map Ok -- 2020-03-07 Support easy migration of apps: Support decode from older JSON format for now.
         ]"""
       }
-    , { functionNameCommonPart = jsonCodeTupleFunctionNameCommonPart ++ "2"
+    , { functionNameCommonPart = jsonConvertTupleFunctionNameCommonPart ++ "2"
       , encodeSyntax = """encodeA encodeB ( a, b ) =
     [ a |> encodeA, b |> encodeB ]
         |> Json.Encode.list identity"""
@@ -2486,7 +2496,7 @@ generalSupportingFunctionsTextsWithCommonNamePattern =
         (Json.Decode.index 0 decodeA)
         (Json.Decode.index 1 decodeB)"""
       }
-    , { functionNameCommonPart = jsonCodeTupleFunctionNameCommonPart ++ "3"
+    , { functionNameCommonPart = jsonConvertTupleFunctionNameCommonPart ++ "3"
       , encodeSyntax = """encodeA encodeB encodeC ( a, b, c ) =
     [ a |> encodeA, b |> encodeB, c |> encodeC ]
         |> Json.Encode.list identity"""
@@ -2499,38 +2509,38 @@ generalSupportingFunctionsTextsWithCommonNamePattern =
     ]
 
 
-jsonCodeMaybeFunctionNameCommonPart : String
-jsonCodeMaybeFunctionNameCommonPart =
+jsonConvertMaybeFunctionNameCommonPart : String
+jsonConvertMaybeFunctionNameCommonPart =
     "_generic_Maybe"
 
 
-jsonCodeListFunctionNameCommonPart : String
-jsonCodeListFunctionNameCommonPart =
+jsonConvertListFunctionNameCommonPart : String
+jsonConvertListFunctionNameCommonPart =
     "_generic_List"
 
 
-jsonCodeArrayFunctionNameCommonPart : String
-jsonCodeArrayFunctionNameCommonPart =
+jsonConvertArrayFunctionNameCommonPart : String
+jsonConvertArrayFunctionNameCommonPart =
     "_generic_Array"
 
 
-jsonCodeSetFunctionNameCommonPart : String
-jsonCodeSetFunctionNameCommonPart =
+jsonConvertSetFunctionNameCommonPart : String
+jsonConvertSetFunctionNameCommonPart =
     "_generic_Set"
 
 
-jsonCodeDictFunctionNameCommonPart : String
-jsonCodeDictFunctionNameCommonPart =
+jsonConvertDictFunctionNameCommonPart : String
+jsonConvertDictFunctionNameCommonPart =
     "_generic_Dict"
 
 
-jsonCodeResultFunctionNameCommonPart : String
-jsonCodeResultFunctionNameCommonPart =
+jsonConvertResultFunctionNameCommonPart : String
+jsonConvertResultFunctionNameCommonPart =
     "_generic_Result"
 
 
-jsonCodeTupleFunctionNameCommonPart : String
-jsonCodeTupleFunctionNameCommonPart =
+jsonConvertTupleFunctionNameCommonPart : String
+jsonConvertTupleFunctionNameCommonPart =
     "_tuple_"
 
 
@@ -2554,36 +2564,33 @@ findModuleByName moduleName =
     Dict.toList >> List.filter (Tuple.second >> .moduleName >> (==) moduleName) >> List.head
 
 
-elmModulesDictFromAppFiles : AppFiles -> Dict.Dict (List String) SourceParsedElmModule
+elmModulesDictFromAppFiles : AppFiles -> Dict.Dict (List String) (Result String SourceParsedElmModule)
 elmModulesDictFromAppFiles =
-    Dict.toList
-        >> List.filter
-            (Tuple.first
-                >> List.reverse
-                >> List.head
-                >> Maybe.map (String.toLower >> String.endsWith ".elm")
-                >> Maybe.withDefault False
-            )
-        >> List.filterMap
-            (\( filePath, fileContent ) ->
-                stringFromFileContent fileContent
-                    |> Maybe.andThen
+    Dict.filter
+        (List.reverse
+            >> List.head
+            >> Maybe.map (String.toLower >> String.endsWith ".elm")
+            >> Maybe.withDefault False
+            >> always
+        )
+        >> Dict.map
+            (\_ ->
+                stringFromFileContent
+                    >> Maybe.map Ok
+                    >> Maybe.withDefault (Err "Failed to decode file content as string")
+                    >> Result.andThen
                         (\fileContentAsString ->
-                            case parseElmModuleText fileContentAsString of
-                                Err _ ->
-                                    Nothing
-
-                                Ok elmFile ->
-                                    Just
-                                        ( filePath
-                                        , { fileText = fileContentAsString
-                                          , parsedSyntax = elmFile
-                                          , moduleName = Elm.Syntax.Module.moduleName (Elm.Syntax.Node.value elmFile.moduleDefinition)
-                                          }
-                                        )
+                            parseElmModuleText fileContentAsString
+                                |> Result.mapError Parser.deadEndsToString
+                                |> Result.map
+                                    (\parsedSyntax ->
+                                        { fileText = fileContentAsString
+                                        , parsedSyntax = parsedSyntax
+                                        , moduleName = Elm.Syntax.Module.moduleName (Elm.Syntax.Node.value parsedSyntax.moduleDefinition)
+                                        }
+                                    )
                         )
             )
-        >> Dict.fromList
 
 
 elmModulesDictFromModuleTexts : (List String -> List String) -> List String -> Result String (Dict.Dict (List String) SourceParsedElmModule)
@@ -2609,10 +2616,10 @@ elmModulesDictFromModuleTexts filePathFromModuleName =
             )
 
 
-parseJsonCodingFunctionType :
+parseJsonConverterDeclarationType :
     Elm.Syntax.Signature.Signature
     -> Result String { isDecoder : Bool, typeAnnotation : Elm.Syntax.Node.Node Elm.Syntax.TypeAnnotation.TypeAnnotation }
-parseJsonCodingFunctionType signature =
+parseJsonConverterDeclarationType signature =
     let
         errorValue detail =
             Err

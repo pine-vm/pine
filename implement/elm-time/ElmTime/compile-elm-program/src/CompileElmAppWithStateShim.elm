@@ -13,13 +13,13 @@ import CompileElmApp
         , SourceDirectories
         , SourceParsedElmModule
         , addModulesFromTextToAppFiles
-        , buildJsonCodingFunctionsForTypeAnnotation
+        , buildJsonConverterFunctionsForTypeAnnotation
         , buildTypeAnnotationText
         , fileContentFromString
         , filePathFromElmModuleName
         , importSyntaxTextFromModuleNameAndAlias
         , indentElmCodeLines
-        , mapAppFilesToSupportJsonCoding
+        , mapAppFilesToSupportJsonConversion
         , mapLocatedInSourceFiles
         , modulesToAddForBase64Coding
         , updateFileContentAtPath
@@ -169,7 +169,7 @@ loweredForAppInStateManagementShim sourceDirs stateShimConfig config sourceFiles
                     ( appFiles, generateSerializersResult ) =
                         sourceFiles
                             |> addModulesFromTextToAppFiles sourceDirs modulesToAdd
-                            |> mapAppFilesToSupportJsonCoding
+                            |> mapAppFilesToSupportJsonConversion
                                 { generatedModuleNamePrefix = config.interfaceToHostRootModuleName
                                 , sourceDirs = sourceDirs
                                 }
@@ -182,10 +182,10 @@ loweredForAppInStateManagementShim sourceDirs stateShimConfig config sourceFiles
                             ++ List.map .moduleName (Dict.values supportingTypes.modules)
 
                     stateShimRequestFunctionsNamesInGeneratedModules =
-                        buildJsonCodingFunctionsForTypeAnnotation (Tuple.first supportingTypes.stateShimRequestType)
+                        buildJsonConverterFunctionsForTypeAnnotation (Tuple.first supportingTypes.stateShimRequestType)
 
                     stateShimResponseResultFunctionsNamesInGeneratedModules =
-                        buildJsonCodingFunctionsForTypeAnnotation (Tuple.first supportingTypes.stateShimResponseResultType)
+                        buildJsonConverterFunctionsForTypeAnnotation (Tuple.first supportingTypes.stateShimResponseResultType)
 
                     stateShimRequestDecodeFunction =
                         ( generateSerializersResult.generatedModuleName
@@ -203,7 +203,7 @@ loweredForAppInStateManagementShim sourceDirs stateShimConfig config sourceFiles
                                 (\_ jsonConverter ->
                                     let
                                         jsonConverterFunctionNames =
-                                            buildJsonCodingFunctionsForTypeAnnotation jsonConverter.typeAnnotation
+                                            buildJsonConverterFunctionsForTypeAnnotation jsonConverter.typeAnnotation
 
                                         getEncodeOrDecode =
                                             if jsonConverter.isDecoder then

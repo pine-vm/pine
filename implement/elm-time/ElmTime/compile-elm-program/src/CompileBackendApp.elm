@@ -12,7 +12,7 @@ import CompileElmApp
         , EntryPointClass
         , LocatedInSourceFiles(..)
         , SourceParsedElmModule
-        , buildJsonCodingFunctionsForTypeAnnotation
+        , buildJsonConverterFunctionsForTypeAnnotation
         , entryPointClassFromSetOfEquallyProcessedFunctionNames
         , filePathFromElmModuleName
         , findModuleByName
@@ -745,7 +745,7 @@ parseExposeFunctionsToAdminConfigFromDeclaration { originalSourceModules, interf
                                     localJsonConverterFunctionFromTypeAnnotation { isDecoder } typeAnnotation =
                                         let
                                             converterFunctions =
-                                                buildJsonCodingFunctionsForTypeAnnotation typeAnnotation
+                                                buildJsonConverterFunctionsForTypeAnnotation typeAnnotation
 
                                             nameSuffix =
                                                 if isDecoder then

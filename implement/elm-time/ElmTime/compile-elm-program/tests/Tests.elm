@@ -829,7 +829,7 @@ Json.Decode.map3 (\\item_0 item_1 item_2 -> ( item_0, item_1, item_2 ))
                 Test.test testName <|
                     \() ->
                         ( typeAnnotation, [] )
-                            |> CompileElmApp.jsonCodingExpressionFromType
+                            |> CompileElmApp.jsonConverterExpressionFromType
                                 { encodeValueExpression = "valueToEncode", typeArgLocalName = "type_arg" }
                             |> Expect.equal expectedResult
             )
@@ -1018,7 +1018,7 @@ jsonDecode_ListDict_Dict jsonDecode_type_parameter_key jsonDecode_type_parameter
                 Test.test testName <|
                     \() ->
                         choiceType
-                            |> CompileElmApp.jsonCodingFunctionFromChoiceType
+                            |> CompileElmApp.jsonConverterFunctionFromChoiceType
                                 { choiceTypeName = choiceTypeName
                                 , encodeValueExpression = "valueToEncode"
                                 , typeArgLocalName = "type_arg"
