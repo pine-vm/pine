@@ -317,6 +317,7 @@ Backend.Generated.StateShim.exposedFunctionExpectingSingleArgumentAndAppState
 , exposedFunctions = config_exposedFunctions
 , initAppShimState = Backend.Generated.WebServiceShim.initWebServiceShimState
 , appStateLessShim = .stateLessFramework
+, estimateJsonEncodeAppStateLength = estimateJsonEncodeAppStateLength
 }"""
                                                     in
                                                     case

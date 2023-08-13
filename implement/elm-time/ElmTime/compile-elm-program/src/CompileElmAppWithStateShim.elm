@@ -13,6 +13,7 @@ import CompileElmApp
         , SourceDirectories
         , SourceParsedElmModule
         , addModulesFromTextToAppFiles
+        , buildEstimateJsonEncodeLengthFunctionForTypeAnnotation
         , buildJsonConverterFunctionsForTypeAnnotation
         , buildTypeAnnotationText
         , fileContentFromString
@@ -240,6 +241,21 @@ loweredForAppInStateManagementShim sourceDirs stateShimConfig config sourceFiles
                         ]
                             |> String.join "\n"
 
+                    estimateJsonEncodeStateLengthGenerated =
+                        CompileElmApp.buildEstimateJsonEncodeLengthFunctionsForMultipleTypes
+                            [ appStateType.typeAnnotation ]
+                            appStateType.dependencies
+
+                    estimateAppStateJsonEncodeLengthFunctionName =
+                        (buildEstimateJsonEncodeLengthFunctionForTypeAnnotation appStateType.typeAnnotation).name
+
+                    estimateJsonEncodeLengthSupportingFunctionsText =
+                        [ """
+estimateJsonEncodeAppStateLength : AppState -> Int
+estimateJsonEncodeAppStateLength = """ ++ estimateAppStateJsonEncodeLengthFunctionName
+                        ]
+                            ++ List.map .functionText estimateJsonEncodeStateLengthGenerated.generatedFunctions
+
                     rootElmModuleText =
                         composeRootElmModuleTextWithStateShim
                             { interfaceToHostRootModuleName = String.join "." config.interfaceToHostRootModuleName
@@ -252,6 +268,7 @@ loweredForAppInStateManagementShim sourceDirs stateShimConfig config sourceFiles
                             , otherSupportingFunctions =
                                 exposedFunctionsRootModuleSupportingFunction
                                     :: stateShimConfig.rootModuleSupportingFunctions
+                                    ++ estimateJsonEncodeLengthSupportingFunctionsText
                             , appStateWithPlatformShimTypeAnnotationFromAppStateAnnotation =
                                 stateShimConfig.appStateWithPlatformShimTypeAnnotationFromAppStateAnnotation
                             , stateShimConfigExpression = stateShimConfig.stateShimConfigExpression
@@ -590,6 +607,7 @@ type alias StateShimConfig appState appStateLessShim =
     , jsonDecodeAppState : Json.Decode.Decoder appStateLessShim
     , initAppShimState : appStateLessShim -> appState
     , appStateLessShim : appState -> appStateLessShim
+    , estimateJsonEncodeAppStateLength : appStateLessShim -> Int
     }
 
 
@@ -752,9 +770,7 @@ processEvent config hostEvent stateBefore =
                     ( stateBefore
                     , appState
                         |> config.appStateLessShim
-                        |> config.jsonEncodeAppState
-                        |> Json.Encode.encode 0
-                        |> String.length
+                        |> config.estimateJsonEncodeAppStateLength
                         |> Ok
                         |> EstimateSerializedStateLengthShimResponse
                     )

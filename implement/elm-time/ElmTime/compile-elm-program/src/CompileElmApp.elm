@@ -939,10 +939,67 @@ buildJsonConverterFunctionsForMultipleTypes typeAnnotations choiceTypes =
 
         generatedFunctions =
             generatedFunctionsForTypes.generatedFunctions
-                ++ generalSupportingFunctionsTexts
+                ++ jsonConverterSupportingFunctionsTexts
     in
     { generatedFunctions = generatedFunctions
     , modulesToImportForChoiceTypes = generatedFunctionsForTypes.modulesToImportForChoiceTypes
+    }
+
+
+buildEstimateJsonEncodeLengthFunctionsForMultipleTypes :
+    List ElmTypeAnnotation
+    -> Dict.Dict String ElmChoiceTypeStruct
+    ->
+        { generatedFunctions : List GenerateFunctionFromTypeResult
+        , modulesToImportForChoiceTypes : Set.Set (List String)
+        }
+buildEstimateJsonEncodeLengthFunctionsForMultipleTypes typeAnnotations choiceTypes =
+    let
+        defaultModulesToImportForFunction =
+            [ [ "Dict" ]
+            , [ "Set" ]
+            , [ "Array" ]
+            , [ "Bytes" ]
+            ]
+                |> Set.fromList
+
+        generatedFunctionsForTypes =
+            generateFunctionsForMultipleTypes
+                { generateFromTypeAnnotation =
+                    buildEstimateJsonEncodeLengthFunctionForTypeAnnotation
+                        >> (\functionForType ->
+                                { functionName = functionForType.name
+                                , functionText = functionForType.text
+                                , modulesToImport = defaultModulesToImportForFunction
+                                }
+                           )
+                        >> List.singleton
+                , generateFromChoiceType =
+                    (\( choiceTypeName, choiceType ) ->
+                        estimateSerializedSizeFunctionFromChoiceType
+                            { choiceTypeName = choiceTypeName
+                            , encodeValueExpression = estimateJsonEncodeLengthParamName
+                            , typeArgLocalName = "type_arg"
+                            }
+                            choiceType
+                    )
+                        >> (\functionForType ->
+                                { functionName = functionForType.name
+                                , functionText = functionForType.text
+                                , modulesToImport = defaultModulesToImportForFunction
+                                }
+                           )
+                        >> List.singleton
+                }
+                typeAnnotations
+                choiceTypes
+
+        generatedFunctions =
+            generatedFunctionsForTypes.generatedFunctions
+                ++ estimateJsonEncodeLengthSupportingFunctionsTexts
+    in
+    { generatedFunctionsForTypes
+        | generatedFunctions = generatedFunctions
     }
 
 
@@ -1025,6 +1082,38 @@ buildJsonConverterFunctionsForTypeAnnotation typeAnnotation =
     { encodeFunction = { name = encodeFunctionName, text = encodeFunctionText }
     , decodeFunction = { name = decodeFunctionName, text = decodeFunctionText }
     }
+
+
+buildEstimateJsonEncodeLengthFunctionForTypeAnnotation : ElmTypeAnnotation -> { name : String, text : String }
+buildEstimateJsonEncodeLengthFunctionForTypeAnnotation typeAnnotation =
+    let
+        jsonConverterExpressions =
+            estimateJsonEncodeLengthExpressionFromType
+                { encodeValueExpression = estimateJsonEncodeLengthParamName
+                , typeArgLocalName = "type_arg"
+                }
+                ( typeAnnotation, [] )
+
+        typeAnnotationText =
+            buildTypeAnnotationText typeAnnotation
+
+        nameCommonPart =
+            typeAnnotationText
+                |> SHA256.fromString
+                |> SHA256.toHex
+                |> String.left 10
+
+        encodeFunctionName =
+            estimateJsonEncodeLengthFunctionNamePrefix ++ nameCommonPart
+
+        estimateFunctionText =
+            encodeFunctionName
+                ++ " "
+                ++ estimateJsonEncodeLengthParamName
+                ++ " =\n"
+                ++ indentElmCodeLines 1 jsonConverterExpressions.estimateExpression
+    in
+    { name = encodeFunctionName, text = estimateFunctionText }
 
 
 mapSourceFilesModuleText :
@@ -2315,6 +2404,315 @@ jsonConverterFunctionFromChoiceType { choiceTypeName, encodeValueExpression, typ
     }
 
 
+estimateJsonEncodeLengthExpressionFromType :
+    { encodeValueExpression : String, typeArgLocalName : String }
+    -> ( ElmTypeAnnotation, List ElmTypeAnnotation )
+    -> { estimateExpression : String }
+estimateJsonEncodeLengthExpressionFromType { encodeValueExpression, typeArgLocalName } ( typeAnnotation, typeArguments ) =
+    let
+        typeArgumentsExpressions =
+            typeArguments
+                |> List.map
+                    (\typeArgument ->
+                        let
+                            typeArgumentExpressions =
+                                estimateJsonEncodeLengthExpressionFromType
+                                    { encodeValueExpression = typeArgLocalName
+                                    , typeArgLocalName = typeArgLocalName ++ "_"
+                                    }
+                                    ( typeArgument, [] )
+                        in
+                        { encode =
+                            "(\\"
+                                ++ typeArgLocalName
+                                ++ " -> "
+                                ++ typeArgumentExpressions.estimateExpression
+                                ++ ")"
+                        }
+                    )
+
+        typeArgumentsEncodeExpressionsText =
+            typeArgumentsExpressions
+                |> List.map .encode
+                |> String.join " "
+
+        continueWithLocalNameAndCommonPrefix localName =
+            { estimateExpression =
+                [ estimateJsonEncodeLengthFunctionNamePrefix ++ localName
+                , typeArgumentsEncodeExpressionsText
+                , encodeValueExpression
+                ]
+                    |> List.filter (String.isEmpty >> not)
+                    |> String.join " "
+            }
+    in
+    case typeAnnotation of
+        ChoiceElmType choice ->
+            let
+                typeNameRepresentation =
+                    jsonConverterFunctionNameCommonPartFromTypeName choice
+            in
+            { estimateExpression =
+                [ estimateJsonEncodeLengthFunctionNamePrefix ++ typeNameRepresentation
+                , typeArgumentsEncodeExpressionsText
+                , encodeValueExpression
+                ]
+                    |> List.filter (String.isEmpty >> not)
+                    |> String.join " "
+            }
+
+        RecordElmType record ->
+            let
+                fieldsExpressions =
+                    record.fields
+                        |> List.map
+                            (\( fieldName, fieldType ) ->
+                                let
+                                    fieldExpression =
+                                        estimateJsonEncodeLengthExpressionFromType
+                                            { encodeValueExpression = encodeValueExpression ++ "." ++ fieldName
+                                            , typeArgLocalName = typeArgLocalName
+                                            }
+                                            ( fieldType, [] )
+                                in
+                                { fieldName = fieldName
+                                , encode =
+                                    "( "
+                                        ++ String.fromInt (String.length fieldName + 3)
+                                        ++ "\n + "
+                                        ++ String.trimLeft (indentElmCodeLines 1 fieldExpression.estimateExpression)
+                                        ++ "\n  )"
+                                }
+                            )
+
+                estimateListExpression =
+                    "[ "
+                        ++ (fieldsExpressions |> List.map .encode |> String.join "\n, ")
+                        ++ "\n]"
+            in
+            { estimateExpression =
+                [ "List.sum"
+                , indentElmCodeLines 1 estimateListExpression
+                , " + 3"
+                ]
+                    |> String.join "\n"
+            }
+
+        InstanceElmType instance ->
+            estimateJsonEncodeLengthExpressionFromType
+                { encodeValueExpression = encodeValueExpression, typeArgLocalName = typeArgLocalName }
+                ( instance.instantiated, instance.arguments )
+
+        TupleElmType tuple ->
+            let
+                itemsNames =
+                    List.range 0 (List.length tuple - 1)
+                        |> List.map (String.fromInt >> (++) "item_")
+
+                getItemFunctionFromIndex itemIndex =
+                    "(\\( " ++ (itemsNames |> String.join ", ") ++ " ) -> item_" ++ String.fromInt itemIndex ++ ")"
+
+                itemsExpressions =
+                    tuple
+                        |> List.indexedMap
+                            (\i itemType ->
+                                let
+                                    localName =
+                                        "item_" ++ String.fromInt i
+
+                                    getItemFunction =
+                                        getItemFunctionFromIndex i
+
+                                    itemExpression =
+                                        estimateJsonEncodeLengthExpressionFromType
+                                            { encodeValueExpression =
+                                                "("
+                                                    ++ getItemFunction
+                                                    ++ " "
+                                                    ++ encodeValueExpression
+                                                    ++ ")"
+                                            , typeArgLocalName = typeArgLocalName
+                                            }
+                                            ( itemType, [] )
+                                in
+                                { localName = localName
+                                , encode = itemExpression.estimateExpression
+                                }
+                            )
+
+                estimateListExpression =
+                    "[ "
+                        ++ (itemsExpressions |> List.map .encode |> String.join "\n, ")
+                        ++ "\n]"
+            in
+            { estimateExpression =
+                [ "List.sum"
+                , indentElmCodeLines 1 estimateListExpression
+                ]
+                    |> String.join "\n"
+            }
+
+        GenericType name ->
+            let
+                functionsNames =
+                    jsonConverterFunctionNameFromTypeParameterName name
+            in
+            { estimateExpression = functionsNames.encodeName ++ " " ++ encodeValueExpression
+            }
+
+        UnitType ->
+            { estimateExpression = "3"
+            }
+
+        LeafElmType leaf ->
+            case leaf of
+                StringLeaf ->
+                    { estimateExpression = "String.length " ++ encodeValueExpression
+                    }
+
+                IntLeaf ->
+                    { estimateExpression = "estimateJsonEncodeLength_int " ++ encodeValueExpression
+                    }
+
+                BoolLeaf ->
+                    { estimateExpression = "2"
+                    }
+
+                FloatLeaf ->
+                    { estimateExpression = "17"
+                    }
+
+                BytesLeaf ->
+                    { estimateExpression = "Bytes.width " ++ encodeValueExpression
+                    }
+
+                ListLeaf ->
+                    continueWithLocalNameAndCommonPrefix jsonConvertListFunctionNameCommonPart
+
+                ArrayLeaf ->
+                    continueWithLocalNameAndCommonPrefix jsonConvertArrayFunctionNameCommonPart
+
+                SetLeaf ->
+                    continueWithLocalNameAndCommonPrefix jsonConvertSetFunctionNameCommonPart
+
+                ResultLeaf ->
+                    continueWithLocalNameAndCommonPrefix jsonConvertResultFunctionNameCommonPart
+
+                MaybeLeaf ->
+                    continueWithLocalNameAndCommonPrefix jsonConvertMaybeFunctionNameCommonPart
+
+                DictLeaf ->
+                    continueWithLocalNameAndCommonPrefix jsonConvertDictFunctionNameCommonPart
+
+                JsonEncodeValueLeaf ->
+                    { estimateExpression = "String.length (Json.Encode.encode 0 " ++ encodeValueExpression ++ ")"
+                    }
+
+
+estimateSerializedSizeFunctionFromChoiceType :
+    { choiceTypeName : String, encodeValueExpression : String, typeArgLocalName : String }
+    -> ElmChoiceTypeStruct
+    -> { name : String, text : String }
+estimateSerializedSizeFunctionFromChoiceType { choiceTypeName, encodeValueExpression, typeArgLocalName } choiceType =
+    let
+        encodeParametersText =
+            choiceType.parameters
+                |> List.map (jsonConverterFunctionNameFromTypeParameterName >> .encodeName)
+                |> String.join " "
+
+        moduleName =
+            moduleNameFromTypeName choiceTypeName
+
+        typeNameRepresentation =
+            jsonConverterFunctionNameCommonPartFromTypeName choiceTypeName
+
+        tagsExpressions =
+            choiceType.tags
+                |> Dict.toList
+                |> List.sortBy Tuple.first
+                |> List.map
+                    (\( tagName, tagParameters ) ->
+                        let
+                            tagParametersExpressions =
+                                tagParameters
+                                    |> List.indexedMap
+                                        (\i tagParamType ->
+                                            let
+                                                argumentLocalName =
+                                                    "tagArgument" ++ String.fromInt i
+
+                                                tagParamExpr =
+                                                    estimateJsonEncodeLengthExpressionFromType
+                                                        { encodeValueExpression = argumentLocalName
+                                                        , typeArgLocalName = typeArgLocalName
+                                                        }
+                                                        ( tagParamType, [] )
+                                            in
+                                            { localName = argumentLocalName
+                                            , encode = tagParamExpr.estimateExpression
+                                            }
+                                        )
+
+                            encodeArguments =
+                                tagParametersExpressions
+                                    |> List.map .localName
+                                    |> String.join " "
+
+                            encodeFirstLine =
+                                [ moduleName ++ "." ++ tagName
+                                , encodeArguments
+                                , "->"
+                                ]
+                                    |> List.filter (String.isEmpty >> not)
+                                    |> String.join " "
+
+                            encodeSecondLine =
+                                "( "
+                                    ++ String.fromInt (String.length tagName + 3)
+                                    ++ " + List.sum ["
+                                    ++ (if tagParametersExpressions == [] then
+                                            ""
+
+                                        else
+                                            " " ++ (tagParametersExpressions |> List.map .encode |> String.join ", ") ++ " "
+                                       )
+                                    ++ "] )"
+                        in
+                        { encode =
+                            [ encodeFirstLine
+                            , indentElmCodeLines 1 encodeSecondLine
+                            ]
+                                |> String.join "\n"
+                        }
+                    )
+
+        estimateSizeListExpression =
+            tagsExpressions |> List.map .encode |> String.join "\n"
+
+        estimateSizeExpression =
+            [ "case " ++ encodeValueExpression ++ " of"
+            , indentElmCodeLines 1 estimateSizeListExpression
+            ]
+                |> String.join "\n"
+
+        estimateSizeFunctionName =
+            estimateJsonEncodeLengthFunctionNamePrefix ++ typeNameRepresentation
+    in
+    { name = estimateSizeFunctionName
+    , text =
+        [ [ estimateSizeFunctionName
+          , encodeParametersText
+          , encodeValueExpression
+          , "="
+          ]
+            |> List.filter (String.isEmpty >> not)
+            |> String.join " "
+        , indentElmCodeLines 1 estimateSizeExpression
+        ]
+            |> String.join "\n"
+    }
+
+
 jsonConverterFunctionNameFromTypeParameterName : String -> { encodeName : String, decodeName : String }
 jsonConverterFunctionNameFromTypeParameterName paramName =
     { encodeName = jsonEncodeFunctionNamePrefix ++ "type_parameter_" ++ paramName
@@ -2443,20 +2841,20 @@ type Declaration
     | ChoiceTypeDeclaration Elm.Syntax.Type.Type
 
 
-generalSupportingFunctionsTexts : List GenerateFunctionFromTypeResult
-generalSupportingFunctionsTexts =
-    (generalSupportingFunctionsTextsWithCommonNamePattern
+jsonConverterSupportingFunctionsTexts : List GenerateFunctionFromTypeResult
+jsonConverterSupportingFunctionsTexts =
+    (jsonConverterSupportingFunctionsTextsWithCommonNamePattern
         |> List.concatMap
-            (\generalSupportingFunction ->
+            (\supportingFunction ->
                 [ { name =
                         jsonEncodeFunctionNamePrefix
-                            ++ generalSupportingFunction.functionNameCommonPart
-                  , afterName = generalSupportingFunction.encodeSyntax
+                            ++ supportingFunction.functionNameCommonPart
+                  , afterName = supportingFunction.encodeSyntax
                   }
                 , { name =
                         jsonDecodeFunctionNamePrefix
-                            ++ generalSupportingFunction.functionNameCommonPart
-                  , afterName = generalSupportingFunction.decodeSyntax
+                            ++ supportingFunction.functionNameCommonPart
+                  , afterName = supportingFunction.decodeSyntax
                   }
                 ]
             )
@@ -2515,13 +2913,54 @@ jsonDecodeSucceedWhenNotNull valueIfNotNull =
             )
 
 
-generalSupportingFunctionsTextsWithCommonNamePattern :
+estimateJsonEncodeLengthSupportingFunctionsTexts : List GenerateFunctionFromTypeResult
+estimateJsonEncodeLengthSupportingFunctionsTexts =
+    ((estimateJsonEncodeLengthSupportingFunctionsTextsWithCommonNamePattern
+        |> List.concatMap
+            (\supportingFunction ->
+                [ { name =
+                        estimateJsonEncodeLengthFunctionNamePrefix
+                            ++ supportingFunction.functionNameCommonPart
+                  , afterName = supportingFunction.encodeSyntax
+                  }
+                ]
+            )
+     )
+        ++ [ { name = "estimateJsonEncodeLength_int"
+             , afterName = """ integer =
+    if 1000 * 1000 * 1000 < abs integer
+    then 12
+    else if 1000 * 1000 < abs integer
+    then 9
+    else if 1000 < abs integer
+    then 6
+    else 3
+                """
+             }
+           ]
+        |> List.map
+            (\function ->
+                { functionName = function.name
+                , functionText = function.name ++ " " ++ function.afterName
+                }
+            )
+    )
+        |> List.map
+            (\function ->
+                { functionName = function.functionName
+                , functionText = function.functionText
+                , modulesToImport = Set.empty
+                }
+            )
+
+
+jsonConverterSupportingFunctionsTextsWithCommonNamePattern :
     List
         { functionNameCommonPart : String
         , encodeSyntax : String
         , decodeSyntax : String
         }
-generalSupportingFunctionsTextsWithCommonNamePattern =
+jsonConverterSupportingFunctionsTextsWithCommonNamePattern =
     [ { functionNameCommonPart = jsonConvertMaybeFunctionNameCommonPart
       , encodeSyntax = """encodeJust valueToEncode =
     case valueToEncode of
@@ -2599,6 +3038,61 @@ generalSupportingFunctionsTextsWithCommonNamePattern =
     ]
 
 
+estimateJsonEncodeLengthSupportingFunctionsTextsWithCommonNamePattern :
+    List
+        { functionNameCommonPart : String
+        , encodeSyntax : String
+        }
+estimateJsonEncodeLengthSupportingFunctionsTextsWithCommonNamePattern =
+    [ { functionNameCommonPart = jsonConvertMaybeFunctionNameCommonPart
+      , encodeSyntax = """encodeJust valueToEncode =
+    case valueToEncode of
+        Nothing ->
+            3
+
+        Just just ->
+            encodeJust just + 3
+"""
+      }
+    , { functionNameCommonPart = jsonConvertListFunctionNameCommonPart
+      , encodeSyntax = """ estimateItem =
+        List.map estimateItem >> List.sum """
+      }
+    , { functionNameCommonPart = jsonConvertArrayFunctionNameCommonPart
+      , encodeSyntax = """ estimateItem =
+        Array.toList >> List.map estimateItem >> List.sum """
+      }
+    , { functionNameCommonPart = jsonConvertSetFunctionNameCommonPart
+      , encodeSyntax = """ estimateItem =
+        Set.toList >> List.map estimateItem >> List.sum """
+      }
+    , { functionNameCommonPart = jsonConvertDictFunctionNameCommonPart
+      , encodeSyntax =
+            """estimateKey estimateValue =
+        Dict.toList >> List.map (\\( key, value ) -> estimateKey key + estimateValue value) >> List.sum """
+      }
+    , { functionNameCommonPart = jsonConvertResultFunctionNameCommonPart
+      , encodeSyntax = """estimateErr estimateOk valueToEncode =
+    case valueToEncode of
+        Err valueToEncodeError ->
+            estimateErr valueToEncodeError
+
+        Ok valueToEncodeOk ->
+            estimateOk valueToEncodeOk"""
+      }
+    , { functionNameCommonPart = jsonConvertTupleFunctionNameCommonPart ++ "2"
+      , encodeSyntax = """estimateA estimateB ( a, b ) =
+    estimateA a + estimateB b
+    """
+      }
+    , { functionNameCommonPart = jsonConvertTupleFunctionNameCommonPart ++ "3"
+      , encodeSyntax = """estimateA estimateB estimateC ( a, b, c ) =
+    estimateA a + estimateB b + estimateC c
+    """
+      }
+    ]
+
+
 jsonConvertMaybeFunctionNameCommonPart : String
 jsonConvertMaybeFunctionNameCommonPart =
     "_generic_Maybe"
@@ -2639,6 +3133,11 @@ jsonEncodeParamName =
     "valueToEncode"
 
 
+estimateJsonEncodeLengthParamName : String
+estimateJsonEncodeLengthParamName =
+    "valueToEncode"
+
+
 jsonEncodeFunctionNamePrefix : String
 jsonEncodeFunctionNamePrefix =
     "jsonEncode_"
@@ -2647,6 +3146,11 @@ jsonEncodeFunctionNamePrefix =
 jsonDecodeFunctionNamePrefix : String
 jsonDecodeFunctionNamePrefix =
     "jsonDecode_"
+
+
+estimateJsonEncodeLengthFunctionNamePrefix : String
+estimateJsonEncodeLengthFunctionNamePrefix =
+    "estimateJsonEncodeLength_"
 
 
 findModuleByName : List String -> Dict.Dict (List String) SourceParsedElmModule -> Maybe ( List String, SourceParsedElmModule )
