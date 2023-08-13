@@ -3,6 +3,7 @@ module Backend.Main exposing
     , webServiceMain
     )
 
+import Backend.State
 import Base64
 import Bytes.Encode
 import CompilationInterface.ElmMake
@@ -15,7 +16,7 @@ import Url.Parser exposing ((</>))
 
 
 type alias State =
-    { store : Dict.Dict Int { entryBase64 : String } }
+    Backend.State.State
 
 
 type Route

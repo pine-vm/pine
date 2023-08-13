@@ -87,7 +87,7 @@ public class StateShim
             process,
             request: request,
             stateSource: Maybe<StateSource>.just(MainStateBranch),
-            stateDestinationBranches:request.commitResultingState ? ImmutableList.Create(MainBranchName) : ImmutableList<string>.Empty);
+            stateDestinationBranches: request.commitResultingState ? ImmutableList.Create(MainBranchName) : ImmutableList<string>.Empty);
 
     public static Result<string, AdminInterface.ApplyDatabaseFunctionSuccess> ApplyFunction(
         IProcess<string, string> process,
@@ -162,12 +162,17 @@ public class StateShim
     }
 
     public static Result<string, long> EstimateSerializedStateLengthOnMainBranch(
-        IProcess<string, string> process)
+        IProcess<string, string> process) =>
+        EstimateSerializedStateLengthOnBranch(process, MainBranchName);
+
+    public static Result<string, long> EstimateSerializedStateLengthOnBranch(
+        IProcess<string, string> process,
+        string branchName)
     {
         return
             ProcessStateShimRequest(
                 process,
-                new StateShimRequestStruct.EstimateSerializedStateLengthShimRequest(MainStateBranch))
+                new StateShimRequestStruct.EstimateSerializedStateLengthShimRequest(new StateSource.BranchStateSource(branchName)))
             .AndThen(responseOk => responseOk.Response switch
             {
                 StateShimResponseStruct.EstimateSerializedStateLengthShimResponse estimateResponse =>

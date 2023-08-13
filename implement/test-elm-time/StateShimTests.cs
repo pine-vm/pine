@@ -5,6 +5,7 @@ using Pine.Json;
 using System;
 using System.Collections.Immutable;
 using System.Linq;
+using System.Security.Cryptography;
 using System.Text.Json;
 
 namespace TestElmTime;
@@ -170,6 +171,104 @@ public class StateShimTests
         Assert.IsTrue(
             ElmTime.StateShim.StateShim.TestAreBranchesEqual(calculatorProcess, ImmutableList.Create("alfa", "beta"))
             .Extract(err => throw new Exception(err)));
+    }
+
+    [TestMethod]
+    public void Test_state_shim_estimate_serialized_state_length()
+    {
+        var webAppProgram =
+            TestSetup.AppConfigComponentFromFiles(
+                TestSetup.GetElmAppFromDirectoryPath(
+                    ImmutableList.Create(".", "..", "..", "..", "..", "example-apps", "test-database-scale")));
+
+        var deployment =
+            PineValueComposition.ParseAsTreeWithStringPath(webAppProgram)
+            .Extract(err => throw new Exception(err.ToString()));
+
+        var preparedProcess =
+            ElmTime.Platform.WebService.PersistentProcessLiveRepresentation.ProcessFromDeployment(deployment);
+
+        using var elmProcess = preparedProcess.startProcess();
+
+        Result<string, ElmTime.AdminInterface.ApplyDatabaseFunctionSuccess> setStoreEntryBase64(
+            string branchName,
+            int entryId,
+            string entryBase64)
+        {
+            return
+                ElmTime.StateShim.StateShim.ApplyFunction(
+                    elmProcess,
+                    new ElmTime.AdminInterface.ApplyDatabaseFunctionRequest(
+                        functionName: "Backend.ExposeFunctionsToAdmin.setStoreEntryBase64",
+                        serializedArgumentsJson: ImmutableList.Create(
+                            JsonSerializer.Serialize(new { entryId, entryBase64 })),
+                        commitResultingState: true),
+                    stateSource: Maybe.NothingFromNull<StateSource>(new StateSource.BranchStateSource(branchName)),
+                    stateDestinationBranches: ImmutableList.Create(branchName));
+        }
+
+        ElmTime.Platform.WebService.PersistentProcessLiveRepresentation.InitBranchesInElmInJsProcess(
+            elmProcess,
+            ImmutableList.Create("main"))
+            .Extract(err => throw new Exception(err));
+
+        var stateSizeInitial =
+            ElmTime.StateShim.StateShim.EstimateSerializedStateLengthOnBranch(elmProcess, "main")
+            .Extract(err => throw new Exception(err));
+
+        var entrySize = 1_000;
+
+        setStoreEntryBase64(
+            "main",
+            entryId: 1,
+            entryBase64: Convert.ToBase64String(RandomNumberGenerator.GetBytes(entrySize)))
+            .Extract(err => throw new Exception(err));
+
+        var stateSizeAfterSettingFirstEntry =
+            ElmTime.StateShim.StateShim.EstimateSerializedStateLengthOnBranch(elmProcess, "main")
+            .Extract(err => throw new Exception(err));
+
+        Assert.IsTrue(stateSizeAfterSettingFirstEntry > stateSizeInitial + entrySize);
+
+        setStoreEntryBase64(
+            "main",
+            entryId: 2,
+            entryBase64: Convert.ToBase64String(RandomNumberGenerator.GetBytes(entrySize)))
+            .Extract(err => throw new Exception(err));
+
+        var stateSizeAfterSettingSecondEntry =
+            ElmTime.StateShim.StateShim.EstimateSerializedStateLengthOnBranch(elmProcess, "main")
+            .Extract(err => throw new Exception(err));
+
+        Assert.IsTrue(stateSizeAfterSettingSecondEntry > stateSizeAfterSettingFirstEntry + entrySize);
+
+        setStoreEntryBase64(
+            "main",
+            entryId: 1,
+            entryBase64: Convert.ToBase64String(Array.Empty<byte>()))
+            .Extract(err => throw new Exception(err));
+
+        var stateSizeAfterReplacingFirstEntry =
+            ElmTime.StateShim.StateShim.EstimateSerializedStateLengthOnBranch(elmProcess, "main")
+            .Extract(err => throw new Exception(err));
+
+        Assert.IsTrue(stateSizeAfterReplacingFirstEntry < stateSizeAfterSettingSecondEntry - entrySize);
+
+        for (int i = 0; i < 1000; ++i)
+        {
+            setStoreEntryBase64(
+                "main",
+                entryId: 1000 + i,
+                entryBase64: Convert.ToBase64String(RandomNumberGenerator.GetBytes(entrySize)))
+                .Extract(err => throw new Exception(err));
+        }
+
+        var stateSizeAfterSetting1000MoreEntries =
+            ElmTime.StateShim.StateShim.EstimateSerializedStateLengthOnBranch(elmProcess, "main")
+            .Extract(err => throw new Exception(err));
+
+        Assert.IsTrue(
+            stateSizeAfterSetting1000MoreEntries > stateSizeAfterReplacingFirstEntry + 1000 * entrySize);
     }
 
     [System.Text.Json.Serialization.JsonConverter(typeof(JsonConverterForChoiceType))]
