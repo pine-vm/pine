@@ -34,7 +34,7 @@ import File
 import File.Download
 import File.Select
 import FileTree
-import FileTreeInWorkspace as FileTreeInWorkspace
+import FileTreeInWorkspace
 import FontAwesome.Icon
 import FontAwesome.Solid
 import FontAwesome.Styles

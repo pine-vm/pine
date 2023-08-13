@@ -730,7 +730,7 @@ mapJsonConvertersModuleText { originalSourceModules, sourceDirs } ( sourceFiles,
                         (\functionsToReplace ->
                             let
                                 ( appFiles, { generatedModuleName, modulesToImport } ) =
-                                    mapAppFilesToSupportJsonConversion
+                                    mapAppFilesToSupportJsonConverters
                                         { generatedModuleNamePrefix = interfaceModuleName
                                         , sourceDirs = sourceDirs
                                         }
@@ -777,7 +777,7 @@ mapJsonConvertersModuleText { originalSourceModules, sourceDirs } ( sourceFiles,
                                             |> Result.mapError (Elm.Syntax.Node.Node functionToReplace.declarationRange)
                                     )
                                     (addImportsInElmModuleText
-                                        (List.map (Tuple.pair >> (|>) Nothing) modulesToImport)
+                                        (modulesToImport |> Set.toList |> List.map (Tuple.pair >> (|>) Nothing))
                                         moduleText
                                         |> Result.mapError (Elm.Syntax.Node.Node (syntaxRangeCoveringCompleteString moduleText))
                                     )
@@ -787,76 +787,42 @@ mapJsonConvertersModuleText { originalSourceModules, sourceDirs } ( sourceFiles,
             )
 
 
-mapAppFilesToSupportJsonConversion :
+{-| Combines two transformations of the app files to support JSON converters:
+
+  - Exposes the choice type tags from declaring modules where necessary to implement JSON decoders.
+  - Adds a module containing generated JSON conversion functions for the given list of type annotations and choice types.
+
+-}
+mapAppFilesToSupportJsonConverters :
     { generatedModuleNamePrefix : List String
     , sourceDirs : SourceDirectories
     }
     -> List ElmTypeAnnotation
     -> Dict.Dict String ElmChoiceTypeStruct
     -> AppFiles
-    -> ( AppFiles, { generatedModuleName : List String, modulesToImport : List (List String) } )
-mapAppFilesToSupportJsonConversion { generatedModuleNamePrefix, sourceDirs } typeAnnotationsBeforeDeduplicating choiceTypes appFilesBefore =
+    -> ( AppFiles, { generatedModuleName : List String, modulesToImport : Set.Set (List String) } )
+mapAppFilesToSupportJsonConverters { generatedModuleNamePrefix, sourceDirs } typeAnnotationsBeforeDeduplicating choiceTypes appFilesBefore =
     let
-        modulesToImportForChoiceTypes =
-            choiceTypes
-                |> Dict.keys
-                |> List.map moduleNameFromTypeName
-                |> Set.fromList
-                |> Set.toList
-                |> List.map (String.split ".")
+        generatedFunctions =
+            buildJsonConverterFunctionsForMultipleTypes typeAnnotationsBeforeDeduplicating choiceTypes
 
         modulesToImport =
-            [ [ "Dict" ]
-            , [ "Set" ]
-            , [ "Array" ]
-            , [ "Json", "Decode" ]
-            , [ "Json", "Encode" ]
-            , [ "Bytes" ]
-            , [ "Bytes", "Decode" ]
-            , [ "Bytes", "Encode" ]
-            ]
-                ++ modulesToImportForChoiceTypes
+            generatedFunctions.generatedFunctions
+                |> List.map .modulesToImport
+                |> List.foldl Set.union Set.empty
+                |> Set.union generatedFunctions.modulesToImportForChoiceTypes
 
         generatedModuleModulesToImport =
-            encodingModuleImportBase64 :: List.map (Tuple.pair >> (|>) Nothing) modulesToImport
+            encodingModuleImportBase64
+                :: (modulesToImport
+                        |> Set.toList
+                        |> List.map (Tuple.pair >> (|>) Nothing)
+                   )
 
         appFilesAfterExposingChoiceTypesInModules =
-            modulesToImportForChoiceTypes
+            generatedFunctions.modulesToImportForChoiceTypes
+                |> Set.toList
                 |> List.foldl (exposeAllInElmModuleInAppFiles sourceDirs) appFilesBefore
-
-        typeAnnotationsFunctions =
-            typeAnnotationsBeforeDeduplicating
-                |> listRemoveDuplicates
-                |> List.map buildJsonConverterFunctionsForTypeAnnotation
-
-        typeAnnotationsFunctionsForGeneratedModule =
-            typeAnnotationsFunctions
-                |> List.concatMap
-                    (\functionsForType ->
-                        [ functionsForType.encodeFunction, functionsForType.decodeFunction ]
-                    )
-                |> List.map (\function -> { functionName = function.name, functionText = function.text })
-
-        dependenciesFunctions =
-            choiceTypes
-                |> Dict.toList
-                |> List.map
-                    (\( choiceTypeName, choiceType ) ->
-                        jsonConverterFunctionFromChoiceType
-                            { choiceTypeName = choiceTypeName
-                            , encodeValueExpression = jsonEncodeParamName
-                            , typeArgLocalName = "type_arg"
-                            }
-                            choiceType
-                    )
-                |> List.concatMap
-                    (\functionsForType ->
-                        [ functionsForType.encodeFunction, functionsForType.decodeFunction ]
-                    )
-                |> List.map (\function -> { functionName = function.name, functionText = function.text })
-
-        functionsForGeneratedModule =
-            typeAnnotationsFunctionsForGeneratedModule ++ dependenciesFunctions ++ generalSupportingFunctionsTexts
 
         generatedModuleTextWithoutModuleDeclaration =
             [ [ generatedModuleModulesToImport
@@ -864,7 +830,7 @@ mapAppFilesToSupportJsonConversion { generatedModuleNamePrefix, sourceDirs } typ
                     |> List.sort
                     |> String.join "\n"
               ]
-            , functionsForGeneratedModule |> List.map .functionText
+            , generatedFunctions.generatedFunctions |> List.map .functionText
             ]
                 |> List.concat
                 |> List.map String.trim
@@ -895,9 +861,126 @@ mapAppFilesToSupportJsonConversion { generatedModuleNamePrefix, sourceDirs } typ
     in
     ( appFiles
     , { generatedModuleName = generatedModuleName
-      , modulesToImport = generatedModuleName :: modulesToImport
+      , modulesToImport = Set.insert generatedModuleName modulesToImport
       }
     )
+
+
+type alias GenerateFunctionsFromTypesConfig =
+    { generateFromTypeAnnotation : ElmTypeAnnotation -> List GenerateFunctionFromTypeResult
+    , generateFromChoiceType : ( String, ElmChoiceTypeStruct ) -> List GenerateFunctionFromTypeResult
+    }
+
+
+type alias GenerateFunctionFromTypeResult =
+    { functionName : String
+    , functionText : String
+    , modulesToImport : Set.Set (List String)
+    }
+
+
+buildJsonConverterFunctionsForMultipleTypes :
+    List ElmTypeAnnotation
+    -> Dict.Dict String ElmChoiceTypeStruct
+    ->
+        { generatedFunctions : List GenerateFunctionFromTypeResult
+        , modulesToImportForChoiceTypes : Set.Set (List String)
+        }
+buildJsonConverterFunctionsForMultipleTypes typeAnnotations choiceTypes =
+    let
+        defaultModulesToImportForFunction =
+            [ [ "Dict" ]
+            , [ "Set" ]
+            , [ "Array" ]
+            , [ "Json", "Decode" ]
+            , [ "Json", "Encode" ]
+            , [ "Bytes" ]
+            , [ "Bytes", "Decode" ]
+            , [ "Bytes", "Encode" ]
+            ]
+                |> Set.fromList
+
+        generatedFunctionsForTypes =
+            generateFunctionsForMultipleTypes
+                { generateFromTypeAnnotation =
+                    buildJsonConverterFunctionsForTypeAnnotation
+                        >> (\functionsForType ->
+                                [ functionsForType.encodeFunction, functionsForType.decodeFunction ]
+                                    |> List.map
+                                        (\function ->
+                                            { functionName = function.name
+                                            , functionText = function.text
+                                            , modulesToImport = defaultModulesToImportForFunction
+                                            }
+                                        )
+                           )
+                , generateFromChoiceType =
+                    (\( choiceTypeName, choiceType ) ->
+                        jsonConverterFunctionFromChoiceType
+                            { choiceTypeName = choiceTypeName
+                            , encodeValueExpression = jsonEncodeParamName
+                            , typeArgLocalName = "type_arg"
+                            }
+                            choiceType
+                    )
+                        >> (\functionsForType ->
+                                [ functionsForType.encodeFunction, functionsForType.decodeFunction ]
+                                    |> List.map
+                                        (\function ->
+                                            { functionName = function.name
+                                            , functionText = function.text
+                                            , modulesToImport = defaultModulesToImportForFunction
+                                            }
+                                        )
+                           )
+                }
+                typeAnnotations
+                choiceTypes
+
+        generatedFunctions =
+            generatedFunctionsForTypes.generatedFunctions
+                ++ generalSupportingFunctionsTexts
+    in
+    { generatedFunctions = generatedFunctions
+    , modulesToImportForChoiceTypes = generatedFunctionsForTypes.modulesToImportForChoiceTypes
+    }
+
+
+generateFunctionsForMultipleTypes :
+    GenerateFunctionsFromTypesConfig
+    -> List ElmTypeAnnotation
+    -> Dict.Dict String ElmChoiceTypeStruct
+    ->
+        { generatedFunctions : List GenerateFunctionFromTypeResult
+        , modulesToImportForChoiceTypes : Set.Set (List String)
+        }
+generateFunctionsForMultipleTypes config typeAnnotationsBeforeDeduplicating choiceTypes =
+    let
+        modulesToImportForChoiceTypes =
+            choiceTypes
+                |> Dict.keys
+                |> List.map moduleNameFromTypeName
+                |> Set.fromList
+                |> Set.toList
+                |> List.map (String.split ".")
+                |> Set.fromList
+
+        generatedFunctionsFromTypeAnnotations =
+            typeAnnotationsBeforeDeduplicating
+                |> List.Extra.unique
+                |> List.concatMap config.generateFromTypeAnnotation
+
+        generatedFunctionsFromChoiceTypes =
+            choiceTypes
+                |> Dict.toList
+                |> List.concatMap config.generateFromChoiceType
+
+        generatedFunctions =
+            generatedFunctionsFromTypeAnnotations ++ generatedFunctionsFromChoiceTypes
+    in
+    { generatedFunctions = generatedFunctions
+    , modulesToImportForChoiceTypes = modulesToImportForChoiceTypes
+    }
 
 
 buildJsonConverterFunctionsForTypeAnnotation :
@@ -2360,7 +2443,7 @@ type Declaration
     | ChoiceTypeDeclaration Elm.Syntax.Type.Type
 
 
-generalSupportingFunctionsTexts : List { functionName : String, functionText : String }
+generalSupportingFunctionsTexts : List GenerateFunctionFromTypeResult
 generalSupportingFunctionsTexts =
     (generalSupportingFunctionsTextsWithCommonNamePattern
         |> List.concatMap
@@ -2423,6 +2506,13 @@ jsonDecodeSucceedWhenNotNull valueIfNotNull =
             )"""
              }
            ]
+        |> List.map
+            (\function ->
+                { functionName = function.functionName
+                , functionText = function.functionText
+                , modulesToImport = Set.empty
+                }
+            )
 
 
 generalSupportingFunctionsTextsWithCommonNamePattern :
@@ -4213,19 +4303,6 @@ resultCombineConcatenatingErrors =
                             Ok (previousList ++ [ newItem ])
         )
         (Ok [])
-
-
-listRemoveDuplicates : List a -> List a
-listRemoveDuplicates =
-    List.foldr
-        (\item list ->
-            if list |> List.member item then
-                list
-
-            else
-                item :: list
-        )
-        []
 
 
 importSyntaxTextFromModuleNameAndAlias : ( List String, Maybe String ) -> String

@@ -19,7 +19,7 @@ import CompileElmApp
         , filePathFromElmModuleName
         , importSyntaxTextFromModuleNameAndAlias
         , indentElmCodeLines
-        , mapAppFilesToSupportJsonConversion
+        , mapAppFilesToSupportJsonConverters
         , mapLocatedInSourceFiles
         , modulesToAddForBase64Coding
         , updateFileContentAtPath
@@ -169,7 +169,7 @@ loweredForAppInStateManagementShim sourceDirs stateShimConfig config sourceFiles
                     ( appFiles, generateSerializersResult ) =
                         sourceFiles
                             |> addModulesFromTextToAppFiles sourceDirs modulesToAdd
-                            |> mapAppFilesToSupportJsonConversion
+                            |> mapAppFilesToSupportJsonConverters
                                 { generatedModuleNamePrefix = config.interfaceToHostRootModuleName
                                 , sourceDirs = sourceDirs
                                 }
@@ -177,7 +177,7 @@ loweredForAppInStateManagementShim sourceDirs stateShimConfig config sourceFiles
                                 jsonConvertedTypesDependencies
 
                     modulesToImport =
-                        generateSerializersResult.modulesToImport
+                        Set.toList generateSerializersResult.modulesToImport
                             ++ stateShimConfig.modulesToImport
                             ++ List.map .moduleName (Dict.values supportingTypes.modules)
 
