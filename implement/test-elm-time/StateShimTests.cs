@@ -1,4 +1,4 @@
-﻿using ElmTime.StateShim.InterfaceToHost;
+using ElmTime.StateShim.InterfaceToHost;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Pine;
 using Pine.Json;
@@ -98,7 +98,14 @@ public class StateShimTests
             .Extract(err => throw new Exception(err.ToString()));
 
         var preparedProcess =
-            ElmTime.Platform.WebService.PersistentProcessLiveRepresentation.ProcessFromDeployment(deployment);
+            ElmTime.Platform.WebService.PersistentProcessLiveRepresentation.ProcessFromDeployment(
+                deployment,
+                /*
+                 * 2023-08-14 Adapt to failures on macOS observed in GitHub Actions:
+                 * switch to V8 to avoid stack overflow seen in Jint
+                 * */
+                overrideJsEngineFactory:
+                ElmTime.JavaScript.JsEngineFromJavaScriptEngineSwitcher.ConstructJsEngine);
 
         using var calculatorProcess = preparedProcess.startProcess();
 
@@ -185,8 +192,16 @@ public class StateShimTests
             PineValueComposition.ParseAsTreeWithStringPath(webAppProgram)
             .Extract(err => throw new Exception(err.ToString()));
 
+
         var preparedProcess =
-            ElmTime.Platform.WebService.PersistentProcessLiveRepresentation.ProcessFromDeployment(deployment);
+            ElmTime.Platform.WebService.PersistentProcessLiveRepresentation.ProcessFromDeployment(
+                deployment,
+                /*
+                 * 2023-08-14 Adapt to failures on macOS observed in GitHub Actions:
+                 * switch to V8 to avoid stack overflow seen in Jint
+                 * */
+                overrideJsEngineFactory:
+                ElmTime.JavaScript.JsEngineFromJavaScriptEngineSwitcher.ConstructJsEngine);
 
         using var elmProcess = preparedProcess.startProcess();
 
