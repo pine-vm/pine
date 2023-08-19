@@ -1139,6 +1139,9 @@ compileElmSyntaxExpression stack elmExpression =
                 (Elm.Syntax.Node.value nameNode)
                 (Elm.Syntax.Node.value expressionNode)
 
+        Elm.Syntax.Expression.UnitExpr ->
+            Ok (ListExpression [])
+
         _ ->
             Err
                 ("Unsupported type of expression: "
@@ -1788,6 +1791,12 @@ compileElmSyntaxPattern elmPattern =
 
         Elm.Syntax.Pattern.ParenthesizedPattern parenthesized ->
             compileElmSyntaxPattern (Elm.Syntax.Node.value parenthesized)
+
+        Elm.Syntax.Pattern.UnitPattern ->
+            Ok
+                { conditionExpressions = always []
+                , declarations = []
+                }
 
         _ ->
             Err

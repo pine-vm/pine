@@ -1,0 +1,6 @@
+let
+    second _ snd =
+        snd
+
+in
+second () 6789
