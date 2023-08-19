@@ -9,8 +9,8 @@ In this guide, I use the `elm-time` command-line interface (CLI) program. You ca
 
 Here are direct links to the downloads, containing the `elm-time` executable file in a zip archive:
 
-+ Windows: <https://github.com/elm-time/elm-time/releases/download/v2023-05-07/elm-time-bin-v2023-05-07-win10-x64.zip>
-+ Linux: <https://github.com/elm-time/elm-time/releases/download/v2023-05-07/elm-time-bin-v2023-05-07-linux-x64.zip>
++ Windows: <https://github.com/elm-time/elm-time/releases/download/v2023-08-19/elm-time-bin-v2023-08-19-win10-x64.zip>
++ Linux: <https://github.com/elm-time/elm-time/releases/download/v2023-08-19/elm-time-bin-v2023-08-19-linux-x64.zip>
 
 To register the elm-time executable on your system, run the `elm-time  install` command. If you use Linux or PowerShell on Windows, you can achieve this by running the following command after navigating to the directory containing the executable file extracted from the downloaded archive:
 
@@ -21,7 +21,7 @@ To register the elm-time executable on your system, run the `elm-time  install` 
 In Windows, you will get a confirmation like this:
 
 ```text
-I added the path 'C:\Users\John\Downloads\elm-time-bin-v2023-02-27-win10-x64' to the 'PATH' environment variable for the current user account. You will be able to use the 'elm-time' command in newer instances of the Command Prompt.
+I added the path 'C:\Users\John\Downloads\elm-time-bin-v2023-08-19-win10-x64' to the 'PATH' environment variable for the current user account. You will be able to use the 'elm-time' command in newer instances of the Command Prompt.
 ```
 
 On Linux, the confirmation of the installation looks like this:
