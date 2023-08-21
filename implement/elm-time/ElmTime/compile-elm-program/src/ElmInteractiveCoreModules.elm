@@ -1659,6 +1659,50 @@ moveRedRight dict =
       dict
 
 
+{-| Update the value of a dictionary for a specific key with a given function. -}
+update : comparable -> (Maybe v -> Maybe v) -> Dict comparable v -> Dict comparable v
+update targetKey alter dictionary =
+  case alter (get targetKey dictionary) of
+    Just value ->
+      insert targetKey value dictionary
+
+    Nothing ->
+      remove targetKey dictionary
+
+
+{-| Create a dictionary with one key-value pair. -}
+singleton : comparable -> v -> Dict comparable v
+singleton key value =
+  -- Root node is always Black
+  RBNode_elm_builtin Black key value RBEmpty_elm_builtin RBEmpty_elm_builtin
+
+
+-- COMBINE
+
+
+{-| Combine two dictionaries. If there is a collision, preference is given
+to the first dictionary.
+-}
+union : Dict comparable v -> Dict comparable v -> Dict comparable v
+union t1 t2 =
+  foldl insert t2 t1
+
+
+{-| Keep a key-value pair when its key appears in the second dictionary.
+Preference is given to values in the first dictionary.
+-}
+intersect : Dict comparable v -> Dict comparable v -> Dict comparable v
+intersect t1 t2 =
+  filter (\\k _ -> member k t2) t1
+
+
+{-| Keep a key-value pair when its key does not appear in the second dictionary.
+-}
+diff : Dict comparable a -> Dict comparable b -> Dict comparable a
+diff t1 t2 =
+  foldl (\\k v t -> remove k t) t1 t2
+
+
 {-| Fold over the key-value pairs in a dictionary from lowest key to highest key.
 
     import Dict exposing (Dict)
