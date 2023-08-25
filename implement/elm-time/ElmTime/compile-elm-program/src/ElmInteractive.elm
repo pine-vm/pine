@@ -272,7 +272,37 @@ elmValueAsExpression elmValue =
             )
 
         ElmTag tagName tagArguments ->
-            if tagName == "RBEmpty_elm_builtin" then
+            let
+                defaultForTag () =
+                    ( tagName
+                        :: (tagArguments |> List.map (elmValueAsExpression >> applyNeedsParens))
+                        |> String.join " "
+                    , { needsParens = tagArguments /= [] }
+                    )
+            in
+            if tagName == "Set_elm_builtin" then
+                case tagArguments of
+                    [ singleArgument ] ->
+                        case List.map Tuple.first (elmValueDictToList singleArgument) of
+                            [] ->
+                                ( "Set.empty"
+                                , { needsParens = False }
+                                )
+
+                            setElements ->
+                                ( "Set.fromList ["
+                                    ++ String.join ","
+                                        (setElements
+                                            |> List.map (elmValueAsExpression >> Tuple.first)
+                                        )
+                                    ++ "]"
+                                , { needsParens = True }
+                                )
+
+                    _ ->
+                        defaultForTag ()
+
+            else if tagName == "RBEmpty_elm_builtin" then
                 ( "Dict.empty"
                 , { needsParens = False }
                 )
@@ -280,11 +310,7 @@ elmValueAsExpression elmValue =
             else
                 case elmValueDictToList elmValue of
                     [] ->
-                        ( tagName
-                            :: (tagArguments |> List.map (elmValueAsExpression >> applyNeedsParens))
-                            |> String.join " "
-                        , { needsParens = tagArguments /= [] }
-                        )
+                        defaultForTag ()
 
                     dictToList ->
                         ( "Dict.fromList ["
