@@ -1,0 +1,6 @@
+let
+    getFields { a, c } =
+        [ a, c ]
+
+in
+[ getFields { a = 13, c = 17 }, getFields { c = 21, a = 23 }, getFields { a = 27, b = 31, c = 37 } ]

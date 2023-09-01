@@ -1,0 +1,6 @@
+let
+    getField { a } =
+        a
+
+in
+getField { a = 17 }
