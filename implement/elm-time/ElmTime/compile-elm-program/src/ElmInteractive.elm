@@ -16,6 +16,7 @@ import Elm.Syntax.Pattern
 import Elm.Syntax.Range
 import Elm.Syntax.Type
 import ElmInteractiveCoreModules
+import ElmInteractiveKernelModules
 import Json.Decode
 import Json.Encode
 import List.Extra
@@ -544,10 +545,12 @@ compileEvalContextForElmInteractive context =
             case context of
                 DefaultContext ->
                     ElmInteractiveCoreModules.elmCoreModulesTexts
+                        ++ ElmInteractiveKernelModules.elmKernelModulesTexts
 
                 CustomModulesContext { includeCoreModules, modulesTexts } ->
                     [ if includeCoreModules then
                         ElmInteractiveCoreModules.elmCoreModulesTexts
+                            ++ ElmInteractiveKernelModules.elmKernelModulesTexts
 
                       else
                         []

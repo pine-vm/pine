@@ -6,6 +6,7 @@ import Dict
 import Elm.Syntax.File
 import ElmInteractive
 import ElmInteractiveCoreModules
+import ElmInteractiveKernelModules
 import Json.Decode
 import Json.Encode
 import Parser
@@ -71,7 +72,10 @@ evaluateSubmissionInInteractive argumentsJson =
 
 getDefaultElmCoreModulesTexts : String -> String
 getDefaultElmCoreModulesTexts _ =
-    ElmInteractiveCoreModules.elmCoreModulesTexts
+    [ ElmInteractiveCoreModules.elmCoreModulesTexts
+    , ElmInteractiveKernelModules.elmKernelModulesTexts
+    ]
+        |> List.concat
         |> Json.Encode.list Json.Encode.string
         |> Json.Encode.encode 0
 
