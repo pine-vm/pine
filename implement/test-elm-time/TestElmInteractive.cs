@@ -10,7 +10,9 @@ namespace TestElmTime;
 [TestClass]
 public class TestElmInteractive
 {
-    private static string pathToScenariosDirectory => @"./../../../../test-and-train/elm-interactive-scenarios-core";
+    private static string PathToCoreScenariosDirectory => @"./../../../../test-and-train/elm-interactive-scenarios-core";
+
+    private static string PathToKernelScenariosDirectory => @"./../../../../test-and-train/elm-interactive-scenarios-kernel";
 
     [TestMethod]
     public void TestElmInteractiveScenarios()
@@ -18,7 +20,12 @@ public class TestElmInteractive
         var console = (IConsole)StaticConsole.Instance;
 
         var scenarios =
-            Directory.EnumerateDirectories(pathToScenariosDirectory)
+            new[]
+            {
+                PathToCoreScenariosDirectory,
+                PathToKernelScenariosDirectory
+            }
+            .SelectMany(Directory.EnumerateDirectories)
             .SelectMany(scenarioDirectory =>
             {
                 var scenarioName = Path.GetFileName(scenarioDirectory);
