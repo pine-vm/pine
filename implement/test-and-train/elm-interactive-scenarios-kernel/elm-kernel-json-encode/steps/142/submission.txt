@@ -1,0 +1,1 @@
+Json.Encode.encode 0 (Json.Encode.object [("alfa", Json.Encode.int 123),("beta", Json.Encode.bool True)])

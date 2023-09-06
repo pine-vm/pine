@@ -557,6 +557,12 @@ toCode char =
     -- Add the sign prefix byte
     Pine_kernel.concat [ Pine_kernel.take [ 1, 0 ], char ]
 
+
+fromCode : Int -> Char
+fromCode code =
+    -- Remove the sign prefix byte
+    Pine_kernel.skip [ 1, code ]
+
 """
     , """
 module String exposing

@@ -320,6 +320,21 @@ int =
     IntValue
 
 
+string : String -> Value
+string =
+    StringValue
+
+
+list : (item -> Value) -> List item -> Value
+list encodeItem items =
+    ArrayValue (List.map encodeItem items)
+
+
+object : List ( String, Value ) -> Value
+object =
+    ObjectValue
+
+
 encode : Int -> Value -> String
 encode indent value =
     case value of
@@ -336,24 +351,24 @@ encode indent value =
         IntValue intVal ->
             String.fromInt intVal
 
-        StringValue string ->
-            "\\"" ++ escapeString string ++ "\\""
+        StringValue stringVal ->
+            "\\"" ++ escapeString stringVal ++ "\\""
 
         ArrayValue values ->
-            "[" ++ String.join ", " (List.map (encode indent) values) ++ "]"
+            "[" ++ String.join "," (List.map (encode indent) values) ++ "]"
 
         ObjectValue fields ->
-            "{" ++ String.join ", " (List.map (encodeField indent) fields) ++ "}"
+            "{" ++ String.join "," (List.map (encodeField indent) fields) ++ "}"
 
 
 encodeField : Int -> ( String, Value ) -> String
 encodeField indent ( key, value ) =
-    "\\"" ++ escapeString key ++ "\\": " ++ encode indent value
+    "\\"" ++ escapeString key ++ "\\":" ++ encode indent value
 
 
 escapeString : String -> String
-escapeString string =
-    String.join "" (List.map escapeChar (String.toList string))
+escapeString stringVal =
+    String.join "" (List.map escapeChar (String.toList stringVal))
 
 
 escapeChar : Char -> String
