@@ -5,6 +5,7 @@ import ElmInteractive exposing (InteractiveContext(..))
 import Expect
 import Json.Encode
 import Pine
+import Set
 import Test
 
 
@@ -519,3 +520,18 @@ evolutionStagesToMakeElmFunction =
                     )
     ]
         |> Test.describe "Make Elm Function"
+
+
+encodeDecodeChoiceTypeTest : Test.Test
+encodeDecodeChoiceTypeTest =
+    Test.test "Encode and decode Elm module choice type" <|
+        \_ ->
+            { tagsNames = Set.fromList [ "Variant_Alfa", "Variant_Beta", "Variant_Gamma" ]
+            }
+                |> ElmInteractive.emitChoiceTypeValue
+                |> ElmInteractive.parseChoiceTypeRecordFromValueTagged
+                |> Expect.equal
+                    (Ok
+                        { tagsNames = Set.fromList [ "Variant_Alfa", "Variant_Beta", "Variant_Gamma" ]
+                        }
+                    )

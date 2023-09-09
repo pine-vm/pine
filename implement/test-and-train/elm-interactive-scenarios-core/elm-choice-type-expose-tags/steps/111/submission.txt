@@ -1,0 +1,1 @@
+ConsumeExposingNamedType.construct_variant_Beta 7
