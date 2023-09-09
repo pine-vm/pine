@@ -102,7 +102,13 @@ public class ElmInteractive
         var elmModulesTextsFromBase =
             closestBase is null ?
             elmModulesTexts :
-            elmModulesTexts.Skip(closestBase.AllModulesTextsList.Count).ToImmutableList();
+            elmModulesTexts
+            .Skip(closestBase.AllModulesTextsList.Count)
+            .ToImmutableList();
+
+        var elmModulesTextsFromBaseOrderedByDependencies =
+            ElmSyntax.ElmModule.ModulesTextOrderedForCompilationByDependencies(elmModulesTextsFromBase)
+            .ToImmutableList();
 
         var initResult =
             closestBase is not null
@@ -122,7 +128,7 @@ public class ElmInteractive
             {
                 return
                     ResultExtension.AggregateExitingOnFirstError(
-                        sequence: elmModulesTextsFromBase,
+                        sequence: elmModulesTextsFromBaseOrderedByDependencies,
                         aggregateFunc: (prev, elmCoreModuleText) =>
                         {
                             var resultBeforeCache =
