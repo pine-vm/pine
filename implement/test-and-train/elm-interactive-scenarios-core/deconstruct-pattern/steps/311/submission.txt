@@ -1,0 +1,17 @@
+let
+    branchUsingPattern number =
+        case number of
+            71 ->
+                91
+
+            73 ->
+                97
+
+            _ ->
+                11
+in
+[ branchUsingPattern 0
+, branchUsingPattern 71
+, branchUsingPattern 73
+, branchUsingPattern 111
+]

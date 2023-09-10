@@ -1,0 +1,10 @@
+let
+    branchUsingPattern str =
+        case str of
+            "test" ->
+                "matched"
+
+            _ ->
+                "not matched"
+in
+[ branchUsingPattern "test", branchUsingPattern "test " ]

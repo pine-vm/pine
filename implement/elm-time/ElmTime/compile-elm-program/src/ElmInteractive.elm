@@ -1833,6 +1833,9 @@ compileElmSyntaxPattern elmPattern =
         Elm.Syntax.Pattern.IntPattern int ->
             continueWithOnlyEqualsCondition (LiteralExpression (Pine.valueFromBigInt (BigInt.fromInt int)))
 
+        Elm.Syntax.Pattern.StringPattern string ->
+            continueWithOnlyEqualsCondition (LiteralExpression (valueFromString string))
+
         Elm.Syntax.Pattern.VarPattern name ->
             Ok
                 { conditionExpressions = always []

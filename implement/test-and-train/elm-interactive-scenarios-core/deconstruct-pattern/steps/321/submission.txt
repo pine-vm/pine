@@ -1,0 +1,13 @@
+let
+    branchUsingPattern char =
+        case char of
+            '\n' ->
+                91
+
+            _ ->
+                11
+in
+[ branchUsingPattern ' '
+, branchUsingPattern '\n'
+, branchUsingPattern '\t'
+]
