@@ -1,0 +1,12 @@
+let
+    branchUsingPattern bool =
+        case bool of
+            True ->
+                11
+
+            False ->
+                13
+in
+[ branchUsingPattern False
+, branchUsingPattern True
+]

@@ -1790,10 +1790,23 @@ compileElmSyntaxPattern elmPattern =
                                 \deconstructedExpression ->
                                     let
                                         matchingTagCondition =
-                                            equalCondition
-                                                [ LiteralExpression (Pine.valueFromString qualifiedName.name)
-                                                , pineKernel_ListHead deconstructedExpression
-                                                ]
+                                            case
+                                                autoImportedModulesNames
+                                                    |> List.filterMap (Dict.get >> (|>) elmDeclarationsOverrides)
+                                                    |> List.foldl Dict.union Dict.empty
+                                                    |> Dict.get qualifiedName.name
+                                            of
+                                                Just tagNameValueFromOverrides ->
+                                                    equalCondition
+                                                        [ LiteralExpression tagNameValueFromOverrides
+                                                        , deconstructedExpression
+                                                        ]
+
+                                                Nothing ->
+                                                    equalCondition
+                                                        [ LiteralExpression (Pine.valueFromString qualifiedName.name)
+                                                        , pineKernel_ListHead deconstructedExpression
+                                                        ]
 
                                         argumentsConditions =
                                             itemsResults
