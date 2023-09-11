@@ -13,10 +13,10 @@ namespace ElmTime.ElmInteractive;
 
 public class ElmInteractive
 {
-    public static readonly Lazy<string> JavascriptToEvaluateElm = new(PrepareJavascriptToEvaluateElm, System.Threading.LazyThreadSafetyMode.ExecutionAndPublication);
+    public static readonly Lazy<string> JavascriptToEvaluateElm = new(PrepareJavaScriptToEvaluateElm, System.Threading.LazyThreadSafetyMode.ExecutionAndPublication);
 
     public static Result<string, EvaluatedSctructure> EvaluateSubmissionAndGetResultingValue(
-        IJsEngine evalElmPreparedJsEngine,
+        IJavaScriptEngine evalElmPreparedJavaScriptEngine,
         TreeNodeWithStringPath? appCodeTree,
         string submission,
         IReadOnlyList<string>? previousLocalSubmissions = null)
@@ -33,7 +33,7 @@ public class ElmInteractive
         );
 
         var responseJson =
-            evalElmPreparedJsEngine.CallFunction("evaluateSubmissionInInteractive", argumentsJson).ToString()!;
+            evalElmPreparedJavaScriptEngine.CallFunction("evaluateSubmissionInInteractive", argumentsJson).ToString()!;
 
         var responseStructure =
             System.Text.Json.JsonSerializer.Deserialize<EvaluateSubmissionResponseStructure>(responseJson)!;
@@ -49,29 +49,29 @@ public class ElmInteractive
     }
 
     public static IReadOnlyList<string> GetDefaultElmCoreModulesTexts(
-        IJsEngine evalElmPreparedJsEngine)
+        IJavaScriptEngine evalElmPreparedJavaScriptEngine)
     {
         var responseJson =
-            evalElmPreparedJsEngine.CallFunction("getDefaultElmCoreModulesTexts", 0).ToString()!;
+            evalElmPreparedJavaScriptEngine.CallFunction("getDefaultElmCoreModulesTexts", 0).ToString()!;
 
         return
             System.Text.Json.JsonSerializer.Deserialize<IReadOnlyList<string>>(responseJson)!;
     }
 
     internal static Result<string, (PineValue compileResult, CompilationCache compilationCache)> CompileInteractiveEnvironment(
-        IJsEngine evalElmPreparedJsEngine,
+        IJavaScriptEngine evalElmPreparedJavaScriptEngine,
         TreeNodeWithStringPath? appCodeTree,
         CompilationCache compilationCacheBefore)
     {
         var allModulesTexts =
-            GetDefaultElmCoreModulesTexts(evalElmPreparedJsEngine)
+            GetDefaultElmCoreModulesTexts(evalElmPreparedJavaScriptEngine)
             .Concat(ModulesTextsFromAppCodeTree(appCodeTree).EmptyIfNull())
             .ToImmutableList();
 
         return
             CompileInteractiveEnvironmentForModulesCachingIncrements(
                 elmModulesTexts: allModulesTexts,
-                evalElmPreparedJsEngine,
+                evalElmPreparedJavaScriptEngine,
                 compilationCacheBefore)
             .Map(compileResultAndCache =>
             (compileResult: compileResultAndCache.compileResult.environmentPineValue,
@@ -80,7 +80,7 @@ public class ElmInteractive
 
     private static Result<string, (CompileInteractiveEnvironmentResult compileResult, CompilationCache compilationCache)> CompileInteractiveEnvironmentForModulesCachingIncrements(
         IReadOnlyList<string> elmModulesTexts,
-        IJsEngine evalElmPreparedJsEngine,
+        IJavaScriptEngine evalElmPreparedJavaScriptEngine,
         CompilationCache compilationCacheBefore)
     {
         var baseResults =
@@ -118,7 +118,7 @@ public class ElmInteractive
             :
             CompileInteractiveEnvironmentForModules(
                 elmModulesTexts: ImmutableList<string>.Empty,
-                evalElmPreparedJsEngine: evalElmPreparedJsEngine,
+                evalElmPreparedJavaScriptEngine: evalElmPreparedJavaScriptEngine,
                 parentEnvironment: null,
                 compilationCacheBefore: compilationCacheBefore);
 
@@ -134,7 +134,7 @@ public class ElmInteractive
                             var resultBeforeCache =
                             CompileInteractiveEnvironmentForModules(
                                 elmModulesTexts: ImmutableList.Create(elmCoreModuleText),
-                                evalElmPreparedJsEngine: evalElmPreparedJsEngine,
+                                evalElmPreparedJavaScriptEngine: evalElmPreparedJavaScriptEngine,
                                 parentEnvironment: prev.compileResult,
                                 compilationCacheBefore: prev.compilationCache);
 
@@ -161,7 +161,7 @@ public class ElmInteractive
     private static Result<string, (CompileInteractiveEnvironmentResult compileResult, CompilationCache compilationCache)> CompileInteractiveEnvironmentForModules(
         IReadOnlyList<string> elmModulesTexts,
         CompileInteractiveEnvironmentResult? parentEnvironment,
-        IJsEngine evalElmPreparedJsEngine,
+        IJavaScriptEngine evalElmPreparedJavaScriptEngine,
         CompilationCache compilationCacheBefore)
     {
         var environmentBefore =
@@ -175,7 +175,7 @@ public class ElmInteractive
             options: new System.Text.Json.JsonSerializerOptions { MaxDepth = 1000 });
 
         var responseJson =
-            evalElmPreparedJsEngine.CallFunction("compileInteractiveEnvironment", argumentsJson).ToString()!;
+            evalElmPreparedJavaScriptEngine.CallFunction("compileInteractiveEnvironment", argumentsJson).ToString()!;
 
         var responseStructure =
             System.Text.Json.JsonSerializer.Deserialize<Result<string, PineValueJson>>(
@@ -247,7 +247,7 @@ public class ElmInteractive
     }
 
     internal static Result<string, (PineValue compiledValue, CompilationCache cache)> CompileInteractiveSubmission(
-        IJsEngine evalElmPreparedJsEngine,
+        IJavaScriptEngine evalElmPreparedJavaScriptEngine,
         PineValue environment,
         string submission,
         Action<string>? addInspectionLogEntry,
@@ -280,7 +280,7 @@ public class ElmInteractive
         clock.Restart();
 
         var responseJson =
-            evalElmPreparedJsEngine.CallFunction("compileInteractiveSubmission", requestJson).ToString()!;
+            evalElmPreparedJavaScriptEngine.CallFunction("compileInteractiveSubmission", requestJson).ToString()!;
 
         logDuration("JavaScript function");
 
@@ -321,11 +321,11 @@ public class ElmInteractive
         string submission);
 
     public static Result<string, EvaluatedSctructure> SubmissionResponseFromResponsePineValue(
-        IJsEngine evalElmPreparedJsEngine,
+        IJavaScriptEngine evalElmPreparedJavaScriptEngine,
         PineValue response)
     {
         var responseJson =
-            evalElmPreparedJsEngine.CallFunction(
+            evalElmPreparedJavaScriptEngine.CallFunction(
                 "submissionResponseFromResponsePineValue",
                 System.Text.Json.JsonSerializer.Serialize(PineValueJson.FromPineValueWithoutBuildingDictionary(response))).ToString()!;
 
@@ -613,26 +613,26 @@ public class ElmInteractive
                 fromOk: compilationOk => SortedTreeFromSetOfBlobsWithStringPath(compilationOk.result.compiledFiles));
     }
 
-    public static IJsEngine PrepareJsEngineToEvaluateElm(InteractiveSessionJavaScript.JavaScriptEngineFlavor javaScriptEngineFlavor) =>
-        PrepareJsEngineToEvaluateElm(
-            jsEngineFactory: javaScriptEngineFlavor switch
+    public static IJavaScriptEngine PrepareJavaScriptEngineToEvaluateElm(InteractiveSessionJavaScript.JavaScriptEngineFlavor javaScriptEngineFlavor) =>
+        PrepareJavaScriptEngineToEvaluateElm(
+            javaScriptEngineFactory: javaScriptEngineFlavor switch
             {
-                InteractiveSessionJavaScript.JavaScriptEngineFlavor.Jint => JsEngineJintOptimizedForElmApps.Create,
-                InteractiveSessionJavaScript.JavaScriptEngineFlavor.V8 => JsEngineFromJavaScriptEngineSwitcher.ConstructJsEngine,
+                InteractiveSessionJavaScript.JavaScriptEngineFlavor.Jint => JavaScriptEngineJintOptimizedForElmApps.Create,
+                InteractiveSessionJavaScript.JavaScriptEngineFlavor.V8 => JavaScriptEngineFromJavaScriptEngineSwitcher.ConstructJavaScriptEngine,
 
                 _ => throw new NotImplementedException("Not implemented: " + javaScriptEngineFlavor)
             });
 
-    public static IJsEngine PrepareJsEngineToEvaluateElm(Func<IJsEngine> jsEngineFactory)
+    public static IJavaScriptEngine PrepareJavaScriptEngineToEvaluateElm(Func<IJavaScriptEngine> javaScriptEngineFactory)
     {
-        var javascriptEngine = jsEngineFactory();
+        var javaScriptEngine = javaScriptEngineFactory();
 
-        javascriptEngine.Evaluate(JavascriptToEvaluateElm.Value);
+        javaScriptEngine.Evaluate(JavascriptToEvaluateElm.Value);
 
-        return javascriptEngine;
+        return javaScriptEngine;
     }
 
-    public static string PrepareJavascriptToEvaluateElm()
+    public static string PrepareJavaScriptToEvaluateElm()
     {
         var compileElmProgramCodeFiles = LoadCompileElmProgramCodeFiles();
 

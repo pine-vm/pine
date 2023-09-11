@@ -62,7 +62,7 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
     public static ProcessFromElm019Code.PreparedProcess ProcessFromDeployment(
         TreeNodeWithStringPath deployment,
         ElmAppInterfaceConfig? overrideElmAppInterfaceConfig = null,
-        Func<IJsEngine>? overrideJsEngineFactory = null)
+        Func<IJavaScriptEngine>? overrideJavaScriptEngineFactory = null)
     {
         var deploymentFiles = PineValueComposition.TreeToFlatDictionaryWithPathComparer(deployment);
 
@@ -78,7 +78,7 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
             ProcessFromElm019Code.ProcessFromElmCodeFiles(
                 loweredAppFiles.compiledFiles,
                 overrideElmAppInterfaceConfig: overrideElmAppInterfaceConfig,
-                overrideJsEngineFactory: overrideJsEngineFactory);
+                overrideJavaScriptEngineFactory: overrideJavaScriptEngineFactory);
     }
 
     private PersistentProcessLiveRepresentation(
@@ -181,7 +181,7 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
         IProcessStoreReader storeReader,
         Action<string>? logger,
         ElmAppInterfaceConfig? overrideElmAppInterfaceConfig = null,
-        Func<IJsEngine>? overrideJsEngineFactory = null)
+        Func<IJavaScriptEngine>? overrideJavaScriptEngineFactory = null)
     {
         var restoreStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
@@ -206,7 +206,7 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
         var processLiveRepresentation = RestoreFromCompositionEventSequence(
             compositionEventsFromLatestReduction,
             overrideElmAppInterfaceConfig,
-            overrideJsEngineFactory);
+            overrideJavaScriptEngineFactory);
 
         logger?.Invoke("Restored the process state in " + (int)restoreStopwatch.Elapsed.TotalSeconds + " seconds.");
 
@@ -221,7 +221,7 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
         RestoreFromCompositionEventSequence(
         IEnumerable<CompositionLogRecordWithResolvedDependencies> compositionLogRecords,
         ElmAppInterfaceConfig? overrideElmAppInterfaceConfig = null,
-        Func<IJsEngine>? overrideJsEngineFactory = null)
+        Func<IJavaScriptEngine>? overrideJavaScriptEngineFactory = null)
     {
         var firstCompositionLogRecord =
             compositionLogRecords.FirstOrDefault();
@@ -262,7 +262,7 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
                     ProcessFromDeployment(
                         reductionWithResolvedDependencies.appConfigAsTree,
                         overrideElmAppInterfaceConfig: overrideElmAppInterfaceConfig,
-                        overrideJsEngineFactory: overrideJsEngineFactory);
+                        overrideJavaScriptEngineFactory: overrideJavaScriptEngineFactory);
 
                 var newElmAppProcess = prepareProcessResult.startProcess();
 
@@ -307,7 +307,7 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
                     compositionLogRecord.composition!.Value,
                     process,
                     overrideElmAppInterfaceConfig,
-                    overrideJsEngineFactory: overrideJsEngineFactory)
+                    overrideJavaScriptEngineFactory: overrideJavaScriptEngineFactory)
                 .AndThen(continueOk);
         }
 
@@ -351,7 +351,7 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
         CompositionEventWithResolvedDependencies compositionEvent,
         PersistentProcessLiveRepresentationDuringRestore processBefore,
         ElmAppInterfaceConfig? overrideElmAppInterfaceConfig,
-        Func<IJsEngine>? overrideJsEngineFactory = null)
+        Func<IJavaScriptEngine>? overrideJavaScriptEngineFactory = null)
     {
         if (compositionEvent.UpdateElmAppStateForEvent is { } updateElmAppStateForEvent)
         {
@@ -438,7 +438,7 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
                 ProcessFromDeployment(
                     deployAppConfigAndMigrateElmAppState,
                     overrideElmAppInterfaceConfig: overrideElmAppInterfaceConfig,
-                    overrideJsEngineFactory: overrideJsEngineFactory);
+                    overrideJavaScriptEngineFactory: overrideJavaScriptEngineFactory);
 
             var newElmAppProcess = prepareProcessResult.startProcess();
 
@@ -491,7 +491,7 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
                 ProcessFromDeployment(
                     appConfig,
                     overrideElmAppInterfaceConfig: overrideElmAppInterfaceConfig,
-                    overrideJsEngineFactory: overrideJsEngineFactory);
+                    overrideJavaScriptEngineFactory: overrideJavaScriptEngineFactory);
 
             var newElmAppProcess = prepareProcessResult.startProcess();
 
@@ -744,7 +744,7 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
             CompositionLogRecordInFile.CompositionEvent compositionLogEvent,
             IFileStoreReader fileStoreReader,
             Action<string>? logger = null,
-            Func<IJsEngine>? overrideJsEngineFactory = null)
+            Func<IJavaScriptEngine>? overrideJavaScriptEngineFactory = null)
     {
         var projectionResult = IProcessStoreReader.ProjectFileStoreReaderForAppendedCompositionLogEvent(
             originalFileStore: fileStoreReader,
@@ -756,7 +756,7 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
                 LoadFromStoreAndRestoreProcess(
                     new ProcessStoreReaderInFileStore(projectionResult.projectedReader),
                     logger: message => logger?.Invoke(message),
-                    overrideJsEngineFactory: overrideJsEngineFactory)
+                    overrideJavaScriptEngineFactory: overrideJavaScriptEngineFactory)
                 .Map(_ => projectionResult);
         }
         catch (Exception e)

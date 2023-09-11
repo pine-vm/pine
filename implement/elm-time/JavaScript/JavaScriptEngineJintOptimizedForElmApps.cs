@@ -7,13 +7,13 @@ using System.Collections.Immutable;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
-using static ElmTime.JavaScript.JsEngineJint;
+using static ElmTime.JavaScript.JavaScriptEngineJint;
 
 namespace ElmTime.JavaScript;
 
-public class JsEngineJintOptimizedForElmApps
+public class JavaScriptEngineJintOptimizedForElmApps
 {
-    public static JsEngineJint Create() =>
+    public static JavaScriptEngineJint Create() =>
         new(DelegatesIntoHost);
 
     private static readonly IReadOnlyList<FunctionDelegateIntoHost> DelegatesIntoHost = BuildDelegatesIntoHost().ToImmutableList();

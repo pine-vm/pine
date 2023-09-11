@@ -87,11 +87,11 @@ public class RunServer
                 processStoreFileStore.SetFileContent(file.Key.ToImmutableList(), file.Value.ToArray());
         }
 
-        var jsEngineFactory =
+        var javaScriptEngineFactory =
             elmEngineType switch
             {
-                ElmInteractive.ElmEngineType.JavaScript_Jint => JsEngineJintOptimizedForElmApps.Create,
-                ElmInteractive.ElmEngineType.JavaScript_V8 => new Func<IJsEngine>(JsEngineFromJavaScriptEngineSwitcher.ConstructJsEngine),
+                ElmInteractive.ElmEngineType.JavaScript_Jint => JavaScriptEngineJintOptimizedForElmApps.Create,
+                ElmInteractive.ElmEngineType.JavaScript_V8 => new Func<IJavaScriptEngine>(JavaScriptEngineFromJavaScriptEngineSwitcher.ConstructJavaScriptEngine),
 
                 object other => throw new NotImplementedException("Engine type not implemented here: " + other)
             };
@@ -135,7 +135,7 @@ public class RunServer
             var testDeployResult = PersistentProcessLiveRepresentation.TestContinueWithCompositionEvent(
                 compositionLogEvent: compositionLogEvent,
                 fileStoreReader: processStoreFileStore,
-                overrideJsEngineFactory: jsEngineFactory)
+                overrideJavaScriptEngineFactory: javaScriptEngineFactory)
             .Extract(error => throw new Exception("Attempt to deploy app config failed: " + error));
 
             foreach (var (filePath, fileContent) in testDeployResult.projectedFiles)
@@ -148,7 +148,7 @@ public class RunServer
                 .UseUrls(adminInterfaceUrls)
                 .UseStartup<StartupAdminInterface>()
                 .WithSettingPublicWebHostUrls(publicAppUrls)
-                .WithJsEngineFactory(jsEngineFactory)
+                .WithJavaScriptEngineFactory(javaScriptEngineFactory)
                 .WithProcessStoreFileStore(processStoreFileStore);
 
         if (adminPassword is not null)

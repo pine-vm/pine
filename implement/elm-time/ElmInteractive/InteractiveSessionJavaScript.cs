@@ -18,7 +18,7 @@ public class InteractiveSessionJavaScript : IInteractiveSession
 
     private readonly TreeNodeWithStringPath? appCodeTree;
 
-    private readonly Lazy<IJsEngine> evalElmPreparedJsEngine;
+    private readonly Lazy<IJavaScriptEngine> evalElmPreparedJavaScriptEngine;
 
     private readonly IList<string> previousSubmissions = new List<string>();
 
@@ -26,7 +26,7 @@ public class InteractiveSessionJavaScript : IInteractiveSession
         TreeNodeWithStringPath? appCodeTree,
         JavaScriptEngineFlavor javaScriptEngineFlavor)
     {
-        evalElmPreparedJsEngine = new Lazy<IJsEngine>(() => ElmInteractive.PrepareJsEngineToEvaluateElm(javaScriptEngineFlavor));
+        evalElmPreparedJavaScriptEngine = new Lazy<IJavaScriptEngine>(() => ElmInteractive.PrepareJavaScriptEngineToEvaluateElm(javaScriptEngineFlavor));
         this.appCodeTree = appCodeTree;
     }
 
@@ -34,7 +34,7 @@ public class InteractiveSessionJavaScript : IInteractiveSession
     {
         var result =
             ElmInteractive.EvaluateSubmissionAndGetResultingValue(
-                evalElmPreparedJsEngine.Value,
+                evalElmPreparedJavaScriptEngine.Value,
                 appCodeTree: appCodeTree,
                 submission: submission,
                 previousLocalSubmissions: previousSubmissions.ToImmutableList());
@@ -46,7 +46,7 @@ public class InteractiveSessionJavaScript : IInteractiveSession
 
     void IDisposable.Dispose()
     {
-        if (evalElmPreparedJsEngine.IsValueCreated)
-            evalElmPreparedJsEngine.Value?.Dispose();
+        if (evalElmPreparedJavaScriptEngine.IsValueCreated)
+            evalElmPreparedJavaScriptEngine.Value?.Dispose();
     }
 }

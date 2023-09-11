@@ -104,8 +104,8 @@ public class StateShimTests
                  * 2023-08-14 Adapt to failures on macOS observed in GitHub Actions:
                  * switch to V8 to avoid stack overflow seen in Jint
                  * */
-                overrideJsEngineFactory:
-                ElmTime.JavaScript.JsEngineFromJavaScriptEngineSwitcher.ConstructJsEngine);
+                overrideJavaScriptEngineFactory:
+                ElmTime.JavaScript.JavaScriptEngineFromJavaScriptEngineSwitcher.ConstructJavaScriptEngine);
 
         using var calculatorProcess = preparedProcess.startProcess();
 
@@ -200,8 +200,8 @@ public class StateShimTests
                  * 2023-08-14 Adapt to failures on macOS observed in GitHub Actions:
                  * switch to V8 to avoid stack overflow seen in Jint
                  * */
-                overrideJsEngineFactory:
-                ElmTime.JavaScript.JsEngineFromJavaScriptEngineSwitcher.ConstructJsEngine);
+                overrideJavaScriptEngineFactory:
+                ElmTime.JavaScript.JavaScriptEngineFromJavaScriptEngineSwitcher.ConstructJavaScriptEngine);
 
         using var elmProcess = preparedProcess.startProcess();
 

@@ -18,7 +18,7 @@ namespace ElmTime;
 
 public class Program
 {
-    public static string AppVersionId => "2023-09-09";
+    public static string AppVersionId => "2023-09-10";
 
     private static int AdminInterfaceDefaultPort => 4000;
 
@@ -1284,7 +1284,7 @@ public class Program
     private static CommandLineApplication AddMakeCommand(CommandLineApplication app) =>
         app.Command("make", makeCommand =>
         {
-            makeCommand.Description = "The `make` command compiles Elm code into JS, HTML, or other files.";
+            makeCommand.Description = "The `make` command compiles Elm code into JavaScript, HTML, or other files.";
             makeCommand.UnrecognizedArgumentHandling = UnrecognizedArgumentHandling.Throw;
 
             var pathToElmFileArgument =
@@ -1294,7 +1294,7 @@ public class Program
             var outputOption =
             makeCommand.Option(
                 "--output",
-                "Specify the name of the resulting HTML or JS file.",
+                "Specify the name of the resulting HTML or JavaScript file.",
                 CommandOptionType.SingleValue);
 
             var inputDirectoryOption =
@@ -1567,7 +1567,7 @@ public class Program
                                             javascriptMinusCrashes,
                                             listFunctionToPublish);
 
-                                    using var javascriptEngine = IJsEngine.BuildJsEngine();
+                                    using var javascriptEngine = IJavaScriptEngine.BuildJavaScriptEngine();
 
                                     javascriptEngine.Evaluate(finalJs);
 

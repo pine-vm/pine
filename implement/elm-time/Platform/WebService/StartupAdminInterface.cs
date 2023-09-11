@@ -104,7 +104,7 @@ public class StartupAdminInterface
 
         var configuration = app.ApplicationServices.GetService<IConfiguration>();
 
-        var jsEngineFactory = app.ApplicationServices.GetService<Func<IJsEngine>>();
+        var javaScriptEngineFactory = app.ApplicationServices.GetService<Func<IJavaScriptEngine>>();
 
         var adminPassword = configuration?.GetValue<string>(Configuration.AdminPasswordSettingKey);
 
@@ -150,7 +150,7 @@ public class StartupAdminInterface
                     PersistentProcessLiveRepresentation.LoadFromStoreAndRestoreProcess(
                         new ProcessStoreReaderInFileStore(processStoreFileStore),
                         logger: logEntry => logger.LogInformation(logEntry),
-                        overrideJsEngineFactory: jsEngineFactory);
+                        overrideJavaScriptEngineFactory: javaScriptEngineFactory);
 
                 restoreProcessResult
                     .Unpack(

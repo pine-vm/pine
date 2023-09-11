@@ -9,8 +9,8 @@ public class JavaScriptEngineTest
     [TestMethod]
     public void Evaluate_in_JavaScriptEngine()
     {
-        var jsEngine = JsEngineFromJavaScriptEngineSwitcher.ConstructJsEngine();
+        var javaScriptEngine = JavaScriptEngineFromJavaScriptEngineSwitcher.ConstructJavaScriptEngine();
 
-        Assert.AreEqual(4, jsEngine.Evaluate("3 + 1"));
+        Assert.AreEqual(4, javaScriptEngine.Evaluate("3 + 1"));
     }
 }

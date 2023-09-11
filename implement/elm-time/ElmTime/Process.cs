@@ -24,13 +24,13 @@ public interface IDisposableProcessWithStringInterface : IProcessWithStringInter
 {
 }
 
-public class ProcessHostedWithJsEngine : IDisposableProcessWithStringInterface
+public class ProcessHostedWithJavaScriptEngine : IDisposableProcessWithStringInterface
 {
-    private readonly IJsEngine javascriptEngine;
+    private readonly IJavaScriptEngine javascriptEngine;
 
-    public ProcessHostedWithJsEngine(
+    public ProcessHostedWithJavaScriptEngine(
         string javascriptPreparedToRun,
-        IJsEngine javascriptEngine)
+        IJavaScriptEngine javascriptEngine)
     {
         this.javascriptEngine = javascriptEngine;
 
@@ -78,16 +78,16 @@ public class ProcessFromElm019Code
     public static PreparedProcess ProcessFromElmCodeFiles(
         IReadOnlyCollection<(IReadOnlyList<string>, ReadOnlyMemory<byte>)> elmCodeFiles,
         ElmAppInterfaceConfig? overrideElmAppInterfaceConfig = null,
-        Func<IJsEngine>? overrideJsEngineFactory = null) =>
+        Func<IJavaScriptEngine>? overrideJavaScriptEngineFactory = null) =>
         ProcessFromElmCodeFiles(
             PineValueComposition.ToFlatDictionaryWithPathComparer(elmCodeFiles),
             overrideElmAppInterfaceConfig,
-            overrideJsEngineFactory);
+            overrideJavaScriptEngineFactory);
 
     public static PreparedProcess ProcessFromElmCodeFiles(
         IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> elmCodeFiles,
         ElmAppInterfaceConfig? overrideElmAppInterfaceConfig = null,
-        Func<IJsEngine>? overrideJsEngineFactory = null)
+        Func<IJavaScriptEngine>? overrideJavaScriptEngineFactory = null)
     {
         var elmAppInterfaceConfig = overrideElmAppInterfaceConfig ?? ElmAppInterfaceConfig.Default;
 
@@ -113,9 +113,9 @@ public class ProcessFromElm019Code
                 buildArtifacts: new BuildArtifacts(
                     javaScriptFromElmMake: javascriptFromElmMake,
                     javaScriptPreparedToRun: javascriptPreparedToRun),
-                startProcess: () => new ProcessHostedWithJsEngine(
+                startProcess: () => new ProcessHostedWithJavaScriptEngine(
                     javascriptPreparedToRun,
-                    javascriptEngine: overrideJsEngineFactory?.Invoke() ?? JsEngineJintOptimizedForElmApps.Create()));
+                    javascriptEngine: overrideJavaScriptEngineFactory?.Invoke() ?? JavaScriptEngineJintOptimizedForElmApps.Create()));
     }
 
     public const string appStateJsVarName = "app_state";

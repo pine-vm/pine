@@ -38,21 +38,21 @@ public class TestModeledInElm
             workingDirectoryRelative: null,
             ImmutableList.Create("src", "Main.elm"));
 
-        var javascriptFromElmMake =
+        var javaScriptFromElmMake =
             Encoding.UTF8.GetString(
                 elmMakeResult.Extract(err => throw new Exception("Failed elm make: " + err)).producedFile.Span);
 
-        var javascriptPreparedToRun =
+        var javaScriptPreparedToRun =
             ProcessFromElm019Code.PublishFunctionsFromJavascriptFromElmMake(
-                ProcessFromElm019Code.JavascriptMinusCrashes(javascriptFromElmMake),
+                ProcessFromElm019Code.JavascriptMinusCrashes(javaScriptFromElmMake),
                 new[]
                 {(functionNameInElm: "Main.tests", publicName: "published_tests", arity: 0)});
 
-        var javascriptEngine = JsEngineFromJavaScriptEngineSwitcher.ConstructClearScriptJavaScriptEngine();
+        var javaScriptEngine = JavaScriptEngineFromJavaScriptEngineSwitcher.ConstructClearScriptJavaScriptEngine();
 
-        javascriptEngine.Evaluate(javascriptPreparedToRun);
+        javaScriptEngine.Evaluate(javaScriptPreparedToRun);
 
-        return javascriptEngine.Evaluate("published_tests")?.ToString();
+        return javaScriptEngine.Evaluate("published_tests")?.ToString();
     }
 
     [TestMethod]

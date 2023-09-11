@@ -8,7 +8,7 @@ using System.Runtime.CompilerServices;
 
 namespace ElmTime.JavaScript;
 
-public class JsEngineJint : IJsEngine
+public class JavaScriptEngineJint : IJavaScriptEngine
 {
     public record FunctionDelegateIntoHost(
         string delegatedJavaScriptFunctionName,
@@ -21,7 +21,7 @@ public class JsEngineJint : IJsEngine
 
     private readonly IReadOnlyDictionary<string, Func<Esprima.Ast.Node, Esprima.Ast.Expression>> evalAstRewriterDeclarationReplacements;
 
-    public JsEngineJint(IReadOnlyList<FunctionDelegateIntoHost>? functionDelegatesIntoHost)
+    public JavaScriptEngineJint(IReadOnlyList<FunctionDelegateIntoHost>? functionDelegatesIntoHost)
     {
         this.functionDelegatesIntoHost = functionDelegatesIntoHost ?? Array.Empty<FunctionDelegateIntoHost>();
 

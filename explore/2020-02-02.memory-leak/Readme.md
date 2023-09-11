@@ -2,9 +2,9 @@
 
 Saw growing memory usage in one application in production and restarted the server within three weeks to avoid running out of memory.
 
-2020-02-01 Profiling session: Using the webserver: Sending one hundred thousand HTTP requests to a simple Elm app led to several MB increased memory use. Using dotMemory to take snapshots of the process and investigate: dotMemory showed only around 3.5 MB and 15 k objects used in the .NET heap, even after the 100 k requests. Comparing snapshots did not indicate any growth in the .NET heap, but showed robust growth of total memory use. These observations led to the theory that maybe this leak can be avoided by using the JS engine different, or a different JS engine.
+2020-02-01 Profiling session: Using the webserver: Sending one hundred thousand HTTP requests to a simple Elm app led to several MB increased memory use. Using dotMemory to take snapshots of the process and investigate: dotMemory showed only around 3.5 MB and 15 k objects used in the .NET heap, even after the 100 k requests. Comparing snapshots did not indicate any growth in the .NET heap, but showed robust growth of total memory use. These observations led to the theory that maybe this leak can be avoided by using the JavaScript engine different, or a different JavaScript engine.
 
-The next step is to see if we can reproduce the problem with a simplified demo app. If the problem is in the use of the JS engine, it should still be observable after removing the webserver and the persistence parts from the demo.
+The next step is to see if we can reproduce the problem with a simplified demo app. If the problem is in the use of the JavaScript engine, it should still be observable after removing the webserver and the persistence parts from the demo.
 
 The app in the subdirectoy `demo-memory-leak` implements this setup, derived from the 'Echo' automated test. It sends 15 batches of 200 k events into the Elm app. The output using the runtime from January show the memory leak is also present in this simple scenario:
 

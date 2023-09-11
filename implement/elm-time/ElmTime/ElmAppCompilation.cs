@@ -342,25 +342,25 @@ namespace ElmTime
 
             serializeStopwatch.Stop();
 
-            System.Diagnostics.Stopwatch? prepareJsEngineStopwatch = null;
-            System.Diagnostics.Stopwatch? inJsEngineStopwatch = null;
+            System.Diagnostics.Stopwatch? prepareJavaScriptEngineStopwatch = null;
+            System.Diagnostics.Stopwatch? inJavaScriptEngineStopwatch = null;
             System.Diagnostics.Stopwatch? deserializeStopwatch = null;
 
             Result<IReadOnlyList<CompilerSerialInterface.LocatedCompilationError>, CompilationIterationSuccess> compileNew()
             {
-                prepareJsEngineStopwatch = System.Diagnostics.Stopwatch.StartNew();
+                prepareJavaScriptEngineStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
-                var jsEngine = CachedJsEngineToCompileFileTree(compilerElmProgramCodeFiles);
+                var javaScriptEngine = CachedJavaScriptEngineToCompileFileTree(compilerElmProgramCodeFiles);
 
-                prepareJsEngineStopwatch.Stop();
+                prepareJavaScriptEngineStopwatch.Stop();
 
-                inJsEngineStopwatch = System.Diagnostics.Stopwatch.StartNew();
+                inJavaScriptEngineStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
                 var responseJson =
-                    jsEngine.CallFunction("lowerSerialized", argumentsJson)
+                    javaScriptEngine.CallFunction("lowerSerialized", argumentsJson)
                     .ToString()!;
 
-                inJsEngineStopwatch.Stop();
+                inJavaScriptEngineStopwatch.Stop();
 
                 deserializeStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
@@ -401,10 +401,10 @@ namespace ElmTime
                 new CompilationIterationCompilationReport
                 (
                     serializeTimeSpentMilli: (int)serializeStopwatch.ElapsedMilliseconds,
-                    prepareJsEngineTimeSpentMilli: (int?)prepareJsEngineStopwatch?.ElapsedMilliseconds,
+                    prepareJavaScriptEngineTimeSpentMilli: (int?)prepareJavaScriptEngineStopwatch?.ElapsedMilliseconds,
                     argumentsJsonHash: argumentsJsonHash,
-                    argumentsToJsEngineSerializedLength: argumentsJson.Length,
-                    inJsEngineTimeSpentMilli: (int?)inJsEngineStopwatch?.ElapsedMilliseconds,
+                    argumentsToJavaScriptEngineSerializedLength: argumentsJson.Length,
+                    inJavaScriptEngineTimeSpentMilli: (int?)inJavaScriptEngineStopwatch?.ElapsedMilliseconds,
                     deserializeTimeSpentMilli: (int?)deserializeStopwatch?.ElapsedMilliseconds,
                     totalTimeSpentMilli: (int)totalStopwatch.ElapsedMilliseconds
                 ));
@@ -423,7 +423,7 @@ namespace ElmTime
 
         public static string InterfaceToHostRootModuleName => "Backend.InterfaceToHost_Root";
 
-        public static IJsEngine CachedJsEngineToCompileFileTree(
+        public static IJavaScriptEngine CachedJavaScriptEngineToCompileFileTree(
             IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> compilerElmProgramCodeFiles)
         {
             var compilerId =
@@ -431,19 +431,19 @@ namespace ElmTime
                     PineValueHashTree.ComputeHashSorted(
                         PineValueComposition.SortedTreeFromSetOfBlobsWithStringPath(compilerElmProgramCodeFiles)));
 
-            return FileTreeCompilerJsEngineCache.GetOrAdd(
+            return FileTreeCompilerJavaScriptEngineCache.GetOrAdd(
                 compilerId,
-                _ => CreateJsEngineToCompileFileTree(compilerElmProgramCodeFiles));
+                _ => CreateJavaScriptEngineToCompileFileTree(compilerElmProgramCodeFiles));
         }
 
-        private static readonly ConcurrentDictionary<string, IJsEngine> FileTreeCompilerJsEngineCache = new();
+        private static readonly ConcurrentDictionary<string, IJavaScriptEngine> FileTreeCompilerJavaScriptEngineCache = new();
 
-        public static IJsEngine CreateJsEngineToCompileFileTree(
+        public static IJavaScriptEngine CreateJavaScriptEngineToCompileFileTree(
             IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> compilerElmProgramCodeFiles)
         {
             var javascript = BuildJavascriptToCompileFileTree(compilerElmProgramCodeFiles);
 
-            var javascriptEngine = IJsEngine.BuildJsEngine();
+            var javascriptEngine = IJavaScriptEngine.BuildJavaScriptEngine();
 
             javascriptEngine.Evaluate(javascript);
 
@@ -585,10 +585,10 @@ namespace ElmTime
 
         public record CompilationIterationCompilationReport(
             int serializeTimeSpentMilli,
-            int? prepareJsEngineTimeSpentMilli,
+            int? prepareJavaScriptEngineTimeSpentMilli,
             string? argumentsJsonHash,
-            int? argumentsToJsEngineSerializedLength,
-            int? inJsEngineTimeSpentMilli,
+            int? argumentsToJavaScriptEngineSerializedLength,
+            int? inJavaScriptEngineTimeSpentMilli,
             int? deserializeTimeSpentMilli,
             int totalTimeSpentMilli);
 

@@ -47,7 +47,7 @@ dependencies_encoding_roundtrip =
             , outputType = CompileElmApp.ElmMakeOutputTypeHtml
             }
       )
-    , ( "ElmMakeDependency with only Main.elm to JS"
+    , ( "ElmMakeDependency with only Main.elm to JavaScript"
       , CompileElmApp.ElmMakeDependency
             { files =
                 [ ( defaultSourceDirs.elmJsonDirectoryPath ++ [ "elm.json" ]
