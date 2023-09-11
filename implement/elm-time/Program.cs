@@ -18,7 +18,7 @@ namespace ElmTime;
 
 public class Program
 {
-    public static string AppVersionId => "2023-09-10";
+    public static string AppVersionId => "2023-09-11";
 
     private static int AdminInterfaceDefaultPort => 4000;
 
@@ -819,6 +819,8 @@ public class Program
     private static CommandLineApplication AddInteractiveCommand(CommandLineApplication app) =>
         app.Command("interactive", interactiveCommand =>
         {
+            interactiveCommand.AddName("repl");
+
             interactiveCommand.Description = "Enter an environment for interactive exploration and composition of Elm programs.";
 
             var contextAppOption =
