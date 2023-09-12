@@ -7,10 +7,10 @@ namespace Pine;
 
 public static class PineValueComposition
 {
-    public static Result<IImmutableList<(int index, string name)>, TreeNodeWithStringPath> ParseAsTreeWithStringPath(
+    public static Result<IReadOnlyList<(int index, string name)>, TreeNodeWithStringPath> ParseAsTreeWithStringPath(
         PineValue composition)
     {
-        static Result<IImmutableList<(int index, string name)>, TreeNodeWithStringPath> continueForListComposition(
+        static Result<IReadOnlyList<(int index, string name)>, TreeNodeWithStringPath> continueForListComposition(
             PineValue.ListValue compositionAsList)
         {
             var compositionResults =
@@ -19,17 +19,15 @@ public static class PineValueComposition
                     {
                         if (element is not PineValue.ListValue elementAsList || elementAsList.Elements.Count != 2)
                         {
-                            return Result<IImmutableList<(int index, string name)>, (string name, TreeNodeWithStringPath
-                                element)>.err(
-                                ImmutableList<(int index, string name)>.Empty);
+                            return Result<IReadOnlyList<(int index, string name)>, (string name, TreeNodeWithStringPath
+                                element)>.err([]);
                         }
 
                         if (PineValueAsString.StringFromValue(elementAsList.Elements.ElementAt(0)) is not
                             Result<string, string>.Ok nameOk)
                         {
-                            return Result<IImmutableList<(int index, string name)>, (string name, TreeNodeWithStringPath
-                                element)>.err(
-                                ImmutableList<(int index, string name)>.Empty);
+                            return Result<IReadOnlyList<(int index, string name)>, (string name, TreeNodeWithStringPath
+                                element)>.err([]);
                         }
 
                         var currentIndexAndName =
@@ -38,13 +36,13 @@ public static class PineValueComposition
                         return
                             ParseAsTreeWithStringPath(elementAsList.Elements.ElementAt(1)) switch
                             {
-                                Result<IImmutableList<(int index, string name)>, TreeNodeWithStringPath>.Err err =>
-                                    Result<IImmutableList<(int index, string name)>, (string name,
+                                Result<IReadOnlyList<(int index, string name)>, TreeNodeWithStringPath>.Err err =>
+                                    Result<IReadOnlyList<(int index, string name)>, (string name,
                                         TreeNodeWithStringPath element)>.err(
-                                        ImmutableList.Create(currentIndexAndName).AddRange(err.Value)),
+                                        [currentIndexAndName, .. err.Value]),
 
-                                Result<IImmutableList<(int index, string name)>, TreeNodeWithStringPath>.Ok ok =>
-                                    Result<IImmutableList<(int index, string name)>, (string name,
+                                Result<IReadOnlyList<(int index, string name)>, TreeNodeWithStringPath>.Ok ok =>
+                                    Result<IReadOnlyList<(int index, string name)>, (string name,
                                         TreeNodeWithStringPath element)>.ok(
                                         (currentIndexAndName.name, ok.Value)),
 
@@ -63,7 +61,7 @@ public static class PineValueComposition
             composition switch
             {
                 PineValue.BlobValue compositionAsBlob =>
-                    Result<IImmutableList<(int index, string name)>, TreeNodeWithStringPath>.ok(
+                    Result<IReadOnlyList<(int index, string name)>, TreeNodeWithStringPath>.ok(
                         TreeNodeWithStringPath.Blob(compositionAsBlob.Bytes)),
 
                 PineValue.ListValue compositionAsList =>
@@ -83,9 +81,10 @@ public static class PineValueComposition
                     tree.Elements
                         .Select(treeElement =>
                             PineValue.List(
-                                ImmutableList.Create(
+                                [
                                     PineValueAsString.ValueFromString(treeElement.name),
-                                    FromTreeWithStringPath(treeElement.component))
+                                    FromTreeWithStringPath(treeElement.component)
+                                ]
                             ))
                         .ToImmutableList()),
 

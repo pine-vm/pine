@@ -80,11 +80,11 @@ public class TestSetup
     public static IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> GetElmAppFromExampleName(
         string exampleName) => GetElmAppFromDirectoryPath(Path.Combine(PathToExampleElmApps, exampleName));
 
-    private static string FilePathStringFromPath(IImmutableList<string> path) =>
+    private static string FilePathStringFromPath(IReadOnlyList<string> path) =>
         Path.Combine(path.ToArray());
 
     public static IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> GetElmAppFromDirectoryPath(
-        IImmutableList<string> directoryPath) =>
+        IReadOnlyList<string> directoryPath) =>
         GetElmAppFromDirectoryPath(FilePathStringFromPath(directoryPath));
 
     public static IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> GetElmAppFromDirectoryPath(

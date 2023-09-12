@@ -46,18 +46,19 @@ public class StartupAdminInterface
 
     public static string PathApiGuiRequest => "/api/gui";
 
-    public static IImmutableList<string> WebServiceConfigFilePathDefault => ImmutableList.Create("web-service.json");
+    public static IReadOnlyList<string> WebServiceConfigFilePathDefault => ["web-service.json"];
 
-    public static IImmutableList<IImmutableList<string>> WebServiceConfigFilePathAlternatives =>
-        ImmutableList.Create(
+    public static IReadOnlyList<IReadOnlyList<string>> WebServiceConfigFilePathAlternatives =>
+        [
             WebServiceConfigFilePathDefault,
 
             /*
              * Support smooth migration of projects with backwards compatibility here:
              * Support the name used before 2023-05 as alternative.
              * */
-            ImmutableList.Create("web-server.json"),
-            ImmutableList.Create("elm-fullstack.json"));
+            ["web-server.json"],
+            ["elm-fullstack.json"]
+        ];
 
     private readonly ILogger<StartupAdminInterface> logger;
 

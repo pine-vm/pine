@@ -1,5 +1,4 @@
 ﻿using System.Collections.Generic;
-using System.Collections.Immutable;
 using System.Linq;
 using System.Text.Json.Serialization;
 
@@ -15,7 +14,7 @@ public record ElmJsonStructure(
 
     public static RelativeDirectory ParseSourceDirectory(string sourceDirectory)
     {
-        var initialRecord = new RelativeDirectory(ParentLevel: 0, Subdirectories: ImmutableList<string>.Empty);
+        var initialRecord = new RelativeDirectory(ParentLevel: 0, Subdirectories: []);
 
         if (sourceDirectory == ".")
             return initialRecord;
@@ -37,7 +36,7 @@ public record ElmJsonStructure(
                                 0 < aggregate.Subdirectories.Count ?
                                     aggregate with
                                     {
-                                        Subdirectories = aggregate.Subdirectories.RemoveAt(aggregate.Subdirectories.Count - 1)
+                                        Subdirectories = [.. aggregate.Subdirectories.SkipLast(1)]
                                     }
                                     :
                                     aggregate with
@@ -47,13 +46,13 @@ public record ElmJsonStructure(
                             _ =>
                                 aggregate with
                                 {
-                                    Subdirectories = aggregate.Subdirectories.Add(nextSegment)
+                                    Subdirectories = [.. aggregate.Subdirectories, nextSegment]
                                 }
                         });
     }
 
     public record RelativeDirectory(
         int ParentLevel,
-        IImmutableList<string> Subdirectories);
+        IReadOnlyList<string> Subdirectories);
 }
 

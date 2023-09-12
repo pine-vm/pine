@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Collections.Immutable;
 using System.Linq;
 
 namespace Pine;
@@ -23,7 +22,7 @@ public abstract record PineValue : IEquatable<PineValue>
     public static PineValue List(IReadOnlyList<PineValue> elements) =>
         new ListValue(elements);
 
-    public static readonly PineValue EmptyList = List(ImmutableList<PineValue>.Empty);
+    public static readonly PineValue EmptyList = List([]);
 
     /// <summary>
     /// A <see cref="PineValue"/> that is a list of <see cref="PineValue"/>s.

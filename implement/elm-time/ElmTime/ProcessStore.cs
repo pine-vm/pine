@@ -200,14 +200,16 @@ public class ProcessStoreWriterInFileStore : ProcessStoreInFileStore, IProcessSt
 
                 var lastFileNameIfAddRequestedFileName =
                     CompositionLogFileOrder(
-                        EnumerateCompositionsLogFilesPaths().Concat(new[] { compositionLogRequestedFilePathInDirectory }))
+                        [.. EnumerateCompositionsLogFilesPaths(), compositionLogRequestedFilePathInDirectory])
                     .Last();
 
                 if (compositionLogRequestedFilePathInDirectory.Equals(lastFileNameIfAddRequestedFileName))
                     compositionLogFilePath = compositionLogRequestedFilePathInDirectory;
             }
 
-            compositionFileStoreWriter.AppendFileContent(compositionLogFilePath, record.Concat(Encoding.UTF8.GetBytes("\n")).ToArray());
+            compositionFileStoreWriter.AppendFileContent(
+                compositionLogFilePath,
+                CommonConversion.Concat<byte>(record, Encoding.UTF8.GetBytes("\n")));
 
             appendSerializedCompositionRecordLastFilePath = compositionLogFilePath;
         }

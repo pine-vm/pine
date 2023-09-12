@@ -35,7 +35,7 @@ public static class PineValueHashTree
                     Buffer.BlockCopy(prefix, 0, serialRepresentation, 0, prefix.Length);
                     Buffer.BlockCopy(blobValueArray, 0, serialRepresentation, prefix.Length, blobValueArray.Length);
 
-                    return (serialRepresentation, ImmutableHashSet<PineValue>.Empty);
+                    return (serialRepresentation, []);
                 }
 
             case PineValue.ListValue listValue:
@@ -46,7 +46,7 @@ public static class PineValueHashTree
                     var prefix = System.Text.Encoding.ASCII.GetBytes("list " + elementsHashes.Count + "\0");
 
                     return
-                        (serialRepresentation: CommonConversion.Concat(new[] { (ReadOnlyMemory<byte>)prefix }.Concat(elementsHashes).ToList()).ToArray(),
+                        (serialRepresentation: CommonConversion.Concat([(ReadOnlyMemory<byte>)prefix, .. elementsHashes]),
                             dependencies: listValue.Elements);
                 }
 

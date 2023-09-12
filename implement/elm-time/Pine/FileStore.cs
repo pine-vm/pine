@@ -136,7 +136,7 @@ public class FileStoreFromSystemIOFile : IFileStore
         var fileSystemDirectoryPath = CombinePath(directoryPath);
 
         if (!Directory.Exists(fileSystemDirectoryPath))
-            return ImmutableList<IImmutableList<string>>.Empty;
+            return [];
 
         return
             Directory.GetFiles(fileSystemDirectoryPath, "*", SearchOption.AllDirectories)
@@ -299,7 +299,7 @@ public class EmptyFileStoreReader : IFileStoreReader
     public ReadOnlyMemory<byte>? GetFileContent(IImmutableList<string> path) => null;
 
     public IEnumerable<IImmutableList<string>> ListFilesInDirectory(IImmutableList<string> directoryPath) =>
-        ImmutableList<IImmutableList<string>>.Empty;
+        [];
 }
 
 public static class FileStoreExtension

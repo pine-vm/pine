@@ -203,7 +203,7 @@ public class ProcessFromElm019Code
         var publicationInsertLocation = invokeExportStatementMatch.Index;
 
         var publicationInsertString =
-            string.Join(Environment.NewLine, new[] { "" }.Concat(publishStatements).Concat(new[] { "" }));
+            string.Join(Environment.NewLine, ["", .. publishStatements, ""]);
 
         return
             javascriptFromElmMake.Insert(publicationInsertLocation, publicationInsertString);

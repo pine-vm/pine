@@ -44,7 +44,7 @@ public class WebHostAdminInterfaceTestSetup : IDisposable
             (webHostBuilderMap ?? (builder => builder))
             (Microsoft.AspNetCore.WebHost.CreateDefaultBuilder()
             .UseUrls(AdminWebHostUrl)
-            .WithSettingPublicWebHostUrls(new[] { PublicWebHostUrl })
+            .WithSettingPublicWebHostUrls([PublicWebHostUrl])
             .WithSettingAdminPassword(adminPassword)
             .UseStartup<StartupAdminInterface>()
             .WithProcessStoreFileStore(processStoreFileStoreMap?.Invoke(fileStore) ?? fileStore))

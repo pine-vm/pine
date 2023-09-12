@@ -90,10 +90,10 @@ public class TestElmInteractive
         console.WriteLine(
             string.Join(
                 " - ",
-                (failedSteps.Any() ? "Failed" : "Passed") + "!",
+                (!failedSteps.IsEmpty ? "Failed" : "Passed") + "!",
                 string.Join(", ", overallStats.Select(stat => stat.label + ": " + stat.value)),
                 scenariosTreeCompositionHash[..10] + " (elm-time " + Program.AppVersionId + ")"),
-            color: failedSteps.Any() ? IConsole.TextColor.Red : IConsole.TextColor.Green);
+            color: !failedSteps.IsEmpty ? IConsole.TextColor.Red : IConsole.TextColor.Green);
 
         var failedScenarios =
             failedSteps
@@ -206,10 +206,10 @@ public class TestElmInteractive
     public static Result<string, Scenario> ParseScenario(TreeNodeWithStringPath scenarioTree)
     {
         var appCodeTree =
-            scenarioTree.GetNodeAtPath(new[] { "context-app" });
+            scenarioTree.GetNodeAtPath(["context-app"]);
 
         var stepsDirectory =
-            scenarioTree.GetNodeAtPath(new[] { "steps" });
+            scenarioTree.GetNodeAtPath(["steps"]);
 
         var testScenarioSteps =
             stepsDirectory switch
@@ -251,14 +251,14 @@ public class TestElmInteractive
     public static Result<string, ScenarioStep> ParseScenarioStep(TreeNodeWithStringPath sessionStep)
     {
         var expectedResponse =
-            sessionStep.GetNodeAtPath(new[] { "expected-value.txt" }) is TreeNodeWithStringPath.BlobNode expectedValueBlob
+            sessionStep.GetNodeAtPath(["expected-value.txt"]) is TreeNodeWithStringPath.BlobNode expectedValueBlob
             ?
             Encoding.UTF8.GetString(expectedValueBlob.Bytes.Span)
             :
             null;
 
         return
-            (sessionStep.GetNodeAtPath(new[] { "submission.txt" }) switch
+            (sessionStep.GetNodeAtPath(["submission.txt"]) switch
             {
                 TreeNodeWithStringPath.BlobNode submissionBlob => Result<string, string>.ok(Encoding.UTF8.GetString(submissionBlob.Bytes.Span)),
                 _ => Result<string, string>.err("Missing submission"),

@@ -1,7 +1,6 @@
 using ElmTime;
 using ElmTime.Elm019;
 using ElmTime.JavaScript;
-using JavaScriptEngineSwitcher.V8;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using System;
 using System.Collections.Generic;

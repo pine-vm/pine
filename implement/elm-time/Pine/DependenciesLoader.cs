@@ -93,7 +93,7 @@ public class DependenciesLoader
                 treesFromUrl
                 .Aggregate(
                     seed:
-                    Result<ImmutableList<TreeNodeWithStringPath>, ReadOnlyMemory<byte>>.err(ImmutableList<TreeNodeWithStringPath>.Empty),
+                    Result<ImmutableList<TreeNodeWithStringPath>, ReadOnlyMemory<byte>>.err([]),
                     func:
                     (aggregate, tree) =>
                     {

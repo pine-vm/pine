@@ -11,7 +11,7 @@ public class CommandLineInterface
         integer.ToString("N",
             new NumberFormatInfo
             {
-                NumberGroupSizes = new[] { 3, 3, 3, 3, 3, 3 },
+                NumberGroupSizes = [3, 3, 3, 3, 3, 3],
                 NumberGroupSeparator = thousandsSeparator.ToString(),
                 NumberDecimalDigits = 0
             });

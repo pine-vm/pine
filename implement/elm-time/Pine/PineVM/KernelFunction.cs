@@ -103,7 +103,7 @@ public static class KernelFunction
                                 aggregate switch
                                 {
                                     PineValue.ListValue aggregateListValue =>
-                                        PineValue.List(aggregateListValue.Elements.Concat(elemListValue.Elements).ToImmutableList()),
+                                        PineValue.List([.. aggregateListValue.Elements, .. elemListValue.Elements]),
                                     _ => elemListValue
                                 },
                             _ => throw new NotImplementedException()

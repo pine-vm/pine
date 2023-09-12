@@ -57,7 +57,7 @@ public class GitPartialForCommitServer
                 return Results.BadRequest("Missing clone URL. Use one line in the request body for each clone URL.");
             }
 
-            if (!supportedCloneUrls.Any())
+            if (supportedCloneUrls.IsEmpty)
             {
                 return Results.BadRequest(
                     "None of the given clone URLs is enabled here. Only URLs with the following " +

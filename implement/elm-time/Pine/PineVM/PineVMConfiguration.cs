@@ -1,5 +1,4 @@
-﻿using Microsoft.CodeAnalysis;
-using Microsoft.CodeAnalysis.CSharp;
+﻿using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using System;
 using System.Collections.Generic;
@@ -68,6 +67,6 @@ public partial class PineVMConfiguration
         return
             PineCompileToDotNet.GenerateCSharpFile(
                 compileCSharpClassResult,
-                additionalMembers: new[] { configurationClassDeclarationInNamespace });
+                additionalMembers: [configurationClassDeclarationInNamespace]);
     }
 }

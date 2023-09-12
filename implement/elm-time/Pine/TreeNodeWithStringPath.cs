@@ -76,16 +76,16 @@ public abstract record TreeNodeWithStringPath : IEquatable<TreeNodeWithStringPat
     public static TreeNodeWithStringPath Blob(ReadOnlyMemory<byte> blobContent) =>
         new BlobNode(blobContent);
 
-    public static TreeNodeWithStringPath SortedTree(IImmutableList<(string name, TreeNodeWithStringPath component)> treeContent) =>
+    public static TreeNodeWithStringPath SortedTree(IReadOnlyList<(string name, TreeNodeWithStringPath component)> treeContent) =>
         Sort(NonSortedTree(treeContent));
 
-    public static TreeNodeWithStringPath NonSortedTree(IImmutableList<(string name, TreeNodeWithStringPath component)> treeContent) =>
+    public static TreeNodeWithStringPath NonSortedTree(IReadOnlyList<(string name, TreeNodeWithStringPath component)> treeContent) =>
         new TreeNode(treeContent);
 
-    public static readonly TreeNodeWithStringPath EmptyTree = new TreeNode(ImmutableList<(string name, TreeNodeWithStringPath component)>.Empty);
+    public static readonly TreeNodeWithStringPath EmptyTree = new TreeNode([]);
 
 
-    public IImmutableList<(IImmutableList<string> path, ReadOnlyMemory<byte> blobContent)> EnumerateBlobsTransitive() =>
+    public IEnumerable<(IImmutableList<string> path, ReadOnlyMemory<byte> blobContent)> EnumerateBlobsTransitive() =>
         this switch
         {
             BlobNode blob => ImmutableList.Create<(IImmutableList<string> path, ReadOnlyMemory<byte> blobContent)>(
@@ -135,13 +135,13 @@ public abstract record TreeNodeWithStringPath : IEquatable<TreeNodeWithStringPat
                     return ImmutableList.Create(treeNode);
 
                 if (path.Count == 1)
-                    return ImmutableList<(string name, TreeNodeWithStringPath component)>.Empty;
+                    return [];
 
                 var componentAfterRemoval =
                     treeNode.component.RemoveNodeAtPath(path.Skip(1).ToImmutableArray());
 
                 if (componentAfterRemoval == null)
-                    return ImmutableList<(string name, TreeNodeWithStringPath component)>.Empty;
+                    return [];
 
                 return ImmutableList.Create((treeNode.name, componentAfterRemoval));
             }).ToImmutableList();
@@ -156,7 +156,7 @@ public abstract record TreeNodeWithStringPath : IEquatable<TreeNodeWithStringPat
 
         var pathFirstElement = path[0];
 
-        var childNodeBefore = GetNodeAtPath(new[] { pathFirstElement });
+        var childNodeBefore = GetNodeAtPath([pathFirstElement]);
 
         var childNode =
             (childNodeBefore ?? EmptyTree).SetNodeAtPathSorted(path.Skip(1).ToImmutableList(), node);
@@ -168,7 +168,7 @@ public abstract record TreeNodeWithStringPath : IEquatable<TreeNodeWithStringPat
                 _ => ImmutableList<(string name, TreeNodeWithStringPath component)>.Empty
             })
             .Where(treeNode => treeNode.name != pathFirstElement)
-            .Concat(new[] { (pathFirstElement, childNode) })
+            .Concat([(pathFirstElement, childNode)])
             .Order(TreeEntryDefaultComparer)
             .ToImmutableList();
 

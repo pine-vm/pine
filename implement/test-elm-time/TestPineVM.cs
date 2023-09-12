@@ -2,7 +2,6 @@
 using Pine;
 using Pine.PineVM;
 using System;
-using System.Collections.Immutable;
 
 namespace TestElmTime;
 
@@ -22,19 +21,17 @@ public class TestPineVM
             },
             new
             {
-                expression = (Expression)new Expression.ListExpression(ImmutableArray<Expression>.Empty),
-                expected = Result<string, PineValue>.ok(
-                    PineValue.List(ImmutableList<PineValue>.Empty))
+                expression = (Expression)new Expression.ListExpression([]),
+                expected = Result<string, PineValue>.ok(PineValue.EmptyList)
             },
             new
             {
                 expression = (Expression)PineVM.DecodeKernelApplicationExpression
                 (
                     functionName: "concat",
-                    argument: new Expression.ListExpression(ImmutableArray<Expression>.Empty)
+                    argument: new Expression.ListExpression([])
                 ).Extract(fromErr: err => throw new Exception(err)),
-                expected = Result<string, PineValue>.ok(
-                    PineValue.List(ImmutableList<PineValue>.Empty))
+                expected = Result<string, PineValue>.ok(PineValue.EmptyList)
             }
         };
 
@@ -44,7 +41,7 @@ public class TestPineVM
 
             var evaluated = pineVM.EvaluateExpression(
                 testCase.expression,
-                PineValue.List(ImmutableList<PineValue>.Empty));
+                PineValue.EmptyList);
 
             Assert.AreEqual(testCase.expected, evaluated);
         }

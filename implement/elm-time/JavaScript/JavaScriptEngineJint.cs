@@ -122,7 +122,7 @@ public class JavaScriptEngineJint : IJavaScriptEngine
 
                     return new Esprima.Ast.VariableDeclaration(
                         Esprima.Ast.NodeList.Create(
-                            new[] { new Esprima.Ast.VariableDeclarator(functionDeclaration.Id, replacement) }),
+                            [new Esprima.Ast.VariableDeclarator(functionDeclaration.Id, replacement)]),
                         Esprima.Ast.VariableDeclarationKind.Var)
                         as T;
                 }

@@ -191,7 +191,7 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
             EnumerateCompositionLogRecordsForRestoreProcessAndLoadDependencies(storeReader)
             .ToImmutableList();
 
-        if (!compositionEventsFromLatestReduction.Any())
+        if (compositionEventsFromLatestReduction.IsEmpty)
         {
             var message = "Found no composition record, default to initial state.";
 
@@ -369,7 +369,7 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
                                 Maybe<StateShim.InterfaceToHost.StateSource>.just(
                                     new StateShim.InterfaceToHost.StateSource.BranchStateSource("main")) :
                                     Maybe<StateShim.InterfaceToHost.StateSource>.nothing()),
-                                stateDestinationBranches: ImmutableList.Create("main")));
+                                stateDestinationBranches: ["main"]));
 
                     var eventString = JsonSerializer.Serialize<StateShim.InterfaceToHost.StateShimRequestStruct>(eventStateShimRequest);
 
@@ -449,8 +449,8 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
                         functionName: "migrate",
                         arguments: new StateShim.InterfaceToHost.ApplyFunctionArguments<Maybe<StateShim.InterfaceToHost.StateSource>>(
                             stateArgument: Maybe<StateShim.InterfaceToHost.StateSource>.nothing(),
-                            serializedArgumentsJson: ImmutableList.Create(elmAppStateBefore.Value)),
-                        stateDestinationBranches: ImmutableList.Create("main"))));
+                            serializedArgumentsJson: [elmAppStateBefore.Value]),
+                        stateDestinationBranches: ["main"])));
 
             return
                 migrateEventResult
@@ -497,7 +497,7 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
 
             var applyInitSerialInterfaceResult = InitBranchesInElmInJsProcess(
                 newElmAppProcess,
-                stateDestinationBranches: ImmutableList.Create("main"));
+                stateDestinationBranches: ["main"]);
 
             return
                 applyInitSerialInterfaceResult
@@ -562,7 +562,7 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
                 functionName: "processEvent",
                 arguments: new StateShim.InterfaceToHost.ApplyFunctionArguments<bool>(
                     stateArgument: true,
-                    serializedArgumentsJson: ImmutableList.Create(JsonSerializer.SerializeToElement(webServiceEvent)))));
+                    serializedArgumentsJson: [JsonSerializer.SerializeToElement(webServiceEvent)])));
         try
         {
             var webServiceEvent = JsonSerializer.Deserialize<InterfaceToHost.BackendEventStruct>(asString);
@@ -775,7 +775,7 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
                     process: lastElmAppVolatileProcess,
                     new AdminInterface.ApplyDatabaseFunctionRequest(
                         functionName: "processEvent",
-                        serializedArgumentsJson: ImmutableList.Create(serializedAppEvent),
+                        serializedArgumentsJson: [serializedAppEvent],
                         commitResultingState: true))
                 .Map(applyFunctionSuccess =>
                 {

@@ -77,7 +77,7 @@ public class VolatileProcessCSharp : VolatileProcess
                         .Where(d => d.Severity == DiagnosticSeverity.Error && d.Id == "CS0006")
                         .ToImmutableList();
 
-                    if (metadataNotFoundErrors.Any())
+                    if (!metadataNotFoundErrors.IsEmpty)
                     {
                         var metadataNotFoundErrorsReports =
                             metadataNotFoundErrors

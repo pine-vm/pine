@@ -1,5 +1,4 @@
 ﻿using System.Collections.Generic;
-using System.Collections.Immutable;
 
 namespace Pine;
 
@@ -9,7 +8,7 @@ public interface IConsole
         Write("\n" + text, color);
 
     void Write(string text, TextColor color) =>
-        Write(ImmutableList.Create((text, color)));
+        Write([(text, color)]);
 
     void Write(IReadOnlyList<(string text, TextColor color)> coloredTexts);
 

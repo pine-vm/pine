@@ -74,7 +74,7 @@ public class SelfTest
                 processStorePath: null,
                 adminInterfaceUrls: null,
                 adminPassword: null,
-                publicAppUrls: new[] { "http://localhost:" + serverHttpPort },
+                publicAppUrls: ["http://localhost:" + serverHttpPort],
                 elmEngineType: ElmEngineType.JavaScript_V8,
                 deletePreviousProcess: false,
                 copyProcess: null,

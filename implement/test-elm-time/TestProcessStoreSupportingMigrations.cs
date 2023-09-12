@@ -27,6 +27,6 @@ public class TestProcessStoreSupportingMigrations
         var compositionLogRecords =
             processStoreReader.EnumerateSerializedCompositionLogRecordsReverse().ToImmutableList();
 
-        Assert.IsTrue(compositionLogRecords.Any());
+        Assert.IsTrue(!compositionLogRecords.IsEmpty);
     }
 }

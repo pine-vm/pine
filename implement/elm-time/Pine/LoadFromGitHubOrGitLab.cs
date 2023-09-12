@@ -141,7 +141,7 @@ public static class LoadFromGitHubOrGitLab
             getRepositoryFilesPartialForCommit(
                 new GetRepositoryFilesPartialForCommitRequest(
                     commit: parsedUrl.inRepository!.@ref,
-                    cloneUrlCandidates: ImmutableList.Create(cloneUrl)))
+                    cloneUrlCandidates: [cloneUrl]))
             :
             GetRepositoryFilesPartialForBranchViaLibGitSharpCheckout(cloneUrl, branchName);
 
@@ -156,7 +156,7 @@ public static class LoadFromGitHubOrGitLab
                 {
                     foreach (var fileWithPath in repositoryFilesPartial)
                     {
-                        var absoluteFilePath = Path.Combine(new[] { gitRepositoryLocalDirectory }.Concat(fileWithPath.Key).ToArray());
+                        var absoluteFilePath = Path.Combine([gitRepositoryLocalDirectory, .. fileWithPath.Key]);
                         var absoluteDirectoryPath = Path.GetDirectoryName(absoluteFilePath)!;
 
                         Directory.CreateDirectory(absoluteDirectoryPath);
@@ -404,7 +404,7 @@ public static class LoadFromGitHubOrGitLab
 
             using var gitRepository = new Repository(tempWorkingDirectory);
 
-            gitRepository.CheckoutPaths(commit, ImmutableList.Create(tempWorkingDirectory.TrimEnd('/') + "/"));
+            gitRepository.CheckoutPaths(commit, [tempWorkingDirectory.TrimEnd('/') + "/"]);
 
             return
                 Result<string, IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>>>.ok(
@@ -611,9 +611,7 @@ public static class LoadFromGitHubOrGitLab
     {
         var prefixAsText = "blob " + blobContent.Length + "\0";
 
-        var hashedValue = Encoding.ASCII.GetBytes(prefixAsText).Concat(blobContent).ToArray();
-
-        return SHA1.HashData(hashedValue);
+        return SHA1.HashData([.. Encoding.ASCII.GetBytes(prefixAsText), .. blobContent]);
     }
 
     public record LoadFromUrlSuccess(

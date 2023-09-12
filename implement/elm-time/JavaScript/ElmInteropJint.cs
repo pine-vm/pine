@@ -70,6 +70,6 @@ public class ElmInteropJint
                 .UpdateWith(
                     callee: originalCallExpression.Callee,
                     arguments: Esprima.Ast.NodeList.Create<Esprima.Ast.Expression>(
-                        new[] { new Esprima.Ast.Identifier(delegateIdentifier) })));
+                        [new Esprima.Ast.Identifier(delegateIdentifier)])));
     }
 }

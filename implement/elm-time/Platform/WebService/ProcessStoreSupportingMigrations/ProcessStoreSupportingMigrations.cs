@@ -201,13 +201,13 @@ public class ProcessStoreInFileStore
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
     };
 
-    protected static IImmutableList<string> CompositionHeadHashFilePath =>
-        ImmutableList.Create("composition-log-head-hash");
+    protected static ImmutableList<string> CompositionHeadHashFilePath =>
+        ["composition-log-head-hash"];
 
     /// <summary>
     /// Use the 'literal' name to distinguish from other possible (future) representations, such as 'deflated'.
     /// </summary>
-    protected static readonly IImmutableList<string> CompositionLogLiteralPath = ImmutableList.Create("composition-log", "literal");
+    protected static readonly IReadOnlyList<string> CompositionLogLiteralPath = ["composition-log", "literal"];
 
     /*
     Distinguish literals from other kinds of representations. (derivations/recipes)
@@ -223,7 +223,7 @@ public class ProcessStoreInFileStore
     protected static readonly JsonSerializerOptions recordSerializationSettings = RecordSerializationSettings;
 
     public static IImmutableList<string> GetFilePathForComponentInComponentFileStore(string componentHash) =>
-        ImmutableList.Create(componentHash.Substring(0, 2), componentHash);
+        ImmutableList.Create(componentHash[..2], componentHash);
 
     private static readonly IComparer<IImmutableList<string>> CompositionLogFileOrderPathComparer = EnumerableExtension.Comparer<IImmutableList<string>>();
 

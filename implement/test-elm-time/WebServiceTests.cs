@@ -202,9 +202,9 @@ public class WebServiceTests
             {
                 ElmTime.Platform.WebService.InterfaceToHost.BackendEventStruct.HttpRequestEvent httpRequestEvent =>
                 httpRequestEvent.Struct.request.bodyAsBase64
-                .Map(bodyAsBase64 => ImmutableList.Create(bodyAsBase64)).WithDefault(ImmutableList<string>.Empty),
+                .Map(bodyAsBase64 => ImmutableList.Create(bodyAsBase64)).WithDefault([]),
 
-                _ => ImmutableList<string>.Empty
+                _ => []
             })
             .Select(bodyBase64 => System.Text.Encoding.UTF8.GetString(Convert.FromBase64String(bodyBase64)));
 
@@ -302,9 +302,9 @@ public class WebServiceTests
                 ElmTime.Platform.WebService.InterfaceToHost.BackendEventStruct.HttpRequestEvent httpRequestEvent =>
                 httpRequestEvent.Struct.request.bodyAsBase64
                 .Map(bodyAsBase64 => ImmutableList.Create(bodyAsBase64))
-                .WithDefault(ImmutableList<string>.Empty),
+                .WithDefault([]),
 
-                _ => ImmutableList<string>.Empty
+                _ => []
             })
             .Select(bodyBase64 => System.Text.Encoding.UTF8.GetString(Convert.FromBase64String(bodyBase64)));
 

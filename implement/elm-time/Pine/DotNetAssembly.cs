@@ -65,7 +65,7 @@ public class DotNetAssembly
                 directoryContents,
                 loadSubdirectory:
                 subdirectory =>
-                LoadTreeFromManifestEmbeddedFileProvider(ImmutableList.CreateRange(directoryPath).Add(subdirectory), assembly));
+                LoadTreeFromManifestEmbeddedFileProvider([.. directoryPath, subdirectory], assembly));
     }
 
     public static Result<string, TreeNodeWithStringPath> LoadTreeFromManifestEmbeddedFileProviderFileInfo(

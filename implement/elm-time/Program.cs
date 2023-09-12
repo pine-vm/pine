@@ -18,7 +18,7 @@ namespace ElmTime;
 
 public class Program
 {
-    public static string AppVersionId => "2023-09-11";
+    public static string AppVersionId => "2023-09-12";
 
     private static int AdminInterfaceDefaultPort => 4000;
 
@@ -484,9 +484,9 @@ public class Program
                             databaseFunction.functionName.Split('.').LastOrDefault(databaseFunction.functionName) + " :\n" +
                             string.Join("\n",
                             string.Join("", databaseFunction.functionDescription.parameters.Select(p => p.typeSourceCodeText)
-                            .Concat(new[] {
+                            .Concat([
                                 databaseFunction.functionDescription.returnType.sourceCodeText +
-                                " " + commentOnReturnType })
+                                " " + commentOnReturnType])
                             .Intersperse("\n-> "))
                             .Split("\n")
                             .Select(line => "    " + line));
@@ -766,7 +766,7 @@ public class Program
 
             var compilationResult = ElmAppCompilation.AsCompletelyLoweredElmApp(
                 sourceFiles: sourceFiles,
-                workingDirectoryRelative: ImmutableList<string>.Empty,
+                workingDirectoryRelative: [],
                 interfaceConfig: interfaceConfig);
 
             var compilationTimeSpentMilli = compilationStopwatch.ElapsedMilliseconds;
@@ -907,7 +907,7 @@ public class Program
                         .Where(r => !r.Value.result.IsOk())
                         .ToImmutableList();
 
-                        if (failedLoads.Any())
+                        if (!failedLoads.IsEmpty)
                         {
                             var failedLoad = failedLoads.First();
 
@@ -1361,12 +1361,12 @@ public class Program
                         if (pathToElmFile.StartsWith("./"))
                             pathToElmFile = pathToElmFile.Substring(2);
 
-                        if (!sourceDirectoriesNotInInputDirectory.Any())
+                        if (sourceDirectoriesNotInInputDirectory.IsEmpty)
                         {
                             return
                                 Result<string, LoadForMakeResult>.ok(
                                     new LoadForMakeResult(loadInputDirectoryOk.tree,
-                                        ImmutableList<string>.Empty,
+                                        [],
                                         pathToElmFile.Replace('\\', '/').Split('/')));
                         }
 
@@ -1400,7 +1400,7 @@ public class Program
                             absoluteSourceDirectoryFromRelative(
                                 new ElmJsonStructure.RelativeDirectory(
                                     ParentLevel: maxParentLevel,
-                                    Subdirectories: ImmutableList<string>.Empty));
+                                    Subdirectories: []));
 
                         IReadOnlyList<string> pathRelativeToCommonParentFromAbsolute(string absolutePath) =>
                             absolutePath[commonParentDirectory.Length..].Replace('\\', '/').Trim('/').Split('/');
@@ -1509,7 +1509,7 @@ public class Program
         string outputFileName,
         string? elmMakeCommandAppendix)
     {
-        workingDirectoryRelative ??= ImmutableList<string>.Empty;
+        workingDirectoryRelative ??= [];
 
         var pathToFileWithElmEntryPointFromWorkingDir =
             pathToFileWithElmEntryPoint.Skip(workingDirectoryRelative.Count).ToImmutableList();

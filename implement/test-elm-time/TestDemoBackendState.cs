@@ -1,5 +1,6 @@
 using ElmTime;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
+using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 
@@ -13,14 +14,14 @@ public class TestDemoBackendState
     {
         var sourceFiles =
             TestSetup.GetElmAppFromDirectoryPath(
-                ImmutableList.Create(".", "..", "..", "..", "..", "example-apps", "demo-backend-state"));
+                (IReadOnlyList<string>)[".", "..", "..", "..", "..", "example-apps", "demo-backend-state"]);
 
         var webAppSource =
             TestSetup.AppConfigComponentFromFiles(sourceFiles);
 
         var compilationResult = ElmAppCompilation.AsCompletelyLoweredElmApp(
             sourceFiles: sourceFiles,
-            workingDirectoryRelative: ImmutableList<string>.Empty,
+            workingDirectoryRelative: [],
             interfaceConfig: ElmAppInterfaceConfig.Default);
 
         var compilationSuccess =

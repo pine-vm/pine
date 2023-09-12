@@ -29,7 +29,7 @@ public class StateShim
             ProcessStateShimRequest(
                 process,
                 new StateShimRequestStruct.SetBranchesStateShimRequest(
-                    new StateSource.JsonStateSource(stateJson), Branches: ImmutableList.Create(branchName)))
+                    new StateSource.JsonStateSource(stateJson), Branches: [branchName]))
             .AndThen(decodeOk => decodeOk.Response switch
             {
                 StateShimResponseStruct.SetBranchesStateShimResponse setBranchesResponse =>
@@ -87,7 +87,7 @@ public class StateShim
             process,
             request: request,
             stateSource: Maybe<StateSource>.just(MainStateBranch),
-            stateDestinationBranches: request.commitResultingState ? ImmutableList.Create(MainBranchName) : ImmutableList<string>.Empty);
+            stateDestinationBranches: request.commitResultingState ? [MainBranchName] : []);
 
     public static Result<string, AdminInterface.ApplyDatabaseFunctionSuccess> ApplyFunction(
         IProcess<string, string> process,
@@ -108,7 +108,7 @@ public class StateShim
             {
                 var matchingFunctions = exposedFunctions.Where(c => c.functionName == request.functionName).ToImmutableList();
 
-                if (!matchingFunctions.Any())
+                if (matchingFunctions.IsEmpty)
                     return Result<string, NamedExposedFunction>.err(
                         "None of the exposed functions matches name '" + request.functionName +
                         "'. This app only exposes the following " + exposedFunctions.Count + " functions: "

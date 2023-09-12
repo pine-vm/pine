@@ -35,13 +35,8 @@ public class PineCompileToDotNet
             SyntaxFactory.CompilationUnit()
                 .WithUsings(new SyntaxList<UsingDirectiveSyntax>(compileCSharpClassResult.UsingDirectives))
                 .WithMembers(
-                    SyntaxFactory.List(
-                        (additionalMembers ?? Array.Empty<MemberDeclarationSyntax>())
-                        .Concat(
-                            new MemberDeclarationSyntax[]
-                            {
-                                compileCSharpClassResult.ClassDeclarationSyntax
-                            })));
+                    SyntaxFactory.List<MemberDeclarationSyntax>(
+                        [.. (additionalMembers ?? []), compileCSharpClassResult.ClassDeclarationSyntax]));
 
         var formattedNode = new FormatCSharpSyntaxRewriter().Visit(compilationUnitSyntax.NormalizeWhitespace(eol: "\n"));
 
@@ -401,10 +396,10 @@ public class PineCompileToDotNet
                             ClassDeclarationSyntax:
                             SyntaxFactory.ClassDeclaration(containerConfig.containerTypeName)
                                 .WithMembers(
-                                    SyntaxFactory.List(
-                                        new MemberDeclarationSyntax[] { dictionaryMemberDeclaration }
-                                            .Concat(compiledExpressions.Select(f => f.memberDeclarationSyntax))
-                                            .Concat(staticFieldsDeclarations).ToArray())),
+                                    SyntaxFactory.List<MemberDeclarationSyntax>(
+                                        [dictionaryMemberDeclaration
+                                        , .. compiledExpressions.Select(f => f.memberDeclarationSyntax)
+                                        , .. staticFieldsDeclarations])),
                             UsingDirectives: usings));
                 });
     }
@@ -610,7 +605,7 @@ public class PineCompileToDotNet
                 ImmutableList<CompiledExpression> compiledList,
                 ImmutableList<ExpressionSyntax> syntaxesCs)
             {
-                if (!compiledList.Any())
+                if (compiledList.IsEmpty)
                     return combine(syntaxesCs);
 
                 return
@@ -625,7 +620,7 @@ public class PineCompileToDotNet
                 recursive(
                     combine,
                     compiledList.ToImmutableList(),
-                    ImmutableList<ExpressionSyntax>.Empty);
+                    []);
         }
     }
 
@@ -1411,28 +1406,28 @@ public class PineCompileToDotNet
         expression switch
         {
             Expression.LiteralExpression literal =>
-                new[] { literal.Value },
+            [literal.Value],
 
             Expression.EnvironmentExpression =>
-                Enumerable.Empty<PineValue>(),
+            [],
 
             Expression.ListExpression list =>
-                list.List.SelectMany(EnumerateAllLiterals),
+            list.List.SelectMany(EnumerateAllLiterals),
 
             Expression.KernelApplicationExpression kernelApplicationExpression =>
-                EnumerateAllLiterals(kernelApplicationExpression.argument),
+            EnumerateAllLiterals(kernelApplicationExpression.argument),
 
             Expression.ConditionalExpression conditionalExpression =>
-                EnumerateAllLiterals(conditionalExpression.condition)
-                    .Concat(EnumerateAllLiterals(conditionalExpression.ifTrue)
-                        .Concat(EnumerateAllLiterals(conditionalExpression.ifFalse))),
+            [.. EnumerateAllLiterals(conditionalExpression.condition)
+            , .. EnumerateAllLiterals(conditionalExpression.ifTrue)
+            , .. EnumerateAllLiterals(conditionalExpression.ifFalse)],
 
             Expression.DecodeAndEvaluateExpression decodeAndEvaluateExpression =>
-                EnumerateAllLiterals(decodeAndEvaluateExpression.expression)
-                    .Concat(EnumerateAllLiterals(decodeAndEvaluateExpression.environment)),
+            [.. EnumerateAllLiterals(decodeAndEvaluateExpression.expression)
+            , .. EnumerateAllLiterals(decodeAndEvaluateExpression.environment)],
 
             Expression.StringTagExpression stringTagExpression =>
-                EnumerateAllLiterals(stringTagExpression.tagged),
+            EnumerateAllLiterals(stringTagExpression.tagged),
 
             _ => throw new NotImplementedException("Expression type not implemented: " + expression.GetType().FullName)
         };
@@ -1521,14 +1516,13 @@ public class PineCompileToDotNet
             .WithArgumentList(
                 SyntaxFactory.ArgumentList(
                     SyntaxFactory.SeparatedList(
-                    new[]
-                    {
+                    [
                         SyntaxFactory.Argument(
                             SyntaxFactory.LiteralExpression(
                                 SyntaxKind.StringLiteralExpression,
                                 SyntaxFactory.Literal(kernelApplicationExpr.functionName))),
                         SyntaxFactory.Argument(encodedArgument)
-                    })))),
+                    ])))),
 
             Expression.DecodeAndEvaluateExpression decodeAndEvaluate =>
             continueEncode(decodeAndEvaluate.expression)

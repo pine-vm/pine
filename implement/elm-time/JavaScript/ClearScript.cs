@@ -16,25 +16,25 @@ public class ClearScriptV8
         ImmutableDictionary<OSPlatform, IReadOnlyList<DependencyFile>>.Empty
         .Add(
             OSPlatform.Linux,
-            ImmutableList.Create(
+            [
                 new DependencyFile(
                     HashBase16: "4524f101eceed4c6b0344a4cb67b19443f1d42e9f3e2f27b5cb68b007c947409",
                     ExpectedFileName: "ClearScriptV8.linux-x64.so",
-                    RemoteSources: new[] { "https://www.nuget.org/api/v2/package/Microsoft.ClearScript.V8.Native.linux-x64/7.4.2" })))
+                    RemoteSources: ["https://www.nuget.org/api/v2/package/Microsoft.ClearScript.V8.Native.linux-x64/7.4.2"])])
         .Add(
             OSPlatform.Windows,
-            ImmutableList.Create(
+            [
                 new DependencyFile(
                     HashBase16: "6ef8e937639a25554be8f60830c47b720d432b8ac47b7b54d82214d1d4083d34",
                     ExpectedFileName: "ClearScriptV8.win-x64.dll",
-                    RemoteSources: new[] { "https://www.nuget.org/api/v2/package/Microsoft.ClearScript.V8.Native.win-x64/7.4.2" })))
+                    RemoteSources: ["https://www.nuget.org/api/v2/package/Microsoft.ClearScript.V8.Native.win-x64/7.4.2"])])
         .Add(
             OSPlatform.OSX,
-            ImmutableList.Create(
+            [
                 new DependencyFile(
                     HashBase16: "e9e13385c02554fa7c76d1df0307a0ca6825eff0b641ddf7826e3fbf9a546794",
                     ExpectedFileName: "ClearScriptV8.osx-x64.dylib",
-                    RemoteSources: new[] { "https://www.nuget.org/api/v2/package/Microsoft.ClearScript.V8.Native.osx-x64/7.4.2" })));
+                    RemoteSources: ["https://www.nuget.org/api/v2/package/Microsoft.ClearScript.V8.Native.osx-x64/7.4.2"])]);
 
     public static readonly Lazy<Task> SetupTask = new(() =>
     {
@@ -74,7 +74,7 @@ public class ClearScriptV8
 
         AuxiliarySearchPathAsList =
             new[] { cacheDirectory }
-            .Concat(AuxiliarySearchPathAsList ?? Array.Empty<string>())
+            .Concat(AuxiliarySearchPathAsList ?? [])
             .Distinct()
             .ToList();
     }

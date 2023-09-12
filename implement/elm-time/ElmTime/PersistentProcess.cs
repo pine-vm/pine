@@ -25,7 +25,7 @@ public class PersistentProcessWithHistoryOnFileFromElm019Code : IPersistentProce
 {
     private static readonly JsonSerializerOptions recordSerializationSettings = ProcessStoreInFileStore.RecordSerializationSettings;
 
-    private byte[] lastStateHash = CompositionRecordInFile.HashFromSerialRepresentation(Array.Empty<byte>());
+    private byte[] lastStateHash = CompositionRecordInFile.HashFromSerialRepresentation([]);
 
     private readonly IDisposableProcessWithStringInterface process;
 
@@ -48,7 +48,7 @@ public class PersistentProcessWithHistoryOnFileFromElm019Code : IPersistentProce
 
         logger?.Invoke("Begin to restore the process state using the storeReader.");
 
-        var emptyInitHash = CompositionRecordInFile.HashFromSerialRepresentation(Array.Empty<byte>());
+        var emptyInitHash = CompositionRecordInFile.HashFromSerialRepresentation([]);
 
         static string dictKeyForHash(byte[] hash) => Convert.ToBase64String(hash);
 
@@ -112,7 +112,7 @@ public class PersistentProcessWithHistoryOnFileFromElm019Code : IPersistentProce
                                 .Extract(err => throw new Exception(err));
                         }
 
-                        foreach (var appendedEvent in followingComposition.composition.AppendedEventsLiteralString.EmptyIfNull())
+                        foreach (var appendedEvent in followingComposition.composition.AppendedEventsLiteralString ?? [])
                             process.ProcessEvent(appendedEvent);
 
                         lastStateHash = followingComposition.hash;

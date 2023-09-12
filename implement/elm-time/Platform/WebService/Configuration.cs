@@ -15,9 +15,9 @@ public static class Configuration
 
     public static string AdminPasswordSettingKey => "adminPassword";
 
-    public static string PublicWebHostUrlsSettingKey = "publicWebHostUrls";
+    public static string PublicWebHostUrlsSettingKey => "publicWebHostUrls";
 
-    public static string[] PublicWebHostUrlsDefault => new[] { "http://*", "https://*" };
+    public static string[] PublicWebHostUrlsDefault => ["http://*", "https://*"];
 
     /// <summary>
     ///  https://en.wikipedia.org/wiki/Basic_access_authentication

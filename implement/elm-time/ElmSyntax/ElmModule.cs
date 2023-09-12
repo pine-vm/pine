@@ -35,7 +35,7 @@ public static class ElmModule
         IEnumerable<IReadOnlyList<string>> EnumerateImportsOfModuleTransitive(IReadOnlyList<string> moduleName) =>
             !parsedModulesByName.ContainsKey(moduleName)
             ?
-            ImmutableList<IReadOnlyList<string>>.Empty
+            []
             :
             parsedModulesByName[moduleName].importedModulesNames
             .SelectMany(

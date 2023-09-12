@@ -33,7 +33,7 @@ public class TestElmInteractive
                 if (!Directory.EnumerateFiles(scenarioDirectory, "*", searchOption: SearchOption.AllDirectories).Any())
                 {
                     // Do not stumble over empty directory here. It could be a leftover after git checkout.
-                    return ImmutableList<(string scenarioName, string scenarioDirectory)>.Empty;
+                    return [];
                 }
 
                 return ImmutableList.Create((scenarioName, scenarioDirectory));
@@ -86,7 +86,7 @@ public class TestElmInteractive
             }
         }
 
-        if (failedScenarios.Any())
+        if (!failedScenarios.IsEmpty)
         {
             throw new Exception(
                 "Failed for " + failedScenarios.Count + " scenarios:\n" +

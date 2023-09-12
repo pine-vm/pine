@@ -54,7 +54,7 @@ public class ExecutableFile
             .SetItems(
                 (environmentPathExecutableFiles ?? ImmutableDictionary<string, ReadOnlyMemory<byte>>.Empty)
                 .Select(execFile => new KeyValuePair<IReadOnlyList<string>, ReadOnlyMemory<byte>>(
-                    ImmutableList.Create(environmentPathContainerDirectoryName, execFile.Key + executableFileNameAppendix), execFile.Value)))
+                    [environmentPathContainerDirectoryName, execFile.Key + executableFileNameAppendix], execFile.Value)))
             .SetItem(mainExecutableFilePathRelative, executableFile);
 
         foreach (var environmentFile in allExecutableFiles)
@@ -65,7 +65,7 @@ public class ExecutableFile
         var workingDirectoryAbsolute =
             Path.Combine(
                 containerDirectory,
-                Filesystem.MakePlatformSpecificPath(workingDirectoryRelative ?? ImmutableList<string>.Empty))
+                Filesystem.MakePlatformSpecificPath(workingDirectoryRelative ?? []))
             .TrimEnd(Path.DirectorySeparatorChar)
             + Path.DirectorySeparatorChar.ToString();
 
@@ -106,7 +106,7 @@ public class ExecutableFile
                         }
                         .Where(c => 0 < c?.Length))))
             :
-            ImmutableList<KeyValuePair<string, string>>.Empty;
+            [];
 
         var environmentStringsWithExecutableFiles =
             environmentStringsDict
@@ -204,7 +204,7 @@ public class ExecutableFile
         .Select(s => Path.Combine(s, executableFileName))
         .Where(File.Exists)
         ??
-        Array.Empty<string>();
+        [];
 
     public static char PathEnvironmentVarSeparator =>
         RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? ';' : ':';

@@ -124,7 +124,7 @@ public class ElmTestRs
 
         var environmentFilesExecutable =
             ImmutableDictionary.Create<IReadOnlyList<string>, ReadOnlyMemory<byte>>()
-            .SetItem(ImmutableList.Create(elmExecutableFileName), Elm019Binaries.GetElmExecutableFile);
+            .SetItem([elmExecutableFileName], Elm019Binaries.GetElmExecutableFile);
 
         var executeElmTestResult =
             ExecutableFile.ExecuteFileWithArguments(
@@ -169,12 +169,12 @@ public class ElmTestRs
         if (@event.@event == "runStart")
         {
             return
-                (ImmutableList.Create(
+                ([
                     (string.Join("\n",
                     "Running " + @event.testCount + " tests. To reproduce these results later,"
                     , "run elm-test-rs with --seed " + @event.initialSeed + " and --fuzz " + @event.fuzzRuns),
                     ElmTestRsConsoleOutputColor.DefaultColor)
-                    ),
+                    ],
                 overallSuccess: null);
         }
 
@@ -189,28 +189,28 @@ public class ElmTestRs
                 ("\nTEST RUN FAILED\n\n", ElmTestRsConsoleOutputColor.RedColor);
 
             return
-                (ImmutableList.Create(
+                ([
                     overallSuccessText,
                     (string.Join("\n",
                     "Duration: " + string.Format("{0:#,##0}", @event.duration) + " ms",
                     "Passed:   " + @event.passed,
                     "Failed:   " + @event.failed),
-                    ElmTestRsConsoleOutputColor.DefaultColor)),
+                    ElmTestRsConsoleOutputColor.DefaultColor)],
                 overallSuccess);
         }
 
         if (@event.@event == "testsCompleted" && @event.status != "pass")
         {
             var textsFromLabels =
-                @event.labels.EmptyIfNull().SkipLast(1).Select(label => ("\n↓ " + label, ElmTestRsConsoleOutputColor.DefaultColor))
-                .Concat(@event.labels.EmptyIfNull().TakeLast(1).Select(label => ("\n✗ " + label, ElmTestRsConsoleOutputColor.RedColor)))
+                (@event.labels ?? []).SkipLast(1).Select(label => ("\n↓ " + label, ElmTestRsConsoleOutputColor.DefaultColor))
+                .Concat((@event.labels ?? []).TakeLast(1).Select(label => ("\n✗ " + label, ElmTestRsConsoleOutputColor.RedColor)))
                 .ToImmutableList();
 
             static IReadOnlyList<string> renderFailureReasonData(ElmTestRsReportJsonEntryFailureReasonData failureReasonData)
             {
                 if (failureReasonData.Equality != null)
                 {
-                    return ImmutableList.Create(
+                    return [
                         "",
                         failureReasonData.Equality.actual,
                         "╷",
@@ -218,30 +218,29 @@ public class ElmTestRs
                         "╵",
                         failureReasonData.Equality.expected,
                         ""
-                    );
+                    ];
                 }
 
                 if (failureReasonData.String != null)
-                    return ImmutableList.Create("", failureReasonData.String, "");
+                    return ["", failureReasonData.String, ""];
 
                 throw new Exception("Incomplete match on sum type.");
             }
 
             var textsFromFailures =
-                @event.failures.EmptyIfNull()
+                (@event.failures ?? [])
                 .Select(failure => failure.reason?.data)
                 .WhereNotNull()
                 .SelectMany(renderFailureReasonData)
                 .ToImmutableList();
 
             return
-                (textsFromLabels.Concat(
-                    textsFromFailures
-                    .Select(textFromFailure => ("\n    " + textFromFailure, ElmTestRsConsoleOutputColor.DefaultColor))).ToImmutableList(),
+                ([.. textsFromLabels
+                , .. textsFromFailures.Select(textFromFailure => ("\n    " + textFromFailure, ElmTestRsConsoleOutputColor.DefaultColor))],
                     null);
         }
 
-        return (ImmutableList<(string text, ElmTestRsConsoleOutputColor color)>.Empty, null);
+        return ([], null);
     }
 }
 

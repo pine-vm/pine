@@ -35,22 +35,22 @@ public class JavaScriptEngineJintOptimizedForElmApps
                 var callToHostExpression =
                 new Esprima.Ast.CallExpression(
                     new Esprima.Ast.Identifier(hostFuncName),
-                    Esprima.Ast.NodeList.Create<Esprima.Ast.Expression>(new[] { getBufferExpression }),
+                    Esprima.Ast.NodeList.Create<Esprima.Ast.Expression>([getBufferExpression]),
                     optional: false);
 
                 var wrapInMaybeJustExpression =
                 new Esprima.Ast.CallExpression(
                     new Esprima.Ast.Identifier("$elm$core$Maybe$Just"),
-                    Esprima.Ast.NodeList.Create<Esprima.Ast.Expression>(new[] { callToHostExpression }),
+                    Esprima.Ast.NodeList.Create<Esprima.Ast.Expression>([callToHostExpression]),
                     optional: false);
 
                 var wholeFunctionBody = new Esprima.Ast.BlockStatement(
                     Esprima.Ast.NodeList.Create<Esprima.Ast.Statement>(
-                        new[] { new Esprima.Ast.ReturnStatement(wrapInMaybeJustExpression) }));
+                        [new Esprima.Ast.ReturnStatement(wrapInMaybeJustExpression)]));
 
                 var wholeFunctionExpression = new Esprima.Ast.FunctionExpression(
                     id: null,
-                    parameters: Esprima.Ast.NodeList.Create<Esprima.Ast.Node>(new[] { new Esprima.Ast.Identifier(dataViewParamName) }),
+                    parameters: Esprima.Ast.NodeList.Create<Esprima.Ast.Node>([new Esprima.Ast.Identifier(dataViewParamName)]),
                     body: wholeFunctionBody,
                     generator: false,
                     strict: true,

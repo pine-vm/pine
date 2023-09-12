@@ -189,7 +189,7 @@ public class PineVM
             EncodeExpressionAsValue(stringTag.tagged)
             .Map(encodedTagged => EncodeChoiceTypeVariantAsPineValue(
                 "StringTag",
-                PineValue.List(new[] { PineValueAsString.ValueFromString(stringTag.tag), encodedTagged }))),
+                PineValue.List([PineValueAsString.ValueFromString(stringTag.tag), encodedTagged]))),
 
             _ =>
             Result<string, PineValue>.err("Unsupported expression type: " + expression.GetType().FullName)
@@ -394,11 +394,10 @@ public class PineVM
     public static PineValue EncodeRecordToPineValue(params (string fieldName, PineValue fieldValue)[] fields) =>
         PineValue.List(
             fields.Select(field => PineValue.List(
-                new[]
-                {
+                [
                     PineValueAsString.ValueFromString(field.fieldName),
                     field.fieldValue
-                })).ToArray());
+                ])).ToArray());
 
 
     public static Result<string, ImmutableDictionary<string, PineValue>> DecodeRecordFromPineValue(PineValue value) =>
@@ -415,11 +414,10 @@ public class PineVM
 
     public static PineValue EncodeChoiceTypeVariantAsPineValue(string tagName, PineValue tagArguments) =>
         PineValue.List(
-            new[]
-            {
+            [
                 PineValueAsString.ValueFromString(tagName),
                 tagArguments,
-            });
+            ]);
 
     public static Result<string, T> DecodeChoiceFromPineValue<T>(
         Func<PineValue, Result<string, T>> generalDecoder,

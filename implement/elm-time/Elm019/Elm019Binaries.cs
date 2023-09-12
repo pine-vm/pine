@@ -26,7 +26,7 @@ public static class Elm019Binaries
     public static Result<string, ElmMakeOk> ElmMakeToJavascript(
         IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> elmCodeFiles,
         IReadOnlyList<string>? workingDirectoryRelative,
-        IImmutableList<string> pathToFileWithElmEntryPoint,
+        IReadOnlyList<string> pathToFileWithElmEntryPoint,
         string? elmMakeCommandAppendix = null) =>
         ElmMake(
             elmCodeFiles,
@@ -212,7 +212,7 @@ public static class Elm019Binaries
                 .ToImmutableList();
 
             var outputFileExpectedPath =
-                (workingDirectoryRelative ?? ImmutableList<string>.Empty).ToImmutableList().Add(outputFileName);
+                (workingDirectoryRelative ?? []).ToImmutableList().Add(outputFileName);
 
             var outputFiles =
                 newFiles

@@ -26,9 +26,9 @@ public class ElmInteractive
         var argumentsJson = System.Text.Json.JsonSerializer.Serialize(
             new
             {
-                modulesTexts = modulesTexts ?? ImmutableList<string>.Empty,
+                modulesTexts = modulesTexts ?? [],
                 submission = submission,
-                previousLocalSubmissions = previousLocalSubmissions ?? ImmutableList<string>.Empty,
+                previousLocalSubmissions = previousLocalSubmissions ?? [],
             }
         );
 
@@ -65,7 +65,7 @@ public class ElmInteractive
     {
         var allModulesTexts =
             GetDefaultElmCoreModulesTexts(evalElmPreparedJavaScriptEngine)
-            .Concat(ModulesTextsFromAppCodeTree(appCodeTree).EmptyIfNull())
+            .Concat(ModulesTextsFromAppCodeTree(appCodeTree) ?? [])
             .ToImmutableList();
 
         return
@@ -117,7 +117,7 @@ public class ElmInteractive
                 (closestBase, compilationCacheBefore))
             :
             CompileInteractiveEnvironmentForModules(
-                elmModulesTexts: ImmutableList<string>.Empty,
+                elmModulesTexts: [],
                 evalElmPreparedJavaScriptEngine: evalElmPreparedJavaScriptEngine,
                 parentEnvironment: null,
                 compilationCacheBefore: compilationCacheBefore);
@@ -133,7 +133,7 @@ public class ElmInteractive
                         {
                             var resultBeforeCache =
                             CompileInteractiveEnvironmentForModules(
-                                elmModulesTexts: ImmutableList.Create(elmCoreModuleText),
+                                elmModulesTexts: [elmCoreModuleText],
                                 evalElmPreparedJavaScriptEngine: evalElmPreparedJavaScriptEngine,
                                 parentEnvironment: prev.compileResult,
                                 compilationCacheBefore: prev.compilationCache);
@@ -229,7 +229,7 @@ public class ElmInteractive
             if (parent is null)
                 return selfHash;
 
-            return PineValueHashTree.ComputeHash(PineValue.List(new[] { PineValue.Blob(selfHash), PineValue.Blob(parent.Hash) }));
+            return PineValueHashTree.ComputeHash(PineValue.List([PineValue.Blob(selfHash), PineValue.Blob(parent.Hash)]));
         }
 
         public virtual bool Equals(CompileInteractiveEnvironmentResult? other)
@@ -596,7 +596,7 @@ public class ElmInteractive
 
         var compilationResult = ElmAppCompilation.AsCompletelyLoweredElmApp(
             sourceFiles: TreeToFlatDictionaryWithPathComparer(sourceTree),
-            workingDirectoryRelative: ImmutableList<string>.Empty,
+            workingDirectoryRelative: [],
             ElmAppInterfaceConfig.Default with { compilationRootFilePath = compilationRootFilePath });
 
         return
@@ -641,7 +641,7 @@ public class ElmInteractive
                 compileElmProgramCodeFiles
                 .Extract(error => throw new NotImplementedException(nameof(LoadCompileElmProgramCodeFiles) + ": " + error)),
                 workingDirectoryRelative: null,
-                ImmutableList.Create("src", "ElmInteractiveMain.elm"));
+                ["src", "ElmInteractiveMain.elm"]);
 
         var javascriptFromElmMake =
             Encoding.UTF8.GetString(
@@ -681,7 +681,7 @@ public class ElmInteractive
 
     public static Result<string, IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>>> LoadCompileElmProgramCodeFiles() =>
         DotNetAssembly.LoadDirectoryFilesFromManifestEmbeddedFileProviderAsDictionary(
-            directoryPath: ImmutableList.Create("ElmTime", "compile-elm-program"),
+            directoryPath: ["ElmTime", "compile-elm-program"],
             assembly: typeof(ElmInteractive).Assembly);
 
     private record EvaluateSubmissionResponseStructure
