@@ -34,7 +34,7 @@ downloadPlatforms =
       , icon = FontAwesome.Brands.windows
       , getDownloadLink = .windows
       }
-    , { title = "MacOS"
+    , { title = "macOS"
       , icon = FontAwesome.Brands.apple
       , getDownloadLink = .macOS
       }
@@ -48,9 +48,9 @@ dockerImageUrl =
 
 downloads : DownloadLinksByPlatform
 downloads =
-    { linux = "https://github.com/elm-time/elm-time/releases/download/v2023-08-19/elm-time-bin-v2023-08-19-linux-x64.zip"
-    , windows = "https://github.com/elm-time/elm-time/releases/download/v2023-08-19/elm-time-bin-v2023-08-19-win10-x64.zip"
-    , macOS = "https://github.com/elm-time/elm-time/releases/download/v2023-08-19/elm-time-bin-v2023-08-19-osx-x64.zip"
+    { linux = "https://github.com/elm-time/elm-time/releases/download/v2023-09-12/elm-time-bin-v2023-09-12-linux-x64.zip"
+    , windows = "https://github.com/elm-time/elm-time/releases/download/v2023-09-12/elm-time-bin-v2023-09-12-win-x64.zip"
+    , macOS = "https://github.com/elm-time/elm-time/releases/download/v2023-09-12/elm-time-bin-v2023-09-12-osx-x64.zip"
     }
 
 

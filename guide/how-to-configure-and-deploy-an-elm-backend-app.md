@@ -7,11 +7,6 @@ The backend includes a web server and a database persisting the application stat
 
 In this guide, I use the `elm-time` command-line interface (CLI) program. You can find all downloads at <https://elm-time.org/downloads> and <https://github.com/elm-time/elm-time/releases>
 
-Here are direct links to the downloads, containing the `elm-time` executable file in a zip archive:
-
-+ Windows: <https://github.com/elm-time/elm-time/releases/download/v2023-08-19/elm-time-bin-v2023-08-19-win10-x64.zip>
-+ Linux: <https://github.com/elm-time/elm-time/releases/download/v2023-08-19/elm-time-bin-v2023-08-19-linux-x64.zip>
-
 To register the elm-time executable on your system, run the `elm-time  install` command. If you use Linux or PowerShell on Windows, you can achieve this by running the following command after navigating to the directory containing the executable file extracted from the downloaded archive:
 
 ```text
