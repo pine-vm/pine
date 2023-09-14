@@ -5,24 +5,16 @@ using System.Linq;
 
 namespace Pine.PineVM;
 
-public class FormatCSharpSyntaxRewriter : CSharpSyntaxRewriter
+public class FormatCSharpSyntaxRewriter(
+    char indentChar,
+    int indentCharsPerLevel)
+    : CSharpSyntaxRewriter
 {
-    private readonly char indentChar;
-    private readonly int indentCharsPerLevel;
-
     public FormatCSharpSyntaxRewriter()
         : this(
               indentChar: ' ',
               indentCharsPerLevel: 4)
     {
-    }
-
-    public FormatCSharpSyntaxRewriter(
-        char indentChar,
-        int indentCharsPerLevel)
-    {
-        this.indentChar = indentChar;
-        this.indentCharsPerLevel = indentCharsPerLevel;
     }
 
     public override SyntaxNode VisitInvocationExpression(InvocationExpressionSyntax nodeBeforeRewriteInner)

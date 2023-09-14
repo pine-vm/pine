@@ -18,14 +18,11 @@ public interface IJavaScriptEngine : IDisposable
         OverrideDefaultBuildJavaScriptEngine?.Invoke() ?? DefaultBuildJavaScriptEngine();
 }
 
-public class JavaScriptEngineFromJavaScriptEngineSwitcher : IJavaScriptEngine
+public class JavaScriptEngineFromJavaScriptEngineSwitcher(
+    JavaScriptEngineSwitcher.Core.IJsEngine javaScriptEngine)
+    : IJavaScriptEngine
 {
-    private readonly JavaScriptEngineSwitcher.Core.IJsEngine javaScriptEngine;
-
-    public JavaScriptEngineFromJavaScriptEngineSwitcher(JavaScriptEngineSwitcher.Core.IJsEngine javaScriptEngine)
-    {
-        this.javaScriptEngine = javaScriptEngine;
-    }
+    private readonly JavaScriptEngineSwitcher.Core.IJsEngine javaScriptEngine = javaScriptEngine;
 
     object IJavaScriptEngine.CallFunction(string functionName, params object[] args) =>
         javaScriptEngine.CallFunction(functionName, args);

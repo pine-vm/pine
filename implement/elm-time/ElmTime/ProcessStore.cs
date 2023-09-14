@@ -63,7 +63,7 @@ public class EmptyProcessStoreReader : IProcessStoreReader
     public ReductionRecord? GetReduction(byte[] reducedCompositionHash) => null;
 }
 
-public class ProcessStoreInFileStore
+public class ProcessStoreInFileStore(IFileStore fileStore)
 {
     public static JsonSerializerOptions RecordSerializationSettings => new()
     {
@@ -75,8 +75,6 @@ public class ProcessStoreInFileStore
     protected record ReductionRecordInFile(
         string ReducedCompositionHashBase16,
         ValueInFile ReducedValue);
-
-    protected IFileStore fileStore;
 
     protected IFileStoreReader compositionFileStoreReader => ((IFileStoreReader)fileStore).ForSubdirectory("composition");
     protected IFileStoreWriter compositionFileStoreWriter => ((IFileStoreWriter)fileStore).ForSubdirectory("composition");
@@ -90,20 +88,11 @@ public class ProcessStoreInFileStore
     public IEnumerable<IImmutableList<string>> EnumerateCompositionsLogFilesPaths() =>
         CompositionLogFileOrder(
             compositionFileStoreReader.ListFilesInDirectory(ImmutableList<string>.Empty));
-
-    public ProcessStoreInFileStore(IFileStore fileStore)
-    {
-        this.fileStore = fileStore;
-    }
 }
 
-public class ProcessStoreReaderInFileStore : ProcessStoreInFileStore, IProcessStoreReader
+public class ProcessStoreReaderInFileStore(IFileStore fileStore)
+    : ProcessStoreInFileStore(fileStore), IProcessStoreReader
 {
-    public ProcessStoreReaderInFileStore(IFileStore fileStore)
-        : base(fileStore)
-    {
-    }
-
     public IEnumerable<byte[]> EnumerateSerializedCompositionsRecordsReverse() =>
         EnumerateCompositionsLogFilesPaths().Reverse()
         .SelectMany(compositionFilePath =>
@@ -166,21 +155,16 @@ public class ProcessStoreReaderInFileStore : ProcessStoreInFileStore, IProcessSt
         .Select(Enumerable.Last);
 }
 
-public class ProcessStoreWriterInFileStore : ProcessStoreInFileStore, IProcessStoreWriter
+public class ProcessStoreWriterInFileStore(
+    IFileStore fileStore,
+    Func<IImmutableList<string>> getCompositionLogRequestedNextFilePath)
+    : ProcessStoreInFileStore(fileStore), IProcessStoreWriter
 {
-    private Func<IImmutableList<string>> getCompositionLogRequestedNextFilePath;
+    private Func<IImmutableList<string>> getCompositionLogRequestedNextFilePath = getCompositionLogRequestedNextFilePath;
 
     private readonly object appendSerializedCompositionRecordLock = new();
 
     private IImmutableList<string>? appendSerializedCompositionRecordLastFilePath = null;
-
-    public ProcessStoreWriterInFileStore(
-        IFileStore fileStore,
-        Func<IImmutableList<string>> getCompositionLogRequestedNextFilePath)
-        : base(fileStore)
-    {
-        this.getCompositionLogRequestedNextFilePath = getCompositionLogRequestedNextFilePath;
-    }
 
     public void AppendSerializedCompositionRecord(byte[] record)
     {

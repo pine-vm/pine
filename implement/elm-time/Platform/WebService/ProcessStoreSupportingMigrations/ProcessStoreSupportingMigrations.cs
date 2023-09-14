@@ -238,10 +238,10 @@ public class ProcessStoreInFileStore
     }
 }
 
-public class ProcessStoreReaderInFileStore : ProcessStoreInFileStore, IProcessStoreReader
+public class ProcessStoreReaderInFileStore(
+    IFileStoreReader fileStore)
+    : ProcessStoreInFileStore, IProcessStoreReader
 {
-    protected IFileStoreReader fileStore;
-
     protected IFileStoreReader LiteralElementFileStore => fileStore.ForSubdirectory(LiteralElementSubdirectory);
 
     protected IFileStoreReader DeflatedLiteralElementFileStore => fileStore.ForSubdirectory(DeflatedLiteralElementSubdirectory);
@@ -249,11 +249,6 @@ public class ProcessStoreReaderInFileStore : ProcessStoreInFileStore, IProcessSt
     protected IFileStoreReader ProvisionalReductionFileStore => fileStore.ForSubdirectory(ProvisionalReductionSubdirectory);
 
     protected IFileStoreReader CompositionLogLiteralFileStore => fileStore.ForSubdirectory(CompositionLogLiteralPath);
-
-    public ProcessStoreReaderInFileStore(IFileStoreReader fileStore)
-    {
-        this.fileStore = fileStore;
-    }
 
     private ReadOnlyMemory<byte>? LoadComponentSerialRepresentationForHash(ReadOnlyMemory<byte> componentHash) =>
         LoadComponentSerialRepresentationForHash(CommonConversion.StringBase16(componentHash));

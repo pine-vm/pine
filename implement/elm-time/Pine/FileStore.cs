@@ -55,14 +55,9 @@ public interface IFileStore : IFileStoreReader, IFileStoreWriter
 {
 }
 
-public class FileStoreFromSystemIOFile : IFileStore
+public class FileStoreFromSystemIOFile(string directoryPath) : IFileStore
 {
-    private readonly string directoryPath;
-
-    public FileStoreFromSystemIOFile(string directoryPath)
-    {
-        this.directoryPath = directoryPath ?? throw new ArgumentNullException(nameof(directoryPath));
-    }
+    private readonly string directoryPath = directoryPath ?? throw new ArgumentNullException(nameof(directoryPath));
 
     private string CombinePath(IImmutableList<string> path)
     {
@@ -155,18 +150,11 @@ public class FileStoreFromSystemIOFile : IFileStore
     }
 }
 
-public class FileStoreFromWriterAndReader : IFileStore
+public class FileStoreFromWriterAndReader(
+    IFileStoreWriter writer,
+    IFileStoreReader reader)
+    : IFileStore
 {
-    private readonly IFileStoreWriter writer;
-
-    private readonly IFileStoreReader reader;
-
-    public FileStoreFromWriterAndReader(IFileStoreWriter writer, IFileStoreReader reader)
-    {
-        this.writer = writer;
-        this.reader = reader;
-    }
-
     public void AppendFileContent(IImmutableList<string> path, ReadOnlyMemory<byte> fileContent) =>
         writer.AppendFileContent(path, fileContent);
 

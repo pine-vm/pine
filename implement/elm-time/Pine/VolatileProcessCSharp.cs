@@ -176,13 +176,15 @@ public class VolatileProcessCSharp : VolatileProcess
         return "InterfaceToHost_Request(\"" + request.Replace(@"\", @"\\").Replace("\"", "\\\"") + "\")";
     }
 
-    private class MetadataResolver : MetadataReferenceResolver
+    private class MetadataResolver(
+        string csharpScriptCode,
+        // TODO: Make getFileFromHashSHA256 optional after migration phase.
+        Func<byte[], byte[]?> getFileFromHashSHA256)
+        : MetadataReferenceResolver
     {
         private readonly object @lock = new();
 
-        private readonly SyntaxTree csharpScriptCodeSyntaxTree;
-
-        private readonly Func<byte[], byte[]?> getFileFromHashSHA256;
+        private readonly SyntaxTree csharpScriptCodeSyntaxTree = CSharpSyntaxTree.ParseText(csharpScriptCode);
 
         private ImmutableList<AssemblyMetadata> resolvedAssemblies = ImmutableList<AssemblyMetadata>.Empty;
 
@@ -216,16 +218,6 @@ public class VolatileProcessCSharp : VolatileProcess
 
                 yield return requestAndReport.Value;
             }
-        }
-
-        public MetadataResolver(
-            string csharpScriptCode,
-            // TODO: Make getFileFromHashSHA256 optional after migration phase.
-            Func<byte[], byte[]?> getFileFromHashSHA256)
-        {
-            csharpScriptCodeSyntaxTree = CSharpSyntaxTree.ParseText(csharpScriptCode);
-
-            this.getFileFromHashSHA256 = getFileFromHashSHA256;
         }
 
         static MetadataResolver()

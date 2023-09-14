@@ -8,7 +8,10 @@ using static ElmTime.ElmInteractive.IInteractiveSession;
 namespace ElmTime.ElmInteractive;
 
 
-public class InteractiveSessionJavaScript : IInteractiveSession
+public class InteractiveSessionJavaScript(
+    TreeNodeWithStringPath? appCodeTree,
+    InteractiveSessionJavaScript.JavaScriptEngineFlavor javaScriptEngineFlavor)
+    : IInteractiveSession
 {
     public enum JavaScriptEngineFlavor
     {
@@ -16,19 +19,10 @@ public class InteractiveSessionJavaScript : IInteractiveSession
         V8 = 2,
     }
 
-    private readonly TreeNodeWithStringPath? appCodeTree;
-
-    private readonly Lazy<IJavaScriptEngine> evalElmPreparedJavaScriptEngine;
+    private readonly Lazy<IJavaScriptEngine> evalElmPreparedJavaScriptEngine =
+        new(() => ElmInteractive.PrepareJavaScriptEngineToEvaluateElm(javaScriptEngineFlavor));
 
     private readonly IList<string> previousSubmissions = new List<string>();
-
-    public InteractiveSessionJavaScript(
-        TreeNodeWithStringPath? appCodeTree,
-        JavaScriptEngineFlavor javaScriptEngineFlavor)
-    {
-        evalElmPreparedJavaScriptEngine = new Lazy<IJavaScriptEngine>(() => ElmInteractive.PrepareJavaScriptEngineToEvaluateElm(javaScriptEngineFlavor));
-        this.appCodeTree = appCodeTree;
-    }
 
     public Result<string, SubmissionResponse> Submit(string submission)
     {

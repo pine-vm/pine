@@ -67,14 +67,9 @@ public static class ElmModule
             .ToImmutableList();
     }
 
-    public class DelegateComparer<T> : IComparer<T>
+    public class DelegateComparer<T>(Func<T?, T?, int> func) : IComparer<T>
     {
-        private readonly Func<T?, T?, int> func;
-
-        public DelegateComparer(Func<T?, T?, int> func)
-        {
-            this.func = func;
-        }
+        private readonly Func<T?, T?, int> func = func;
 
         public int Compare(T? x, T? y) => func(x, y);
     }

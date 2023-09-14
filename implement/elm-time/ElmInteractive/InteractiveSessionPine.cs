@@ -43,7 +43,7 @@ public class InteractiveSessionPine : IInteractiveSession
     {
     }
 
-    InteractiveSessionPine(TreeNodeWithStringPath? appCodeTree, (PineVM pineVM, PineVMCache? pineVMCache) pineVMAndCache)
+    private InteractiveSessionPine(TreeNodeWithStringPath? appCodeTree, (PineVM pineVM, PineVMCache? pineVMCache) pineVMAndCache)
     {
         pineVM = pineVMAndCache.pineVM;
         pineVMCache = pineVMAndCache.pineVMCache;

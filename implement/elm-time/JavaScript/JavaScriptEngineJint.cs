@@ -85,15 +85,10 @@ public class JavaScriptEngineJint : IJavaScriptEngine
     {
     }
 
-    private class AstRewriter : Esprima.Utils.AstRewriter
+    private class AstRewriter(
+        IReadOnlyDictionary<string, Func<Esprima.Ast.Node, Esprima.Ast.Expression>> declarationReplacements)
+        : Esprima.Utils.AstRewriter
     {
-        private readonly IReadOnlyDictionary<string, Func<Esprima.Ast.Node, Esprima.Ast.Expression>> declarationReplacements;
-
-        public AstRewriter(IReadOnlyDictionary<string, Func<Esprima.Ast.Node, Esprima.Ast.Expression>> declarationReplacements)
-        {
-            this.declarationReplacements = declarationReplacements;
-        }
-
         public override T VisitAndConvert<T>(T node, bool allowNull = false, [CallerMemberName] string? callerName = null)
         {
             /*
@@ -132,20 +127,13 @@ public class JavaScriptEngineJint : IJavaScriptEngine
         }
     }
 
-    private class DelegatingFunctionInstance : Jint.Native.Function.FunctionInstance
+    private class DelegatingFunctionInstance(
+        Engine engine,
+        Realm realm,
+        JsString? name,
+        Func<JsValue, JsValue[], JsValue> func)
+        : Jint.Native.Function.FunctionInstance(engine, realm, name)
     {
-        private readonly Func<JsValue, JsValue[], JsValue> func;
-
-        public DelegatingFunctionInstance(
-            Engine engine,
-            Realm realm,
-            JsString? name,
-            Func<JsValue, JsValue[], JsValue> func)
-            : base(engine, realm, name)
-        {
-            this.func = func;
-        }
-
         protected override JsValue Call(JsValue thisObject, JsValue[] arguments)
         {
             return func(thisObject, arguments);

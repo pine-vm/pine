@@ -1421,32 +1421,14 @@ public class WebServiceTests
         Assert.AreEqual("value from local assembly", responseContent);
     }
 
-    private class FileStoreFromDelegates : IFileStore
+    private class FileStoreFromDelegates(
+        Action<IImmutableList<string>, ReadOnlyMemory<byte>> setFileContent,
+        Action<IImmutableList<string>, ReadOnlyMemory<byte>> appendFileContent,
+        Action<IImmutableList<string>> deleteFile,
+        Func<IImmutableList<string>, ReadOnlyMemory<byte>?> getFileContent,
+        Func<IImmutableList<string>, IEnumerable<IImmutableList<string>>> listFilesInDirectory)
+        : IFileStore
     {
-        private readonly Action<IImmutableList<string>, ReadOnlyMemory<byte>> setFileContent;
-
-        private readonly Action<IImmutableList<string>, ReadOnlyMemory<byte>> appendFileContent;
-
-        private readonly Action<IImmutableList<string>> deleteFile;
-
-        private readonly Func<IImmutableList<string>, ReadOnlyMemory<byte>?> getFileContent;
-
-        private readonly Func<IImmutableList<string>, IEnumerable<IImmutableList<string>>> listFilesInDirectory;
-
-        public FileStoreFromDelegates(
-            Action<IImmutableList<string>, ReadOnlyMemory<byte>> setFileContent,
-            Action<IImmutableList<string>, ReadOnlyMemory<byte>> appendFileContent,
-            Action<IImmutableList<string>> deleteFile,
-            Func<IImmutableList<string>, ReadOnlyMemory<byte>?> getFileContent,
-            Func<IImmutableList<string>, IEnumerable<IImmutableList<string>>> listFilesInDirectory)
-        {
-            this.setFileContent = setFileContent;
-            this.appendFileContent = appendFileContent;
-            this.deleteFile = deleteFile;
-            this.getFileContent = getFileContent;
-            this.listFilesInDirectory = listFilesInDirectory;
-        }
-
         public void AppendFileContent(IImmutableList<string> path, ReadOnlyMemory<byte> fileContent) =>
             appendFileContent(path, fileContent);
 

@@ -48,16 +48,11 @@ public record RateLimitStateSingleWindow(
     }
 }
 
-public class RateLimitMutableContainer : IMutableRateLimit
+public class RateLimitMutableContainer(
+    IRateLimit rateLimitState)
+    : IMutableRateLimit
 {
     private readonly object @lock = new();
-
-    private IRateLimit rateLimitState;
-
-    public RateLimitMutableContainer(IRateLimit init)
-    {
-        rateLimitState = init;
-    }
 
     public bool AttemptPass(long time)
     {
