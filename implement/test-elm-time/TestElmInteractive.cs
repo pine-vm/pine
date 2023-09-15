@@ -44,7 +44,10 @@ public class TestElmInteractive
             ElmTime.ElmInteractive.TestElmInteractive.TestElmInteractiveScenarios(
                 scenarios,
                 scenario => LoadFromLocalFilesystem.LoadSortedTreeFromPath(scenario.scenarioDirectory)!,
-                appCode => ElmTime.ElmInteractive.IInteractiveSession.Create(appCode, ElmTime.ElmInteractive.ElmEngineType.Pine));
+                appCode => ElmTime.ElmInteractive.IInteractiveSession.Create(
+                    compileElmProgramCodeFiles: ElmTime.ElmInteractive.IInteractiveSession.CompileElmProgramCodeFilesDefault.Value,
+                    appCodeTree: appCode,
+                    ElmTime.ElmInteractive.ElmEngineType.Pine));
 
         var allSteps =
             scenariosResults

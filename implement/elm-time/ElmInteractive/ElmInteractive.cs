@@ -2,6 +2,7 @@ using ElmTime.Elm019;
 using ElmTime.JavaScript;
 using Pine;
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
@@ -13,7 +14,16 @@ namespace ElmTime.ElmInteractive;
 
 public class ElmInteractive
 {
-    public static readonly Lazy<string> JavascriptToEvaluateElm = new(PrepareJavaScriptToEvaluateElm, System.Threading.LazyThreadSafetyMode.ExecutionAndPublication);
+    public static readonly ConcurrentDictionary<TreeNodeWithStringPath, System.Threading.Tasks.Task<string>>
+        JavaScriptToEvaluateElmFromCompilerTask = new();
+
+    public static System.Threading.Tasks.Task<string> JavaScriptToEvaluateElmFromCompilerCachedTask(
+        TreeNodeWithStringPath compileElmProgramCodeFiles) =>
+        JavaScriptToEvaluateElmFromCompilerTask.GetOrAdd(
+            compileElmProgramCodeFiles,
+            valueFactory:
+            compileElmProgramCodeFiles =>
+            System.Threading.Tasks.Task.Run(() => PrepareJavaScriptToEvaluateElm(compileElmProgramCodeFiles)));
 
     public static Result<string, EvaluatedSctructure> EvaluateSubmissionAndGetResultingValue(
         IJavaScriptEngine evalElmPreparedJavaScriptEngine,
@@ -613,8 +623,11 @@ public class ElmInteractive
                 fromOk: compilationOk => SortedTreeFromSetOfBlobsWithStringPath(compilationOk.result.compiledFiles));
     }
 
-    public static IJavaScriptEngine PrepareJavaScriptEngineToEvaluateElm(InteractiveSessionJavaScript.JavaScriptEngineFlavor javaScriptEngineFlavor) =>
+    public static IJavaScriptEngine PrepareJavaScriptEngineToEvaluateElm(
+        TreeNodeWithStringPath compileElmProgramCodeFiles,
+        InteractiveSessionJavaScript.JavaScriptEngineFlavor javaScriptEngineFlavor) =>
         PrepareJavaScriptEngineToEvaluateElm(
+            compileElmProgramCodeFiles,
             javaScriptEngineFactory: javaScriptEngineFlavor switch
             {
                 InteractiveSessionJavaScript.JavaScriptEngineFlavor.Jint => JavaScriptEngineJintOptimizedForElmApps.Create,
@@ -623,25 +636,28 @@ public class ElmInteractive
                 _ => throw new NotImplementedException("Not implemented: " + javaScriptEngineFlavor)
             });
 
-    public static IJavaScriptEngine PrepareJavaScriptEngineToEvaluateElm(Func<IJavaScriptEngine> javaScriptEngineFactory)
+    public static IJavaScriptEngine PrepareJavaScriptEngineToEvaluateElm(
+        TreeNodeWithStringPath compileElmProgramCodeFiles,
+        Func<IJavaScriptEngine> javaScriptEngineFactory)
     {
         var javaScriptEngine = javaScriptEngineFactory();
 
-        javaScriptEngine.Evaluate(JavascriptToEvaluateElm.Value);
+        javaScriptEngine.Evaluate(JavaScriptToEvaluateElmFromCompilerCachedTask(compileElmProgramCodeFiles).Result);
 
         return javaScriptEngine;
     }
 
-    public static string PrepareJavaScriptToEvaluateElm()
-    {
-        var compileElmProgramCodeFiles = LoadCompileElmProgramCodeFiles();
+    public static string PrepareJavaScriptToEvaluateElm(TreeNodeWithStringPath compileElmProgramCodeFiles) =>
+        PrepareJavaScriptToEvaluateElm(TreeToFlatDictionaryWithPathComparer(compileElmProgramCodeFiles));
 
+    public static string PrepareJavaScriptToEvaluateElm(
+        IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> compileElmProgramCodeFiles)
+    {
         var elmMakeResult =
-            Elm019Binaries.ElmMakeToJavascript(
-                compileElmProgramCodeFiles
-                .Extract(error => throw new NotImplementedException(nameof(LoadCompileElmProgramCodeFiles) + ": " + error)),
-                workingDirectoryRelative: null,
-                ["src", "ElmInteractiveMain.elm"]);
+        Elm019Binaries.ElmMakeToJavascript(
+            compileElmProgramCodeFiles,
+            workingDirectoryRelative: null,
+            ["src", "ElmInteractiveMain.elm"]);
 
         var javascriptFromElmMake =
             Encoding.UTF8.GetString(

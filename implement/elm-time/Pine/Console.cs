@@ -4,7 +4,10 @@ namespace Pine;
 
 public interface IConsole
 {
-    void WriteLine(string text, TextColor color = TextColor.Default) =>
+    void WriteLine(string text) =>
+        WriteLine(text, TextColor.Default);
+
+    void WriteLine(string text, TextColor color) =>
         Write("\n" + text, color);
 
     void Write(string text, TextColor color) =>

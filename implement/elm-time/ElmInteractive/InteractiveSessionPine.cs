@@ -16,8 +16,7 @@ public class InteractiveSessionPine : IInteractiveSession
 
     private System.Threading.Tasks.Task<Result<string, PineValue>> buildPineEvalContextTask;
 
-    private readonly Lazy<IJavaScriptEngine> compileElmPreparedJavaScriptEngine =
-        new(ElmInteractive.PrepareJavaScriptEngineToEvaluateElm(InteractiveSessionJavaScript.JavaScriptEngineFlavor.V8));
+    private readonly Lazy<IJavaScriptEngine> compileElmPreparedJavaScriptEngine;
 
     private ElmInteractive.CompilationCache lastCompilationCache = ElmInteractive.CompilationCache.Empty;
 
@@ -31,22 +30,42 @@ public class InteractiveSessionPine : IInteractiveSession
 
     public long EvaluateExpressionCount => pineVM.EvaluateExpressionCount;
 
-    public InteractiveSessionPine(TreeNodeWithStringPath? appCodeTree, bool caching)
+    public InteractiveSessionPine(
+        TreeNodeWithStringPath compileElmProgramCodeFiles,
+        TreeNodeWithStringPath? appCodeTree,
+        bool caching)
         :
-        this(appCodeTree: appCodeTree, BuildPineVM(caching))
+        this(
+            compileElmProgramCodeFiles: compileElmProgramCodeFiles,
+            appCodeTree: appCodeTree,
+            BuildPineVM(caching))
     {
     }
 
-    public InteractiveSessionPine(TreeNodeWithStringPath? appCodeTree, PineVM pineVM)
+    public InteractiveSessionPine(
+        TreeNodeWithStringPath compileElmProgramCodeFiles,
+        TreeNodeWithStringPath? appCodeTree,
+        PineVM pineVM)
         :
-        this(appCodeTree: appCodeTree, (pineVM, pineVMCache: null))
+        this(
+            compileElmProgramCodeFiles: compileElmProgramCodeFiles,
+            appCodeTree: appCodeTree,
+            (pineVM, pineVMCache: null))
     {
     }
 
-    private InteractiveSessionPine(TreeNodeWithStringPath? appCodeTree, (PineVM pineVM, PineVMCache? pineVMCache) pineVMAndCache)
+    private InteractiveSessionPine(
+        TreeNodeWithStringPath compileElmProgramCodeFiles,
+        TreeNodeWithStringPath? appCodeTree,
+        (PineVM pineVM, PineVMCache? pineVMCache) pineVMAndCache)
     {
         pineVM = pineVMAndCache.pineVM;
         pineVMCache = pineVMAndCache.pineVMCache;
+
+        compileElmPreparedJavaScriptEngine =
+        new(() => ElmInteractive.PrepareJavaScriptEngineToEvaluateElm(
+            compileElmProgramCodeFiles: compileElmProgramCodeFiles,
+            InteractiveSessionJavaScript.JavaScriptEngineFlavor.V8));
 
         buildPineEvalContextTask = System.Threading.Tasks.Task.Run(() =>
             CompileInteractiveEnvironment(appCodeTree: appCodeTree));
@@ -217,13 +236,17 @@ public class InteractiveSessionPine : IInteractiveSession
     }
 
     public static Result<string, PineCompileToDotNet.CompileCSharpClassResult> CompileForProfiledScenarios(
+        TreeNodeWithStringPath compileElmProgramCodeFiles,
         IReadOnlyList<TestElmInteractive.Scenario> scenarios,
         PineCompileToDotNet.SyntaxContainerConfig syntaxContainerConfig,
         int limitNumber)
     {
         var expressionsToCompile =
             scenarios
-            .SelectMany(CollectExpressionsToOptimizeFromScenario)
+            .SelectMany(scenario =>
+            CollectExpressionsToOptimizeFromScenario(
+                compileElmProgramCodeFiles: compileElmProgramCodeFiles,
+                scenario: scenario))
             .Distinct()
             .Take(limitNumber)
             .ToImmutableList();
@@ -234,7 +257,9 @@ public class InteractiveSessionPine : IInteractiveSession
                 syntaxContainerConfig);
     }
 
-    public static IReadOnlyList<Expression> CollectExpressionsToOptimizeFromScenario(TestElmInteractive.Scenario scenario)
+    public static IReadOnlyList<Expression> CollectExpressionsToOptimizeFromScenario(
+        TreeNodeWithStringPath compileElmProgramCodeFiles,
+        TestElmInteractive.Scenario scenario)
     {
         var expressionEvaluations = new ConcurrentQueue<Expression>();
 
@@ -262,7 +287,10 @@ public class InteractiveSessionPine : IInteractiveSession
                 return originalHandler(expression, environment);
             });
 
-        var profilingSession = new InteractiveSessionPine(appCodeTree: null, profilingPineVM);
+        var profilingSession = new InteractiveSessionPine(
+            compileElmProgramCodeFiles: compileElmProgramCodeFiles,
+            appCodeTree: null,
+            profilingPineVM);
 
         foreach (var step in scenario.steps)
             profilingSession.Submit(step.step.submission);

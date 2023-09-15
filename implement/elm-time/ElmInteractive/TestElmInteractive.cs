@@ -32,7 +32,7 @@ public class TestElmInteractive
 
     public static ImmutableDictionary<string, InteractiveScenarioTestReport> TestElmInteractiveScenarios(
         TreeNodeWithStringPath scenariosTree,
-        Func<TreeNodeWithStringPath?, IInteractiveSession> interactiveSessionFromAppCode,
+        IInteractiveSessionConfig interactiveConfig,
         IConsole console)
     {
         var scenariosTreeComposition =
@@ -59,7 +59,7 @@ public class TestElmInteractive
             TestElmInteractiveScenarios(
                 namedDistinctScenarios,
                 namedScenario => namedScenario.component,
-                interactiveSessionFromAppCode);
+                interactiveConfig.InteractiveSessionFromAppCode);
 
         var allSteps =
             scenariosResults
@@ -92,7 +92,8 @@ public class TestElmInteractive
                 " - ",
                 (!failedSteps.IsEmpty ? "Failed" : "Passed") + "!",
                 string.Join(", ", overallStats.Select(stat => stat.label + ": " + stat.value)),
-                scenariosTreeCompositionHash[..10] + " (elm-time " + Program.AppVersionId + ")"),
+                scenariosTreeCompositionHash[..10] +
+                " (elm-time " + Program.AppVersionId + " with Elm compiler " + interactiveConfig.CompilerId + ")"),
             color: !failedSteps.IsEmpty ? IConsole.TextColor.Red : IConsole.TextColor.Green);
 
         var failedScenarios =

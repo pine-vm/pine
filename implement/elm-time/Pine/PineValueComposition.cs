@@ -100,7 +100,7 @@ public static class PineValueComposition
                     blobWithPath.path.Split("/").SelectMany(pathElement => pathElement.Split(@"\"))
                         .ToImmutableList();
 
-                return (path: (IImmutableList<string>)pathElements, blobWithPath.blobContent);
+                return (path: (IReadOnlyList<string>)pathElements, blobWithPath.blobContent);
             })
         );
 
@@ -109,7 +109,7 @@ public static class PineValueComposition
         Func<PathT, string> mapPathElement) =>
         SortedTreeFromSetOfBlobs(
             blobsWithPath.Select(blobWithPath =>
-                (path: (IImmutableList<string>)blobWithPath.path.Select(mapPathElement).ToImmutableList(),
+                (path: (IReadOnlyList<string>)blobWithPath.path.Select(mapPathElement).ToImmutableList(),
                     blobWithPath.blobContent)));
 
     public static TreeNodeWithStringPath SortedTreeFromSetOfBlobsWithStringPath(
@@ -126,7 +126,7 @@ public static class PineValueComposition
         TreeNodeWithStringPath tree) => TreeNodeWithStringPath.Sort(tree);
 
     public static TreeNodeWithStringPath SortedTreeFromSetOfBlobs(
-        IEnumerable<(IImmutableList<string> path, ReadOnlyMemory<byte> blobContent)> blobsWithPath) =>
+        IEnumerable<(IReadOnlyList<string> path, ReadOnlyMemory<byte> blobContent)> blobsWithPath) =>
         blobsWithPath.Aggregate(
             seed: TreeNodeWithStringPath.EmptyTree,
             func: (tree, blobPathAndContent) =>
@@ -150,4 +150,28 @@ public static class PineValueComposition
             entry => entry.filePath,
             entry => entry.fileContent,
             keyComparer: EnumerableExtension.Comparer<IReadOnlyList<string>>());
+
+    public static IEqualityComparer<T> FromDictionaryComparer<T>()
+        where T : IReadOnlyDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> =>
+        new DictionaryAsTreeEqualityComparer<T>();
+
+    private class DictionaryAsTreeEqualityComparer<T> : IEqualityComparer<T>
+        where T : IReadOnlyDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>>
+    {
+        public bool Equals(T? x, T? y)
+        {
+            if (ReferenceEquals(x, y))
+                return true;
+
+            if (x is null || y is null)
+                return false;
+
+            return
+                SortedTreeFromSetOfBlobsWithStringPath(x)
+                .Equals(SortedTreeFromSetOfBlobsWithStringPath(y));
+        }
+
+        public int GetHashCode(T obj) =>
+            obj?.GetHashCode() ?? 0;
+    }
 }

@@ -18,7 +18,7 @@ namespace ElmTime;
 
 public class Program
 {
-    public static string AppVersionId => "2023-09-13";
+    public static string AppVersionId => "2023-09-14";
 
     private static int AdminInterfaceDefaultPort => 4000;
 
@@ -844,6 +844,8 @@ public class Program
                     description: "Display additional information to inspect the implementation.",
                     optionType: CommandOptionType.NoValue);
 
+            var elmCompilerOption = AddElmCompilerOptionOnCommand(interactiveCommand);
+
             var elmEngineOption = AddElmEngineOptionOnCommand(
                 interactiveCommand,
                 defaultFromEnvironmentVariablePrefix: "interactive",
@@ -961,12 +963,21 @@ public class Program
                                 keySelector: scenario => scenario.loadedScenario.name + "-" + scenario.hashBase16[..10],
                                 elementSelector: scenario => scenario);
 
+                        var compileElmProgramCodeFiles = elmCompilerOption.loadElmCompilerFromOption(console);
                         var elmEngineType = elmEngineOption.parseElmEngineTypeFromOption();
 
                         ElmInteractive.IInteractiveSession newInteractiveSessionFromAppCode(TreeNodeWithStringPath? appCodeTree)
                         {
-                            return ElmInteractive.IInteractiveSession.Create(appCodeTree: appCodeTree, elmEngineType);
+                            return ElmInteractive.IInteractiveSession.Create(
+                                compileElmProgramCodeFiles: compileElmProgramCodeFiles,
+                                appCodeTree: appCodeTree,
+                                elmEngineType);
                         }
+
+                        var interactiveConfig = new ElmInteractive.InteractiveSessionConfig(
+                            CompilerId:
+                            CommonConversion.StringBase16(PineValueHashTree.ComputeHashSorted(compileElmProgramCodeFiles))[..8],
+                            newInteractiveSessionFromAppCode);
 
                         var aggregateCompositionTree =
                             TreeNodeWithStringPath.SortedTree(
@@ -975,7 +986,7 @@ public class Program
                         var scenariosResults =
                         ElmInteractive.TestElmInteractive.TestElmInteractiveScenarios(
                             aggregateCompositionTree,
-                            newInteractiveSessionFromAppCode,
+                            interactiveConfig,
                             console: console);
 
                         if (compileToOption.Value() is { } compileTo)
@@ -994,6 +1005,7 @@ public class Program
 
                             var compileResult =
                             ElmInteractive.InteractiveSessionPine.CompileForProfiledScenarios(
+                                compileElmProgramCodeFiles: compileElmProgramCodeFiles,
                                 profilingScenarios,
                                 syntaxContainerConfig: syntaxContainerConfig,
                                 limitNumber: 10);
@@ -1058,16 +1070,22 @@ public class Program
                                                             overrideEvaluateExpression: null);
 
                                                     return new ElmInteractive.InteractiveSessionPine(
+                                                        compileElmProgramCodeFiles: compileElmProgramCodeFiles,
                                                         appCodeTree: appCodeTree,
                                                         pineVMWithCompiledAssembly);
                                                 }
+
+                                                var interactiveConfig = new ElmInteractive.InteractiveSessionConfig(
+                                                    CompilerId:
+                                                    CommonConversion.StringBase16(PineValueHashTree.ComputeHashSorted(compileElmProgramCodeFiles))[..8],
+                                                    newInteractiveSessionFromAppCode);
 
                                                 console.WriteLine("Running tests with compiled assembly...");
 
                                                 var compiledScenariosResults =
                                                     ElmInteractive.TestElmInteractive.TestElmInteractiveScenarios(
                                                         aggregateCompositionTree,
-                                                        newInteractiveSessionWithCompiledAssembly,
+                                                        interactiveConfig,
                                                         console: console);
 
                                                 return "Compiled to assembly with " + compileToAssemblyOk.Assembly.Length + " bytes";
@@ -1091,10 +1109,13 @@ public class Program
 
             interactiveCommand.OnExecute(() =>
             {
+                var console = (Pine.IConsole)StaticConsole.Instance;
+
+                var compileElmProgramCodeFiles = elmCompilerOption.loadElmCompilerFromOption(console);
                 var elmEngineType = elmEngineOption.parseElmEngineTypeFromOption();
 
-                Console.WriteLine(
-                                    "---- Elm Interactive v" + AppVersionId + " using engine based on " + elmEngineType + " ----");
+                console.WriteLine(
+                    "---- Elm Interactive v" + AppVersionId + " using engine based on " + elmEngineType + " ----");
 
                 var contextAppPath = contextAppOption.Value();
 
@@ -1106,7 +1127,7 @@ public class Program
                     null => null,
                     not null =>
                     LoadComposition.LoadFromPathResolvingNetworkDependencies(contextAppPath)
-                    .LogToActions(Console.WriteLine)
+                    .LogToActions(console.WriteLine)
                     .Map(loaded => loaded.tree)
                     .Unpack(
                         fromErr: error => throw new Exception("Failed to load from path '" + contextAppPath + "': " + error),
@@ -1125,7 +1146,7 @@ public class Program
                     null => ImmutableList<string>.Empty,
                     not null =>
                     LoadComposition.LoadFromPathResolvingNetworkDependencies(initStepsPath)
-                    .LogToActions(Console.WriteLine)
+                    .LogToActions(console.WriteLine)
                     .Map(loaded => loaded.tree)
                     .Unpack(
                         fromErr: error => throw new Exception("Failed to load from path '" + initStepsPath + "': " + error),
@@ -1147,6 +1168,7 @@ public class Program
                 };
 
                 using var interactiveSession = ElmInteractive.IInteractiveSession.Create(
+                    compileElmProgramCodeFiles: compileElmProgramCodeFiles,
                     appCodeTree: contextAppCodeTree,
                     engineType: elmEngineType);
 
@@ -1166,23 +1188,23 @@ public class Program
                     .Unpack(
                         fromErr: error =>
                         {
-                            Console.WriteLine("Failed to evaluate: " + error);
+                            console.WriteLine("Failed to evaluate: " + error);
                             return submission;
                         },
                         fromOk: evalOk =>
                         {
                             if (enableInspectionOption.HasValue())
                             {
-                                Console.WriteLine(
+                                console.WriteLine(
                                     "Processing this submission took " +
                                     CommandLineInterface.FormatIntegerForDisplay(evalStopwatch.ElapsedMilliseconds) + " ms.");
 
-                                Console.WriteLine(
+                                console.WriteLine(
                                     "Inspection log has " + (evalOk.inspectionLog?.Count ?? 0) + " entries:\n" +
                                     string.Join("\n", evalOk.inspectionLog.EmptyIfNull()));
                             }
 
-                            Console.WriteLine(evalOk.interactiveResponse.displayText);
+                            console.WriteLine(evalOk.interactiveResponse.displayText);
 
                             return submission;
                         });
@@ -1197,12 +1219,12 @@ public class Program
 
                 if (0 < allSubmissionsFromArguments.Count)
                 {
-                    Console.WriteLine(allSubmissionsFromArguments.Count + " initial submission(s) from arguments in total...");
+                    console.WriteLine(allSubmissionsFromArguments.Count + " initial submission(s) from arguments in total...");
                 }
 
                 foreach (var submission in allSubmissionsFromArguments)
                 {
-                    Console.WriteLine(promptPrefix + submission);
+                    console.WriteLine(promptPrefix + submission);
 
                     processSubmission(submission);
                 }
@@ -1530,7 +1552,7 @@ public class Program
                     {
                         return
                             Elm019Binaries.ElmMake(
-                                sourceFilesAfterLowering.ToImmutableDictionary(),
+                                sourceFilesAfterLowering,
                                 workingDirectoryRelative: workingDirectoryRelative,
                                 pathToFileWithElmEntryPoint: pathToFileWithElmEntryPointFromWorkingDir,
                                 outputFileName: outputFileName.Replace('\\', '/').Split('/').Last(),
@@ -1542,7 +1564,7 @@ public class Program
                     {
                         return
                             Elm019Binaries.ElmMakeToJavascript(
-                                    sourceFilesAfterLowering.ToImmutableDictionary(),
+                                    sourceFilesAfterLowering,
                                     workingDirectoryRelative: workingDirectoryRelative,
                                     pathToFileWithElmEntryPoint: pathToFileWithElmEntryPointFromWorkingDir,
                                     elmMakeCommandAppendix: elmMakeCommandAppendix)
@@ -1707,14 +1729,14 @@ public class Program
         string? defaultFromEnvironmentVariablePrefix,
         Func<ElmInteractive.ElmEngineType?, ElmInteractive.ElmEngineType> defaultEngineConsideringEnvironmentVariable)
     {
-        var defaultEngineFromEnvironmentVarible =
+        var defaultEngineFromEnvironmentVariable =
             defaultFromEnvironmentVariablePrefix switch
             {
                 { } variablePrefix => ElmEngineFromEnvironmentVariableWithPrefix(variablePrefix),
                 null => null
             };
 
-        var defaultEngine = defaultEngineConsideringEnvironmentVariable(defaultEngineFromEnvironmentVarible);
+        var defaultEngine = defaultEngineConsideringEnvironmentVariable(defaultEngineFromEnvironmentVariable);
 
         var elmEngineOption =
             cmd.Option(
@@ -1732,6 +1754,37 @@ public class Program
         }
 
         return (elmEngineOption, parseElmEngineTypeFromOption);
+    }
+
+    private static (CommandOption elmCompilerOption, Func<Pine.IConsole, TreeNodeWithStringPath> loadElmCompilerFromOption)
+        AddElmCompilerOptionOnCommand(CommandLineApplication cmd)
+    {
+        var defaultCompiler = ElmInteractive.IInteractiveSession.CompileElmProgramCodeFilesDefault.Value;
+
+        var elmCompilerOption =
+            cmd.Option(
+                template: "--elm-compiler",
+                description: "Select a program for compiling Elm programs. Defaults to the version integrated with Elm-Time.",
+                optionType: CommandOptionType.SingleValue,
+                inherited: true);
+
+        TreeNodeWithStringPath parseElmCompilerFromOption(Pine.IConsole console)
+        {
+            if (elmCompilerOption?.Value() is { } compilerAsString)
+            {
+                console.WriteLine("Loading Elm compiler from " + compilerAsString);
+
+                return
+                    LoadComposition.LoadFromPathResolvingNetworkDependencies(compilerAsString)
+                    .LogToActions(console.WriteLine)
+                    .Extract(error => throw new Exception("Failed to load from path '" + compilerAsString + "': " + error))
+                    .tree;
+            }
+
+            return ElmInteractive.IInteractiveSession.CompileElmProgramCodeFilesDefault.Value!;
+        }
+
+        return (elmCompilerOption, parseElmCompilerFromOption);
     }
 
     public static ElmInteractive.ElmEngineType? ElmEngineFromEnvironmentVariableWithPrefix(string? environmentVariablePrefix)
