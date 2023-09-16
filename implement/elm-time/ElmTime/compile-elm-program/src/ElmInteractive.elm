@@ -243,9 +243,15 @@ elmValueAsExpression elmValue =
     in
     case elmValue of
         ElmList list ->
-            ( "[" ++ (list |> List.map (elmValueAsExpression >> Tuple.first) |> String.join ",") ++ "]"
-            , { needsParens = False }
-            )
+            if Maybe.withDefault False (elmListItemsLookLikeTupleItems list) then
+                ( "(" ++ (list |> List.map (elmValueAsExpression >> Tuple.first) |> String.join ",") ++ ")"
+                , { needsParens = False }
+                )
+
+            else
+                ( "[" ++ (list |> List.map (elmValueAsExpression >> Tuple.first) |> String.join ",") ++ "]"
+                , { needsParens = False }
+                )
 
         ElmInteger integer ->
             ( integer |> BigInt.toString
@@ -416,14 +422,6 @@ pineValueAsElmValue pineValue =
 
                     Ok listValues ->
                         let
-                            tryMapToChar elmValue =
-                                case elmValue of
-                                    ElmChar char ->
-                                        Just char
-
-                                    _ ->
-                                        Nothing
-
                             resultAsList =
                                 Ok (ElmList listValues)
                         in
@@ -432,49 +430,44 @@ pineValueAsElmValue pineValue =
 
                         else
                             case listValues of
-                                [ ElmString tagName, ElmList tagArguments ] ->
-                                    if stringStartsWithUpper tagName then
-                                        if tagName == elmRecordTypeTagName then
-                                            (case tagArguments of
-                                                [ recordValue ] ->
-                                                    elmValueAsElmRecord recordValue
+                                [ ElmList tagNameChars, ElmList tagArguments ] ->
+                                    case tryMapElmValueToString tagNameChars of
+                                        Just tagName ->
+                                            if stringStartsWithUpper tagName then
+                                                if tagName == elmRecordTypeTagName then
+                                                    (case tagArguments of
+                                                        [ recordValue ] ->
+                                                            elmValueAsElmRecord recordValue
 
-                                                _ ->
-                                                    Err ("Wrong number of tag arguments: " ++ String.fromInt (List.length tagArguments))
-                                            )
-                                                |> Result.mapError ((++) "Failed to extract value under record tag: ")
+                                                        _ ->
+                                                            Err ("Wrong number of tag arguments: " ++ String.fromInt (List.length tagArguments))
+                                                    )
+                                                        |> Result.mapError ((++) "Failed to extract value under record tag: ")
 
-                                        else if tagName == elmStringTypeTagName then
-                                            (case tagArguments of
-                                                [ ElmString string ] ->
-                                                    Ok (ElmString string)
+                                                else if tagName == elmStringTypeTagName then
+                                                    (case tagArguments of
+                                                        [ ElmList charsList ] ->
+                                                            charsList
+                                                                |> tryMapElmValueToString
+                                                                |> Maybe.map (ElmString >> Ok)
+                                                                |> Maybe.withDefault (Err "Failed to map chars")
 
-                                                [ ElmList charsList ] ->
-                                                    case charsList |> List.map tryMapToChar |> Maybe.Extra.combine of
-                                                        Just chars ->
-                                                            chars |> String.fromList |> ElmString |> Ok
+                                                        _ ->
+                                                            Err "Unexpected shape of tag arguments"
+                                                    )
+                                                        |> Result.mapError ((++) "Failed to extract value under String tag: ")
 
-                                                        Nothing ->
-                                                            Err "Failed to map chars"
+                                                else
+                                                    Ok (ElmTag tagName tagArguments)
 
-                                                _ ->
-                                                    Err "Unexpected shape of tag arguments"
-                                            )
-                                                |> Result.mapError ((++) "Failed to extract value under String tag: ")
-
-                                        else
-                                            Ok (ElmTag tagName tagArguments)
-
-                                    else
-                                        resultAsList
-
-                                _ ->
-                                    case listValues |> List.map tryMapToChar |> Maybe.Extra.combine of
-                                        Just chars ->
-                                            chars |> String.fromList |> ElmString |> Ok
+                                            else
+                                                resultAsList
 
                                         Nothing ->
                                             resultAsList
+
+                                _ ->
+                                    resultAsList
 
 
 elmValueAsElmRecord : ElmValue -> Result String ElmValue
@@ -482,19 +475,45 @@ elmValueAsElmRecord elmValue =
     let
         tryMapToRecordField possiblyRecordField =
             case possiblyRecordField of
-                ElmList [ ElmString fieldName, fieldValue ] ->
-                    if not (stringStartsWithUpper fieldName) then
-                        Ok ( fieldName, fieldValue )
+                ElmList fieldListItems ->
+                    case fieldListItems of
+                        [ fieldNameValue, fieldValue ] ->
+                            let
+                                continueWithFieldName fieldName =
+                                    if not (stringStartsWithUpper fieldName) then
+                                        Ok ( fieldName, fieldValue )
 
-                    else
-                        Err ("Field name does start with uppercase: '" ++ fieldName ++ "'")
+                                    else
+                                        Err ("Field name does start with uppercase: '" ++ fieldName ++ "'")
+                            in
+                            case fieldNameValue of
+                                ElmList fieldNameValueList ->
+                                    case tryMapElmValueToString fieldNameValueList of
+                                        Just fieldName ->
+                                            continueWithFieldName fieldName
+
+                                        Nothing ->
+                                            Err "Failed parsing field name value."
+
+                                ElmString fieldName ->
+                                    continueWithFieldName fieldName
+
+                                _ ->
+                                    Err "Unexpected type in field name value."
+
+                        _ ->
+                            Err ("Unexpected number of list items: " ++ String.fromInt (List.length fieldListItems))
 
                 _ ->
                     Err "Not a list."
     in
     case elmValue of
         ElmList recordFieldList ->
-            case recordFieldList |> List.map tryMapToRecordField |> Result.Extra.combine of
+            case
+                recordFieldList
+                    |> List.map tryMapToRecordField
+                    |> Result.Extra.combine
+            of
                 Ok recordFields ->
                     let
                         recordFieldsNames =
@@ -511,6 +530,24 @@ elmValueAsElmRecord elmValue =
 
         _ ->
             Err "Value is not a list."
+
+
+tryMapElmValueToChar : ElmValue -> Maybe Char
+tryMapElmValueToChar elmValue =
+    case elmValue of
+        ElmChar char ->
+            Just char
+
+        _ ->
+            Nothing
+
+
+tryMapElmValueToString : List ElmValue -> Maybe String
+tryMapElmValueToString elmValues =
+    elmValues
+        |> List.map tryMapElmValueToChar
+        |> Maybe.Extra.combine
+        |> Maybe.map String.fromList
 
 
 elmValueDictToList : ElmValue -> List ( ElmValue, ElmValue )
@@ -543,6 +580,67 @@ elmValueDictFoldr func acc dict =
 
         _ ->
             acc
+
+
+elmListItemsLookLikeTupleItems : List ElmValue -> Maybe Bool
+elmListItemsLookLikeTupleItems list =
+    if 3 < List.length list then
+        Just False
+
+    else
+        list
+            |> areAlmValueListItemTypesEqual
+            |> Maybe.map not
+
+
+areAlmValueListItemTypesEqual : List ElmValue -> Maybe Bool
+areAlmValueListItemTypesEqual list =
+    let
+        pairsTypesEqual =
+            list
+                |> List.Extra.uniquePairs
+                |> List.map (\( left, right ) -> areElmValueTypesEqual left right)
+    in
+    if List.all ((==) (Just True)) pairsTypesEqual then
+        Just True
+
+    else if List.any ((==) (Just False)) pairsTypesEqual then
+        Just False
+
+    else
+        Nothing
+
+
+areElmValueTypesEqual : ElmValue -> ElmValue -> Maybe Bool
+areElmValueTypesEqual valueA valueB =
+    case ( valueA, valueB ) of
+        ( ElmInteger _, ElmInteger _ ) ->
+            Just True
+
+        ( ElmChar _, ElmChar _ ) ->
+            Just True
+
+        ( ElmString _, ElmString _ ) ->
+            Just True
+
+        ( ElmList _, ElmList _ ) ->
+            Nothing
+
+        ( ElmRecord recordA, ElmRecord recordB ) ->
+            if Set.fromList (List.map Tuple.first recordA) /= Set.fromList (List.map Tuple.first recordB) then
+                Just False
+
+            else
+                Nothing
+
+        ( ElmTag _ _, ElmTag _ _ ) ->
+            Nothing
+
+        ( ElmInternal _, ElmInternal _ ) ->
+            Nothing
+
+        _ ->
+            Just False
 
 
 compileEvalContextForElmInteractive : InteractiveContext -> Result String Pine.EvalContext
