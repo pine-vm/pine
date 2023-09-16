@@ -563,6 +563,10 @@ fromCode code =
     -- Remove the sign prefix byte
     Pine_kernel.skip [ 1, code ]
 
+
+isDigit char =
+    char >= '0' && char <= '9'
+
 """
     , """
 module String exposing
@@ -605,6 +609,21 @@ fromList =
 fromChar : Char -> String
 fromChar char =
     String [ char ]
+
+
+cons : Char -> String -> String
+cons char string =
+    fromList (char :: toList string)
+
+
+uncons : String -> Maybe ( Char, String )
+uncons string =
+    case toList string of
+        [] ->
+            Nothing
+
+        first :: rest ->
+            Just ( first, fromList rest )
 
 
 isEmpty : String -> Bool
@@ -898,6 +917,39 @@ fromUnsignedIntAsList int =
             digitCharacterFromValue lastDigitValue
     in
     upperDigitsString ++ [ Maybe.withDefault 'e' lastDigitChar ]
+
+
+trim : String -> String
+trim str =
+    fromList (dropWhileList isCharRemovedOnTrim (List.reverse (dropWhileList isCharRemovedOnTrim (List.reverse (toList str)))))
+
+
+trimLeft : String -> String
+trimLeft str =
+    fromList (dropWhileList isCharRemovedOnTrim (toList str))
+
+
+trimRight : String -> String
+trimRight str =
+    fromList (List.reverse (dropWhileList isCharRemovedOnTrim (List.reverse (toList str))))
+
+
+isCharRemovedOnTrim : Char -> Bool
+isCharRemovedOnTrim char =
+    Char.toCode char <= 32
+
+
+dropWhileList : (Char -> Bool) -> List Char -> List Char
+dropWhileList predicate stringList =
+    case stringList of
+        [] ->
+            []
+
+        char :: rest ->
+            if predicate char then
+                dropWhileList predicate rest
+            else
+                stringList
 
 """
     , """
