@@ -9,26 +9,29 @@ namespace ElmTime.ElmSyntax;
 
 public static class ElmModule
 {
+    record ParsedModule(
+        IReadOnlyList<string> ModuleName,
+        IImmutableSet<IReadOnlyList<string>> ImportedModulesNames);
+
     public static IReadOnlyList<string> ModulesTextOrderedForCompilationByDependencies(IReadOnlyList<string> modulesTexts)
     {
         var parsedModules =
             modulesTexts
             .Select(
                 moduleText =>
-                new
-                {
-                    moduleText,
-                    moduleName =
-                    ParseModuleName(moduleText).Extract(err => throw new Exception("Failed parsing module name: " + err)),
-                    importedModulesNames =
+                (moduleText,
+                parsedModule: new ParsedModule
+                (ModuleName: ParseModuleName(moduleText).Extract(err => throw new Exception("Failed parsing module name: " + err)),
+                ImportedModulesNames:
                     ParseModuleImportedModulesNames(moduleText)
                     .ToImmutableHashSet(EnumerableExtension.EqualityComparer<IReadOnlyList<string>>())
-                });
+                )))
+            .ToImmutableList();
 
         var parsedModulesByName =
             parsedModules
             .ToImmutableDictionary(
-                keySelector: parsedModule => parsedModule.moduleName,
+                keySelector: moduleTextAndParsed => moduleTextAndParsed.parsedModule.ModuleName,
                 elementSelector: parsedModule => parsedModule,
                 keyComparer: EnumerableExtension.EqualityComparer<IReadOnlyList<string>>());
 
@@ -37,7 +40,7 @@ public static class ElmModule
             ?
             []
             :
-            parsedModulesByName[moduleName].importedModulesNames
+            parsedModulesByName[moduleName].parsedModule.ImportedModulesNames
             .SelectMany(
                 importedModuleName =>
                 EnumerateImportsOfModuleTransitive(importedModuleName)
@@ -61,7 +64,7 @@ public static class ElmModule
         return
             parsedModules
             .OrderBy(
-                parsedModule => parsedModule.moduleName,
+                parsedModule => parsedModule.parsedModule.ModuleName,
                 new DelegateComparer<IReadOnlyList<string>>(ModuleSortOrder!))
             .Select(parsedModule => parsedModule.moduleText)
             .ToImmutableList();

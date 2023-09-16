@@ -702,7 +702,8 @@ expandElmInteractiveEnvironmentWithModuleTexts environmentBefore contextModulesT
                                     Err ( file, error ) ->
                                         Err
                                             ("Failed to resolve dependencies for module "
-                                                ++ String.join "." (Elm.Syntax.Module.moduleName (Elm.Syntax.Node.value file.parsedModule.moduleDefinition))
+                                                ++ String.join "."
+                                                    (Elm.Syntax.Module.moduleName (Elm.Syntax.Node.value file.parsedModule.moduleDefinition))
                                                 ++ ": "
                                                 ++ error
                                             )
@@ -777,7 +778,10 @@ expandElmInteractiveEnvironmentWithModuleTexts environmentBefore contextModulesT
                             )
 
 
-listModuleTransitiveDependencies : List Elm.Syntax.File.File -> Elm.Syntax.File.File -> Result String (List (List String))
+listModuleTransitiveDependencies :
+    List Elm.Syntax.File.File
+    -> Elm.Syntax.File.File
+    -> Result String (List Elm.Syntax.ModuleName.ModuleName)
 listModuleTransitiveDependencies allFiles file =
     listModuleTransitiveDependenciesExcludingModules Set.empty allFiles file
         |> Result.mapError
@@ -839,7 +843,7 @@ getDirectDependenciesFromModule file =
                 |> List.map (Elm.Syntax.Node.value >> .moduleName >> Elm.Syntax.Node.value)
 
         implicit =
-            if List.member (Elm.Syntax.Node.value (moduleNameFromSyntaxFile file)) moduleNamesWithoutImplicitImport then
+            if List.member (Elm.Syntax.Node.value (moduleNameFromSyntaxFile file)) autoImportedModulesNames then
                 []
 
             else
@@ -1086,20 +1090,21 @@ compileElmModuleTextIntoNamedExports availableModules moduleToTranslate =
                 )
 
 
-moduleNamesWithoutImplicitImport : List (List String)
-moduleNamesWithoutImplicitImport =
-    autoImportedModulesNames
+autoImportedModulesNames : List (List String)
+autoImportedModulesNames =
+    autoImportedModulesExposingTagsNames
         ++ [ [ "Char" ]
            , [ "Tuple" ]
            ]
 
 
-autoImportedModulesNames : List (List String)
-autoImportedModulesNames =
+autoImportedModulesExposingTagsNames : List (List String)
+autoImportedModulesExposingTagsNames =
     [ [ "Basics" ]
     , [ "Maybe" ]
     , [ "List" ]
     , [ "String" ]
+    , [ "Result" ]
     ]
 
 
@@ -1889,7 +1894,7 @@ compileElmSyntaxPattern elmPattern =
                                     let
                                         matchingTagCondition =
                                             case
-                                                autoImportedModulesNames
+                                                autoImportedModulesExposingTagsNames
                                                     |> List.filterMap (Dict.get >> (|>) elmDeclarationsOverrides)
                                                     |> List.foldl Dict.union Dict.empty
                                                     |> Dict.get qualifiedName.name
