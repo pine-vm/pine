@@ -399,4 +399,246 @@ escapeChar char =
             String.fromChar char
 
 """
+    , """
+module Json.Decode exposing (..)
+
+
+import Json.Encode exposing (Value(..))
+
+
+{-| A structured error describing exactly how the decoder failed. You can use
+this to create more elaborate visualizations of a decoder problem. For example,
+you could show the entire JSON object and show the part causing the failure in
+red.
+-}
+type Error
+    = Field String Error
+    | Index Int Error
+    | OneOf (List Error)
+    | Failure String Value
+
+
+type alias Decoder a =
+    Value -> Result Error a
+
+
+temporaryStubErrorNotImplemented : Value -> Error
+temporaryStubErrorNotImplemented =
+    Failure "Json.Decode error not implemented yet"
+
+
+decodeValue : Decoder a -> Value -> Result Error a
+decodeValue decoder jsonValue =
+    decoder jsonValue
+
+
+{-| Do not do anything with a JSON value, just bring it into Elm as a `Value`.
+This can be useful if you have particularly complex data that you would like to
+deal with later. Or if you are going to send it out a port and do not care
+about its structure.
+-}
+value : Decoder Value
+value =
+    Ok
+
+
+{-| Decode a `null` value into some Elm value.
+
+    decodeString (null False) "null" == Ok False
+    decodeString (null 42) "null"    == Ok 42
+    decodeString (null 42) "42"      == Err ..
+    decodeString (null 42) "false"   == Err ..
+
+So if you ever see a `null`, this will return whatever value you specified.
+
+-}
+null : a -> Decoder a
+null ok jsonValue =
+    if jsonValue == NullValue then
+        Ok ok
+
+    else
+        Err (temporaryStubErrorNotImplemented jsonValue)
+
+
+bool : Decoder Bool
+bool jsonValue =
+    case jsonValue of
+        BoolValue boolVal ->
+            Ok boolVal
+
+        _ ->
+            Err (temporaryStubErrorNotImplemented jsonValue)
+
+
+int : Decoder Int
+int jsonValue =
+    case jsonValue of
+        IntValue intVal ->
+            Ok intVal
+
+        _ ->
+            Err (temporaryStubErrorNotImplemented jsonValue)
+
+
+string : Decoder String
+string jsonValue =
+    case jsonValue of
+        StringValue stringVal ->
+            Ok stringVal
+
+        _ ->
+            Err (temporaryStubErrorNotImplemented jsonValue)
+
+
+{-| Ignore the JSON and produce a certain Elm value.
+
+    decodeString (succeed 42) "true"    == Ok 42
+    decodeString (succeed 42) "[1,2,3]" == Ok 42
+    decodeString (succeed 42) "hello"   == Err ... -- this is not a valid JSON string
+
+This is handy when used with `oneOf` or `andThen`.
+
+-}
+succeed : a -> Decoder a
+succeed success _ =
+    Ok success
+
+
+{-| Ignore the JSON and make the decoder fail. This is handy when used with
+`oneOf` or `andThen` where you want to give a custom error message in some
+case.
+
+See the [`andThen`](#andThen) docs for an example.
+
+-}
+fail : String -> Decoder a
+fail error jsonValue =
+    Err (Failure error jsonValue)
+
+
+{-| Parse the given string into a JSON value and then run the `Decoder` on it.
+This will fail if the string is not well-formed JSON or if the `Decoder`
+fails for some reason.
+
+    decodeString int "4"     == Ok 4
+    decodeString int "1 + 2" == Err ...
+
+-}
+decodeString : Decoder a -> String -> Result Error a
+decodeString decoder jsonString =
+    case parseJsonString jsonString of
+        Err parseErr ->
+            Err (Failure ("Bad JSON: " ++ parseErr) NullValue)
+
+        Ok jsonValue ->
+            decodeValue decoder jsonValue
+
+
+parseJsonString : String -> Result String Value
+parseJsonString jsonString =
+    case parseValue (String.trim jsonString) of
+        ( Ok ok, "" ) ->
+            Ok ok
+
+        ( Ok _, rest ) ->
+            Err ("Unexpected string at the end: " ++ rest)
+
+        ( Err err, _ ) ->
+            Err err
+
+
+type alias Parser a =
+    String -> ( Result String a, String )
+
+
+parseValue : Parser Value
+parseValue str =
+    case str of
+        "" ->
+            ( Err "Unexpected end of input", "" )
+
+        _ ->
+            if String.startsWith "null" str then
+                ( Ok NullValue, String.dropLeft 4 str )
+
+            else if String.startsWith "true" str then
+                ( Ok (BoolValue True), String.dropLeft 4 str )
+
+            else if String.startsWith "false" str then
+                ( Ok (BoolValue False), String.dropLeft 5 str )
+
+            else if String.startsWith "\\"" str then
+                parseString (String.dropLeft 1 str)
+                    |> Tuple.mapFirst (Result.map StringValue)
+
+            else if String.startsWith "[" str then
+                parseArray (String.dropLeft 1 str)
+                    |> Tuple.mapFirst (Result.map ArrayValue)
+
+            else if String.startsWith "{" str then
+                parseObject (String.dropLeft 1 str)
+                    |> Tuple.mapFirst (Result.map ObjectValue)
+
+            else
+                parseInt str |> Tuple.mapFirst (Result.map IntValue)
+
+
+parseString : Parser String
+parseString str =
+    case String.uncons str of
+        Just ( '"', rest ) ->
+            ( Ok "", rest )
+
+        Just ( char, rest ) ->
+            parseString rest
+                |> Tuple.mapFirst (Result.map ((++) (String.fromChar char)))
+
+        Nothing ->
+            ( Err "Unexpected end of input while parsing string", "" )
+
+
+parseInt : Parser Int
+parseInt str =
+    let
+        ( digits, rest ) =
+            takeWhile Char.isDigit str |> (\\ds -> ( ds, String.dropLeft (String.length ds) str ))
+    in
+    if String.length digits > 0 then
+        ( Ok (String.toInt digits |> Maybe.withDefault 0), rest )
+
+    else
+        ( Err "Expected integer", str )
+
+
+takeWhile : (Char -> Bool) -> String -> String
+takeWhile predicate str =
+    case String.uncons str of
+        Just ( ch, rest ) ->
+            if predicate ch then
+                String.cons ch (takeWhile predicate rest)
+
+            else
+                ""
+
+        Nothing ->
+            ""
+
+
+parseArray : Parser (List Value)
+parseArray str =
+    -- Array parsing logic goes here
+    -- This would involve recursively using `parseValue` to parse each element of the array
+    -- and dealing with commas, whitespaces, and the closing bracket.
+    ( Err "Array parsing not implemented", str )
+
+
+parseObject : Parser (List ( String, Value ))
+parseObject str =
+    -- Object parsing logic goes here
+    -- Similar to `parseArray`, but also needs to handle the colon (:) separating keys and values.
+    ( Err "Object parsing not implemented", str )
+
+
+"""
     ]
