@@ -537,92 +537,101 @@ decodeString decoder jsonString =
 
 parseJsonString : String -> Result String Value
 parseJsonString jsonString =
-    case parseValue (String.trim jsonString) of
-        ( Ok ok, "" ) ->
-            Ok ok
+    case parseValue (String.toList (String.trim jsonString)) of
+        ( Ok ok, consumed ) ->
+            if consumed < String.length jsonString then
+                Err ("Unexpected string at the end: " ++ String.dropLeft consumed jsonString)
 
-        ( Ok _, rest ) ->
-            Err ("Unexpected string at the end: " ++ rest)
+            else
+                Ok ok
 
         ( Err err, _ ) ->
             Err err
 
 
 type alias Parser a =
-    String -> ( Result String a, String )
+    List Char -> ( Result String a, Int )
 
 
 parseValue : Parser Value
 parseValue str =
-    case str of
-        "" ->
-            ( Err "Unexpected end of input", "" )
+    if str == [] then
+        ( Err "Unexpected end of input", 0 )
 
-        _ ->
-            if String.startsWith "null" str then
-                ( Ok NullValue, String.dropLeft 4 str )
+    else if listStartsWith [ 'n', 'u', 'l', 'l' ] str then
+        ( Ok NullValue, 4 )
 
-            else if String.startsWith "true" str then
-                ( Ok (BoolValue True), String.dropLeft 4 str )
+    else if listStartsWith [ 't', 'r', 'u', 'e' ] str then
+        ( Ok (BoolValue True), 4 )
 
-            else if String.startsWith "false" str then
-                ( Ok (BoolValue False), String.dropLeft 5 str )
+    else if listStartsWith [ 'f', 'a', 'l', 's', 'e' ] str then
+        ( Ok (BoolValue False), 5 )
 
-            else if String.startsWith "\\"" str then
-                parseString (String.dropLeft 1 str)
-                    |> Tuple.mapFirst (Result.map StringValue)
+    else if listStartsWith [ '"' ] str then
+        parseString (List.drop 1 str)
+            |> Tuple.mapFirst (Result.map (String.fromList >> StringValue))
+            |> Tuple.mapSecond ((+) 1)
 
-            else if String.startsWith "[" str then
-                parseArray (String.dropLeft 1 str)
-                    |> Tuple.mapFirst (Result.map ArrayValue)
+    else if listStartsWith [ '[' ] str then
+        parseArray (List.drop 1 str)
+            |> Tuple.mapFirst (Result.map ArrayValue)
+            |> Tuple.mapSecond ((+) 1)
 
-            else if String.startsWith "{" str then
-                parseObject (String.dropLeft 1 str)
-                    |> Tuple.mapFirst (Result.map ObjectValue)
+    else if listStartsWith [ '{' ] str then
+        parseObject (List.drop 1 str)
+            |> Tuple.mapFirst (Result.map ObjectValue)
+            |> Tuple.mapSecond ((+) 1)
 
-            else
-                parseInt str |> Tuple.mapFirst (Result.map IntValue)
+    else
+        parseInt str
+            |> Tuple.mapFirst (Result.map IntValue)
 
 
-parseString : Parser String
+parseString : Parser (List Char)
 parseString str =
-    case String.uncons str of
-        Just ( '"', rest ) ->
-            ( Ok "", rest )
+    case str of
+        [] ->
+            ( Err "Unexpected end of input while parsing string", 0 )
 
-        Just ( char, rest ) ->
-            parseString rest
-                |> Tuple.mapFirst (Result.map ((++) (String.fromChar char)))
+        nextChar :: following ->
+            case nextChar of
+                '"' ->
+                    ( Ok [], 1 )
 
-        Nothing ->
-            ( Err "Unexpected end of input while parsing string", "" )
+                _ ->
+                    parseString following
+                        |> Tuple.mapFirst (Result.map ((::) nextChar))
+                        |> Tuple.mapSecond ((+) 1)
 
 
 parseInt : Parser Int
 parseInt str =
     let
-        ( digits, rest ) =
-            takeWhile Char.isDigit str |> (\\ds -> ( ds, String.dropLeft (String.length ds) str ))
+        digits =
+            takeWhile Char.isDigit str
+
+        offset =
+            List.length digits
     in
-    if String.length digits > 0 then
-        ( Ok (String.toInt digits |> Maybe.withDefault 0), rest )
+    if offset > 0 then
+        ( Ok (String.fromList digits |> String.toInt |> Maybe.withDefault 0), offset )
 
     else
-        ( Err "Expected integer", str )
+        ( Err "Expected integer", 0 )
 
 
-takeWhile : (Char -> Bool) -> String -> String
+takeWhile : (Char -> Bool) -> List Char -> List Char
 takeWhile predicate str =
-    case String.uncons str of
-        Just ( ch, rest ) ->
-            if predicate ch then
-                String.cons ch (takeWhile predicate rest)
+    case str of
+        [] ->
+            []
+
+        char :: rest ->
+            if predicate char then
+                char :: takeWhile predicate rest
 
             else
-                ""
-
-        Nothing ->
-            ""
+                []
 
 
 parseArray : Parser (List Value)
@@ -630,14 +639,19 @@ parseArray str =
     -- Array parsing logic goes here
     -- This would involve recursively using `parseValue` to parse each element of the array
     -- and dealing with commas, whitespaces, and the closing bracket.
-    ( Err "Array parsing not implemented", str )
+    ( Err "Array parsing not implemented", 0 )
 
 
 parseObject : Parser (List ( String, Value ))
 parseObject str =
     -- Object parsing logic goes here
     -- Similar to `parseArray`, but also needs to handle the colon (:) separating keys and values.
-    ( Err "Object parsing not implemented", str )
+    ( Err "Object parsing not implemented", 0 )
+
+
+listStartsWith : List a -> List a -> Bool
+listStartsWith prefix list =
+    List.take (List.length prefix) list == prefix
 
 
 """
