@@ -1,0 +1,8 @@
+let
+    charCodeIsWhitespace charCode =
+        charCode == 32 || charCode == 9 || charCode == 10 || charCode == 13
+in
+[ charCodeIsWhitespace 33
+, charCodeIsWhitespace 32
+, charCodeIsWhitespace 9
+]
