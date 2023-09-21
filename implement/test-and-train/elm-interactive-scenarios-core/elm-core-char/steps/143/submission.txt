@@ -1,0 +1,11 @@
+[ Char.isHexDigit ' '
+, Char.isHexDigit '0'
+, Char.isHexDigit '1'
+, Char.isHexDigit '9'
+, Char.isHexDigit 'a'
+, Char.isHexDigit 'A'
+, Char.isHexDigit 'f'
+, Char.isHexDigit 'F'
+, Char.isHexDigit 'g'
+, Char.isHexDigit 'G'
+]

@@ -1,0 +1,7 @@
+[ Char.isDigit ' '
+, Char.isDigit '0'
+, Char.isDigit '1'
+, Char.isDigit '9'
+, Char.isDigit 'a'
+, Char.isDigit 'A'
+]

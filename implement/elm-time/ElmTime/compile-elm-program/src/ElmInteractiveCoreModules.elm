@@ -564,8 +564,67 @@ fromCode code =
     Pine_kernel.skip [ 1, code ]
 
 
+{-| Detect digits `0123456789`
+
+    isDigit '0' == True
+
+    isDigit '1'
+        == True
+        ... isDigit '9'
+        == True
+
+    isDigit 'a' == False
+
+    isDigit 'b' == False
+
+    isDigit 'A' == False
+
+-}
+isDigit : Char -> Bool
 isDigit char =
-    char >= '0' && char <= '9'
+    let
+        code =
+            toCode char
+    in
+    (code <= 0x39) && (0x30 <= code)
+
+
+{-| Detect octal digits `01234567`
+
+    isOctDigit '0' == True
+
+    isOctDigit '1'
+        == True
+        ... isOctDigit '7'
+        == True
+
+    isOctDigit '8' == False
+
+    isOctDigit 'a' == False
+
+    isOctDigit 'A' == False
+
+-}
+isOctDigit : Char -> Bool
+isOctDigit char =
+    let
+        code =
+            toCode char
+    in
+    code <= 0x37 && 0x30 <= code
+
+
+{-| Detect hexadecimal digits `0123456789abcdefABCDEF`
+-}
+isHexDigit : Char -> Bool
+isHexDigit char =
+    let
+        code =
+            toCode char
+    in
+    (0x30 <= code && code <= 0x39)
+        || (0x41 <= code && code <= 0x46)
+        || (0x61 <= code && code <= 0x66)
 
 """
     , """

@@ -606,6 +606,29 @@ parseString str =
 
 parseInt : Parser Int
 parseInt str =
+    case str of
+        '-' :: rest ->
+            let
+                ( result, offset ) =
+                    parseIntWithoutSign rest
+            in
+            case result of
+                Ok intAbsolute ->
+                    ( Ok -intAbsolute
+                    , offset + 1
+                    )
+
+                Err err ->
+                    ( Err err
+                    , offset + 1
+                    )
+
+        _ ->
+            parseIntWithoutSign str
+
+
+parseIntWithoutSign : Parser Int
+parseIntWithoutSign str =
     let
         digits =
             takeWhile Char.isDigit str

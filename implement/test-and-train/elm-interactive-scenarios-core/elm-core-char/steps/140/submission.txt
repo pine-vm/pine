@@ -1,0 +1,1 @@
+Char.isHexDigit '0'
