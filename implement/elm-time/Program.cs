@@ -18,7 +18,7 @@ namespace ElmTime;
 
 public class Program
 {
-    public static string AppVersionId => "2023-09-21";
+    public static string AppVersionId => "2023-09-22";
 
     private static int AdminInterfaceDefaultPort => 4000;
 
@@ -875,10 +875,16 @@ public class Program
                             description: "Test a list of interactive scenarios from the given directory. Each scenario specifies the submissions and can also specify expectations.",
                             optionType: CommandOptionType.MultipleValue);
 
-                    var compileToOption =
+                    var compileOption =
                         testCommand.Option(
-                            template: "--compile-to",
-                            description: "Option to compile frequently used expressions to a C# file",
+                            template: "--compile",
+                            description: "Compile an optimized engine first and run the test scenarios in there.",
+                            optionType: CommandOptionType.NoValue);
+
+                    var saveCompiledCSharpOption =
+                        testCommand.Option(
+                            template: "--save-compiled-csharp",
+                            description: "Path to a file to save a C# representation of the compiled pine expressions",
                             optionType: CommandOptionType.SingleValue);
 
                     testCommand.OnExecute(() =>
@@ -965,8 +971,109 @@ public class Program
                         var compileElmProgramCodeFiles = elmCompilerOption.loadElmCompilerFromOption(console);
                         var elmEngineType = elmEngineOption.parseElmEngineTypeFromOption();
 
+                        var aggregateCompositionTree =
+                            TreeNodeWithStringPath.SortedTree(
+                                [.. namedDistinctScenarios.Select(scenario => (scenario.Key, scenario.Value.loadedScenario.component))]);
+
+                        var parsedScenarios =
+                        ElmInteractive.TestElmInteractive.ParseElmInteractiveScenarios(
+                            aggregateCompositionTree,
+                            console);
+
+                        var saveCompiledCSharp = saveCompiledCSharpOption.Value();
+
                         ElmInteractive.IInteractiveSession newInteractiveSessionFromAppCode(TreeNodeWithStringPath? appCodeTree)
                         {
+                            if (compileOption.HasValue() || saveCompiledCSharp is not null)
+                            {
+                                var profilingScenarios =
+                                parsedScenarios.NamedDistinctScenarios.Values
+                                .ToImmutableList();
+
+                                console.WriteLine("Starting to compile for " + profilingScenarios.Count + " scenarios...");
+
+                                var syntaxContainerConfig =
+                                new PineCompileToDotNet.SyntaxContainerConfig(
+                                    containerTypeName: "container_type",
+                                    dictionaryMemberName: "compiled_expressions_dictionary");
+
+                                var compileResult =
+                                ElmInteractive.InteractiveSessionPine.CompileForProfiledScenarios(
+                                    compileElmProgramCodeFiles: compileElmProgramCodeFiles,
+                                    profilingScenarios,
+                                    syntaxContainerConfig: syntaxContainerConfig,
+                                    limitNumber: 10);
+
+                                var compileToFileResult =
+                                compileResult
+                                .Map(compiledClass =>
+                                PineVMConfiguration.GenerateCSharpFile(
+                                    syntaxContainerConfig: syntaxContainerConfig,
+                                    compileCSharpClassResult: compiledClass));
+
+                                return
+                                compileToFileResult
+                                .AndThen(
+                                    compileSuccess =>
+                                    {
+                                        if (saveCompiledCSharp is not null)
+                                        {
+                                            var outputPath = Path.GetFullPath(saveCompiledCSharp);
+
+                                            var outputDirectory = Path.GetDirectoryName(outputPath);
+
+                                            if (outputDirectory is not null)
+                                                Directory.CreateDirectory(outputDirectory);
+
+                                            File.WriteAllText(outputPath, compileSuccess.FileText);
+
+                                            console.WriteLine("Saved the compiled code to " + outputPath, color: Pine.IConsole.TextColor.Green);
+                                        }
+
+                                        var compileToAssemblyResult =
+                                        compileResult
+                                        .AndThen(compileOk => PineCompileToDotNet.CompileToAssembly(syntaxContainerConfig, compileOk));
+
+                                        return
+                                        compileToAssemblyResult
+                                        .MapError(err => "Compiling to assembly failed:\n" + err)
+                                        .AndThen(
+                                            compileToAssemblyOk =>
+                                            {
+                                                console.WriteLine(
+                                                    "Compiled to assembly with " + compileToAssemblyOk.Assembly.Length + " bytes");
+
+                                                return
+                                                compileToAssemblyOk
+                                                .BuildCompiledExpressionsDictionary()
+                                                .MapError(err => "Building compiled expressions dictionary failed:\n" + err)
+                                                .Map(buildDictionaryOk =>
+                                                {
+                                                    console.WriteLine(
+                                                        "Dictionary of compiled expressions contains " +
+                                                        buildDictionaryOk.Count + " entries.");
+
+                                                    var pineVMWithCompiledAssembly =
+                                                        new PineVM(
+                                                            decodeExpressionOverrides: buildDictionaryOk,
+                                                            overrideEvaluateExpression: null);
+
+                                                    return new ElmInteractive.InteractiveSessionPine(
+                                                        compileElmProgramCodeFiles: compileElmProgramCodeFiles,
+                                                        appCodeTree: appCodeTree,
+                                                        pineVMWithCompiledAssembly);
+                                                });
+                                            });
+                                    })
+                                .Extract(
+                                    fromErr: err =>
+                                    {
+                                        console.WriteLine("Failed compilation:\n" + err, color: Pine.IConsole.TextColor.Red);
+
+                                        throw new Exception("Failed compilation: " + err);
+                                    });
+                            }
+
                             return ElmInteractive.IInteractiveSession.Create(
                                 compileElmProgramCodeFiles: compileElmProgramCodeFiles,
                                 appCodeTree: appCodeTree,
@@ -978,131 +1085,11 @@ public class Program
                             CommonConversion.StringBase16(PineValueHashTree.ComputeHashSorted(compileElmProgramCodeFiles))[..8],
                             newInteractiveSessionFromAppCode);
 
-                        var aggregateCompositionTree =
-                            TreeNodeWithStringPath.SortedTree(
-                                namedDistinctScenarios.Select(scenario => (scenario.Key, scenario.Value.loadedScenario.component)).ToImmutableList());
-
                         var scenariosResults =
                         ElmInteractive.TestElmInteractive.TestElmInteractiveScenarios(
-                            aggregateCompositionTree,
+                            parsedScenarios,
                             interactiveConfig,
                             console: console);
-
-                        if (compileToOption.Value() is { } compileTo)
-                        {
-                            var profilingScenarios =
-                            scenariosResults
-                            .Select(sr => sr.Value.scenario)
-                            .ToImmutableList();
-
-                            console.WriteLine("Starting to compile for " + profilingScenarios.Count + " scenarios...");
-
-                            var syntaxContainerConfig =
-                            new PineCompileToDotNet.SyntaxContainerConfig(
-                                containerTypeName: "container_type",
-                                dictionaryMemberName: "compiled_expressions_dictionary");
-
-                            var compileResult =
-                            ElmInteractive.InteractiveSessionPine.CompileForProfiledScenarios(
-                                compileElmProgramCodeFiles: compileElmProgramCodeFiles,
-                                profilingScenarios,
-                                syntaxContainerConfig: syntaxContainerConfig,
-                                limitNumber: 10);
-
-                            var compileToFileResult =
-                            compileResult
-                            .Map(compiledClass =>
-                            PineVMConfiguration.GenerateCSharpFile(
-                                syntaxContainerConfig: syntaxContainerConfig,
-                                compileCSharpClassResult: compiledClass));
-
-                            var returnValue =
-                            compileToFileResult
-                            .Unpack(
-                                fromErr: err =>
-                                {
-                                    console.WriteLine("Failed compilation:\n" + err, color: Pine.IConsole.TextColor.Red);
-
-                                    return 1;
-                                },
-                                fromOk: compileSuccess =>
-                                {
-                                    var outputPath = Path.GetFullPath(compileTo);
-
-                                    var outputDirectory = Path.GetDirectoryName(outputPath);
-
-                                    if (outputDirectory is not null)
-                                        Directory.CreateDirectory(outputDirectory);
-
-                                    File.WriteAllText(outputPath, compileSuccess.FileText);
-                                    console.WriteLine("Saved the compiled code to " + outputPath, color: Pine.IConsole.TextColor.Green);
-
-                                    var compileToAssemblyResult =
-                                    compileResult
-                                    .AndThen(compileOk => PineCompileToDotNet.CompileToAssembly(syntaxContainerConfig, compileOk));
-
-                                    return
-                                    compileToAssemblyResult
-                                    .MapError(err => "Compiling to assembly failed:\n" + err)
-                                    .AndThen(
-                                        compileToAssemblyOk =>
-                                        {
-                                            console.WriteLine(
-                                                "Compiled to assembly with " + compileToAssemblyOk.Assembly.Length + " bytes");
-
-                                            return
-                                            compileToAssemblyOk
-                                            .BuildCompiledExpressionsDictionary()
-                                            .MapError(err => "Building compiled expressions dictionary failed:\n" + err)
-                                            .Map(buildDictionaryOk =>
-                                            {
-                                                console.WriteLine(
-                                                    "Dictionary of compiled expressions contains " +
-                                                    buildDictionaryOk.Count + " entries.");
-
-                                                ElmInteractive.IInteractiveSession newInteractiveSessionWithCompiledAssembly(
-                                                    TreeNodeWithStringPath? appCodeTree)
-                                                {
-                                                    var pineVMWithCompiledAssembly =
-                                                        new PineVM(
-                                                            decodeExpressionOverrides: buildDictionaryOk,
-                                                            overrideEvaluateExpression: null);
-
-                                                    return new ElmInteractive.InteractiveSessionPine(
-                                                        compileElmProgramCodeFiles: compileElmProgramCodeFiles,
-                                                        appCodeTree: appCodeTree,
-                                                        pineVMWithCompiledAssembly);
-                                                }
-
-                                                var interactiveConfig = new ElmInteractive.InteractiveSessionConfig(
-                                                    CompilerId:
-                                                    CommonConversion.StringBase16(PineValueHashTree.ComputeHashSorted(compileElmProgramCodeFiles))[..8],
-                                                    newInteractiveSessionFromAppCode);
-
-                                                console.WriteLine("Running tests with compiled assembly...");
-
-                                                var compiledScenariosResults =
-                                                    ElmInteractive.TestElmInteractive.TestElmInteractiveScenarios(
-                                                        aggregateCompositionTree,
-                                                        interactiveConfig,
-                                                        console: console);
-
-                                                return "Compiled to assembly with " + compileToAssemblyOk.Assembly.Length + " bytes";
-                                            });
-                                        })
-                                    .Unpack(
-                                        fromErr: err =>
-                                        {
-                                            console.WriteLine(err, color: Pine.IConsole.TextColor.Red);
-                                            return 1;
-                                        },
-                                        fromOk: ok =>
-                                        {
-                                            console.WriteLine(ok, color: Pine.IConsole.TextColor.Green);
-                                            return 0;
-                                        });
-                                });
-                        }
                     });
                 });
 
@@ -1161,7 +1148,7 @@ public class Program
                                 fromTree: tree =>
                                 tree.Select(stepDirectory =>
                                 ElmInteractive.TestElmInteractive.ParseScenarioStep(stepDirectory.itemValue)
-                                .Extract(fromErr: error => throw new Exception(error)).submission))
+                                .Extract(fromErr: error => throw new Exception(error)).Submission))
                                 .ToImmutableList();
                         })
                 };

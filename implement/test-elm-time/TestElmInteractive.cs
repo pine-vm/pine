@@ -40,10 +40,21 @@ public class TestElmInteractive
             })
             .ToImmutableList();
 
+        var scenariosTree =
+            TreeNodeWithStringPath.SortedTree(
+                scenarios
+                .Select(scenario =>
+                (name: scenario.scenarioName,
+                component: LoadFromLocalFilesystem.LoadSortedTreeFromPath(scenario.scenarioDirectory)!))
+                .ToImmutableList());
+
+        var parsedScenarios =
+            ElmTime.ElmInteractive.TestElmInteractive.ParseElmInteractiveScenarios(scenariosTree, console);
+
         var scenariosResults =
             ElmTime.ElmInteractive.TestElmInteractive.TestElmInteractiveScenarios(
-                scenarios,
-                scenario => LoadFromLocalFilesystem.LoadSortedTreeFromPath(scenario.scenarioDirectory)!,
+                parsedScenarios.NamedDistinctScenarios,
+                namedScenario => namedScenario.Value,
                 appCode => ElmTime.ElmInteractive.IInteractiveSession.Create(
                     compileElmProgramCodeFiles: ElmTime.ElmInteractive.IInteractiveSession.CompileElmProgramCodeFilesDefault.Value,
                     appCodeTree: appCode,
@@ -51,7 +62,7 @@ public class TestElmInteractive
 
         var allSteps =
             scenariosResults
-            .SelectMany(scenario => scenario.Value.stepsReports.Select(step => (scenario, step)))
+            .SelectMany(scenario => scenario.Value.StepsReports.Select(step => (scenario, step)))
             .ToImmutableList();
 
         var passedSteps =
@@ -62,7 +73,7 @@ public class TestElmInteractive
 
         var failedScenarios =
             failedSteps
-            .GroupBy(failedStep => failedStep.scenario.Key.scenarioName)
+            .GroupBy(failedStep => failedStep.scenario.Key.Key)
             .ToImmutableSortedDictionary(
                 keySelector: failedScenario => failedScenario.Key,
                 elementSelector: failedScenario => failedScenario);

@@ -292,8 +292,8 @@ public class InteractiveSessionPine : IInteractiveSession
             appCodeTree: null,
             profilingPineVM);
 
-        foreach (var step in scenario.steps)
-            profilingSession.Submit(step.step.submission);
+        foreach (var step in scenario.Steps)
+            profilingSession.Submit(step.step.Submission);
 
         var pineExpressionsToOptimize =
             expressionEvaluations

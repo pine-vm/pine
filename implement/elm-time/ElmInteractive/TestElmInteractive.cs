@@ -10,29 +10,33 @@ namespace ElmTime.ElmInteractive;
 
 public class TestElmInteractive
 {
+    public record ParsedScenarios(
+        TreeNodeWithStringPath ScenariosTree,
+        string ScenariosTreeCompositionHash,
+        IReadOnlyDictionary<string, Scenario> NamedDistinctScenarios);
+
     public record Scenario(
-        TreeNodeWithStringPath? appCodeTree,
-        IReadOnlyList<(string stepName, ScenarioStep step)> steps);
+        TreeNodeWithStringPath? AppCodeTree,
+        IReadOnlyList<(string stepName, ScenarioStep step)> Steps);
 
     public record ScenarioStep(
-        string submission,
-        string? expectedResponse);
+        string Submission,
+        string? ExpectedResponse);
 
     public record InteractiveScenarioTestReport(
-        Scenario scenario,
-        ImmutableList<(string name, Result<InteractiveScenarioTestStepFailure, object> result)> stepsReports,
-        TimeSpan elapsedTime)
+        Scenario Scenario,
+        ImmutableList<(string name, Result<InteractiveScenarioTestStepFailure, object> result)> StepsReports,
+        TimeSpan ElapsedTime)
     {
-        public bool Passed => stepsReports.All(s => s.result.IsOk());
+        public bool Passed => StepsReports.All(s => s.result.IsOk());
     }
 
     public record InteractiveScenarioTestStepFailure(
         string submission,
         string errorAsText);
 
-    public static ImmutableDictionary<string, InteractiveScenarioTestReport> TestElmInteractiveScenarios(
+    public static ParsedScenarios ParseElmInteractiveScenarios(
         TreeNodeWithStringPath scenariosTree,
-        IInteractiveSessionConfig interactiveConfig,
         IConsole console)
     {
         var scenariosTreeComposition =
@@ -44,7 +48,15 @@ public class TestElmInteractive
         var namedDistinctScenarios =
             scenariosTree switch
             {
-                TreeNodeWithStringPath.TreeNode treeNode => treeNode.Elements,
+                TreeNodeWithStringPath.TreeNode treeNode =>
+                treeNode.Elements
+                .ToImmutableDictionary(
+                    keySelector:
+                    treeNode => treeNode.name,
+                    elementSelector:
+                    treeNode =>
+                    ParseScenario(treeNode.component)
+                    .Extract(err => throw new Exception("Failed parsing scenario: " + err))),
 
                 _ => throw new InvalidOperationException("Unexpected scenarios tree type: " + scenariosTree.GetType().FullName),
             };
@@ -53,17 +65,28 @@ public class TestElmInteractive
             "Successfully loaded " + namedDistinctScenarios.Count +
             " distinct scenario(s) from composition " + scenariosTreeCompositionHash + ".");
 
+        return new ParsedScenarios(
+            ScenariosTree: scenariosTree,
+            ScenariosTreeCompositionHash: scenariosTreeCompositionHash,
+            NamedDistinctScenarios: namedDistinctScenarios);
+    }
+
+    public static ImmutableDictionary<string, InteractiveScenarioTestReport> TestElmInteractiveScenarios(
+        ParsedScenarios scenarios,
+        IInteractiveSessionConfig interactiveConfig,
+        IConsole console)
+    {
         var exceptLoadingStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
         var scenariosResults =
             TestElmInteractiveScenarios(
-                namedDistinctScenarios,
-                namedScenario => namedScenario.component,
+                scenarios.NamedDistinctScenarios,
+                namedScenario => namedScenario.Value,
                 interactiveConfig.InteractiveSessionFromAppCode);
 
         var allSteps =
             scenariosResults
-            .SelectMany(scenario => scenario.Value.stepsReports.Select(step => (scenario, step)))
+            .SelectMany(scenario => scenario.Value.StepsReports.Select(step => (scenario, step)))
         .ToImmutableList();
 
         console.WriteLine(scenariosResults.Count + " scenario(s) resulted in " + allSteps.Count + " steps.");
@@ -76,7 +99,7 @@ public class TestElmInteractive
 
         var aggregateDuration =
             scenariosResults
-            .Select(scenario => scenario.Value.elapsedTime)
+            .Select(scenario => scenario.Value.ElapsedTime)
             .Aggregate(seed: TimeSpan.Zero, func: (aggregate, scenarioTime) => aggregate + scenarioTime);
 
         var overallStats = new[]
@@ -92,13 +115,13 @@ public class TestElmInteractive
                 " - ",
                 (!failedSteps.IsEmpty ? "Failed" : "Passed") + "!",
                 string.Join(", ", overallStats.Select(stat => stat.label + ": " + stat.value)),
-                scenariosTreeCompositionHash[..10] +
+                scenarios.ScenariosTreeCompositionHash[..10] +
                 " (elm-time " + Program.AppVersionId + " with Elm compiler " + interactiveConfig.CompilerId + ")"),
             color: !failedSteps.IsEmpty ? IConsole.TextColor.Red : IConsole.TextColor.Green);
 
         var failedScenarios =
             failedSteps
-            .GroupBy(failedStep => failedStep.scenario.Key.name)
+            .GroupBy(failedStep => failedStep.scenario.Key.Key)
             .ToImmutableSortedDictionary(
                 keySelector: failedScenario => failedScenario.Key,
                 elementSelector: failedScenario => failedScenario);
@@ -123,13 +146,13 @@ public class TestElmInteractive
         return
             scenariosResults
             .ToImmutableDictionary(
-                i => i.Key.name,
+                i => i.Key.Key,
                 i => i.Value);
     }
 
     public static ImmutableDictionary<TContainer, InteractiveScenarioTestReport> TestElmInteractiveScenarios<TContainer>(
         IReadOnlyCollection<TContainer> scenarioContainers,
-        Func<TContainer, TreeNodeWithStringPath> getScenario,
+        Func<TContainer, Scenario> getScenario,
         Func<TreeNodeWithStringPath?, IInteractiveSession> interactiveSessionFromAppCode) where TContainer : notnull =>
         scenarioContainers
         .AsParallel()
@@ -141,32 +164,28 @@ public class TestElmInteractive
             elementSelector: s => s.testReport);
 
     public static InteractiveScenarioTestReport TestElmInteractiveScenario(
-        TreeNodeWithStringPath scenarioTree,
+        Scenario parsedScenario,
         Func<TreeNodeWithStringPath?, IInteractiveSession> interactiveSessionFromAppCode)
     {
         var totalStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
-        var parsedScenario =
-            ParseScenario(scenarioTree)
-            .Extract(err => throw new Exception("Failed parsing scenario: " + err));
-
-        using var interactiveSession = interactiveSessionFromAppCode(parsedScenario.appCodeTree);
+        using var interactiveSession = interactiveSessionFromAppCode(parsedScenario.AppCodeTree);
 
         var stepsReports =
-            parsedScenario.steps
+            parsedScenario.Steps
             .Select(sessionStep =>
             {
                 Result<InteractiveScenarioTestStepFailure, object> getResult()
                 {
                     try
                     {
-                        var evalResult = interactiveSession.Submit(sessionStep.step.submission);
+                        var evalResult = interactiveSession.Submit(sessionStep.step.Submission);
 
                         var evalOk =
                         evalResult
                         .Extract(evalError => throw new AssertFailedException("Submission result has error: " + evalError));
 
-                        if (sessionStep.step.expectedResponse is { } expectedResponse)
+                        if (sessionStep.step.ExpectedResponse is { } expectedResponse)
                         {
                             if (expectedResponse != evalOk.interactiveResponse?.displayText)
                             {
@@ -178,7 +197,7 @@ public class TestElmInteractive
 
                                 return Result<InteractiveScenarioTestStepFailure, object>.err(
                                     new InteractiveScenarioTestStepFailure(
-                                        submission: sessionStep.step.submission,
+                                        submission: sessionStep.step.Submission,
                                         errorAsText: errorText));
                             }
                         }
@@ -187,7 +206,7 @@ public class TestElmInteractive
                     {
                         return Result<InteractiveScenarioTestStepFailure, object>.err(
                             new InteractiveScenarioTestStepFailure(
-                                submission: sessionStep.step.submission,
+                                submission: sessionStep.step.Submission,
                                 errorAsText: "Runtime exception:\n" + e));
                     }
 
@@ -199,9 +218,9 @@ public class TestElmInteractive
             .ToImmutableList();
 
         return new InteractiveScenarioTestReport(
-            scenario: parsedScenario,
-            stepsReports: stepsReports,
-            elapsedTime: totalStopwatch.Elapsed);
+            Scenario: parsedScenario,
+            StepsReports: stepsReports,
+            ElapsedTime: totalStopwatch.Elapsed);
     }
 
     public static Result<string, Scenario> ParseScenario(TreeNodeWithStringPath scenarioTree)
@@ -246,7 +265,7 @@ public class TestElmInteractive
                 .Map(parsedStep => (stepName, parsedStep));
             })
             .ListCombine()
-            .Map(steps => new Scenario(appCodeTree: appCodeTree, steps: steps));
+            .Map(steps => new Scenario(AppCodeTree: appCodeTree, Steps: steps));
     }
 
     public static Result<string, ScenarioStep> ParseScenarioStep(TreeNodeWithStringPath sessionStep)
