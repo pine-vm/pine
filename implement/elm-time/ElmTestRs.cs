@@ -236,7 +236,8 @@ public class ElmTestRs
 
             return
                 ([.. textsFromLabels
-                , .. textsFromFailures.Select(textFromFailure => ("\n    " + textFromFailure, ElmTestRsConsoleOutputColor.DefaultColor))],
+                ,
+                    .. textsFromFailures.Select(textFromFailure => ("\n    " + textFromFailure, ElmTestRsConsoleOutputColor.DefaultColor))],
                     null);
         }
 
@@ -244,9 +245,9 @@ public class ElmTestRs
     }
 }
 
-public record ElmTestRsConsoleOutputColor(object? Default = null, object? Red = null, object? Green = null)
+public enum ElmTestRsConsoleOutputColor
 {
-    public static ElmTestRsConsoleOutputColor DefaultColor => new(Default: new object());
-    public static ElmTestRsConsoleOutputColor RedColor => new(Red: new object());
-    public static ElmTestRsConsoleOutputColor GreenColor => new(Green: new object());
+    DefaultColor = 0,
+    RedColor = 2,
+    GreenColor = 4,
 }

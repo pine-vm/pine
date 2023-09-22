@@ -114,10 +114,9 @@ public class Program
                 checkedInstallation.executableIsRegisteredOnPath
                 ?
                 Array.Empty<CommandLineApplication>() :
-                new[]
-                {
+                [
                     installCommand,
-                };
+                ];
 
             var commonCmdGroups = new[]
             {
@@ -668,17 +667,17 @@ public class Program
 
                     foreach (var coloredText in eventOutput.text)
                     {
-                        if (coloredText.color.Red != null)
+                        switch (coloredText.color)
                         {
-                            Console.ForegroundColor = ConsoleColor.Red;
-                        }
-                        else if (coloredText.color.Green != null)
-                        {
-                            Console.ForegroundColor = ConsoleColor.Green;
-                        }
-                        else
-                        {
-                            Console.ResetColor();
+                            case ElmTestRsConsoleOutputColor.RedColor:
+                                Console.ForegroundColor = ConsoleColor.Red;
+                                break;
+                            case ElmTestRsConsoleOutputColor.GreenColor:
+                                Console.ForegroundColor = ConsoleColor.Green;
+                                break;
+                            default:
+                                Console.ResetColor();
+                                break;
                         }
 
                         Console.Write(coloredText.text);
@@ -1353,7 +1352,7 @@ public class Program
                     new[] { debugOption, optimizeOption }
                     .SelectMany(optionToForward =>
                     optionToForward.HasValue() ?
-                    new[] { "--" + optionToForward.LongName } :
+                    ["--" + optionToForward.LongName] :
                     Array.Empty<string>())
                     .ToImmutableList();
 
