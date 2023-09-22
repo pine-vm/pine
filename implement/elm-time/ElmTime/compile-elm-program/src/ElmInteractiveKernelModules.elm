@@ -610,7 +610,7 @@ parseInt str =
         '-' :: rest ->
             let
                 ( result, offset ) =
-                    parseIntWithoutSign rest
+                    parseUnsignedInt rest
             in
             case result of
                 Ok intAbsolute ->
@@ -624,37 +624,93 @@ parseInt str =
                     )
 
         _ ->
-            parseIntWithoutSign str
+            parseUnsignedInt str
 
 
-parseIntWithoutSign : Parser Int
-parseIntWithoutSign str =
+parseUnsignedInt : Parser Int
+parseUnsignedInt str =
     let
-        digits =
-            takeWhile Char.isDigit str
-
-        offset =
-            List.length digits
+        digitsCount =
+            countCharsWhile Char.isDigit str
     in
-    if offset > 0 then
-        ( Ok (String.fromList digits |> String.toInt |> Maybe.withDefault 0), offset )
+    if digitsCount > 0 then
+        ( Ok (toUnsignedIntFromList (List.take digitsCount str) |> Maybe.withDefault 0)
+        , digitsCount
+        )
 
     else
         ( Err "Expected integer", 0 )
 
 
-takeWhile : (Char -> Bool) -> List Char -> List Char
-takeWhile predicate str =
+toUnsignedIntFromList : List Char -> Maybe Int
+toUnsignedIntFromList string =
+    let
+        digitValueFromCharacter char =
+            case char of
+                '0' ->
+                    Just 0
+
+                '1' ->
+                    Just 1
+                
+                '2' ->
+                    Just 2
+                
+                '3' ->
+                    Just 3
+                
+                '4' ->
+                    Just 4
+
+                '5' ->
+                    Just 5
+
+                '6' ->
+                    Just 6
+
+                '7' ->
+                    Just 7
+
+                '8' ->
+                    Just 8
+
+                '9' ->
+                    Just 9
+
+                _ ->
+                    Nothing
+
+    in
+    case string of
+        [] ->
+            Nothing
+
+        digits ->
+            List.foldl
+                (\\maybeDigitValue maybeAggregate ->
+                    case (maybeDigitValue, maybeAggregate) of
+                        (Just digitValue, Just aggregate) ->
+                            Just (aggregate * 10 + digitValue)
+                        
+                        _ ->
+                            Nothing
+                )
+                (Just 0)
+                (List.map digitValueFromCharacter digits)
+
+
+countCharsWhile : (Char -> Bool) -> List Char -> Int
+countCharsWhile predicate str =
     case str of
         [] ->
-            []
+            0
 
         char :: rest ->
             if predicate char then
-                char :: takeWhile predicate rest
+                countCharsWhile predicate rest + 1
 
             else
-                []
+                0
 
 
 parseArray : Parser (List Value)
