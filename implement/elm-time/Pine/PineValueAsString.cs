@@ -55,6 +55,6 @@ public static class PineValueAsString
                 i += 1;
         }
 
-        return codePoints.ToArray();
+        return [.. codePoints];
     }
 }

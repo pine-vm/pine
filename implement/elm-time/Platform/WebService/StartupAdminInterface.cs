@@ -16,6 +16,12 @@ using System.Linq;
 using System.Net.Http.Headers;
 using System.Text;
 
+using ApiRouteMethodConfig =
+    System.Func<
+        Microsoft.AspNetCore.Http.HttpContext,
+        ElmTime.Platform.WebService.StartupAdminInterface.PublicHostConfiguration?,
+        System.Threading.Tasks.Task>;
+
 namespace ElmTime.Platform.WebService;
 
 public class StartupAdminInterface
@@ -87,7 +93,7 @@ public class StartupAdminInterface
         services.AddSingleton(getDateTimeOffset);
     }
 
-    private record PublicHostConfiguration(
+    public record PublicHostConfiguration(
         PersistentProcessLiveRepresentation processLiveRepresentation,
         IHost webHost);
 
@@ -119,7 +125,7 @@ public class StartupAdminInterface
         {
             lock (avoidConcurrencyLock)
             {
-                if (publicAppHost == null)
+                if (publicAppHost is null)
                     return;
 
                 logger.LogInformation("Begin to stop the public app.");
@@ -290,7 +296,30 @@ public class StartupAdminInterface
 
         startPublicApp();
 
-        app.Run(async context =>
+        app.Run(
+            AdminInterfaceRun(
+                logger: logger,
+                processStoreFileStore: processStoreFileStore,
+                processStoreWriter: processStoreWriter,
+                adminPassword: adminPassword,
+                getPublicAppHost: () => publicAppHost,
+                avoidConcurrencyLock: avoidConcurrencyLock,
+                startPublicApp: startPublicApp,
+                stopPublicApp: stopPublicApp));
+    }
+
+    private static RequestDelegate AdminInterfaceRun(
+        ILogger logger,
+        IFileStore processStoreFileStore,
+        IProcessStoreWriter processStoreWriter,
+        string? adminPassword,
+        Func<PublicHostConfiguration?> getPublicAppHost,
+        object avoidConcurrencyLock,
+        Action startPublicApp,
+        Action stopPublicApp)
+    {
+        return
+        async context =>
         {
             var bodyControlFeature = context.Features.Get<Microsoft.AspNetCore.Http.Features.IHttpBodyControlFeature>();
             if (bodyControlFeature != null)
@@ -301,7 +330,7 @@ public class StartupAdminInterface
             {
                 context.Request.Headers.TryGetValue("Authorization", out var requestAuthorizationHeaderValue);
 
-                context.Response.Headers.Add("X-Powered-By", "Elm-Time");
+                context.Response.Headers.XPoweredBy = "Elm-Time";
 
                 AuthenticationHeaderValue.TryParse(
                     requestAuthorizationHeaderValue.FirstOrDefault(), out var requestAuthorization);
@@ -326,9 +355,7 @@ public class StartupAdminInterface
                     string.Equals("basic", requestAuthorization?.Scheme, StringComparison.OrdinalIgnoreCase)))
                 {
                     context.Response.StatusCode = 401;
-                    context.Response.Headers.Add(
-                        "WWW-Authenticate",
-                        @"Basic realm=""" + context.Request.Host + @""", charset=""UTF-8""");
+                    context.Response.Headers.WWWAuthenticate = @"Basic realm=""" + context.Request.Host + @""", charset=""UTF-8""";
                     await context.Response.WriteAsync("Unauthorized");
                     return;
                 }
@@ -382,7 +409,7 @@ public class StartupAdminInterface
 
             Result<string, IReadOnlyList<StateShim.InterfaceToHost.NamedExposedFunction>> listDatabaseFunctions()
             {
-                if (publicAppHost?.processLiveRepresentation is null)
+                if (getPublicAppHost() is not { } publicAppHost)
                     return Result<string, IReadOnlyList<StateShim.InterfaceToHost.NamedExposedFunction>>.err(
                         "No application deployed.");
 
@@ -394,7 +421,7 @@ public class StartupAdminInterface
             {
                 lock (avoidConcurrencyLock)
                 {
-                    if (publicAppHost?.processLiveRepresentation is null)
+                    if (getPublicAppHost() is not { } publicAppHost)
                         return Result<string, AdminInterface.ApplyDatabaseFunctionSuccess>.err(
                             "No application deployed.");
 
@@ -432,7 +459,7 @@ public class StartupAdminInterface
                     new ApiRoute
                     (
                         path : PathApiGetDeployedAppConfig,
-                        methods : ImmutableDictionary<string, Func<HttpContext, PublicHostConfiguration?, System.Threading.Tasks.Task>>.Empty
+                        methods : ImmutableDictionary<string, ApiRouteMethodConfig>.Empty
                         .Add("get", async (context, publicAppHost) =>
                         {
                             var appConfig = publicAppHost?.processLiveRepresentation?.lastAppConfig.appConfigComponent;
@@ -458,16 +485,16 @@ public class StartupAdminInterface
 
                             context.Response.StatusCode = 200;
                             context.Response.Headers.ContentLength = appConfigZipArchive.LongLength;
-                            context.Response.Headers.Add("Content-Disposition", new ContentDispositionHeaderValue("attachment") { FileName = appConfigHashBase16 + ".zip" }.ToString());
-                            context.Response.Headers.Add("Content-Type", new MediaTypeHeaderValue("application/zip").ToString());
+                            context.Response.Headers.ContentDisposition = new ContentDispositionHeaderValue("attachment") { FileName = appConfigHashBase16 + ".zip" }.ToString();
+                            context.Response.Headers.ContentType = new MediaTypeHeaderValue("application/zip").ToString();
 
                             await context.Response.Body.WriteAsync(appConfigZipArchive);
                         })
                     ),
                     new ApiRoute
                     (
-                        path : PathApiElmAppState,
-                        methods : ImmutableDictionary<string, Func<HttpContext, PublicHostConfiguration?, System.Threading.Tasks.Task>>.Empty
+                        path: PathApiElmAppState,
+                        methods: ImmutableDictionary<string, ApiRouteMethodConfig>.Empty
                         .Add("get", async (context, publicAppHost) =>
                         {
                             if (publicAppHost == null)
@@ -503,8 +530,8 @@ public class StartupAdminInterface
                             var elmAppStateReductionComponent =
                                 components.First(c => CommonConversion.StringBase16(PineValueHashTree.ComputeHash(c)) == elmAppStateReductionHashBase16);
 
-                            if(elmAppStateReductionComponent is not PineValue.BlobValue elmAppStateReductionComponentBlob)
-                                throw   new Exception("elmAppStateReductionComponent is not a blob");
+                            if (elmAppStateReductionComponent is not PineValue.BlobValue elmAppStateReductionComponentBlob)
+                                throw new Exception("elmAppStateReductionComponent is not a blob");
 
                             var elmAppStateReductionString =
                                 Encoding.UTF8.GetString(elmAppStateReductionComponentBlob.Bytes.Span);
@@ -520,7 +547,7 @@ public class StartupAdminInterface
 
                             var elmAppStateToSet = await System.Text.Json.JsonSerializer.DeserializeAsync<System.Text.Json.JsonElement>(context.Request.Body);
 
-                            var setAppStateResult=
+                            var setAppStateResult =
                             Result<string, PublicHostConfiguration?>.ok(publicAppHost)
                             .AndThen(maybeNull => Maybe.NothingFromNull(maybeNull).ToResult("Not possible because there is no app (state)."))
                             .AndThen(publicAppHost =>
@@ -545,20 +572,20 @@ public class StartupAdminInterface
                     ),
                     new ApiRoute
                     (
-                        path : PathApiDeployAndInitAppState,
-                        methods : ImmutableDictionary<string, Func<HttpContext, PublicHostConfiguration?, System.Threading.Tasks.Task>>.Empty
+                        path: PathApiDeployAndInitAppState,
+                        methods: ImmutableDictionary<string, ApiRouteMethodConfig>.Empty
                         .Add("post", async (_, _) => await deployElmApp(initElmAppState: true))
                     ),
                     new ApiRoute
                     (
-                        path : PathApiDeployAndMigrateAppState,
-                        methods : ImmutableDictionary<string, Func<HttpContext, PublicHostConfiguration?, System.Threading.Tasks.Task>>.Empty
+                        path: PathApiDeployAndMigrateAppState,
+                        methods: ImmutableDictionary<string, ApiRouteMethodConfig>.Empty
                         .Add("post", async (_, _) => await deployElmApp(initElmAppState: false))
                     ),
                     new ApiRoute
                     (
-                        path : PathApiListDatabaseFunctions,
-                        methods : ImmutableDictionary<string, Func<HttpContext, PublicHostConfiguration?, System.Threading.Tasks.Task>>.Empty
+                        path: PathApiListDatabaseFunctions,
+                        methods: ImmutableDictionary<string, ApiRouteMethodConfig>.Empty
                         .Add("get", async (context, _) =>
                         {
                             try
@@ -577,8 +604,8 @@ public class StartupAdminInterface
                     ),
                     new ApiRoute
                     (
-                        path : PathApiApplyDatabaseFunction,
-                        methods : ImmutableDictionary<string, Func<HttpContext, PublicHostConfiguration?, System.Threading.Tasks.Task>>.Empty
+                        path: PathApiApplyDatabaseFunction,
+                        methods: ImmutableDictionary<string, ApiRouteMethodConfig>.Empty
                         .Add("post", async (context, _) =>
                         {
                             try
@@ -600,8 +627,8 @@ public class StartupAdminInterface
                     ),
                     new ApiRoute
                     (
-                        path : PathApiGuiRequest,
-                        methods : ImmutableDictionary<string, Func<HttpContext, PublicHostConfiguration?, System.Threading.Tasks.Task>>.Empty
+                        path: PathApiGuiRequest,
+                        methods: ImmutableDictionary<string, ApiRouteMethodConfig>.Empty
                         .Add("post", async (context, _) =>
                         {
                             try
@@ -623,8 +650,8 @@ public class StartupAdminInterface
                     ),
                     new ApiRoute
                     (
-                        path : PathApiReplaceProcessHistory,
-                        methods : ImmutableDictionary<string, Func<HttpContext, PublicHostConfiguration?, System.Threading.Tasks.Task>>.Empty
+                        path: PathApiReplaceProcessHistory,
+                        methods: ImmutableDictionary<string, ApiRouteMethodConfig>.Empty
                         .Add("post", async (context, _) =>
                         {
                             var historyZipArchive = await Asp.CopyRequestBody(context.Request);
@@ -643,8 +670,8 @@ public class StartupAdminInterface
                                 foreach (var filePath in processStoreFileStore.ListFilesInDirectory(ImmutableList<string>.Empty).ToImmutableList())
                                     processStoreFileStore.DeleteFile(filePath);
 
-                                foreach (var replacementFile in replacementFiles)
-                                    processStoreFileStore.SetFileContent(replacementFile.path, replacementFile.content.ToArray());
+                                foreach (var (path, content) in replacementFiles)
+                                    processStoreFileStore.SetFileContent(path, content.ToArray());
 
                                 startPublicApp();
                             }
@@ -685,7 +712,7 @@ public class StartupAdminInterface
                     return;
                 }
 
-                await matchingMethodDelegate.Invoke(context, publicAppHost);
+                await matchingMethodDelegate.Invoke(context, getPublicAppHost());
                 return;
             }
 
@@ -746,7 +773,8 @@ public class StartupAdminInterface
                     var storeReductionStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
                     var storeReductionReport =
-                        publicAppHost?.processLiveRepresentation?.StoreReductionRecordForCurrentState(processStoreWriter).report;
+                        getPublicAppHost()
+                        ?.processLiveRepresentation?.StoreReductionRecordForCurrentState(processStoreWriter).report;
 
                     storeReductionStopwatch.Stop();
 
@@ -887,7 +915,8 @@ public class StartupAdminInterface
                     var storeReductionStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
                     var storeReductionReport =
-                        publicAppHost?.processLiveRepresentation?.StoreReductionRecordForCurrentState(processStoreWriter).report;
+                        getPublicAppHost()
+                        ?.processLiveRepresentation?.StoreReductionRecordForCurrentState(processStoreWriter).report;
 
                     storeReductionStopwatch.Stop();
 
@@ -962,7 +991,7 @@ public class StartupAdminInterface
 
             context.Response.StatusCode = 404;
             await context.Response.WriteAsync("Not Found");
-        });
+        };
     }
 
     private static void BeginMakeAdminGuiHtml() =>
@@ -1006,7 +1035,7 @@ public class StartupAdminInterface
 
     private record ApiRoute(
         string path,
-        ImmutableDictionary<string, Func<HttpContext, PublicHostConfiguration?, System.Threading.Tasks.Task>> methods);
+        ImmutableDictionary<string, ApiRouteMethodConfig> methods);
 
     public static string HtmlDocument(string body) =>
         string.Join("\n", "<html>", "<body>", body, "</body>", "</html>");
@@ -1050,9 +1079,8 @@ public class StartupAdminInterface
                 )),
                 fromOk: testContinueOk =>
                 {
-                    foreach (var projectedFilePathAndContent in testContinueOk.projectedFiles)
-                        processStoreFileStore.SetFileContent(
-                            projectedFilePathAndContent.filePath, projectedFilePathAndContent.fileContent);
+                    foreach (var (filePath, fileContent) in testContinueOk.projectedFiles)
+                        processStoreFileStore.SetFileContent(filePath, fileContent);
 
                     return (statusCode: 200, new AttemptContinueWithCompositionEventReport
                     (

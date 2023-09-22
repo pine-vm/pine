@@ -67,7 +67,7 @@ public class FileStoreFromSystemIOFile(string directoryPath) : IFileStore
                 throw new ArgumentException("Invalid character in path component '" + pathComponent + "'.");
         }
 
-        return Path.Combine(path.Insert(0, directoryPath).ToArray());
+        return Path.Combine([directoryPath, .. path]);
     }
 
     private static void EnsureDirectoryExists(string directoryPath)

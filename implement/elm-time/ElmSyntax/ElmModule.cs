@@ -36,11 +36,9 @@ public static class ElmModule
                 keyComparer: EnumerableExtension.EqualityComparer<IReadOnlyList<string>>());
 
         IEnumerable<IReadOnlyList<string>> EnumerateImportsOfModuleTransitive(IReadOnlyList<string> moduleName) =>
-            !parsedModulesByName.ContainsKey(moduleName)
-            ?
+            !parsedModulesByName.TryGetValue(moduleName, out (string moduleText, ParsedModule parsedModule) value) ?
             []
-            :
-            parsedModulesByName[moduleName].parsedModule.ImportedModulesNames
+            : value.parsedModule.ImportedModulesNames
             .SelectMany(
                 importedModuleName =>
                 EnumerateImportsOfModuleTransitive(importedModuleName)

@@ -18,7 +18,7 @@ public class TestModeledInElm
         ImmutableList.Create(".", "..", "..", "..", "modeled-in-elm");
 
     private static string FilePathStringFromPath(IImmutableList<string> path) =>
-        Path.Combine(path.ToArray());
+        Path.Combine([.. path]);
 
     private static IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> GetLoweredElmAppFromDirectoryPath(
         IImmutableList<string> directoryPath) =>

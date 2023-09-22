@@ -13,7 +13,7 @@ public class CommonConversion
         .ToArray();
 
     public static string StringBase16FromByteArray(IReadOnlyList<byte> bytes) =>
-        BitConverter.ToString(bytes as byte[] ?? bytes.ToArray()).Replace("-", "").ToLowerInvariant();
+        BitConverter.ToString(bytes as byte[] ?? [.. bytes]).Replace("-", "").ToLowerInvariant();
 
     public static string StringBase16(ReadOnlyMemory<byte> bytes) =>
         BitConverter.ToString(bytes.ToArray()).Replace("-", "").ToLowerInvariant();

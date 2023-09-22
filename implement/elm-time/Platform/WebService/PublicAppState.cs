@@ -118,7 +118,7 @@ public class PublicAppState
                     httpsOptions.ServerCertificateSelector = (_, _) => LetsEncryptRenewalService.Certificate;
                 });
             })
-            .UseUrls(publicWebHostUrls.ToArray())
+            .UseUrls([.. publicWebHostUrls])
             .WithSettingDateTimeOffsetDelegate(getDateTimeOffset)
             .ConfigureServices(services => ConfigureServices(services, logger));
 
@@ -252,7 +252,7 @@ public class PublicAppState
             if (headerContentType != null)
                 context.Response.ContentType = headerContentType;
 
-            context.Response.Headers.Add("X-Powered-By", "Elm-Time");
+            context.Response.Headers.XPoweredBy = "Elm-Time";
 
             ReadOnlyMemory<byte>? contentAsByteArray = null;
 

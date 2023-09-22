@@ -619,7 +619,7 @@ public class PineCompileToDotNet
             return
                 recursive(
                     combine,
-                    compiledList.ToImmutableList(),
+                    [.. compiledList],
                     []);
         }
     }
@@ -1155,7 +1155,7 @@ public class PineCompileToDotNet
                     Expression.ListExpression list =>
                     list.List.Select(e => TransformPineExpressionWithOptionalReplacement(findReplacement, e))
                     .ListCombine()
-                    .Map(elements => (Expression)new Expression.ListExpression(elements.ToImmutableArray())),
+                    .Map(elements => (Expression)new Expression.ListExpression([.. elements])),
 
                     Expression.ConditionalExpression conditional =>
                     TransformPineExpressionWithOptionalReplacement(

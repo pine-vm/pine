@@ -81,7 +81,7 @@ public class TestSetup
         string exampleName) => GetElmAppFromDirectoryPath(Path.Combine(PathToExampleElmApps, exampleName));
 
     private static string FilePathStringFromPath(IReadOnlyList<string> path) =>
-        Path.Combine(path.ToArray());
+        Path.Combine([.. path]);
 
     public static IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> GetElmAppFromDirectoryPath(
         IReadOnlyList<string> directoryPath) =>

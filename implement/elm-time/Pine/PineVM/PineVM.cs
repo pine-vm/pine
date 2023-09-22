@@ -223,7 +223,7 @@ public class PineVM
             (generalDecoder, listValue) =>
             DecodePineListValue(listValue)
             .AndThen(list => ResultListMapCombine(list, generalDecoder))
-            .Map(expressionList => (Expression)new Expression.ListExpression(expressionList.ToImmutableArray())))
+            .Map(expressionList => (Expression)new Expression.ListExpression([.. expressionList])))
         .SetItem(
             "DecodeAndEvaluate",
             (generalDecoder, value) => DecodeDecodeAndEvaluateExpression(generalDecoder, value)
