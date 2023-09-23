@@ -993,6 +993,8 @@ public class Program
 
                             console.WriteLine("Starting to compile for " + profilingScenarios.Count + " scenarios...");
 
+                            var pgoAndCompileStopwatch = System.Diagnostics.Stopwatch.StartNew();
+
                             var syntaxContainerConfig =
                             new PineCompileToDotNet.SyntaxContainerConfig(
                                 containerTypeName: "container_type",
@@ -1017,6 +1019,14 @@ public class Program
                             .AndThen(
                                 compileSuccess =>
                                 {
+                                    var compileToAssemblyResult =
+                                    compileResult
+                                    .AndThen(compileOk => PineCompileToDotNet.CompileToAssembly(syntaxContainerConfig, compileOk));
+
+                                    console.WriteLine(
+                                        "Completed PGO and compilation in " +
+                                        pgoAndCompileStopwatch.Elapsed.TotalSeconds.ToString("0.##") + " seconds.");
+
                                     if (saveCompiledCSharp is not null)
                                     {
                                         var outputPath = Path.GetFullPath(saveCompiledCSharp);
@@ -1030,10 +1040,6 @@ public class Program
 
                                         console.WriteLine("Saved the compiled code to " + outputPath, color: Pine.IConsole.TextColor.Green);
                                     }
-
-                                    var compileToAssemblyResult =
-                                    compileResult
-                                    .AndThen(compileOk => PineCompileToDotNet.CompileToAssembly(syntaxContainerConfig, compileOk));
 
                                     return
                                     compileToAssemblyResult
@@ -1095,6 +1101,18 @@ public class Program
                             CompilerId:
                             CommonConversion.StringBase16(PineValueHashTree.ComputeHashSorted(compileElmProgramCodeFiles))[..8],
                             newInteractiveSessionFromAppCode);
+
+                        {
+                            var warmupStopwatch = System.Diagnostics.Stopwatch.StartNew();
+
+                            using var session = interactiveConfig.SessionFromAppCode(null);
+
+                            session.Submit("1 + 3");
+
+                            console.WriteLine(
+                                "Warmup completed in " +
+                                warmupStopwatch.Elapsed.TotalSeconds.ToString("0.##") + " seconds.");
+                        }
 
                         var scenariosResults =
                         ElmInteractive.TestElmInteractive.TestElmInteractiveScenarios(
