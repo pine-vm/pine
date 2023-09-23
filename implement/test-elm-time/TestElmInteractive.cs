@@ -51,14 +51,29 @@ public class TestElmInteractive
         var parsedScenarios =
             ElmTime.ElmInteractive.TestElmInteractive.ParseElmInteractiveScenarios(scenariosTree, console);
 
+        static ElmTime.ElmInteractive.IInteractiveSession newInteractiveSessionFromAppCode(TreeNodeWithStringPath? appCodeTree) =>
+            ElmTime.ElmInteractive.IInteractiveSession.Create(
+                compileElmProgramCodeFiles: ElmTime.ElmInteractive.IInteractiveSession.CompileElmProgramCodeFilesDefault.Value,
+                appCodeTree: appCodeTree,
+                ElmTime.ElmInteractive.ElmEngineType.Pine);
+
+        {
+            var warmupStopwatch = System.Diagnostics.Stopwatch.StartNew();
+
+            using var session = newInteractiveSessionFromAppCode(null);
+
+            session.Submit("1 + 3");
+
+            console.WriteLine(
+                "Warmup completed in " +
+                warmupStopwatch.Elapsed.TotalSeconds.ToString("0.##") + " seconds.");
+        }
+
         var scenariosResults =
             ElmTime.ElmInteractive.TestElmInteractive.TestElmInteractiveScenarios(
                 parsedScenarios.NamedDistinctScenarios,
                 namedScenario => namedScenario.Value,
-                appCode => ElmTime.ElmInteractive.IInteractiveSession.Create(
-                    compileElmProgramCodeFiles: ElmTime.ElmInteractive.IInteractiveSession.CompileElmProgramCodeFilesDefault.Value,
-                    appCodeTree: appCode,
-                    ElmTime.ElmInteractive.ElmEngineType.Pine));
+                newInteractiveSessionFromAppCode);
 
         var allSteps =
             scenariosResults
