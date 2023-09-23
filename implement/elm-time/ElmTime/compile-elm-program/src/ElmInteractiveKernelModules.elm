@@ -629,22 +629,15 @@ parseInt str =
 
 parseUnsignedInt : Parser Int
 parseUnsignedInt str =
+    parseUnsignedIntHelp ( 0, Nothing ) str
+
+
+parseUnsignedIntHelp : ( Int, Maybe Int ) -> Parser Int
+parseUnsignedIntHelp previousDigits str =
     let
-        digitsCount =
-            countCharsWhile Char.isDigit str
-    in
-    if digitsCount > 0 then
-        ( Ok (toUnsignedIntFromList (List.take digitsCount str) |> Maybe.withDefault 0)
-        , digitsCount
-        )
+        ( previousDigitsCount, maybePreviusDigitsValue ) =
+            previousDigits
 
-    else
-        ( Err "Expected integer", 0 )
-
-
-toUnsignedIntFromList : List Char -> Maybe Int
-toUnsignedIntFromList string =
-    let
         digitValueFromCharacter char =
             case char of
                 '0' ->
@@ -652,13 +645,13 @@ toUnsignedIntFromList string =
 
                 '1' ->
                     Just 1
-                
+
                 '2' ->
                     Just 2
-                
+
                 '3' ->
                     Just 3
-                
+
                 '4' ->
                     Just 4
 
@@ -680,23 +673,26 @@ toUnsignedIntFromList string =
                 _ ->
                     Nothing
 
+        complete =
+            ( Result.fromMaybe "No digits found" maybePreviusDigitsValue
+            , previousDigitsCount
+            )
     in
-    case string of
+    case str of
         [] ->
-            Nothing
+            complete
 
-        digits ->
-            List.foldl
-                (\\maybeDigitValue maybeAggregate ->
-                    case (maybeDigitValue, maybeAggregate) of
-                        (Just digitValue, Just aggregate) ->
-                            Just (aggregate * 10 + digitValue)
-                        
-                        _ ->
-                            Nothing
-                )
-                (Just 0)
-                (List.map digitValueFromCharacter digits)
+        currentChar :: followingChars ->
+            case digitValueFromCharacter currentChar of
+                Just digitValue ->
+                    parseUnsignedIntHelp
+                        ( previousDigitsCount + 1
+                        , Just (Maybe.withDefault 0 maybePreviusDigitsValue * 10 + digitValue)
+                        )
+                        followingChars
+
+                Nothing ->
+                    complete
 
 
 countCharsWhile : (Char -> Bool) -> List Char -> Int
