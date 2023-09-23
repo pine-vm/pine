@@ -1,4 +1,3 @@
-using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Pine;
 using System;
 using System.Collections.Generic;
@@ -25,7 +24,7 @@ public class TestElmInteractive
 
     public record InteractiveScenarioTestReport(
         Scenario Scenario,
-        ImmutableList<(string name, Result<InteractiveScenarioTestStepFailure, object> result)> StepsReports,
+        ImmutableList<(string name, Result<InteractiveScenarioTestStepFailure, IInteractiveSession.SubmissionResponse> result)> StepsReports,
         TimeSpan ElapsedTime)
     {
         public bool Passed => StepsReports.All(s => s.result.IsOk());
@@ -175,42 +174,47 @@ public class TestElmInteractive
             parsedScenario.Steps
             .Select(sessionStep =>
             {
-                Result<InteractiveScenarioTestStepFailure, object> getResult()
+                Result<InteractiveScenarioTestStepFailure, IInteractiveSession.SubmissionResponse> getResult()
                 {
                     try
                     {
-                        var evalResult = interactiveSession.Submit(sessionStep.step.Submission);
+                        var submissionResult =
+                        interactiveSession.Submit(sessionStep.step.Submission)
+                        .MapError(err => new InteractiveScenarioTestStepFailure(
+                            submission: sessionStep.step.Submission,
+                            errorAsText: "Submission result has error: " + err));
 
-                        var evalOk =
-                        evalResult
-                        .Extract(evalError => throw new AssertFailedException("Submission result has error: " + evalError));
-
-                        if (sessionStep.step.ExpectedResponse is { } expectedResponse)
+                        return
+                        submissionResult
+                        .AndThen(submissionResultOk =>
                         {
-                            if (expectedResponse != evalOk.interactiveResponse?.displayText)
+                            if (sessionStep.step.ExpectedResponse is { } expectedResponse)
                             {
-                                var errorText =
-                                "Response from interactive does not match expected value. Expected:\n" +
-                                expectedResponse +
-                                "\nBut got this response:\n" +
-                                evalOk.interactiveResponse?.displayText;
+                                if (expectedResponse != submissionResultOk.interactiveResponse?.displayText)
+                                {
+                                    var errorText =
+                                    "Response from interactive does not match expected value. Expected:\n" +
+                                    expectedResponse +
+                                    "\nBut got this response:\n" +
+                                    submissionResultOk.interactiveResponse?.displayText;
 
-                                return Result<InteractiveScenarioTestStepFailure, object>.err(
-                                    new InteractiveScenarioTestStepFailure(
-                                        submission: sessionStep.step.Submission,
-                                        errorAsText: errorText));
+                                    return Result<InteractiveScenarioTestStepFailure, IInteractiveSession.SubmissionResponse>.err(
+                                        new InteractiveScenarioTestStepFailure(
+                                            submission: sessionStep.step.Submission,
+                                            errorAsText: errorText));
+                                }
                             }
-                        }
+
+                            return submissionResult;
+                        });
                     }
                     catch (Exception e)
                     {
-                        return Result<InteractiveScenarioTestStepFailure, object>.err(
+                        return Result<InteractiveScenarioTestStepFailure, IInteractiveSession.SubmissionResponse>.err(
                             new InteractiveScenarioTestStepFailure(
                                 submission: sessionStep.step.Submission,
                                 errorAsText: "Runtime exception:\n" + e));
                     }
-
-                    return Result<InteractiveScenarioTestStepFailure, object>.ok(new object());
                 }
 
                 return (sessionStep.stepName, getResult());

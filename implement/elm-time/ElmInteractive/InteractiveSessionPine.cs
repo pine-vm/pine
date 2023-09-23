@@ -241,14 +241,25 @@ public class InteractiveSessionPine : IInteractiveSession
         PineCompileToDotNet.SyntaxContainerConfig syntaxContainerConfig,
         int limitNumber)
     {
-        var expressionsToCompile =
+        var expressionsProfiles =
             scenarios
-            .SelectMany(scenario =>
+            .Select(scenario =>
             CollectExpressionsToOptimizeFromScenario(
                 compileElmProgramCodeFiles: compileElmProgramCodeFiles,
                 scenario: scenario))
-            .Distinct()
+            .ToImmutableArray();
+
+        var aggregateExpressionsProfiles =
+            AggregateExpressionUsageProfiles(expressionsProfiles);
+
+        var totalTrackedExpressionUsageCount =
+            aggregateExpressionsProfiles.Sum(ep => ep.Value.UsageCount);
+
+        var expressionsToCompile =
+            aggregateExpressionsProfiles
+            .OrderByDescending(expressionAndProfile => expressionAndProfile.Value.UsageCount)
             .Take(limitNumber)
+            .Select(expressionAndProfile => expressionAndProfile.Key)
             .ToImmutableList();
 
         return
@@ -257,15 +268,19 @@ public class InteractiveSessionPine : IInteractiveSession
                 syntaxContainerConfig);
     }
 
-    public static IReadOnlyList<Expression> CollectExpressionsToOptimizeFromScenario(
+    public record ExpressionUsageProfile(int UsageCount);
+
+    public static IReadOnlyDictionary<Expression, ExpressionUsageProfile> CollectExpressionsToOptimizeFromScenario(
         TreeNodeWithStringPath compileElmProgramCodeFiles,
         TestElmInteractive.Scenario scenario)
     {
         var expressionEvaluations = new ConcurrentQueue<Expression>();
 
         var profilingPineVM = new PineVM(
-            decodeExpressionOverrides: ImmutableDictionary<PineValue, Func<PineVM.EvalExprDelegate, PineValue, Result<string, PineValue>>>.Empty,
-            overrideEvaluateExpression: originalHandler => (expression, environment) =>
+            decodeExpressionOverrides:
+            ImmutableDictionary<PineValue, Func<PineVM.EvalExprDelegate, PineValue, Result<string, PineValue>>>.Empty,
+            overrideEvaluateExpression:
+            originalHandler => (expression, environment) =>
             {
                 if (expression is Expression.DecodeAndEvaluateExpression decodeAndEvaluateExpression)
                 {
@@ -298,18 +313,49 @@ public class InteractiveSessionPine : IInteractiveSession
         var pineExpressionsToOptimize =
             expressionEvaluations
             .Distinct()
-            .Select(expression =>
+            .ToDictionary(
+                keySelector: expression => expression,
+                elementSelector: expression =>
+                {
+                    var usageCount = expressionEvaluations.Count(e => e == expression);
+
+                    return new ExpressionUsageProfile(usageCount);
+                });
+
+        return pineExpressionsToOptimize;
+    }
+
+    static public IReadOnlyDictionary<T, ExpressionUsageProfile> AggregateExpressionUsageProfiles<T>(
+        IReadOnlyList<IReadOnlyDictionary<T, ExpressionUsageProfile>> dictionaries)
+        where T : notnull
+        =>
+        dictionaries
+        .SelectMany(dict => dict.Keys)
+        .Distinct()
+        .ToImmutableDictionary(
+            keySelector:
+            expr => expr,
+            elementSelector:
+            expr =>
             {
-                var usageCount = expressionEvaluations.Count(c => c == expression);
+                var profiles =
+                    dictionaries.SelectMany(dict =>
+                    {
+                        if (!dict.TryGetValue(expr, out var result))
+                            return [];
 
-                return (expression, stats: new { usageCount });
-            })
-            .OrderByDescending(expressionAndStats => expressionAndStats.stats.usageCount)
-            .ToImmutableList();
+                        return ImmutableList.Create(result);
+                    })
+                    .ToImmutableArray();
 
-        return
-            pineExpressionsToOptimize
-            .Select(expressionAndStats => expressionAndStats.expression)
-            .ToImmutableList();
+                return
+                AggregateExpressionUsageProfiles(profiles);
+            });
+
+    static public ExpressionUsageProfile AggregateExpressionUsageProfiles(
+        IReadOnlyList<ExpressionUsageProfile> profiles)
+    {
+        return new ExpressionUsageProfile(
+            UsageCount: profiles.Sum(p => p.UsageCount));
     }
 }
