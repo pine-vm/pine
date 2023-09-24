@@ -152,7 +152,7 @@ public class PineCompileToDotNet
                     }
 
                     var valuesToDeclare =
-                        OrderValuesByContainment(aggregateValueDependencies.Concat(usedValues).Distinct())
+                        OrderValuesForDeclaration(aggregateValueDependencies.Concat(usedValues).Distinct())
                             .ToImmutableList();
 
                     ExpressionSyntax? specialSyntaxForPineValue(PineValue pineValue) =>
@@ -1564,26 +1564,83 @@ public class PineCompileToDotNet
                 SyntaxFactory.ArgumentList(SyntaxFactory.SeparatedList(argumentsExpressions.Select(SyntaxFactory.Argument))));
     }
 
-    public static IEnumerable<PineValue> OrderValuesByContainment(IEnumerable<PineValue> pineValues)
+    public class BlobValueDeclarationOrder : IComparer<PineValue.BlobValue>
     {
-        var blobs = pineValues.OfType<PineValue.BlobValue>();
+        public int Compare(PineValue.BlobValue? x, PineValue.BlobValue? y)
+        {
+            if (x == y)
+                return 0;
 
-        var rootLists = pineValues.OfType<PineValue.ListValue>().Distinct();
+            if (x is null)
+                return -1;
 
-        var descendantLists =
-            EnumerateDescendantListsBreadthFirst(rootLists)
-            .ToImmutableList();
+            if (y is null)
+                return 1;
 
-        var orderedLists =
-            rootLists
-            .Concat(descendantLists)
-            .Reverse()
-            .Distinct()
-            .Intersect(rootLists)
-            .ToImmutableList();
+            if (x.Bytes.Length < y.Bytes.Length)
+                return -1;
+
+            if (y.Bytes.Length < x.Bytes.Length)
+                return 1;
+
+            for (var i = 0; i < x.Bytes.Length; i++)
+            {
+                if (x.Bytes.Span[i] < y.Bytes.Span[i])
+                    return -1;
+
+                if (y.Bytes.Span[i] < x.Bytes.Span[i])
+                    return 1;
+            }
+
+            return 0;
+        }
+    }
+
+    public static IEnumerable<PineValue> OrderValuesForDeclaration(IEnumerable<PineValue> pineValues)
+    {
+        var blobs =
+            pineValues.OfType<PineValue.BlobValue>()
+            .Order(new BlobValueDeclarationOrder());
+
+        var originalLists = pineValues.OfType<PineValue.ListValue>().Distinct();
+
+        var orderedLists = OrderListValuesByContainment(originalLists);
 
         return blobs.Cast<PineValue>().Concat(orderedLists);
     }
+
+    public static IEnumerable<PineValue.ListValue> OrderListValuesByContainment(IEnumerable<PineValue.ListValue> listValues)
+    {
+        var listValuesSortedBySize =
+            listValues
+            .OrderBy(AggregateSizeIncludingDescendants)
+            .ToImmutableList();
+
+        var descendantLists =
+            EnumerateDescendantListsBreadthFirst(listValuesSortedBySize)
+            .ToImmutableList();
+
+        var orderedLists =
+            listValuesSortedBySize
+            .Concat(descendantLists.Reverse())
+            .Distinct()
+            .Intersect(listValuesSortedBySize)
+            .ToImmutableList();
+
+        return orderedLists;
+    }
+
+    private static int AggregateSizeIncludingDescendants(PineValue value) =>
+        value switch
+        {
+            PineValue.BlobValue blobValue =>
+            blobValue.Bytes.Length,
+
+            PineValue.ListValue listValue =>
+            listValue.Elements.Count + listValue.Elements.Sum(AggregateSizeIncludingDescendants),
+
+            _ => throw new Exception("Unknown value type: " + value.GetType().FullName)
+        };
 
     private static IEnumerable<PineValue.ListValue> EnumerateDescendantListsBreadthFirst(IEnumerable<PineValue.ListValue> roots)
     {

@@ -18,7 +18,7 @@ namespace ElmTime;
 
 public class Program
 {
-    public static string AppVersionId => "2023-09-23";
+    public static string AppVersionId => "2023-09-24";
 
     private static int AdminInterfaceDefaultPort => 4000;
 
@@ -1005,7 +1005,7 @@ public class Program
                                 compileElmProgramCodeFiles: compileElmProgramCodeFiles,
                                 profilingScenarios,
                                 syntaxContainerConfig: syntaxContainerConfig,
-                                limitNumber: 10);
+                                limitNumber: 40);
 
                             var compileToFileResult =
                             compileResult

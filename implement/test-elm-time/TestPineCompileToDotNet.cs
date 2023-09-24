@@ -11,17 +11,19 @@ public class TestPineCompileToDotNet
 {
     public static readonly PineValue value_299b7decef = PineValueAsString.ValueFromString("List");
 
-    public static readonly PineValue value_d597fb92e5 = PineValue.List(new[] { value_299b7decef, PineValue.EmptyList });
+    public static readonly PineValue value_d597fb92e5 = PineValue.List([value_299b7decef, PineValue.EmptyList]);
 
     [TestMethod]
-    public void Test_sort_pine_value_by_containment()
+    public void Test_sort_pine_value_for_declaration()
     {
         Assert.IsTrue(value_d597fb92e5.ContainsInListTransitive(value_299b7decef));
 
         var listBeforeOrdering =
             new[]
             {
+                PineValueAsString.ValueFromString("Err"),
                 value_d597fb92e5,
+                PineValueAsString.ValueFromString("Ok"),
                 value_299b7decef
             };
 
@@ -30,11 +32,13 @@ public class TestPineCompileToDotNet
             .Select(value => (value, hash: CommonConversion.StringBase16(PineValueHashTree.ComputeHash(value))))
             .ToImmutableList();
 
-        var orderedValues = PineCompileToDotNet.OrderValuesByContainment(listBeforeOrdering).ToImmutableList();
+        var orderedValues = PineCompileToDotNet.OrderValuesForDeclaration(listBeforeOrdering).ToImmutableList();
 
         CollectionAssert.AreEqual(
             new[]
             {
+                PineValueAsString.ValueFromString("Ok"),
+                PineValueAsString.ValueFromString("Err"),
                 value_299b7decef,
                 value_d597fb92e5
             },
