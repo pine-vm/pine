@@ -118,6 +118,7 @@ public class PineCompileToDotNet
                                         memberDeclarationSyntaxForExpression(functionName, ok.blockSyntax)));
                     }
                 ).ListCombine()
+                .Map(compiledExpressions => compiledExpressions.OrderBy(ce => ce.expressionHash))
                 .AndThen(compiledExpressions =>
                 {
                     var aggregateDependencies =
@@ -398,8 +399,10 @@ public class PineCompileToDotNet
                                 .WithMembers(
                                     SyntaxFactory.List<MemberDeclarationSyntax>(
                                         [dictionaryMemberDeclaration
-                                        , .. compiledExpressions.Select(f => f.memberDeclarationSyntax)
-                                        , .. staticFieldsDeclarations])),
+                                        ,
+                                            .. compiledExpressions.Select(f => f.memberDeclarationSyntax)
+                                        ,
+                                            .. staticFieldsDeclarations])),
                             UsingDirectives: usings));
                 });
     }
@@ -1419,12 +1422,15 @@ public class PineCompileToDotNet
 
             Expression.ConditionalExpression conditionalExpression =>
             [.. EnumerateAllLiterals(conditionalExpression.condition)
-            , .. EnumerateAllLiterals(conditionalExpression.ifTrue)
-            , .. EnumerateAllLiterals(conditionalExpression.ifFalse)],
+            ,
+                .. EnumerateAllLiterals(conditionalExpression.ifTrue)
+            ,
+                .. EnumerateAllLiterals(conditionalExpression.ifFalse)],
 
             Expression.DecodeAndEvaluateExpression decodeAndEvaluateExpression =>
             [.. EnumerateAllLiterals(decodeAndEvaluateExpression.expression)
-            , .. EnumerateAllLiterals(decodeAndEvaluateExpression.environment)],
+            ,
+                .. EnumerateAllLiterals(decodeAndEvaluateExpression.environment)],
 
             Expression.StringTagExpression stringTagExpression =>
             EnumerateAllLiterals(stringTagExpression.tagged),
