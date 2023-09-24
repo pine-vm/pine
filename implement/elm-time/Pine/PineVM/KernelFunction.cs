@@ -23,6 +23,10 @@ public static class KernelFunction
                 }
             ));
 
+    public static Result<string, PineValue> equal(PineValue valueA, PineValue valueB) =>
+        Result<string, PineValue>.ok(
+            PineVM.ValueFromBool(valueA.Equals(valueB)));
+
     public static Result<string, PineValue> logical_not(PineValue value) =>
         PineVM.DecodeBoolFromValue(value)
             .Map(b => PineVM.ValueFromBool(!b));
