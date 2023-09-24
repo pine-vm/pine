@@ -2245,6 +2245,7 @@ emitExpression stack expression =
                 |> List.map (emitExpression stack)
                 |> Result.Extra.combine
                 |> Result.map Pine.ListExpression
+                |> Result.map reduceExpressionToLiteralIfIndependent
 
         KernelApplicationExpression kernelApplication ->
             kernelApplication.argument
@@ -2415,9 +2416,39 @@ searchForExpressionReductionRecursive { maxDepth } expression =
             searchForExpressionReductionRecursive { maxDepth = maxDepth - 1 } transformed
 
 
+reduceExpressionToLiteralIfIndependent : Pine.Expression -> Pine.Expression
+reduceExpressionToLiteralIfIndependent expression =
+    if pineExpressionIsIndependent expression then
+        case Pine.evaluateExpression Pine.emptyEvalContext expression of
+            Err _ ->
+                expression
+
+            Ok expressionValue ->
+                Pine.LiteralExpression expressionValue
+
+    else
+        expression
+
+
 searchForExpressionReduction : Pine.Expression -> Maybe Pine.Expression
 searchForExpressionReduction expression =
+    let
+        attemptReduceViaEval () =
+            if pineExpressionIsIndependent expression then
+                case Pine.evaluateExpression Pine.emptyEvalContext expression of
+                    Err _ ->
+                        Nothing
+
+                    Ok expressionValue ->
+                        Just (Pine.LiteralExpression expressionValue)
+
+            else
+                Nothing
+    in
     case expression of
+        Pine.LiteralExpression _ ->
+            Nothing
+
         Pine.KernelApplicationExpression rootKernelApp ->
             case rootKernelApp.functionName of
                 "list_head" ->
@@ -2426,7 +2457,7 @@ searchForExpressionReduction expression =
                             List.head argumentList
 
                         _ ->
-                            Nothing
+                            attemptReduceViaEval ()
 
                 "skip" ->
                     case rootKernelApp.argument of
@@ -2438,7 +2469,7 @@ searchForExpressionReduction expression =
                                     |> Maybe.andThen (BigInt.toString >> String.toInt)
                             of
                                 Nothing ->
-                                    Nothing
+                                    attemptReduceViaEval ()
 
                                 Just skipCount ->
                                     expressionList
@@ -2447,13 +2478,13 @@ searchForExpressionReduction expression =
                                         |> Just
 
                         _ ->
-                            Nothing
+                            attemptReduceViaEval ()
 
                 _ ->
-                    Nothing
+                    attemptReduceViaEval ()
 
         _ ->
-            Nothing
+            attemptReduceViaEval ()
 
 
 transformPineExpressionWithOptionalReplacement :

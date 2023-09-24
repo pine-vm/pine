@@ -136,7 +136,7 @@ evaluateExpression context expression =
                     Debug.log "eval expression with tag"
                         tag
             in
-                    evaluateExpression context tagged
+            evaluateExpression context tagged
                 |> Result.mapError (DescribePathNode ("Failed to evaluate tagged expression '" ++ tag ++ "': "))
 
 
@@ -561,6 +561,14 @@ stringFromListValue =
         (bigIntFromUnsignedValue
             >> Result.fromMaybe "Failed to map to big int"
             >> Result.andThen intFromBigInt
+            >> Result.andThen
+                (\int ->
+                    if int <= 0xFFFF then
+                        Ok int
+
+                    else
+                        Err "Avoiding codes above 0xFFFF since transfer encoding failed for 0x10000."
+                )
         )
         >> Result.Extra.combine
         >> Result.mapError ((++) "Failed to map list items to chars: ")
