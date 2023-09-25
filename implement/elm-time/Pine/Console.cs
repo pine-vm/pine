@@ -8,7 +8,7 @@ public interface IConsole
         WriteLine(text, TextColor.Default);
 
     void WriteLine(string text, TextColor color) =>
-        Write("\n" + text, color);
+        Write(text + "\n", color);
 
     void Write(string text, TextColor color) =>
         Write([(text, color)]);
