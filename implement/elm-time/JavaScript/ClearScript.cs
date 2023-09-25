@@ -18,23 +18,23 @@ public class ClearScriptV8
             OSPlatform.Linux,
             [
                 new DependencyFile(
-                    HashBase16: "4524f101eceed4c6b0344a4cb67b19443f1d42e9f3e2f27b5cb68b007c947409",
+                    HashBase16: "5c8f3ecc18a3799d1836631d51a4dec9c902d296bdd31903c861f345583bbea6",
                     ExpectedFileName: "ClearScriptV8.linux-x64.so",
-                    RemoteSources: ["https://www.nuget.org/api/v2/package/Microsoft.ClearScript.V8.Native.linux-x64/7.4.2"])])
+                    RemoteSources: ["https://www.nuget.org/api/v2/package/Microsoft.ClearScript.V8.Native.linux-x64/7.4.3"])])
         .Add(
             OSPlatform.Windows,
             [
                 new DependencyFile(
-                    HashBase16: "6ef8e937639a25554be8f60830c47b720d432b8ac47b7b54d82214d1d4083d34",
+                    HashBase16: "5c3fbbc83084ea31140c6ae3efa81890ca1a1defcd99043d6225b1e948c17c31",
                     ExpectedFileName: "ClearScriptV8.win-x64.dll",
-                    RemoteSources: ["https://www.nuget.org/api/v2/package/Microsoft.ClearScript.V8.Native.win-x64/7.4.2"])])
+                    RemoteSources: ["https://www.nuget.org/api/v2/package/Microsoft.ClearScript.V8.Native.win-x64/7.4.3"])])
         .Add(
             OSPlatform.OSX,
             [
                 new DependencyFile(
-                    HashBase16: "e9e13385c02554fa7c76d1df0307a0ca6825eff0b641ddf7826e3fbf9a546794",
+                    HashBase16: "c549e22c6cee7041cd28a856ea9f5990aecc61ba59691fdc0280b06032170249",
                     ExpectedFileName: "ClearScriptV8.osx-x64.dylib",
-                    RemoteSources: ["https://www.nuget.org/api/v2/package/Microsoft.ClearScript.V8.Native.osx-x64/7.4.2"])]);
+                    RemoteSources: ["https://www.nuget.org/api/v2/package/Microsoft.ClearScript.V8.Native.osx-x64/7.4.3"])]);
 
     public static readonly Lazy<Task> SetupTask = new(() =>
     {
