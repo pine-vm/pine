@@ -1005,7 +1005,7 @@ public class Program
                                 compileElmProgramCodeFiles: compileElmProgramCodeFiles,
                                 profilingScenarios,
                                 syntaxContainerConfig: syntaxContainerConfig,
-                                limitNumber: 40);
+                                limitNumber: 60);
 
                             var compileToFileResult =
                             compileResult

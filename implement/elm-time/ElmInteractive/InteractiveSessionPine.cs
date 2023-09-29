@@ -257,6 +257,7 @@ public class InteractiveSessionPine : IInteractiveSession
 
         var expressionsToCompile =
             aggregateExpressionsProfiles
+            .Where(expressionProfile => 4 < expressionProfile.Value.UsageCount)
             .OrderByDescending(expressionAndProfile => expressionAndProfile.Value.UsageCount)
             .Take(limitNumber)
             .Select(expressionAndProfile => expressionAndProfile.Key)
