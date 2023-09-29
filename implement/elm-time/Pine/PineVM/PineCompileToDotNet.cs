@@ -56,7 +56,7 @@ public class PineCompileToDotNet
         var parametersSyntaxes = new[]
         {
             SyntaxFactory.Parameter(SyntaxFactory.Identifier(argumentEvalGenericName))
-                .WithType(evalExprDelegateTypeSyntax),
+                .WithType(EvalExprDelegateTypeSyntax),
 
             SyntaxFactory.Parameter(SyntaxFactory.Identifier(argumentEnvironmentName))
                 .WithType(SyntaxFactory.IdentifierName("PineValue")),
@@ -99,7 +99,7 @@ public class PineCompileToDotNet
 
                         var expressionHash = CommonConversion.StringBase16(PineValueHashTree.ComputeHash(expressionValue))[..10];
 
-                        var functionName = "expr_function_" + expressionHash[..10];
+                        var functionName = MemberNameForCompiledExpressionFunction(expressionHash);
 
                         return
                             CompileToCSharpFunctionBlockSyntax(
@@ -182,7 +182,7 @@ public class PineCompileToDotNet
                             EncodePineExpressionAsCSharpExpression(hashAndExpr.expression, specialSyntaxForPineValue)
                                 .Extract(err => throw new Exception("Failed to encode expression: " + err));
 
-                        var memberName = "expression_" + hashAndExpr.hash[..10];
+                        var memberName = MemberNameForExpression(hashAndExpr.hash[..10]);
 
                         return
                             (memberName,
@@ -239,7 +239,7 @@ public class PineCompileToDotNet
                                                             SyntaxFactory.SeparatedList<TypeSyntax>(
                                                                 new SyntaxNodeOrToken[]
                                                                 {
-                                                                    evalExprDelegateTypeSyntax,
+                                                                    EvalExprDelegateTypeSyntax,
                                                                     SyntaxFactory.Token(SyntaxKind.CommaToken),
                                                                     SyntaxFactory.IdentifierName("PineValue"),
                                                                     SyntaxFactory.Token(SyntaxKind.CommaToken),
@@ -304,7 +304,7 @@ public class PineCompileToDotNet
                                                                 SyntaxFactory.SeparatedList<TypeSyntax>(
                                                                     new SyntaxNodeOrToken[]
                                                                     {
-                                                                        evalExprDelegateTypeSyntax,
+                                                                        EvalExprDelegateTypeSyntax,
                                                                         SyntaxFactory.Token(SyntaxKind.CommaToken),
                                                                         SyntaxFactory.IdentifierName("PineValue"),
                                                                         SyntaxFactory.Token(SyntaxKind.CommaToken),
@@ -407,12 +407,12 @@ public class PineCompileToDotNet
                 });
     }
 
-    private static QualifiedNameSyntax evalExprDelegateTypeSyntax =>
+    private static QualifiedNameSyntax EvalExprDelegateTypeSyntax =>
         SyntaxFactory.QualifiedName(
-            pineVmClassQualifiedNameSyntax,
+            PineVmClassQualifiedNameSyntax,
             SyntaxFactory.IdentifierName(nameof(PineVM.EvalExprDelegate)));
 
-    private static QualifiedNameSyntax pineVmClassQualifiedNameSyntax =>
+    private static QualifiedNameSyntax PineVmClassQualifiedNameSyntax =>
         SyntaxFactory.QualifiedName(
             SyntaxFactory.QualifiedName(
                 SyntaxFactory.IdentifierName("Pine"),
@@ -636,7 +636,7 @@ public class PineCompileToDotNet
         IImmutableSet<(string hash, Expression expression)> Expressions)
     {
         public static readonly DependenciesFromCompilation Empty = new(
-            Values: ImmutableHashSet<PineValue>.Empty,
+            Values: [],
             Expressions: ImmutableHashSet<(string, Expression)>.Empty);
 
         public static (T, DependenciesFromCompilation) WithNoDependencies<T>(T other) => (other, Empty);
@@ -1110,30 +1110,92 @@ public class PineCompileToDotNet
         var decodeAndEvaluateExpressionHash =
             CommonConversion.StringBase16(PineValueHashTree.ComputeHash(decodeAndEvaluateExpressionValue));
 
-        var invocationExpression =
-            SyntaxFactory.InvocationExpression(
-                SyntaxFactory.IdentifierName(environment.argumentEvalGenericName))
-            .WithArgumentList(
-                SyntaxFactory.ArgumentList(
-                    SyntaxFactory.SeparatedList<ArgumentSyntax>(
-                        new SyntaxNodeOrToken[]
+        (CompiledExpression, DependenciesFromCompilation) continueWithGenericCase()
+        {
+            var invocationExpression =
+                SyntaxFactory.InvocationExpression(
+                    SyntaxFactory.IdentifierName(environment.argumentEvalGenericName))
+                .WithArgumentList(
+                    SyntaxFactory.ArgumentList(
+                        SyntaxFactory.SeparatedList<ArgumentSyntax>(
+                            new SyntaxNodeOrToken[]
+                            {
+                                SyntaxFactory.Argument(
+                                    SyntaxFactory.IdentifierName(
+                                        MemberNameForExpression(decodeAndEvaluateExpressionHash))),
+                                SyntaxFactory.Token(SyntaxKind.CommaToken),
+                                SyntaxFactory.Argument(
+                                    SyntaxFactory.IdentifierName(environment.argumentEnvironmentName))
+                            })));
+
+            return
+                (CompiledExpression.WithTypeResult(invocationExpression),
+                DependenciesFromCompilation.Empty
+                with
+                {
+                    Expressions = ImmutableHashSet.Create((decodeAndEvaluateExpressionHash, (Expression)decodeAndEvaluateExpression)),
+                });
+        }
+
+        if (Expression.IsIndependent(decodeAndEvaluateExpression.expression))
+        {
+            return
+                TryEvaluateExpressionIndependent(decodeAndEvaluateExpression.expression)
+                .MapError(err => "Failed evaluate inner as independent expression: " + err)
+                .AndThen(innerExpressionValue =>
+                PineVM.DecodeExpressionFromValueDefault(innerExpressionValue)
+                .MapError(err => "Failed to decode inner expression: " + err)
+                .AndThen(innerExpression =>
+                {
+                    var innerExpressionValueHash =
+                        CommonConversion.StringBase16(PineValueHashTree.ComputeHash(innerExpressionValue));
+
+                    return
+                    CompileToCSharpExpression(decodeAndEvaluateExpression.environment, environment)
+                    .Map(compiledArgumentExpression =>
+                    {
+                        var invocationExpression =
+                        compiledArgumentExpression.expression.MapOrAndThen(argumentExprPlainValue =>
                         {
-                            SyntaxFactory.Argument(
-                                SyntaxFactory.IdentifierName("expression_" + decodeAndEvaluateExpressionHash[..10])),
-                            SyntaxFactory.Token(SyntaxKind.CommaToken),
-                            SyntaxFactory.Argument(
-                                SyntaxFactory.IdentifierName(environment.argumentEnvironmentName))
-                        })));
+                            return
+                            CompiledExpression.WithTypeResult(
+                                SyntaxFactory.InvocationExpression(
+                                    SyntaxFactory.IdentifierName(
+                                        MemberNameForCompiledExpressionFunction(innerExpressionValueHash)))
+                                .WithArgumentList(
+                                    SyntaxFactory.ArgumentList(
+                                        SyntaxFactory.SeparatedList<ArgumentSyntax>(
+                                            new SyntaxNodeOrToken[]
+                                            {
+                                                SyntaxFactory.Argument(
+                                                    SyntaxFactory.IdentifierName(environment.argumentEvalGenericName)),
+                                                SyntaxFactory.Token(SyntaxKind.CommaToken),
+                                                SyntaxFactory.Argument(argumentExprPlainValue)
+                                            }))));
+                        });
+
+                        return
+                            (invocationExpression,
+                            compiledArgumentExpression.dependencies.Union(
+                            DependenciesFromCompilation.Empty
+                            with
+                            {
+                                Expressions = ImmutableHashSet.Create((innerExpressionValueHash, innerExpression)),
+                            }));
+                    });
+                }));
+        }
 
         return
             Result<string, (CompiledExpression, DependenciesFromCompilation)>.ok(
-                (CompiledExpression.WithTypeResult(invocationExpression),
-                    DependenciesFromCompilation.Empty
-                    with
-                    {
-                        Expressions = ImmutableHashSet.Create((decodeAndEvaluateExpressionHash, (Expression)decodeAndEvaluateExpression)),
-                    }));
+                continueWithGenericCase());
     }
+
+    static string MemberNameForExpression(string expressionValueHash) =>
+        "expression_" + expressionValueHash[..10];
+
+    static string MemberNameForCompiledExpressionFunction(string expressionValueHash) =>
+        "expr_function_" + expressionValueHash[..10];
 
     public static Result<string, Expression> TransformPineExpressionWithOptionalReplacement(
         Func<Expression, Result<string, Maybe<Expression>>> findReplacement,
@@ -1199,6 +1261,9 @@ public class PineCompileToDotNet
     public static Result<string, PineValue> TryEvaluateExpressionIndependent(Expression expression) =>
         expression switch
         {
+            Expression.EnvironmentExpression =>
+            Result<string, PineValue>.err("Expression depends on environment"),
+
             Expression.LiteralExpression literal =>
             Result<string, PineValue>.ok(literal.Value),
 
@@ -1517,7 +1582,7 @@ public class PineCompileToDotNet
             .Map(encodedArgument =>
             (ExpressionSyntax)SyntaxFactory.InvocationExpression(
                 SyntaxFactory.QualifiedName(
-                    pineVmClassQualifiedNameSyntax,
+                    PineVmClassQualifiedNameSyntax,
                     SyntaxFactory.IdentifierName(nameof(PineVM.DecodeKernelApplicationExpressionThrowOnUnknownName))))
             .WithArgumentList(
                 SyntaxFactory.ArgumentList(

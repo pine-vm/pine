@@ -91,4 +91,39 @@ public abstract record Expression
 
     public record DelegatingExpression(Func<PineVM.EvalExprDelegate, PineValue, Result<string, PineValue>> Delegate)
         : Expression;
+
+    /// <summary>
+    /// Returns true if the expression is independent of the environment, that is none of the expressions in the tree contain an <see cref="EnvironmentExpression"/>.
+    /// </summary>
+    public static bool IsIndependent(Expression expression) =>
+        expression switch
+        {
+            EnvironmentExpression =>
+            false,
+
+            LiteralExpression =>
+            true,
+
+            ListExpression list =>
+            list.List.All(IsIndependent),
+
+            DecodeAndEvaluateExpression decodeAndEvaluate =>
+            IsIndependent(decodeAndEvaluate.expression) && IsIndependent(decodeAndEvaluate.environment),
+
+            KernelApplicationExpression kernelApplication =>
+            IsIndependent(kernelApplication.argument),
+
+            ConditionalExpression conditional =>
+            IsIndependent(conditional.condition) && IsIndependent(conditional.ifTrue) && IsIndependent(conditional.ifFalse),
+
+            StringTagExpression stringTag =>
+            IsIndependent(stringTag.tagged),
+
+            DelegatingExpression =>
+            false,
+
+            _ =>
+            throw new NotImplementedException(),
+        };
+
 }

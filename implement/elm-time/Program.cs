@@ -18,7 +18,7 @@ namespace ElmTime;
 
 public class Program
 {
-    public static string AppVersionId => "2023-09-25";
+    public static string AppVersionId => "2023-09-28";
 
     private static int AdminInterfaceDefaultPort => 4000;
 
@@ -1158,7 +1158,7 @@ public class Program
                 var initStepsSubmission =
                 initStepsPath switch
                 {
-                    null => ImmutableList<string>.Empty,
+                    null => [],
                     not null =>
                     LoadComposition.LoadFromPathResolvingNetworkDependencies(initStepsPath)
                     .LogToActions(console.WriteLine)

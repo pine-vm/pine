@@ -186,7 +186,7 @@ public class VolatileProcessCSharp : VolatileProcess
 
         private readonly SyntaxTree csharpScriptCodeSyntaxTree = CSharpSyntaxTree.ParseText(csharpScriptCode);
 
-        private ImmutableList<AssemblyMetadata> resolvedAssemblies = ImmutableList<AssemblyMetadata>.Empty;
+        private ImmutableList<AssemblyMetadata> resolvedAssemblies = [];
 
         private static readonly ConcurrentBag<(AssemblyMetadata metadata, byte[] assembly)> globalResolvedAssemblies = new();
 
@@ -206,7 +206,7 @@ public class VolatileProcessCSharp : VolatileProcess
             public ImmutableArray<PortableExecutableReference> References =>
                 HashResolution
                 ?.Extract(_ => ImmutableArray<PortableExecutableReference>.Empty) ??
-                ImmutableArray<PortableExecutableReference>.Empty;
+                [];
         }
 
         public static IEnumerable<AssemblyReferenceResolutionReport> ResolutionsFromAssemblyReference(string assemblyReference)
