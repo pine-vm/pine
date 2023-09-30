@@ -20,17 +20,12 @@ public class FormatCSharpSyntaxRewriterTests
             """
             Result<string, PineValue>.ok(
                 Pine.PineVM.KernelFunction.list_head(
-                    pine_environment).WithDefault(
+                    pine_environment)
+                .WithDefault(
                     PineValue.EmptyList));
             """.Trim();
 
-        var inputSyntaxTree = SyntaxFactory.ParseSyntaxTree(
-            inputSyntaxText,
-            options: new CSharpParseOptions().WithKind(SourceCodeKind.Script));
-
-        var formattedSyntaxTree = new FormatCSharpSyntaxRewriter().Visit(inputSyntaxTree.GetRoot());
-
-        var formattedSyntaxText = formattedSyntaxTree.ToFullString();
+        var formattedSyntaxText = FormatCSharpScript(inputSyntaxText);
 
         StringAssert.Contains(formattedSyntaxText, expectedFormattedText);
     }
@@ -42,7 +37,8 @@ public class FormatCSharpSyntaxRewriterTests
             """
             int method_name()
             {
-                var local = 0;
+                var local =
+                    0;
                 return local;
             }
             """.Trim();
@@ -51,19 +47,14 @@ public class FormatCSharpSyntaxRewriterTests
             """
             int method_name()
             {
-                var local = 0;
+                var local =
+                    0;
 
                 return local;
             }
             """.Trim();
 
-        var inputSyntaxTree = SyntaxFactory.ParseSyntaxTree(
-            inputSyntaxText,
-            options: new CSharpParseOptions().WithKind(SourceCodeKind.Script));
-
-        var formattedSyntaxTree = new FormatCSharpSyntaxRewriter().Visit(inputSyntaxTree.GetRoot());
-
-        var formattedSyntaxText = formattedSyntaxTree.ToFullString();
+        var formattedSyntaxText = FormatCSharpScript(inputSyntaxText);
 
         StringAssert.Contains(formattedSyntaxText, expectedFormattedText);
     }
@@ -84,14 +75,142 @@ public class FormatCSharpSyntaxRewriterTests
                 1;
             """.Trim();
 
-        var inputSyntaxTree = SyntaxFactory.ParseSyntaxTree(
-            inputSyntaxText,
-            options: new CSharpParseOptions().WithKind(SourceCodeKind.Script));
-
-        var formattedSyntaxTree = new FormatCSharpSyntaxRewriter().Visit(inputSyntaxTree.GetRoot());
-
-        var formattedSyntaxText = formattedSyntaxTree.ToFullString();
+        var formattedSyntaxText = FormatCSharpScript(inputSyntaxText);
 
         StringAssert.Contains(formattedSyntaxText, expectedFormattedText);
     }
+
+    [TestMethod]
+    public void Adds_newlines_in_conditional_expression()
+    {
+        var inputSyntaxText =
+            """
+            bool is_less_than_million(int integer) => integer < 1_000_000 ? true : false;
+            """.Trim();
+
+        var expectedFormattedText =
+            """
+            bool is_less_than_million(int integer) =>
+                integer < 1_000_000
+                ?
+                true
+                :
+                false;
+            """.Trim();
+
+        var formattedSyntaxText = FormatCSharpScript(inputSyntaxText);
+
+        StringAssert.Contains(formattedSyntaxText, expectedFormattedText);
+    }
+
+    [TestMethod]
+    public void Adds_newlines_between_member_declarations()
+    {
+        var inputSyntaxText =
+            """
+            class MyClass
+            {
+                public int MyField;
+                public int MyFunction()
+                {
+                    return 1;
+                }
+            }
+            """.Trim();
+
+        var expectedFormattedText =
+            """
+            class MyClass
+            {
+                public int MyField;
+
+                public int MyFunction()
+                {
+                    return 1;
+                }
+            }
+            """.Trim();
+
+        var formattedSyntaxText = FormatCSharpScript(inputSyntaxText);
+
+        StringAssert.Contains(formattedSyntaxText, expectedFormattedText);
+    }
+
+    [TestMethod]
+    public void Adds_newlines_before_method_calls()
+    {
+        var inputSyntaxText =
+            """
+            string method_declaration()
+            {
+                return
+                    1.ToString().Trim().ToLower();
+            }
+            """.Trim();
+
+        var expectedFormattedText =
+            """
+            string method_declaration()
+            {
+                return
+                    1.ToString()
+                    .Trim()
+                    .ToLower();
+            }
+            """.Trim();
+
+        var formattedSyntaxText = FormatCSharpScript(inputSyntaxText);
+
+        StringAssert.Contains(formattedSyntaxText, expectedFormattedText);
+    }
+
+    [TestMethod]
+    public void Adds_newlines_after_assignment()
+    {
+        var inputSyntaxText =
+            """
+            class MyClass
+            {
+                public int myField = 1;
+
+                public int MyProperty { get; set; } = 1;
+
+                void method_declaration()
+                {
+                    var local = 1;
+                }
+            }
+            """.Trim();
+
+        var expectedFormattedText =
+            """
+            class MyClass
+            {
+                public int myField =
+                    1;
+
+                public int MyProperty { get; set; } =
+                    1;
+
+                void method_declaration()
+                {
+                    var local =
+                        1;
+                }
+            }
+            """.Trim();
+
+        var formattedSyntaxText = FormatCSharpScript(inputSyntaxText);
+
+        StringAssert.Contains(formattedSyntaxText, expectedFormattedText);
+    }
+
+    static string FormatCSharpScript(string inputSyntaxText) =>
+        FormatCSharpSyntaxRewriter.FormatSyntaxTree(ParseAsCSharpScript(inputSyntaxText))
+        .GetRoot().ToFullString();
+
+    static SyntaxTree ParseAsCSharpScript(string inputSyntaxText) =>
+        SyntaxFactory.ParseSyntaxTree(
+            inputSyntaxText,
+            options: new CSharpParseOptions().WithKind(SourceCodeKind.Script));
 }

@@ -17,6 +17,19 @@ public class FormatCSharpSyntaxRewriter(
     {
     }
 
+    public static SyntaxTree FormatSyntaxTree(SyntaxTree syntaxTree)
+    {
+        var formattedSyntaxRoot = FormatSyntaxTree(syntaxTree.GetRoot());
+
+        var formattedSyntaxTree = syntaxTree.WithRootAndOptions(formattedSyntaxRoot, syntaxTree.Options);
+
+        return formattedSyntaxTree;
+    }
+
+    public static T FormatSyntaxTree<T>(T syntaxTree)
+        where T : SyntaxNode =>
+        (T)new FormatCSharpSyntaxRewriter().Visit(syntaxTree);
+
     public override SyntaxNode VisitInvocationExpression(InvocationExpressionSyntax nodeBeforeRewriteInner)
     {
         var node = (InvocationExpressionSyntax)base.VisitInvocationExpression(nodeBeforeRewriteInner)!;
@@ -26,13 +39,17 @@ public class FormatCSharpSyntaxRewriter(
 
         var indentationTrivia = ComputeIndentationTriviaForNode(nodeBeforeRewriteInner.ArgumentList);
 
-        var newOpenParenToken = node.ArgumentList.OpenParenToken
-            .WithTrailingTrivia(
-            node.ArgumentList.OpenParenToken.TrailingTrivia
-            .Add(SyntaxFactory.LineFeed)
-            .Add(indentationTrivia));
+        var newArguments =
+            SyntaxFactory.SeparatedList(
+                node.ArgumentList.Arguments
+                .Select(argumentSyntax =>
+                argumentSyntax.WithLeadingTrivia(
+                    new SyntaxTriviaList(SyntaxFactory.LineFeed, indentationTrivia)
+                    .AddRange(argumentSyntax.GetLeadingTrivia()))));
 
-        var newArgumentList = node.ArgumentList.WithOpenParenToken(newOpenParenToken);
+        var newArgumentList =
+            node.ArgumentList
+            .WithArguments(newArguments);
 
         var newInvocationExpression = node.WithArgumentList(newArgumentList);
 
@@ -58,14 +75,19 @@ public class FormatCSharpSyntaxRewriter(
 
         return
             node
+            .WithCondition(node.Condition.WithTrailingTrivia())
             .WithQuestionToken(
                 node.QuestionToken
                 .WithLeadingTrivia(SyntaxFactory.LineFeed, indentationTrivia)
-                .WithTrailingTrivia(SyntaxFactory.LineFeed, indentationTrivia))
+                .WithTrailingTrivia())
+            .WithWhenTrue(
+                node.WhenTrue.WithLeadingTrivia(SyntaxFactory.LineFeed, indentationTrivia)
+                .WithTrailingTrivia())
             .WithColonToken(
                 node.ColonToken
                 .WithLeadingTrivia(SyntaxFactory.LineFeed, indentationTrivia)
-                .WithTrailingTrivia(SyntaxFactory.LineFeed, indentationTrivia));
+                .WithTrailingTrivia())
+            .WithWhenFalse(node.WhenFalse.WithLeadingTrivia(SyntaxFactory.LineFeed, indentationTrivia));
     }
 
     public override SyntaxNode? VisitBlock(BlockSyntax originalNode)
@@ -90,6 +112,55 @@ public class FormatCSharpSyntaxRewriter(
                         statement.WithLeadingTrivia(indentationTrivia)
                         .WithTrailingTrivia(trailingTrivia);
                     })));
+    }
+
+    public override SyntaxNode? VisitClassDeclaration(ClassDeclarationSyntax originalNode)
+    {
+        var node = (ClassDeclarationSyntax)base.VisitClassDeclaration(originalNode)!;
+
+        var newMembers =
+            SyntaxFactory.List(
+                node.Members
+                .Select((member, i) =>
+                {
+                    if (i < 1)
+                        return member;
+
+                    var indentationTrivia = ComputeIndentationTriviaForNode(member);
+
+                    return
+                    member.WithLeadingTrivia(
+                        new SyntaxTriviaList(SyntaxFactory.LineFeed, indentationTrivia));
+                }));
+
+        return node.WithMembers(newMembers);
+    }
+
+    public override SyntaxNode? VisitMemberAccessExpression(MemberAccessExpressionSyntax originalNode)
+    {
+        var node = (MemberAccessExpressionSyntax)base.VisitMemberAccessExpression(originalNode)!;
+
+        if (originalNode.Expression is not InvocationExpressionSyntax)
+            return node;
+
+        var indentationTrivia = ComputeIndentationTriviaForNode(originalNode.Expression);
+
+        return
+            node
+            .WithOperatorToken(node.OperatorToken.WithLeadingTrivia(
+                new SyntaxTriviaList(SyntaxFactory.LineFeed, indentationTrivia)));
+    }
+
+    public override SyntaxNode? VisitEqualsValueClause(EqualsValueClauseSyntax originalNode)
+    {
+        var indentationTrivia = ComputeIndentationTriviaForNode(originalNode.Value);
+
+        var node = (EqualsValueClauseSyntax)base.VisitEqualsValueClause(originalNode)!;
+
+        return
+            node
+            .WithValue(node.Value.WithLeadingTrivia(new SyntaxTriviaList(SyntaxFactory.LineFeed, indentationTrivia)))
+            .WithEqualsToken(node.EqualsToken.WithTrailingTrivia());
     }
 
     public SyntaxTrivia ComputeIndentationTriviaForNode(SyntaxNode node) =>
@@ -136,6 +207,8 @@ public class FormatCSharpSyntaxRewriter(
             UsingStatementSyntax => true,
             LockStatementSyntax => true,
             ArgumentListSyntax => true,
+            ReturnStatementSyntax => true,
+            EqualsValueClauseSyntax => true,
 
             _ => false
         };

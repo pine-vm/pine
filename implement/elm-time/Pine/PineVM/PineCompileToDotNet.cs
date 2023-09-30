@@ -4,6 +4,7 @@ using Microsoft.CodeAnalysis.CSharp.Syntax;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Numerics;
@@ -38,7 +39,8 @@ public class PineCompileToDotNet
                     SyntaxFactory.List<MemberDeclarationSyntax>(
                         [.. (additionalMembers ?? []), compileCSharpClassResult.ClassDeclarationSyntax]));
 
-        var formattedNode = new FormatCSharpSyntaxRewriter().Visit(compilationUnitSyntax.NormalizeWhitespace(eol: "\n"));
+        var formattedNode =
+            FormatCSharpSyntaxRewriter.FormatSyntaxTree(compilationUnitSyntax.NormalizeWhitespace(eol: "\n"));
 
         return
             new GenerateCSharpFileResult(
@@ -915,8 +917,8 @@ public class PineCompileToDotNet
             {
                 dictionary[KernelFunctionParameterType.Integer] =
                     (CompiledExpression.WithTypePlainValue(
-                        SyntaxFactory.LiteralExpression(SyntaxKind.NumericLiteralExpression, SyntaxFactory.Literal((long)okInteger.Value))),
-                            DependenciesFromCompilation.Empty);
+                        ExpressionSyntaxForIntegerLiteral((long)okInteger.Value)),
+                        DependenciesFromCompilation.Empty);
             }
         }
 
@@ -1366,9 +1368,7 @@ public class PineCompileToDotNet
                     SyntaxFactory.ArgumentList(
                         SyntaxFactory.SingletonSeparatedList(
                             SyntaxFactory.Argument(
-                                SyntaxFactory.LiteralExpression(
-                                    SyntaxKind.NumericLiteralExpression,
-                                    SyntaxFactory.Literal((long)okInteger.Value))))));
+                                ExpressionSyntaxForIntegerLiteral((long)okInteger.Value)))));
             }
         }
 
@@ -1394,9 +1394,7 @@ public class PineCompileToDotNet
             var bytesIntegers =
                 blob
                 .ToArray()
-                .Select(b => SyntaxFactory.LiteralExpression(
-                    SyntaxKind.NumericLiteralExpression,
-                    SyntaxFactory.Literal(b)));
+                .Select(b => ExpressionSyntaxForIntegerLiteral(b));
 
             return
                 SyntaxFactory.InvocationExpression(
@@ -1463,6 +1461,22 @@ public class PineCompileToDotNet
             throw new Exception("Unknown value type: " + pineValue.GetType().FullName)
         };
     }
+
+    public static LiteralExpressionSyntax ExpressionSyntaxForIntegerLiteral(long integer) =>
+        SyntaxFactory.LiteralExpression(
+            SyntaxKind.NumericLiteralExpression,
+            SyntaxTokenForIntegerLiteral(integer));
+
+    public static SyntaxToken SyntaxTokenForIntegerLiteral(long integer) =>
+        SyntaxFactory.Literal(
+            integer.ToString("N0", IntegerLiteralNumberFormatInfo),
+            integer);
+
+    static readonly NumberFormatInfo IntegerLiteralNumberFormatInfo = new()
+    {
+        NumberGroupSeparator = "_",
+        NumberGroupSizes = [3]
+    };
 
     private static readonly ExpressionSyntax pineValueEmptyListSyntax =
         SyntaxFactory.MemberAccessExpression(
