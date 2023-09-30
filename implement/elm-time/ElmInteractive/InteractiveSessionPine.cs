@@ -235,10 +235,10 @@ public class InteractiveSessionPine : IInteractiveSession
             compileElmPreparedJavaScriptEngine.Value?.Dispose();
     }
 
-    public static Result<string, PineCompileToDotNet.CompileCSharpClassResult> CompileForProfiledScenarios(
+    public static Result<string, Pine.CompilePineToDotNet.CompileCSharpClassResult> CompileForProfiledScenarios(
         TreeNodeWithStringPath compileElmProgramCodeFiles,
         IReadOnlyList<TestElmInteractive.Scenario> scenarios,
-        PineCompileToDotNet.SyntaxContainerConfig syntaxContainerConfig,
+        Pine.CompilePineToDotNet.SyntaxContainerConfig syntaxContainerConfig,
         int limitNumber)
     {
         var expressionsProfiles =
@@ -264,7 +264,7 @@ public class InteractiveSessionPine : IInteractiveSession
             .ToImmutableList();
 
         return
-            PineCompileToDotNet.CompileExpressionsToCSharpClass(
+            Pine.CompilePineToDotNet.CompileToCSharp.CompileExpressionsToCSharpClass(
                 expressionsToCompile,
                 syntaxContainerConfig);
     }

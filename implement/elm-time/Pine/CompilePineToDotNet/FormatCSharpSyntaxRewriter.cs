@@ -1,9 +1,9 @@
-﻿using Microsoft.CodeAnalysis.CSharp.Syntax;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis;
 using System.Linq;
 
-namespace Pine.PineVM;
+namespace Pine.CompilePineToDotNet;
 
 public class FormatCSharpSyntaxRewriter(
     char indentChar,

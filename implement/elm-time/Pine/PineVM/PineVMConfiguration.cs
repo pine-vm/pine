@@ -22,9 +22,9 @@ public partial class PineVMConfiguration
 
     static partial void LinkGeneratedOptimizations();
 
-    public static PineCompileToDotNet.GenerateCSharpFileResult GenerateCSharpFile(
-        PineCompileToDotNet.SyntaxContainerConfig syntaxContainerConfig,
-        PineCompileToDotNet.CompileCSharpClassResult compileCSharpClassResult)
+    public static CompilePineToDotNet.GenerateCSharpFileResult GenerateCSharpFile(
+        CompilePineToDotNet.SyntaxContainerConfig syntaxContainerConfig,
+        CompilePineToDotNet.CompileCSharpClassResult compileCSharpClassResult)
     {
         var configurationClassDeclaration =
             SyntaxFactory.ClassDeclaration(nameof(PineVMConfiguration))
@@ -65,7 +65,7 @@ public partial class PineVMConfiguration
                 .WithMembers(SyntaxFactory.SingletonList<MemberDeclarationSyntax>(configurationClassDeclaration));
 
         return
-            PineCompileToDotNet.GenerateCSharpFile(
+            CompilePineToDotNet.CompileToCSharp.GenerateCSharpFile(
                 compileCSharpClassResult,
                 additionalMembers: [configurationClassDeclarationInNamespace]);
     }

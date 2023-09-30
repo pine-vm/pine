@@ -996,7 +996,7 @@ public class Program
                             var pgoAndCompileStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
                             var syntaxContainerConfig =
-                            new PineCompileToDotNet.SyntaxContainerConfig(
+                            new Pine.CompilePineToDotNet.SyntaxContainerConfig(
                                 containerTypeName: "container_type",
                                 dictionaryMemberName: "compiled_expressions_dictionary");
 
@@ -1021,7 +1021,8 @@ public class Program
                                 {
                                     var compileToAssemblyResult =
                                     compileResult
-                                    .AndThen(compileOk => PineCompileToDotNet.CompileToAssembly(syntaxContainerConfig, compileOk));
+                                    .AndThen(compileOk => Pine.CompilePineToDotNet.CompileToAssembly.Compile(
+                                        syntaxContainerConfig, compileOk));
 
                                     console.WriteLine(
                                         "Completed PGO and compilation in " +

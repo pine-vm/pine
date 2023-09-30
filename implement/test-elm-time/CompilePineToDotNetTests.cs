@@ -1,13 +1,12 @@
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Pine;
-using Pine.PineVM;
 using System.Collections.Immutable;
 using System.Linq;
 
 namespace TestElmTime;
 
 [TestClass]
-public class TestPineCompileToDotNet
+public class CompilePineToDotNetTests
 {
     public static readonly PineValue value_299b7decef = PineValueAsString.ValueFromString("List");
 
@@ -32,7 +31,9 @@ public class TestPineCompileToDotNet
             .Select(value => (value, hash: CommonConversion.StringBase16(PineValueHashTree.ComputeHash(value))))
             .ToImmutableList();
 
-        var orderedValues = PineCompileToDotNet.OrderValuesForDeclaration(listBeforeOrdering).ToImmutableList();
+        var orderedValues =
+            Pine.CompilePineToDotNet.CSharpDeclarationOrder.OrderValuesForDeclaration(listBeforeOrdering)
+            .ToImmutableList();
 
         CollectionAssert.AreEqual(
             new[]
