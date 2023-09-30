@@ -753,10 +753,9 @@ public class PineCompileToDotNet
                             SyntaxFactory.ArgumentList(
                                 SyntaxFactory.SingletonSeparatedList(
                                     SyntaxFactory.Argument(
-                                        SyntaxFactory.ImplicitArrayCreationExpression(
-                                            SyntaxFactory.InitializerExpression(
-                                                SyntaxKind.ArrayInitializerExpression,
-                                                SyntaxFactory.SeparatedList(csharpItems)))))))),
+                                        SyntaxFactory.CollectionExpression(
+                                            SyntaxFactory.SeparatedList<CollectionElementSyntax>(
+                                                csharpItems.Select(SyntaxFactory.ExpressionElement)))))))),
                     compiledElements.Select(ce => ce.expression).ToImmutableList());
 
                 var aggregateDeps = DependenciesFromCompilation.Union(compiledElements.Select(e => e.dependencies));
@@ -1406,19 +1405,18 @@ public class PineCompileToDotNet
                     SyntaxFactory.ArgumentList(
                         SyntaxFactory.SingletonSeparatedList(
                             SyntaxFactory.Argument(
-                                SyntaxFactory.ArrayCreationExpression(
+                                SyntaxFactory.CastExpression(
                                     SyntaxFactory.ArrayType(
-                                        SyntaxFactory.PredefinedType(
-                                            SyntaxFactory.Token(SyntaxKind.ByteKeyword)))
+                                        SyntaxFactory.PredefinedType(SyntaxFactory.Token(SyntaxKind.ByteKeyword)))
                                     .WithRankSpecifiers(
                                         SyntaxFactory.SingletonList(
                                             SyntaxFactory.ArrayRankSpecifier(
                                                 SyntaxFactory.SingletonSeparatedList<ExpressionSyntax>(
-                                                    SyntaxFactory.OmittedArraySizeExpression())))))
-                                .WithInitializer(
-                                    SyntaxFactory.InitializerExpression(
-                                        SyntaxKind.ArrayInitializerExpression,
-                                        SyntaxFactory.SeparatedList<ExpressionSyntax>(bytesIntegers)))))));
+                                                    SyntaxFactory.OmittedArraySizeExpression())))),
+                                    SyntaxFactory.CollectionExpression(
+                                        SyntaxFactory.SeparatedList<CollectionElementSyntax>(
+                                            bytesIntegers.Select(SyntaxFactory.ExpressionElement))))
+                                ))));
         }
 
         ExpressionSyntax defaultRepresentationOfList(IReadOnlyList<PineValue> list)
@@ -1436,17 +1434,11 @@ public class PineCompileToDotNet
                     SyntaxFactory.ArgumentList(
                         SyntaxFactory.SingletonSeparatedList(
                             SyntaxFactory.Argument(
-                                SyntaxFactory.ArrayCreationExpression(
-                                    SyntaxFactory.ArrayType(SyntaxFactory.IdentifierName("PineValue"))
-                                    .WithRankSpecifiers(
-                                        SyntaxFactory.SingletonList(
-                                            SyntaxFactory.ArrayRankSpecifier(
-                                                SyntaxFactory.SingletonSeparatedList<ExpressionSyntax>(
-                                                    SyntaxFactory.OmittedArraySizeExpression())))))
-                                .WithInitializer(
-                                    SyntaxFactory.InitializerExpression(
-                                        SyntaxKind.ArrayInitializerExpression,
-                                        SyntaxFactory.SeparatedList(elementsSyntaxes)))))));
+                                SyntaxFactory.CollectionExpression(
+                                    SyntaxFactory.SeparatedList<CollectionElementSyntax>(
+                                        elementsSyntaxes
+                                        .Select(SyntaxFactory.ExpressionElement)))
+                                ))));
         }
 
         return pineValue switch
