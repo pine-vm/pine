@@ -711,10 +711,64 @@ countCharsWhile predicate str =
 
 parseArray : Parser (List Value)
 parseArray str =
-    -- Array parsing logic goes here
-    -- This would involve recursively using `parseValue` to parse each element of the array
-    -- and dealing with commas, whitespaces, and the closing bracket.
-    ( Err "Array parsing not implemented", 0 )
+    parseArrayHelper [] str
+        |> Tuple.mapFirst (Result.map List.reverse)
+
+
+parseArrayHelper : List Value -> Parser (List Value)
+parseArrayHelper previousItems str =
+    let
+        strTrimmed =
+            dropWhileList isCharRemovedOnTrim str
+
+        trimmedLength =
+            List.length str - List.length strTrimmed
+    in
+    case strTrimmed of
+        [] ->
+            ( Err "Unexpected end of input while parsing array"
+            , 0
+            )
+
+        ']' :: _ ->
+            ( Ok previousItems
+            , trimmedLength + 1
+            )
+
+        _ ->
+            parseArrayHelperTrimmedNotEmpty previousItems strTrimmed
+                |> Tuple.mapSecond ((+) trimmedLength)
+
+
+parseArrayHelperTrimmedNotEmpty : List Value -> Parser (List Value)
+parseArrayHelperTrimmedNotEmpty previousItems strTrimmed =
+    let
+        ( valueResult, itemLength ) =
+            parseValue strTrimmed
+    in
+    case valueResult of
+        Err err ->
+            ( Err err, itemLength )
+
+        Ok itemValue ->
+            let
+                strAfterItem =
+                    List.drop itemLength strTrimmed
+
+                strAfterValueTrimmed =
+                    dropWhileList isCharRemovedOnTrim strAfterItem
+
+                trimmedLength =
+                    List.length strAfterItem - List.length strAfterValueTrimmed
+            in
+            case strAfterValueTrimmed of
+                ',' :: afterComma ->
+                    parseArrayHelper (itemValue :: previousItems) afterComma
+                        |> Tuple.mapSecond ((+) (itemLength + trimmedLength + 1))
+
+                _ ->
+                    parseArrayHelper (itemValue :: previousItems) strAfterValueTrimmed
+                        |> Tuple.mapSecond ((+) (itemLength + trimmedLength))
 
 
 parseObject : Parser (List ( String, Value ))
@@ -727,6 +781,25 @@ parseObject str =
 listStartsWith : List a -> List a -> Bool
 listStartsWith prefix list =
     List.take (List.length prefix) list == prefix
+
+
+dropWhileList : (Char -> Bool) -> List Char -> List Char
+dropWhileList predicate stringList =
+    case stringList of
+        [] ->
+            []
+
+        char :: rest ->
+            if predicate char then
+                dropWhileList predicate rest
+
+            else
+                stringList
+
+
+isCharRemovedOnTrim : Char -> Bool
+isCharRemovedOnTrim char =
+    Char.toCode char <= 32
 
 
 """
