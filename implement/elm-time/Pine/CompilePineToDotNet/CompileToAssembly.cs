@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.IO;
 using System.Linq;
+using System.Numerics;
 using System.Reflection;
 using static Pine.CompilePineToDotNet.CompileToCSharp;
 
@@ -91,6 +92,7 @@ public class CompileToAssembly
         {
             typeof(object),
             typeof(Func<>),
+            typeof(BigInteger),
             typeof(IImmutableList<>),
             typeof(PineVM.PineVM)
         };
