@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Collections.Immutable;
@@ -12,39 +12,28 @@ public record ProfilingPineVM(
     PineVM PineVM,
     IReadOnlyCollection<Expression> ExpressionEvaluations)
 {
-    public static ProfilingPineVM BuildProfilingVM(
-        IReadOnlyDictionary<PineValue, Func<PineVM.EvalExprDelegate, PineValue, Result<string, PineValue>>>? decodeExpressionOverrides = null)
+    public static ProfilingPineVM BuildProfilingVM()
     {
         var expressionEvaluations = new ConcurrentQueue<Expression>();
 
         var profilingPineVM =
             new PineVM(
-                decodeExpressionOverrides: decodeExpressionOverrides,
-                overrideEvaluateExpression:
-                originalHandler => (expression, environment) =>
+                overrideDecodeExpression:
+                defaultHandler => value =>
                 {
-                    if (expression is Expression.DecodeAndEvaluateExpression decodeAndEvaluateExpression)
+                    return
+                    defaultHandler(value)
+                    .Map(decodedExpr =>
                     {
-                        originalHandler(decodeAndEvaluateExpression.expression, environment)
-                        .AndThen(PineVM.DecodeExpressionFromValueDefault)
-                        .MapError(err =>
+                        if (decodedExpr is not Expression.DelegatingExpression)
                         {
-                            Console.WriteLine("Failed to decode expression: " + err);
-                            return err;
-                        })
-                        .Map(innerExpr =>
-                        {
-                            if (innerExpr is not Expression.DelegatingExpression)
-                            {
-                                expressionEvaluations.Enqueue(innerExpr);
-                            }
+                            expressionEvaluations.Enqueue(decodedExpr);
+                        }
 
-                            return innerExpr;
-                        });
-                    }
-
-                    return originalHandler(expression, environment);
-                });
+                        return decodedExpr;
+                    });
+                },
+                overrideEvaluateExpression: null);
 
         return new ProfilingPineVM(profilingPineVM, expressionEvaluations);
     }

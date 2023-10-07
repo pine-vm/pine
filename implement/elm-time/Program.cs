@@ -18,7 +18,7 @@ namespace ElmTime;
 
 public class Program
 {
-    public static string AppVersionId => "2023-10-03";
+    public static string AppVersionId => "2023-10-04";
 
     private static int AdminInterfaceDefaultPort => 4000;
 
@@ -1081,9 +1081,9 @@ public class Program
                                 if (compiledDecodeExpressionOverrides is not null)
                                 {
                                     var pineVMWithCompiledAssembly =
-                                        new PineVM(
-                                            decodeExpressionOverrides: compiledDecodeExpressionOverrides,
-                                            overrideEvaluateExpression: null);
+                                    PineVM.Construct(
+                                        decodeExpressionOverrides: compiledDecodeExpressionOverrides,
+                                        overrideEvaluateExpression: null);
 
                                     return new ElmInteractive.InteractiveSessionPine(
                                         compileElmProgramCodeFiles: compileElmProgramCodeFiles,

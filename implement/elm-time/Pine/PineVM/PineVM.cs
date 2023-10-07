@@ -11,26 +11,50 @@ public class PineVM
 
     public delegate EvalExprDelegate OverrideEvalExprDelegate(EvalExprDelegate evalExprDelegate);
 
+    public delegate Result<string, Expression> DecodeExprDelegate(PineValue value);
+
+    public delegate DecodeExprDelegate OverrideDecodeExprDelegate(DecodeExprDelegate decodeExprDelegate);
+
     public long EvaluateExpressionCount { private set; get; }
 
     public long FunctionApplicationMaxEnvSize { private set; get; }
 
-    private readonly IReadOnlyDictionary<PineValue, Expression.DelegatingExpression>? decodeExpressionOverrides;
+    private readonly DecodeExprDelegate decodeExpressionDelegate;
 
     private readonly EvalExprDelegate evalExprDelegate;
 
-    public PineVM(
+    public static PineVM Construct(
         IReadOnlyDictionary<PineValue, Func<EvalExprDelegate, PineValue, Result<string, PineValue>>>? decodeExpressionOverrides = null,
         OverrideEvalExprDelegate? overrideEvaluateExpression = null)
     {
-        evalExprDelegate =
-            overrideEvaluateExpression?.Invoke(EvaluateExpressionDefault) ?? EvaluateExpressionDefault;
-
-        this.decodeExpressionOverrides =
-            (decodeExpressionOverrides ?? PineVMConfiguration.DecodeExpressionOverrides)
+        var decodeExpressionOverridesDict =
+            decodeExpressionOverrides
             ?.ToImmutableDictionary(
                 keySelector: encodedExprAndDelegate => encodedExprAndDelegate.Key,
                 elementSelector: encodedExprAndDelegate => new Expression.DelegatingExpression(encodedExprAndDelegate.Value));
+
+        return new PineVM(
+            overrideDecodeExpression:
+            decodeExpressionOverridesDict switch
+            {
+                null =>
+                originalHandler => originalHandler,
+
+                not null =>
+                _ => value => DecodeExpressionFromValue(value, decodeExpressionOverridesDict)
+            },
+            overrideEvaluateExpression);
+    }
+
+    public PineVM(
+        OverrideDecodeExprDelegate? overrideDecodeExpression = null,
+        OverrideEvalExprDelegate? overrideEvaluateExpression = null)
+    {
+        decodeExpressionDelegate =
+            overrideDecodeExpression?.Invoke(DecodeExpressionFromValueDefault) ?? DecodeExpressionFromValueDefault;
+
+        evalExprDelegate =
+            overrideEvaluateExpression?.Invoke(EvaluateExpressionDefault) ?? EvaluateExpressionDefault;
     }
 
     public Result<string, PineValue> EvaluateExpression(
@@ -195,17 +219,22 @@ public class PineVM
             Result<string, PineValue>.err("Unsupported expression type: " + expression.GetType().FullName)
         };
 
-    public Result<string, Expression> DecodeExpressionFromValue(PineValue value)
+    public static Result<string, Expression> DecodeExpressionFromValue(
+        PineValue value,
+        IReadOnlyDictionary<PineValue, Expression.DelegatingExpression> decodeExpressionOverrides)
     {
-        if (decodeExpressionOverrides?.TryGetValue(value, out var delegatingExpression) ?? false)
+        if (decodeExpressionOverrides.TryGetValue(value, out var delegatingExpression))
             return Result<string, Expression>.ok(delegatingExpression);
 
         return
             DecodeChoiceFromPineValue(
-                generalDecoder: DecodeExpressionFromValue,
+                generalDecoder: value => DecodeExpressionFromValue(value, decodeExpressionOverrides),
                 ExpressionDecoders,
                 value);
     }
+
+    public Result<string, Expression> DecodeExpressionFromValue(PineValue value) =>
+        decodeExpressionDelegate(value);
 
     public static Result<string, Expression> DecodeExpressionFromValueDefault(PineValue value) =>
         DecodeChoiceFromPineValue(
