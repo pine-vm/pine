@@ -242,7 +242,7 @@ public class PineVM
             ExpressionDecoders,
             value);
 
-    private static readonly IImmutableDictionary<string, Func<Func<PineValue, Result<string, Expression>>, PineValue, Result<string, Expression>>> ExpressionDecoders =
+    private static readonly IImmutableDictionary<PineValue, Func<Func<PineValue, Result<string, Expression>>, PineValue, Result<string, Expression>>> ExpressionDecoders =
         ImmutableDictionary<string, Func<Func<PineValue, Result<string, Expression>>, PineValue, Result<string, Expression>>>.Empty
         .SetItem(
             "Literal",
@@ -271,7 +271,12 @@ public class PineVM
         .SetItem(
             "StringTag",
             (generalDecoder, value) => DecodeStringTagExpression(generalDecoder, value)
-            .Map(stringTag => (Expression)stringTag));
+            .Map(stringTag => (Expression)stringTag))
+        .ToImmutableDictionary(
+            keySelector:
+            stringTagAndDecoder => PineValueAsString.ValueFromString(stringTagAndDecoder.Key),
+            elementSelector:
+            stringTagAndDecoder => stringTagAndDecoder.Value);
 
     public static Result<string, PineValue> EncodeDecodeAndEvaluateExpression(Expression.DecodeAndEvaluateExpression decodeAndEval) =>
         EncodeExpressionAsValue(decodeAndEval.expression)
@@ -450,19 +455,20 @@ public class PineVM
 
     public static Result<string, T> DecodeChoiceFromPineValue<T>(
         Func<PineValue, Result<string, T>> generalDecoder,
-        IImmutableDictionary<string, Func<Func<PineValue, Result<string, T>>, PineValue, Result<string, T>>> variants,
+        IImmutableDictionary<PineValue, Func<Func<PineValue, Result<string, T>>, PineValue, Result<string, T>>> variants,
         PineValue value) =>
         DecodePineListValue(value)
         .AndThen(DecodeListWithExactlyTwoElements)
-        .AndThen(tagNameValueAndValue => PineValueAsString.StringFromValue(tagNameValueAndValue.Item1)
-        .MapError(error => "Failed to decode union tag name: " + error)
-        .AndThen(tagName =>
+        .AndThen(tagNameValueAndValue =>
         {
-            if (!variants.TryGetValue(tagName, out var variant))
-                return Result<string, T>.err("Unexpected tag name: " + tagName);
+            if (!variants.TryGetValue(tagNameValueAndValue.Item1, out var variant))
+                return Result<string, T>.err(
+                    "Unexpected tag name: " +
+                    PineValueAsString.StringFromValue(tagNameValueAndValue.Item1)
+                    .Extract(err => "Failed to decode as string: " + err));
 
             return variant(generalDecoder, tagNameValueAndValue.Item2)!;
-        }));
+        });
 
     public static Result<string, IImmutableList<PineValue>> DecodePineListValue(PineValue value)
     {
