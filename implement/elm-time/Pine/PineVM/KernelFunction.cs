@@ -14,14 +14,29 @@ public static class KernelFunction
                 value switch
                 {
                     PineValue.ListValue list =>
-                    list.Elements.Count < 1 || list.Elements.All(e => e.Equals(list.Elements[0])),
+                    list.Elements switch
+                    {
+                        [] => true,
+
+                        [var first, ..] =>
+                        /*
+                         * ::rest pattern seems not implemented yet:
+                         * https://github.com/dotnet/csharplang/issues/6574
+                         * */
+                        list.Elements.All(e => e.Equals(first)),
+                    },
 
                     PineValue.BlobValue blob =>
-                    blob.Bytes.Length < 1 || blob.Bytes.ToArray().All(b => b == blob.Bytes.Span[0]),
+                    BlobAllBytesEqual(blob.Bytes),
 
-                    _ => throw new NotImplementedException()
+                    _ =>
+                    throw new NotImplementedException()
                 }
             ));
+
+    private static bool BlobAllBytesEqual(ReadOnlyMemory<byte> readOnlyMemory) =>
+        readOnlyMemory.IsEmpty ||
+        !readOnlyMemory.Span.ContainsAnyExcept(readOnlyMemory.Span[0]);
 
     public static Result<string, PineValue> equal(PineValue valueA, PineValue valueB) =>
         Result<string, PineValue>.ok(
@@ -58,7 +73,7 @@ public static class KernelFunction
         value switch
         {
             PineValue.BlobValue blobComponent => PineValue.Blob(blobComponent.Bytes[(int)count..]),
-            PineValue.ListValue listComponent => PineValue.List(listComponent.Elements.Skip((int)count).ToImmutableList()),
+            PineValue.ListValue listComponent => PineValue.List([.. listComponent.Elements.Skip((int)count)]),
             _ => throw new NotImplementedException()
         };
 
@@ -73,8 +88,7 @@ public static class KernelFunction
         value switch
         {
             PineValue.BlobValue blobComponent => PineValue.Blob(blobComponent.Bytes[..(int)count]),
-            PineValue.ListValue listComponent => PineValue.List(listComponent.Elements
-                .Take((int)count).ToImmutableList()),
+            PineValue.ListValue listComponent => PineValue.List([.. listComponent.Elements.Take((int)count)]),
             _ => throw new NotImplementedException()
         };
 
@@ -83,7 +97,7 @@ public static class KernelFunction
             value switch
             {
                 PineValue.BlobValue blobComponent => PineValue.Blob(blobComponent.Bytes.ToArray().Reverse().ToArray()),
-                PineValue.ListValue listComponent => PineValue.List(listComponent.Elements.Reverse().ToImmutableList()),
+                PineValue.ListValue listComponent => PineValue.List([.. listComponent.Elements.Reverse()]),
                 _ => throw new NotImplementedException()
             });
 
@@ -155,11 +169,11 @@ public static class KernelFunction
         value switch
         {
             PineValue.ListValue list =>
-                new PineValue.ListValue(
-                    list.Elements
+                PineValue.List(
+                    [.. list.Elements
                         .Select(sort_int)
                         .Order(valueComparerInt)
-                        .ToImmutableList()),
+                        ]),
 
             _ => value,
         };
