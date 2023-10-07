@@ -27,6 +27,8 @@ public record GenerateCSharpFileResult(
 
 public partial class CompileToCSharp
 {
+    static private readonly CompilerMutableCache compilerCache = new();
+
     public static GenerateCSharpFileResult GenerateCSharpFile(
         CompileCSharpClassResult compileCSharpClassResult,
         IReadOnlyList<MemberDeclarationSyntax>? additionalMembers = null)
@@ -39,7 +41,7 @@ public partial class CompileToCSharp
                         [.. (additionalMembers ?? []), compileCSharpClassResult.ClassDeclarationSyntax]));
 
         var formattedNode =
-            CompilePineToDotNet.FormatCSharpSyntaxRewriter.FormatSyntaxTree(compilationUnitSyntax.NormalizeWhitespace(eol: "\n"));
+            FormatCSharpSyntaxRewriter.FormatSyntaxTree(compilationUnitSyntax.NormalizeWhitespace(eol: "\n"));
 
         return
             new GenerateCSharpFileResult(
@@ -99,7 +101,7 @@ public partial class CompileToCSharp
                     {
                         var expressionValue = PineVM.PineVM.EncodeExpressionAsValue(expression).Extract(err => throw new Exception(err));
 
-                        var expressionHash = CommonConversion.StringBase16(PineValueHashTree.ComputeHash(expressionValue))[..10];
+                        var expressionHash = CommonConversion.StringBase16(compilerCache.ComputeHash(expressionValue))[..10];
 
                         var functionName = MemberNameForCompiledExpressionFunction(expressionHash);
 
@@ -726,7 +728,7 @@ public partial class CompileToCSharp
             .Extract(err => throw new Exception(err));
 
         var decodeAndEvaluateExpressionHash =
-            CommonConversion.StringBase16(PineValueHashTree.ComputeHash(decodeAndEvaluateExpressionValue));
+            CommonConversion.StringBase16(compilerCache.ComputeHash(decodeAndEvaluateExpressionValue));
 
         (CompiledExpression, DependenciesFromCompilation) continueWithGenericCase()
         {
@@ -761,12 +763,12 @@ public partial class CompileToCSharp
                 TryEvaluateExpressionIndependent(decodeAndEvaluateExpression.expression)
                 .MapError(err => "Failed evaluate inner as independent expression: " + err)
                 .AndThen(innerExpressionValue =>
-                PineVM.PineVM.DecodeExpressionFromValueDefault(innerExpressionValue)
+                compilerCache.DecodeExpressionFromValue(innerExpressionValue)
                 .MapError(err => "Failed to decode inner expression: " + err)
                 .AndThen(innerExpression =>
                 {
                     var innerExpressionValueHash =
-                        CommonConversion.StringBase16(PineValueHashTree.ComputeHash(innerExpressionValue));
+                        CommonConversion.StringBase16(compilerCache.ComputeHash(innerExpressionValue));
 
                     return
                     CompileToCSharpExpression(decodeAndEvaluateExpression.environment, environment)
@@ -924,7 +926,7 @@ public partial class CompileToCSharp
         return
             TryEvaluateExpressionIndependent(decodeAndEvaluateExpression.expression)
             .MapError(err => "Expression is not independent: " + err)
-            .AndThen(PineVM.PineVM.DecodeExpressionFromValueDefault)
+            .AndThen(compilerCache.DecodeExpressionFromValue)
             .AndThen(innerExpr => TryEvaluateExpressionIndependent(innerExpr)
             .MapError(err => "Inner expression is not independent: " + err));
     }
@@ -935,11 +937,11 @@ public partial class CompileToCSharp
         return
             Result<string, (CompiledExpression, DependenciesFromCompilation)>.ok(
                 (CompiledExpression.WithTypePlainValue(SyntaxFactory.IdentifierName(DeclarationNameForValue(literalExpression.Value))),
-                DependenciesFromCompilation.Empty with { Values = ImmutableHashSet.Create(literalExpression.Value) }));
+                DependenciesFromCompilation.Empty with { Values = [literalExpression.Value] }));
     }
 
     public static string DeclarationNameForValue(PineValue pineValue) =>
-        "value_" + CommonConversion.StringBase16(PineValueHashTree.ComputeHash(pineValue))[..10];
+        "value_" + CommonConversion.StringBase16(compilerCache.ComputeHash(pineValue))[..10];
 
     public static Result<string, (CompiledExpression expressionSyntax, DependenciesFromCompilation dependencies)> CompileToCSharpExpression(
         Expression.StringTagExpression stringTagExpression,
