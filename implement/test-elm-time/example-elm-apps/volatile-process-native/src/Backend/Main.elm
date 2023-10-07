@@ -72,7 +72,15 @@ updateForCurrentPosixTimeMilli { currentPosixTimeMilli } stateBefore =
             []
 
         Just ( pendingHttpRequestContext, pendingHttpRequest ) ->
-            if currentPosixTimeMilli < pendingHttpRequestContext.timeMilli + 1100 then
+            if
+                currentPosixTimeMilli
+                    < pendingHttpRequestContext.timeMilli
+                    {-
+                       The delay gradually increased due to sporadic failures of tests.
+                       TODO: Explore how to get the response earlier.
+                    -}
+                    + 1300
+            then
                 []
 
             else
