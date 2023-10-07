@@ -17,7 +17,7 @@ public class ElmSyntaxTests
             new
             {
                 moduleText = @"module TestModule exposing (..)",
-                expectedImports = System.Array.Empty<ImmutableList<string>>()
+                expectedImports = System.Array.Empty<IReadOnlyList<string>>()
             },
             new
             {
@@ -29,12 +29,12 @@ public class ElmSyntaxTests
                 import List exposing ((::))
                 import Maybe exposing (Maybe(..))
                 """,
-                expectedImports = new[]
+                expectedImports = new IReadOnlyList<string>[]
                 {
-                    ImmutableList.Create("Basics"),
-                    ImmutableList.Create("Dict"),
-                    ImmutableList.Create("List"),
-                    ImmutableList.Create("Maybe")
+                    ["Basics"],
+                    ["Dict"],
+                    ["List"],
+                    ["Maybe"]
                 }
             },
         };

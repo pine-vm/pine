@@ -1,7 +1,6 @@
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Pine;
 using Pine.PineVM;
-using System.Collections.Immutable;
 
 namespace TestElmTime;
 
@@ -18,11 +17,11 @@ public class TestPineVMEncodeExpression
             new Expression.EnvironmentExpression(),
 
             new Expression.ListExpression(
-                ImmutableArray.Create<Expression>(
+                [
                     new Expression.LiteralExpression(PineValueAsString.ValueFromString("list element alfa")),
                     new Expression.LiteralExpression(PineValueAsString.ValueFromString("list element beta")),
-                    new Expression.LiteralExpression(PineValueAsString.ValueFromString("list element gamma"))
-            )),
+                    new Expression.LiteralExpression(PineValueAsString.ValueFromString("list element gamma")),
+                ]),
 
             new Expression.ConditionalExpression(
                 condition: new Expression.LiteralExpression(PineValueAsString.ValueFromString("condition")),
