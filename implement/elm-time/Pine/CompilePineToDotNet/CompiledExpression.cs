@@ -82,26 +82,15 @@ public partial class CompileToCSharp
                 .MergeBindings(LetBindings);
 
             var mapErrorExpression =
-                SyntaxFactory.InvocationExpression(
-                    SyntaxFactory.MemberAccessExpression(
-                        SyntaxKind.SimpleMemberAccessExpression,
-                        Syntax,
-                        SyntaxFactory.IdentifierName("MapError")))
-                .WithArgumentList(
-                    SyntaxFactory.ArgumentList(
-                        SyntaxFactory.SingletonSeparatedList(
-                            SyntaxFactory.Argument(
-                                SyntaxFactory.SimpleLambdaExpression(
-                                        SyntaxFactory.Parameter(
-                                            SyntaxFactory.Identifier("err")))
-                                    .WithExpressionBody(
-                                        SyntaxFactory.BinaryExpression(
-                                            SyntaxKind.AddExpression,
-                                            SyntaxFactory.LiteralExpression(
-                                                SyntaxKind.StringLiteralExpression,
-                                                SyntaxFactory.Literal(
-                                                    "Failed to evaluate expression " + syntaxName + ":")),
-                                            SyntaxFactory.IdentifierName("err")))))));
+                BuildMapErrorExpression(
+                    Syntax,
+                    map: errExpr =>
+                    SyntaxFactory.BinaryExpression(
+                        SyntaxKind.AddExpression,
+                        SyntaxFactory.LiteralExpression(
+                            SyntaxKind.StringLiteralExpression,
+                            SyntaxFactory.Literal("Failed to evaluate expression " + syntaxName + ":")),
+                        errExpr));
 
             var combinedExpressionSyntax =
                 ExpressionBodyOrBlock(environment, combinedExpression);
@@ -120,6 +109,23 @@ public partial class CompileToCSharp
                                     SyntaxFactory.SimpleLambdaExpression(SyntaxFactory.Parameter(okIdentifier))
                                     .WithBody(combinedExpressionSyntax))))));
         }
+
+        public static ExpressionSyntax BuildMapErrorExpression(
+            ExpressionSyntax leftExpression,
+            Func<ExpressionSyntax, ExpressionSyntax> map) =>
+            SyntaxFactory.InvocationExpression(
+                SyntaxFactory.MemberAccessExpression(
+                    SyntaxKind.SimpleMemberAccessExpression,
+                    leftExpression,
+                    SyntaxFactory.IdentifierName(nameof(Result<int, int>.MapError))))
+            .WithArgumentList(
+                SyntaxFactory.ArgumentList(
+                    SyntaxFactory.SingletonSeparatedList(
+                        SyntaxFactory.Argument(
+                            SyntaxFactory.SimpleLambdaExpression(
+                                SyntaxFactory.Parameter(
+                                    SyntaxFactory.Identifier("err")))
+                            .WithExpressionBody(map(SyntaxFactory.IdentifierName("err")))))));
 
         static CSharpSyntaxNode ExpressionBodyOrBlock(
             EnvironmentConfig environment,
@@ -274,5 +280,26 @@ public partial class CompileToCSharp
     public record LetBinding(
         string DeclarationName,
         CompiledExpression Expression,
-        DependenciesFromCompilation Dependencies);
+        CompiledExpressionDependencies Dependencies);
+
+
+    public record CompiledExpressionDependencies(
+        ImmutableHashSet<PineValue> Values,
+        IImmutableSet<(string hash, PineVM.Expression expression)> Expressions)
+    {
+        public static readonly CompiledExpressionDependencies Empty = new(
+            Values: [],
+            Expressions: ImmutableHashSet<(string, PineVM.Expression)>.Empty);
+
+        public static (T, CompiledExpressionDependencies) WithNoDependencies<T>(T other) => (other, Empty);
+
+        public CompiledExpressionDependencies Union(CompiledExpressionDependencies other) =>
+            new(Values: Values.Union(other.Values),
+                Expressions: Expressions.Union(other.Expressions));
+
+        public static CompiledExpressionDependencies Union(IEnumerable<CompiledExpressionDependencies> dependencies) =>
+            dependencies.Aggregate(
+                seed: Empty,
+                func: (aggregate, next) => aggregate.Union(next));
+    }
 }

@@ -66,7 +66,7 @@ namespace Pine
 
                         return (
                             originalBlobRemainingBytes,
-                            CommonConversion.Concat<byte>(changedBlobBytes.Span, [.. bytes]));
+                            CommonConversion.Concat(changedBlobBytes.Span, [.. bytes]));
                     }
 
                     throw new Exception("Unexpected shape of BlobChangeSequenceElement");

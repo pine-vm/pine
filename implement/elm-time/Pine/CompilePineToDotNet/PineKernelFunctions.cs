@@ -13,7 +13,7 @@ namespace Pine.CompilePineToDotNet;
 public partial class CompileToCSharp
 {
     private record ParsedKernelApplicationArgumentExpression(
-        IReadOnlyDictionary<KernelFunctionParameterType, (CompiledExpression, DependenciesFromCompilation)> ArgumentSyntaxFromParameterType);
+        IReadOnlyDictionary<KernelFunctionParameterType, (CompiledExpression, CompiledExpressionDependencies)> ArgumentSyntaxFromParameterType);
 
     private record KernelFunctionInfo(
         Func<ExpressionSyntax, InvocationExpressionSyntax> CompileGenericInvocation,
@@ -66,7 +66,7 @@ public partial class CompileToCSharp
         Expression argumentExpression,
         EnvironmentConfig environment)
     {
-        var dictionary = new Dictionary<KernelFunctionParameterType, (CompiledExpression, DependenciesFromCompilation)>();
+        var dictionary = new Dictionary<KernelFunctionParameterType, (CompiledExpression, CompiledExpressionDependencies)>();
 
         if (argumentExpression is Expression.LiteralExpression literal)
         {
@@ -76,7 +76,7 @@ public partial class CompileToCSharp
                 dictionary[KernelFunctionParameterType.Integer] =
                     (CompiledExpression.WithTypePlainValue(
                         ExpressionSyntaxForIntegerLiteral((long)okInteger.Value)),
-                        DependenciesFromCompilation.Empty);
+                        CompiledExpressionDependencies.Empty);
             }
         }
 
@@ -85,7 +85,7 @@ public partial class CompileToCSharp
                 .Map(csharpExpression =>
                     new ParsedKernelApplicationArgumentExpression(
                         ArgumentSyntaxFromParameterType:
-                        ImmutableDictionary<KernelFunctionParameterType, (CompiledExpression, DependenciesFromCompilation)>.Empty
+                        ImmutableDictionary<KernelFunctionParameterType, (CompiledExpression, CompiledExpressionDependencies)>.Empty
                             .SetItem(KernelFunctionParameterType.Generic, (csharpExpression.expression, csharpExpression.dependencies))
                             .SetItems(dictionary)));
     }

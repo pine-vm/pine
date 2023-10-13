@@ -37,7 +37,7 @@ public partial class CompileToCSharp
             SyntaxFactory.CompilationUnit()
                 .WithUsings(new SyntaxList<UsingDirectiveSyntax>(compileCSharpClassResult.UsingDirectives))
                 .WithMembers(
-                    SyntaxFactory.List<MemberDeclarationSyntax>(
+                    SyntaxFactory.List(
                         [.. (additionalMembers ?? []), compileCSharpClassResult.ClassDeclarationSyntax]));
 
         var formattedNode =
@@ -97,209 +97,202 @@ public partial class CompileToCSharp
 
         return
             expressions
-                .Select(expression =>
-                    {
-                        var expressionValue = PineVM.PineVM.EncodeExpressionAsValue(expression).Extract(err => throw new Exception(err));
+            .Select(expression =>
+            {
+                var expressionValue = PineVM.PineVM.EncodeExpressionAsValue(expression).Extract(err => throw new Exception(err));
 
-                        var expressionHash = CommonConversion.StringBase16(compilerCache.ComputeHash(expressionValue))[..10];
+                var expressionHash = CommonConversion.StringBase16(compilerCache.ComputeHash(expressionValue))[..10];
 
-                        var functionName = MemberNameForCompiledExpressionFunction(expressionHash);
+                var functionName = MemberNameForCompiledExpressionFunction(expressionHash);
 
-                        return
-                            CompileToCSharpFunctionBlockSyntax(
-                                    expression,
-                                    new EnvironmentConfig(
-                                        ArgumentEnvironmentName: argumentEnvironmentName,
-                                        ArgumentEvalGenericName: argumentEvalGenericName,
-                                        LetBindings: ImmutableDictionary<Expression, LetBinding>.Empty))
-                                .MapError(err => "Failed to compile expression " + expressionHash[..10] + ": " + err)
-                                .Map(ok =>
-                                    (expression,
-                                        expressionValue,
-                                        expressionHash,
-                                        ok.dependencies,
-                                        functionName,
-                                        memberDeclarationSyntax:
-                                        memberDeclarationSyntaxForExpression(functionName, ok.blockSyntax)));
-                    }
-                ).ListCombine()
-                .Map(compiledExpressions => compiledExpressions.OrderBy(ce => ce.expressionHash))
-                .AndThen(compiledExpressions =>
+                return
+                    CompileToCSharpFunctionBlockSyntax(
+                            expression,
+                            new EnvironmentConfig(
+                                ArgumentEnvironmentName: argumentEnvironmentName,
+                                ArgumentEvalGenericName: argumentEvalGenericName,
+                                LetBindings: ImmutableDictionary<Expression, LetBinding>.Empty))
+                        .MapError(err => "Failed to compile expression " + expressionHash[..10] + ": " + err)
+                        .Map(ok =>
+                            (expression,
+                                expressionValue,
+                                expressionHash,
+                                ok.dependencies,
+                                functionName,
+                                memberDeclarationSyntax:
+                                memberDeclarationSyntaxForExpression(functionName, ok.blockSyntax)));
+            }).ListCombine()
+            .Map(compiledExpressions => compiledExpressions.OrderBy(ce => ce.expressionHash))
+            .AndThen(compiledExpressions =>
+            {
+                var aggregateDependencies =
+                    CompiledExpressionDependencies.Union(compiledExpressions.Select(er => er.dependencies));
+
+                var aggregateValueDependencies =
+                    aggregateDependencies.Values.Union(
+                            compiledExpressions.Select(forExprFunction => forExprFunction.expressionValue))
+                        .Union(
+                            aggregateDependencies.Expressions.SelectMany(e => EnumerateAllLiterals(e.expression)));
+
+                var usedValues = new HashSet<PineValue>();
+
+                void registerValueUsagesRecursive(PineValue pineValue)
                 {
-                    var aggregateDependencies =
-                        DependenciesFromCompilation.Union(compiledExpressions.Select(er => er.dependencies));
+                    if (usedValues.Contains(pineValue))
+                        return;
 
-                    var aggregateValueDependencies =
-                        aggregateDependencies.Values.Union(
-                                compiledExpressions.Select(forExprFunction => forExprFunction.expressionValue))
-                            .Union(
-                                aggregateDependencies.Expressions.SelectMany(e => EnumerateAllLiterals(e.expression)));
+                    usedValues.Add(pineValue);
 
-                    var usedValues = new HashSet<PineValue>();
+                    if (pineValue is not PineValue.ListValue list)
+                        return;
 
-                    void registerValueUsagesRecursive(PineValue pineValue)
-                    {
-                        if (usedValues.Contains(pineValue))
-                            return;
+                    foreach (var i in list.Elements)
+                        registerValueUsagesRecursive(i);
+                }
 
-                        usedValues.Add(pineValue);
+                foreach (var item in aggregateValueDependencies)
+                {
+                    registerValueUsagesRecursive(item);
+                }
 
-                        if (pineValue is not PineValue.ListValue list)
-                            return;
+                var valuesToDeclare =
+                CSharpDeclarationOrder.OrderValuesForDeclaration(aggregateValueDependencies.Concat(usedValues).Distinct())
+                .ToImmutableList();
 
-                        foreach (var i in list.Elements)
-                            registerValueUsagesRecursive(i);
-                    }
+                ExpressionSyntax? specialSyntaxForPineValue(PineValue pineValue) =>
+                    valuesToDeclare.Contains(pineValue)
+                        ? SyntaxFactory.IdentifierName(DeclarationNameForValue(pineValue))
+                        : null;
 
-                    foreach (var item in aggregateValueDependencies)
-                    {
-                        registerValueUsagesRecursive(item);
-                    }
+                (string memberName, TypeSyntax typeSyntax, ExpressionSyntax memberDeclaration)
+                    memberDeclarationForValue(
+                        PineValue pineValue)
+                {
+                    var valueExpression = CompileToCSharpLiteralExpression(pineValue, specialSyntaxForPineValue);
 
-                    var valuesToDeclare =
-                    CSharpDeclarationOrder.OrderValuesForDeclaration(aggregateValueDependencies.Concat(usedValues).Distinct())
-                    .ToImmutableList();
+                    var memberName = DeclarationNameForValue(pineValue);
 
-                    ExpressionSyntax? specialSyntaxForPineValue(PineValue pineValue) =>
-                        valuesToDeclare.Contains(pineValue)
-                            ? SyntaxFactory.IdentifierName(DeclarationNameForValue(pineValue))
-                            : null;
+                    return
+                        (memberName,
+                            SyntaxFactory.IdentifierName("PineValue"),
+                            valueExpression);
+                }
 
-                    (string memberName, TypeSyntax typeSyntax, ExpressionSyntax memberDeclaration)
-                        memberDeclarationForValue(
-                            PineValue pineValue)
-                    {
-                        var valueExpression = CompileToCSharpLiteralExpression(pineValue, specialSyntaxForPineValue);
+                (string memberName, TypeSyntax typeSyntax, ExpressionSyntax memberDeclaration)
+                    memberDeclarationForExpression(
+                        (string hash, Expression expression) hashAndExpr)
+                {
+                    var expressionExpression =
+                        EncodePineExpressionAsCSharpExpression(hashAndExpr.expression, specialSyntaxForPineValue)
+                            .Extract(err => throw new Exception("Failed to encode expression: " + err));
 
-                        var memberName = DeclarationNameForValue(pineValue);
+                    var memberName = MemberNameForExpression(hashAndExpr.hash[..10]);
 
-                        return
-                            (memberName,
-                                SyntaxFactory.IdentifierName("PineValue"),
-                                valueExpression);
-                    }
-
-                    (string memberName, TypeSyntax typeSyntax, ExpressionSyntax memberDeclaration)
-                        memberDeclarationForExpression(
-                            (string hash, Expression expression) hashAndExpr)
-                    {
-                        var expressionExpression =
-                            EncodePineExpressionAsCSharpExpression(hashAndExpr.expression, specialSyntaxForPineValue)
-                                .Extract(err => throw new Exception("Failed to encode expression: " + err));
-
-                        var memberName = MemberNameForExpression(hashAndExpr.hash[..10]);
-
-                        return
-                            (memberName,
+                    return
+                        (memberName,
+                            SyntaxFactory.QualifiedName(
                                 SyntaxFactory.QualifiedName(
-                                    SyntaxFactory.QualifiedName(
-                                        SyntaxFactory.IdentifierName("Pine"),
-                                        SyntaxFactory.IdentifierName("PineVM")),
-                                    SyntaxFactory.IdentifierName("Expression")),
-                                expressionExpression);
-                    }
+                                    SyntaxFactory.IdentifierName("Pine"),
+                                    SyntaxFactory.IdentifierName("PineVM")),
+                                SyntaxFactory.IdentifierName("Expression")),
+                            expressionExpression);
+                }
 
-                    var usingsTypes = new[]
-                    {
-                        typeof(PineValue),
-                        typeof(ImmutableArray),
-                        typeof(IReadOnlyDictionary<,>),
-                        typeof(Func<,>)
-                    };
+                var usingsTypes = new[]
+                {
+                    typeof(PineValue),
+                    typeof(ImmutableArray),
+                    typeof(IReadOnlyDictionary<,>),
+                    typeof(Func<,>)
+                };
 
-                    var usings =
-                        usingsTypes.Select(t => t.Namespace)
-                            .WhereNotNull()
-                            .Distinct()
-                            .Select(ns => SyntaxFactory.UsingDirective(SyntaxFactory.IdentifierName(ns)))
-                            .ToImmutableList();
+                var usings =
+                    usingsTypes.Select(t => t.Namespace)
+                        .WhereNotNull()
+                        .Distinct()
+                        .Select(ns => SyntaxFactory.UsingDirective(SyntaxFactory.IdentifierName(ns)))
+                        .ToImmutableList();
 
-                    var valuesStaticMembers =
-                        valuesToDeclare
-                            .Select(memberDeclarationForValue)
-                            .ToImmutableList();
+                var valuesStaticMembers =
+                    valuesToDeclare
+                        .Select(memberDeclarationForValue)
+                        .ToImmutableList();
 
-                    var expressionStaticMembers =
-                        aggregateDependencies.Expressions
-                            .Select(memberDeclarationForExpression)
-                            .DistinctBy(member => member.memberName)
-                            .ToImmutableList();
+                var expressionStaticMembers =
+                    aggregateDependencies.Expressions
+                        .Select(memberDeclarationForExpression)
+                        .DistinctBy(member => member.memberName)
+                        .ToImmutableList();
 
-                    var emptyDictionaryExpression =
-                        SyntaxFactory.MemberAccessExpression(
-                            SyntaxKind.SimpleMemberAccessExpression,
-                            SyntaxFactory.GenericName(
-                                    SyntaxFactory.Identifier("ImmutableDictionary"))
-                                .WithTypeArgumentList(
-                                    SyntaxFactory.TypeArgumentList(
-                                        SyntaxFactory.SeparatedList<TypeSyntax>(
-                                            new SyntaxNodeOrToken[]
-                                            {
-                                                SyntaxFactory.IdentifierName("PineValue"),
-                                                SyntaxFactory.Token(SyntaxKind.CommaToken),
-                                                SyntaxFactory.GenericName(
-                                                        SyntaxFactory.Identifier("Func"))
-                                                    .WithTypeArgumentList(
-                                                        SyntaxFactory.TypeArgumentList(
-                                                            SyntaxFactory.SeparatedList<TypeSyntax>(
-                                                                new SyntaxNodeOrToken[]
-                                                                {
-                                                                    EvalExprDelegateTypeSyntax,
-                                                                    SyntaxFactory.Token(SyntaxKind.CommaToken),
-                                                                    SyntaxFactory.IdentifierName("PineValue"),
-                                                                    SyntaxFactory.Token(SyntaxKind.CommaToken),
-                                                                    SyntaxFactory.GenericName(
-                                                                            SyntaxFactory.Identifier("Result"))
-                                                                        .WithTypeArgumentList(
-                                                                            SyntaxFactory.TypeArgumentList(
-                                                                                SyntaxFactory.SeparatedList<TypeSyntax>(
-                                                                                    new SyntaxNodeOrToken[]
-                                                                                    {
-                                                                                        SyntaxFactory.PredefinedType(
-                                                                                            SyntaxFactory.Token(
-                                                                                                SyntaxKind
-                                                                                                    .StringKeyword)),
-                                                                                        SyntaxFactory.Token(SyntaxKind
-                                                                                            .CommaToken),
-                                                                                        SyntaxFactory.IdentifierName(
-                                                                                            "PineValue")
-                                                                                    })))
-                                                                })))
-                                            }))),
-                            SyntaxFactory.IdentifierName("Empty"));
-
-                    var dictionaryExpression =
-                        compiledExpressions
-                            .Aggregate(
-                                seed: (ExpressionSyntax)emptyDictionaryExpression,
-                                func: (dictionaryExpression, fromCompiledExpression) =>
-                                    SyntaxFactory.InvocationExpression(
-                                            SyntaxFactory.MemberAccessExpression(
-                                                SyntaxKind.SimpleMemberAccessExpression,
-                                                dictionaryExpression,
-                                                SyntaxFactory.IdentifierName("SetItem")))
-                                        .WithArgumentList(
-                                            SyntaxFactory.ArgumentList(
-                                                SyntaxFactory.SeparatedList<ArgumentSyntax>(
+                var emptyDictionaryExpression =
+                    SyntaxFactory.MemberAccessExpression(
+                        SyntaxKind.SimpleMemberAccessExpression,
+                        SyntaxFactory.GenericName(
+                            SyntaxFactory.Identifier("ImmutableDictionary"))
+                        .WithTypeArgumentList(
+                            SyntaxFactory.TypeArgumentList(
+                                SyntaxFactory.SeparatedList<TypeSyntax>(
+                                    new SyntaxNodeOrToken[]
+                                    {
+                                        SyntaxFactory.IdentifierName("PineValue"),
+                                        SyntaxFactory.Token(SyntaxKind.CommaToken),
+                                        SyntaxFactory.GenericName(SyntaxFactory.Identifier("Func"))
+                                        .WithTypeArgumentList(
+                                            SyntaxFactory.TypeArgumentList(
+                                                SyntaxFactory.SeparatedList<TypeSyntax>(
                                                     new SyntaxNodeOrToken[]
                                                     {
+                                                        EvalExprDelegateTypeSyntax,
+                                                        SyntaxFactory.Token(SyntaxKind.CommaToken),
+                                                        SyntaxFactory.IdentifierName("PineValue"),
+                                                        SyntaxFactory.Token(SyntaxKind.CommaToken),
+                                                        SyntaxFactory.GenericName(SyntaxFactory.Identifier("Result"))
+                                                        .WithTypeArgumentList(
+                                                            SyntaxFactory.TypeArgumentList(
+                                                                SyntaxFactory.SeparatedList<TypeSyntax>(
+                                                                    new SyntaxNodeOrToken[]
+                                                                    {
+                                                                        SyntaxFactory.PredefinedType(
+                                                                            SyntaxFactory.Token(SyntaxKind.StringKeyword)),
+                                                                        SyntaxFactory.Token(SyntaxKind.CommaToken),
+                                                                        SyntaxFactory.IdentifierName("PineValue")
+                                                                    })))
+                                                                })))
+                                        }))),
+                        SyntaxFactory.IdentifierName("Empty"));
+
+                var dictionaryExpression =
+                    compiledExpressions
+                        .Aggregate(
+                            seed: (ExpressionSyntax)emptyDictionaryExpression,
+                            func: (dictionaryExpression, fromCompiledExpression) =>
+                                SyntaxFactory.InvocationExpression(
+                                        SyntaxFactory.MemberAccessExpression(
+                                            SyntaxKind.SimpleMemberAccessExpression,
+                                            dictionaryExpression,
+                                            SyntaxFactory.IdentifierName("SetItem")))
+                                    .WithArgumentList(
+                                        SyntaxFactory.ArgumentList(
+                                            SyntaxFactory.SeparatedList<ArgumentSyntax>(
+                                                new SyntaxNodeOrToken[]
+                                                {
                                                         SyntaxFactory.Argument(SyntaxFactory.IdentifierName(
                                                             DeclarationNameForValue(fromCompiledExpression
                                                                 .expressionValue))),
                                                         SyntaxFactory.Token(SyntaxKind.CommaToken),
                                                         SyntaxFactory.Argument(
                                                             SyntaxFactory.IdentifierName(fromCompiledExpression.functionName))
-                                                    }))));
+                                                }))));
 
-                    var dictionaryMemberDeclaration =
-                        SyntaxFactory.MethodDeclaration(
-                                SyntaxFactory.GenericName(
-                                        SyntaxFactory.Identifier("IReadOnlyDictionary"))
-                                    .WithTypeArgumentList(
-                                        SyntaxFactory.TypeArgumentList(
-                                            SyntaxFactory.SeparatedList<TypeSyntax>(
-                                                new SyntaxNodeOrToken[]
-                                                {
+                var dictionaryMemberDeclaration =
+                    SyntaxFactory.MethodDeclaration(
+                            SyntaxFactory.GenericName(
+                                    SyntaxFactory.Identifier("IReadOnlyDictionary"))
+                                .WithTypeArgumentList(
+                                    SyntaxFactory.TypeArgumentList(
+                                        SyntaxFactory.SeparatedList<TypeSyntax>(
+                                            new SyntaxNodeOrToken[]
+                                            {
                                                     SyntaxFactory.IdentifierName("PineValue"),
                                                     SyntaxFactory.Token(SyntaxKind.CommaToken),
                                                     SyntaxFactory.GenericName(
@@ -335,81 +328,80 @@ public partial class CompileToCSharp
                                                                                                         "PineValue")
                                                                                             })))
                                                                     })))
-                                                }))),
-                                identifier: containerConfig.dictionaryMemberName)
-                            .WithModifiers(
-                                SyntaxFactory.TokenList(
-                                    SyntaxFactory.Token(SyntaxKind.StaticKeyword),
-                                    SyntaxFactory.Token(SyntaxKind.PublicKeyword)))
-                            .WithExpressionBody(
-                                SyntaxFactory.ArrowExpressionClause(dictionaryExpression))
-                            .WithSemicolonToken(
-                                SyntaxFactory.Token(SyntaxKind.SemicolonToken));
+                                            }))),
+                            identifier: containerConfig.dictionaryMemberName)
+                        .WithModifiers(
+                            SyntaxFactory.TokenList(
+                                SyntaxFactory.Token(SyntaxKind.StaticKeyword),
+                                SyntaxFactory.Token(SyntaxKind.PublicKeyword)))
+                        .WithExpressionBody(
+                            SyntaxFactory.ArrowExpressionClause(dictionaryExpression))
+                        .WithSemicolonToken(
+                            SyntaxFactory.Token(SyntaxKind.SemicolonToken));
 
-                    var staticReadonlyFieldMembers = new[]
-                        {
-                            (memberName: "value_true",
-                                typeSyntax: (TypeSyntax)SyntaxFactory.IdentifierName("PineValue"),
-                                (ExpressionSyntax)SyntaxFactory.MemberAccessExpression(
-                                    SyntaxKind.SimpleMemberAccessExpression,
-                                    SyntaxFactory.MemberAccessExpression(
-                                        SyntaxKind.SimpleMemberAccessExpression,
-                                        SyntaxFactory.MemberAccessExpression(
-                                            SyntaxKind.SimpleMemberAccessExpression,
-                                            SyntaxFactory.IdentifierName("Pine"),
-                                            SyntaxFactory.IdentifierName("PineVM")),
-                                        SyntaxFactory.IdentifierName("PineVM")),
-                                    SyntaxFactory.IdentifierName("TrueValue"))),
+                var staticReadonlyFieldMembers = new[]
+                {
+                    (memberName: "value_true",
+                    typeSyntax:
+                    (TypeSyntax)SyntaxFactory.IdentifierName("PineValue"),
+                    (ExpressionSyntax)SyntaxFactory.MemberAccessExpression(
+                        SyntaxKind.SimpleMemberAccessExpression,
+                        SyntaxFactory.MemberAccessExpression(
+                            SyntaxKind.SimpleMemberAccessExpression,
+                            SyntaxFactory.MemberAccessExpression(
+                                SyntaxKind.SimpleMemberAccessExpression,
+                                SyntaxFactory.IdentifierName("Pine"),
+                                SyntaxFactory.IdentifierName("PineVM")),
+                            SyntaxFactory.IdentifierName("PineVM")),
+                        SyntaxFactory.IdentifierName("TrueValue"))),
 
-                            ("value_false",
-                                SyntaxFactory.IdentifierName("PineValue"),
-                                SyntaxFactory.MemberAccessExpression(
-                                    SyntaxKind.SimpleMemberAccessExpression,
-                                    SyntaxFactory.MemberAccessExpression(
-                                        SyntaxKind.SimpleMemberAccessExpression,
-                                        SyntaxFactory.MemberAccessExpression(
-                                            SyntaxKind.SimpleMemberAccessExpression,
-                                            SyntaxFactory.IdentifierName("Pine"),
-                                            SyntaxFactory.IdentifierName("PineVM")),
-                                        SyntaxFactory.IdentifierName("PineVM")),
-                                    SyntaxFactory.IdentifierName("FalseValue"))),
-                        }
-                        .Concat(valuesStaticMembers)
-                        .Concat(expressionStaticMembers)
-                        .ToImmutableList();
+                    ("value_false",
+                    SyntaxFactory.IdentifierName("PineValue"),
+                    SyntaxFactory.MemberAccessExpression(
+                        SyntaxKind.SimpleMemberAccessExpression,
+                        SyntaxFactory.MemberAccessExpression(
+                            SyntaxKind.SimpleMemberAccessExpression,
+                            SyntaxFactory.MemberAccessExpression(
+                                SyntaxKind.SimpleMemberAccessExpression,
+                                SyntaxFactory.IdentifierName("Pine"),
+                                SyntaxFactory.IdentifierName("PineVM")),
+                            SyntaxFactory.IdentifierName("PineVM")),
+                        SyntaxFactory.IdentifierName("FalseValue"))),
+                }
+                .Concat(valuesStaticMembers)
+                .Concat(expressionStaticMembers)
+                .ToImmutableList();
 
-                    var staticFieldsDeclarations =
-                        staticReadonlyFieldMembers
-                            .Select(member =>
-                                SyntaxFactory.FieldDeclaration(
-                                        SyntaxFactory.VariableDeclaration(member.typeSyntax)
-                                            .WithVariables(
-                                                SyntaxFactory.SingletonSeparatedList(
-                                                    SyntaxFactory
-                                                        .VariableDeclarator(SyntaxFactory.Identifier(member.memberName))
-                                                        .WithInitializer(
-                                                            SyntaxFactory.EqualsValueClause(member.Item3)))))
-                                    .WithModifiers(
-                                        SyntaxFactory.TokenList(
-                                            SyntaxFactory.Token(SyntaxKind.StaticKeyword),
-                                            SyntaxFactory.Token(SyntaxKind.PublicKeyword),
-                                            SyntaxFactory.Token(SyntaxKind.ReadOnlyKeyword)))
-                            )
-                            .ToImmutableList();
+                var staticFieldsDeclarations =
+                    staticReadonlyFieldMembers
+                    .Select(member =>
+                    SyntaxFactory.FieldDeclaration(
+                        SyntaxFactory.VariableDeclaration(member.typeSyntax)
+                        .WithVariables(
+                            SyntaxFactory.SingletonSeparatedList(
+                                SyntaxFactory.VariableDeclarator(SyntaxFactory.Identifier(member.memberName))
+                                .WithInitializer(SyntaxFactory.EqualsValueClause(member.Item3)))))
+                    .WithModifiers(
+                        SyntaxFactory.TokenList(
+                            SyntaxFactory.Token(SyntaxKind.StaticKeyword),
+                            SyntaxFactory.Token(SyntaxKind.PublicKeyword),
+                            SyntaxFactory.Token(SyntaxKind.ReadOnlyKeyword)))
+                    )
+                    .ToImmutableList();
 
-                    return Result<string, CompileCSharpClassResult>.ok(
-                        new CompileCSharpClassResult(
-                            ClassDeclarationSyntax:
-                            SyntaxFactory.ClassDeclaration(containerConfig.containerTypeName)
-                                .WithMembers(
-                                    SyntaxFactory.List<MemberDeclarationSyntax>(
-                                        [dictionaryMemberDeclaration
-                                        ,
-                                            .. compiledExpressions.Select(f => f.memberDeclarationSyntax)
-                                        ,
-                                            .. staticFieldsDeclarations])),
-                            UsingDirectives: usings));
-                });
+                return Result<string, CompileCSharpClassResult>.ok(
+                    new CompileCSharpClassResult(
+                        ClassDeclarationSyntax:
+                        SyntaxFactory.ClassDeclaration(containerConfig.containerTypeName)
+                            .WithMembers(
+                                SyntaxFactory.List(
+                                    [dictionaryMemberDeclaration
+                                    ,
+                                        .. compiledExpressions.Select(f => f.memberDeclarationSyntax)
+                                    ,
+                                        .. staticFieldsDeclarations])),
+                        UsingDirectives: usings));
+            });
     }
 
     private static QualifiedNameSyntax EvalExprDelegateTypeSyntax =>
@@ -437,27 +429,7 @@ public partial class CompileToCSharp
                 .SetItem(binding.Key, binding.Value)));
     }
 
-    public record DependenciesFromCompilation(
-        ImmutableHashSet<PineValue> Values,
-        IImmutableSet<(string hash, Expression expression)> Expressions)
-    {
-        public static readonly DependenciesFromCompilation Empty = new(
-            Values: [],
-            Expressions: ImmutableHashSet<(string, Expression)>.Empty);
-
-        public static (T, DependenciesFromCompilation) WithNoDependencies<T>(T other) => (other, Empty);
-
-        public DependenciesFromCompilation Union(DependenciesFromCompilation other) =>
-            new(Values: Values.Union(other.Values),
-                Expressions: Expressions.Union(other.Expressions));
-
-        public static DependenciesFromCompilation Union(IEnumerable<DependenciesFromCompilation> dependencies) =>
-            dependencies.Aggregate(
-                seed: Empty,
-                func: (aggregate, next) => aggregate.Union(next));
-    }
-
-    public static Result<string, (BlockSyntax blockSyntax, DependenciesFromCompilation dependencies)>
+    public static Result<string, (BlockSyntax blockSyntax, CompiledExpressionDependencies dependencies)>
         CompileToCSharpFunctionBlockSyntax(
             Expression expression,
             EnvironmentConfig environment) =>
@@ -476,7 +448,7 @@ public partial class CompileToCSharp
                     excludeBinding: null);
 
                 var combinedDependencies =
-                    DependenciesFromCompilation.Union(
+                    CompiledExpressionDependencies.Union(
                         availableLetBindings.Values
                         .Select(b => b.Dependencies).Prepend(exprWithDependencies.dependencies));
 
@@ -490,26 +462,25 @@ public partial class CompileToCSharp
 
     public static ExpressionSyntax WrapExpressionInPineValueResultOk(ExpressionSyntax expression) =>
         SyntaxFactory.InvocationExpression(
-                SyntaxFactory.MemberAccessExpression(
-                    SyntaxKind.SimpleMemberAccessExpression,
-                    SyntaxFactory.GenericName(
-                            SyntaxFactory.Identifier("Result"))
-                        .WithTypeArgumentList(
-                            SyntaxFactory.TypeArgumentList(
-                                SyntaxFactory.SeparatedList<TypeSyntax>(
-                                    new SyntaxNodeOrToken[]
-                                    {
-                                        SyntaxFactory.PredefinedType(
-                                            SyntaxFactory.Token(SyntaxKind.StringKeyword)),
-                                        SyntaxFactory.Token(SyntaxKind.CommaToken),
-                                        SyntaxFactory.IdentifierName("PineValue")
-                                    }))),
-                    SyntaxFactory.IdentifierName("ok")))
-            .WithArgumentList(
-                SyntaxFactory.ArgumentList(
-                    SyntaxFactory.SingletonSeparatedList(SyntaxFactory.Argument(expression))));
+            SyntaxFactory.MemberAccessExpression(
+                SyntaxKind.SimpleMemberAccessExpression,
+                SyntaxFactory.GenericName(
+                        SyntaxFactory.Identifier(nameof(Result<int, int>)))
+                    .WithTypeArgumentList(
+                        SyntaxFactory.TypeArgumentList(
+                            SyntaxFactory.SeparatedList<TypeSyntax>(
+                                (IEnumerable<SyntaxNodeOrToken>)
+                                [
+                                    SyntaxFactory.PredefinedType(SyntaxFactory.Token(SyntaxKind.StringKeyword)),
+                                    SyntaxFactory.Token(SyntaxKind.CommaToken),
+                                    SyntaxFactory.IdentifierName(nameof(PineValue))
+                                ]))),
+                SyntaxFactory.IdentifierName(nameof(Result<int, int>.ok))))
+        .WithArgumentList(
+            SyntaxFactory.ArgumentList(
+                SyntaxFactory.SingletonSeparatedList(SyntaxFactory.Argument(expression))));
 
-    public static Result<string, (CompiledExpression expression, DependenciesFromCompilation dependencies)> CompileToCSharpExpression(
+    public static Result<string, (CompiledExpression expression, CompiledExpressionDependencies dependencies)> CompileToCSharpExpression(
         Expression expression,
         EnvironmentConfig parentEnvironment)
     {
@@ -519,10 +490,10 @@ public partial class CompileToCSharp
         if (letBindingsAvailableFromParent.TryGetValue(expression, out var letBinding))
         {
             return
-                Result<string, (CompiledExpression expression, DependenciesFromCompilation dependencies)>.ok(
+                Result<string, (CompiledExpression expression, CompiledExpressionDependencies dependencies)>.ok(
                     (CompiledExpression.WithTypeResult(
                         SyntaxFactory.IdentifierName(letBinding.DeclarationName)),
-                        DependenciesFromCompilation.Empty));
+                        CompiledExpressionDependencies.Empty));
         }
 
         var letBindingsAvailableFromParentKeys =
@@ -623,7 +594,7 @@ public partial class CompileToCSharp
             _ => false
         };
 
-    public static Result<string, (CompiledExpression expression, DependenciesFromCompilation dependencies)>
+    public static Result<string, (CompiledExpression expression, CompiledExpressionDependencies dependencies)>
         CompileToCSharpExpressionWithoutCSE(
         Expression expression,
         EnvironmentConfig environment)
@@ -632,8 +603,8 @@ public partial class CompileToCSharp
             expression switch
             {
                 Expression.EnvironmentExpression =>
-                Result<string, (CompiledExpression, DependenciesFromCompilation)>.ok(
-                    DependenciesFromCompilation.WithNoDependencies(
+                Result<string, (CompiledExpression, CompiledExpressionDependencies)>.ok(
+                    CompiledExpressionDependencies.WithNoDependencies(
                         CompiledExpression.WithTypePlainValue(
                             SyntaxFactory.IdentifierName(environment.ArgumentEnvironmentName)))),
 
@@ -656,19 +627,19 @@ public partial class CompileToCSharp
                 CompileToCSharpExpression(stringTagExpr, environment),
 
                 _ =>
-                Result<string, (CompiledExpression, DependenciesFromCompilation)>.err(
+                Result<string, (CompiledExpression, CompiledExpressionDependencies)>.err(
                     "Unsupported syntax kind: " + expression.GetType().FullName)
             };
     }
 
-    public static Result<string, (CompiledExpression, DependenciesFromCompilation)> CompileToCSharpExpression(
+    public static Result<string, (CompiledExpression, CompiledExpressionDependencies)> CompileToCSharpExpression(
         Expression.ListExpression listExpression,
         EnvironmentConfig environment)
     {
         if (!listExpression.List.Any())
-            return Result<string, (CompiledExpression, DependenciesFromCompilation)>.ok(
+            return Result<string, (CompiledExpression, CompiledExpressionDependencies)>.ok(
                 (CompiledExpression.WithTypePlainValue(pineValueEmptyListSyntax),
-                    DependenciesFromCompilation.Empty));
+                    CompiledExpressionDependencies.Empty));
 
         return
             listExpression.List.Select((itemExpression, itemIndex) =>
@@ -702,13 +673,13 @@ public partial class CompileToCSharp
                     compiledItems.Select(ce => ce.expression).ToImmutableList());
 
                 var aggregateDeps =
-                DependenciesFromCompilation.Union(compiledItems.Select(e => e.dependencies));
+                CompiledExpressionDependencies.Union(compiledItems.Select(e => e.dependencies));
 
                 return (aggregateSyntax, aggregateDeps);
             });
     }
 
-    public static Result<string, (CompiledExpression, DependenciesFromCompilation)> CompileToCSharpExpression(
+    public static Result<string, (CompiledExpression, CompiledExpressionDependencies)> CompileToCSharpExpression(
         Expression.KernelApplicationExpression kernelApplicationExpression,
         EnvironmentConfig environment)
     {
@@ -716,7 +687,7 @@ public partial class CompileToCSharp
               out var kernelFunctionInfo))
         {
             return
-                Result<string, (CompiledExpression, DependenciesFromCompilation)>.err(
+                Result<string, (CompiledExpression, CompiledExpressionDependencies)>.err(
                     "Kernel function name " + kernelApplicationExpression.functionName + " does not match any of the " +
                     KernelFunctionsInfo.Value.Count + " known names: " +
                     string.Join(", ", KernelFunctionsInfo.Value.Keys));
@@ -729,7 +700,7 @@ public partial class CompileToCSharp
                 environment);
     }
 
-    private static Result<string, (CompiledExpression, DependenciesFromCompilation)> CompileKernelFunctionApplicationToCSharpExpression(
+    private static Result<string, (CompiledExpression, CompiledExpressionDependencies)> CompileKernelFunctionApplicationToCSharpExpression(
         KernelFunctionInfo kernelFunctionInfo,
         Expression kernelApplicationArgumentExpression,
         EnvironmentConfig environment)
@@ -773,17 +744,17 @@ public partial class CompileToCSharp
                             {
                                 if (!staticallyKnownArgumentsList[parameterIndex].ArgumentSyntaxFromParameterType
                                         .TryGetValue(parameterType, out var param))
-                                    return Result<string, (CompiledExpression, DependenciesFromCompilation)>.err(
+                                    return Result<string, (CompiledExpression, CompiledExpressionDependencies)>.err(
                                         "No transformation found for parameter type " + parameterType);
 
-                                return Result<string, (CompiledExpression, DependenciesFromCompilation)>.ok(param);
+                                return Result<string, (CompiledExpression, CompiledExpressionDependencies)>.ok(param);
                             });
 
                     if (argumentsResults.ListCombine() is
-                        Result<string, IReadOnlyList<(CompiledExpression, DependenciesFromCompilation)>>.Ok specializedOk)
+                        Result<string, IReadOnlyList<(CompiledExpression, CompiledExpressionDependencies)>>.Ok specializedOk)
                     {
                         var aggregateDependencies =
-                            DependenciesFromCompilation.Union(specializedOk.Value.Select(p => p.Item2));
+                            CompiledExpressionDependencies.Union(specializedOk.Value.Select(p => p.Item2));
 
                         var aggregateLetBindings =
                             CompiledExpression.Union(specializedOk.Value.Select(c => c.Item1.LetBindings));
@@ -806,7 +777,7 @@ public partial class CompileToCSharp
                                 specializedOk.Value.Select(p => p.Item1).ToImmutableList());
 
                         return
-                            Result<string, (CompiledExpression, DependenciesFromCompilation)>.ok(
+                            Result<string, (CompiledExpression, CompiledExpressionDependencies)>.ok(
                                 (expressionReturningPineValue,
                                 aggregateDependencies));
                     }
@@ -824,7 +795,7 @@ public partial class CompileToCSharp
             compiledArgument.dependencies));
     }
 
-    public static Result<string, (CompiledExpression, DependenciesFromCompilation)> CompileToCSharpExpression(
+    public static Result<string, (CompiledExpression, CompiledExpressionDependencies)> CompileToCSharpExpression(
         Expression.ConditionalExpression conditionalExpression,
         EnvironmentConfig environment)
     {
@@ -891,7 +862,7 @@ public partial class CompileToCSharp
             )));
     }
 
-    public static Result<string, (CompiledExpression, DependenciesFromCompilation)> CompileToCSharpExpression(
+    public static Result<string, (CompiledExpression, CompiledExpressionDependencies)> CompileToCSharpExpression(
         Expression.DecodeAndEvaluateExpression decodeAndEvaluateExpression,
         EnvironmentConfig environment)
     {
@@ -902,7 +873,7 @@ public partial class CompileToCSharp
         var decodeAndEvaluateExpressionHash =
             CommonConversion.StringBase16(compilerCache.ComputeHash(decodeAndEvaluateExpressionValue));
 
-        (CompiledExpression, DependenciesFromCompilation) continueWithGenericCase()
+        (CompiledExpression, CompiledExpressionDependencies) continueWithGenericCase()
         {
             var invocationExpression =
                 SyntaxFactory.InvocationExpression(
@@ -922,7 +893,7 @@ public partial class CompileToCSharp
 
             return
                 (CompiledExpression.WithTypeResult(invocationExpression),
-                DependenciesFromCompilation.Empty
+                CompiledExpressionDependencies.Empty
                 with
                 {
                     Expressions = ImmutableHashSet.Create((decodeAndEvaluateExpressionHash, (Expression)decodeAndEvaluateExpression)),
@@ -971,7 +942,7 @@ public partial class CompileToCSharp
                         return
                             (invocationExpression,
                             compiledArgumentExpression.dependencies.Union(
-                            DependenciesFromCompilation.Empty
+                            CompiledExpressionDependencies.Empty
                             with
                             {
                                 Expressions = ImmutableHashSet.Create((innerExpressionValueHash, innerExpression)),
@@ -981,7 +952,7 @@ public partial class CompileToCSharp
         }
 
         return
-            Result<string, (CompiledExpression, DependenciesFromCompilation)>.ok(
+            Result<string, (CompiledExpression, CompiledExpressionDependencies)>.ok(
                 continueWithGenericCase());
     }
 
@@ -1105,19 +1076,19 @@ public partial class CompileToCSharp
             .MapError(err => "Inner expression is not independent: " + err));
     }
 
-    public static Result<string, (CompiledExpression, DependenciesFromCompilation)> CompileToCSharpExpression(
+    public static Result<string, (CompiledExpression, CompiledExpressionDependencies)> CompileToCSharpExpression(
         Expression.LiteralExpression literalExpression)
     {
         return
-            Result<string, (CompiledExpression, DependenciesFromCompilation)>.ok(
+            Result<string, (CompiledExpression, CompiledExpressionDependencies)>.ok(
                 (CompiledExpression.WithTypePlainValue(SyntaxFactory.IdentifierName(DeclarationNameForValue(literalExpression.Value))),
-                DependenciesFromCompilation.Empty with { Values = [literalExpression.Value] }));
+                CompiledExpressionDependencies.Empty with { Values = [literalExpression.Value] }));
     }
 
     public static string DeclarationNameForValue(PineValue pineValue) =>
         "value_" + CommonConversion.StringBase16(compilerCache.ComputeHash(pineValue))[..10];
 
-    public static Result<string, (CompiledExpression expressionSyntax, DependenciesFromCompilation dependencies)> CompileToCSharpExpression(
+    public static Result<string, (CompiledExpression expressionSyntax, CompiledExpressionDependencies dependencies)> CompileToCSharpExpression(
         Expression.StringTagExpression stringTagExpression,
         EnvironmentConfig environment)
     {
@@ -1266,8 +1237,8 @@ public partial class CompileToCSharp
     private static readonly ExpressionSyntax pineValueEmptyListSyntax =
         SyntaxFactory.MemberAccessExpression(
             SyntaxKind.SimpleMemberAccessExpression,
-            SyntaxFactory.IdentifierName("PineValue"),
-            SyntaxFactory.IdentifierName("EmptyList"));
+            SyntaxFactory.IdentifierName(nameof(PineValue)),
+            SyntaxFactory.IdentifierName(nameof(PineValue.EmptyList)));
 
     private static IEnumerable<PineValue> EnumerateAllLiterals(Expression expression) =>
         expression switch
