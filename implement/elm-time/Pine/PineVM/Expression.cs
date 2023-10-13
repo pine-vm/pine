@@ -1,5 +1,6 @@
 ﻿using Pine.Json;
 using System;
+using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 using System.Text.Json.Serialization;
@@ -126,4 +127,69 @@ public abstract record Expression
             throw new NotImplementedException(),
         };
 
+    public static IEnumerable<Expression> EnumerateSelfAndDescendants(Expression expression)
+    {
+        yield return expression;
+
+        switch (expression)
+        {
+            case EnvironmentExpression:
+            case LiteralExpression:
+            case DelegatingExpression:
+                break;
+
+            case ListExpression list:
+                foreach (var item in list.List)
+                {
+                    foreach (var descendant in EnumerateSelfAndDescendants(item))
+                    {
+                        yield return descendant;
+                    }
+                }
+                break;
+
+            case DecodeAndEvaluateExpression decodeAndEvaluate:
+                foreach (var descendant in EnumerateSelfAndDescendants(decodeAndEvaluate.expression))
+                {
+                    yield return descendant;
+                }
+                foreach (var descendant in EnumerateSelfAndDescendants(decodeAndEvaluate.environment))
+                {
+                    yield return descendant;
+                }
+                break;
+
+            case KernelApplicationExpression kernelApplication:
+                foreach (var descendant in EnumerateSelfAndDescendants(kernelApplication.argument))
+                {
+                    yield return descendant;
+                }
+                break;
+
+            case ConditionalExpression conditional:
+                foreach (var descendant in EnumerateSelfAndDescendants(conditional.condition))
+                {
+                    yield return descendant;
+                }
+                foreach (var descendant in EnumerateSelfAndDescendants(conditional.ifTrue))
+                {
+                    yield return descendant;
+                }
+                foreach (var descendant in EnumerateSelfAndDescendants(conditional.ifFalse))
+                {
+                    yield return descendant;
+                }
+                break;
+
+            case StringTagExpression stringTag:
+                foreach (var descendant in EnumerateSelfAndDescendants(stringTag.tagged))
+                {
+                    yield return descendant;
+                }
+                break;
+
+            default:
+                throw new NotImplementedException();
+        }
+    }
 }

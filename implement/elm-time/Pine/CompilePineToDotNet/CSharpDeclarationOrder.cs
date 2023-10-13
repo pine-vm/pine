@@ -73,6 +73,21 @@ public class CSharpDeclarationOrder
         return orderedLists;
     }
 
+    public static IEnumerable<PineVM.Expression> OrderExpressionsByContainment(IEnumerable<PineVM.Expression> expressions)
+    {
+        var descendantLists =
+            expressions
+            .SelectMany(PineVM.Expression.EnumerateSelfAndDescendants)
+            .ToImmutableList();
+
+        var ordered =
+            descendantLists.Reverse()
+            .Distinct()
+            .Intersect(expressions);
+
+        return ordered;
+    }
+
     private static int AggregateSizeIncludingDescendants(PineValue value) =>
         value switch
         {
