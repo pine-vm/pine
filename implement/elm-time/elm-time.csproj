@@ -5,8 +5,8 @@
     <TargetFramework>net8.0</TargetFramework>
     <RootNamespace>ElmTime</RootNamespace>
     <AssemblyName>elm-time</AssemblyName>
-    <AssemblyVersion>2023.1011.0.0</AssemblyVersion>
-    <FileVersion>2023.1011.0.0</FileVersion>
+    <AssemblyVersion>2023.1012.0.0</AssemblyVersion>
+    <FileVersion>2023.1012.0.0</FileVersion>
     <Nullable>enable</Nullable>
     <GenerateEmbeddedFilesManifest>true</GenerateEmbeddedFilesManifest>
   </PropertyGroup>
@@ -40,7 +40,7 @@
     <PackageReference Include="LibGit2Sharp" Version="0.27.2" />
     <PackageReference Include="McMaster.Extensions.CommandLineUtils" Version="4.1.0" />
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Scripting" Version="4.8.0-2.final" />
-    <PackageReference Include="Microsoft.Extensions.FileProviders.Embedded" Version="8.0.0-rc.1.23421.29" />
+    <PackageReference Include="Microsoft.Extensions.FileProviders.Embedded" Version="8.0.0-rc.2.23480.2" />
     <PackageReference Include="MSTest.TestFramework" Version="3.1.1" />
     <PackageReference Include="ReadLine" Version="2.0.1" />
     <PackageReference Include="SharpCompress" Version="0.34.0" />
