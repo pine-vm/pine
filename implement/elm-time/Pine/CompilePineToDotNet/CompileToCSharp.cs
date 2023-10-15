@@ -108,7 +108,7 @@ public partial class CompileToCSharp
                 return
                     CompileToCSharpFunctionBlockSyntax(
                             expression,
-                            new EnvironmentConfig(
+                            new CompilationEnvironment(
                                 ArgumentEnvironmentName: argumentEnvironmentName,
                                 ArgumentEvalGenericName: argumentEvalGenericName,
                                 LetBindings: ImmutableDictionary<Expression, LetBinding>.Empty,
@@ -199,7 +199,7 @@ public partial class CompileToCSharp
                             expressionExpression);
                 }
 
-                var usingsTypes = new[]
+                var usingDirectivesTypes = new[]
                 {
                     typeof(PineValue),
                     typeof(ImmutableArray),
@@ -207,12 +207,13 @@ public partial class CompileToCSharp
                     typeof(Func<,>)
                 };
 
-                var usings =
-                    usingsTypes.Select(t => t.Namespace)
-                        .WhereNotNull()
-                        .Distinct()
-                        .Select(ns => SyntaxFactory.UsingDirective(SyntaxFactory.IdentifierName(ns)))
-                        .ToImmutableList();
+                var usingDirectives =
+                    usingDirectivesTypes
+                    .Select(t => t.Namespace)
+                    .WhereNotNull()
+                    .Distinct()
+                    .Select(ns => SyntaxFactory.UsingDirective(SyntaxFactory.IdentifierName(ns)))
+                    .ToImmutableList();
 
                 var valuesStaticMembers =
                     valuesToDeclare
@@ -225,112 +226,38 @@ public partial class CompileToCSharp
                         .DistinctBy(member => member.memberName)
                         .ToImmutableList();
 
-                var emptyDictionaryExpression =
-                    SyntaxFactory.MemberAccessExpression(
-                        SyntaxKind.SimpleMemberAccessExpression,
-                        SyntaxFactory.GenericName(
-                            SyntaxFactory.Identifier("ImmutableDictionary"))
-                        .WithTypeArgumentList(
-                            SyntaxFactory.TypeArgumentList(
-                                SyntaxFactory.SeparatedList<TypeSyntax>(
-                                    new SyntaxNodeOrToken[]
-                                    {
-                                        SyntaxFactory.IdentifierName("PineValue"),
-                                        SyntaxFactory.Token(SyntaxKind.CommaToken),
-                                        SyntaxFactory.GenericName(SyntaxFactory.Identifier("Func"))
-                                        .WithTypeArgumentList(
-                                            SyntaxFactory.TypeArgumentList(
-                                                SyntaxFactory.SeparatedList<TypeSyntax>(
-                                                    new SyntaxNodeOrToken[]
-                                                    {
-                                                        EvalExprDelegateTypeSyntax,
-                                                        SyntaxFactory.Token(SyntaxKind.CommaToken),
-                                                        SyntaxFactory.IdentifierName("PineValue"),
-                                                        SyntaxFactory.Token(SyntaxKind.CommaToken),
-                                                        SyntaxFactory.GenericName(SyntaxFactory.Identifier("Result"))
-                                                        .WithTypeArgumentList(
-                                                            SyntaxFactory.TypeArgumentList(
-                                                                SyntaxFactory.SeparatedList<TypeSyntax>(
-                                                                    new SyntaxNodeOrToken[]
-                                                                    {
-                                                                        SyntaxFactory.PredefinedType(
-                                                                            SyntaxFactory.Token(SyntaxKind.StringKeyword)),
-                                                                        SyntaxFactory.Token(SyntaxKind.CommaToken),
-                                                                        SyntaxFactory.IdentifierName("PineValue")
-                                                                    })))
-                                                                })))
-                                        }))),
-                        SyntaxFactory.IdentifierName("Empty"));
+                var dictionaryKeyTypeSyntax =
+                CompileTypeSyntax.TypeSyntaxFromType(
+                    typeof(PineValue),
+                    usingDirectives);
+
+                var dictionaryValueTypeSyntax =
+                CompileTypeSyntax.TypeSyntaxFromType(
+                    typeof(Func<PineVM.PineVM.EvalExprDelegate, PineValue, Result<string, PineValue>>),
+                    usingDirectives);
+
+                var dictionaryMemberType =
+                CompileTypeSyntax.TypeSyntaxFromType(
+                    typeof(IReadOnlyDictionary<PineValue, Func<PineVM.PineVM.EvalExprDelegate, PineValue, Result<string, PineValue>>>),
+                    usingDirectives);
+
+                var dictionaryEntries =
+                    compiledExpressions
+                    .Select(compiledExpression =>
+                    (SyntaxFactory.IdentifierName(DeclarationNameForValue(compiledExpression.expressionValue)),
+                    SyntaxFactory.IdentifierName(compiledExpression.functionName)))
+                    .ToImmutableList();
 
                 var dictionaryExpression =
-                    compiledExpressions
-                        .Aggregate(
-                            seed: (ExpressionSyntax)emptyDictionaryExpression,
-                            func: (dictionaryExpression, fromCompiledExpression) =>
-                                SyntaxFactory.InvocationExpression(
-                                        SyntaxFactory.MemberAccessExpression(
-                                            SyntaxKind.SimpleMemberAccessExpression,
-                                            dictionaryExpression,
-                                            SyntaxFactory.IdentifierName("SetItem")))
-                                    .WithArgumentList(
-                                        SyntaxFactory.ArgumentList(
-                                            SyntaxFactory.SeparatedList<ArgumentSyntax>(
-                                                new SyntaxNodeOrToken[]
-                                                {
-                                                        SyntaxFactory.Argument(SyntaxFactory.IdentifierName(
-                                                            DeclarationNameForValue(fromCompiledExpression
-                                                                .expressionValue))),
-                                                        SyntaxFactory.Token(SyntaxKind.CommaToken),
-                                                        SyntaxFactory.Argument(
-                                                            SyntaxFactory.IdentifierName(fromCompiledExpression.functionName))
-                                                }))));
+                CompileDictionarySyntax.ImmutableDictionaryExpressionSyntax(
+                    keyTypeSyntax: dictionaryKeyTypeSyntax,
+                    valueTypeSyntax: dictionaryValueTypeSyntax,
+                    dictionaryEntries: dictionaryEntries);
 
                 var dictionaryMemberDeclaration =
                     SyntaxFactory.MethodDeclaration(
-                            SyntaxFactory.GenericName(
-                                    SyntaxFactory.Identifier("IReadOnlyDictionary"))
-                                .WithTypeArgumentList(
-                                    SyntaxFactory.TypeArgumentList(
-                                        SyntaxFactory.SeparatedList<TypeSyntax>(
-                                            new SyntaxNodeOrToken[]
-                                            {
-                                                    SyntaxFactory.IdentifierName("PineValue"),
-                                                    SyntaxFactory.Token(SyntaxKind.CommaToken),
-                                                    SyntaxFactory.GenericName(
-                                                            SyntaxFactory.Identifier("Func"))
-                                                        .WithTypeArgumentList(
-                                                            SyntaxFactory.TypeArgumentList(
-                                                                SyntaxFactory.SeparatedList<TypeSyntax>(
-                                                                    new SyntaxNodeOrToken[]
-                                                                    {
-                                                                        EvalExprDelegateTypeSyntax,
-                                                                        SyntaxFactory.Token(SyntaxKind.CommaToken),
-                                                                        SyntaxFactory.IdentifierName("PineValue"),
-                                                                        SyntaxFactory.Token(SyntaxKind.CommaToken),
-                                                                        SyntaxFactory.GenericName(
-                                                                                SyntaxFactory.Identifier("Result"))
-                                                                            .WithTypeArgumentList(
-                                                                                SyntaxFactory.TypeArgumentList(
-                                                                                    SyntaxFactory
-                                                                                        .SeparatedList<TypeSyntax>(
-                                                                                            new SyntaxNodeOrToken[]
-                                                                                            {
-                                                                                                SyntaxFactory
-                                                                                                    .PredefinedType(
-                                                                                                        SyntaxFactory
-                                                                                                            .Token(
-                                                                                                                SyntaxKind
-                                                                                                                    .StringKeyword)),
-                                                                                                SyntaxFactory.Token(
-                                                                                                    SyntaxKind
-                                                                                                        .CommaToken),
-                                                                                                SyntaxFactory
-                                                                                                    .IdentifierName(
-                                                                                                        "PineValue")
-                                                                                            })))
-                                                                    })))
-                                            }))),
-                            identifier: containerConfig.dictionaryMemberName)
+                        dictionaryMemberType,
+                        identifier: containerConfig.dictionaryMemberName)
                         .WithModifiers(
                             SyntaxFactory.TokenList(
                                 SyntaxFactory.Token(SyntaxKind.StaticKeyword),
@@ -401,7 +328,7 @@ public partial class CompileToCSharp
                                         .. compiledExpressions.Select(f => f.memberDeclarationSyntax)
                                     ,
                                         .. staticFieldsDeclarations])),
-                        UsingDirectives: usings));
+                        UsingDirectives: usingDirectives));
             });
     }
 
@@ -417,44 +344,10 @@ public partial class CompileToCSharp
                 SyntaxFactory.IdentifierName("PineVM")),
             SyntaxFactory.IdentifierName("PineVM"));
 
-    public record EnvironmentConfig(
-        string ArgumentEnvironmentName,
-        string ArgumentEvalGenericName,
-        IReadOnlyDictionary<Expression, LetBinding> LetBindings,
-        EnvironmentConfig? ParentEnvironment)
-    {
-        public IEnumerable<EnvironmentConfig> EnumerateAncestors()
-        {
-            var current = this;
-
-            while (current.ParentEnvironment is { } parentEnv)
-            {
-                yield return parentEnv;
-
-                current = parentEnv;
-            }
-        }
-
-        public IEnumerable<EnvironmentConfig> EnumerateSelfAndAncestors() =>
-            EnumerateAncestors().Prepend(this);
-
-        public ImmutableDictionary<Expression, LetBinding> EnumerateSelfAndAncestorsLetBindingsTransitive() =>
-            EnumerateSelfAndAncestors()
-            .SelectMany(env => env.EnumerateSelfLetBindingsTransitive())
-            .ToImmutableDictionary();
-
-        public ImmutableDictionary<Expression, LetBinding> EnumerateSelfLetBindingsTransitive() =>
-            CompiledExpression.Union(
-                LetBindings
-                .Select(binding =>
-                binding.Value.Expression.EnumerateLetBindingsTransitive()
-                .SetItem(binding.Key, binding.Value)));
-    }
-
     public static Result<string, (BlockSyntax blockSyntax, CompiledExpressionDependencies dependencies)>
         CompileToCSharpFunctionBlockSyntax(
             Expression expression,
-            EnvironmentConfig environment) =>
+            CompilationEnvironment environment) =>
         CompileToCSharpExpression(
             expression,
             environment,
@@ -508,7 +401,7 @@ public partial class CompileToCSharp
 
     public static Result<string, CompiledExpression> CompileToCSharpExpression(
         Expression expression,
-        EnvironmentConfig parentEnvironment,
+        CompilationEnvironment parentEnvironment,
         bool createLetBindingsForCse)
     {
         var letBindingsAvailableFromParent =
@@ -526,7 +419,7 @@ public partial class CompileToCSharp
         var letBindingsAvailableFromParentKeys =
             letBindingsAvailableFromParent.Keys.ToImmutableHashSet();
 
-        EnvironmentConfig DescendantEnvironmentFromNewLetBindings(
+        CompilationEnvironment DescendantEnvironmentFromNewLetBindings(
             IReadOnlyDictionary<Expression, LetBinding> newLetBindings) =>
             parentEnvironment
             with
@@ -626,7 +519,7 @@ public partial class CompileToCSharp
 
     private static Result<string, CompiledExpression> CompileToCSharpExpressionWithoutCSE(
         Expression expression,
-        EnvironmentConfig environment)
+        CompilationEnvironment environment)
     {
         return
             expression switch
@@ -662,7 +555,7 @@ public partial class CompileToCSharp
 
     public static Result<string, CompiledExpression> CompileToCSharpExpression(
         Expression.ListExpression listExpression,
-        EnvironmentConfig environment)
+        CompilationEnvironment environment)
     {
         if (!listExpression.List.Any())
             return Result<string, CompiledExpression>.ok(
@@ -713,7 +606,7 @@ public partial class CompileToCSharp
 
     public static Result<string, CompiledExpression> CompileToCSharpExpression(
         Expression.KernelApplicationExpression kernelApplicationExpression,
-        EnvironmentConfig environment)
+        CompilationEnvironment environment)
     {
         if (!KernelFunctionsInfo.Value.TryGetValue(kernelApplicationExpression.functionName,
               out var kernelFunctionInfo))
@@ -735,7 +628,7 @@ public partial class CompileToCSharp
     private static Result<string, CompiledExpression> CompileKernelFunctionApplicationToCSharpExpression(
         KernelFunctionInfo kernelFunctionInfo,
         Expression kernelApplicationArgumentExpression,
-        EnvironmentConfig environment)
+        CompilationEnvironment environment)
     {
         var staticallyKnownArgumentsList =
             ParseKernelApplicationArgumentAsList(kernelApplicationArgumentExpression, environment)
@@ -831,7 +724,7 @@ public partial class CompileToCSharp
 
     public static Result<string, CompiledExpression> CompileToCSharpExpression(
         Expression.ConditionalExpression conditionalExpression,
-        EnvironmentConfig environment)
+        CompilationEnvironment environment)
     {
         return
             CompileToCSharpExpression(
@@ -903,7 +796,7 @@ public partial class CompileToCSharp
 
     public static Result<string, CompiledExpression> CompileToCSharpExpression(
         Expression.DecodeAndEvaluateExpression decodeAndEvaluateExpression,
-        EnvironmentConfig environment)
+        CompilationEnvironment environment)
     {
         var decodeAndEvaluateExpressionValue =
             PineVM.PineVM.EncodeExpressionAsValue(decodeAndEvaluateExpression)
@@ -1134,7 +1027,7 @@ public partial class CompileToCSharp
 
     public static Result<string, CompiledExpression> CompileToCSharpExpression(
         Expression.StringTagExpression stringTagExpression,
-        EnvironmentConfig environment)
+        CompilationEnvironment environment)
     {
         Console.WriteLine("Compiling string tag: " + stringTagExpression.tag);
 

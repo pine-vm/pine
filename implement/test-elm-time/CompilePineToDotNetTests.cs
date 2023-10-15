@@ -1,5 +1,6 @@
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Pine;
+using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 
@@ -44,5 +45,44 @@ public class CompilePineToDotNetTests
                 value_d597fb92e5
             },
             orderedValues);
+    }
+
+    [TestMethod]
+    public void Test_compile_syntax_for_type_declared_in_type()
+    {
+        var syntax =
+            Pine.CompilePineToDotNet.CompileTypeSyntax.TypeSyntaxFromType(
+                typeof(Pine.PineVM.PineVM.EvalExprDelegate),
+                usings: []);
+
+        Assert.AreEqual(
+            "Pine.PineVM.PineVM.EvalExprDelegate",
+            syntax.ToFullString());
+    }
+
+    [TestMethod]
+    public void Test_compile_syntax_for_generic_type()
+    {
+        var syntax =
+            Pine.CompilePineToDotNet.CompileTypeSyntax.TypeSyntaxFromType(
+                typeof(Result<string, int>),
+                usings: []);
+
+        Assert.AreEqual(
+            "Pine.Result<System.String,System.Int32>",
+            syntax.ToFullString());
+    }
+
+    [TestMethod]
+    public void Test_compile_syntax_for_generic_IReadOnlyDictionary()
+    {
+        var syntax =
+            Pine.CompilePineToDotNet.CompileTypeSyntax.TypeSyntaxFromType(
+                typeof(IReadOnlyDictionary<PineValue, string>),
+                usings: []);
+
+        Assert.AreEqual(
+            "System.Collections.Generic.IReadOnlyDictionary<Pine.PineValue,System.String>",
+            syntax.ToFullString());
     }
 }
