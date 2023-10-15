@@ -15,7 +15,7 @@ public class CSharpDeclarationOrder
 
         var originalLists = pineValues.OfType<PineValue.ListValue>().Distinct();
 
-        var orderedLists = OrderListValuesByContainment(originalLists);
+        var orderedLists = OrderListValuesBySize(originalLists);
 
         return blobs.Cast<PineValue>().Concat(orderedLists);
     }
@@ -51,6 +51,12 @@ public class CSharpDeclarationOrder
             return 0;
         }
     }
+
+    public static IEnumerable<PineValue.ListValue> OrderListValuesBySize(IEnumerable<PineValue.ListValue> listValues) =>
+        listValues
+        .Select(value => (value, size: AggregateSizeIncludingDescendants(value)))
+        .OrderBy(tuple => tuple.size)
+        .Select(tuple => tuple.value);
 
     public static IEnumerable<PineValue.ListValue> OrderListValuesByContainment(IEnumerable<PineValue.ListValue> listValues)
     {
