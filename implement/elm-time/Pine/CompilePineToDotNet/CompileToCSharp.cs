@@ -101,9 +101,9 @@ public partial class CompileToCSharp
             {
                 var expressionValue = PineVM.PineVM.EncodeExpressionAsValue(expression).Extract(err => throw new Exception(err));
 
-                var expressionHash = CommonConversion.StringBase16(compilerCache.ComputeHash(expressionValue))[..10];
+                var expressionHash = CommonConversion.StringBase16(compilerCache.ComputeHash(expressionValue));
 
-                var functionName = MemberNameForCompiledExpressionFunction(expressionHash);
+                var functionName = MemberNameForCompiledExpressionFunction(expressionHash[..10]);
 
                 return
                     CompileToCSharpFunctionBlockSyntax(
@@ -111,7 +111,8 @@ public partial class CompileToCSharp
                             new EnvironmentConfig(
                                 ArgumentEnvironmentName: argumentEnvironmentName,
                                 ArgumentEvalGenericName: argumentEvalGenericName,
-                                LetBindings: ImmutableDictionary<Expression, LetBinding>.Empty))
+                                LetBindings: ImmutableDictionary<Expression, LetBinding>.Empty,
+                                ParentEnvironment: null))
                         .MapError(err => "Failed to compile expression " + expressionHash[..10] + ": " + err)
                         .Map(ok =>
                             (expression,
@@ -419,9 +420,30 @@ public partial class CompileToCSharp
     public record EnvironmentConfig(
         string ArgumentEnvironmentName,
         string ArgumentEvalGenericName,
-        ImmutableDictionary<Expression, LetBinding> LetBindings)
+        IReadOnlyDictionary<Expression, LetBinding> LetBindings,
+        EnvironmentConfig? ParentEnvironment)
     {
-        public ImmutableDictionary<Expression, LetBinding> EnumerateLetBindingsTransitive() =>
+        public IEnumerable<EnvironmentConfig> EnumerateAncestors()
+        {
+            var current = this;
+
+            while (current.ParentEnvironment is { } parentEnv)
+            {
+                yield return parentEnv;
+
+                current = parentEnv;
+            }
+        }
+
+        public IEnumerable<EnvironmentConfig> EnumerateSelfAndAncestors() =>
+            EnumerateAncestors().Prepend(this);
+
+        public ImmutableDictionary<Expression, LetBinding> EnumerateSelfAndAncestorsLetBindingsTransitive() =>
+            EnumerateSelfAndAncestors()
+            .SelectMany(env => env.EnumerateSelfLetBindingsTransitive())
+            .ToImmutableDictionary();
+
+        public ImmutableDictionary<Expression, LetBinding> EnumerateSelfLetBindingsTransitive() =>
             CompiledExpression.Union(
                 LetBindings
                 .Select(binding =>
@@ -433,13 +455,16 @@ public partial class CompileToCSharp
         CompileToCSharpFunctionBlockSyntax(
             Expression expression,
             EnvironmentConfig environment) =>
-        CompileToCSharpExpression(expression, environment)
+        CompileToCSharpExpression(
+            expression,
+            environment,
+            createLetBindingsForCse: true)
             .Map(exprWithDependencies =>
             {
                 var availableLetBindings =
-                exprWithDependencies.expression.EnumerateLetBindingsTransitive();
+                exprWithDependencies.EnumerateLetBindingsTransitive();
 
-                var returnExpression = exprWithDependencies.expression.AsCsWithTypeResult();
+                var returnExpression = exprWithDependencies.AsCsWithTypeResult();
 
                 var variableDeclarations =
                 CompiledExpression.VariableDeclarationsForLetBindings(
@@ -449,13 +474,14 @@ public partial class CompileToCSharp
 
                 var combinedDependencies =
                     CompiledExpressionDependencies.Union(
-                        availableLetBindings.Values
-                        .Select(b => b.Dependencies).Prepend(exprWithDependencies.dependencies));
+                        variableDeclarations
+                        .Select(b => b.letBinding.Expression.DependenciesIncludingLetBindings())
+                        .Prepend(exprWithDependencies.DependenciesIncludingLetBindings()));
 
                 return
                 (SyntaxFactory.Block(
                     (StatementSyntax[])
-                    ([.. variableDeclarations,
+                    ([.. variableDeclarations.Select(b => b.declarationSyntax),
                         SyntaxFactory.ReturnStatement(returnExpression)])),
                         combinedDependencies);
             });
@@ -480,51 +506,58 @@ public partial class CompileToCSharp
             SyntaxFactory.ArgumentList(
                 SyntaxFactory.SingletonSeparatedList(SyntaxFactory.Argument(expression))));
 
-    public static Result<string, (CompiledExpression expression, CompiledExpressionDependencies dependencies)> CompileToCSharpExpression(
+    public static Result<string, CompiledExpression> CompileToCSharpExpression(
         Expression expression,
-        EnvironmentConfig parentEnvironment)
+        EnvironmentConfig parentEnvironment,
+        bool createLetBindingsForCse)
     {
         var letBindingsAvailableFromParent =
-            parentEnvironment.EnumerateLetBindingsTransitive();
+            parentEnvironment.EnumerateSelfAndAncestorsLetBindingsTransitive();
 
         if (letBindingsAvailableFromParent.TryGetValue(expression, out var letBinding))
         {
             return
-                Result<string, (CompiledExpression expression, CompiledExpressionDependencies dependencies)>.ok(
-                    (CompiledExpression.WithTypeResult(
-                        SyntaxFactory.IdentifierName(letBinding.DeclarationName)),
-                        CompiledExpressionDependencies.Empty));
+                Result<string, CompiledExpression>.ok(
+                    CompiledExpression.WithTypeResult(
+                        SyntaxFactory.IdentifierName(letBinding.DeclarationName))
+                    .MergeDependencies(letBinding.Expression.Dependencies));
         }
 
         var letBindingsAvailableFromParentKeys =
             letBindingsAvailableFromParent.Keys.ToImmutableHashSet();
-
-        var candidatesForCSE =
-            CSharpDeclarationOrder.OrderExpressionsByContainment(
-                CollectForCommonSubexpressionElimination(
-                    expression,
-                    skipSubexpression: letBindingsAvailableFromParentKeys.Contains))
-            .ToImmutableList();
 
         EnvironmentConfig DescendantEnvironmentFromNewLetBindings(
             IReadOnlyDictionary<Expression, LetBinding> newLetBindings) =>
             parentEnvironment
             with
             {
-                LetBindings = parentEnvironment.LetBindings.SetItems(newLetBindings)
+                LetBindings = newLetBindings,
+                ParentEnvironment = parentEnvironment
             };
 
-        var letBindingsForCSE =
-            candidatesForCSE
+        var newLetBindingsExpressionsForCse =
+            createLetBindingsForCse
+            ?
+            CollectForCommonSubexpressionElimination(
+                expression,
+                skipSubexpression: letBindingsAvailableFromParentKeys.Contains)
+            :
+            [];
+
+        var newLetBindingsExpressions = newLetBindingsExpressionsForCse;
+
+        var newLetBindings =
+            CSharpDeclarationOrder.OrderExpressionsByContainment(newLetBindingsExpressions)
             .Aggregate(
-                seed: parentEnvironment.LetBindings,
+                seed: CompiledExpression.NoLetBindings,
                 func:
                 (dict, subexpression) =>
                 {
                     return
                     CompileToCSharpExpression(
                         subexpression,
-                        DescendantEnvironmentFromNewLetBindings(dict))
+                        DescendantEnvironmentFromNewLetBindings(dict),
+                        createLetBindingsForCse: true)
                     .Unpack(
                         fromErr: _ => dict,
                         fromOk: compileOk =>
@@ -541,23 +574,20 @@ public partial class CompileToCSharp
                                 subexpression,
                                 new LetBinding(
                                     declarationName,
-                                    compileOk.expression,
-                                    compileOk.dependencies));
+                                    compileOk));
                         });
                 });
 
-        var descendantEnvironment = DescendantEnvironmentFromNewLetBindings(letBindingsForCSE);
-
-        var beforeAddingVariableDeclarations =
-            CompileToCSharpExpressionWithoutCSE(expression, descendantEnvironment);
+        var descendantEnvironment = DescendantEnvironmentFromNewLetBindings(newLetBindings);
 
         return
-            beforeAddingVariableDeclarations
-            .Map(exprAndDeps =>
-            (exprAndDeps.expression.MergeBindings(letBindingsForCSE), exprAndDeps.dependencies));
+            CompileToCSharpExpressionWithoutCSE(
+                expression,
+                descendantEnvironment)
+            .Map(beforeNewBindings => beforeNewBindings.MergeBindings(newLetBindings));
     }
 
-    public static IEnumerable<Expression> CollectForCommonSubexpressionElimination(
+    public static ImmutableHashSet<Expression> CollectForCommonSubexpressionElimination(
         Expression expression,
         Func<Expression, bool> skipSubexpression)
     {
@@ -594,8 +624,7 @@ public partial class CompileToCSharp
             _ => false
         };
 
-    public static Result<string, (CompiledExpression expression, CompiledExpressionDependencies dependencies)>
-        CompileToCSharpExpressionWithoutCSE(
+    private static Result<string, CompiledExpression> CompileToCSharpExpressionWithoutCSE(
         Expression expression,
         EnvironmentConfig environment)
     {
@@ -603,10 +632,9 @@ public partial class CompileToCSharp
             expression switch
             {
                 Expression.EnvironmentExpression =>
-                Result<string, (CompiledExpression, CompiledExpressionDependencies)>.ok(
-                    CompiledExpressionDependencies.WithNoDependencies(
-                        CompiledExpression.WithTypePlainValue(
-                            SyntaxFactory.IdentifierName(environment.ArgumentEnvironmentName)))),
+                Result<string, CompiledExpression>.ok(
+                    CompiledExpression.WithTypePlainValue(
+                        SyntaxFactory.IdentifierName(environment.ArgumentEnvironmentName))),
 
                 Expression.ListExpression listExpr =>
                 CompileToCSharpExpression(listExpr, environment),
@@ -627,37 +655,42 @@ public partial class CompileToCSharp
                 CompileToCSharpExpression(stringTagExpr, environment),
 
                 _ =>
-                Result<string, (CompiledExpression, CompiledExpressionDependencies)>.err(
+                Result<string, CompiledExpression>.err(
                     "Unsupported syntax kind: " + expression.GetType().FullName)
             };
     }
 
-    public static Result<string, (CompiledExpression, CompiledExpressionDependencies)> CompileToCSharpExpression(
+    public static Result<string, CompiledExpression> CompileToCSharpExpression(
         Expression.ListExpression listExpression,
         EnvironmentConfig environment)
     {
         if (!listExpression.List.Any())
-            return Result<string, (CompiledExpression, CompiledExpressionDependencies)>.ok(
-                (CompiledExpression.WithTypePlainValue(pineValueEmptyListSyntax),
-                    CompiledExpressionDependencies.Empty));
+            return Result<string, CompiledExpression>.ok(
+                CompiledExpression.WithTypePlainValue(pineValueEmptyListSyntax));
 
         return
             listExpression.List.Select((itemExpression, itemIndex) =>
-            CompileToCSharpExpression(itemExpression, environment)
+            CompileToCSharpExpression(
+                itemExpression,
+                environment,
+                createLetBindingsForCse: false)
             .MapError(err => "Failed to translate list item " + itemIndex + ": " + err))
             .ListCombine()
             .Map(compiledItems =>
             {
                 var aggregateLetBindings =
-                CompiledExpression.Union(compiledItems.Select(c => c.expression.LetBindings));
+                CompiledExpression.Union(compiledItems.Select(c => c.LetBindings));
+
+                var aggregateDeps =
+                CompiledExpressionDependencies.Union(compiledItems.Select(i => i.Dependencies));
 
                 var aggregateSyntax =
                 CompiledExpression.ListMapOrAndThen(
                     environment,
                     combine:
                     csharpItems =>
-                CompiledExpression.WithTypePlainValue(
-                    SyntaxFactory.InvocationExpression(
+                    CompiledExpression.WithTypePlainValue(
+                        SyntaxFactory.InvocationExpression(
                             SyntaxFactory.MemberAccessExpression(
                                 SyntaxKind.SimpleMemberAccessExpression,
                                 SyntaxFactory.IdentifierName("PineValue"),
@@ -669,17 +702,16 @@ public partial class CompileToCSharp
                                         SyntaxFactory.CollectionExpression(
                                             SyntaxFactory.SeparatedList<CollectionElementSyntax>(
                                                 csharpItems.Select(SyntaxFactory.ExpressionElement))))))),
-                    aggregateLetBindings),
-                    compiledItems.Select(ce => ce.expression).ToImmutableList());
+                    aggregateLetBindings,
+                    aggregateDeps),
+                    compiledItems)
+                .MergeDependencies(aggregateDeps);
 
-                var aggregateDeps =
-                CompiledExpressionDependencies.Union(compiledItems.Select(e => e.dependencies));
-
-                return (aggregateSyntax, aggregateDeps);
+                return aggregateSyntax;
             });
     }
 
-    public static Result<string, (CompiledExpression, CompiledExpressionDependencies)> CompileToCSharpExpression(
+    public static Result<string, CompiledExpression> CompileToCSharpExpression(
         Expression.KernelApplicationExpression kernelApplicationExpression,
         EnvironmentConfig environment)
     {
@@ -687,7 +719,7 @@ public partial class CompileToCSharp
               out var kernelFunctionInfo))
         {
             return
-                Result<string, (CompiledExpression, CompiledExpressionDependencies)>.err(
+                Result<string, CompiledExpression>.err(
                     "Kernel function name " + kernelApplicationExpression.functionName + " does not match any of the " +
                     KernelFunctionsInfo.Value.Count + " known names: " +
                     string.Join(", ", KernelFunctionsInfo.Value.Keys));
@@ -700,7 +732,7 @@ public partial class CompileToCSharp
                 environment);
     }
 
-    private static Result<string, (CompiledExpression, CompiledExpressionDependencies)> CompileKernelFunctionApplicationToCSharpExpression(
+    private static Result<string, CompiledExpression> CompileKernelFunctionApplicationToCSharpExpression(
         KernelFunctionInfo kernelFunctionInfo,
         Expression kernelApplicationArgumentExpression,
         EnvironmentConfig environment)
@@ -744,20 +776,20 @@ public partial class CompileToCSharp
                             {
                                 if (!staticallyKnownArgumentsList[parameterIndex].ArgumentSyntaxFromParameterType
                                         .TryGetValue(parameterType, out var param))
-                                    return Result<string, (CompiledExpression, CompiledExpressionDependencies)>.err(
+                                    return Result<string, CompiledExpression>.err(
                                         "No transformation found for parameter type " + parameterType);
 
-                                return Result<string, (CompiledExpression, CompiledExpressionDependencies)>.ok(param);
+                                return Result<string, CompiledExpression>.ok(param);
                             });
 
                     if (argumentsResults.ListCombine() is
-                        Result<string, IReadOnlyList<(CompiledExpression, CompiledExpressionDependencies)>>.Ok specializedOk)
+                        Result<string, IReadOnlyList<CompiledExpression>>.Ok specializedOk)
                     {
                         var aggregateDependencies =
-                            CompiledExpressionDependencies.Union(specializedOk.Value.Select(p => p.Item2));
+                            CompiledExpressionDependencies.Union(specializedOk.Value.Select(p => p.Dependencies));
 
                         var aggregateLetBindings =
-                            CompiledExpression.Union(specializedOk.Value.Select(c => c.Item1.LetBindings));
+                            CompiledExpression.Union(specializedOk.Value.Select(c => c.LetBindings));
 
                         var expressionReturningPineValue =
                             CompiledExpression.ListMapOrAndThen(
@@ -772,14 +804,13 @@ public partial class CompileToCSharp
                                         wrapInvocationInWithDefault(plainInvocationSyntax)
                                         :
                                         plainInvocationSyntax,
-                                        aggregateLetBindings);
+                                        aggregateLetBindings,
+                                        aggregateDependencies);
                                 },
-                                specializedOk.Value.Select(p => p.Item1).ToImmutableList());
+                                specializedOk.Value);
 
                         return
-                            Result<string, (CompiledExpression, CompiledExpressionDependencies)>.ok(
-                                (expressionReturningPineValue,
-                                aggregateDependencies));
+                            Result<string, CompiledExpression>.ok(expressionReturningPineValue);
                     }
                 }
             }
@@ -787,65 +818,71 @@ public partial class CompileToCSharp
 
         return
             CompileToCSharpExpression(
-                kernelApplicationArgumentExpression, environment)
+                kernelApplicationArgumentExpression,
+                environment,
+                createLetBindingsForCse: false)
             .Map(compiledArgument =>
-            (compiledArgument.expression.Map(environment, argumentCs =>
+            (compiledArgument.Map(environment, argumentCs =>
             wrapInvocationInWithDefault(kernelFunctionInfo.CompileGenericInvocation(argumentCs)))
-            .MergeBindings(compiledArgument.expression.LetBindings),
-            compiledArgument.dependencies));
+            .MergeBindings(compiledArgument.LetBindings)
+
+            .MergeDependencies(compiledArgument.Dependencies)));
     }
 
-    public static Result<string, (CompiledExpression, CompiledExpressionDependencies)> CompileToCSharpExpression(
+    public static Result<string, CompiledExpression> CompileToCSharpExpression(
         Expression.ConditionalExpression conditionalExpression,
         EnvironmentConfig environment)
     {
         return
             CompileToCSharpExpression(
                 conditionalExpression.condition,
-                environment)
+                environment,
+                createLetBindingsForCse: false)
             .MapError(err => "Failed to compile condition: " + err)
             .AndThen(compiledCondition =>
             CompileToCSharpExpression(
                 conditionalExpression.ifTrue,
-                environment)
+                environment,
+                createLetBindingsForCse: true)
             .MapError(err => "Failed to compile branch if true: " + err)
             .AndThen(compiledIfTrue =>
             CompileToCSharpExpression(
                 conditionalExpression.ifFalse,
-                environment)
+                environment,
+                createLetBindingsForCse: true)
             .MapError(err => "Failed to compile branch if false: " + err)
             .Map(compiledIfFalse =>
             {
                 CompiledExpression continueWithConditionCs(ExpressionSyntax conditionCs)
                 {
-                    if (!(compiledIfTrue.expression.IsTypeResult || compiledIfFalse.expression.IsTypeResult))
+                    if (!(compiledIfTrue.IsTypeResult || compiledIfFalse.IsTypeResult))
                     {
                         return
                         CompiledExpression.WithTypePlainValue(SyntaxFactory.ConditionalExpression(
                             conditionCs,
-                            compiledIfTrue.expression.Syntax,
-                            compiledIfFalse.expression.Syntax));
+                            compiledIfTrue.Syntax,
+                            compiledIfFalse.Syntax));
                     }
 
                     return
                     CompiledExpression.WithTypeResult(
                         SyntaxFactory.ConditionalExpression(
                             conditionCs,
-                            compiledIfTrue.expression.AsCsWithTypeResult(),
-                            compiledIfFalse.expression.AsCsWithTypeResult()));
+                            compiledIfTrue.AsCsWithTypeResult(),
+                            compiledIfFalse.AsCsWithTypeResult()));
                 }
 
                 var aggregateLetBindings =
                 CompiledExpression.Union(
                     [
-                        compiledCondition.expression.LetBindings,
-                        compiledIfTrue.expression.LetBindings,
-                        compiledIfFalse.expression.LetBindings
+                        compiledCondition.LetBindings,
+                        compiledIfTrue.LetBindings,
+                        compiledIfFalse.LetBindings
                     ]);
 
                 var
                 combinedExpr =
-                compiledCondition.expression
+                compiledCondition
                 .MapOrAndThen(
                     environment,
                     conditionCs =>
@@ -853,16 +890,18 @@ public partial class CompileToCSharp
                         SyntaxFactory.BinaryExpression(
                             SyntaxKind.EqualsExpression,
                             SyntaxFactory.IdentifierName("value_true"),
-                            conditionCs)));
+                            conditionCs))
+                    .MergeBindings(aggregateLetBindings));
 
                 return
-                (combinedExpr.MergeBindings(aggregateLetBindings),
-                compiledCondition.dependencies.Union(compiledIfTrue.dependencies).Union(compiledIfFalse.dependencies));
+                combinedExpr
+                .MergeDependencies(
+                    compiledCondition.Dependencies.Union(compiledIfTrue.Dependencies).Union(compiledIfFalse.Dependencies));
             }
             )));
     }
 
-    public static Result<string, (CompiledExpression, CompiledExpressionDependencies)> CompileToCSharpExpression(
+    public static Result<string, CompiledExpression> CompileToCSharpExpression(
         Expression.DecodeAndEvaluateExpression decodeAndEvaluateExpression,
         EnvironmentConfig environment)
     {
@@ -873,7 +912,7 @@ public partial class CompileToCSharp
         var decodeAndEvaluateExpressionHash =
             CommonConversion.StringBase16(compilerCache.ComputeHash(decodeAndEvaluateExpressionValue));
 
-        (CompiledExpression, CompiledExpressionDependencies) continueWithGenericCase()
+        CompiledExpression continueWithGenericCase()
         {
             var invocationExpression =
                 SyntaxFactory.InvocationExpression(
@@ -892,12 +931,13 @@ public partial class CompileToCSharp
                             })));
 
             return
-                (CompiledExpression.WithTypeResult(invocationExpression),
-                CompiledExpressionDependencies.Empty
-                with
-                {
-                    Expressions = ImmutableHashSet.Create((decodeAndEvaluateExpressionHash, (Expression)decodeAndEvaluateExpression)),
-                });
+                CompiledExpression.WithTypeResult(invocationExpression)
+                .MergeDependencies(
+                    CompiledExpressionDependencies.Empty
+                    with
+                    {
+                        Expressions = ImmutableHashSet.Create((decodeAndEvaluateExpressionHash, (Expression)decodeAndEvaluateExpression)),
+                    });
         }
 
         if (Expression.IsIndependent(decodeAndEvaluateExpression.expression))
@@ -914,11 +954,14 @@ public partial class CompileToCSharp
                         CommonConversion.StringBase16(compilerCache.ComputeHash(innerExpressionValue));
 
                     return
-                    CompileToCSharpExpression(decodeAndEvaluateExpression.environment, environment)
+                    CompileToCSharpExpression(
+                        decodeAndEvaluateExpression.environment,
+                        environment,
+                        createLetBindingsForCse: false)
                     .Map(compiledArgumentExpression =>
                     {
                         var invocationExpression =
-                        compiledArgumentExpression.expression.MapOrAndThen(
+                        compiledArgumentExpression.MapOrAndThen(
                             environment,
                             argumentExprPlainValue =>
                         {
@@ -940,20 +983,20 @@ public partial class CompileToCSharp
                         });
 
                         return
-                            (invocationExpression,
-                            compiledArgumentExpression.dependencies.Union(
-                            CompiledExpressionDependencies.Empty
-                            with
-                            {
-                                Expressions = ImmutableHashSet.Create((innerExpressionValueHash, innerExpression)),
-                            }));
+                            invocationExpression
+                            .MergeDependencies(
+                                compiledArgumentExpression.Dependencies.Union(
+                                    CompiledExpressionDependencies.Empty
+                                    with
+                                    {
+                                        Expressions = ImmutableHashSet.Create((innerExpressionValueHash, innerExpression)),
+                                    }));
                     });
                 }));
         }
 
         return
-            Result<string, (CompiledExpression, CompiledExpressionDependencies)>.ok(
-                continueWithGenericCase());
+            Result<string, CompiledExpression>.ok(continueWithGenericCase());
     }
 
     static string MemberNameForExpression(string expressionValueHash) =>
@@ -1076,19 +1119,20 @@ public partial class CompileToCSharp
             .MapError(err => "Inner expression is not independent: " + err));
     }
 
-    public static Result<string, (CompiledExpression, CompiledExpressionDependencies)> CompileToCSharpExpression(
+    public static Result<string, CompiledExpression> CompileToCSharpExpression(
         Expression.LiteralExpression literalExpression)
     {
         return
-            Result<string, (CompiledExpression, CompiledExpressionDependencies)>.ok(
-                (CompiledExpression.WithTypePlainValue(SyntaxFactory.IdentifierName(DeclarationNameForValue(literalExpression.Value))),
-                CompiledExpressionDependencies.Empty with { Values = [literalExpression.Value] }));
+            Result<string, CompiledExpression>.ok(
+                CompiledExpression.WithTypePlainValue(SyntaxFactory.IdentifierName(DeclarationNameForValue(literalExpression.Value)))
+                .MergeDependencies(
+                    CompiledExpressionDependencies.Empty with { Values = [literalExpression.Value] }));
     }
 
     public static string DeclarationNameForValue(PineValue pineValue) =>
         "value_" + CommonConversion.StringBase16(compilerCache.ComputeHash(pineValue))[..10];
 
-    public static Result<string, (CompiledExpression expressionSyntax, CompiledExpressionDependencies dependencies)> CompileToCSharpExpression(
+    public static Result<string, CompiledExpression> CompileToCSharpExpression(
         Expression.StringTagExpression stringTagExpression,
         EnvironmentConfig environment)
     {
@@ -1097,12 +1141,12 @@ public partial class CompileToCSharp
         return
             CompileToCSharpExpression(
                 stringTagExpression.tagged,
-                environment)
+                environment,
+                createLetBindingsForCse: false)
             .Map(compiledExpr =>
-            (compiledExpr.expression.MapSyntax(s => s.InsertTriviaBefore(
+            (compiledExpr.MapSyntax(s => s.InsertTriviaBefore(
                 SyntaxFactory.Comment("/*\n" + stringTagExpression.tag + "\n*/"),
-                SyntaxFactory.TriviaList())),
-                compiledExpr.dependencies));
+                SyntaxFactory.TriviaList()))));
     }
 
     public static ExpressionSyntax CompileToCSharpLiteralExpression(
@@ -1329,8 +1373,6 @@ public partial class CompileToCSharp
                     break;
                 case Expression.ConditionalExpression conditionalExpr:
                     // For ConditionalExpression, traverse its branches as conditional
-
-                    // TODO: If an expression appears in both branches, it should be counted as unconditional.
 
                     Traverse(conditionalExpr.condition, isConditional);
                     Traverse(conditionalExpr.ifTrue, true);

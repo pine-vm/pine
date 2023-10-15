@@ -13,7 +13,7 @@ namespace Pine.CompilePineToDotNet;
 public partial class CompileToCSharp
 {
     private record ParsedKernelApplicationArgumentExpression(
-        IReadOnlyDictionary<KernelFunctionParameterType, (CompiledExpression, CompiledExpressionDependencies)> ArgumentSyntaxFromParameterType);
+        IReadOnlyDictionary<KernelFunctionParameterType, CompiledExpression> ArgumentSyntaxFromParameterType);
 
     private record KernelFunctionInfo(
         Func<ExpressionSyntax, InvocationExpressionSyntax> CompileGenericInvocation,
@@ -66,7 +66,7 @@ public partial class CompileToCSharp
         Expression argumentExpression,
         EnvironmentConfig environment)
     {
-        var dictionary = new Dictionary<KernelFunctionParameterType, (CompiledExpression, CompiledExpressionDependencies)>();
+        var dictionary = new Dictionary<KernelFunctionParameterType, CompiledExpression>();
 
         if (argumentExpression is Expression.LiteralExpression literal)
         {
@@ -74,19 +74,21 @@ public partial class CompileToCSharp
                 PineValueAsInteger.ValueFromSignedInteger(okInteger.Value) == literal.Value)
             {
                 dictionary[KernelFunctionParameterType.Integer] =
-                    (CompiledExpression.WithTypePlainValue(
-                        ExpressionSyntaxForIntegerLiteral((long)okInteger.Value)),
-                        CompiledExpressionDependencies.Empty);
+                    CompiledExpression.WithTypePlainValue(
+                        ExpressionSyntaxForIntegerLiteral((long)okInteger.Value));
             }
         }
 
         return
-            CompileToCSharpExpression(argumentExpression, environment)
+            CompileToCSharpExpression(
+                argumentExpression,
+                environment,
+                createLetBindingsForCse: false)
                 .Map(csharpExpression =>
                     new ParsedKernelApplicationArgumentExpression(
                         ArgumentSyntaxFromParameterType:
-                        ImmutableDictionary<KernelFunctionParameterType, (CompiledExpression, CompiledExpressionDependencies)>.Empty
-                            .SetItem(KernelFunctionParameterType.Generic, (csharpExpression.expression, csharpExpression.dependencies))
+                        ImmutableDictionary<KernelFunctionParameterType, CompiledExpression>.Empty
+                            .SetItem(KernelFunctionParameterType.Generic, csharpExpression)
                             .SetItems(dictionary)));
     }
 

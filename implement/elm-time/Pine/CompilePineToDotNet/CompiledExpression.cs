@@ -18,32 +18,42 @@ public partial class CompileToCSharp
          * */
         bool IsTypeResult,
 
-        ImmutableDictionary<PineVM.Expression, LetBinding> LetBindings)
+        ImmutableDictionary<PineVM.Expression, LetBinding> LetBindings,
+        CompiledExpressionDependencies Dependencies)
     {
+        public CompiledExpressionDependencies DependenciesIncludingLetBindings() =>
+            CompiledExpressionDependencies.Union(
+                EnumerateLetBindingsTransitive().Values.Select(binding => binding.Expression.Dependencies)
+                .Prepend(Dependencies));
+
         public ImmutableDictionary<PineVM.Expression, LetBinding> EnumerateLetBindingsTransitive() =>
             Union([LetBindings, .. LetBindings.Values.Select(binding => binding.Expression.EnumerateLetBindingsTransitive())]);
 
         public static CompiledExpression WithTypePlainValue(ExpressionSyntax syntax) =>
-            WithTypePlainValue(syntax, NoLetBindings);
+            WithTypePlainValue(syntax, NoLetBindings, CompiledExpressionDependencies.Empty);
 
         public static CompiledExpression WithTypePlainValue(
             ExpressionSyntax syntax,
-            ImmutableDictionary<PineVM.Expression, LetBinding> letBindings) =>
+            ImmutableDictionary<PineVM.Expression, LetBinding> letBindings,
+            CompiledExpressionDependencies dependencies) =>
             new(
                 syntax,
                 IsTypeResult: false,
-                LetBindings: letBindings);
+                LetBindings: letBindings,
+                Dependencies: dependencies);
 
         public static CompiledExpression WithTypeResult(ExpressionSyntax syntax) =>
-            WithTypeResult(syntax, NoLetBindings);
+            WithTypeResult(syntax, NoLetBindings, CompiledExpressionDependencies.Empty);
 
         public static CompiledExpression WithTypeResult(
             ExpressionSyntax syntax,
-            ImmutableDictionary<PineVM.Expression, LetBinding> letBindings) =>
+            ImmutableDictionary<PineVM.Expression, LetBinding> letBindings,
+            CompiledExpressionDependencies dependencies) =>
             new(
                 syntax,
                 IsTypeResult: true,
-                LetBindings: letBindings);
+                LetBindings: letBindings,
+                Dependencies: dependencies);
 
         public static readonly ImmutableDictionary<PineVM.Expression, LetBinding> NoLetBindings =
             ImmutableDictionary<PineVM.Expression, LetBinding>.Empty;
@@ -53,6 +63,13 @@ public partial class CompileToCSharp
             with
             {
                 LetBindings = LetBindings.SetItems(bindings)
+            };
+
+        public CompiledExpression MergeDependencies(CompiledExpressionDependencies dependencies) =>
+            this
+            with
+            {
+                Dependencies = Dependencies.Union(dependencies)
             };
 
         public CompiledExpression MapSyntax(Func<ExpressionSyntax, ExpressionSyntax> map) =>
@@ -70,7 +87,8 @@ public partial class CompileToCSharp
             {
                 return
                     continueWithPlainValue(Syntax)
-                    .MergeBindings(LetBindings);
+                    .MergeBindings(LetBindings)
+                    .MergeDependencies(Dependencies);
             }
 
             var syntaxName = GetNameForExpression(Syntax);
@@ -92,7 +110,7 @@ public partial class CompileToCSharp
                             SyntaxFactory.Literal("Failed to evaluate expression " + syntaxName + ":")),
                         errExpr));
 
-            var combinedExpressionSyntax =
+            var (combinedExpressionSyntax, combinedExpressionDependencies) =
                 ExpressionBodyOrBlock(environment, combinedExpression);
 
             return
@@ -107,7 +125,9 @@ public partial class CompileToCSharp
                             SyntaxFactory.SingletonSeparatedList(
                                 SyntaxFactory.Argument(
                                     SyntaxFactory.SimpleLambdaExpression(SyntaxFactory.Parameter(okIdentifier))
-                                    .WithBody(combinedExpressionSyntax))))));
+                                    .WithBody(combinedExpressionSyntax))))))
+                .MergeDependencies(combinedExpressionDependencies)
+                .MergeDependencies(Dependencies);
         }
 
         public static ExpressionSyntax BuildMapErrorExpression(
@@ -127,12 +147,13 @@ public partial class CompileToCSharp
                                     SyntaxFactory.Identifier("err")))
                             .WithExpressionBody(map(SyntaxFactory.IdentifierName("err")))))));
 
-        static CSharpSyntaxNode ExpressionBodyOrBlock(
+        static (CSharpSyntaxNode syntax, CompiledExpressionDependencies dependencies) ExpressionBodyOrBlock(
             EnvironmentConfig environment,
             CompiledExpression compiledExpression)
         {
             var letBindingsAvailableFromParentKeys =
-                environment.EnumerateLetBindingsTransitive().Keys.ToImmutableHashSet();
+                (environment.ParentEnvironment?.EnumerateSelfAndAncestorsLetBindingsTransitive().Keys ?? [])
+                .ToImmutableHashSet();
 
             var letBindingsTransitive =
                 compiledExpression.EnumerateLetBindingsTransitive();
@@ -143,18 +164,27 @@ public partial class CompileToCSharp
                     usagesSyntaxes: [compiledExpression.Syntax],
                     excludeBinding: letBindingsAvailableFromParentKeys.Contains);
 
-            if (variableDeclarations is [])
-                return compiledExpression.Syntax;
+            var aggregateDependencies =
+                CompiledExpressionDependencies.Union(
+                    variableDeclarations.Select(b => b.letBinding.Expression.DependenciesIncludingLetBindings()));
 
-            return
+            var blockSyntax =
+                variableDeclarations is []
+                ?
+                compiledExpression.Syntax
+                :
+                (CSharpSyntaxNode)
                 SyntaxFactory.Block(
                     (StatementSyntax[])
-                    ([.. variableDeclarations,
+                    ([.. variableDeclarations.Select(b => b.declarationSyntax),
                         SyntaxFactory.ReturnStatement(compiledExpression.Syntax)])
                     );
+
+            return (blockSyntax, aggregateDependencies);
         }
 
-        public static IReadOnlyList<LocalDeclarationStatementSyntax> VariableDeclarationsForLetBindings(
+        public static IReadOnlyList<(LetBinding letBinding, LocalDeclarationStatementSyntax declarationSyntax)>
+            VariableDeclarationsForLetBindings(
             IReadOnlyDictionary<PineVM.Expression, LetBinding> availableLetBindings,
             IReadOnlyCollection<ExpressionSyntax> usagesSyntaxes,
             Func<PineVM.Expression, bool>? excludeBinding)
@@ -180,6 +210,7 @@ public partial class CompileToCSharp
             return
                 orderedBindings
                 .Select(letBinding =>
+                (letBinding,
                 SyntaxFactory.LocalDeclarationStatement(
                     SyntaxFactory.VariableDeclaration(
                         SyntaxFactory.IdentifierName(
@@ -194,7 +225,7 @@ public partial class CompileToCSharp
                             SyntaxFactory.VariableDeclarator(
                                 SyntaxFactory.Identifier(letBinding.DeclarationName))
                             .WithInitializer(
-                                SyntaxFactory.EqualsValueClause(letBinding.Expression.AsCsWithTypeResult()))))))
+                                SyntaxFactory.EqualsValueClause(letBinding.Expression.AsCsWithTypeResult())))))))
                 .ToImmutableArray();
         }
 
@@ -228,7 +259,8 @@ public partial class CompileToCSharp
                 inner => new CompiledExpression(
                 map(inner),
                 IsTypeResult: false,
-                LetBindings: NoLetBindings));
+                LetBindings: NoLetBindings,
+                CompiledExpressionDependencies.Empty));
         }
 
         public ExpressionSyntax AsCsWithTypeResult()
@@ -279,8 +311,7 @@ public partial class CompileToCSharp
 
     public record LetBinding(
         string DeclarationName,
-        CompiledExpression Expression,
-        CompiledExpressionDependencies Dependencies);
+        CompiledExpression Expression);
 
 
     public record CompiledExpressionDependencies(
