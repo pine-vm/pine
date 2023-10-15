@@ -98,6 +98,12 @@ public record CompiledExpression(
             continueWithPlainValue(SyntaxFactory.IdentifierName(okIdentifier))
             .MergeBindings(LetBindings);
 
+        var (combinedExpressionSyntax, combinedExpressionDependencies) =
+            ExpressionBodyOrBlock(environment, combinedExpression);
+
+        /*
+         * 2023-10-15
+         * 
         var mapErrorExpression =
             BuildMapErrorExpression(
                 Syntax,
@@ -108,16 +114,18 @@ public record CompiledExpression(
                         SyntaxKind.StringLiteralExpression,
                         SyntaxFactory.Literal("Failed to evaluate expression " + syntaxName + ":")),
                     errExpr));
-
-        var (combinedExpressionSyntax, combinedExpressionDependencies) =
-            ExpressionBodyOrBlock(environment, combinedExpression);
+        */
 
         return
             WithTypeResult(
                 SyntaxFactory.InvocationExpression(
                     SyntaxFactory.MemberAccessExpression(
                         SyntaxKind.SimpleMemberAccessExpression,
+                        /*
+                         * 2023-10-15
                         mapErrorExpression,
+                        */
+                        Syntax,
                         SyntaxFactory.IdentifierName(combinedExpression.IsTypeResult ? "AndThen" : "Map")))
                 .WithArgumentList(
                     SyntaxFactory.ArgumentList(
