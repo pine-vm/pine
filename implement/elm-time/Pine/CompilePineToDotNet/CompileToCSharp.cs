@@ -66,6 +66,22 @@ public partial class CompileToCSharp
                 .WithType(SyntaxFactory.IdentifierName("PineValue")),
         };
 
+        var usingDirectivesTypes = new[]
+        {
+            typeof(PineValue),
+            typeof(ImmutableArray),
+            typeof(IReadOnlyDictionary<,>),
+            typeof(Func<,>)
+        };
+
+        var usingDirectives =
+            usingDirectivesTypes
+            .Select(t => t.Namespace)
+            .WhereNotNull()
+            .Distinct()
+            .Select(ns => SyntaxFactory.UsingDirective(SyntaxFactory.IdentifierName(ns)))
+            .ToImmutableList();
+
         MemberDeclarationSyntax memberDeclarationSyntaxForExpression(
             string functionName,
             BlockSyntax blockSyntax)
@@ -106,13 +122,11 @@ public partial class CompileToCSharp
                 var functionName = MemberNameForCompiledExpressionFunction(expressionHash[..10]);
 
                 return
-                    CompileToCSharpFunctionBlockSyntax(
-                            expression,
-                            new CompilationEnvironment(
-                                ArgumentEnvironmentName: argumentEnvironmentName,
-                                ArgumentEvalGenericName: argumentEvalGenericName,
-                                LetBindings: ImmutableDictionary<Expression, LetBinding>.Empty,
-                                ParentEnvironment: null))
+                    compilerCache.CompileToCSharpFunctionBlockSyntax(
+                        expression,
+                        new FunctionCompilationEnvironment(
+                            ArgumentEnvironmentName: argumentEnvironmentName,
+                            ArgumentEvalGenericName: argumentEvalGenericName))
                         .MapError(err => "Failed to compile expression " + expressionHash[..10] + ": " + err)
                         .Map(ok =>
                             (expression,
@@ -166,8 +180,7 @@ public partial class CompileToCSharp
                         : null;
 
                 (string memberName, TypeSyntax typeSyntax, ExpressionSyntax memberDeclaration)
-                    memberDeclarationForValue(
-                        PineValue pineValue)
+                    memberDeclarationForValue(PineValue pineValue)
                 {
                     var valueExpression = CompileToCSharpLiteralExpression(pineValue, specialSyntaxForPineValue);
 
@@ -180,8 +193,7 @@ public partial class CompileToCSharp
                 }
 
                 (string memberName, TypeSyntax typeSyntax, ExpressionSyntax memberDeclaration)
-                    memberDeclarationForExpression(
-                        (string hash, Expression expression) hashAndExpr)
+                    memberDeclarationForExpression((string hash, Expression expression) hashAndExpr)
                 {
                     var expressionExpression =
                         EncodePineExpressionAsCSharpExpression(hashAndExpr.expression, specialSyntaxForPineValue)
@@ -217,8 +229,8 @@ public partial class CompileToCSharp
 
                 var valuesStaticMembers =
                     valuesToDeclare
-                        .Select(memberDeclarationForValue)
-                        .ToImmutableList();
+                    .Select(memberDeclarationForValue)
+                    .ToImmutableList();
 
                 var expressionStaticMembers =
                     aggregateDependencies.Expressions
@@ -347,10 +359,13 @@ public partial class CompileToCSharp
     public static Result<string, (BlockSyntax blockSyntax, CompiledExpressionDependencies dependencies)>
         CompileToCSharpFunctionBlockSyntax(
             Expression expression,
-            CompilationEnvironment environment) =>
+            FunctionCompilationEnvironment environment) =>
         CompileToCSharpExpression(
             expression,
-            environment,
+            new ExpressionCompilationEnvironment(
+                FunctionEnvironment: environment,
+                LetBindings: ImmutableDictionary<Expression, LetBinding>.Empty,
+                ParentEnvironment: null),
             createLetBindingsForCse: true)
             .Map(exprWithDependencies =>
             {
@@ -401,7 +416,7 @@ public partial class CompileToCSharp
 
     public static Result<string, CompiledExpression> CompileToCSharpExpression(
         Expression expression,
-        CompilationEnvironment parentEnvironment,
+        ExpressionCompilationEnvironment parentEnvironment,
         bool createLetBindingsForCse)
     {
         var letBindingsAvailableFromParent =
@@ -419,7 +434,7 @@ public partial class CompileToCSharp
         var letBindingsAvailableFromParentKeys =
             letBindingsAvailableFromParent.Keys.ToImmutableHashSet();
 
-        CompilationEnvironment DescendantEnvironmentFromNewLetBindings(
+        ExpressionCompilationEnvironment DescendantEnvironmentFromNewLetBindings(
             IReadOnlyDictionary<Expression, LetBinding> newLetBindings) =>
             parentEnvironment
             with
@@ -519,7 +534,7 @@ public partial class CompileToCSharp
 
     private static Result<string, CompiledExpression> CompileToCSharpExpressionWithoutCSE(
         Expression expression,
-        CompilationEnvironment environment)
+        ExpressionCompilationEnvironment environment)
     {
         return
             expression switch
@@ -527,7 +542,7 @@ public partial class CompileToCSharp
                 Expression.EnvironmentExpression =>
                 Result<string, CompiledExpression>.ok(
                     CompiledExpression.WithTypePlainValue(
-                        SyntaxFactory.IdentifierName(environment.ArgumentEnvironmentName))),
+                        SyntaxFactory.IdentifierName(environment.FunctionEnvironment.ArgumentEnvironmentName))),
 
                 Expression.ListExpression listExpr =>
                 CompileToCSharpExpression(listExpr, environment),
@@ -555,7 +570,7 @@ public partial class CompileToCSharp
 
     public static Result<string, CompiledExpression> CompileToCSharpExpression(
         Expression.ListExpression listExpression,
-        CompilationEnvironment environment)
+        ExpressionCompilationEnvironment environment)
     {
         if (!listExpression.List.Any())
             return Result<string, CompiledExpression>.ok(
@@ -606,7 +621,7 @@ public partial class CompileToCSharp
 
     public static Result<string, CompiledExpression> CompileToCSharpExpression(
         Expression.KernelApplicationExpression kernelApplicationExpression,
-        CompilationEnvironment environment)
+        ExpressionCompilationEnvironment environment)
     {
         if (!KernelFunctionsInfo.Value.TryGetValue(kernelApplicationExpression.functionName,
               out var kernelFunctionInfo))
@@ -628,7 +643,7 @@ public partial class CompileToCSharp
     private static Result<string, CompiledExpression> CompileKernelFunctionApplicationToCSharpExpression(
         KernelFunctionInfo kernelFunctionInfo,
         Expression kernelApplicationArgumentExpression,
-        CompilationEnvironment environment)
+        ExpressionCompilationEnvironment environment)
     {
         var staticallyKnownArgumentsList =
             ParseKernelApplicationArgumentAsList(kernelApplicationArgumentExpression, environment)
@@ -724,7 +739,7 @@ public partial class CompileToCSharp
 
     public static Result<string, CompiledExpression> CompileToCSharpExpression(
         Expression.ConditionalExpression conditionalExpression,
-        CompilationEnvironment environment)
+        ExpressionCompilationEnvironment environment)
     {
         return
             CompileToCSharpExpression(
@@ -796,7 +811,7 @@ public partial class CompileToCSharp
 
     public static Result<string, CompiledExpression> CompileToCSharpExpression(
         Expression.DecodeAndEvaluateExpression decodeAndEvaluateExpression,
-        CompilationEnvironment environment)
+        ExpressionCompilationEnvironment environment)
     {
         var decodeAndEvaluateExpressionValue =
             PineVM.PineVM.EncodeExpressionAsValue(decodeAndEvaluateExpression)
@@ -809,7 +824,7 @@ public partial class CompileToCSharp
         {
             var invocationExpression =
                 SyntaxFactory.InvocationExpression(
-                    SyntaxFactory.IdentifierName(environment.ArgumentEvalGenericName))
+                    SyntaxFactory.IdentifierName(environment.FunctionEnvironment.ArgumentEvalGenericName))
                 .WithArgumentList(
                     SyntaxFactory.ArgumentList(
                         SyntaxFactory.SeparatedList<ArgumentSyntax>(
@@ -820,7 +835,7 @@ public partial class CompileToCSharp
                                         MemberNameForExpression(decodeAndEvaluateExpressionHash))),
                                 SyntaxFactory.Token(SyntaxKind.CommaToken),
                                 SyntaxFactory.Argument(
-                                    SyntaxFactory.IdentifierName(environment.ArgumentEnvironmentName))
+                                    SyntaxFactory.IdentifierName(environment.FunctionEnvironment.ArgumentEnvironmentName))
                             })));
 
             return
@@ -869,7 +884,7 @@ public partial class CompileToCSharp
                                             new SyntaxNodeOrToken[]
                                             {
                                                 SyntaxFactory.Argument(
-                                                    SyntaxFactory.IdentifierName(environment.ArgumentEvalGenericName)),
+                                                    SyntaxFactory.IdentifierName(environment.FunctionEnvironment.ArgumentEvalGenericName)),
                                                 SyntaxFactory.Token(SyntaxKind.CommaToken),
                                                 SyntaxFactory.Argument(argumentExprPlainValue)
                                             }))));
@@ -1027,7 +1042,7 @@ public partial class CompileToCSharp
 
     public static Result<string, CompiledExpression> CompileToCSharpExpression(
         Expression.StringTagExpression stringTagExpression,
-        CompilationEnvironment environment)
+        ExpressionCompilationEnvironment environment)
     {
         Console.WriteLine("Compiling string tag: " + stringTagExpression.tag);
 

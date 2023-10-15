@@ -5,13 +5,16 @@ using System.Linq;
 
 namespace Pine.CompilePineToDotNet;
 
-public record CompilationEnvironment(
+public record FunctionCompilationEnvironment(
     string ArgumentEnvironmentName,
-    string ArgumentEvalGenericName,
+    string ArgumentEvalGenericName);
+
+public record ExpressionCompilationEnvironment(
+    FunctionCompilationEnvironment FunctionEnvironment,
     IReadOnlyDictionary<Expression, LetBinding> LetBindings,
-    CompilationEnvironment? ParentEnvironment)
+    ExpressionCompilationEnvironment? ParentEnvironment)
 {
-    public IEnumerable<CompilationEnvironment> EnumerateAncestors()
+    public IEnumerable<ExpressionCompilationEnvironment> EnumerateAncestors()
     {
         var current = this;
 
@@ -23,7 +26,7 @@ public record CompilationEnvironment(
         }
     }
 
-    public IEnumerable<CompilationEnvironment> EnumerateSelfAndAncestors() =>
+    public IEnumerable<ExpressionCompilationEnvironment> EnumerateSelfAndAncestors() =>
         EnumerateAncestors().Prepend(this);
 
     public ImmutableDictionary<Expression, LetBinding> EnumerateSelfAndAncestorsLetBindingsTransitive() =>

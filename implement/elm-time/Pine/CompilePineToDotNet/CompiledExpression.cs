@@ -79,7 +79,7 @@ public record CompiledExpression(
         };
 
     public CompiledExpression MapOrAndThen(
-        CompilationEnvironment environment,
+        ExpressionCompilationEnvironment environment,
         Func<ExpressionSyntax, CompiledExpression> continueWithPlainValue)
     {
         if (!IsTypeResult)
@@ -155,7 +155,7 @@ public record CompiledExpression(
                         .WithExpressionBody(map(SyntaxFactory.IdentifierName("err")))))));
 
     static (CSharpSyntaxNode syntax, CompiledExpressionDependencies dependencies) ExpressionBodyOrBlock(
-        CompilationEnvironment environment,
+        ExpressionCompilationEnvironment environment,
         CompiledExpression compiledExpression)
     {
         var letBindingsAvailableFromParentKeys =
@@ -258,7 +258,7 @@ public record CompiledExpression(
     }
 
     public CompiledExpression Map(
-        CompilationEnvironment environment,
+        ExpressionCompilationEnvironment environment,
         Func<ExpressionSyntax, ExpressionSyntax> map)
     {
         return MapOrAndThen(
@@ -279,7 +279,7 @@ public record CompiledExpression(
     }
 
     public static CompiledExpression ListMapOrAndThen(
-        CompilationEnvironment environment,
+        ExpressionCompilationEnvironment environment,
         Func<IReadOnlyList<ExpressionSyntax>, CompiledExpression> combine,
         IReadOnlyList<CompiledExpression> compiledList)
     {

@@ -35,7 +35,7 @@ public partial class CompileToCSharp
 
     private static Result<string, IReadOnlyList<ParsedKernelApplicationArgumentExpression>>? ParseKernelApplicationArgumentAsList(
         Expression kernelApplicationArgumentExpression,
-        CompilationEnvironment environment)
+        ExpressionCompilationEnvironment environment)
     {
         Result<string, IReadOnlyList<ParsedKernelApplicationArgumentExpression>> continueWithList(IEnumerable<Expression> list) =>
             list
@@ -64,7 +64,7 @@ public partial class CompileToCSharp
 
     private static Result<string, ParsedKernelApplicationArgumentExpression> ParseKernelApplicationArgument(
         Expression argumentExpression,
-        CompilationEnvironment environment)
+        ExpressionCompilationEnvironment environment)
     {
         var dictionary = new Dictionary<KernelFunctionParameterType, CompiledExpression>();
 
