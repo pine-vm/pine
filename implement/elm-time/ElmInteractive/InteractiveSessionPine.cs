@@ -20,7 +20,7 @@ public class InteractiveSessionPine : IInteractiveSession
 
     private ElmInteractive.CompilationCache lastCompilationCache = ElmInteractive.CompilationCache.Empty;
 
-    private readonly PineVM pineVM;
+    private readonly IPineVM pineVM;
 
     private readonly PineVMCache? pineVMCache;
 
@@ -28,24 +28,23 @@ public class InteractiveSessionPine : IInteractiveSession
 
     public long? FunctionApplicationCacheLookupCount => pineVMCache?.FunctionApplicationCacheLookupCount;
 
-    public long EvaluateExpressionCount => pineVM.EvaluateExpressionCount;
-
     public InteractiveSessionPine(
         TreeNodeWithStringPath compileElmProgramCodeFiles,
         TreeNodeWithStringPath? appCodeTree,
-        bool caching)
+        bool caching,
+        DynamicPGOShare? autoPGO)
         :
         this(
             compileElmProgramCodeFiles: compileElmProgramCodeFiles,
             appCodeTree: appCodeTree,
-            BuildPineVM(caching))
+            BuildPineVM(caching: caching, autoPGO: autoPGO))
     {
     }
 
     public InteractiveSessionPine(
         TreeNodeWithStringPath compileElmProgramCodeFiles,
         TreeNodeWithStringPath? appCodeTree,
-        PineVM pineVM)
+        IPineVM pineVM)
         :
         this(
             compileElmProgramCodeFiles: compileElmProgramCodeFiles,
@@ -57,7 +56,7 @@ public class InteractiveSessionPine : IInteractiveSession
     private InteractiveSessionPine(
         TreeNodeWithStringPath compileElmProgramCodeFiles,
         TreeNodeWithStringPath? appCodeTree,
-        (PineVM pineVM, PineVMCache? pineVMCache) pineVMAndCache)
+        (IPineVM pineVM, PineVMCache? pineVMCache) pineVMAndCache)
     {
         pineVM = pineVMAndCache.pineVM;
         pineVMCache = pineVMAndCache.pineVMCache;
@@ -71,7 +70,9 @@ public class InteractiveSessionPine : IInteractiveSession
             CompileInteractiveEnvironment(appCodeTree: appCodeTree));
     }
 
-    private static (PineVM, PineVMCache?) BuildPineVM(bool caching)
+    private static (IPineVM, PineVMCache?) BuildPineVM(
+        bool caching,
+        DynamicPGOShare? autoPGO)
     {
         var cache = caching ? new PineVMCache() : null;
 
@@ -81,6 +82,9 @@ public class InteractiveSessionPine : IInteractiveSession
             null
             :
             (PineVM.OverrideEvalExprDelegate?)cache.BuildEvalExprDelegate;
+
+        if (autoPGO is not null)
+            return (autoPGO.GetVMAutoUpdating(overrideEvaluateExpression: overrideEvaluateExpression), cache);
 
         return (new PineVM(overrideEvaluateExpression: overrideEvaluateExpression), cache);
     }

@@ -1,4 +1,3 @@
-using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Collections.Immutable;
@@ -12,7 +11,9 @@ public record ProfilingPineVM(
     PineVM PineVM,
     IReadOnlyCollection<Expression> ExpressionEvaluations)
 {
-    public static ProfilingPineVM BuildProfilingVM()
+    public static ProfilingPineVM BuildProfilingVM(
+        PineVM.OverrideDecodeExprDelegate? overrideDecodeExpression = null,
+        PineVM.OverrideEvalExprDelegate? overrideEvaluateExpression = null)
     {
         var expressionEvaluations = new ConcurrentQueue<Expression>();
 
@@ -22,7 +23,8 @@ public record ProfilingPineVM(
                 defaultHandler => value =>
                 {
                     return
-                    defaultHandler(value)
+                    (overrideDecodeExpression?.Invoke(defaultHandler) ?? defaultHandler)
+                    .Invoke(value)
                     .Map(decodedExpr =>
                     {
                         if (decodedExpr is not Expression.DelegatingExpression)
@@ -33,23 +35,25 @@ public record ProfilingPineVM(
                         return decodedExpr;
                     });
                 },
-                overrideEvaluateExpression: null);
+                overrideEvaluateExpression: overrideEvaluateExpression);
 
         return new ProfilingPineVM(profilingPineVM, expressionEvaluations);
     }
 
     public static IReadOnlyDictionary<Expression, ExpressionUsageProfile> UsageProfileDictionaryFromListOfUsages(
-        IReadOnlyCollection<Expression> usages) =>
-        usages
-        .Distinct()
-        .ToImmutableDictionary(
-            keySelector: expression => expression,
-            elementSelector: expression =>
-            {
-                var usageCount = usages.Count(e => e == expression);
+        IReadOnlyCollection<Expression> usages)
+    {
+        var counts = new Dictionary<Expression, int>();
 
-                return new ExpressionUsageProfile(usageCount);
-            });
+        foreach (var usage in usages)
+            counts[usage] = counts.GetValueOrDefault(usage, 0) + 1;
+
+        return
+            counts
+            .ToDictionary(
+                keySelector: p => p.Key,
+                elementSelector: p => new ExpressionUsageProfile(UsageCount: p.Value));
+    }
 
     static public IReadOnlyDictionary<T, ExpressionUsageProfile> AggregateExpressionUsageProfiles<T>(
         IReadOnlyCollection<IReadOnlyDictionary<T, ExpressionUsageProfile>> dictionaries)

@@ -50,7 +50,7 @@ public partial class CompileToCSharp
     }
 
     public static Result<string, CompileCSharpClassResult> CompileExpressionsToCSharpClass(
-        IReadOnlyList<Expression> expressions,
+        IReadOnlyCollection<Expression> expressions,
         SyntaxContainerConfig containerConfig)
     {
         const string argumentEnvironmentName = "pine_environment";
@@ -210,22 +210,6 @@ public partial class CompileToCSharp
                                 SyntaxFactory.IdentifierName("Expression")),
                             expressionExpression);
                 }
-
-                var usingDirectivesTypes = new[]
-                {
-                    typeof(PineValue),
-                    typeof(ImmutableArray),
-                    typeof(IReadOnlyDictionary<,>),
-                    typeof(Func<,>)
-                };
-
-                var usingDirectives =
-                    usingDirectivesTypes
-                    .Select(t => t.Namespace)
-                    .WhereNotNull()
-                    .Distinct()
-                    .Select(ns => SyntaxFactory.UsingDirective(SyntaxFactory.IdentifierName(ns)))
-                    .ToImmutableList();
 
                 var valuesStaticMembers =
                     valuesToDeclare

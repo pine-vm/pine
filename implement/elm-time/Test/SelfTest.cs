@@ -75,7 +75,7 @@ public class SelfTest
                 adminInterfaceUrls: null,
                 adminPassword: null,
                 publicAppUrls: ["http://localhost:" + serverHttpPort],
-                elmEngineType: ElmEngineType.JavaScript_V8,
+                elmEngineType: new ElmEngineType.JavaScript_V8(),
                 deletePreviousProcess: false,
                 copyProcess: null,
                 deployApp: "https://github.com/elm-time/elm-time/tree/1b8d4ff50a3ae94921f9e0f3357abf2bc1a696f3/implement/example-apps/minimal-backend-hello-world");

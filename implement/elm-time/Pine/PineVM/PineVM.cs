@@ -5,7 +5,14 @@ using System.Linq;
 
 namespace Pine.PineVM;
 
-public class PineVM
+public interface IPineVM
+{
+    Result<string, PineValue> EvaluateExpression(
+        Expression expression,
+        PineValue environment);
+}
+
+public class PineVM : IPineVM
 {
     public delegate Result<string, PineValue> EvalExprDelegate(Expression expression, PineValue environment);
 

@@ -8,19 +8,26 @@ namespace Pine;
 
 public static class PineValueHashTree
 {
-    public static ReadOnlyMemory<byte> ComputeHash(PineValue pineValue) =>
-        ComputeHashAndDependencies(pineValue).hash;
+    public static ReadOnlyMemory<byte> ComputeHash(
+        PineValue pineValue,
+        Func<PineValue, ReadOnlyMemory<byte>?>? delegateGetHashOfComponent = null) =>
+        ComputeHashAndDependencies(pineValue, delegateGetHashOfComponent).hash;
+
 
     public static (ReadOnlyMemory<byte> hash, IReadOnlyCollection<PineValue> dependencies)
-        ComputeHashAndDependencies(PineValue pineValue)
+        ComputeHashAndDependencies(
+        PineValue pineValue,
+        Func<PineValue, ReadOnlyMemory<byte>?>? delegateGetHashOfComponent = null)
     {
-        var (serialRepresentation, dependencies) = ComputeHashTreeNodeSerialRepresentation(pineValue);
+        var (serialRepresentation, dependencies) = ComputeHashTreeNodeSerialRepresentation(pineValue, delegateGetHashOfComponent);
 
         return (hash: CommonConversion.HashSHA256(serialRepresentation), dependencies);
     }
 
     public static (ReadOnlyMemory<byte> serialRepresentation, IReadOnlyCollection<PineValue> dependencies)
-        ComputeHashTreeNodeSerialRepresentation(PineValue pineValue)
+        ComputeHashTreeNodeSerialRepresentation(
+        PineValue pineValue,
+        Func<PineValue, ReadOnlyMemory<byte>?>? delegateGetHashOfComponent = null)
     {
         switch (pineValue)
         {
@@ -28,12 +35,7 @@ public static class PineValueHashTree
                 {
                     var prefix = System.Text.Encoding.ASCII.GetBytes("blob " + blobValue.Bytes.Length + "\0");
 
-                    var serialRepresentation = new byte[prefix.Length + blobValue.Bytes.Length];
-
-                    var blobValueArray = blobValue.Bytes.ToArray();
-
-                    Buffer.BlockCopy(prefix, 0, serialRepresentation, 0, prefix.Length);
-                    Buffer.BlockCopy(blobValueArray, 0, serialRepresentation, prefix.Length, blobValueArray.Length);
+                    var serialRepresentation = CommonConversion.Concat(prefix.AsSpan(), blobValue.Bytes.Span);
 
                     return (serialRepresentation, []);
                 }
@@ -41,7 +43,9 @@ public static class PineValueHashTree
             case PineValue.ListValue listValue:
                 {
                     var elementsHashes =
-                        listValue.Elements.Select(ComputeHash).ToList();
+                        listValue.Elements
+                        .Select(i => delegateGetHashOfComponent?.Invoke(i) ?? ComputeHash(i, delegateGetHashOfComponent))
+                        .ToList();
 
                     var prefix = System.Text.Encoding.ASCII.GetBytes("list " + elementsHashes.Count + "\0");
 

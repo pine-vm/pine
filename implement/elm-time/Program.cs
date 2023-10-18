@@ -18,11 +18,20 @@ namespace ElmTime;
 
 public class Program
 {
-    public static string AppVersionId => "2023-10-15";
+    public static string AppVersionId => "2023-10-17";
 
     private static int AdminInterfaceDefaultPort => 4000;
 
     private static int Main(string[] args)
+    {
+        using var dynamicPGOShare = new DynamicPGOShare();
+
+        return MainLessDispose(args, dynamicPGOShare);
+    }
+
+    private static int MainLessDispose(
+        string[] args,
+        DynamicPGOShare dynamicPGOShare)
     {
         Elm019Binaries.OverrideElmMakeHomeDirectory = ElmMakeHomeDirectoryPath;
         Elm019Binaries.ElmMakeResultCacheFileStoreDefault = ElmMakeResultCacheFileStoreDefault;
@@ -55,7 +64,7 @@ public class Program
 
         AddSelfTestCommand(app);
 
-        var runServerCommand = AddRunServerCommand(app);
+        var runServerCommand = AddRunServerCommand(app, dynamicPGOShare);
 
         var deployCommand = AddDeployCommand(app);
         var copyAppStateCommand = AddCopyAppStateCommand(app);
@@ -65,7 +74,7 @@ public class Program
         var truncateProcessHistoryCommand = AddTruncateProcessHistoryCommand(app);
 
         var compileCommand = AddCompileCommand(app);
-        var interactiveCommand = AddInteractiveCommand(app);
+        var interactiveCommand = AddInteractiveCommand(app, dynamicPGOShare);
         var describeCommand = AddDescribeCommand(app);
         var elmTestRsCommand = AddElmTestRsCommand(app);
         var makeCommand = AddMakeCommand(app);
@@ -261,7 +270,9 @@ public class Program
             });
         });
 
-    private static CommandLineApplication AddRunServerCommand(CommandLineApplication app) =>
+    private static CommandLineApplication AddRunServerCommand(
+        CommandLineApplication app,
+        DynamicPGOShare dynamicPGOShare) =>
         app.Command("run-server", runServerCommand =>
         {
             runServerCommand.Description = "Run a server with a web-based admin interface. The HTTP API supports deployments, migrations, and other operations to manage your app.";
@@ -277,9 +288,10 @@ public class Program
             var copyProcessOption = runServerCommand.Option("--copy-process", "Path to a process to copy. Can be a URL to an admin interface of a server or a path to an archive containing files representing the process state. This option also implies '--delete-previous-process'.", CommandOptionType.SingleValue);
             var deployOption = runServerCommand.Option("--deploy", "Path to an app to deploy on startup, analogous to the 'source' path on the `deploy` command. Can be combined with '--copy-process'.", CommandOptionType.SingleValue);
             var elmEngineOption = AddElmEngineOptionOnCommand(
+                dynamicPGOShare,
                 runServerCommand,
                 defaultFromEnvironmentVariablePrefix: "web_server",
-                defaultEngineConsideringEnvironmentVariable: fromEnv => fromEnv ?? ElmInteractive.ElmEngineType.JavaScript_V8);
+                defaultEngineConsideringEnvironmentVariable: fromEnv => fromEnv ?? ElmInteractive.ElmEngineTypeCLI.JavaScript_V8);
 
             runServerCommand.OnExecute(() =>
             {
@@ -815,7 +827,9 @@ public class Program
         }
     }
 
-    private static CommandLineApplication AddInteractiveCommand(CommandLineApplication app) =>
+    private static CommandLineApplication AddInteractiveCommand(
+        CommandLineApplication app,
+        DynamicPGOShare dynamicPGOShare) =>
         app.Command("interactive", interactiveCommand =>
         {
             interactiveCommand.AddName("repl");
@@ -846,9 +860,11 @@ public class Program
             var elmCompilerOption = AddElmCompilerOptionOnCommand(interactiveCommand);
 
             var elmEngineOption = AddElmEngineOptionOnCommand(
+                dynamicPGOShare,
                 interactiveCommand,
                 defaultFromEnvironmentVariablePrefix: "interactive",
-                defaultEngineConsideringEnvironmentVariable: fromEnv => fromEnv ?? ElmInteractive.IInteractiveSession.DefaultImplementation);
+                defaultEngineConsideringEnvironmentVariable:
+                fromEnv => fromEnv ?? ElmInteractive.IInteractiveSession.DefaultImplementation);
 
             var submitOption =
                 interactiveCommand.Option(
@@ -1740,10 +1756,12 @@ public class Program
         .Argument("process-site", "Path to the admin interface of the server running the process.")
         .IsRequired(allowEmptyStrings: false);
 
-    private static (CommandOption elmEngineOption, Func<ElmInteractive.ElmEngineType> parseElmEngineTypeFromOption) AddElmEngineOptionOnCommand(
+    private static (CommandOption elmEngineOption, Func<ElmInteractive.ElmEngineType> parseElmEngineTypeFromOption)
+        AddElmEngineOptionOnCommand(
+        DynamicPGOShare dynamicPGOShare,
         CommandLineApplication cmd,
         string? defaultFromEnvironmentVariablePrefix,
-        Func<ElmInteractive.ElmEngineType?, ElmInteractive.ElmEngineType> defaultEngineConsideringEnvironmentVariable)
+        Func<ElmInteractive.ElmEngineTypeCLI?, ElmInteractive.ElmEngineTypeCLI> defaultEngineConsideringEnvironmentVariable)
     {
         var defaultEngineFromEnvironmentVariable =
             defaultFromEnvironmentVariablePrefix switch
@@ -1757,16 +1775,23 @@ public class Program
         var elmEngineOption =
             cmd.Option(
                 template: "--elm-engine",
-                description: "Select the engine for running Elm programs (" + string.Join(", ", Enum.GetNames<ElmInteractive.ElmEngineType>()) + "). Defaults to " + defaultEngine,
+                description: "Select the engine for running Elm programs (" + string.Join(", ", Enum.GetNames<ElmInteractive.ElmEngineTypeCLI>()) + "). Defaults to " + defaultEngine,
                 optionType: CommandOptionType.SingleValue,
                 inherited: true);
 
         ElmInteractive.ElmEngineType parseElmEngineTypeFromOption()
         {
-            if (elmEngineOption?.Value() is { } implementationAsString)
-                return Enum.Parse<ElmInteractive.ElmEngineType>(implementationAsString, ignoreCase: true);
+            var cliName =
+                elmEngineOption?.Value() switch
+                {
+                    { } asString => Enum.Parse<ElmInteractive.ElmEngineTypeCLI>(asString, ignoreCase: true),
+                    null => defaultEngine,
+                };
 
-            return defaultEngine;
+            return
+                ParseElmEngineType(
+                    dynamicPGOShare,
+                    cliName);
         }
 
         return (elmEngineOption, parseElmEngineTypeFromOption);
@@ -1803,7 +1828,7 @@ public class Program
         return (elmCompilerOption, parseElmCompilerFromOption);
     }
 
-    public static ElmInteractive.ElmEngineType? ElmEngineFromEnvironmentVariableWithPrefix(string? environmentVariablePrefix)
+    public static ElmInteractive.ElmEngineTypeCLI? ElmEngineFromEnvironmentVariableWithPrefix(string? environmentVariablePrefix)
     {
         var environmentVariable =
             environmentVariablePrefix?.TrimEnd('_') +
@@ -1813,11 +1838,36 @@ public class Program
         if (Environment.GetEnvironmentVariable(environmentVariable) is not { } asString)
             return null;
 
-        if (Enum.TryParse<ElmInteractive.ElmEngineType>(asString, ignoreCase: true, out var result))
-            return result;
+        if (Enum.TryParse<ElmInteractive.ElmEngineTypeCLI>(asString, ignoreCase: true, out var cliName))
+            return cliName;
 
         return null;
     }
+
+    public static ElmInteractive.ElmEngineType ParseElmEngineType(
+        DynamicPGOShare dynamicPGOShare,
+        ElmInteractive.ElmEngineTypeCLI elmEngineTypeCLI) =>
+        elmEngineTypeCLI switch
+        {
+            ElmInteractive.ElmEngineTypeCLI.JavaScript_Jint =>
+            new ElmInteractive.ElmEngineType.JavaScript_Jint(),
+
+            ElmInteractive.ElmEngineTypeCLI.JavaScript_V8 =>
+            new ElmInteractive.ElmEngineType.JavaScript_V8(),
+
+            ElmInteractive.ElmEngineTypeCLI.Pine =>
+            new ElmInteractive.ElmEngineType.Pine(
+                Caching: true,
+                DynamicPGOShare: dynamicPGOShare),
+
+            ElmInteractive.ElmEngineTypeCLI.Pine_without_cache =>
+            new ElmInteractive.ElmEngineType.Pine(
+                Caching: false,
+                DynamicPGOShare: dynamicPGOShare),
+
+            _ =>
+            throw new NotImplementedException($"Unexpected engine type value: {elmEngineTypeCLI}"),
+        };
 
     public static string ElmMakeHomeDirectoryPath =>
         Path.Combine(Filesystem.CacheDirectory, "elm-make-home");

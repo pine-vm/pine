@@ -17,6 +17,8 @@ public class TestElmInteractive
     [TestMethod]
     public void TestElmInteractiveScenarios()
     {
+        using var dynamicPGOShare = new Pine.PineVM.DynamicPGOShare();
+
         var console = (IConsole)StaticConsole.Instance;
 
         var scenarios =
@@ -51,11 +53,11 @@ public class TestElmInteractive
         var parsedScenarios =
             ElmTime.ElmInteractive.TestElmInteractive.ParseElmInteractiveScenarios(scenariosTree, console);
 
-        static ElmTime.ElmInteractive.IInteractiveSession newInteractiveSessionFromAppCode(TreeNodeWithStringPath? appCodeTree) =>
-            ElmTime.ElmInteractive.IInteractiveSession.Create(
+        ElmTime.ElmInteractive.IInteractiveSession newInteractiveSessionFromAppCode(TreeNodeWithStringPath? appCodeTree) =>
+            new ElmTime.ElmInteractive.InteractiveSessionPine(
                 compileElmProgramCodeFiles: ElmTime.ElmInteractive.IInteractiveSession.CompileElmProgramCodeFilesDefault.Value,
                 appCodeTree: appCodeTree,
-                ElmTime.ElmInteractive.ElmEngineType.Pine);
+                dynamicPGOShare.GetVMAutoUpdating());
 
         {
             var warmupStopwatch = System.Diagnostics.Stopwatch.StartNew();

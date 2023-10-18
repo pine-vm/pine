@@ -44,5 +44,5 @@ public class CompilerMutableCache
         valueHashCache
         .GetOrAdd(
             pineValue,
-            valueFactory: PineValueHashTree.ComputeHash);
+            valueFactory: v => PineValueHashTree.ComputeHash(v, other => ComputeHash(other)));
 }
