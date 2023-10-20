@@ -32,7 +32,7 @@ public static class CompileDictionarySyntax
     public static ExpressionSyntax ImmutableDictionaryExpressionSyntax<KeyT, ValueT>(
         TypeSyntax keyTypeSyntax,
         TypeSyntax valueTypeSyntax,
-        IReadOnlyList<(KeyT, ValueT)> dictionaryEntries)
+        IReadOnlyList<(KeyT key, ValueT value)> dictionaryEntries)
         where KeyT : ExpressionSyntax
         where ValueT : ExpressionSyntax
         =>
@@ -41,7 +41,7 @@ public static class CompileDictionarySyntax
             valueTypeSyntax: valueTypeSyntax,
             dictionaryEntries:
             [.. dictionaryEntries
-            .Select(entry => new KeyValuePair<ExpressionSyntax, ExpressionSyntax>(entry.Item1, entry.Item2))]);
+            .Select(entry => new KeyValuePair<ExpressionSyntax, ExpressionSyntax>(entry.key, entry.value))]);
 
     public static ExpressionSyntax ImmutableDictionaryExpressionSyntax(
         TypeSyntax keyTypeSyntax,

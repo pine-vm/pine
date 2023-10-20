@@ -49,6 +49,11 @@ public partial class CompileToCSharp
                 FileText: formattedNode.ToFullString());
     }
 
+    record CompiledExpressionFunction(
+        CompiledExpressionId Identifier,
+        BlockSyntax BlockSyntax,
+        CompiledExpressionDependencies Dependencies);
+
     public static Result<string, CompileCSharpClassResult> CompileExpressionsToCSharpClass(
         IReadOnlyCollection<Expression> expressions,
         SyntaxContainerConfig containerConfig)
@@ -83,7 +88,7 @@ public partial class CompileToCSharp
             .ToImmutableList();
 
         MemberDeclarationSyntax memberDeclarationSyntaxForExpression(
-            string functionName,
+            string declarationName,
             BlockSyntax blockSyntax)
         {
             return
@@ -100,7 +105,7 @@ public partial class CompileToCSharp
                                             SyntaxFactory.Token(SyntaxKind.CommaToken),
                                             SyntaxFactory.IdentifierName("PineValue")
                                         }))),
-                        SyntaxFactory.Identifier(functionName))
+                        SyntaxFactory.Identifier(declarationName))
                     .WithModifiers(
                         SyntaxFactory.TokenList(
                             SyntaxFactory.Token(SyntaxKind.StaticKeyword),
@@ -111,43 +116,70 @@ public partial class CompileToCSharp
                     .WithBody(blockSyntax);
         }
 
-        return
-            expressions
-            .Select(expression =>
+        static Result<string, IReadOnlyDictionary<Expression, CompiledExpressionFunction>> CompileExpressionFunctions(
+            IReadOnlyCollection<Expression> expressions)
+        {
+            var dictionary = new Dictionary<Expression, CompiledExpressionFunction>();
+
+            var queue = new Queue<Expression>(expressions);
+
+            while (queue.Any())
             {
-                var expressionValue = PineVM.PineVM.EncodeExpressionAsValue(expression).Extract(err => throw new Exception(err));
+                var expression = queue.Dequeue();
 
-                var expressionHash = CommonConversion.StringBase16(compilerCache.ComputeHash(expressionValue));
+                if (dictionary.ContainsKey(expression))
+                    continue;
 
-                var functionName = MemberNameForCompiledExpressionFunction(expressionHash[..10]);
+                var derivedId =
+                CompiledExpressionId(expression)
+                .Extract(err => throw new Exception(err));
 
-                return
+                var result =
                     compilerCache.CompileToCSharpFunctionBlockSyntax(
                         expression,
                         new FunctionCompilationEnvironment(
                             ArgumentEnvironmentName: argumentEnvironmentName,
                             ArgumentEvalGenericName: argumentEvalGenericName))
-                        .MapError(err => "Failed to compile expression " + expressionHash[..10] + ": " + err)
+                        .MapError(err => "Failed to compile expression " + derivedId.ExpressionHashBase16[..10] + ": " + err)
                         .Map(ok =>
-                            (expression,
-                                expressionValue,
-                                expressionHash,
-                                ok.dependencies,
-                                functionName,
-                                memberDeclarationSyntax:
-                                memberDeclarationSyntaxForExpression(functionName, ok.blockSyntax)));
-            }).ListCombine()
-            .Map(compiledExpressions => compiledExpressions.OrderBy(ce => ce.expressionHash))
+                            new CompiledExpressionFunction(
+                                derivedId,
+                                ok.blockSyntax,
+                                ok.dependencies));
+
+                if (result is Result<string, CompiledExpressionFunction>.Ok ok)
+                {
+                    dictionary.Add(expression, ok.Value);
+
+                    foreach (var item in ok.Value.Dependencies.ExpressionFunctions)
+                        queue.Enqueue(item.Key);
+                }
+                else
+                {
+                    return
+                        result
+                        .MapError(err => "Failed to compile expression " + expression + ": " + err)
+                        .Map(_ => (IReadOnlyDictionary<Expression, CompiledExpressionFunction>)
+                        ImmutableDictionary<Expression, CompiledExpressionFunction>.Empty);
+                }
+            }
+
+            return
+                Result<string, IReadOnlyDictionary<Expression, CompiledExpressionFunction>>.ok(dictionary);
+        }
+
+        return
+            CompileExpressionFunctions(expressions)
+            .Map(compiledExpressions => compiledExpressions.OrderBy(ce => ce.Value.Identifier.ExpressionHashBase16))
             .AndThen(compiledExpressions =>
             {
                 var aggregateDependencies =
-                    CompiledExpressionDependencies.Union(compiledExpressions.Select(er => er.dependencies));
+                    CompiledExpressionDependencies.Union(compiledExpressions.Select(er => er.Value.Dependencies));
 
                 var aggregateValueDependencies =
-                    aggregateDependencies.Values.Union(
-                            compiledExpressions.Select(forExprFunction => forExprFunction.expressionValue))
-                        .Union(
-                            aggregateDependencies.Expressions.SelectMany(e => EnumerateAllLiterals(e.expression)));
+                    aggregateDependencies.Values
+                    .Union(compiledExpressions.Select(forExprFunction => forExprFunction.Value.Identifier.ExpressionValue))
+                    .Union(aggregateDependencies.Expressions.SelectMany(e => EnumerateAllLiterals(e.expression)));
 
                 var usedValues = new HashSet<PineValue>();
 
@@ -240,8 +272,13 @@ public partial class CompileToCSharp
                 var dictionaryEntries =
                     compiledExpressions
                     .Select(compiledExpression =>
-                    (SyntaxFactory.IdentifierName(DeclarationNameForValue(compiledExpression.expressionValue)),
-                    SyntaxFactory.IdentifierName(compiledExpression.functionName)))
+                    {
+                        var declarationName = MemberNameForCompiledExpressionFunction(compiledExpression.Value.Identifier);
+
+                        return
+                            (SyntaxFactory.IdentifierName(DeclarationNameForValue(compiledExpression.Value.Identifier.ExpressionValue)),
+                            SyntaxFactory.IdentifierName(declarationName));
+                    })
                     .ToImmutableList();
 
                 var dictionaryExpression =
@@ -313,6 +350,14 @@ public partial class CompileToCSharp
                     )
                     .ToImmutableList();
 
+                var compiledExpressionsMemberDeclarations =
+                compiledExpressions
+                .Select(compiledExpression =>
+                memberDeclarationSyntaxForExpression(
+                    declarationName: MemberNameForCompiledExpressionFunction(compiledExpression.Value.Identifier),
+                    blockSyntax: compiledExpression.Value.BlockSyntax))
+                .ToImmutableList();
+
                 return Result<string, CompileCSharpClassResult>.ok(
                     new CompileCSharpClassResult(
                         ClassDeclarationSyntax:
@@ -321,7 +366,7 @@ public partial class CompileToCSharp
                                 SyntaxFactory.List(
                                     [dictionaryMemberDeclaration
                                     ,
-                                        .. compiledExpressions.Select(f => f.memberDeclarationSyntax)
+                                        .. compiledExpressionsMemberDeclarations
                                     ,
                                         .. staticFieldsDeclarations])),
                         UsingDirectives: usingDirectives));
@@ -796,30 +841,71 @@ public partial class CompileToCSharp
 
         CompiledExpression continueWithGenericCase()
         {
-            var invocationExpression =
-                SyntaxFactory.InvocationExpression(
-                    SyntaxFactory.IdentifierName(environment.FunctionEnvironment.ArgumentEvalGenericName))
-                .WithArgumentList(
-                    SyntaxFactory.ArgumentList(
-                        SyntaxFactory.SeparatedList<ArgumentSyntax>(
-                            new SyntaxNodeOrToken[]
-                            {
-                                SyntaxFactory.Argument(
-                                    SyntaxFactory.IdentifierName(
-                                        MemberNameForExpression(decodeAndEvaluateExpressionHash))),
-                                SyntaxFactory.Token(SyntaxKind.CommaToken),
-                                SyntaxFactory.Argument(
-                                    SyntaxFactory.IdentifierName(environment.FunctionEnvironment.ArgumentEnvironmentName))
-                            })));
+            var decodeAndEvaluateExpressionExpressionId =
+                CompiledExpressionId(decodeAndEvaluateExpression.expression)
+                .Extract(err => throw new Exception(err));
+
+            var decodeAndEvaluateExpressionEnvironmentId =
+                CompiledExpressionId(decodeAndEvaluateExpression.environment)
+                .Extract(err => throw new Exception(err));
+
+            var envResultExpr =
+                InvocationExpressionForCurrentEnvironment(
+                    environment.FunctionEnvironment,
+                    decodeAndEvaluateExpressionEnvironmentId);
+
+            var exprResultExpr =
+                InvocationExpressionForCurrentEnvironment(
+                    environment.FunctionEnvironment,
+                    decodeAndEvaluateExpressionExpressionId);
 
             return
-                CompiledExpression.WithTypeResult(invocationExpression)
-                .MergeDependencies(
-                    CompiledExpressionDependencies.Empty
-                    with
-                    {
-                        Expressions = ImmutableHashSet.Create((decodeAndEvaluateExpressionHash, (Expression)decodeAndEvaluateExpression)),
-                    });
+                envResultExpr
+                .MapOrAndThen(
+                    environment,
+                    envResultExprCs =>
+                    exprResultExpr
+                    .MapOrAndThen(
+                        environment,
+                        exprResultExprCs =>
+                        {
+                            var decodeAndEvalLiteralExpr =
+                            NewConstructorOfExpressionVariant(
+                                nameof(Expression.DecodeAndEvaluateExpression),
+                                NewConstructorOfExpressionVariant(
+                                    nameof(Expression.LiteralExpression),
+                                    exprResultExprCs),
+                                NewConstructorOfExpressionVariant(
+                                    nameof(Expression.LiteralExpression),
+                                    envResultExprCs));
+
+                            var invocationExpression =
+                            SyntaxFactory.InvocationExpression(
+                                SyntaxFactory.IdentifierName(environment.FunctionEnvironment.ArgumentEvalGenericName))
+                            .WithArgumentList(
+                                SyntaxFactory.ArgumentList(
+                                    SyntaxFactory.SeparatedList<ArgumentSyntax>(
+                                        new SyntaxNodeOrToken[]
+                                        {
+                                            SyntaxFactory.Argument(decodeAndEvalLiteralExpr),
+                                            SyntaxFactory.Token(SyntaxKind.CommaToken),
+                                            SyntaxFactory.Argument(pineValueEmptyListSyntax)
+                                        })));
+
+                            return
+                            CompiledExpression.WithTypeResult(invocationExpression)
+                                .MergeDependencies(
+                                envResultExpr.Dependencies.Union(exprResultExpr.Dependencies)
+                                .Union(
+                                    CompiledExpressionDependencies.Empty
+                                    with
+                                    {
+                                        ExpressionFunctions =
+                                            ImmutableDictionary<Expression, CompiledExpressionId>.Empty
+                                            .SetItem(decodeAndEvaluateExpression.expression, decodeAndEvaluateExpressionExpressionId)
+                                            .SetItem(decodeAndEvaluateExpression.environment, decodeAndEvaluateExpressionEnvironmentId)
+                                    }));
+                        }));
         }
 
         if (Expression.IsIndependent(decodeAndEvaluateExpression.expression))
@@ -832,8 +918,7 @@ public partial class CompileToCSharp
                 .MapError(err => "Failed to decode inner expression: " + err)
                 .AndThen(innerExpression =>
                 {
-                    var innerExpressionValueHash =
-                        CommonConversion.StringBase16(compilerCache.ComputeHash(innerExpressionValue));
+                    var innerExpressionId = CompiledExpressionId(innerExpressionValue);
 
                     return
                     CompileToCSharpExpression(
@@ -842,37 +927,26 @@ public partial class CompileToCSharp
                         createLetBindingsForCse: false)
                     .Map(compiledArgumentExpression =>
                     {
-                        var invocationExpression =
+                        return
                         compiledArgumentExpression.MapOrAndThen(
                             environment,
                             argumentExprPlainValue =>
                         {
                             return
-                            CompiledExpression.WithTypeResult(
-                                SyntaxFactory.InvocationExpression(
-                                    SyntaxFactory.IdentifierName(
-                                        MemberNameForCompiledExpressionFunction(innerExpressionValueHash)))
-                                .WithArgumentList(
-                                    SyntaxFactory.ArgumentList(
-                                        SyntaxFactory.SeparatedList<ArgumentSyntax>(
-                                            new SyntaxNodeOrToken[]
-                                            {
-                                                SyntaxFactory.Argument(
-                                                    SyntaxFactory.IdentifierName(environment.FunctionEnvironment.ArgumentEvalGenericName)),
-                                                SyntaxFactory.Token(SyntaxKind.CommaToken),
-                                                SyntaxFactory.Argument(argumentExprPlainValue)
-                                            }))));
-                        });
-
-                        return
-                            invocationExpression
+                            InvocationExpressionForCompiledExpressionFunction(
+                                environment.FunctionEnvironment,
+                                innerExpressionId,
+                                argumentExprPlainValue)
                             .MergeDependencies(
                                 compiledArgumentExpression.Dependencies.Union(
                                     CompiledExpressionDependencies.Empty
                                     with
                                     {
-                                        Expressions = ImmutableHashSet.Create((innerExpressionValueHash, innerExpression)),
+                                        ExpressionFunctions =
+                                        ImmutableDictionary<Expression, CompiledExpressionId>.Empty
+                                        .SetItem(innerExpression, innerExpressionId),
                                     }));
+                        });
                     });
                 }));
         }
@@ -881,11 +955,52 @@ public partial class CompileToCSharp
             Result<string, CompiledExpression>.ok(continueWithGenericCase());
     }
 
+    public static CompiledExpression InvocationExpressionForCurrentEnvironment(
+        FunctionCompilationEnvironment environment,
+        CompiledExpressionId invokedFunction) =>
+        InvocationExpressionForCompiledExpressionFunction(
+            environment,
+            invokedFunction,
+            SyntaxFactory.IdentifierName(environment.ArgumentEnvironmentName));
+
+    public static CompiledExpression InvocationExpressionForCompiledExpressionFunction(
+        FunctionCompilationEnvironment environment,
+        CompiledExpressionId invokedFunction,
+        ExpressionSyntax environmentExpressionSyntax) =>
+        CompiledExpression.WithTypeResult(
+            SyntaxFactory.InvocationExpression(
+                SyntaxFactory.IdentifierName(
+                    MemberNameForCompiledExpressionFunction(invokedFunction)))
+            .WithArgumentList(
+                SyntaxFactory.ArgumentList(
+                    SyntaxFactory.SeparatedList<ArgumentSyntax>(
+                        new SyntaxNodeOrToken[]
+                        {
+                            SyntaxFactory.Argument(
+                                SyntaxFactory.IdentifierName(environment.ArgumentEvalGenericName)),
+                            SyntaxFactory.Token(SyntaxKind.CommaToken),
+                            SyntaxFactory.Argument(environmentExpressionSyntax)
+                        }))));
+
+    public static Result<string, CompiledExpressionId> CompiledExpressionId(Expression expression) =>
+        PineVM.PineVM.EncodeExpressionAsValue(expression)
+        .Map(CompiledExpressionId);
+
+    public static CompiledExpressionId CompiledExpressionId(PineValue expressionValue)
+    {
+        var expressionHash = CommonConversion.StringBase16(compilerCache.ComputeHash(expressionValue));
+
+        return
+            new CompiledExpressionId(
+                ExpressionValue: expressionValue,
+                ExpressionHashBase16: expressionHash);
+    }
+
     static string MemberNameForExpression(string expressionValueHash) =>
         "expression_" + expressionValueHash[..10];
 
-    static string MemberNameForCompiledExpressionFunction(string expressionValueHash) =>
-        "expr_function_" + expressionValueHash[..10];
+    static string MemberNameForCompiledExpressionFunction(CompiledExpressionId derivedId) =>
+        "expr_function_" + derivedId.ExpressionHashBase16[..10];
 
     public static Result<string, Expression> TransformPineExpressionWithOptionalReplacement(
         Func<Expression, Result<string, Maybe<Expression>>> findReplacement,
@@ -1026,9 +1141,9 @@ public partial class CompileToCSharp
                 environment,
                 createLetBindingsForCse: false)
             .Map(compiledExpr =>
-            (compiledExpr.MapSyntax(s => s.InsertTriviaBefore(
+            compiledExpr.MapSyntax(s => s.InsertTriviaBefore(
                 SyntaxFactory.Comment("/*\n" + stringTagExpression.tag + "\n*/"),
-                SyntaxFactory.TriviaList()))));
+                SyntaxFactory.TriviaList())));
     }
 
     public static ExpressionSyntax CompileToCSharpLiteralExpression(

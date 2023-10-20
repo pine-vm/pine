@@ -56,6 +56,32 @@ public class FormatCSharpSyntaxRewriter(
         return newInvocationExpression;
     }
 
+    public override SyntaxNode? VisitObjectCreationExpression(ObjectCreationExpressionSyntax nodeBeforeRewriteInner)
+    {
+        var node = (ObjectCreationExpressionSyntax)base.VisitObjectCreationExpression(nodeBeforeRewriteInner)!;
+
+        if (nodeBeforeRewriteInner.ArgumentList is not { } argumentListBefore || argumentListBefore.Arguments.Count < 1)
+            return node;
+
+        var indentationTrivia = ComputeIndentationTriviaForNode(argumentListBefore);
+
+        var newArguments =
+            SyntaxFactory.SeparatedList(
+                argumentListBefore.Arguments
+                .Select(argumentSyntax =>
+                argumentSyntax.WithLeadingTrivia(
+                    new SyntaxTriviaList(SyntaxFactory.LineFeed, indentationTrivia)
+                    .AddRange(argumentSyntax.GetLeadingTrivia()))));
+
+        var newArgumentList =
+            argumentListBefore
+            .WithArguments(newArguments);
+
+        var newCreationExpression = node.WithArgumentList(newArgumentList);
+
+        return newCreationExpression;
+    }
+
     public override SyntaxNode? VisitArrowExpressionClause(ArrowExpressionClauseSyntax originalNode)
     {
         var node = (ArrowExpressionClauseSyntax)base.VisitArrowExpressionClause(originalNode)!;

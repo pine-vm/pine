@@ -326,20 +326,28 @@ public record LetBinding(
 
 public record CompiledExpressionDependencies(
     ImmutableHashSet<PineValue> Values,
-    IImmutableSet<(string hash, PineVM.Expression expression)> Expressions)
+    IImmutableSet<(string hash, PineVM.Expression expression)> Expressions,
+    IImmutableDictionary<PineVM.Expression, CompiledExpressionId> ExpressionFunctions)
 {
     public static readonly CompiledExpressionDependencies Empty = new(
         Values: [],
-        Expressions: ImmutableHashSet<(string, PineVM.Expression)>.Empty);
+        Expressions: [],
+        ExpressionFunctions:
+        ImmutableDictionary<PineVM.Expression, CompiledExpressionId>.Empty);
 
     public static (T, CompiledExpressionDependencies) WithNoDependencies<T>(T other) => (other, Empty);
 
     public CompiledExpressionDependencies Union(CompiledExpressionDependencies other) =>
         new(Values: Values.Union(other.Values),
-            Expressions: Expressions.Union(other.Expressions));
+            Expressions: Expressions.Union(other.Expressions),
+            ExpressionFunctions: CompiledExpression.Union([ExpressionFunctions, other.ExpressionFunctions]));
 
     public static CompiledExpressionDependencies Union(IEnumerable<CompiledExpressionDependencies> dependencies) =>
         dependencies.Aggregate(
             seed: Empty,
             func: (aggregate, next) => aggregate.Union(next));
 }
+
+public record CompiledExpressionId(
+    PineValue ExpressionValue,
+    string ExpressionHashBase16);

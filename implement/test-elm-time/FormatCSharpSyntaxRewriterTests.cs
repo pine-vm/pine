@@ -31,6 +31,26 @@ public class FormatCSharpSyntaxRewriterTests
     }
 
     [TestMethod]
+    public void Formats_argument_list_in_constructor_invocation()
+    {
+        var inputSyntaxText =
+            """
+            new Expression.DecodeAndEvaluateExpression(arg_a, arg_b);
+            """.Trim();
+
+        var expectedFormattedText =
+            """
+            new Expression.DecodeAndEvaluateExpression(
+                arg_a,
+                arg_b);
+            """.Trim();
+
+        var formattedSyntaxText = FormatCSharpScript(inputSyntaxText);
+
+        StringAssert.Contains(formattedSyntaxText, expectedFormattedText);
+    }
+
+    [TestMethod]
     public void Adds_newlines_between_statements_in_method_declaration()
     {
         var inputSyntaxText =
