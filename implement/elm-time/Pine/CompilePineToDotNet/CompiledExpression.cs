@@ -171,9 +171,12 @@ public record CompiledExpression(
                 usagesSyntaxes: [compiledExpression.Syntax],
                 excludeBinding: letBindingsAvailableFromParentKeys.Contains);
 
-        var aggregateDependencies =
+        var letBindingsAggregateDependencies =
             CompiledExpressionDependencies.Union(
                 variableDeclarations.Select(b => b.letBinding.Expression.DependenciesIncludingLetBindings()));
+
+        var aggregateDependencies =
+            compiledExpression.Dependencies.Union(letBindingsAggregateDependencies);
 
         var blockSyntax =
             variableDeclarations is []

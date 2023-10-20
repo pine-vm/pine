@@ -570,12 +570,6 @@ public partial class CompileToCSharp
             .ListCombine()
             .Map(compiledItems =>
             {
-                var aggregateLetBindings =
-                CompiledExpression.Union(compiledItems.Select(c => c.LetBindings));
-
-                var aggregateDeps =
-                CompiledExpressionDependencies.Union(compiledItems.Select(i => i.Dependencies));
-
                 var aggregateSyntax =
                 CompiledExpression.ListMapOrAndThen(
                     environment,
@@ -593,11 +587,8 @@ public partial class CompileToCSharp
                                     SyntaxFactory.Argument(
                                         SyntaxFactory.CollectionExpression(
                                             SyntaxFactory.SeparatedList<CollectionElementSyntax>(
-                                                csharpItems.Select(SyntaxFactory.ExpressionElement))))))),
-                    aggregateLetBindings,
-                    aggregateDeps),
-                    compiledItems)
-                .MergeDependencies(aggregateDeps);
+                                                csharpItems.Select(SyntaxFactory.ExpressionElement)))))))),
+                    compiledItems);
 
                 return aggregateSyntax;
             });
@@ -714,11 +705,9 @@ public partial class CompileToCSharp
                 environment,
                 createLetBindingsForCse: false)
             .Map(compiledArgument =>
-            (compiledArgument.Map(environment, argumentCs =>
+            compiledArgument.Map(environment, argumentCs =>
             wrapInvocationInWithDefault(kernelFunctionInfo.CompileGenericInvocation(argumentCs)))
-            .MergeBindings(compiledArgument.LetBindings)
-
-            .MergeDependencies(compiledArgument.Dependencies)));
+            .MergeBindings(compiledArgument.LetBindings));
     }
 
     public static Result<string, CompiledExpression> CompileToCSharpExpression(
@@ -783,12 +772,13 @@ public partial class CompileToCSharp
                             SyntaxKind.EqualsExpression,
                             SyntaxFactory.IdentifierName("value_true"),
                             conditionCs))
-                    .MergeBindings(aggregateLetBindings));
+                    .MergeBindings(aggregateLetBindings)
+                    .MergeDependencies(
+                        compiledCondition.Dependencies
+                        .Union(compiledIfTrue.Dependencies)
+                        .Union(compiledIfFalse.Dependencies)));
 
-                return
-                combinedExpr
-                .MergeDependencies(
-                    compiledCondition.Dependencies.Union(compiledIfTrue.Dependencies).Union(compiledIfFalse.Dependencies));
+                return combinedExpr;
             }
             )));
     }
