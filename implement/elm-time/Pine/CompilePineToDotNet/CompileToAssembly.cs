@@ -11,9 +11,12 @@ using static Pine.CompilePineToDotNet.CompileToCSharp;
 
 namespace Pine.CompilePineToDotNet;
 
+using CompileDictionaryResult =
+    IReadOnlyDictionary<PineValue, Func<PineVM.PineVM.EvalExprDelegate, PineValue, Result<string, PineValue>>>;
+
 public record CompileToAssemblyResult(
     byte[] Assembly,
-    Func<Result<string, IReadOnlyDictionary<PineValue, Func<PineVM.PineVM.EvalExprDelegate, PineValue, Result<string, PineValue>>>>>
+    Func<Result<string, CompileDictionaryResult>>
     BuildCompiledExpressionsDictionary);
 
 
@@ -53,26 +56,26 @@ public class CompileToAssembly
 
         var assembly = codeStream.ToArray();
 
-        Result<string, IReadOnlyDictionary<PineValue, Func<PineVM.PineVM.EvalExprDelegate, PineValue, Result<string, PineValue>>>> buildDictionary()
+        Result<string, CompileDictionaryResult> buildDictionary()
         {
             var loadedAssembly = Assembly.Load(assembly);
 
             var compiledType = loadedAssembly.GetType(syntaxContainerConfig.containerTypeName);
 
             if (compiledType is null)
-                return Result<string, IReadOnlyDictionary<PineValue, Func<PineVM.PineVM.EvalExprDelegate, PineValue, Result<string, PineValue>>>>.err(
+                return Result<string, CompileDictionaryResult>.err(
                     "Did not find type " + syntaxContainerConfig.containerTypeName + " in assembly " + loadedAssembly.FullName);
 
             var dictionaryMember =
                 compiledType.GetMethod(syntaxContainerConfig.dictionaryMemberName, BindingFlags.Public | BindingFlags.Static);
 
             if (dictionaryMember is null)
-                return Result<string, IReadOnlyDictionary<PineValue, Func<PineVM.PineVM.EvalExprDelegate, PineValue, Result<string, PineValue>>>>.err(
+                return Result<string, CompileDictionaryResult>.err(
                     "Did not find method " + syntaxContainerConfig.dictionaryMemberName + " in type " + compiledType.FullName);
 
             return
-                Result<string, IReadOnlyDictionary<PineValue, Func<PineVM.PineVM.EvalExprDelegate, PineValue, Result<string, PineValue>>>>.ok(
-                    (IReadOnlyDictionary<PineValue, Func<PineVM.PineVM.EvalExprDelegate, PineValue, Result<string, PineValue>>>)
+                Result<string, CompileDictionaryResult>.ok(
+                    (CompileDictionaryResult)
                     dictionaryMember.Invoke(null, null));
         }
 
