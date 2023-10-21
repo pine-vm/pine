@@ -1,3 +1,5 @@
+using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Pine;
 using System.Collections.Generic;
@@ -84,5 +86,73 @@ public class CompilePineToDotNetTests
         Assert.AreEqual(
             "System.Collections.Generic.IReadOnlyDictionary<Pine.PineValue,System.String>",
             syntax.ToFullString());
+    }
+
+    [TestMethod]
+    public void Test_compile_specialized_for_kernel_list_head()
+    {
+        var pineExpression =
+            new Pine.PineVM.Expression.KernelApplicationExpression(
+                functionName: nameof(Pine.PineVM.KernelFunction.list_head),
+                argument: new Pine.PineVM.Expression.EnvironmentExpression(),
+                function: null);
+
+        var compiledFormattedExpression =
+            CompiledFormattedCSharp(
+                pineExpression,
+                new Pine.CompilePineToDotNet.FunctionCompilationEnvironment(
+                    ArgumentEnvironmentName: "environment",
+                    ArgumentEvalGenericName: "eval"));
+
+        var expectedSyntaxText = """
+            environment switch
+            {
+                PineValue.ListValue listValue =>
+                listValue.Elements switch
+                {
+                    [var head, ..] =>
+                    head,
+
+                    _ =>
+                    PineValue.EmptyList
+                },
+
+                _ =>
+                PineValue.EmptyList
+            }
+            """;
+
+        var expectedSyntaxNormalized =
+            CSharpSyntaxTree.ParseText(expectedSyntaxText)
+            .GetRoot()
+            .NormalizeWhitespace();
+
+        Assert.AreEqual(
+            expectedSyntaxNormalized.ToFullString(),
+            compiledFormattedExpression.Syntax.ToFullString());
+    }
+
+    static Pine.CompilePineToDotNet.CompiledExpression CompiledFormattedCSharp(
+        Pine.PineVM.Expression expression,
+        Pine.CompilePineToDotNet.FunctionCompilationEnvironment environment)
+    {
+        var compiledExpression =
+            Pine.CompilePineToDotNet.CompileToCSharp.CompileToCSharpExpression(
+                expression,
+                new Pine.CompilePineToDotNet.ExpressionCompilationEnvironment(
+                    environment,
+                    LetBindings: Pine.CompilePineToDotNet.CompiledExpression.NoLetBindings,
+                    ParentEnvironment: null),
+                createLetBindingsForCse: false)
+            .Extract(err => throw new System.Exception(err));
+
+        return
+            compiledExpression
+            with
+            {
+                Syntax =
+                Pine.CompilePineToDotNet.FormatCSharpSyntaxRewriter.FormatSyntaxTree(compiledExpression.Syntax)
+                .NormalizeWhitespace()
+            };
     }
 }

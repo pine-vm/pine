@@ -225,6 +225,80 @@ public class FormatCSharpSyntaxRewriterTests
         StringAssert.Contains(formattedSyntaxText, expectedFormattedText);
     }
 
+    [TestMethod]
+    public void Formats_switch_expression()
+    {
+        var inputSyntaxText =
+            """
+            environment switch
+            {
+                PineValue.ListValue listValue => 11,
+                _ =>
+                13 }
+            """.Trim();
+
+        var expectedFormattedText =
+            """
+            environment switch
+            {
+                PineValue.ListValue listValue =>
+                11,
+
+                _ =>
+                13
+            }
+            """.Trim();
+
+        var formattedSyntaxText = FormatCSharpScript(inputSyntaxText);
+
+        StringAssert.Contains(formattedSyntaxText, expectedFormattedText);
+    }
+
+    [TestMethod]
+    public void Formats_nested_switch_expression()
+    {
+        var inputSyntaxText =
+            """
+            environment switch
+            {
+                PineValue.ListValue listValue =>
+                listValue switch
+                {
+                [] =>17,
+
+                _ =>
+                    
+                19   }
+            
+                _ =>
+                13
+            }
+            """.Trim();
+
+        var expectedFormattedText =
+            """
+            environment switch
+            {
+                PineValue.ListValue listValue =>
+                listValue switch
+                {
+                    [] =>
+                    17,
+
+                    _ =>
+                    19
+                }
+
+                _ =>
+                13
+            }
+            """.Trim();
+
+        var formattedSyntaxText = FormatCSharpScript(inputSyntaxText);
+
+        StringAssert.Contains(formattedSyntaxText, expectedFormattedText);
+    }
+
     static string FormatCSharpScript(string inputSyntaxText) =>
         FormatCSharpSyntaxRewriter.FormatSyntaxTree(ParseAsCSharpScript(inputSyntaxText))
         .GetRoot().ToFullString();

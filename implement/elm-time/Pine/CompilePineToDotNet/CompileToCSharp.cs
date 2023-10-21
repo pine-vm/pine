@@ -79,7 +79,8 @@ public partial class CompileToCSharp
             typeof(PineValue),
             typeof(ImmutableArray),
             typeof(IReadOnlyDictionary<,>),
-            typeof(Func<,>)
+            typeof(Func<,>),
+            typeof(Enumerable)
         };
 
         var usingDirectives =
@@ -607,7 +608,7 @@ public partial class CompileToCSharp
     {
         if (!listExpression.List.Any())
             return Result<string, CompiledExpression>.ok(
-                CompiledExpression.WithTypePlainValue(pineValueEmptyListSyntax));
+                CompiledExpression.WithTypePlainValue(PineCSharpSyntaxFactory.PineValueEmptyListSyntax));
 
         return
             listExpression.List.Select((itemExpression, itemIndex) =>
@@ -671,29 +672,34 @@ public partial class CompileToCSharp
     {
         var staticallyKnownArgumentsList =
             ParseKernelApplicationArgumentAsList(kernelApplicationArgumentExpression, environment)
-                ?.Unpack(fromErr: err =>
-                {
-                    Console.WriteLine("Failed to parse argument list: " + err);
-                    return null;
-                },
-                    fromOk: ok => ok);
+            ?.Unpack(fromErr: err =>
+            {
+                Console.WriteLine("Failed to parse argument list: " + err);
+                return null;
+            },
+            fromOk: ok => ok);
 
         static InvocationExpressionSyntax wrapInvocationInWithDefault(InvocationExpressionSyntax invocationExpressionSyntax)
         {
             return
                 SyntaxFactory.InvocationExpression(
-                        SyntaxFactory.MemberAccessExpression(
-                            SyntaxKind.SimpleMemberAccessExpression,
-                            invocationExpressionSyntax,
-                            SyntaxFactory.IdentifierName("WithDefault")))
-                    .WithArgumentList(
-                        SyntaxFactory.ArgumentList(
-                            SyntaxFactory.SingletonSeparatedList(
-                                SyntaxFactory.Argument(
-                                    SyntaxFactory.MemberAccessExpression(
-                                        SyntaxKind.SimpleMemberAccessExpression,
-                                        SyntaxFactory.IdentifierName("PineValue"),
-                                        SyntaxFactory.IdentifierName("EmptyList"))))));
+                    SyntaxFactory.MemberAccessExpression(
+                        SyntaxKind.SimpleMemberAccessExpression,
+                        invocationExpressionSyntax,
+                        SyntaxFactory.IdentifierName("WithDefault")))
+                .WithArgumentList(
+                    SyntaxFactory.ArgumentList(
+                        SyntaxFactory.SingletonSeparatedList(
+                            SyntaxFactory.Argument(
+                                SyntaxFactory.MemberAccessExpression(
+                                    SyntaxKind.SimpleMemberAccessExpression,
+                                    SyntaxFactory.IdentifierName("PineValue"),
+                                    SyntaxFactory.IdentifierName("EmptyList"))))));
+        }
+
+        if (kernelFunctionInfo.TryInline?.Invoke(kernelApplicationArgumentExpression, environment) is { } inlineNotNull)
+        {
+            return inlineNotNull;
         }
 
         if (staticallyKnownArgumentsList is not null)
@@ -893,7 +899,7 @@ public partial class CompileToCSharp
                                         {
                                             SyntaxFactory.Argument(decodeAndEvalLiteralExpr),
                                             SyntaxFactory.Token(SyntaxKind.CommaToken),
-                                            SyntaxFactory.Argument(pineValueEmptyListSyntax)
+                                            SyntaxFactory.Argument(PineCSharpSyntaxFactory.PineValueEmptyListSyntax)
                                         })));
 
                             return
@@ -1159,7 +1165,7 @@ public partial class CompileToCSharp
             CompileToCSharpLiteralExpression(pineValue, overrideDefaultExpression);
 
         if (pineValue == PineValue.EmptyList)
-            return pineValueEmptyListSyntax;
+            return PineCSharpSyntaxFactory.PineValueEmptyListSyntax;
 
         if (PineValueAsInteger.SignedIntegerFromValue(pineValue) is Result<string, BigInteger>.Ok okInteger &&
             PineValueAsInteger.ValueFromSignedInteger(okInteger.Value) == pineValue)
@@ -1176,7 +1182,7 @@ public partial class CompileToCSharp
                     SyntaxFactory.ArgumentList(
                         SyntaxFactory.SingletonSeparatedList(
                             SyntaxFactory.Argument(
-                                ExpressionSyntaxForIntegerLiteral((long)okInteger.Value)))));
+                                PineCSharpSyntaxFactory.ExpressionSyntaxForIntegerLiteral((long)okInteger.Value)))));
             }
         }
 
@@ -1202,7 +1208,7 @@ public partial class CompileToCSharp
             var bytesIntegers =
                 blob
                 .ToArray()
-                .Select(b => ExpressionSyntaxForIntegerLiteral(b));
+                .Select(b => PineCSharpSyntaxFactory.ExpressionSyntaxForIntegerLiteral(b));
 
             return
                 SyntaxFactory.InvocationExpression(
@@ -1262,28 +1268,6 @@ public partial class CompileToCSharp
             throw new Exception("Unknown value type: " + pineValue.GetType().FullName)
         };
     }
-
-    public static LiteralExpressionSyntax ExpressionSyntaxForIntegerLiteral(long integer) =>
-        SyntaxFactory.LiteralExpression(
-            SyntaxKind.NumericLiteralExpression,
-            SyntaxTokenForIntegerLiteral(integer));
-
-    public static SyntaxToken SyntaxTokenForIntegerLiteral(long integer) =>
-        SyntaxFactory.Literal(
-            integer.ToString("N0", IntegerLiteralNumberFormatInfo),
-            integer);
-
-    static readonly NumberFormatInfo IntegerLiteralNumberFormatInfo = new()
-    {
-        NumberGroupSeparator = "_",
-        NumberGroupSizes = [3]
-    };
-
-    private static readonly ExpressionSyntax pineValueEmptyListSyntax =
-        SyntaxFactory.MemberAccessExpression(
-            SyntaxKind.SimpleMemberAccessExpression,
-            SyntaxFactory.IdentifierName(nameof(PineValue)),
-            SyntaxFactory.IdentifierName(nameof(PineValue.EmptyList)));
 
     private static IEnumerable<PineValue> EnumerateAllLiterals(Expression expression) =>
         expression switch

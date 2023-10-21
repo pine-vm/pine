@@ -1,3 +1,4 @@
+using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Pine.PineVM;
@@ -12,12 +13,14 @@ namespace Pine.CompilePineToDotNet;
 
 public partial class CompileToCSharp
 {
-    private record ParsedKernelApplicationArgumentExpression(
-        IReadOnlyDictionary<KernelFunctionParameterType, CompiledExpression> ArgumentSyntaxFromParameterType);
+    public record ParsedKernelApplicationArgumentExpression(
+        IReadOnlyDictionary<KernelFunctionParameterType, CompiledExpression> ArgumentSyntaxFromParameterType,
+        long? AsLiteralInt64);
 
     private record KernelFunctionInfo(
         Func<ExpressionSyntax, InvocationExpressionSyntax> CompileGenericInvocation,
-        IReadOnlyList<KernelFunctionSpecializedInfo> SpecializedImplementations);
+        IReadOnlyList<KernelFunctionSpecializedInfo> SpecializedImplementations,
+        Func<Expression, ExpressionCompilationEnvironment, Result<string, CompiledExpression>?>? TryInline);
 
     private record KernelFunctionSpecializedInfo(
         IReadOnlyList<KernelFunctionParameterType> ParameterTypes,
@@ -27,13 +30,13 @@ public partial class CompileToCSharp
     private record KernelFunctionSpecializedInfoReturnType(
         bool IsInstanceOfResult);
 
-    private enum KernelFunctionParameterType
+    public enum KernelFunctionParameterType
     {
         Generic = 1,
         Integer = 10,
     }
 
-    private static Result<string, IReadOnlyList<ParsedKernelApplicationArgumentExpression>>? ParseKernelApplicationArgumentAsList(
+    public static Result<string, IReadOnlyList<ParsedKernelApplicationArgumentExpression>>? ParseKernelApplicationArgumentAsList(
         Expression kernelApplicationArgumentExpression,
         ExpressionCompilationEnvironment environment)
     {
@@ -62,20 +65,25 @@ public partial class CompileToCSharp
             };
     }
 
-    private static Result<string, ParsedKernelApplicationArgumentExpression> ParseKernelApplicationArgument(
+    public static Result<string, ParsedKernelApplicationArgumentExpression> ParseKernelApplicationArgument(
         Expression argumentExpression,
         ExpressionCompilationEnvironment environment)
     {
         var dictionary = new Dictionary<KernelFunctionParameterType, CompiledExpression>();
+
+        long? asLiteralInt64 = null;
 
         if (argumentExpression is Expression.LiteralExpression literal)
         {
             if (PineValueAsInteger.SignedIntegerFromValue(literal.Value) is Result<string, BigInteger>.Ok okInteger &&
                 PineValueAsInteger.ValueFromSignedInteger(okInteger.Value) == literal.Value)
             {
+                if (okInteger.Value >= long.MinValue && okInteger.Value <= long.MaxValue)
+                    asLiteralInt64 = (long)okInteger.Value;
+
                 dictionary[KernelFunctionParameterType.Integer] =
                     CompiledExpression.WithTypePlainValue(
-                        ExpressionSyntaxForIntegerLiteral((long)okInteger.Value));
+                        PineCSharpSyntaxFactory.ExpressionSyntaxForIntegerLiteral((long)okInteger.Value));
             }
         }
 
@@ -89,7 +97,8 @@ public partial class CompileToCSharp
                         ArgumentSyntaxFromParameterType:
                         ImmutableDictionary<KernelFunctionParameterType, CompiledExpression>.Empty
                             .SetItem(KernelFunctionParameterType.Generic, csharpExpression)
-                            .SetItems(dictionary)));
+                            .SetItems(dictionary),
+                        AsLiteralInt64: asLiteralInt64));
     }
 
     private static readonly Lazy<IReadOnlyDictionary<string, KernelFunctionInfo>> KernelFunctionsInfo =
@@ -172,10 +181,31 @@ public partial class CompileToCSharp
                     })
                     .ToImmutableList();
 
+            var tryInline =
+                genericMethodInfo.Name switch
+                {
+                    nameof(KernelFunction.equal) =>
+                    (Func<Expression, ExpressionCompilationEnvironment, Result<string, CompiledExpression>?>)
+                    PineKernelFunctionsInline.TryInlineKernelFunction_Equal,
+
+                    nameof(KernelFunction.length) =>
+                    PineKernelFunctionsInline.TryInlineKernelFunction_Length,
+
+                    nameof(KernelFunction.list_head) =>
+                    PineKernelFunctionsInline.TryInlineKernelFunction_ListHead,
+
+                    nameof(KernelFunction.skip) =>
+                    PineKernelFunctionsInline.TryInlineKernelFunction_Skip,
+
+                    _ =>
+                    null
+                };
+
             return
                 new KernelFunctionInfo(
                     CompileGenericInvocation: compileGenericInvocation,
-                    SpecializedImplementations: specializedImplementations);
+                    SpecializedImplementations: specializedImplementations,
+                    TryInline: tryInline);
         }
 
         return

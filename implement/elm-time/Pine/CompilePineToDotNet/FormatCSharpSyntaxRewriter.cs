@@ -189,10 +189,71 @@ public class FormatCSharpSyntaxRewriter(
             .WithEqualsToken(node.EqualsToken.WithTrailingTrivia());
     }
 
-    public SyntaxTrivia ComputeIndentationTriviaForNode(SyntaxNode node) =>
+    public override SyntaxNode? VisitSwitchExpressionArm(SwitchExpressionArmSyntax originalNode)
+    {
+        var node = (SwitchExpressionArmSyntax)base.VisitSwitchExpressionArm(originalNode)!;
+
+        var indentationTrivia = ComputeIndentationTriviaForNode(originalNode);
+
+        var isLastArm =
+            node.Parent is SwitchExpressionSyntax switchExpression &&
+            switchExpression.Arms.Last() == node;
+
+        return
+            node
+            .WithPattern(
+                node.Pattern.WithLeadingTrivia(indentationTrivia))
+            .WithEqualsGreaterThanToken(
+                node.EqualsGreaterThanToken
+                .WithTrailingTrivia(SyntaxFactory.LineFeed))
+            .WithExpression(
+                node.Expression
+                .WithLeadingTrivia(new SyntaxTriviaList(indentationTrivia))
+                .WithTrailingTrivia(isLastArm ? SyntaxTriviaList.Create(SyntaxFactory.LineFeed) : []));
+    }
+
+    public override SyntaxNode? VisitSwitchExpression(SwitchExpressionSyntax originalNode)
+    {
+        var node = (SwitchExpressionSyntax)base.VisitSwitchExpression(originalNode)!;
+
+        var braceIndentTrivia = ComputeIndentationTriviaForNode(originalNode.Parent);
+        var indentationTrivia = ComputeIndentationTriviaForNode(originalNode);
+
+        var armsList =
+            Enumerable
+            .Range(0, node.Arms.Count - 1)
+            .Aggregate(
+                seed: node.Arms,
+                func: (aggregate, separatorIndex) =>
+                {
+                    var separatorBefore = aggregate.GetSeparator(separatorIndex);
+
+                    return
+                    aggregate.ReplaceSeparator(
+                    separatorBefore,
+                    separatorBefore.WithTrailingTrivia(SyntaxFactory.LineFeed, SyntaxFactory.LineFeed));
+                });
+
+        return
+            node
+            .WithGoverningExpression(
+                node.GoverningExpression.WithTrailingTrivia(SyntaxFactory.Whitespace(" ")))
+            .WithSwitchKeyword(
+                node.SwitchKeyword.WithTrailingTrivia(SyntaxFactory.LineFeed))
+            .WithOpenBraceToken(
+                node.OpenBraceToken
+                .WithLeadingTrivia(braceIndentTrivia)
+                .WithTrailingTrivia(SyntaxFactory.LineFeed))
+            .WithArms(armsList)
+            .WithCloseBraceToken(
+                node.CloseBraceToken
+                .WithLeadingTrivia(braceIndentTrivia));
+    }
+
+    public SyntaxTrivia ComputeIndentationTriviaForNode(SyntaxNode? node) =>
         ComputeIndentationTriviaForNode(node, indentChar, indentCharsPerLevel);
 
-    public static SyntaxTrivia ComputeIndentationTriviaForNode(SyntaxNode node, char indentChar, int indentCharsPerLevel)
+    public static SyntaxTrivia ComputeIndentationTriviaForNode(SyntaxNode? node, char indentChar, int indentCharsPerLevel)
     {
         var indentationLevel = ComputeIndentationLevel(node);
 
@@ -235,6 +296,7 @@ public class FormatCSharpSyntaxRewriter(
             ArgumentListSyntax => true,
             ReturnStatementSyntax => true,
             EqualsValueClauseSyntax => true,
+            SwitchExpressionSyntax => true,
 
             _ => false
         };

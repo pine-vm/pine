@@ -57,8 +57,8 @@ public static class KernelFunction
             PineValueAsInteger.ValueFromSignedInteger(
                 value switch
                 {
-                    PineValue.BlobValue blobComponent => blobComponent.Bytes.Length,
-                    PineValue.ListValue listComponent => listComponent.Elements.Count,
+                    PineValue.BlobValue blobValue => blobValue.Bytes.Length,
+                    PineValue.ListValue listValue => listValue.Elements.Count,
                     _ => throw new NotImplementedException()
                 }));
 
@@ -72,8 +72,8 @@ public static class KernelFunction
     public static PineValue skip(BigInteger count, PineValue value) =>
         value switch
         {
-            PineValue.BlobValue blobComponent => PineValue.Blob(blobComponent.Bytes[(int)count..]),
-            PineValue.ListValue listComponent => PineValue.List([.. listComponent.Elements.Skip((int)count)]),
+            PineValue.BlobValue blobValue => PineValue.Blob(blobValue.Bytes[(int)count..]),
+            PineValue.ListValue listValue => PineValue.List([.. listValue.Elements.Skip((int)count)]),
             _ => throw new NotImplementedException()
         };
 
@@ -87,8 +87,8 @@ public static class KernelFunction
     public static PineValue take(BigInteger count, PineValue value) =>
         value switch
         {
-            PineValue.BlobValue blobComponent => PineValue.Blob(blobComponent.Bytes[..(int)count]),
-            PineValue.ListValue listComponent => PineValue.List([.. listComponent.Elements.Take((int)count)]),
+            PineValue.BlobValue blobValue => PineValue.Blob(blobValue.Bytes[..(int)count]),
+            PineValue.ListValue listValue => PineValue.List([.. listValue.Elements.Take((int)count)]),
             _ => throw new NotImplementedException()
         };
 
@@ -96,8 +96,8 @@ public static class KernelFunction
         Result<string, PineValue>.ok(
             value switch
             {
-                PineValue.BlobValue blobComponent => PineValue.Blob(blobComponent.Bytes.ToArray().Reverse().ToArray()),
-                PineValue.ListValue listComponent => PineValue.List([.. listComponent.Elements.Reverse()]),
+                PineValue.BlobValue blobValue => PineValue.Blob(blobValue.Bytes.ToArray().Reverse().ToArray()),
+                PineValue.ListValue listValue => PineValue.List([.. listValue.Elements.Reverse()]),
                 _ => throw new NotImplementedException()
             });
 
