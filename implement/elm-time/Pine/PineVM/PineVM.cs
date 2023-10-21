@@ -162,7 +162,7 @@ public class PineVM : IPineVM
     private static readonly IReadOnlyDictionary<string, Func<PineValue, Result<string, PineValue>>> NamedKernelFunctions =
         ImmutableDictionary<string, Func<PineValue, Result<string, PineValue>>>.Empty
         .SetItem(nameof(KernelFunction.equal), KernelFunction.equal)
-        .SetItem(nameof(KernelFunction.logical_not), KernelFunction.logical_not)
+        .SetItem(nameof(KernelFunction.negate), KernelFunction.negate)
         .SetItem(nameof(KernelFunction.logical_and), KernelFunction.logical_and)
         .SetItem(nameof(KernelFunction.logical_or), KernelFunction.logical_or)
         .SetItem(nameof(KernelFunction.length), KernelFunction.length)
@@ -171,7 +171,6 @@ public class PineVM : IPineVM
         .SetItem(nameof(KernelFunction.reverse), KernelFunction.reverse)
         .SetItem(nameof(KernelFunction.concat), KernelFunction.concat)
         .SetItem(nameof(KernelFunction.list_head), KernelFunction.list_head)
-        .SetItem(nameof(KernelFunction.neg_int), KernelFunction.neg_int)
         .SetItem(nameof(KernelFunction.add_int), KernelFunction.add_int)
         .SetItem(nameof(KernelFunction.sub_int), KernelFunction.sub_int)
         .SetItem(nameof(KernelFunction.mul_int), KernelFunction.mul_int)

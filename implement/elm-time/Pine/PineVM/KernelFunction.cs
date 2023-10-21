@@ -42,9 +42,27 @@ public static class KernelFunction
         Result<string, PineValue>.ok(
             PineVM.ValueFromBool(valueA.Equals(valueB)));
 
-    public static Result<string, PineValue> logical_not(PineValue value) =>
-        PineVM.DecodeBoolFromValue(value)
-            .Map(b => PineVM.ValueFromBool(!b));
+    public static Result<string, PineValue> negate(PineValue value) =>
+        Result<string, PineValue>.ok(
+            value switch
+            {
+                PineValue.BlobValue blobValue
+                when 0 < blobValue.Bytes.Length =>
+                blobValue.Bytes.Span[0] switch
+                {
+                    4 =>
+                    PineValue.Blob(CommonConversion.Concat((ReadOnlySpan<byte>)[2], blobValue.Bytes.Span[1..])),
+
+                    2 =>
+                    PineValue.Blob(CommonConversion.Concat((ReadOnlySpan<byte>)[4], blobValue.Bytes.Span[1..])),
+
+                    _ =>
+                    PineValue.EmptyList
+                },
+
+                _ =>
+                PineValue.EmptyList
+            });
 
     public static Result<string, PineValue> logical_and(PineValue value) =>
         KernelFunctionExpectingListOfTypeBool(bools => bools.Aggregate(seed: true, func: (a, b) => a && b), value);
@@ -130,10 +148,6 @@ public static class KernelFunction
     public static Result<string, PineValue> list_head(PineValue value) =>
         PineVM.DecodePineListValue(value)
             .Map(list => list.Count < 1 ? PineValue.EmptyList : list[0]);
-
-    public static Result<string, PineValue> neg_int(PineValue value) =>
-        PineValueAsInteger.SignedIntegerFromValue(value)
-            .Map(i => PineValueAsInteger.ValueFromSignedInteger(-i));
 
     public static Result<string, PineValue> add_int(PineValue value) =>
         KernelFunctionExpectingListOfBigIntWithAtLeastOneAndProducingBigInt(

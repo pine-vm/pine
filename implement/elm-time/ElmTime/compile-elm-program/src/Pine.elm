@@ -167,10 +167,8 @@ kernelFunctions =
             >> valueFromBool
             >> Ok
       )
-    , ( "logical_not"
-      , boolFromValue
-            >> Result.fromMaybe (DescribePathEnd "Value is neither True nor False")
-            >> Result.map (not >> valueFromBool)
+    , ( "negate"
+      , kernelFunction_Negate
       )
     , ( "logical_and", kernelFunctionExpectingListOfTypeBool (List.foldl (&&) True) )
     , ( "logical_or", kernelFunctionExpectingListOfTypeBool (List.foldl (||) False) )
@@ -236,11 +234,6 @@ kernelFunctions =
             >> Result.map (List.head >> Maybe.withDefault (ListValue []))
             >> Result.mapError DescribePathEnd
       )
-    , ( "neg_int"
-      , bigIntFromValue
-            >> Result.mapError DescribePathEnd
-            >> Result.map (BigInt.negate >> valueFromBigInt)
-      )
     , ( "add_int"
       , kernelFunctionExpectingListOfBigIntWithAtLeastOneAndProducingBigInt (List.foldl BigInt.add)
       )
@@ -258,6 +251,26 @@ kernelFunctions =
       )
     ]
         |> Dict.fromList
+
+
+kernelFunction_Negate : KernelFunction
+kernelFunction_Negate value =
+    Ok
+        (case value of
+            BlobValue blob ->
+                case blob of
+                    4 :: rest ->
+                        BlobValue (2 :: rest)
+
+                    2 :: rest ->
+                        BlobValue (4 :: rest)
+
+                    _ ->
+                        ListValue []
+
+            ListValue _ ->
+                ListValue []
+        )
 
 
 list_all_same : List a -> Bool

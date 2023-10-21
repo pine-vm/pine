@@ -60,7 +60,7 @@ eq a b =
 
 neq : a -> a -> Bool
 neq a b =
-    Pine_kernel.logical_not (Pine_kernel.equal [ a, b ])
+    Pine_kernel.negate (Pine_kernel.equal [ a, b ])
 
 
 add : number -> number -> number
@@ -105,7 +105,7 @@ lt : comparable -> comparable -> Bool
 lt a b =
     Pine_kernel.logical_and
     [ (le a b)
-    , Pine_kernel.logical_not (Pine_kernel.equal [a, b])
+    , Pine_kernel.negate (Pine_kernel.equal [a, b])
     ]
 
 
@@ -113,7 +113,7 @@ gt : comparable -> comparable -> Bool
 gt a b =
     Pine_kernel.logical_and
     [ (ge a b)
-    , Pine_kernel.logical_not (Pine_kernel.equal [a, b])
+    , Pine_kernel.negate (Pine_kernel.equal [a, b])
     ]
 
 

@@ -1194,7 +1194,7 @@ compileElmSyntaxExpression stack elmExpression =
                 Ok negatedExpression ->
                     Ok
                         (KernelApplicationExpression
-                            { functionName = "neg_int"
+                            { functionName = "negate"
                             , argument = negatedExpression
                             }
                         )
@@ -1841,7 +1841,7 @@ compileElmSyntaxPattern elmPattern =
                                         conditionExpressions =
                                             \deconstructedExpression ->
                                                 [ [ KernelApplicationExpression
-                                                        { functionName = "logical_not"
+                                                        { functionName = "negate"
                                                         , argument =
                                                             equalCondition
                                                                 [ deconstructedExpression
