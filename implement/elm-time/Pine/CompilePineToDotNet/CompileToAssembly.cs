@@ -23,10 +23,17 @@ public record CompileToAssemblyResult(
 public class CompileToAssembly
 {
     public static Result<string, CompileToAssemblyResult> Compile(
-        SyntaxContainerConfig syntaxContainerConfig,
         CompileCSharpClassResult compileCSharpClassResult)
     {
-        var syntaxText = GenerateCSharpFile(compileCSharpClassResult, additionalMembers: null).FileText;
+        var csharpFile = GenerateCSharpFile(compileCSharpClassResult, additionalMembers: null);
+
+        return Compile(csharpFile);
+    }
+
+    public static Result<string, CompileToAssemblyResult> Compile(
+        GenerateCSharpFileResult csharpFile)
+    {
+        var syntaxText = csharpFile.FileText;
 
         var syntaxTree = CSharpSyntaxTree.ParseText(syntaxText);
 
@@ -60,18 +67,18 @@ public class CompileToAssembly
         {
             var loadedAssembly = Assembly.Load(assembly);
 
-            var compiledType = loadedAssembly.GetType(syntaxContainerConfig.containerTypeName);
+            var compiledType = loadedAssembly.GetType(csharpFile.SyntaxContainerConfig.containerTypeName);
 
             if (compiledType is null)
                 return Result<string, CompileDictionaryResult>.err(
-                    "Did not find type " + syntaxContainerConfig.containerTypeName + " in assembly " + loadedAssembly.FullName);
+                    "Did not find type " + csharpFile.SyntaxContainerConfig.containerTypeName + " in assembly " + loadedAssembly.FullName);
 
             var dictionaryMember =
-                compiledType.GetMethod(syntaxContainerConfig.dictionaryMemberName, BindingFlags.Public | BindingFlags.Static);
+                compiledType.GetMethod(csharpFile.SyntaxContainerConfig.dictionaryMemberName, BindingFlags.Public | BindingFlags.Static);
 
             if (dictionaryMember is null)
                 return Result<string, CompileDictionaryResult>.err(
-                    "Did not find method " + syntaxContainerConfig.dictionaryMemberName + " in type " + compiledType.FullName);
+                    "Did not find method " + csharpFile.SyntaxContainerConfig.dictionaryMemberName + " in type " + compiledType.FullName);
 
             return
                 Result<string, CompileDictionaryResult>.ok(

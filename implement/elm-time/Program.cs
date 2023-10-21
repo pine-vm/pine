@@ -1026,9 +1026,7 @@ public class Program
                             var compileToFileResult =
                             compileResult
                             .Map(compiledClass =>
-                            PineVMConfiguration.GenerateCSharpFile(
-                                syntaxContainerConfig: syntaxContainerConfig,
-                                compileCSharpClassResult: compiledClass));
+                            Pine.CompilePineToDotNet.CompileToCSharp.GenerateCSharpFile(compiledClass));
 
                             compiledDecodeExpressionOverrides =
                             compileToFileResult
@@ -1036,9 +1034,7 @@ public class Program
                                 compileSuccess =>
                                 {
                                     var compileToAssemblyResult =
-                                    compileResult
-                                    .AndThen(compileOk => Pine.CompilePineToDotNet.CompileToAssembly.Compile(
-                                        syntaxContainerConfig, compileOk));
+                                    Pine.CompilePineToDotNet.CompileToAssembly.Compile(compileSuccess);
 
                                     console.WriteLine(
                                         "Completed PGO and compilation in " +

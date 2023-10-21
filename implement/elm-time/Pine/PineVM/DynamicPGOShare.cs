@@ -166,9 +166,7 @@ public class DynamicPGOShare : IDisposable
             CompilePineToDotNet.CompileToCSharp.CompileExpressionsToCSharpClass(
                 expressionsToCompile,
                 syntaxContainerConfig)
-            .AndThen(csharpClass =>
-                CompilePineToDotNet.CompileToAssembly.Compile(
-                    syntaxContainerConfig, csharpClass));
+            .AndThen(CompilePineToDotNet.CompileToAssembly.Compile);
 
         var dictionary =
             compileToAssemblyResult

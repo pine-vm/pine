@@ -18,10 +18,12 @@ public record SyntaxContainerConfig(
     string dictionaryMemberName);
 
 public record CompileCSharpClassResult(
+    SyntaxContainerConfig SyntaxContainerConfig,
     ClassDeclarationSyntax ClassDeclarationSyntax,
     IReadOnlyList<UsingDirectiveSyntax> UsingDirectives);
 
 public record GenerateCSharpFileResult(
+    SyntaxContainerConfig SyntaxContainerConfig,
     CompilationUnitSyntax CompilationUnitSyntax,
     string FileText);
 
@@ -45,6 +47,7 @@ public partial class CompileToCSharp
 
         return
             new GenerateCSharpFileResult(
+                SyntaxContainerConfig: compileCSharpClassResult.SyntaxContainerConfig,
                 formattedNode,
                 FileText: formattedNode.ToFullString());
     }
@@ -360,6 +363,7 @@ public partial class CompileToCSharp
 
                 return Result<string, CompileCSharpClassResult>.ok(
                     new CompileCSharpClassResult(
+                        SyntaxContainerConfig: containerConfig,
                         ClassDeclarationSyntax:
                         SyntaxFactory.ClassDeclaration(containerConfig.containerTypeName)
                             .WithMembers(
