@@ -9,7 +9,7 @@ public interface IInteractiveSession : IDisposable
 {
     Result<string, SubmissionResponse> Submit(string submission);
 
-    static ElmEngineTypeCLI DefaultImplementation => ElmEngineTypeCLI.JavaScript_V8;
+    static ElmEngineTypeCLI DefaultImplementation => ElmEngineTypeCLI.Pine;
 
     static public readonly Lazy<TreeNodeWithStringPath> CompileElmProgramCodeFilesDefault =
         new(() => PineValueComposition.SortedTreeFromSetOfBlobsWithStringPath(
