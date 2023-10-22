@@ -8,7 +8,7 @@ WORKDIR /app/elm-time
 RUN dotnet publish -c Debug -o out
 
 # Build runtime image
-FROM mcr.microsoft.com/dotnet/aspnet:8.0.100-rc.2 AS binaries
+FROM mcr.microsoft.com/dotnet/aspnet:8.0.0-rc.2 AS binaries
 
 COPY --from=build-env /app/elm-time/out /elm-time/dotnet/
 
