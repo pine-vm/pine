@@ -70,7 +70,7 @@ add a b =
 
 sub : number -> number -> number
 sub a b =
-    Pine_kernel.sub_int [ a, b ]
+    Pine_kernel.add_int [ a, Pine_kernel.negate b ]
 
 
 mul : number -> number -> number
@@ -78,9 +78,70 @@ mul a b =
     Pine_kernel.mul_int [ a, b ]
 
 
-idiv : number -> number -> number
-idiv a b =
-    Pine_kernel.div_int [ a, b ]
+idiv : Int -> Int -> Int
+idiv dividend divisor =
+    if Pine_kernel.equal [ divisor, 0 ] then
+        0
+
+    else
+        let
+            ( dividendNegative, absDividend ) =
+                if le dividend 0 then
+                    ( True, -dividend )
+
+                else
+                    ( False, dividend )
+
+            ( divisorNegative, absDivisor ) =
+                if le divisor 0 then
+                    ( True, -divisor )
+
+                else
+                    ( False, divisor )
+
+            absQuotient =
+                idivHelper absDividend absDivisor 0
+        in
+        if Pine_kernel.equal [ dividendNegative, divisorNegative ] then
+            absQuotient
+
+        else
+            -absQuotient
+
+
+idivHelper : Int -> Int -> Int -> Int
+idivHelper dividend divisor quotient =
+    let
+        quadrupleDivisor =
+            mul divisor 4
+    in
+    if ge dividend quadrupleDivisor then
+        let
+            quarterQuotient =
+                idivHelper
+                    dividend
+                    quadrupleDivisor
+                    0
+
+            quarterQuotientSum =
+                mul quarterQuotient 4
+
+            remainder =
+                sub dividend (mul quarterQuotient quadrupleDivisor)
+
+            remainderQuotient =
+                idivHelper remainder divisor 0
+        in
+        add quarterQuotientSum remainderQuotient
+
+    else if ge dividend divisor then
+        idivHelper
+            (sub dividend divisor)
+            divisor
+            (add quotient 1)
+
+    else
+        quotient
 
 
 and : Bool -> Bool -> Bool
@@ -923,48 +984,14 @@ fromIntAsList int =
 
 fromUnsignedIntAsList : Int -> List Char
 fromUnsignedIntAsList int =
+    fromUnsignedIntAsListHelper
+        int
+        (int // 10)
+
+
+fromUnsignedIntAsListHelper : Int -> Int -> List Char
+fromUnsignedIntAsListHelper int upperDigitsValue =
     let
-        digitCharacterFromValue digitValue =
-            case digitValue of
-                0 ->
-                    Just '0'
-
-                1 ->
-                    Just '1'
-
-                2 ->
-                    Just '2'
-
-                3 ->
-                    Just '3'
-
-                4 ->
-                    Just '4'
-
-                5 ->
-                    Just '5'
-
-                6 ->
-                    Just '6'
-
-                7 ->
-                    Just '7'
-
-                8 ->
-                    Just '8'
-
-                9 ->
-                    Just '9'
-
-                _ ->
-                    Nothing                
-
-        upperDigitsValue =
-            int // 10
-
-        lastDigitValue =
-            int - (upperDigitsValue * 10)
-
         upperDigitsString =
             if upperDigitsValue < 1 then
                 []
@@ -973,9 +1000,46 @@ fromUnsignedIntAsList int =
                 fromUnsignedIntAsList upperDigitsValue
 
         lastDigitChar =
-            digitCharacterFromValue lastDigitValue
+            digitCharacterFromValue (int - (upperDigitsValue * 10))
     in
     upperDigitsString ++ [ Maybe.withDefault 'e' lastDigitChar ]
+
+
+digitCharacterFromValue : Int -> Maybe Char
+digitCharacterFromValue digitValue =
+    case digitValue of
+        0 ->
+            Just '0'
+
+        1 ->
+            Just '1'
+
+        2 ->
+            Just '2'
+
+        3 ->
+            Just '3'
+
+        4 ->
+            Just '4'
+
+        5 ->
+            Just '5'
+
+        6 ->
+            Just '6'
+
+        7 ->
+            Just '7'
+
+        8 ->
+            Just '8'
+
+        9 ->
+            Just '9'
+
+        _ ->
+            Nothing                
 
 
 trim : String -> String

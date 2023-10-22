@@ -364,11 +364,11 @@ emitClosureExpressionTests =
                                                 ]
                                         }
                                     , ElmInteractive.KernelApplicationExpression
-                                        { functionName = "sub_int"
+                                        { functionName = "add_int"
                                         , argument =
                                             ElmInteractive.ListExpression
                                                 [ ElmInteractive.ReferenceExpression "remainingCount"
-                                                , ElmInteractive.LiteralExpression (Pine.valueFromBigInt (BigInt.fromInt 1))
+                                                , ElmInteractive.LiteralExpression (Pine.valueFromBigInt (BigInt.fromInt -1))
                                                 ]
                                         }
                                     , ElmInteractive.ReferenceExpression "value"
@@ -463,11 +463,11 @@ emitClosureExpressionTests =
                                                 ]
                                         }
                                     , ElmInteractive.KernelApplicationExpression
-                                        { functionName = "sub_int"
+                                        { functionName = "add_int"
                                         , argument =
                                             ElmInteractive.ListExpression
                                                 [ ElmInteractive.ReferenceExpression "remainingCount"
-                                                , ElmInteractive.LiteralExpression (Pine.valueFromBigInt (BigInt.fromInt 1))
+                                                , ElmInteractive.LiteralExpression (Pine.valueFromBigInt (BigInt.fromInt -1))
                                                 ]
                                         }
                                     , ElmInteractive.ReferenceExpression "value"
@@ -743,11 +743,11 @@ emitClosureExpressionTests =
                                     }
                                 , ElmInteractive.ListExpression
                                     [ ElmInteractive.KernelApplicationExpression
-                                        { functionName = "sub_int"
+                                        { functionName = "add_int"
                                         , argument =
                                             ElmInteractive.ListExpression
                                                 [ ElmInteractive.ReferenceExpression "remainingCount"
-                                                , ElmInteractive.LiteralExpression (Pine.valueFromBigInt (BigInt.fromInt 1))
+                                                , ElmInteractive.LiteralExpression (Pine.valueFromBigInt (BigInt.fromInt -1))
                                                 ]
                                         }
                                     , ElmInteractive.ReferenceExpression "value"
@@ -815,11 +815,11 @@ emitClosureExpressionTests =
                                             ]
                                     }
                                 , ElmInteractive.KernelApplicationExpression
-                                    { functionName = "sub_int"
+                                    { functionName = "add_int"
                                     , argument =
                                         ElmInteractive.ListExpression
                                             [ ElmInteractive.ReferenceExpression "remainingCount"
-                                            , ElmInteractive.LiteralExpression (Pine.valueFromBigInt (BigInt.fromInt 1))
+                                            , ElmInteractive.LiteralExpression (Pine.valueFromBigInt (BigInt.fromInt -1))
                                             ]
                                     }
                                 , ElmInteractive.ReferenceExpression "value"

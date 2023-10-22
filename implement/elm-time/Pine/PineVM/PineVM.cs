@@ -172,9 +172,7 @@ public class PineVM : IPineVM
         .SetItem(nameof(KernelFunction.concat), KernelFunction.concat)
         .SetItem(nameof(KernelFunction.list_head), KernelFunction.list_head)
         .SetItem(nameof(KernelFunction.add_int), KernelFunction.add_int)
-        .SetItem(nameof(KernelFunction.sub_int), KernelFunction.sub_int)
         .SetItem(nameof(KernelFunction.mul_int), KernelFunction.mul_int)
-        .SetItem(nameof(KernelFunction.div_int), KernelFunction.div_int)
         .SetItem(nameof(KernelFunction.is_sorted_ascending_int), KernelFunction.is_sorted_ascending_int);
 
     public static PineValue ValueFromBool(bool b) => b ? TrueValue : FalseValue;

@@ -150,30 +150,15 @@ public static class KernelFunction
             .Map(list => list.Count < 1 ? PineValue.EmptyList : list[0]);
 
     public static Result<string, PineValue> add_int(PineValue value) =>
-        KernelFunctionExpectingListOfBigIntWithAtLeastOneAndProducingBigInt(
-            (firstInt, otherInts) => Result<string, BigInteger>.ok(
-                otherInts.Aggregate(seed: firstInt, func: (aggregate, next) => aggregate + next)),
-            value);
-
-    public static Result<string, PineValue> sub_int(PineValue value) =>
-        KernelFunctionExpectingListOfBigIntWithAtLeastOneAndProducingBigInt(
-            (firstInt, otherInts) => Result<string, BigInteger>.ok(
-                otherInts.Aggregate(seed: firstInt, func: (aggregate, next) => aggregate - next)),
+        KernelFunctionExpectingListOfBigIntAndProducingBigInt(
+            integers =>
+            integers.Aggregate(seed: BigInteger.Zero, func: (aggregate, next) => aggregate + next),
             value);
 
     public static Result<string, PineValue> mul_int(PineValue value) =>
-        KernelFunctionExpectingListOfBigIntWithAtLeastOneAndProducingBigInt(
-            (firstInt, otherInts) => Result<string, BigInteger>.ok(
-                otherInts.Aggregate(seed: firstInt, func: (aggregate, next) => aggregate * next)),
-            value);
-
-    public static Result<string, PineValue> div_int(PineValue value) =>
-        KernelFunctionExpectingListOfBigIntWithAtLeastOneAndProducingBigInt(
-            (firstInt, otherInts) =>
-                otherInts.Contains(0) ?
-                    Result<string, BigInteger>.err("Division by zero")
-                    :
-                    Result<string, BigInteger>.ok(otherInts.Aggregate(seed: firstInt, func: (aggregate, next) => aggregate / next)),
+        KernelFunctionExpectingListOfBigIntAndProducingBigInt(
+            integers =>
+            integers.Aggregate(seed: BigInteger.One, func: (aggregate, next) => aggregate * next),
             value);
 
     public static Result<string, PineValue> is_sorted_ascending_int(PineValue value) =>
@@ -222,26 +207,20 @@ public static class KernelFunction
             };
     }
 
-    private static Result<string, PineValue> KernelFunctionExpectingListOfBigIntWithAtLeastOneAndProducingBigInt(
-        Func<BigInteger, IReadOnlyList<BigInteger>, Result<string, BigInteger>> aggregate,
+    private static Result<string, PineValue> KernelFunctionExpectingListOfBigIntAndProducingBigInt(
+        Func<IReadOnlyList<BigInteger>, BigInteger> aggregate,
         PineValue value) =>
         KernelFunctionExpectingListOfBigInt(
             aggregate:
-            listOfIntegers =>
-                (listOfIntegers.Count < 1
-                    ?
-                    Result<string, BigInteger>.err("List is empty. Expected at least one element")
-                    :
-                    aggregate(listOfIntegers[0], listOfIntegers.Skip(1).ToImmutableArray()))
-                .Map(PineValueAsInteger.ValueFromSignedInteger),
+            listOfIntegers => PineValueAsInteger.ValueFromSignedInteger(aggregate(listOfIntegers)),
             value);
 
     private static Result<string, PineValue> KernelFunctionExpectingListOfBigInt(
-        Func<IReadOnlyList<BigInteger>, Result<string, PineValue>> aggregate,
+        Func<IReadOnlyList<BigInteger>, PineValue> aggregate,
         PineValue value) =>
         PineVM.DecodePineListValue(value)
             .AndThen(list => PineVM.ResultListMapCombine(list, PineValueAsInteger.SignedIntegerFromValue))
-            .AndThen(ints => aggregate(ints));
+            .Map(ints => aggregate(ints));
 
     private static Func<PineValue, Result<string, PineValue>> KernelFunctionExpectingExactlyTwoArguments<ArgA, ArgB>(
         Func<PineValue, Result<string, ArgA>> decodeArgA,

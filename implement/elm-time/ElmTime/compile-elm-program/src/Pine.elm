@@ -235,16 +235,10 @@ kernelFunctions =
             >> Result.mapError DescribePathEnd
       )
     , ( "add_int"
-      , kernelFunctionExpectingListOfBigIntWithAtLeastOneAndProducingBigInt (List.foldl BigInt.add)
-      )
-    , ( "sub_int"
-      , kernelFunctionExpectingListOfBigIntWithAtLeastOneAndProducingBigInt (List.foldl (\a b -> BigInt.sub b a))
+      , kernelFunctionExpectingListOfBigIntAndProducingBigInt (List.foldl BigInt.add (BigInt.fromInt 0))
       )
     , ( "mul_int"
-      , kernelFunctionExpectingListOfBigIntWithAtLeastOneAndProducingBigInt (List.foldl BigInt.mul)
-      )
-    , ( "div_int"
-      , kernelFunctionExpectingListOfBigIntWithAtLeastOneAndProducingBigInt (List.foldl (\a b -> BigInt.div b a))
+      , kernelFunctionExpectingListOfBigIntAndProducingBigInt (List.foldl BigInt.mul (BigInt.fromInt 1))
       )
     , ( "is_sorted_ascending_int"
       , is_sorted_ascending_int >> valueFromBool >> Ok
@@ -370,19 +364,12 @@ evaluateDecodeAndEvaluate context decodeAndEvaluate =
             )
 
 
-kernelFunctionExpectingListOfBigIntWithAtLeastOneAndProducingBigInt :
-    (BigInt.BigInt -> List BigInt.BigInt -> BigInt.BigInt)
+kernelFunctionExpectingListOfBigIntAndProducingBigInt :
+    (List BigInt.BigInt -> BigInt.BigInt)
     -> KernelFunction
-kernelFunctionExpectingListOfBigIntWithAtLeastOneAndProducingBigInt apply =
+kernelFunctionExpectingListOfBigIntAndProducingBigInt aggregate =
     kernelFunctionExpectingListOfBigInt
-        (\list ->
-            case list of
-                [] ->
-                    Err "List is empty. Expected at least one element"
-
-                firstElement :: otherElements ->
-                    Ok (valueFromBigInt (apply firstElement otherElements))
-        )
+        (aggregate >> valueFromBigInt >> Ok)
 
 
 kernelFunctionExpectingListOfBigInt : (List BigInt.BigInt -> Result String Value) -> KernelFunction
