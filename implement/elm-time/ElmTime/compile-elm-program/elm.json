@@ -17,7 +17,7 @@
             "elm-community/result-extra": "2.4.0",
             "folkertdev/elm-flate": "2.0.5",
             "folkertdev/elm-sha2": "1.0.0",
-            "stil4m/elm-syntax": "7.2.9",
+            "stil4m/elm-syntax": "7.3.2",
             "z5h/jaro-winkler": "1.0.2"
         },
         "indirect": {
@@ -29,7 +29,7 @@
     },
     "test-dependencies": {
         "direct": {
-            "elm-explorations/test": "2.1.1"
+            "elm-explorations/test": "2.1.2"
         },
         "indirect": {
             "elm/html": "1.0.0",
