@@ -7,6 +7,7 @@ import Elm.Syntax.File
 import ElmInteractive
 import ElmInteractiveCoreModules
 import ElmInteractiveKernelModules
+import ElmInteractiveParser
 import Json.Decode
 import Json.Encode
 import Parser
@@ -29,12 +30,12 @@ type alias CompileElmInteractiveEnvironmentRequest =
 
 parseElmModuleTextToJson : String -> String
 parseElmModuleTextToJson =
-    ElmInteractive.parseElmModuleTextToJson
+    ElmInteractiveParser.parseElmModuleTextToJson
 
 
 parseElmModuleText : String -> Result (List Parser.DeadEnd) Elm.Syntax.File.File
 parseElmModuleText =
-    ElmInteractive.parseElmModuleText
+    ElmInteractiveParser.parseElmModuleText
 
 
 evaluateSubmissionInInteractive : String -> String
@@ -52,7 +53,7 @@ evaluateSubmissionInInteractive argumentsJson =
                 Json.Encode.object
                     [ ( "DecodedArguments"
                       , case
-                            ElmInteractive.submissionInInteractive
+                            ElmInteractiveParser.submissionInInteractive
                                 (ElmInteractive.CustomModulesContext
                                     { includeCoreModules = True, modulesTexts = args.modulesTexts }
                                 )
@@ -86,7 +87,7 @@ compileInteractiveEnvironment =
         >> Result.mapError (Json.Decode.errorToString >> (++) "Failed to decode arguments: ")
         >> Result.andThen
             (\( environmentDict, { modulesTexts, environmentBefore } ) ->
-                ElmInteractive.expandElmInteractiveEnvironmentWithModuleTexts environmentBefore
+                ElmInteractiveParser.expandElmInteractiveEnvironmentWithModuleTexts environmentBefore
                     modulesTexts
                     |> Result.mapError ((++) "Failed to prepare the initial context: ")
                     |> Result.map (.environment >> json_encode_pineValue environmentDict)
@@ -102,7 +103,7 @@ compileInteractiveSubmission requestJson =
         |> Result.mapError (Json.Decode.errorToString >> (++) "Failed to decode request: ")
         |> Result.andThen
             (\( ( environment, environmentDict ), submission ) ->
-                ElmInteractive.compileInteractiveSubmission environment submission
+                ElmInteractiveParser.compileInteractiveSubmission environment submission
                     |> Result.map Pine.encodeExpressionAsValue
                     |> Result.map (json_encode_pineValue environmentDict)
             )

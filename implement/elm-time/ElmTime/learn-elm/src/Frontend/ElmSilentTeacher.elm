@@ -10,6 +10,7 @@ import Element.Border
 import Element.Font
 import Element.Input
 import ElmInteractive
+import ElmInteractiveParser
 import Frontend.ElmExplorer
 import Frontend.ElmSilentTeacher.Exercise as Exercise exposing (Exercise, ExerciseChallenge)
 import Html
@@ -98,7 +99,7 @@ init =
             Time.millisToPosix 0
 
         evaluationContextResult =
-            ElmInteractive.compileEvalContextForElmInteractive ElmInteractive.DefaultContext
+            ElmInteractiveParser.compileEvalContextForElmInteractive ElmInteractive.DefaultContext
 
         trainingSession =
             case Exercise.exercises of
@@ -576,7 +577,7 @@ updateLastEvaluatedExpression config stateBefore =
                                 Ok { displayText = "" }
 
                               else
-                                ElmInteractive.submissionInInteractiveInPineContext evaluationContext expression
+                                ElmInteractiveParser.submissionInInteractiveInPineContext evaluationContext expression
                                     |> Result.map Tuple.second
                             )
         in
@@ -1054,7 +1055,7 @@ viewProgressBar { progressMicro } =
 
 computeSolutionFromExerciseInContext : Pine.EvalContext -> ExerciseChallenge -> String
 computeSolutionFromExerciseInContext evaluationContext exerciseChallenge =
-    case ElmInteractive.submissionInInteractiveInPineContext evaluationContext exerciseChallenge of
+    case ElmInteractiveParser.submissionInInteractiveInPineContext evaluationContext exerciseChallenge of
         Err error ->
             "Failed to evaluate: " ++ error
 

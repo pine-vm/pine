@@ -2,8 +2,6 @@ module ElmInteractive exposing (..)
 
 import BigInt
 import Dict
-import Elm.Parser
-import Elm.Processing
 import Elm.Syntax.Declaration
 import Elm.Syntax.Exposing
 import Elm.Syntax.Expression
@@ -15,13 +13,10 @@ import Elm.Syntax.Node
 import Elm.Syntax.Pattern
 import Elm.Syntax.Range
 import Elm.Syntax.Type
-import ElmInteractiveCoreModules
-import ElmInteractiveKernelModules
 import Json.Decode
 import Json.Encode
 import List.Extra
 import Maybe.Extra
-import Parser
 import Pine
 import Result.Extra
 import Set
@@ -167,57 +162,6 @@ type alias ElmModuleInCompilation =
 type alias ElmModuleChoiceType =
     { tagsNames : Set.Set String
     }
-
-
-submissionInInteractive : InteractiveContext -> List String -> String -> Result String SubmissionResponse
-submissionInInteractive context previousSubmissions submission =
-    case compileEvalContextForElmInteractive context of
-        Err error ->
-            Err ("Failed to prepare the initial context: " ++ error)
-
-        Ok initialContext ->
-            submissionWithHistoryInInteractive initialContext previousSubmissions submission
-
-
-submissionWithHistoryInInteractive : Pine.EvalContext -> List String -> String -> Result String SubmissionResponse
-submissionWithHistoryInInteractive initialContext previousSubmissions submission =
-    case previousSubmissions of
-        [] ->
-            submissionInInteractiveInPineContext initialContext submission
-                |> Result.map Tuple.second
-
-        firstSubmission :: remainingPreviousSubmissions ->
-            case submissionInInteractiveInPineContext initialContext firstSubmission of
-                Err _ ->
-                    submissionWithHistoryInInteractive initialContext remainingPreviousSubmissions submission
-
-                Ok ( expressionContext, _ ) ->
-                    submissionWithHistoryInInteractive expressionContext remainingPreviousSubmissions submission
-
-
-submissionInInteractiveInPineContext : Pine.EvalContext -> String -> Result String ( Pine.EvalContext, SubmissionResponse )
-submissionInInteractiveInPineContext expressionContext submission =
-    compileInteractiveSubmission expressionContext.environment submission
-        |> Result.andThen
-            (\pineExpression ->
-                case Pine.evaluateExpression expressionContext pineExpression of
-                    Err error ->
-                        Err ("Failed to evaluate expression:\n" ++ Pine.displayStringFromPineError error)
-
-                    Ok (Pine.BlobValue _) ->
-                        Err "Type mismatch: Pine expression evaluated to a blob"
-
-                    Ok (Pine.ListValue [ newState, responseValue ]) ->
-                        submissionResponseFromResponsePineValue responseValue
-                            |> Result.map (Tuple.pair { environment = newState })
-
-                    Ok (Pine.ListValue resultList) ->
-                        Err
-                            ("Type mismatch: Pine expression evaluated to a list with unexpected number of elements: "
-                                ++ String.fromInt (List.length resultList)
-                                ++ " instead of 2"
-                            )
-            )
 
 
 submissionResponseFromResponsePineValue : Pine.Value -> Result String SubmissionResponse
@@ -643,35 +587,11 @@ areElmValueTypesEqual valueA valueB =
             Just False
 
 
-compileEvalContextForElmInteractive : InteractiveContext -> Result String Pine.EvalContext
-compileEvalContextForElmInteractive context =
-    let
-        contextModulesTexts =
-            case context of
-                DefaultContext ->
-                    ElmInteractiveCoreModules.elmCoreModulesTexts
-                        ++ ElmInteractiveKernelModules.elmKernelModulesTexts
-
-                CustomModulesContext { includeCoreModules, modulesTexts } ->
-                    [ if includeCoreModules then
-                        ElmInteractiveCoreModules.elmCoreModulesTexts
-                            ++ ElmInteractiveKernelModules.elmKernelModulesTexts
-
-                      else
-                        []
-                    , modulesTexts
-                    ]
-                        |> List.concat
-    in
-    expandElmInteractiveEnvironmentWithModuleTexts Pine.emptyEvalContext.environment contextModulesTexts
-        |> Result.map (\result -> { environment = result.environment })
-
-
-expandElmInteractiveEnvironmentWithModuleTexts :
+expandElmInteractiveEnvironmentWithModules :
     Pine.Value
-    -> List String
+    -> List ProjectParsedElmFile
     -> Result String { addedModulesNames : List (List String), environment : Pine.Value }
-expandElmInteractiveEnvironmentWithModuleTexts environmentBefore contextModulesTexts =
+expandElmInteractiveEnvironmentWithModules environmentBefore newParsedElmModules =
     case getDeclarationsFromEnvironment environmentBefore of
         Err error ->
             Err ("Failed to get declarations from environment: " ++ error)
@@ -682,100 +602,94 @@ expandElmInteractiveEnvironmentWithModuleTexts environmentBefore contextModulesT
                     Err ("Failed to separate declarations from environment: " ++ err)
 
                 Ok separateEnvironmentDeclarationsBefore ->
-                    contextModulesTexts
-                        |> List.map parsedElmFileFromOnlyFileText
-                        |> Result.Extra.combine
-                        |> Result.andThen
-                            (\parsedElmFiles ->
-                                let
-                                    modulesNamesWithDependencies =
-                                        parsedElmFiles
-                                            |> List.map
-                                                (\file ->
-                                                    file.parsedModule
-                                                        |> listModuleTransitiveDependencies (List.map .parsedModule parsedElmFiles)
-                                                        |> Result.mapError (Tuple.pair file)
-                                                        |> Result.map (Tuple.pair file)
-                                                )
-                                in
-                                case modulesNamesWithDependencies |> Result.Extra.combine of
-                                    Err ( file, error ) ->
-                                        Err
-                                            ("Failed to resolve dependencies for module "
-                                                ++ String.join "."
-                                                    (Elm.Syntax.Module.moduleName (Elm.Syntax.Node.value file.parsedModule.moduleDefinition))
-                                                ++ ": "
-                                                ++ error
-                                            )
+                    let
+                        modulesNamesWithDependencies =
+                            newParsedElmModules
+                                |> List.map
+                                    (\file ->
+                                        file.parsedModule
+                                            |> listModuleTransitiveDependencies (List.map .parsedModule newParsedElmModules)
+                                            |> Result.mapError (Tuple.pair file)
+                                            |> Result.map (Tuple.pair file)
+                                    )
+                    in
+                    case modulesNamesWithDependencies |> Result.Extra.combine of
+                        Err ( file, error ) ->
+                            Err
+                                ("Failed to resolve dependencies for module "
+                                    ++ String.join "."
+                                        (Elm.Syntax.Module.moduleName (Elm.Syntax.Node.value file.parsedModule.moduleDefinition))
+                                    ++ ": "
+                                    ++ error
+                                )
 
-                                    Ok modulesWithDependencies ->
+                        Ok modulesWithDependencies ->
+                            let
+                                moduleNamesOrderedByDeps =
+                                    modulesWithDependencies
+                                        |> List.concatMap Tuple.second
+                                        |> List.Extra.unique
+                            in
+                            moduleNamesOrderedByDeps
+                                |> List.filterMap
+                                    (\moduleName ->
+                                        modulesWithDependencies
+                                            |> List.Extra.find
+                                                (Tuple.first
+                                                    >> .parsedModule
+                                                    >> .moduleDefinition
+                                                    >> Elm.Syntax.Node.value
+                                                    >> Elm.Syntax.Module.moduleName
+                                                    >> (==) moduleName
+                                                )
+                                    )
+                                |> List.map Tuple.first
+                                |> Ok
+                                |> Result.andThen
+                                    (\parsedElmFiles ->
+                                        parsedElmFiles
+                                            |> List.foldl
+                                                (\moduleToTranslate ->
+                                                    Result.andThen
+                                                        (\aggregate ->
+                                                            let
+                                                                currentAvailableModules =
+                                                                    separateEnvironmentDeclarationsBefore.modules
+                                                                        |> Dict.union aggregate
+                                                            in
+                                                            compileElmModuleTextIntoNamedExports currentAvailableModules moduleToTranslate
+                                                                |> Result.mapError
+                                                                    ((++)
+                                                                        ("Failed to compile elm module '"
+                                                                            ++ String.join "." (Elm.Syntax.Node.value (moduleNameFromSyntaxFile moduleToTranslate.parsedModule))
+                                                                            ++ "': "
+                                                                        )
+                                                                    )
+                                                                |> Result.map
+                                                                    (\( moduleName, moduleValue ) ->
+                                                                        Dict.insert moduleName
+                                                                            moduleValue
+                                                                            aggregate
+                                                                    )
+                                                        )
+                                                )
+                                                (Ok Dict.empty)
+                                    )
+                                |> Result.map
+                                    (\contextModules ->
                                         let
-                                            moduleNamesOrderedByDeps =
-                                                modulesWithDependencies
-                                                    |> List.concatMap Tuple.second
-                                                    |> List.Extra.unique
+                                            modulesValues =
+                                                contextModules
+                                                    |> Dict.toList
+                                                    |> List.map (Tuple.mapFirst (String.join "."))
+                                                    |> List.map (Tuple.mapSecond emitModuleValue)
                                         in
-                                        moduleNamesOrderedByDeps
-                                            |> List.filterMap
-                                                (\moduleName ->
-                                                    modulesWithDependencies
-                                                        |> List.Extra.find
-                                                            (Tuple.first
-                                                                >> .parsedModule
-                                                                >> .moduleDefinition
-                                                                >> Elm.Syntax.Node.value
-                                                                >> Elm.Syntax.Module.moduleName
-                                                                >> (==) moduleName
-                                                            )
-                                                )
-                                            |> List.map Tuple.first
-                                            |> Ok
-                            )
-                        |> Result.andThen
-                            (\parsedElmFiles ->
-                                parsedElmFiles
-                                    |> List.foldl
-                                        (\moduleToTranslate ->
-                                            Result.andThen
-                                                (\aggregate ->
-                                                    let
-                                                        currentAvailableModules =
-                                                            separateEnvironmentDeclarationsBefore.modules
-                                                                |> Dict.union aggregate
-                                                    in
-                                                    compileElmModuleTextIntoNamedExports currentAvailableModules moduleToTranslate
-                                                        |> Result.mapError
-                                                            ((++)
-                                                                ("Failed to compile elm module '"
-                                                                    ++ String.join "." (Elm.Syntax.Node.value (moduleNameFromSyntaxFile moduleToTranslate.parsedModule))
-                                                                    ++ "': "
-                                                                )
-                                                            )
-                                                        |> Result.map
-                                                            (\( moduleName, moduleValue ) ->
-                                                                Dict.insert moduleName
-                                                                    moduleValue
-                                                                    aggregate
-                                                            )
-                                                )
-                                        )
-                                        (Ok Dict.empty)
-                            )
-                        |> Result.map
-                            (\contextModules ->
-                                let
-                                    modulesValues =
-                                        contextModules
-                                            |> Dict.toList
-                                            |> List.map (Tuple.mapFirst (String.join "."))
-                                            |> List.map (Tuple.mapSecond emitModuleValue)
-                                in
-                                { addedModulesNames = Dict.keys contextModules
-                                , environment =
-                                    Pine.environmentFromDeclarations
-                                        (Dict.toList environmentBeforeDeclarations ++ modulesValues)
-                                }
-                            )
+                                        { addedModulesNames = Dict.keys contextModules
+                                        , environment =
+                                            Pine.environmentFromDeclarations
+                                                (Dict.toList environmentBeforeDeclarations ++ modulesValues)
+                                        }
+                                    )
 
 
 listModuleTransitiveDependencies :
@@ -854,27 +768,17 @@ getDirectDependenciesFromModule file =
         |> Set.fromList
 
 
-parsedElmFileFromOnlyFileText : String -> Result String ProjectParsedElmFile
-parsedElmFileFromOnlyFileText fileText =
-    case parseElmModuleText fileText of
-        Err parseError ->
-            [ [ "Failed to parse the module text with " ++ String.fromInt (List.length parseError) ++ " errors:" ]
-            , parseError
-                |> List.map parserDeadEndToString
-            , [ "Module text was as follows:"
-              , fileText
-              ]
-            ]
-                |> List.concat
-                |> String.join "\n"
-                |> Err
-
-        Ok parsedModule ->
-            Ok
-                { fileText = fileText
-                , parsedModule = parsedModule
-                , projectedModuleName = Elm.Syntax.Node.value (moduleNameFromSyntaxFile parsedModule)
-                }
+{-| Missing safety with regards to the relation between the string and the syntax representation!
+The integrating function must ensure that these two match.
+Parsing was separated 2023-11-05 with the goal to reduce the time to arrive at a more efficient implementation of the compiler:
+Using a Pine-based execution allows to skip the work required when running the Elm code via a JavaScript engine.
+-}
+parsedElmFileRecordFromSeparatelyParsedSyntax : ( String, Elm.Syntax.File.File ) -> ProjectParsedElmFile
+parsedElmFileRecordFromSeparatelyParsedSyntax ( fileText, parsedModule ) =
+    { fileText = fileText
+    , parsedModule = parsedModule
+    , projectedModuleName = Elm.Syntax.Node.value (moduleNameFromSyntaxFile parsedModule)
+    }
 
 
 compileElmModuleTextIntoNamedExports :
@@ -4266,124 +4170,6 @@ operatorPrecendencePriority =
         |> Dict.fromList
 
 
-{-| The expression evaluates to a list with two elements:
-The first element contains the new interactive session state for the possible next submission.
-The second element contains the response, the value to display to the user.
--}
-compileInteractiveSubmission : Pine.Value -> String -> Result String Pine.Expression
-compileInteractiveSubmission environment submission =
-    case
-        getDeclarationsFromEnvironment environment |> Result.andThen separateEnvironmentDeclarations
-    of
-        Err error ->
-            Err ("Failed to get declarations from environment: " ++ error)
-
-        Ok environmentDeclarations ->
-            let
-                buildExpressionForNewStateAndResponse config =
-                    Pine.ListExpression
-                        [ config.newStateExpression
-                        , config.responseExpression
-                        ]
-
-                ( defaultCompilationStack, emitStack ) =
-                    compilationAndEmitStackFromInteractiveEnvironment environmentDeclarations
-            in
-            case parseInteractiveSubmissionFromString submission of
-                Err error ->
-                    Ok
-                        (buildExpressionForNewStateAndResponse
-                            { newStateExpression = Pine.EnvironmentExpression
-                            , responseExpression =
-                                Pine.LiteralExpression (Pine.valueFromString ("Failed to parse submission: " ++ error))
-                            }
-                        )
-
-                Ok (DeclarationSubmission elmDeclaration) ->
-                    case elmDeclaration of
-                        Elm.Syntax.Declaration.FunctionDeclaration functionDeclaration ->
-                            let
-                                declarationName =
-                                    Elm.Syntax.Node.value (Elm.Syntax.Node.value functionDeclaration.declaration).name
-
-                                compilationStack =
-                                    { defaultCompilationStack
-                                        | availableDeclarations =
-                                            defaultCompilationStack.availableDeclarations
-                                                |> Dict.remove declarationName
-                                    }
-                            in
-                            case
-                                compileElmSyntaxFunction compilationStack functionDeclaration
-                                    |> Result.map Tuple.second
-                                    |> Result.andThen
-                                        (\functionDeclarationCompilation ->
-                                            emitExpressionInDeclarationBlock
-                                                emitStack
-                                                (Dict.singleton declarationName functionDeclarationCompilation)
-                                                functionDeclarationCompilation
-                                        )
-                                    |> Result.andThen evaluateAsIndependentExpression
-                            of
-                                Err error ->
-                                    Err ("Failed to compile Elm function declaration: " ++ error)
-
-                                Ok declarationValue ->
-                                    Ok
-                                        (buildExpressionForNewStateAndResponse
-                                            { newStateExpression =
-                                                Pine.KernelApplicationExpression
-                                                    { functionName = "concat"
-                                                    , argument =
-                                                        Pine.ListExpression
-                                                            [ Pine.ListExpression
-                                                                [ Pine.LiteralExpression
-                                                                    (Pine.valueFromContextExpansionWithName
-                                                                        ( declarationName
-                                                                        , declarationValue
-                                                                        )
-                                                                    )
-                                                                ]
-                                                            , Pine.EnvironmentExpression
-                                                            ]
-                                                    }
-                                            , responseExpression =
-                                                Pine.LiteralExpression (Pine.valueFromString ("Declared " ++ declarationName))
-                                            }
-                                        )
-
-                        Elm.Syntax.Declaration.AliasDeclaration _ ->
-                            Err "Alias declaration as submission is not implemented"
-
-                        Elm.Syntax.Declaration.CustomTypeDeclaration _ ->
-                            Err "Choice type declaration as submission is not implemented"
-
-                        Elm.Syntax.Declaration.PortDeclaration _ ->
-                            Err "Port declaration as submission is not implemented"
-
-                        Elm.Syntax.Declaration.InfixDeclaration _ ->
-                            Err "Infix declaration as submission is not implemented"
-
-                        Elm.Syntax.Declaration.Destructuring _ _ ->
-                            Err "Destructuring as submission is not implemented"
-
-                Ok (ExpressionSubmission elmExpression) ->
-                    case
-                        compileElmSyntaxExpression defaultCompilationStack elmExpression
-                            |> Result.andThen (emitExpressionInDeclarationBlock emitStack Dict.empty)
-                    of
-                        Err error ->
-                            Err ("Failed to compile Elm to Pine expression: " ++ error)
-
-                        Ok pineExpression ->
-                            Ok
-                                (buildExpressionForNewStateAndResponse
-                                    { newStateExpression = Pine.EnvironmentExpression
-                                    , responseExpression = pineExpression
-                                    }
-                                )
-
-
 compilationAndEmitStackFromInteractiveEnvironment :
     { modules : Dict.Dict Elm.Syntax.ModuleName.ModuleName ElmModuleInCompilation
     , otherDeclarations : Dict.Dict String Pine.Value
@@ -4771,186 +4557,6 @@ parseChoiceTypeRecordFromValue value =
 
         Pine.BlobValue _ ->
             Err "Is not a list but a blob"
-
-
-parseInteractiveSubmissionFromString : String -> Result String InteractiveSubmission
-parseInteractiveSubmissionFromString submission =
-    let
-        unified =
-            String.replace "\n" " " submission
-    in
-    if
-        String.contains " = " unified
-            && not (String.startsWith "let " (String.trim unified))
-            && not (String.startsWith "{" (String.trim submission))
-    then
-        parseDeclarationFromString submission
-            |> Result.mapError parserDeadEndsToString
-            |> Result.Extra.join
-            |> Result.map DeclarationSubmission
-
-    else
-        parseExpressionFromString submission
-            |> Result.mapError parserDeadEndsToString
-            |> Result.Extra.join
-            |> Result.map ExpressionSubmission
-
-
-parseExpressionFromString : String -> Result (List Parser.DeadEnd) (Result String Elm.Syntax.Expression.Expression)
-parseExpressionFromString expressionCode =
-    -- https://github.com/stil4m/elm-syntax/issues/34
-    let
-        indentAmount =
-            4
-
-        indentedExpressionCode =
-            expressionCode
-                |> String.lines
-                |> List.map ((++) (String.repeat indentAmount (String.fromChar ' ')))
-                |> String.join "\n"
-
-        declarationTextBeforeExpression =
-            "wrapping_expression_in_function = \n"
-    in
-    parseDeclarationFromString (declarationTextBeforeExpression ++ indentedExpressionCode)
-        |> Result.mapError (List.map (mapLocationForPrefixText declarationTextBeforeExpression >> mapLocationForIndentAmount indentAmount))
-        |> Result.map
-            (Result.andThen
-                (\declaration ->
-                    case declaration of
-                        Elm.Syntax.Declaration.FunctionDeclaration functionDeclaration ->
-                            functionDeclaration
-                                |> .declaration
-                                |> Elm.Syntax.Node.value
-                                |> .expression
-                                |> Elm.Syntax.Node.value
-                                |> Ok
-
-                        _ ->
-                            Err "Failed to extract the wrapping function."
-                )
-            )
-
-
-parseDeclarationFromString : String -> Result (List Parser.DeadEnd) (Result String Elm.Syntax.Declaration.Declaration)
-parseDeclarationFromString declarationCode =
-    -- https://github.com/stil4m/elm-syntax/issues/34
-    let
-        moduleTextBeforeDeclaration =
-            """
-module Main exposing (..)
-
-
-"""
-
-        moduleText =
-            moduleTextBeforeDeclaration ++ declarationCode
-    in
-    parseElmModuleText moduleText
-        |> Result.mapError (List.map (mapLocationForPrefixText moduleTextBeforeDeclaration))
-        |> Result.map
-            (.declarations
-                >> List.map Elm.Syntax.Node.value
-                >> List.head
-                >> Result.fromMaybe "Failed to extract the declaration from the parsed module."
-            )
-
-
-mapLocationForPrefixText : String -> Parser.DeadEnd -> Parser.DeadEnd
-mapLocationForPrefixText prefixText =
-    let
-        prefixLines =
-            String.lines prefixText
-    in
-    mapLocation
-        { row = 1 - List.length prefixLines
-        , col = -(prefixLines |> List.reverse |> List.head |> Maybe.withDefault "" |> String.length)
-        }
-
-
-mapLocationForIndentAmount : Int -> Parser.DeadEnd -> Parser.DeadEnd
-mapLocationForIndentAmount indentAmount =
-    mapLocation { row = 0, col = -indentAmount }
-
-
-mapLocation : { row : Int, col : Int } -> Parser.DeadEnd -> Parser.DeadEnd
-mapLocation offset deadEnd =
-    { deadEnd | row = deadEnd.row + offset.row, col = deadEnd.col + offset.col }
-
-
-parseElmModuleTextToJson : String -> String
-parseElmModuleTextToJson elmModule =
-    let
-        jsonValue =
-            case parseElmModuleText elmModule of
-                Err _ ->
-                    [ ( "Err", "Failed to parse this as module text" |> Json.Encode.string ) ] |> Json.Encode.object
-
-                Ok file ->
-                    [ ( "Ok", file |> Elm.Syntax.File.encode ) ] |> Json.Encode.object
-    in
-    jsonValue |> Json.Encode.encode 0
-
-
-parseElmModuleText : String -> Result (List Parser.DeadEnd) Elm.Syntax.File.File
-parseElmModuleText =
-    Elm.Parser.parse >> Result.map (Elm.Processing.process Elm.Processing.init)
-
-
-parserDeadEndsToString : List Parser.DeadEnd -> String
-parserDeadEndsToString deadEnds =
-    String.concat (List.intersperse "; " (List.map parserDeadEndToString deadEnds))
-
-
-parserDeadEndToString : Parser.DeadEnd -> String
-parserDeadEndToString deadend =
-    parserProblemToString deadend.problem ++ " at row " ++ String.fromInt deadend.row ++ ", col " ++ String.fromInt deadend.col
-
-
-parserProblemToString : Parser.Problem -> String
-parserProblemToString p =
-    case p of
-        Parser.Expecting s ->
-            "expecting '" ++ s ++ "'"
-
-        Parser.ExpectingInt ->
-            "expecting int"
-
-        Parser.ExpectingHex ->
-            "expecting hex"
-
-        Parser.ExpectingOctal ->
-            "expecting octal"
-
-        Parser.ExpectingBinary ->
-            "expecting binary"
-
-        Parser.ExpectingFloat ->
-            "expecting float"
-
-        Parser.ExpectingNumber ->
-            "expecting number"
-
-        Parser.ExpectingVariable ->
-            "expecting variable"
-
-        Parser.ExpectingSymbol s ->
-            "expecting symbol '" ++ s ++ "'"
-
-        Parser.ExpectingKeyword s ->
-            "expecting keyword '" ++ s ++ "'"
-
-        Parser.ExpectingEnd ->
-            "expecting end"
-
-        Parser.UnexpectedChar ->
-            "unexpected char"
-
-        Parser.Problem s ->
-            "problem " ++ s
-
-        Parser.BadRepeat ->
-            "bad repeat"
 
 
 stringStartsWithUpper : String -> Bool

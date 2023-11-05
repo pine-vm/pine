@@ -8,6 +8,7 @@ import Browser
 import Element
 import Element.Font
 import ElmInteractive
+import ElmInteractiveParser
 import Frontend.BrowserApplicationInitWithTime
 import Html
 import Html.Attributes as HA
@@ -49,7 +50,7 @@ init : Time.Posix -> ( State, Cmd Event )
 init time =
     ( { time = time
       , expression = ""
-      , evaluationContext = ElmInteractive.compileEvalContextForElmInteractive ElmInteractive.DefaultContext
+      , evaluationContext = ElmInteractiveParser.compileEvalContextForElmInteractive ElmInteractive.DefaultContext
       , lastUserInputExpressionTime = Time.millisToPosix 0
       , lastEvaluatedExpression = Nothing
       }
@@ -142,7 +143,7 @@ updateLastEvaluatedExpression stateBefore =
                                 Ok { displayText = "" }
 
                               else
-                                ElmInteractive.submissionInInteractiveInPineContext evaluationContext expression
+                                ElmInteractiveParser.submissionInInteractiveInPineContext evaluationContext expression
                                     |> Result.map Tuple.second
                             )
         in

@@ -2,6 +2,7 @@ module ElmInteractiveTests exposing (..)
 
 import BigInt
 import ElmInteractive exposing (InteractiveContext(..))
+import ElmInteractiveParser
 import Expect
 import Json.Encode
 import Pine
@@ -362,7 +363,7 @@ expectationForElmInteractiveScenario :
     -> Expect.Expectation
 expectationForElmInteractiveScenario scenario =
     Expect.equal (Ok scenario.expectedValueElmExpression)
-        (ElmInteractive.submissionInInteractive scenario.context scenario.previousSubmissions scenario.submission
+        (ElmInteractiveParser.submissionInInteractive scenario.context scenario.previousSubmissions scenario.submission
             |> Result.map .displayText
         )
 
