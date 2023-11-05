@@ -1,4 +1,4 @@
-﻿using ElmTime.StateShim.InterfaceToHost;
+using ElmTime.StateShim.InterfaceToHost;
 using Pine;
 using System;
 using System.Collections.Generic;
@@ -8,6 +8,13 @@ using System.Linq;
 using System.Text.Json;
 
 namespace ElmTime.StateShim;
+
+/*
+ * The state shim evolved to mitigate some of the problems resulting from running Elm programs encapsulated inside of a JavaScript engine.
+ * The state shim is a framework for branching Elm programs and equality checks between branches. These facilities support testing if two different events applied on the state of an Elm app lead to the same program state.
+ * More generally, it supports testing if different sequences of events lead to the same program state.
+ * This testing for convergence of internal program state (in addition to comparing the responses (commands + subscriptions)), in turn, supports the automated reduction of events in event-sourcing applications.
+ * */
 
 public class StateShim
 {
