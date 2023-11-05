@@ -1036,6 +1036,7 @@ elmValuesToExposeToGlobalDefault =
     , ( "(-)", [ "Basics" ] )
     , ( "(*)", [ "Basics" ] )
     , ( "(//)", [ "Basics" ] )
+    , ( "(^)", [ "Basics" ] )
     , ( "(|>)", [ "Basics" ] )
     , ( "(<|)", [ "Basics" ] )
     , ( "(>>)", [ "Basics" ] )
@@ -4164,6 +4165,7 @@ operatorPrecendencePriority =
     , ( "*", 7 )
     , ( "//", 7 )
     , ( "/", 7 )
+    , ( "^", 8 )
     , ( "<<", 9 )
     , ( ">>", 9 )
     ]

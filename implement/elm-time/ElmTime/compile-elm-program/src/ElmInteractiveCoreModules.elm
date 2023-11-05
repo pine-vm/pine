@@ -36,6 +36,7 @@ infix left  6 (+)  = add
 infix left  6 (-)  = sub
 infix left  7 (*)  = mul
 infix left  7 (//) = idiv
+infix right 8 (^)  = pow
 infix left  9 (<<) = composeL
 infix right 9 (>>) = composeR
 
@@ -142,6 +143,24 @@ idivHelper dividend divisor quotient =
 
     else
         quotient
+
+
+pow : Int -> Int -> Int
+pow base exponent =
+    if lt exponent 0 then
+        0
+
+    else
+        powHelper base exponent 1
+
+
+powHelper : Int -> Int -> Int -> Int
+powHelper base exponent accumulator =
+    if eq exponent 0 then
+        accumulator
+
+    else
+        powHelper base (sub exponent 1) (mul base accumulator)
 
 
 and : Bool -> Bool -> Bool
