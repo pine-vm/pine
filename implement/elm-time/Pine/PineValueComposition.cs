@@ -104,20 +104,16 @@ public static class PineValueComposition
             })
         );
 
-    public static TreeNodeWithStringPath SortedTreeFromSetOfBlobs<PathT>(
-        IEnumerable<(IReadOnlyList<PathT> path, ReadOnlyMemory<byte> blobContent)> blobsWithPath,
-        Func<PathT, string> mapPathElement) =>
-        SortedTreeFromSetOfBlobs(
-            blobsWithPath.Select(blobWithPath =>
-                (path: (IReadOnlyList<string>)blobWithPath.path.Select(mapPathElement).ToImmutableList(),
-                    blobWithPath.blobContent)));
+    public static TreeNodeWithStringPath SortedTreeFromSetOfBlobsWithStringPath<PathT>(
+        IEnumerable<(PathT path, ReadOnlyMemory<byte> blobContent)> blobsWithPath)
+        where PathT : IReadOnlyList<string>
+        =>
+        SortedTreeFromSetOfBlobs(blobsWithPath);
 
-    public static TreeNodeWithStringPath SortedTreeFromSetOfBlobsWithStringPath(
-        IEnumerable<(IReadOnlyList<string> path, ReadOnlyMemory<byte> blobContent)> blobsWithPath) =>
-        SortedTreeFromSetOfBlobs(blobsWithPath, pathComponent => pathComponent);
-
-    public static TreeNodeWithStringPath SortedTreeFromSetOfBlobsWithStringPath(
-        IReadOnlyDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> blobsWithPath) =>
+    public static TreeNodeWithStringPath SortedTreeFromSetOfBlobsWithStringPath<PathT>(
+        IReadOnlyDictionary<PathT, ReadOnlyMemory<byte>> blobsWithPath)
+        where PathT : IReadOnlyList<string>
+        =>
         SortedTreeFromSetOfBlobsWithStringPath(
             blobsWithPath.Select(pathAndBlobContent =>
                 (path: pathAndBlobContent.Key, blobContent: pathAndBlobContent.Value)));
@@ -125,8 +121,10 @@ public static class PineValueComposition
     public static TreeNodeWithStringPath SortedTreeFromTree(
         TreeNodeWithStringPath tree) => TreeNodeWithStringPath.Sort(tree);
 
-    public static TreeNodeWithStringPath SortedTreeFromSetOfBlobs(
-        IEnumerable<(IReadOnlyList<string> path, ReadOnlyMemory<byte> blobContent)> blobsWithPath) =>
+    public static TreeNodeWithStringPath SortedTreeFromSetOfBlobs<PathT>(
+        IEnumerable<(PathT path, ReadOnlyMemory<byte> blobContent)> blobsWithPath)
+        where PathT : IReadOnlyList<string>
+        =>
         blobsWithPath.Aggregate(
             seed: TreeNodeWithStringPath.EmptyTree,
             func: (tree, blobPathAndContent) =>
