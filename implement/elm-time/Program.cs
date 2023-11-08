@@ -1131,7 +1131,8 @@ public class Program
                         ElmInteractive.TestElmInteractive.TestElmInteractiveScenarios(
                             parsedScenarios,
                             interactiveConfig,
-                            console: console);
+                            console: console,
+                            asyncLogDelegate: null);
                     });
                 });
 

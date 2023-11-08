@@ -4,6 +4,7 @@ using System;
 using System.Collections.Immutable;
 using System.IO;
 using System.Linq;
+using System.Text.Json;
 
 namespace TestElmTime;
 
@@ -74,8 +75,11 @@ public class TestElmInteractive
         var scenariosResults =
             ElmTime.ElmInteractive.TestElmInteractive.TestElmInteractiveScenarios(
                 parsedScenarios.NamedDistinctScenarios,
-                namedScenario => namedScenario.Value,
-                newInteractiveSessionFromAppCode);
+                namedScenario => (namedScenario.Key, namedScenario.Value),
+                newInteractiveSessionFromAppCode,
+                asyncLogDelegate:
+                logEntry =>
+                console.WriteLine(JsonSerializer.Serialize(new { time = DateTimeOffset.UtcNow, logEntry })));
 
         var allSteps =
             scenariosResults

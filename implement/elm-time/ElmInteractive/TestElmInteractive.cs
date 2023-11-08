@@ -1,4 +1,5 @@
 using Pine;
+using Pine.Json;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
@@ -9,6 +10,37 @@ namespace ElmTime.ElmInteractive;
 
 public class TestElmInteractive
 {
+
+    [System.Text.Json.Serialization.JsonConverter(typeof(JsonConverterForChoiceType))]
+    public abstract record TestInteractiveScenariosLogEntry
+    {
+        public sealed record ScenarioLogEntry(ScenarioLogEntryStruct Struct)
+            : TestInteractiveScenariosLogEntry;
+
+        public record ScenarioLogEntryStruct(
+            string ScenarioName,
+            TestInteractiveScenarioLogEntry Entry);
+    }
+
+    [System.Text.Json.Serialization.JsonConverter(typeof(JsonConverterForChoiceType))]
+    public abstract record TestInteractiveScenarioLogEntry
+    {
+        public sealed record SubmissionStart(SubmissionStartStruct Struct)
+            : TestInteractiveScenarioLogEntry;
+
+        public sealed record SubmissionStartStruct(
+            string StepName,
+            string Submission)
+            : TestInteractiveScenarioLogEntry;
+
+        public sealed record SubmissionResponse(SubmissionResponseStruct Struct)
+            : TestInteractiveScenarioLogEntry;
+
+        public sealed record SubmissionResponseStruct(
+            Result<string, IInteractiveSession.SubmissionResponse> Result)
+            : TestInteractiveScenarioLogEntry;
+    }
+
     public record ParsedScenarios(
         TreeNodeWithStringPath ScenariosTree,
         string ScenariosTreeCompositionHash,
@@ -73,15 +105,17 @@ public class TestElmInteractive
     public static ImmutableDictionary<string, InteractiveScenarioTestReport> TestElmInteractiveScenarios(
         ParsedScenarios scenarios,
         IInteractiveSessionConfig interactiveConfig,
-        IConsole console)
+        IConsole console,
+        Action<TestInteractiveScenariosLogEntry>? asyncLogDelegate)
     {
         var exceptLoadingStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
         var scenariosResults =
             TestElmInteractiveScenarios(
                 scenarios.NamedDistinctScenarios,
-                namedScenario => namedScenario.Value,
-                interactiveConfig.InteractiveSessionFromAppCode);
+                namedScenario => (namedScenario.Key, namedScenario.Value),
+                interactiveConfig.InteractiveSessionFromAppCode,
+                asyncLogDelegate: asyncLogDelegate);
 
         var allSteps =
             scenariosResults
@@ -151,20 +185,36 @@ public class TestElmInteractive
 
     public static ImmutableDictionary<TContainer, InteractiveScenarioTestReport> TestElmInteractiveScenarios<TContainer>(
         IReadOnlyCollection<TContainer> scenarioContainers,
-        Func<TContainer, Scenario> getScenario,
-        Func<TreeNodeWithStringPath?, IInteractiveSession> interactiveSessionFromAppCode) where TContainer : notnull =>
+        Func<TContainer, (string, Scenario)> getScenario,
+        Func<TreeNodeWithStringPath?, IInteractiveSession> interactiveSessionFromAppCode,
+        Action<TestInteractiveScenariosLogEntry>? asyncLogDelegate)
+        where TContainer : notnull =>
         scenarioContainers
         .AsParallel()
         .WithDegreeOfParallelism(3)
         .Select(scenarioContainer =>
-        (scenarioContainer, testReport: TestElmInteractiveScenario(getScenario(scenarioContainer), interactiveSessionFromAppCode)))
+        {
+            var (scenarioName, scenario) = getScenario(scenarioContainer);
+
+            return
+            (scenarioContainer,
+            testReport: TestElmInteractiveScenario(
+                scenario,
+                interactiveSessionFromAppCode,
+                asyncLogDelegate: scenarioEntry =>
+                asyncLogDelegate?.Invoke(new TestInteractiveScenariosLogEntry.ScenarioLogEntry(
+                    new TestInteractiveScenariosLogEntry.ScenarioLogEntryStruct(
+                        ScenarioName: scenarioName,
+                        scenarioEntry)))));
+        })
         .ToImmutableDictionary(
             s => s.scenarioContainer,
             elementSelector: s => s.testReport);
 
     public static InteractiveScenarioTestReport TestElmInteractiveScenario(
         Scenario parsedScenario,
-        Func<TreeNodeWithStringPath?, IInteractiveSession> interactiveSessionFromAppCode)
+        Func<TreeNodeWithStringPath?, IInteractiveSession> interactiveSessionFromAppCode,
+        Action<TestInteractiveScenarioLogEntry>? asyncLogDelegate)
     {
         var totalStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
@@ -178,14 +228,27 @@ public class TestElmInteractive
                 {
                     try
                     {
-                        var submissionResult =
-                        interactiveSession.Submit(sessionStep.step.Submission)
+                        asyncLogDelegate?.Invoke(
+                            new TestInteractiveScenarioLogEntry.SubmissionStart(
+                                new TestInteractiveScenarioLogEntry.SubmissionStartStruct(
+                                    StepName: sessionStep.stepName,
+                                    Submission: sessionStep.step.Submission)));
+
+                        var submissionResult = interactiveSession.Submit(sessionStep.step.Submission);
+
+                        asyncLogDelegate?.Invoke(
+                            new TestInteractiveScenarioLogEntry.SubmissionResponse(
+                                new TestInteractiveScenarioLogEntry.SubmissionResponseStruct(
+                                    Result: submissionResult)));
+
+                        var submissionResultMappedErr =
+                        submissionResult
                         .MapError(err => new InteractiveScenarioTestStepFailure(
                             submission: sessionStep.step.Submission,
                             errorAsText: "Submission result has error: " + err));
 
                         return
-                        submissionResult
+                        submissionResultMappedErr
                         .AndThen(submissionResultOk =>
                         {
                             if (sessionStep.step.ExpectedResponse is { } expectedResponse)
@@ -205,7 +268,7 @@ public class TestElmInteractive
                                 }
                             }
 
-                            return submissionResult;
+                            return submissionResultMappedErr;
                         });
                     }
                     catch (Exception e)
