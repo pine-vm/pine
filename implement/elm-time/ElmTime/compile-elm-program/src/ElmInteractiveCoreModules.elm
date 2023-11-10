@@ -452,6 +452,21 @@ map f maybe =
             Nothing
 
 
+map2 : (a -> b -> value) -> Maybe a -> Maybe b -> Maybe value
+map2 func ma mb =
+    case ma of
+        Nothing ->
+            Nothing
+
+        Just a ->
+            case mb of
+                Nothing ->
+                    Nothing
+
+                Just b ->
+                    Just (func a b)
+
+
 andThen : (a -> Maybe b) -> Maybe a -> Maybe b
 andThen callback maybeValue =
     case maybeValue of
