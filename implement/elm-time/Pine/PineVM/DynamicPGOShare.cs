@@ -9,25 +9,35 @@ using System.Threading.Tasks;
 namespace Pine.PineVM;
 
 /// <summary>
-/// Combines the observations from multiple VM instances to build a profile of the most frequently used expressions.
+/// The <see cref="DynamicPGOShare"/> combines profiling and compilation functionality and offers automatic optimization of the evaluation of Pine expressions.
+/// It combines the observations from multiple VM instances to build a profile of the most frequently used expressions.
+/// Observing new frequently used expressions starts asynchronous compilation of these expressions.
 /// 
 /// For information about PGO, see https://devblogs.microsoft.com/dotnet/conversation-about-pgo/
 /// </summary>
 public class DynamicPGOShare : IDisposable
 {
-    private readonly ConcurrentQueue<IReadOnlyDictionary<Expression, ExpressionUsageProfile>> submissionsProfiles = new();
+    private record SubmissionProfileMutableContainer(
+        ConcurrentQueue<IReadOnlyDictionary<Expression, ExpressionUsageProfile>> Iterations);
 
-    private readonly ConcurrentQueue<Compilation> compilations = new();
+    private readonly ConcurrentQueue<SubmissionProfileMutableContainer> submissionsProfileContainers = new();
+
+    private readonly ConcurrentQueue<Compilation> completedCompilations = new();
 
     private readonly Task dynamicCompilationTask;
 
     private readonly CancellationTokenSource disposedCancellationTokenSource = new();
 
-    public int SubmissionsProfilesCount => submissionsProfiles.Count;
+    IEnumerable<IReadOnlyDictionary<Expression, ExpressionUsageProfile>> SubmissionsProfiles =>
+        submissionsProfileContainers
+        .SelectMany(container => container.Iterations);
 
-    public int CompilationsCount => compilations.Count;
+    public int SubmissionsProfilesCount => SubmissionsProfiles.Count();
 
-    public IReadOnlyList<Compilation> Compilations => compilations.ToImmutableList();
+    public int CompilationsCount => completedCompilations.Count;
+
+    public IReadOnlyList<Compilation> Compilations =>
+        completedCompilations.ToImmutableList();
 
     public DynamicPGOShare()
     {
@@ -48,17 +58,100 @@ public class DynamicPGOShare : IDisposable
     {
         return new RedirectingVM(
             (expression, environment) =>
-            EvaluateExpression(expression, environment, decodeExpressionOverrides, overrideEvaluateExpression));
+            EvaluateExpressionRestartingAfterCompilation(
+                expression,
+                environment,
+                initialProfileAggregationDelay: TimeSpan.FromSeconds(8),
+                decodeExpressionOverrides,
+                overrideEvaluateExpression));
     }
 
-    public Result<string, PineValue> EvaluateExpression(
+    record EvaluateExpressionProfilingTask(
+        ProfilingPineVM ProfilingPineVM,
+        CancellationTokenSource EvalTaskCancellationTokenSource,
+        Task<Result<string, PineValue>> EvalTask);
+
+    public Result<string, PineValue> EvaluateExpressionRestartingAfterCompilation(
         Expression expression,
         PineValue environment,
+        TimeSpan initialProfileAggregationDelay,
+        IReadOnlyDictionary<PineValue, Func<PineVM.EvalExprDelegate, PineValue, Result<string, PineValue>>>? decodeExpressionOverrides = null,
+        PineVM.OverrideEvalExprDelegate? overrideEvaluateExpression = null)
+    {
+        var profileContainer =
+            new SubmissionProfileMutableContainer(
+                Iterations: new ConcurrentQueue<IReadOnlyDictionary<Expression, ExpressionUsageProfile>>());
+
+        submissionsProfileContainers.Enqueue(profileContainer);
+
+        for (var iterationIndex = 0; true; ++iterationIndex)
+        {
+            var profileAggregationDelay = initialProfileAggregationDelay * Math.Pow(1.5, iterationIndex);
+
+            var profilingEvalTask = StartEvaluateExpressionTaskBasedOnLastCompilation(
+                expression,
+                environment: environment,
+                cancellationTokenSource: new CancellationTokenSource(),
+                decodeExpressionOverrides: decodeExpressionOverrides,
+                overrideEvaluateExpression: overrideEvaluateExpression);
+
+            profilingEvalTask.EvalTask.Wait(profileAggregationDelay, disposedCancellationTokenSource.Token);
+
+            Task.Run(() =>
+            {
+                var usageProfiles = ProfilingPineVM.UsageProfileDictionaryFromListOfUsages(
+                    profilingEvalTask.ProfilingPineVM.ExpressionEvaluations);
+
+                profileContainer.Iterations.Enqueue(usageProfiles);
+            });
+
+            if (profilingEvalTask.EvalTask.IsCompleted)
+            {
+                return profilingEvalTask.EvalTask.Result;
+            }
+
+            var waitForNewCompilationTask = WaitForNextCompletedCompilation(disposedCancellationTokenSource.Token);
+
+            Task.WaitAny(
+                [profilingEvalTask.EvalTask, waitForNewCompilationTask],
+                profileAggregationDelay);
+
+            if (profilingEvalTask.EvalTask.IsCompletedSuccessfully)
+            {
+                return profilingEvalTask.EvalTask.Result;
+            }
+
+            if (profilingEvalTask.EvalTask.Exception is { } evalTaskException)
+            {
+                throw new Exception("Forwarding exception from eval task", evalTaskException);
+            }
+
+            profilingEvalTask.EvalTaskCancellationTokenSource.Cancel();
+        }
+    }
+
+    private Task WaitForNextCompletedCompilation(CancellationToken cancellationToken) =>
+        Task.Run(() =>
+        {
+            var lastCompletedCompilation = completedCompilations.LastOrDefault();
+
+            while (completedCompilations.LastOrDefault() == lastCompletedCompilation)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+
+                Task.Delay(TimeSpan.FromSeconds(1), cancellationToken).Wait();
+            }
+        }, cancellationToken);
+
+    private EvaluateExpressionProfilingTask StartEvaluateExpressionTaskBasedOnLastCompilation(
+        Expression expression,
+        PineValue environment,
+        CancellationTokenSource cancellationTokenSource,
         IReadOnlyDictionary<PineValue, Func<PineVM.EvalExprDelegate, PineValue, Result<string, PineValue>>>? decodeExpressionOverrides = null,
         PineVM.OverrideEvalExprDelegate? overrideEvaluateExpression = null)
     {
         var compiledDecodeExpressionOverrides =
-            compilations
+            completedCompilations
             .Reverse()
             .SelectWhereNotNull(compilation => compilation.DictionaryResult.WithDefault(null))
             .FirstOrDefault();
@@ -97,39 +190,53 @@ public class DynamicPGOShare : IDisposable
                 }
             };
 
+        var newCancellationTokenSource = new CancellationTokenSource();
+
+        var combinedCancellationTokenSource =
+            CancellationTokenSource.CreateLinkedTokenSource(
+                cancellationTokenSource.Token,
+                disposedCancellationTokenSource.Token,
+                newCancellationTokenSource.Token);
+
+        PineVM.EvalExprDelegate OverrideEvalExprDelegate(PineVM.EvalExprDelegate evalExprDelegate)
+        {
+            return (Expression expression, PineValue environment) =>
+            {
+                combinedCancellationTokenSource.Token.ThrowIfCancellationRequested();
+
+                return
+                (overrideEvaluateExpression?.Invoke(evalExprDelegate) ?? evalExprDelegate).Invoke(expression, environment);
+            };
+        }
+
         var profilingVM = ProfilingPineVM.BuildProfilingVM(
             overrideDecodeExpression: overrideDecodeExpression,
-            overrideEvaluateExpression: overrideEvaluateExpression);
+            overrideEvaluateExpression: OverrideEvalExprDelegate);
 
-        var evalResult = profilingVM.PineVM.EvaluateExpression(expression, environment);
+        var evalTask =
+            Task.Run(() => profilingVM.PineVM.EvaluateExpression(expression, environment));
 
-        Task.Run(() =>
-        {
-            var aggregateProfilesStopwatch = System.Diagnostics.Stopwatch.StartNew();
-
-            var usageProfiles = ProfilingPineVM.UsageProfileDictionaryFromListOfUsages(profilingVM.ExpressionEvaluations);
-
-            submissionsProfiles.Enqueue(usageProfiles);
-        });
-
-        return evalResult;
+        return new EvaluateExpressionProfilingTask(
+            profilingVM,
+            newCancellationTokenSource,
+            evalTask);
     }
 
     private void CompileIfNewProfiles()
     {
-        var inputProfiles = submissionsProfiles.ToImmutableList();
+        var inputProfiles = SubmissionsProfiles.ToImmutableList();
 
-        if (compilations.LastOrDefault()?.InputProfiles.Count == inputProfiles.Count)
+        if (Compilations.LastOrDefault()?.InputProfiles.Count == inputProfiles.Count)
             return;
 
         var maybeNewCompilation =
             Compile(
                 inputProfiles,
                 limitNumber: 100,
-                previousCompilation: compilations.LastOrDefault());
+                previousCompilation: Compilations.LastOrDefault());
 
         foreach (var compilation in maybeNewCompilation.Map(ImmutableList.Create).WithDefault([]))
-            compilations.Enqueue(compilation);
+            completedCompilations.Enqueue(compilation);
     }
 
     private static Maybe<Compilation> Compile(
