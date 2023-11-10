@@ -621,6 +621,71 @@ drop n list =
     Pine_kernel.skip [ n, list ]
 
 
+sort : List comparable -> List comparable
+sort list =
+    sortWith Basics.compare list
+
+
+sortBy : (a -> comparable) -> List a -> List a
+sortBy toComparable list =
+    let
+        compareFunc x y =
+            Basics.compare (toComparable x) (toComparable y)
+    in
+    sortWith compareFunc list
+
+
+sortWith : (a -> a -> Order) -> List a -> List a
+sortWith compareFunc list =
+    case list of
+        [] ->
+            list
+
+        [ _ ] ->
+            list
+
+        _ ->
+            let
+                ( left, right ) =
+                    sortWithSplit list
+            in
+            sortWithMerge (sortWith compareFunc left) (sortWith compareFunc right) compareFunc
+
+
+sortWithSplit : List a -> ( List a, List a )
+sortWithSplit list =
+    case list of
+        [] ->
+            ( [], [] )
+
+        [ x ] ->
+            ( [ x ], [] )
+
+        x :: y :: rest ->
+            let
+                ( left, right ) =
+                    sortWithSplit rest
+            in
+            ( cons x left, cons y right )
+
+
+sortWithMerge : List a -> List a -> (a -> a -> Order) -> List a
+sortWithMerge left right compareFunc =
+    case ( left, right ) of
+        ( [], _ ) ->
+            right
+
+        ( _, [] ) ->
+            left
+
+        ( x :: xs, y :: ys ) ->
+            case compareFunc x y of
+                LT ->
+                    cons x (sortWithMerge xs right compareFunc)
+
+                _ ->
+                    cons y (sortWithMerge left ys compareFunc)
+
 """
     , """
 module Char exposing (..)
