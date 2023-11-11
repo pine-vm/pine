@@ -7,7 +7,7 @@ using System.Linq;
 namespace TestElmTime;
 
 [TestClass]
-public class TestLoadComposition
+public class LoadCompositionTests
 {
     [TestMethod]
     public void Composition_from_link_in_elm_editor()

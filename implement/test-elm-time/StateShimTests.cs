@@ -17,7 +17,7 @@ public class StateShimTests
     public void Test_state_shim_with_calculator_app()
     {
         using var testSetup = WebHostAdminInterfaceTestSetup.Setup(
-            deployAppAndInitElmState: TestElmWebAppHttpServer.CalculatorWebApp);
+            deployAppAndInitElmState: ElmWebServiceAppTests.CalculatorWebApp);
 
         var fileStore = new FileStoreFromSystemIOFile(testSetup.ProcessStoreDirectory);
 
@@ -94,7 +94,7 @@ public class StateShimTests
     public void Test_state_shim_are_states_equal_with_calculator_app()
     {
         var deployment =
-            PineValueComposition.ParseAsTreeWithStringPath(TestElmWebAppHttpServer.CalculatorWebApp)
+            PineValueComposition.ParseAsTreeWithStringPath(ElmWebServiceAppTests.CalculatorWebApp)
             .Extract(err => throw new Exception(err.ToString()));
 
         var preparedProcess =
@@ -184,9 +184,7 @@ public class StateShimTests
     public void Test_state_shim_estimate_serialized_state_length()
     {
         var webAppProgram =
-            TestSetup.AppConfigComponentFromFiles(
-                TestSetup.GetElmAppFromDirectoryPath(
-                    ImmutableList.Create(".", "..", "..", "..", "..", "example-apps", "test-database-scale")));
+            ExampleAppsTests.ExampleAppValueFromExampleName("test-database-scale");
 
         var deployment =
             PineValueComposition.ParseAsTreeWithStringPath(webAppProgram)

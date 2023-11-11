@@ -6,7 +6,7 @@ using System;
 namespace TestElmTime;
 
 [TestClass]
-public class TestPineVM
+public class PineVMTests
 {
     [TestMethod]
     public void Evaluate_expression()

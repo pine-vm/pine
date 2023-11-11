@@ -11,7 +11,7 @@ using System.Text.Json;
 namespace TestElmTime
 {
     [TestClass]
-    public class TestElmEditor
+    public class ElmEditorTests
     {
         private static string NormalizeStringTestingElmFormat(string originalString) =>
             originalString.Trim().Replace("\n\r", "\n").Replace("\r\n", "\n");
@@ -20,9 +20,7 @@ namespace TestElmTime
         public void Elm_editor_backend_support_format_elm_module_text()
         {
             var webAppSource =
-                TestSetup.AppConfigComponentFromFiles(
-                    TestSetup.GetElmAppFromDirectoryPath(
-                        ImmutableList.Create(".", "..", "..", "..", "..", "example-apps", "elm-editor")));
+                ExampleAppsTests.ExampleAppValueFromExampleName("elm-editor");
 
             var elmModuleTextBeforeFormatting = @"
 module Common exposing (..)

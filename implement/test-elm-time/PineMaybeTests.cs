@@ -5,7 +5,7 @@ using System.Text.Json;
 namespace TestElmTime;
 
 [TestClass]
-public class TestPineMaybe
+public class PineMaybeTests
 {
     [TestMethod]
     public void Maybe_JSON_coding_roundtrip_string()

@@ -6,7 +6,7 @@ using System.Collections.Immutable;
 namespace TestElmTime;
 
 [TestClass]
-public class TestProcessStoreSupportingMigrations
+public class ProcessStoreSupportingMigrationsTests
 {
     [TestMethod]
     public void Test_ProjectFileStoreReaderForAppendedCompositionLogEvent()

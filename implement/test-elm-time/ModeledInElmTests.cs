@@ -11,7 +11,7 @@ using System.Text;
 namespace TestElmTime;
 
 [TestClass]
-public class TestModeledInElm
+public class ModeledInElmTests
 {
     private static IImmutableList<string> PathToDirectoryWithTestsModeledInElm =>
         ImmutableList.Create(".", "..", "..", "..", "modeled-in-elm");

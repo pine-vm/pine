@@ -8,7 +8,7 @@ using System.Linq;
 namespace TestElmTime;
 
 [TestClass]
-public class TestComposition
+public class PineValueCompositionTests
 {
     [TestMethod]
     public void Composition_from_tree_with_string_path()

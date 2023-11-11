@@ -5,7 +5,7 @@ using System.Text.Json;
 namespace TestElmTime;
 
 [TestClass]
-public class TestPineResult
+public class PineResultTests
 {
     [TestMethod]
     public void Result_JSON_coding_roundtrip_string_int()

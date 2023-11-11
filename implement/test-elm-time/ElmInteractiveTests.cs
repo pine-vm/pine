@@ -9,7 +9,7 @@ using System.Text.Json;
 namespace TestElmTime;
 
 [TestClass]
-public class TestElmInteractive
+public class ElmInteractiveTests
 {
     private static string PathToCoreScenariosDirectory => @"./../../../../test-and-train/elm-interactive-scenarios-core";
 

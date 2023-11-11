@@ -46,7 +46,7 @@ public class WebServiceTests
         Assert.IsTrue(2 < eventsAndExpectedResponsesBatches.Count, "More than two batches of events to test with.");
 
         using var testSetup = WebHostAdminInterfaceTestSetup.Setup(
-            deployAppAndInitElmState: TestElmWebAppHttpServer.CounterWebApp,
+            deployAppAndInitElmState: ElmWebServiceAppTests.CounterWebApp,
             persistentProcessHostDateTime: () => persistentProcessHostDateTime);
 
         IEnumerable<string> ReadStoredReductionFileRelativePaths()
@@ -356,7 +356,7 @@ public class WebServiceTests
                 new StringContent(state, System.Text.Encoding.UTF8));
 
         using var testSetup = WebHostAdminInterfaceTestSetup.Setup(
-            deployAppAndInitElmState: TestElmWebAppHttpServer.StringBuilderWebApp,
+            deployAppAndInitElmState: ElmWebServiceAppTests.StringBuilderWebApp,
             adminPassword: adminPassword);
 
         using (var server = testSetup.StartWebHost())
@@ -425,7 +425,7 @@ public class WebServiceTests
         // This name needs to be consistent with the code in Elm app CrossPropagateHttpHeadersToAndFromBody.
         const string appSpecificHttpResponseHeaderName = "response-header-name";
 
-        using var testSetup = WebHostAdminInterfaceTestSetup.Setup(deployAppAndInitElmState: TestElmWebAppHttpServer.CrossPropagateHttpHeadersToAndFromBody);
+        using var testSetup = WebHostAdminInterfaceTestSetup.Setup(deployAppAndInitElmState: ElmWebServiceAppTests.CrossPropagateHttpHeadersToAndFromBody);
         using var server = testSetup.StartWebHost();
         using var publicAppClient = testSetup.BuildPublicAppHttpClient();
 
@@ -487,7 +487,7 @@ public class WebServiceTests
 
         echoServer.Start();
 
-        using var testSetup = WebHostAdminInterfaceTestSetup.Setup(deployAppAndInitElmState: TestElmWebAppHttpServer.HttpProxyWebApp);
+        using var testSetup = WebHostAdminInterfaceTestSetup.Setup(deployAppAndInitElmState: ElmWebServiceAppTests.HttpProxyWebApp);
 
         using var server = testSetup.StartWebHost();
 
@@ -571,7 +571,7 @@ public class WebServiceTests
     [TestMethod]
     public void Web_host_sends_HTTP_response_only_after_write_to_history()
     {
-        using var testSetup = WebHostAdminInterfaceTestSetup.Setup(deployAppAndInitElmState: TestElmWebAppHttpServer.CounterWebApp);
+        using var testSetup = WebHostAdminInterfaceTestSetup.Setup(deployAppAndInitElmState: ElmWebServiceAppTests.CounterWebApp);
 
         async System.Threading.Tasks.Task<HttpResponseMessage> postStringContentToPublicApp(string postContent)
         {
@@ -834,7 +834,7 @@ public class WebServiceTests
     [TestMethod]
     public void Web_host_supports_deploy_app_config_and_migrate_elm_app_state()
     {
-        var initialDeployment = TestElmWebAppHttpServer.CounterWebApp;
+        var initialDeployment = ElmWebServiceAppTests.CounterWebApp;
 
         var migrateAndSecondDeployment =
             TestSetup.GetElmAppFromExampleName("migrate-from-int-to-string-builder-web-app");
@@ -918,7 +918,7 @@ public class WebServiceTests
         var secondBatchOfCounterAppEvents = eventsAndExpectedResponsesBatches.ElementAt(1);
 
         using var testSetup = WebHostAdminInterfaceTestSetup.Setup(
-            deployAppAndInitElmState: TestElmWebAppHttpServer.CounterWebApp);
+            deployAppAndInitElmState: ElmWebServiceAppTests.CounterWebApp);
 
         using var server = testSetup.StartWebHost();
 
@@ -1007,7 +1007,7 @@ public class WebServiceTests
 
         using (var testSetup = WebHostAdminInterfaceTestSetup.Setup(
             adminPassword: originalHostAdminPassword,
-            deployAppAndInitElmState: TestElmWebAppHttpServer.CounterWebApp))
+            deployAppAndInitElmState: ElmWebServiceAppTests.CounterWebApp))
         {
             using var server = testSetup.StartWebHost();
 
@@ -1103,7 +1103,7 @@ public class WebServiceTests
 
         using var testSetup = WebHostAdminInterfaceTestSetup.Setup(
             persistentProcessHostDateTime: () => persistentProcessHostDateTime,
-            deployAppAndInitElmState: TestElmWebAppHttpServer.CounterWebApp);
+            deployAppAndInitElmState: ElmWebServiceAppTests.CounterWebApp);
 
         int countFilesInProcessFileStore() =>
             testSetup.BuildProcessStoreFileStoreReaderInFileDirectory()
@@ -1192,7 +1192,7 @@ public class WebServiceTests
 
         using var testSetup = WebHostAdminInterfaceTestSetup.Setup(
             persistentProcessHostDateTime: () => persistentProcessHostDateTime,
-            deployAppAndInitElmState: TestElmWebAppHttpServer.CounterWebApp);
+            deployAppAndInitElmState: ElmWebServiceAppTests.CounterWebApp);
 
         using (var server = testSetup.StartWebHost())
         {
@@ -1281,7 +1281,7 @@ public class WebServiceTests
         using (var originalTestSetup = WebHostAdminInterfaceTestSetup.Setup(
             fileStore: fileStore,
             persistentProcessHostDateTime: () => persistentProcessHostDateTime,
-            deployAppAndInitElmState: TestElmWebAppHttpServer.CounterWebApp))
+            deployAppAndInitElmState: ElmWebServiceAppTests.CounterWebApp))
         {
             using var server = originalTestSetup.StartWebHost();
 

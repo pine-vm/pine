@@ -6,7 +6,7 @@ using System.Linq;
 namespace TestElmTime;
 
 [TestClass]
-public class TestElmWebAppHttpServer
+public class ElmWebServiceAppTests
 {
     public static PineValue CounterWebApp =>
         TestSetup.AppConfigComponentFromFiles(TestSetup.CounterElmWebApp);
@@ -30,13 +30,13 @@ public class TestElmWebAppHttpServer
             TestSetup.CounterProcessTestEventsAndExpectedResponses(
                 new (int addition, int expectedResponse)[]
                 {
-                        (0, 0),
-                        (1, 1),
-                        (3, 4),
-                        (5, 9),
-                        (7, 16),
-                        (11, 27),
-                        (-13, 14),
+                    (0, 0),
+                    (1, 1),
+                    (3, 4),
+                    (5, 9),
+                    (7, 16),
+                    (11, 27),
+                    (-13, 14),
                 }).ToList();
 
         var eventsAndExpectedResponsesBatches = eventsAndExpectedResponses.Batch(3).ToList();

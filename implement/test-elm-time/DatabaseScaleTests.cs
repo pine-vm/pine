@@ -11,16 +11,13 @@ using System.Threading.Tasks;
 namespace TestElmTime;
 
 [TestClass]
-public class TestDatabaseScale
+public class DatabaseScaleTests
 {
     [TestMethod]
     public async Task Test_database_scale()
     {
-        var sourceFiles =
-            TestSetup.GetElmAppFromDirectoryPath(
-                ImmutableList.Create(".", "..", "..", "..", "..", "example-apps", "test-database-scale"));
-
-        var webAppSource = TestSetup.AppConfigComponentFromFiles(sourceFiles);
+        var webAppSource =
+            ExampleAppsTests.ExampleAppValueFromExampleName("test-database-scale");
 
         using var testSetup = WebHostAdminInterfaceTestSetup.Setup(deployAppAndInitElmState: webAppSource);
         using var server = testSetup.StartWebHost();

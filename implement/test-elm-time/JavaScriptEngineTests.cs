@@ -4,7 +4,7 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 namespace TestElmTime;
 
 [TestClass]
-public class JavaScriptEngineTest
+public class JavaScriptEngineTests
 {
     [TestMethod]
     public void Evaluate_in_JavaScriptEngine()

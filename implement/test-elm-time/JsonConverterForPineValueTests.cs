@@ -7,7 +7,7 @@ using System.Text.Json;
 namespace TestElmTime;
 
 [TestClass]
-public class TestJsonConverterForPineValue
+public class JsonConverterForPineValueTests
 {
     [TestMethod]
     public void JSON_serialize_pine_value_roundtrips()

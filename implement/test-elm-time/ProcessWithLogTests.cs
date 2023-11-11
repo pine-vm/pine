@@ -6,7 +6,7 @@ using System.Linq;
 namespace TestElmTime;
 
 [TestClass]
-public class TestProcessWithLog
+public class ProcessWithLogTests
 {
     [TestMethod]
     public void Process_with_log_build_and_unpack()

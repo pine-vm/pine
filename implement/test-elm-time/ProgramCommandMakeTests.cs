@@ -10,7 +10,7 @@ using System.Text;
 namespace TestElmTime;
 
 [TestClass]
-public class TestCommandMake
+public class ProgramCommandMakeTests
 {
     [TestMethod]
     public void TestCommandMake_with_blobMain()

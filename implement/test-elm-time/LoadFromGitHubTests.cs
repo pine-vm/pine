@@ -9,10 +9,10 @@ using System.Security.Cryptography;
 namespace TestElmTime;
 
 [TestClass]
-public class TestLoadFromGithub
+public class LoadFromGitHubTests
 {
     [TestMethod]
-    public void Test_LoadFromGithub_Tree()
+    public void Test_LoadFromGitHub_Tree()
     {
         var expectedFilesNamesAndHashes = new[]
         {
@@ -53,7 +53,7 @@ public class TestLoadFromGithub
     }
 
     [TestMethod]
-    public void Test_LoadFromGithub_Tree_at_root()
+    public void Test_LoadFromGitHub_Tree_at_root()
     {
         var expectedFilesNamesAndHashes = new[]
         {
@@ -90,7 +90,7 @@ public class TestLoadFromGithub
     }
 
     [TestMethod]
-    public void Test_LoadFromGithub_Object()
+    public void Test_LoadFromGitHub_Object()
     {
         var expectedFileHash = "e80817b2aa00350dff8f00207083b3b21b0726166dd695475be512ce86507238";
 
@@ -112,7 +112,7 @@ public class TestLoadFromGithub
     }
 
     [TestMethod]
-    public void LoadFromGithub_Commits_Contents_And_Lineage()
+    public void LoadFromGitHub_Commits_Contents_And_Lineage()
     {
         var loadFromGithubResult =
             Pine.LoadFromGitHubOrGitLab.LoadFromUrl(
@@ -140,7 +140,7 @@ public class TestLoadFromGithub
 
 
     [TestMethod]
-    public void LoadFromGithub_URL_points_only_to_repository()
+    public void LoadFromGitHub_URL_points_only_to_repository()
     {
         var loadFromGithubResult =
             Pine.LoadFromGitHubOrGitLab.LoadFromUrl(

@@ -5,7 +5,7 @@ using Pine.PineVM;
 namespace TestElmTime;
 
 [TestClass]
-public class TestPineVMEncodeExpression
+public class PineVMEncodeExpressionTests
 {
     [TestMethod]
     public void TestExpressionEncodeDecodeSymmetry()

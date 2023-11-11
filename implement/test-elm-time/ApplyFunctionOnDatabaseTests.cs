@@ -12,7 +12,7 @@ using System.Threading.Tasks;
 namespace TestElmTime;
 
 [TestClass]
-public class TestApplyFunctionOnDatabase
+public class ApplyFunctionOnDatabaseTests
 {
     [TestMethod]
     public async Task Apply_exposed_function_via_admin_interface_adding_to_counter_web_app()
@@ -20,7 +20,7 @@ public class TestApplyFunctionOnDatabase
         var adminPassword = "test";
 
         using var testSetup = WebHostAdminInterfaceTestSetup.Setup(
-            deployAppAndInitElmState: TestElmWebAppHttpServer.CounterWebApp,
+            deployAppAndInitElmState: ElmWebServiceAppTests.CounterWebApp,
             adminPassword: adminPassword);
 
         var expectedCounter = 0;
@@ -111,7 +111,7 @@ public class TestApplyFunctionOnDatabase
         var adminPassword = "test";
 
         using var testSetup = WebHostAdminInterfaceTestSetup.Setup(
-            deployAppAndInitElmState: TestElmWebAppHttpServer.CalculatorWebApp,
+            deployAppAndInitElmState: ElmWebServiceAppTests.CalculatorWebApp,
             adminPassword: adminPassword);
 
         var expectedResultingNumber = 0;
@@ -188,7 +188,7 @@ public class TestApplyFunctionOnDatabase
         var adminPassword = "test";
 
         using var testSetup = WebHostAdminInterfaceTestSetup.Setup(
-            deployAppAndInitElmState: TestElmWebAppHttpServer.CalculatorWebApp,
+            deployAppAndInitElmState: ElmWebServiceAppTests.CalculatorWebApp,
             adminPassword: adminPassword);
 
         using var server = testSetup.StartWebHost();

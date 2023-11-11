@@ -7,7 +7,7 @@ using System.Text.Json.Serialization;
 namespace TestElmTime;
 
 [TestClass]
-public class TestJsonConverterForChoiceType
+public class JsonConverterForChoiceTypeTests
 {
     [JsonConverter(typeof(JsonConverterForChoiceType))]
     private abstract record SimpleClass
