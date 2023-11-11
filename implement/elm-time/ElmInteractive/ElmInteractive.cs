@@ -232,7 +232,7 @@ public class ElmInteractive
             var lastIncrementModulesBlobs =
                 lastIncrementModulesTexts.Select(Encoding.UTF8.GetBytes).ToArray();
 
-            var selfValue = PineValue.List(lastIncrementModulesBlobs.Select(blob => PineValue.Blob(blob)).ToImmutableList());
+            var selfValue = PineValue.List(lastIncrementModulesBlobs.Select(PineValue.Blob).ToImmutableList());
 
             var selfHash = PineValueHashTree.ComputeHash(selfValue);
 
@@ -566,7 +566,7 @@ public class ElmInteractive
             return PineValue.List(list.Select(item => ParsePineValueFromJson(item, dictionary)).ToImmutableList());
 
         if (fromJson.Blob is { } blob)
-            return PineValue.Blob(blob.Select(b => (byte)b).ToArray());
+            return PineValue.Blob([.. blob.Select(b => (byte)b)]);
 
         if (fromJson.ListAsString is { } listAsString)
             return PineValueAsString.ValueFromString(listAsString);

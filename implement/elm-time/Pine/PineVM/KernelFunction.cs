@@ -51,10 +51,10 @@ public static class KernelFunction
                 blobValue.Bytes.Span[0] switch
                 {
                     4 =>
-                    PineValue.Blob(CommonConversion.Concat((ReadOnlySpan<byte>)[2], blobValue.Bytes.Span[1..])),
+                    PineValue.Blob([2, .. blobValue.Bytes.Span[1..]]),
 
                     2 =>
-                    PineValue.Blob(CommonConversion.Concat((ReadOnlySpan<byte>)[4], blobValue.Bytes.Span[1..])),
+                    PineValue.Blob([4, .. blobValue.Bytes.Span[1..]]),
 
                     _ =>
                     PineValue.EmptyList
@@ -114,7 +114,7 @@ public static class KernelFunction
         Result<string, PineValue>.ok(
             value switch
             {
-                PineValue.BlobValue blobValue => PineValue.Blob(blobValue.Bytes.ToArray().Reverse().ToArray()),
+                PineValue.BlobValue blobValue => PineValue.Blob([.. blobValue.Bytes.ToArray().Reverse()]),
                 PineValue.ListValue listValue => PineValue.List([.. listValue.Elements.Reverse()]),
                 _ => throw new NotImplementedException()
             });

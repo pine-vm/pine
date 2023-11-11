@@ -15,9 +15,9 @@ public class PineVMTests
         {
             new
             {
-                expression = (Expression)new Expression.LiteralExpression(PineValue.Blob(new byte[] { 1, 4, 7 })),
+                expression = (Expression)new Expression.LiteralExpression(PineValue.Blob([1, 4, 7])),
                 expected = Result<string, PineValue>.ok(
-                    PineValue.Blob(new byte[] { 1, 4, 7 }))
+                    PineValue.Blob([1, 4, 7]))
             },
             new
             {

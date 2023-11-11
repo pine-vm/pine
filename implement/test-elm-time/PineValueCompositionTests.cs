@@ -18,7 +18,7 @@ public class PineValueCompositionTests
             new
             {
                 input = TreeNodeWithStringPath.Blob(new byte[]{0,1,2}),
-                expectedOutput = PineValue.Blob(new byte[]{0,1,2})
+                expectedOutput = PineValue.Blob([0,1,2])
             },
             new
             {
@@ -33,16 +33,16 @@ public class PineValueCompositionTests
                             [
                                 PineValue.List(
                                     [
-                                        PineValue.Blob(new byte[]{ 65 }),
-                                        PineValue.Blob(new byte[]{ 66 }),
-                                        PineValue.Blob(new byte[]{ 67 }),
-                                        PineValue.Blob(new byte[]{ 32 }),
-                                        PineValue.Blob(new byte[]{ 228 }),
-                                        PineValue.Blob(new byte[]{ 32 }),
-                                        PineValue.Blob(new byte[]{ 1,246,0 }),
+                                        PineValue.Blob([65]),
+                                        PineValue.Blob([66]),
+                                        PineValue.Blob([67]),
+                                        PineValue.Blob([32]),
+                                        PineValue.Blob([228]),
+                                        PineValue.Blob([32]),
+                                        PineValue.Blob([1,246,0]),
                                     ]
                                 ),
-                                PineValue.Blob(new byte[]{0,1,2,3 } )
+                                PineValue.Blob([0,1,2,3] )
                             ]
                         )
                     ])
@@ -64,7 +64,7 @@ public class PineValueCompositionTests
         {
             new
             {
-                input = PineValue.Blob(new byte[]{0,1,2}),
+                input = PineValue.Blob([0,1,2]),
                 expectedOutput = Result<IReadOnlyList<(int index, string name)>, TreeNodeWithStringPath>.ok(
                     TreeNodeWithStringPath.Blob(new byte[]{0,1,2}))
             },
@@ -79,13 +79,13 @@ public class PineValueCompositionTests
                                 PineValue.List(
                                     elements:
                                     [
-                                        PineValue.Blob(new byte[] { 68 }),
-                                        PineValue.Blob(new byte[] { 69 }),
-                                        PineValue.Blob(new byte[] { 70 }),
-                                        PineValue.Blob(new byte[] { 32 }),
-                                        PineValue.Blob(new byte[]{ 1,243,50 }),
+                                        PineValue.Blob([68]),
+                                        PineValue.Blob([69]),
+                                        PineValue.Blob([70]),
+                                        PineValue.Blob([32]),
+                                        PineValue.Blob([1,243,50]),
                                     ]),
-                                PineValue.Blob(new byte[]{0,1,2,3}),
+                                PineValue.Blob([0,1,2,3]),
                             ])
                     ]),
                 expectedOutput = Result<IReadOnlyList<(int index, string name)>, TreeNodeWithStringPath>.ok(
@@ -129,9 +129,9 @@ public class PineValueCompositionTests
                                 PineValue.List(
                                     elements:
                                     [
-                                        PineValue.Blob(new byte[] { 97 }),
+                                        PineValue.Blob([97]),
                                     ]),
-                                PineValue.Blob(new byte[]{0,1,2}),
+                                PineValue.Blob([0,1,2]),
                             ]),
                         PineValue.List(
                             elements:
@@ -139,7 +139,7 @@ public class PineValueCompositionTests
                                 PineValue.List(
                                     elements:
                                     [
-                                        PineValue.Blob(new byte[] { 98 }),
+                                        PineValue.Blob([98]),
                                     ]
                                 ),
                                 PineValue.List(
@@ -151,10 +151,10 @@ public class PineValueCompositionTests
                                                 PineValue.List(
                                                     elements:
                                                     [
-                                                        PineValue.Blob(new byte[] { 99 }),
+                                                        PineValue.Blob([99]),
                                                     ]
                                                 ),
-                                                PineValue.Blob(new byte[]{3,4,5,6}),
+                                                PineValue.Blob([3,4,5,6]),
                                             ]
                                         ),
                                         PineValue.List(
@@ -163,10 +163,10 @@ public class PineValueCompositionTests
                                                 PineValue.List(
                                                     elements:
                                                     [
-                                                        PineValue.Blob(new byte[] { 100 }),
+                                                        PineValue.Blob([100]),
                                                     ]
                                                 ),
-                                                PineValue.Blob(new byte[]{7,8}),
+                                                PineValue.Blob([7,8]),
                                             ]
                                         ),
                                     ]
@@ -193,7 +193,7 @@ public class PineValueCompositionTests
         {
             new
             {
-                input = PineValue.Blob(new byte[]{0,1,2}),
+                input = PineValue.Blob([0,1,2]),
                 expectedHashBase16 = CommonConversion.StringBase16(
                     CommonConversion.HashSHA256("blob 3\0"u8.ToArray().Concat(new byte[]{0,1,2}).ToArray()))
             },

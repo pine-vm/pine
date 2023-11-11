@@ -29,8 +29,8 @@ public class JsonConverterForPineValueTests
                     PineValueAsInteger.ValueFromSignedInteger(56),
                     PineValueAsInteger.ValueFromSignedInteger(57))),
 
-            PineValue.Blob(new byte[]{ }),
-            PineValue.Blob(new byte[]{10,11,13}),
+            PineValue.Blob([]),
+            PineValue.Blob([10,11,13]),
         };
 
         foreach (var testCase in testCases)

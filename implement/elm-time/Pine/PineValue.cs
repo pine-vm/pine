@@ -16,6 +16,13 @@ namespace Pine;
 /// </summary>
 public abstract record PineValue : IEquatable<PineValue>
 {
+    /*
+     * C# 12 does not support mapping from collection expression to ReadOnlyMemory<byte>,
+     * therefore provide an additional overload.
+     * */
+    public static PineValue Blob(byte[] bytes) =>
+        Blob((ReadOnlyMemory<byte>)bytes);
+
     public static PineValue Blob(ReadOnlyMemory<byte> bytes) =>
         new BlobValue(bytes);
 

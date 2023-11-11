@@ -177,9 +177,9 @@ public class PineVM : IPineVM
 
     public static PineValue ValueFromBool(bool b) => b ? TrueValue : FalseValue;
 
-    public static readonly PineValue TrueValue = PineValue.Blob(new byte[] { 4 });
+    public static readonly PineValue TrueValue = PineValue.Blob([4]);
 
-    public static readonly PineValue FalseValue = PineValue.Blob(new byte[] { 2 });
+    public static readonly PineValue FalseValue = PineValue.Blob([2]);
 
     public static Result<string, bool> DecodeBoolFromValue(PineValue value) =>
         value == TrueValue

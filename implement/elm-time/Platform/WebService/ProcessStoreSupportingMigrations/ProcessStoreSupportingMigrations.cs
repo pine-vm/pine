@@ -141,10 +141,10 @@ public record CompositionLogRecordInFile(
 {
     public static string? CompositionLogFirstRecordParentHashBase16 => null;
 
-    public static string HashBase16FromCompositionRecord(byte[] compositionRecord) =>
+    public static string HashBase16FromCompositionRecord(ReadOnlyMemory<byte> compositionRecord) =>
         CommonConversion.StringBase16(HashFromCompositionRecord(compositionRecord));
 
-    public static ReadOnlyMemory<byte> HashFromCompositionRecord(byte[] compositionRecord) =>
+    public static ReadOnlyMemory<byte> HashFromCompositionRecord(ReadOnlyMemory<byte> compositionRecord) =>
         PineValueHashTree.ComputeHash(PineValue.Blob(compositionRecord));
 
     public record CompositionEvent(
