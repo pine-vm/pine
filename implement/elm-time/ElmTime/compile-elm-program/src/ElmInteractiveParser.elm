@@ -9,7 +9,8 @@ import Elm.Syntax.File
 import Elm.Syntax.Node
 import ElmInteractive
     exposing
-        ( InteractiveContext(..)
+        ( ElmCoreModulesExtent(..)
+        , InteractiveContext(..)
         , InteractiveSubmission(..)
         , ProjectParsedElmFile
         , SubmissionResponse
@@ -42,12 +43,16 @@ compileEvalContextForElmInteractive context =
                         ++ ElmInteractiveKernelModules.elmKernelModulesTexts
 
                 CustomModulesContext { includeCoreModules, modulesTexts } ->
-                    [ if includeCoreModules then
-                        ElmInteractiveCoreModules.elmCoreModulesTexts
-                            ++ ElmInteractiveKernelModules.elmKernelModulesTexts
+                    [ case includeCoreModules of
+                        Nothing ->
+                            []
 
-                      else
-                        []
+                        Just OnlyCoreModules ->
+                            ElmInteractiveCoreModules.elmCoreModulesTexts
+
+                        Just CoreAndOtherKernelModules ->
+                            ElmInteractiveCoreModules.elmCoreModulesTexts
+                                ++ ElmInteractiveKernelModules.elmKernelModulesTexts
                     , modulesTexts
                     ]
                         |> List.concat

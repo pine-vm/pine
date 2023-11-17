@@ -29,7 +29,12 @@ type InteractiveSubmission
 
 type InteractiveContext
     = DefaultContext
-    | CustomModulesContext { includeCoreModules : Bool, modulesTexts : List String }
+    | CustomModulesContext { includeCoreModules : Maybe ElmCoreModulesExtent, modulesTexts : List String }
+
+
+type ElmCoreModulesExtent
+    = OnlyCoreModules
+    | CoreAndOtherKernelModules
 
 
 type alias SubmissionResponse =

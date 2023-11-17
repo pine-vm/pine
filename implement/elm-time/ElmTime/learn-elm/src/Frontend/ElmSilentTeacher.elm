@@ -99,7 +99,12 @@ init =
             Time.millisToPosix 0
 
         evaluationContextResult =
-            ElmInteractiveParser.compileEvalContextForElmInteractive ElmInteractive.DefaultContext
+            ElmInteractiveParser.compileEvalContextForElmInteractive
+                (ElmInteractive.CustomModulesContext
+                    { includeCoreModules = Just ElmInteractive.OnlyCoreModules
+                    , modulesTexts = []
+                    }
+                )
 
         trainingSession =
             case Exercise.exercises of

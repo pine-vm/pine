@@ -1,7 +1,7 @@
 module ElmInteractiveTests exposing (..)
 
 import BigInt
-import ElmInteractive exposing (InteractiveContext(..))
+import ElmInteractive exposing (ElmCoreModulesExtent(..), InteractiveContext(..))
 import ElmInteractiveParser
 import Expect
 import Json.Encode
@@ -17,7 +17,7 @@ interactiveScenarios =
             \_ ->
                 expectationForElmInteractiveScenario
                     { context =
-                        CustomModulesContext { includeCoreModules = False, modulesTexts = [] }
+                        CustomModulesContext { includeCoreModules = Nothing, modulesTexts = [] }
                     , previousSubmissions = []
                     , submission = """  "just a literal ✔️"  """
                     , expectedValueElmExpression = "\"just a literal ✔️\""
@@ -26,7 +26,7 @@ interactiveScenarios =
             \_ ->
                 expectationForElmInteractiveScenario
                     { context =
-                        CustomModulesContext { includeCoreModules = False, modulesTexts = [] }
+                        CustomModulesContext { includeCoreModules = Nothing, modulesTexts = [] }
                     , previousSubmissions = []
                     , submission = """  [ "just a literal ✔️", "another string" ]  """
                     , expectedValueElmExpression = """["just a literal ✔️","another string"]"""
@@ -66,7 +66,7 @@ interactiveScenarios =
         , Test.test "Dependency within let" <|
             \_ ->
                 expectationForElmInteractiveScenario
-                    { context = CustomModulesContext { includeCoreModules = False, modulesTexts = [] }
+                    { context = CustomModulesContext { includeCoreModules = Nothing, modulesTexts = [] }
                     , previousSubmissions = []
                     , submission = """
 let
@@ -82,7 +82,7 @@ b
             \_ ->
                 expectationForElmInteractiveScenario
                     { context =
-                        CustomModulesContext { includeCoreModules = False, modulesTexts = [] }
+                        CustomModulesContext { includeCoreModules = Nothing, modulesTexts = [] }
                     , previousSubmissions = []
                     , submission = """
 let
@@ -102,7 +102,7 @@ d
             \_ ->
                 expectationForElmInteractiveScenario
                     { context =
-                        CustomModulesContext { includeCoreModules = False, modulesTexts = [] }
+                        CustomModulesContext { includeCoreModules = Nothing, modulesTexts = [] }
                     , previousSubmissions = []
                     , submission = """
 let
@@ -117,7 +117,7 @@ function_with_one_parameter "argument"
             \_ ->
                 expectationForElmInteractiveScenario
                     { context =
-                        CustomModulesContext { includeCoreModules = False, modulesTexts = [] }
+                        CustomModulesContext { includeCoreModules = Nothing, modulesTexts = [] }
                     , previousSubmissions = []
                     , submission = """
 let
@@ -167,7 +167,7 @@ partially_applied_a "argument 2"
         , Test.test "Lambda with 'var' pattern" <|
             \_ ->
                 expectationForElmInteractiveScenario
-                    { context = CustomModulesContext { includeCoreModules = False, modulesTexts = [] }
+                    { context = CustomModulesContext { includeCoreModules = Nothing, modulesTexts = [] }
                     , previousSubmissions = []
                     , submission = """ (\\x -> x) "test" """
                     , expectedValueElmExpression = "\"test\""
@@ -175,7 +175,7 @@ partially_applied_a "argument 2"
         , Test.test "Lambda with 'all' pattern" <|
             \_ ->
                 expectationForElmInteractiveScenario
-                    { context = CustomModulesContext { includeCoreModules = False, modulesTexts = [] }
+                    { context = CustomModulesContext { includeCoreModules = Nothing, modulesTexts = [] }
                     , previousSubmissions = []
                     , submission = """ (\\_ -> "constant") "test" """
                     , expectedValueElmExpression = "\"constant\""
@@ -218,7 +218,7 @@ in
                 expectationForElmInteractiveScenario
                     { context =
                         CustomModulesContext
-                            { includeCoreModules = False
+                            { includeCoreModules = Nothing
                             , modulesTexts = [ """
 module ModuleName exposing (module_level_binding)
 
@@ -238,7 +238,7 @@ module_level_binding =
                 expectationForElmInteractiveScenario
                     { context =
                         CustomModulesContext
-                            { includeCoreModules = True
+                            { includeCoreModules = Just OnlyCoreModules
                             , modulesTexts = [ """
 module ModuleA exposing (partially_applied_a)
 
@@ -304,7 +304,7 @@ named_literal =
                 expectationForElmInteractiveScenario
                     { context =
                         CustomModulesContext
-                            { includeCoreModules = False
+                            { includeCoreModules = Nothing
                             , modulesTexts = [ """
 module Beta exposing (..)
 
@@ -330,7 +330,7 @@ alfa_decl = 567
                 expectationForElmInteractiveScenario
                     { context =
                         CustomModulesContext
-                            { includeCoreModules = False
+                            { includeCoreModules = Nothing
                             , modulesTexts = [ """
 module Beta exposing (..)
 

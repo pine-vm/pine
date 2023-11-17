@@ -55,7 +55,9 @@ evaluateSubmissionInInteractive argumentsJson =
                       , case
                             ElmInteractiveParser.submissionInInteractive
                                 (ElmInteractive.CustomModulesContext
-                                    { includeCoreModules = True, modulesTexts = args.modulesTexts }
+                                    { includeCoreModules = Just ElmInteractive.CoreAndOtherKernelModules
+                                    , modulesTexts = args.modulesTexts
+                                    }
                                 )
                                 args.previousLocalSubmissions
                                 args.submission
