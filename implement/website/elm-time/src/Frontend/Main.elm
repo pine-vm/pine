@@ -303,24 +303,16 @@ header =
                         { url = url
                         , label = Element.text label
                         }
-
-        linkToRepositoryElement =
-            Element.link
-                [ Element.pointer
-                ]
-                { url = linkToSourceCodeRepository
-                , label =
-                    Visuals.iconSvgElementFromIcon
-                        { width = "2em"
-                        , height = "2em"
-                        , color = "whitesmoke"
-                        }
-                        Visuals.gitHubIcon
-                        |> Element.el [ Element.paddingXY 10 5 ]
-                }
     in
-    [ elmTimeLogoElement
-        |> Element.el [ Element.alignLeft ]
+    [ [ elmTimeLogoElement
+            |> Element.el
+                [ Element.centerX
+                , Element.padding 7
+                ]
+      ]
+        |> Element.row
+            [ Element.width Element.fill
+            ]
     , Element.wrappedRow
         [ Element.spacing Visuals.defaultFontSize
         , Element.padding (Visuals.defaultFontSize * 2)
@@ -328,15 +320,8 @@ header =
         , Element.htmlAttribute (Html.Attributes.style "letter-spacing" "2px")
         ]
         (topNavigationElements |> List.map navigationButtonFromDestination)
-    , linkToRepositoryElement
-        |> Element.el
-            [ Element.alignRight ]
-        |> Element.el
-            [ Element.alignRight
-            , Element.width (Element.px 120)
-            ]
     ]
-        |> Element.row
+        |> Element.column
             [ Element.width Element.fill
             , Element.Background.color Visuals.headerBackgroundColor
             , Element.paddingXY (Visuals.defaultFontSize * 3) 0
@@ -380,7 +365,7 @@ viewFooter _ =
 
 weblinksElement : Element.Element e
 weblinksElement =
-    [ ( FontAwesome.Brands.github, "https://github.com/elm-time/elm-time" )
+    [ ( FontAwesome.Brands.github, linkToSourceCodeRepository )
     , ( FontAwesome.Brands.discord, "https://discord.gg/UEYUj3MXZf" )
     , ( FontAwesome.Brands.twitter, "https://twitter.com/ElmTime" )
     ]
