@@ -13,6 +13,7 @@ import FontAwesome.Styles
 import Frontend.ElmTimeLogo as ElmTimeLogo
 import Frontend.Page.Download
 import Frontend.Page.Home
+import Frontend.Page.News
 import Frontend.Visuals as Visuals
 import Html.Attributes
 import Result.Extra
@@ -29,6 +30,7 @@ type NavigationLink
 type Page
     = HomePage
     | DownloadPage
+    | NewsPage
 
 
 type Event
@@ -60,6 +62,7 @@ topNavigationElements =
     [ PageNavigationLink HomePage
     , ExternalNavigationLink { label = "Learn", url = "https://github.com/elm-time/elm-time/tree/main/guide" }
     , PageNavigationLink DownloadPage
+    , PageNavigationLink NewsPage
     ]
 
 
@@ -166,6 +169,7 @@ routes =
     [ ( "home", HomePage )
     , ( "download", DownloadPage )
     , ( "downloads", DownloadPage )
+    , ( "news", NewsPage )
     ]
 
 
@@ -199,7 +203,7 @@ view state =
             , viewPageMainContent state.selectedPage device
             ]
                 |> Element.column
-                    [ Element.padding (Visuals.defaultFontSize * 2)
+                    [ Element.paddingXY (Visuals.defaultFontSize * 2) 0
                     , Element.spacing (Visuals.defaultFontSize * 2)
                     , Element.width Element.fill
                     , Element.height Element.fill
@@ -241,6 +245,9 @@ viewPageMainContent page device =
 
         DownloadPage ->
             Frontend.Page.Download.view device
+
+        NewsPage ->
+            Frontend.Page.News.view device
 
 
 viewHomePage : Element.Element e
@@ -403,6 +410,9 @@ titleFromPage page =
 
         DownloadPage ->
             "Download"
+
+        NewsPage ->
+            "News"
 
 
 linkToPage : List (Element.Attribute e) -> { label : Element.Element e, page : Page } -> Element.Element e

@@ -18,6 +18,7 @@
             "elm/svg": "1.0.1",
             "elm/time": "1.0.0",
             "elm/url": "1.0.0",
+            "elm-community/list-extra": "8.7.0",
             "elm-community/result-extra": "2.4.0",
             "ianmackenzie/elm-geometry": "3.9.1",
             "ianmackenzie/elm-units": "2.9.0",
@@ -28,7 +29,6 @@
         "indirect": {
             "elm/random": "1.0.0",
             "elm/virtual-dom": "1.0.3",
-            "elm-community/list-extra": "8.7.0",
             "folkertdev/elm-flate": "2.0.5",
             "ianmackenzie/elm-1d-parameter": "1.0.1",
             "ianmackenzie/elm-float-extra": "1.1.0",
