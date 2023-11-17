@@ -21,6 +21,11 @@ import Url
 import Url.Parser
 
 
+type NavigationLink
+    = PageNavigationLink Page
+    | ExternalNavigationLink { label : String, url : String }
+
+
 type Page
     = HomePage
     | DownloadPage
@@ -50,9 +55,12 @@ linkToSourceCodeRepository =
     "https://github.com/elm-time/elm-time"
 
 
-topNavigationElements : List Page
+topNavigationElements : List NavigationLink
 topNavigationElements =
-    [ HomePage, DownloadPage ]
+    [ PageNavigationLink HomePage
+    , ExternalNavigationLink { label = "Learn", url = "https://github.com/elm-time/elm-time/tree/main/guide" }
+    , PageNavigationLink DownloadPage
+    ]
 
 
 main : Program () State Event
@@ -269,18 +277,32 @@ header =
                             ]
                 }
 
+        navigationButtonFromDestination : NavigationLink -> Element.Element msg
         navigationButtonFromDestination destination =
-            linkToPage
-                [ Element.Font.bold
-                , Element.Font.color (Element.rgb 1 1 1)
-                , Element.padding (Visuals.defaultFontSize // 2)
-                , Element.mouseOver
-                    [ Element.Font.color (Element.rgb 0.8 0.8 0.8)
+            let
+                commonAttributes =
+                    [ Element.Font.bold
+                    , Element.Font.color (Element.rgb 1 1 1)
+                    , Element.padding (Visuals.defaultFontSize // 2)
+                    , Element.mouseOver
+                        [ Element.Font.color (Element.rgb 0.8 0.8 0.8)
+                        ]
                     ]
-                ]
-                { page = destination
-                , label = Element.text (titleFromPage destination)
-                }
+            in
+            case destination of
+                PageNavigationLink page ->
+                    linkToPage
+                        commonAttributes
+                        { page = page
+                        , label = Element.text (titleFromPage page)
+                        }
+
+                ExternalNavigationLink { label, url } ->
+                    Element.link
+                        commonAttributes
+                        { url = url
+                        , label = Element.text label
+                        }
 
         linkToRepositoryElement =
             Element.link
