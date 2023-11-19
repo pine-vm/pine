@@ -2,7 +2,6 @@ module ElmInteractiveParser exposing (..)
 
 import Dict
 import Elm.Parser
-import Elm.Processing
 import Elm.Syntax.Declaration
 import Elm.Syntax.Expression
 import Elm.Syntax.File
@@ -351,7 +350,11 @@ module Main exposing (..)
 """
 
         moduleText =
-            moduleTextBeforeDeclaration ++ declarationCode
+            [ moduleTextBeforeDeclaration
+            , String.trim declarationCode
+            , ""
+            ]
+                |> String.join "\n"
     in
     parseElmModuleText moduleText
         |> Result.mapError (List.map (mapLocationForPrefixText moduleTextBeforeDeclaration))
@@ -387,7 +390,7 @@ mapLocation offset deadEnd =
 
 parseElmModuleText : String -> Result (List Parser.DeadEnd) Elm.Syntax.File.File
 parseElmModuleText =
-    Elm.Parser.parse >> Result.map (Elm.Processing.process Elm.Processing.init)
+    Elm.Parser.parseToFile
 
 
 parserDeadEndsToString : List Parser.DeadEnd -> String
