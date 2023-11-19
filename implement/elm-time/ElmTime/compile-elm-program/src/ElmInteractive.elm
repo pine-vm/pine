@@ -2772,9 +2772,7 @@ emitExpressionInDeclarationBlockLessClosure stackBeforeAddingDeps originalBlockD
             in
             closureFunctionEntry.innerExpression
                 |> mapReferencesForClosureCaptures liftedDeclarationsClosureCaptures
-                |> closurizeFunctionExpressions
-                    emitStack
-                    (environmentDeclarationsAsFunctions |> List.map Tuple.first |> Set.fromList)
+                |> closurizeFunctionExpressions emitStack Dict.empty
                 |> emitExpression emitStack
 
         emitEnvironmentDeclarationsResult : Result String (List ( String, Pine.Expression ))
@@ -2995,42 +2993,55 @@ mapReferencesForClosureCaptures closureCapturesByFunctionName expression =
             RecordAccessExpression field (mapReferencesForClosureCaptures closureCapturesByFunctionName record)
 
 
-closurizeFunctionExpressions : EmitStack -> Set.Set String -> Expression -> Expression
-closurizeFunctionExpressions stack closureCaptures expression =
+closurizeFunctionExpressions : EmitStack -> Dict.Dict String (List String) -> Expression -> Expression
+closurizeFunctionExpressions stack capturesFromFunctionName expression =
     case expression of
         LiteralExpression _ ->
             expression
 
         ListExpression list ->
-            ListExpression (List.map (closurizeFunctionExpressions stack closureCaptures) list)
+            ListExpression
+                (List.map (closurizeFunctionExpressions stack capturesFromFunctionName) list)
 
         KernelApplicationExpression kernelApplication ->
             KernelApplicationExpression
                 { kernelApplication
                     | argument =
-                        closurizeFunctionExpressions stack closureCaptures kernelApplication.argument
+                        closurizeFunctionExpressions stack
+                            capturesFromFunctionName
+                            kernelApplication.argument
                 }
 
         ConditionalExpression conditional ->
             ConditionalExpression
                 { condition =
-                    closurizeFunctionExpressions stack closureCaptures conditional.condition
+                    closurizeFunctionExpressions stack capturesFromFunctionName conditional.condition
                 , ifTrue =
-                    closurizeFunctionExpressions stack closureCaptures conditional.ifTrue
+                    closurizeFunctionExpressions stack capturesFromFunctionName conditional.ifTrue
                 , ifFalse =
-                    closurizeFunctionExpressions stack closureCaptures conditional.ifFalse
+                    closurizeFunctionExpressions stack capturesFromFunctionName conditional.ifFalse
                 }
 
-        ReferenceExpression _ ->
-            expression
+        ReferenceExpression name ->
+            case Dict.get name capturesFromFunctionName of
+                Just closureCapturesForFunction ->
+                    FunctionApplicationExpression
+                        expression
+                        [ closureCapturesForFunction
+                            |> List.map ReferenceExpression
+                            |> ListExpression
+                        ]
+
+                Nothing ->
+                    expression
 
         FunctionExpression functionParams functionBody ->
             let
-                dependencies =
-                    listDependenciesOfExpression stack functionBody
+                outerDependencies =
+                    listDependenciesOfExpression stack expression
 
                 closureCapturesForFunction =
-                    Set.intersect closureCaptures dependencies
+                    outerDependencies
                         |> Set.toList
 
                 closureFunctionParameters =
@@ -3041,12 +3052,16 @@ closurizeFunctionExpressions stack closureCaptures expression =
                     closureParameterFromParameters closureFunctionParameters
 
                 functionBodyMapped =
-                    functionBody |> closurizeFunctionExpressions stack closureCaptures
+                    functionBody |> closurizeFunctionExpressions stack capturesFromFunctionName
             in
             if closureCapturesForFunction == [] then
                 FunctionExpression functionParams functionBodyMapped
 
             else
+                {-
+                   Since we are processing all functions that appear as declaration in a let block to bind free variables,
+                   this branch should only be hit for anonymous functions.
+                -}
                 FunctionApplicationExpression
                     (FunctionExpression
                         (closureFunctionParameter :: functionParams)
@@ -3060,35 +3075,99 @@ closurizeFunctionExpressions stack closureCaptures expression =
         FunctionApplicationExpression functionExpression arguments ->
             let
                 mappedArguments =
-                    List.map (closurizeFunctionExpressions stack closureCaptures) arguments
+                    List.map (closurizeFunctionExpressions stack capturesFromFunctionName) arguments
 
                 mappedFunctionExpression =
-                    closurizeFunctionExpressions stack closureCaptures functionExpression
+                    closurizeFunctionExpressions stack capturesFromFunctionName functionExpression
+
+                ( mappedArgumentsMerged, mappedFunctionExpressionMerged ) =
+                    case mappedFunctionExpression of
+                        FunctionApplicationExpression innerFunction innerArguments ->
+                            ( innerArguments ++ mappedArguments
+                            , innerFunction
+                            )
+
+                        _ ->
+                            ( mappedArguments
+                            , mappedFunctionExpression
+                            )
             in
             FunctionApplicationExpression
-                mappedFunctionExpression
-                mappedArguments
+                mappedFunctionExpressionMerged
+                mappedArgumentsMerged
 
         LetBlockExpression letBlock ->
+            let
+                processLetDeclaration : Expression -> Maybe ( List String, Expression )
+                processLetDeclaration declExpression =
+                    case declExpression of
+                        FunctionExpression functionParams functionBody ->
+                            let
+                                outerDependencies =
+                                    listDependenciesOfExpression stack declExpression
+
+                                closureCapturesForFunction =
+                                    outerDependencies
+                                        |> Set.toList
+
+                                closureFunctionParameters =
+                                    closureCapturesForFunction
+                                        |> List.map (Tuple.pair >> (|>) [] >> List.singleton)
+
+                                closureFunctionParameter =
+                                    closureParameterFromParameters closureFunctionParameters
+                            in
+                            if closureCapturesForFunction == [] then
+                                Nothing
+
+                            else
+                                Just
+                                    ( closureCapturesForFunction
+                                    , FunctionExpression
+                                        (closureFunctionParameter :: functionParams)
+                                        functionBody
+                                    )
+
+                        _ ->
+                            Nothing
+
+                declarationsBeforeMappingApplications : List ( String, ( Dict.Dict String (List String), Expression ) )
+                declarationsBeforeMappingApplications =
+                    letBlock.declarations
+                        |> List.map
+                            (\( declName, declExpression ) ->
+                                ( declName
+                                , processLetDeclaration declExpression
+                                    |> Maybe.map (Tuple.mapFirst (Dict.singleton declName))
+                                    |> Maybe.withDefault ( Dict.empty, declExpression )
+                                )
+                            )
+
+                newClosureInstructions =
+                    declarationsBeforeMappingApplications
+                        |> List.map (Tuple.second >> Tuple.first)
+                        |> List.foldl Dict.union Dict.empty
+
+                closurizeFunctionExpressionsInner =
+                    closurizeFunctionExpressions
+                        stack
+                        (Dict.union capturesFromFunctionName newClosureInstructions)
+            in
             LetBlockExpression
                 { letBlock
                     | declarations =
-                        letBlock.declarations
-                            |> List.map
-                                (\( name, declExpression ) ->
-                                    ( name
-                                    , closurizeFunctionExpressions stack closureCaptures declExpression
-                                    )
-                                )
+                        declarationsBeforeMappingApplications
+                            |> List.map (Tuple.mapSecond Tuple.second)
+                            |> List.map (Tuple.mapSecond closurizeFunctionExpressionsInner)
                     , expression =
-                        closurizeFunctionExpressions stack closureCaptures letBlock.expression
+                        closurizeFunctionExpressionsInner letBlock.expression
                 }
 
         StringTagExpression tag tagged ->
-            StringTagExpression tag (closurizeFunctionExpressions stack closureCaptures tagged)
+            StringTagExpression tag (closurizeFunctionExpressions stack capturesFromFunctionName tagged)
 
         RecordAccessExpression field record ->
-            RecordAccessExpression field (closurizeFunctionExpressions stack closureCaptures record)
+            RecordAccessExpression field (closurizeFunctionExpressions stack capturesFromFunctionName record)
 
 
 environmentDeconstructionsFromFunctionParams : List FunctionParam -> Dict.Dict String EnvironmentDeconstructionEntry
@@ -3714,6 +3793,9 @@ parseFunctionParameters expression =
                     parseFunctionParameters functionBody
             in
             ( functionParams ++ innerParams, innerBody )
+
+        StringTagExpression _ tagged ->
+            parseFunctionParameters tagged
 
         _ ->
             ( [], expression )

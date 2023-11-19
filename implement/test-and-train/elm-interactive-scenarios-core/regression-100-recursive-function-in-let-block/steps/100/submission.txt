@@ -1,0 +1,21 @@
+let
+    greedyGroupsOfWithStep : Int -> Int -> List a -> List (List a)
+    greedyGroupsOfWithStep size step list =
+        if size <= 0 || step <= 0 then
+            []
+
+        else
+            let
+                go : List a -> List (List a) -> List (List a)
+                go xs acc =
+                    if List.isEmpty xs then
+                        List.reverse acc
+
+                    else
+                        go
+                            (List.drop step xs)
+                            (List.take size xs :: acc)
+            in
+            go list []
+in
+greedyGroupsOfWithStep 3 3 []
