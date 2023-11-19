@@ -1,0 +1,1 @@
+List.indexedMap (\index item -> (index, item)) [ "Tom", "Sue", "Bob" ]

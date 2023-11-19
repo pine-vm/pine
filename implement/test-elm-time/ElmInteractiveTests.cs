@@ -16,7 +16,7 @@ public class ElmInteractiveTests
     private static string PathToKernelScenariosDirectory => @"./../../../../test-and-train/elm-interactive-scenarios-kernel";
 
     [TestMethod]
-    [Timeout(1000 * 60 * 30)]
+    [Timeout(1000 * 60 * 40)]
     public void TestElmInteractiveScenarios()
     {
         using var dynamicPGOShare = new Pine.PineVM.DynamicPGOShare();

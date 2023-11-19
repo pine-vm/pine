@@ -537,6 +537,11 @@ map f xs =
     foldr (\\x acc -> cons (f x) acc ) [] xs
 
 
+indexedMap : (Int -> a -> b) -> List a -> List b
+indexedMap f xs =
+    map2 f (range 0 (length xs - 1)) xs
+
+
 foldl : (a -> b -> b) -> b -> List a -> b
 foldl func acc list_in_foldl =
     case list_in_foldl of
@@ -596,6 +601,57 @@ concat lists =
     Pine_kernel.concat lists
 
 
+concatMap : (a -> List b) -> List a -> List b
+concatMap f list =
+    concat (map f list)
+
+
+intersperse : a -> List a -> List a
+intersperse sep xs =
+    case xs of
+        [] ->
+            []
+
+        hd :: tl ->
+            let
+                step x rest =
+                    cons sep (cons x rest)
+
+                spersed =
+                    foldr step [] tl
+            in
+            cons hd spersed
+
+
+map2 : (a -> b -> result) -> List a -> List b -> List result
+map2 mapItems listA listB =
+    case ( listA, listB ) of
+        ( [], _ ) ->
+            []
+
+        ( _, [] ) ->
+            []
+
+        ( x :: xs, y :: ys ) ->
+            cons (mapItems x y) (map2 mapItems xs ys)
+
+
+map3 : (a -> b -> c -> result) -> List a -> List b -> List c -> List result
+map3 mapItems listA listB listC =
+    case ( listA, listB, listC ) of
+        ( [], _, _ ) ->
+            []
+
+        ( _, [], _ ) ->
+            []
+
+        ( _, _, [] ) ->
+            []
+
+        ( x :: xs, y :: ys, z :: zs ) ->
+            cons (mapItems x y z) (map3 mapItems xs ys zs)
+
+
 isEmpty : List a -> Bool
 isEmpty xs =
     case xs of
@@ -634,6 +690,19 @@ take n list =
 drop : Int -> List a -> List a
 drop n list =
     Pine_kernel.skip [ n, list ]
+
+
+partition : (a -> Bool) -> List a -> ( List a, List a )
+partition pred list =
+    let
+        step x ( trues, falses ) =
+            if pred x then
+                ( cons x trues, falses )
+
+            else
+                ( trues, cons x falses )
+    in
+    foldr step ( [], [] ) list
 
 
 sort : List comparable -> List comparable

@@ -1,0 +1,1 @@
+Tuple.first (List.partition (\item -> True) [ 17, 19 ])
