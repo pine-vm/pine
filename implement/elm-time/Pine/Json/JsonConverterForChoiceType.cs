@@ -9,6 +9,16 @@ using System.Text.Json.Serialization;
 
 namespace Pine.Json;
 
+/// <summary>
+/// Generates JSON converters for C# types representing choice types (aka discriminated unions, tagged unions).
+/// 
+/// The discussions on representing sum types in C# are ongoing, and Microsoft has not yet settled on a design.
+/// For updates on the progress around sum types in C#, see also <https://github.com/dotnet/csharplang/tree/main/meetings/working-groups/discriminated-unions> and <https://github.com/dotnet/csharplang/issues/113>
+/// 
+/// This JSON converter factory supports the approach of representing choice types as records in C#.
+/// 
+/// For more information, see the guide in the file JsonConverterForChoiceType.md
+/// </summary>
 public class JsonConverterForChoiceType : JsonConverterFactory
 {
     public record ParsedType(IReadOnlyList<ParsedType.Variant> Variants)
@@ -24,7 +34,7 @@ public class JsonConverterForChoiceType : JsonConverterFactory
         PropertyInfo PropertyInfo,
         JsonIgnore? JsonIgnore);
 
-    public record JsonIgnore(object Default);
+    public record JsonIgnore(object? Default);
 
     private static readonly ConcurrentDictionary<Type, Result<string, ParsedType>> parseTypeToConvertCache = new();
 
@@ -89,7 +99,7 @@ public class JsonConverterForChoiceType : JsonConverterFactory
 
     private static Result<string, ParsedType.Variant> ParseUnionTypeVariant(Type variantType)
     {
-        static object DefaultValueFromType(Type type)
+        static object? DefaultValueFromType(Type type)
         {
             if (type.IsValueType)
             {
@@ -243,7 +253,7 @@ public class JsonConverterForChoiceType<T> : JsonConverter<T>
             .DefaultIfEmpty(null)
             .FirstOrDefault();
 
-        if (variant == null)
+        if (variant is null)
         {
             throw new JsonException("Type " + value.GetType().FullName + " not registered as variant of " + typeof(T).FullName);
         }
