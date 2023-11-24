@@ -651,7 +651,8 @@ Json.Encode.object
             , decodeExpression = String.trim """
 Json.Decode.succeed (\\field_name -> { field_name = field_name })
     |> jsonDecode_andMap
-        ( Json.Decode.field "field_name"
+        ( jsonDecode_field_withAlternateNames "field_name"
+            [ "Field_name" ]
             Json.Decode.string
         )
 """
@@ -678,11 +679,13 @@ Json.Encode.object
             , decodeExpression = String.trim """
 Json.Decode.succeed (\\field_a field_b -> { field_a = field_a, field_b = field_b })
     |> jsonDecode_andMap
-        ( Json.Decode.field "field_a"
+        ( jsonDecode_field_withAlternateNames "field_a"
+            [ "Field_a" ]
             Json.Decode.int
         )
     |> jsonDecode_andMap
-        ( Json.Decode.field "field_b"
+        ( jsonDecode_field_withAlternateNames "field_b"
+            [ "Field_b" ]
             Json.Decode.string
         )
 """
@@ -718,16 +721,19 @@ Json.Encode.object
             , decodeExpression = String.trim """
 Json.Decode.succeed (\\field_a field_b -> { field_a = field_a, field_b = field_b })
     |> jsonDecode_andMap
-        ( Json.Decode.field "field_a"
+        ( jsonDecode_field_withAlternateNames "field_a"
+            [ "Field_a" ]
             ( Json.Decode.succeed (\\field_c -> { field_c = field_c })
                 |> jsonDecode_andMap
-                    ( Json.Decode.field "field_c"
+                    ( jsonDecode_field_withAlternateNames "field_c"
+                        [ "Field_c" ]
                         Json.Decode.int
                     )
             )
         )
     |> jsonDecode_andMap
-        ( Json.Decode.field "field_b"
+        ( jsonDecode_field_withAlternateNames "field_b"
+            [ "Field_b" ]
             Json.Decode.string
         )
 """

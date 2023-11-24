@@ -2072,8 +2072,20 @@ jsonConverterExpressionFromType { encodeValueExpression, typeArgLocalName } ( ty
                                             else
                                                 field.decode
 
+                                        alternateFieldNames =
+                                            [ firstCharToUpperCase field.fieldName ]
+
                                         fieldMapLines =
-                                            [ "( Json.Decode.field \"" ++ field.fieldName ++ "\""
+                                            [ "( jsonDecode_field_withAlternateNames "
+                                                ++ stringExpressionFromString field.fieldName
+                                            , [ "["
+                                              , alternateFieldNames
+                                                    |> List.map stringExpressionFromString
+                                                    |> String.join ", "
+                                              , "]"
+                                              ]
+                                                |> String.join " "
+                                                |> indentElmCodeLines 1
                                             , indentElmCodeLines 1 fieldDecode
                                             , ")"
                                             ]
@@ -2224,6 +2236,16 @@ jsonConverterExpressionFromType { encodeValueExpression, typeArgLocalName } ( ty
                     { encodeExpression = encodeValueExpression
                     , decodeExpression = "Json.Decode.value"
                     }
+
+
+firstCharToUpperCase : String -> String
+firstCharToUpperCase string =
+    case String.uncons string of
+        Nothing ->
+            ""
+
+        Just ( firstChar, rest ) ->
+            String.fromChar (Char.toUpper firstChar) ++ rest
 
 
 jsonConverterFunctionFromChoiceType :
@@ -2902,6 +2924,15 @@ jsonDecodeSucceedWhenNotNull valueIfNotNull =
                 else
                     Json.Decode.succeed valueIfNotNull
             )"""
+             }
+           , { functionName = "jsonDecode_field_withAlternateNames"
+             , functionText = """
+jsonDecode_field_withAlternateNames : String -> List String -> Json.Decode.Decoder a -> Json.Decode.Decoder a
+jsonDecode_field_withAlternateNames fieldName alternateNames decoder =
+    Json.Decode.oneOf
+        ((fieldName :: alternateNames)
+            |> List.map (\\name -> Json.Decode.field name decoder)
+        )"""
              }
            ]
         |> List.map

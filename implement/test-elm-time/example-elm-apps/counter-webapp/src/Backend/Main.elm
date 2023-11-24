@@ -7,16 +7,14 @@ import Base64
 import Bytes
 import Bytes.Decode
 import Bytes.Encode
+import CompilationInterface.GenerateJsonConverters as GenerateJsonConverters
+import HttpApi exposing (ClientRequest)
 import Json.Decode
 import Platform.WebService
 
 
 type alias State =
     Int
-
-
-type alias CounterEvent =
-    { addition : Int }
 
 
 webServiceMain : Platform.WebService.WebServiceConfig State
@@ -41,7 +39,8 @@ updateForHttpRequestEvent httpRequestEvent stateBefore =
                 httpRequestEvent.request.bodyAsBase64
                     |> Maybe.map (Base64.toBytes >> Maybe.map (decodeBytesToString >> Maybe.withDefault "Failed to decode bytes to string") >> Maybe.withDefault "Failed to decode from base64")
                     |> Maybe.withDefault "Missing HTTP body"
-                    |> deserializeCounterEvent
+                    |> Json.Decode.decodeString GenerateJsonConverters.jsonDecodeClientRequest
+                    |> Result.mapError Json.Decode.errorToString
             of
                 Err error ->
                     ( stateBefore, Err ("Failed to deserialize counter event from HTTP Request content: " ++ error) )
@@ -71,20 +70,13 @@ updateForHttpRequestEvent httpRequestEvent stateBefore =
     )
 
 
-processCounterEvent : CounterEvent -> State -> ( State, String )
+processCounterEvent : ClientRequest -> State -> ( State, String )
 processCounterEvent counterEvent stateBefore =
     let
         state =
             stateBefore + counterEvent.addition
     in
     ( state, state |> String.fromInt )
-
-
-deserializeCounterEvent : String -> Result String CounterEvent
-deserializeCounterEvent serializedEvent =
-    serializedEvent
-        |> Json.Decode.decodeString (Json.Decode.field "addition" Json.Decode.int |> Json.Decode.map CounterEvent)
-        |> Result.mapError Json.Decode.errorToString
 
 
 decodeBytesToString : Bytes.Bytes -> Maybe String

@@ -13,6 +13,7 @@ using System.Linq;
 using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
+using System.Threading.Tasks;
 using static MoreLinq.Extensions.BatchExtension;
 
 namespace TestElmTime;
@@ -1419,6 +1420,55 @@ public class WebServiceTests
             httpResponse.Content.ReadAsStringAsync().Result;
 
         Assert.AreEqual("value from local assembly", responseContent);
+    }
+
+    [TestMethod]
+    public async Task Elm_webservice_json_decoder_accepts_pascal_case_record_fields()
+    {
+        var adminPassword = "test";
+
+        using var testSetup = WebHostAdminInterfaceTestSetup.Setup(
+            deployAppAndInitElmState: ElmWebServiceAppTests.CounterWebApp,
+            adminPassword: adminPassword);
+
+        using var server = testSetup.StartWebHost();
+
+        using var publicClient = testSetup.BuildPublicAppHttpClient();
+
+        using var adminClient = testSetup.BuildAdminInterfaceHttpClient();
+
+        testSetup.SetDefaultRequestHeaderAuthorizeForAdmin(adminClient);
+
+        {
+            var httpResponse =
+                await publicClient.PostAsync("", new StringContent("""{ "addition" : 3 }"""));
+
+            var httpResponseContent = await httpResponse.Content.ReadAsStringAsync();
+
+            Assert.AreEqual("3", httpResponseContent, false, "response content");
+        }
+
+        {
+            var httpResponse =
+                await publicClient.PostAsync("", new StringContent("""{ "Addition" : 1 }"""));
+
+            var httpResponseContent = await httpResponse.Content.ReadAsStringAsync();
+
+            Assert.IsTrue(httpResponse.IsSuccessStatusCode);
+
+            Assert.AreEqual("4", httpResponseContent, false, "response content");
+        }
+
+        {
+            var httpResponse =
+                await publicClient.PostAsync("", new StringContent("""{ "aDdition" : 1 }"""));
+
+            var httpResponseContent = await httpResponse.Content.ReadAsStringAsync();
+
+            Assert.IsFalse(httpResponse.IsSuccessStatusCode);
+
+            Assert.AreNotEqual("5", httpResponseContent, false, "response content");
+        }
     }
 
     private class FileStoreFromDelegates(
