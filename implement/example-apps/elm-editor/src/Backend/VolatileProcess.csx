@@ -9,6 +9,7 @@
 #r "System.Runtime.InteropServices.RuntimeInformation"
 #r "System.Text.Json"
 
+#r "Pine"
 #r "elm-time"
 
 using Pine;

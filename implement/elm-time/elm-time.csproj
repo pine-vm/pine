@@ -5,8 +5,8 @@
     <TargetFramework>net8.0</TargetFramework>
     <RootNamespace>ElmTime</RootNamespace>
     <AssemblyName>elm-time</AssemblyName>
-    <AssemblyVersion>2023.1119.0.0</AssemblyVersion>
-    <FileVersion>2023.1119.0.0</FileVersion>
+    <AssemblyVersion>2023.1124.0.0</AssemblyVersion>
+    <FileVersion>2023.1124.0.0</FileVersion>
     <Nullable>enable</Nullable>
     <GenerateEmbeddedFilesManifest>true</GenerateEmbeddedFilesManifest>
   </PropertyGroup>
@@ -31,6 +31,10 @@
 
   <ItemGroup>
     <RuntimeHostConfigurationOption Include="System.Globalization.Invariant" Value="true" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Pine\Pine.csproj" />
   </ItemGroup>
 
   <ItemGroup>

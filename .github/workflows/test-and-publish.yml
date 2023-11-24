@@ -33,17 +33,25 @@ jobs:
       run: dotnet --info
 
     - name: Clean package cache as a temporary workaround for https://github.com/actions/setup-dotnet/issues/155
-      run: dotnet clean ./implement/test-elm-time/test-elm-time.csproj && dotnet nuget locals all --clear
+      run: |
+        dotnet clean ./implement/PineTest/Pine.UnitTests/Pine.UnitTests.csproj && dotnet nuget locals all --clear
+        dotnet clean ./implement/test-elm-time/test-elm-time.csproj && dotnet nuget locals all --clear
 
-    - name: Run tests with dotnet test
-      run: dotnet test ./implement/test-elm-time/test-elm-time.csproj --logger "trx"  --diag "./implement/test-elm-time/TestResults/diag-log.txt"  --verbosity  diagnostic
+    - name: Run Pine tests with dotnet test
+      run: |
+        dotnet test ./implement/PineTest/Pine.UnitTests/Pine.UnitTests.csproj --logger "trx"  --diag "./implement/PineTest/Pine.UnitTests/TestResults/diag-log.txt"  --verbosity  diagnostic
+
+    - name: Run Elm-Time tests with dotnet test
+      run: |
+        dotnet test ./implement/test-elm-time/test-elm-time.csproj --logger "trx"  --diag "./implement/test-elm-time/TestResults/diag-log.txt"  --verbosity  diagnostic
 
     - name: Publish test results
       uses: actions/upload-artifact@v3
       if: always()
       with:
         name: test-results-${{ github.sha }}-${{ matrix.environment }}
-        path: ./implement/test-elm-time/TestResults
+        # path: ./implement/test-elm-time/TestResults
+        path: ./implement/**/TestResults
 
     - name: Compile Overview of Test Results
       uses: EnricoMi/publish-unit-test-result-action/composite@v2
@@ -51,11 +59,11 @@ jobs:
       with:
         check_name: "Test Results Overview ${{ matrix.environment }}"
         files: |
-          ./implement/test-elm-time/TestResults/**/*.xml
-          ./implement/test-elm-time/TestResults/**/*.trx
-          ./implement/test-elm-time/TestResults/**/*.json
+          ./implement/**/TestResults/**/*.xml
+          ./implement/**/TestResults/**/*.trx
+          ./implement/**/TestResults/**/*.json
 
-    - name: dotnet publish
+    - name: dotnet publish Elm-Time
       run: dotnet publish -c Debug -r ${{ matrix.publish-runtime-id }} --self-contained true -p:PublishSingleFile=true  -p:PublishReadyToRun=true -p:PublishReadyToRunShowWarnings=true  --output ./dotnet-build  ./implement/elm-time
 
     - name: Copy artifacts to publish
