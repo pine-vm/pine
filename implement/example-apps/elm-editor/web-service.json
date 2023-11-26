@@ -3,7 +3,7 @@
         "windowSizeInMs": 60000,
         "limit": 20
     },
-    "httpRequestEventSizeLimit": 1400000,
+    "httpRequestEventSizeLimit": 5500000,
     "disabled____________________letsEncryptOptions": {
         "Domains": [
             "editor.elm-time.org",
