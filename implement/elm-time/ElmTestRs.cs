@@ -72,7 +72,11 @@ public class ElmTestRsReportJsonEntryFailureReasonDataJsonConverter : System.Tex
 
 public class ElmTestRs
 {
-    public static IReadOnlyDictionary<OSPlatform, (string hash, string remoteSource)> ElmTestRsExecutableFileByOs =
+    public record ElmTestRsRunReport(
+        ExecutableFile.ProcessOutput ProcessOutput,
+        Result<string, IReadOnlyList<(string rawLine, ElmTestRsReportJsonEntry parsedLine)>> ParseOutputResult);
+
+    public static readonly IReadOnlyDictionary<OSPlatform, (string hash, string remoteSource)> ElmTestRsExecutableFileByOs =
         ImmutableDictionary<OSPlatform, (string hash, string remoteSource)>.Empty
         .Add(
             OSPlatform.Linux,
@@ -106,7 +110,7 @@ public class ElmTestRs
 
     public static ReadOnlyMemory<byte>? DenoExecutableFileForCurrentOs() => BlobLibrary.LoadFileForCurrentOs(DenoExecutableFileByOs);
 
-    public static (ExecutableFile.ProcessOutput processOutput, IReadOnlyList<(string rawLine, ElmTestRsReportJsonEntry parsedLine)> stdoutLines) Run(
+    public static ElmTestRsRunReport Run(
         IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> elmProjectFiles)
     {
         var elmTestExecutableFile = ElmTestRsExecutableFileForCurrentOs()!;
@@ -136,7 +140,15 @@ public class ElmTestRs
             environmentFilesExecutable: environmentFilesExecutable,
             environmentPathExecutableFiles: environmentPathExecutableFiles);
 
-        var stdout = executeElmTestResult.processOutput.StandardOutput;
+        return new(
+            executeElmTestResult.processOutput,
+            ParseProcessOutput(executeElmTestResult.processOutput));
+    }
+
+    public static Result<string, IReadOnlyList<(string rawLine, ElmTestRsReportJsonEntry parsedLine)>> ParseProcessOutput(
+        ExecutableFile.ProcessOutput processOutput)
+    {
+        var stdout = processOutput.StandardOutput;
 
         var stdoutLines =
             stdout
@@ -144,11 +156,25 @@ public class ElmTestRs
             .Where(l => 0 < l?.Length)
             .ToImmutableList();
 
-        var parsedLines =
-            stdoutLines.Select(line => (line, DeserializeElmTestRsReportJsonEntry(line)))
-            .ToImmutableList();
+        try
+        {
+            var parsedLines =
+                stdoutLines.Select(line => (line, DeserializeElmTestRsReportJsonEntry(line)))
+                .ToImmutableList();
 
-        return (executeElmTestResult.processOutput, parsedLines);
+            return Result<string, IReadOnlyList<(string rawLine, ElmTestRsReportJsonEntry parsedLine)>>.ok(parsedLines);
+        }
+        catch (Exception e)
+        {
+            return Result<string, IReadOnlyList<(string rawLine, ElmTestRsReportJsonEntry parsedLine)>>.err(
+                string.Join(
+                    "\n",
+                    "Failed to parse process output (" + e.GetType().Name + ", " + e.Message + ")",
+                    "StandardOutput:",
+                    processOutput.StandardOutput,
+                    "StandardError:",
+                    processOutput.StandardError));
+        }
     }
 
     public static ElmTestRsReportJsonEntry DeserializeElmTestRsReportJsonEntry(string json)
@@ -162,6 +188,18 @@ public class ElmTestRs
 
         return System.Text.Json.JsonSerializer.Deserialize<ElmTestRsReportJsonEntry>(json, serializeOptions)!;
     }
+
+    public static IReadOnlyList<(IReadOnlyList<(string text, ElmTestRsConsoleOutputColor color)> text, bool? overallSuccess)>
+        OutputFromEvent(
+        Result<string, IReadOnlyList<(string rawLine, ElmTestRsReportJsonEntry parsedLine)>> parseOutputResult) =>
+        parseOutputResult
+        .Unpack<IReadOnlyList<(IReadOnlyList<(string text, ElmTestRsConsoleOutputColor color)> text, bool? overallSuccess)>>(
+            fromErr:
+            err =>
+            [([(err, ElmTestRsConsoleOutputColor.RedColor)], overallSuccess: false)],
+            fromOk:
+            parsedLines =>
+            parsedLines.Select(l => OutputFromEvent(l.parsedLine)).ToImmutableList());
 
     public static (IReadOnlyList<(string text, ElmTestRsConsoleOutputColor color)> text, bool? overallSuccess) OutputFromEvent(
         ElmTestRsReportJsonEntry @event)

@@ -18,7 +18,7 @@ namespace ElmTime;
 
 public class Program
 {
-    public static string AppVersionId => "2023-11-26";
+    public static string AppVersionId => "2023-11-28";
 
     private static int AdminInterfaceDefaultPort => 4000;
 
@@ -656,21 +656,19 @@ public class Program
 
                 if (elmTestRsOutput != null)
                 {
-                    saveTextToFileAndReportToConsole(elmTestRsOutput + ".stdout", elmTestResult.processOutput.StandardOutput ?? "");
-                    saveTextToFileAndReportToConsole(elmTestRsOutput + ".stderr", elmTestResult.processOutput.StandardError ?? "");
+                    saveTextToFileAndReportToConsole(elmTestRsOutput + ".stdout", elmTestResult.ProcessOutput.StandardOutput ?? "");
+                    saveTextToFileAndReportToConsole(elmTestRsOutput + ".stderr", elmTestResult.ProcessOutput.StandardError ?? "");
                 }
 
-                if (0 < elmTestResult.processOutput.StandardError?.Length)
+                if (0 < elmTestResult.ProcessOutput.StandardError?.Length)
                 {
                     Console.ForegroundColor = ConsoleColor.Red;
-                    Console.WriteLine(elmTestResult.processOutput.StandardError);
+                    Console.WriteLine(elmTestResult.ProcessOutput.StandardError);
                     Console.ResetColor();
                 }
 
                 var eventsOutputs =
-                    elmTestResult.stdoutLines
-                    .Select(l => ElmTestRs.OutputFromEvent(l.parsedLine))
-                    .ToImmutableList();
+                    ElmTestRs.OutputFromEvent(elmTestResult.ParseOutputResult);
 
                 foreach (var eventOutput in eventsOutputs)
                 {
@@ -700,7 +698,7 @@ public class Program
 
                 // TODO: Report more details on timing.
 
-                return elmTestResult.processOutput.ExitCode;
+                return elmTestResult.ProcessOutput.ExitCode;
             });
         });
 
@@ -2699,8 +2697,7 @@ public class Program
 
     private static readonly DateTimeOffset programStartTime = DateTimeOffset.UtcNow;
 
-    public static (ExecutableFile.ProcessOutput processOutput, IReadOnlyList<(string rawLine, ElmTestRsReportJsonEntry parsedLine)> stdoutLines)
-        CompileAndElmTestRs(string source)
+    public static ElmTestRs.ElmTestRsRunReport CompileAndElmTestRs(string source)
     {
         var (_, compiledAppFiles) = CompileApp(source);
 
