@@ -263,9 +263,9 @@ We don't have to return the same value here. We can also use the migration to ma
 
 Here is another example, almost as simple, with the back-end state just a primitive type, migrating from an `Int` to a `String`: <https://github.com/elm-time/elm-time/blob/0ae86d63e4353c8225794fd3cc214121d6c02847/implement/test-elm-time/example-elm-apps/migrate-from-int-to-string-builder-web-app/src/Backend/MigrateState.elm>
 
-### `web-server.json`
+### `web-service.json`
 
-The `web-server.json` file is where we can configure the acquisition of SSL certificates and rate-limiting of HTTP requests to the backend app.
+The `web-service.json` file is where we can configure the acquisition of SSL certificates and rate-limiting of HTTP requests to the backend app.
 Since these features are optional to use, in the simplest case, this file is not present at all.
 
 ## Running a Server With an Elm-Time Process
@@ -365,7 +365,7 @@ docker  run  --mount source=your-docker-volume-name,destination=/elm-time/proces
 
 ## Support HTTPS
 
-The Elm-Time web host supports HTTPS. Thanks to the [`FluffySpoon.AspNet.LetsEncrypt`](https://github.com/ffMathy/FluffySpoon.AspNet.LetsEncrypt) project, it can automatically get an SSL certificate from [Let's Encrypt](https://letsencrypt.org/). To configure this, add a `letsEncryptOptions` property to the `web-server.json` file as follows:
+The Elm-Time web host supports HTTPS. Thanks to the [`FluffySpoon.AspNet.LetsEncrypt`](https://github.com/ffMathy/FluffySpoon.AspNet.LetsEncrypt) project, it can automatically get an SSL certificate from [Let's Encrypt](https://letsencrypt.org/). To configure this, add a `letsEncryptOptions` property to the `web-service.json` file as follows:
 ```json
 {
     "letsEncryptOptions": {
