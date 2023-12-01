@@ -15,23 +15,39 @@ using CompileDictionaryResult =
     IReadOnlyDictionary<PineValue, Func<PineVM.PineVM.EvalExprDelegate, PineValue, Result<string, PineValue>>>;
 
 public record CompileToAssemblyResult(
+    GenerateCSharpFileResult GenerateCSharpFileResult,
     byte[] Assembly,
-    Func<Result<string, CompileDictionaryResult>>
-    BuildCompiledExpressionsDictionary);
+    Func<Result<string, CompileDictionaryResult>> BuildCompiledExpressionsDictionary);
 
 
 public class CompileToAssembly
 {
     public static Result<string, CompileToAssemblyResult> Compile(
-        CompileCSharpClassResult compileCSharpClassResult)
+        CompileCSharpClassResult compileCSharpClassResult) =>
+        Compile(
+            compileCSharpClassResult,
+            OptimizationLevel.Release);
+
+    public static Result<string, CompileToAssemblyResult> Compile(
+        CompileCSharpClassResult compileCSharpClassResult,
+        OptimizationLevel optimizationLevel)
     {
         var csharpFile = GenerateCSharpFile(compileCSharpClassResult, additionalMembers: null);
 
-        return Compile(csharpFile);
+        /*
+         * 2023-12-01:
+         * We frequently observed the compilation to .NET CIL assembly taking more than ten minutes, with C# file lengths between 1 and 3 MB and resulting assembly sizes between 0.5 and 1 MB.
+         * (TODO: Search for more efficient representations in terms of C# text. This will also help reduce expenses for formatting, which now takes more than a second)
+         * 
+         * Using the OptimizationLevel.Debug did not seem to improve the compilation time a lot.
+         * */
+
+        return Compile(csharpFile, optimizationLevel);
     }
 
     public static Result<string, CompileToAssemblyResult> Compile(
-        GenerateCSharpFileResult csharpFile)
+        GenerateCSharpFileResult csharpFile,
+        OptimizationLevel optimizationLevel)
     {
         var syntaxText = csharpFile.FileText;
 
@@ -40,7 +56,7 @@ public class CompileToAssembly
         var compilation = CSharpCompilation.Create("assembly-name")
             .WithOptions(new CSharpCompilationOptions(
                 OutputKind.DynamicallyLinkedLibrary,
-                optimizationLevel: OptimizationLevel.Release)
+                optimizationLevel: optimizationLevel)
             .WithAssemblyIdentityComparer(DesktopAssemblyIdentityComparer.Default))
             .WithReferences(MetadataReferences.Value)
             .AddSyntaxTrees(syntaxTree);
@@ -88,6 +104,7 @@ public class CompileToAssembly
 
         return Result<string, CompileToAssemblyResult>.ok(
             new CompileToAssemblyResult(
+                csharpFile,
                 Assembly: assembly,
                 BuildCompiledExpressionsDictionary: buildDictionary));
     }

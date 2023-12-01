@@ -18,7 +18,7 @@ namespace ElmTime;
 
 public class Program
 {
-    public static string AppVersionId => "2023-11-28";
+    public static string AppVersionId => "2023-11-29";
 
     private static int AdminInterfaceDefaultPort => 4000;
 
@@ -1032,7 +1032,9 @@ public class Program
                                 compileSuccess =>
                                 {
                                     var compileToAssemblyResult =
-                                    Pine.CompilePineToDotNet.CompileToAssembly.Compile(compileSuccess);
+                                    Pine.CompilePineToDotNet.CompileToAssembly.Compile(
+                                        compileSuccess,
+                                        optimizationLevel: Microsoft.CodeAnalysis.OptimizationLevel.Release);
 
                                     console.WriteLine(
                                         "Completed PGO and compilation in " +

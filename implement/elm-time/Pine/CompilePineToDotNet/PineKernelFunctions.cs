@@ -191,11 +191,21 @@ public partial class CompileToCSharp
                     nameof(KernelFunction.length) =>
                     PineKernelFunctionsInline.TryInlineKernelFunction_Length,
 
+                    /*
+                     * 2023-12-01:
+                     * Disabling the inlining for 'list_head' to reduce the size of the emitted C# code.
+                     * 
                     nameof(KernelFunction.list_head) =>
                     PineKernelFunctionsInline.TryInlineKernelFunction_ListHead,
+                    */
 
+                    /*
+                     * 2023-12-01:
+                     * Disabling the inlining for 'skip' to reduce the size of the emitted C# code.
+                     * 
                     nameof(KernelFunction.skip) =>
                     PineKernelFunctionsInline.TryInlineKernelFunction_Skip,
+                    */
 
                     _ =>
                     null

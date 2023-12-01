@@ -89,6 +89,7 @@ public class CompilePineToDotNetTests
     }
 
     [TestMethod]
+    [Ignore("Inlining disabled for list_head")]
     public void Test_compile_specialized_for_kernel_list_head()
     {
         var pineExpression =
