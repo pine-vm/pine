@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Collections.Immutable;
 using System.Linq;
 using System.Numerics;
 
@@ -20,7 +19,7 @@ public static class KernelFunction
 
                         [var first, ..] =>
                         /*
-                         * ::rest pattern seems not implemented yet:
+                         * :: rest pattern seems not implemented yet:
                          * https://github.com/dotnet/csharplang/issues/6574
                          * */
                         list.Elements.All(e => e.Equals(first)),
@@ -122,28 +121,24 @@ public static class KernelFunction
     public static Result<string, PineValue> concat(PineValue value) =>
         PineVM.DecodePineListValue(value)
             .Map(list =>
-                list.Aggregate(
-                    seed: PineValue.EmptyList,
-                    func: (aggregate, elem) =>
-                        elem switch
-                        {
-                            PineValue.BlobValue elemBlobValue =>
-                                aggregate switch
-                                {
-                                    PineValue.BlobValue aggregateBlobValue =>
-                                        PineValue.Blob(CommonConversion.Concat(
-                                            aggregateBlobValue.Bytes.Span, elemBlobValue.Bytes.Span)),
-                                    _ => elemBlobValue
-                                },
-                            PineValue.ListValue elemListValue =>
-                                aggregate switch
-                                {
-                                    PineValue.ListValue aggregateListValue =>
-                                        PineValue.List([.. aggregateListValue.Elements, .. elemListValue.Elements]),
-                                    _ => elemListValue
-                                },
-                            _ => throw new NotImplementedException()
-                        }));
+            list switch
+            {
+                [] =>
+                PineValue.EmptyList,
+
+                [var head, ..] =>
+                head switch
+                {
+                    PineValue.BlobValue =>
+                    PineValue.Blob(CommonConversion.Concat([.. list.OfType<PineValue.BlobValue>().Select(b => b.Bytes)])),
+
+                    PineValue.ListValue =>
+                    PineValue.List([.. list.OfType<PineValue.ListValue>().SelectMany(l => l.Elements)]),
+
+                    _ =>
+                    throw new NotImplementedException()
+                }
+            });
 
     public static Result<string, PineValue> list_head(PineValue value) =>
         PineVM.DecodePineListValue(value)

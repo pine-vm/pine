@@ -211,23 +211,7 @@ kernelFunctions =
             >> Ok
       )
     , ( "concat"
-      , decodePineListValue
-            >> Result.mapError DescribePathEnd
-            >> Result.map
-                (List.foldl
-                    (\next aggregate ->
-                        case ( aggregate, next ) of
-                            ( ListValue aggregateList, ListValue nextList ) ->
-                                ListValue (aggregateList ++ nextList)
-
-                            ( BlobValue aggregateBlob, BlobValue nextBlob ) ->
-                                BlobValue (aggregateBlob ++ nextBlob)
-
-                            _ ->
-                                next
-                    )
-                    (ListValue [])
-                )
+      , kernel_function_concat >> Ok
       )
     , ( "list_head"
       , decodePineListValue
@@ -265,6 +249,48 @@ kernelFunction_Negate value =
             ListValue _ ->
                 ListValue []
         )
+
+
+kernel_function_concat : Value -> Value
+kernel_function_concat value =
+    case value of
+        ListValue list ->
+            case list of
+                [] ->
+                    ListValue []
+
+                (BlobValue _) :: _ ->
+                    BlobValue
+                        (list
+                            |> List.map
+                                (\item ->
+                                    case item of
+                                        BlobValue blob ->
+                                            blob
+
+                                        _ ->
+                                            []
+                                )
+                            |> List.concat
+                        )
+
+                (ListValue _) :: _ ->
+                    ListValue
+                        (list
+                            |> List.map
+                                (\item ->
+                                    case item of
+                                        ListValue innerList ->
+                                            innerList
+
+                                        _ ->
+                                            []
+                                )
+                            |> List.concat
+                        )
+
+        _ ->
+            ListValue []
 
 
 list_all_same : List a -> Bool
