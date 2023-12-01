@@ -5,7 +5,6 @@ using Pine.PineVM;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
-using System.Globalization;
 using System.Linq;
 using System.Numerics;
 using System.Security.Cryptography;
@@ -760,8 +759,7 @@ public partial class CompileToCSharp
                 environment,
                 createLetBindingsForCse: false)
             .Map(compiledArgument =>
-            compiledArgument.Map(environment, argumentCs =>
-            wrapInvocationInWithDefault(kernelFunctionInfo.CompileGenericInvocation(argumentCs)))
+            compiledArgument.Map(environment, argumentCs => kernelFunctionInfo.CompileGenericInvocation(argumentCs))
             .MergeBindings(compiledArgument.LetBindings));
     }
 
@@ -1090,7 +1088,7 @@ public partial class CompileToCSharp
             Expression.KernelApplicationExpression kernelApplication =>
             TryEvaluateExpressionIndependent(kernelApplication.argument)
             .MapError(err => "Failed to evaluate kernel application argument independent: " + err)
-            .AndThen(argument => kernelApplication.function(argument)),
+            .Map(kernelApplication.function),
 
             Expression.DecodeAndEvaluateExpression decodeAndEvaluateExpression =>
             TryEvaluateExpressionIndependent(decodeAndEvaluateExpression)

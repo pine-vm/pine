@@ -53,7 +53,7 @@ public abstract record Expression
         Expression argument,
 
         [property: JsonIgnore]
-            Func<PineValue, Result<string, PineValue>> function)
+            Func<PineValue, PineValue> function)
         : Expression
     {
         public virtual bool Equals(KernelApplicationExpression? other)

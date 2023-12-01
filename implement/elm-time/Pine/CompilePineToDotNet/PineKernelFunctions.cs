@@ -221,8 +221,15 @@ public partial class CompileToCSharp
         return
             methodsInfos
             .Where(methodInfo =>
-            methodInfo.ReturnType == typeof(Result<string, PineValue>) &&
-            methodInfo.GetParameters().Length == 1 && methodInfo.GetParameters()[0].ParameterType == typeof(PineValue))
+            methodInfo.ReturnType == typeof(PineValue) &&
+            methodInfo.GetParameters() switch
+            {
+                [var singleParameter] when singleParameter.ParameterType == typeof(PineValue) =>
+                true,
+
+                _ =>
+                false
+            })
             .ToImmutableDictionary(m => m.Name, ReadKernelFunctionInfo);
     }
 }

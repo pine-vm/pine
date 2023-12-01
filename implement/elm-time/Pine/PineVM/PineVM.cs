@@ -149,7 +149,7 @@ public class PineVM : IPineVM
         Expression.KernelApplicationExpression application) =>
         EvaluateExpression(application.argument, environment)
         .MapError(error => "Failed to evaluate argument: " + error)
-        .Map(argument => application.function(argument).WithDefault(PineValue.EmptyList));
+        .Map(argument => application.function(argument));
 
     public Result<string, PineValue> EvaluateConditionalExpression(
         PineValue environment,
@@ -159,8 +159,8 @@ public class PineVM : IPineVM
         .AndThen(conditionValue =>
         EvaluateExpression(conditionValue == TrueValue ? conditional.ifTrue : conditional.ifFalse, environment));
 
-    private static readonly IReadOnlyDictionary<string, Func<PineValue, Result<string, PineValue>>> NamedKernelFunctions =
-        ImmutableDictionary<string, Func<PineValue, Result<string, PineValue>>>.Empty
+    private static readonly IReadOnlyDictionary<string, Func<PineValue, PineValue>> NamedKernelFunctions =
+        ImmutableDictionary<string, Func<PineValue, PineValue>>.Empty
         .SetItem(nameof(KernelFunction.equal), KernelFunction.equal)
         .SetItem(nameof(KernelFunction.negate), KernelFunction.negate)
         .SetItem(nameof(KernelFunction.logical_and), KernelFunction.logical_and)

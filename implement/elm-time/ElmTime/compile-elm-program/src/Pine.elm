@@ -2,6 +2,7 @@ module Pine exposing (..)
 
 import BigInt
 import Dict
+import Maybe.Extra
 import Result.Extra
 
 
@@ -40,7 +41,7 @@ type Value
 
 
 type alias KernelFunction =
-    Value -> Result (PathDescription String) Value
+    Value -> Value
 
 
 type alias EvalContext =
@@ -110,7 +111,7 @@ evaluateExpression context expression =
                         application.functionName
                             |> decodeKernelFunctionFromName
                             |> Result.mapError DescribePathEnd
-                            |> Result.map (\kernelFunction -> kernelFunction argument |> Result.withDefault (ListValue []))
+                            |> Result.map (\kernelFunction -> kernelFunction argument)
                     )
 
         ConditionalExpression conditional ->
@@ -165,7 +166,6 @@ kernelFunctions =
     [ ( "equal"
       , mapFromListValueOrBlobValue { fromList = list_all_same, fromBlob = list_all_same }
             >> valueFromBool
-            >> Ok
       )
     , ( "negate"
       , kernelFunction_Negate
@@ -175,7 +175,6 @@ kernelFunctions =
     , ( "length"
       , mapFromListValueOrBlobValue { fromList = List.length, fromBlob = List.length }
             >> (BigInt.fromInt >> valueFromBigInt)
-            >> Ok
       )
     , ( "skip"
       , kernelFunctionExpectingExactlyTwoArguments
@@ -208,15 +207,13 @@ kernelFunctions =
             { fromList = List.reverse >> ListValue
             , fromBlob = List.reverse >> BlobValue
             }
-            >> Ok
       )
     , ( "concat"
-      , kernel_function_concat >> Ok
+      , kernel_function_concat
       )
     , ( "list_head"
-      , decodePineListValue
-            >> Result.map (List.head >> Maybe.withDefault (ListValue []))
-            >> Result.mapError DescribePathEnd
+      , kernelFunctionExpectingList
+            (List.head >> Maybe.withDefault (ListValue []))
       )
     , ( "add_int"
       , kernelFunctionExpectingListOfBigIntAndProducingBigInt (List.foldl BigInt.add (BigInt.fromInt 0))
@@ -225,7 +222,7 @@ kernelFunctions =
       , kernelFunctionExpectingListOfBigIntAndProducingBigInt (List.foldl BigInt.mul (BigInt.fromInt 1))
       )
     , ( "is_sorted_ascending_int"
-      , is_sorted_ascending_int >> valueFromBool >> Ok
+      , is_sorted_ascending_int >> valueFromBool
       )
     ]
         |> Dict.fromList
@@ -233,22 +230,20 @@ kernelFunctions =
 
 kernelFunction_Negate : KernelFunction
 kernelFunction_Negate value =
-    Ok
-        (case value of
-            BlobValue blob ->
-                case blob of
-                    4 :: rest ->
-                        BlobValue (2 :: rest)
+    case value of
+        BlobValue blob ->
+            case blob of
+                4 :: rest ->
+                    BlobValue (2 :: rest)
 
-                    2 :: rest ->
-                        BlobValue (4 :: rest)
+                2 :: rest ->
+                    BlobValue (4 :: rest)
 
-                    _ ->
-                        ListValue []
+                _ ->
+                    ListValue []
 
-            ListValue _ ->
-                ListValue []
-        )
+        ListValue _ ->
+            ListValue []
 
 
 kernel_function_concat : Value -> Value
@@ -395,23 +390,33 @@ kernelFunctionExpectingListOfBigIntAndProducingBigInt :
     -> KernelFunction
 kernelFunctionExpectingListOfBigIntAndProducingBigInt aggregate =
     kernelFunctionExpectingListOfBigInt
-        (aggregate >> valueFromBigInt >> Ok)
+        (aggregate >> valueFromBigInt)
 
 
-kernelFunctionExpectingListOfBigInt : (List BigInt.BigInt -> Result String Value) -> KernelFunction
+kernelFunctionExpectingListOfBigInt : (List BigInt.BigInt -> Value) -> KernelFunction
 kernelFunctionExpectingListOfBigInt apply =
-    decodePineListValue
-        >> Result.andThen (List.map bigIntFromValue >> Result.Extra.combine)
-        >> Result.andThen apply
-        >> Result.mapError DescribePathEnd
+    kernelFunctionExpectingList
+        (List.map bigIntFromValue
+            >> Result.Extra.combine
+            >> Result.map apply
+            >> Result.withDefault (ListValue [])
+        )
 
 
 kernelFunctionExpectingListOfTypeBool : (List Bool -> Bool) -> KernelFunction
 kernelFunctionExpectingListOfTypeBool apply =
-    decodePineListValue
-        >> Result.andThen (List.map (boolFromValue >> Result.fromMaybe "Value is neither True nor False") >> Result.Extra.combine)
-        >> Result.map (apply >> valueFromBool)
-        >> Result.mapError DescribePathEnd
+    kernelFunctionExpectingList
+        (\list ->
+            case list of
+                [] ->
+                    ListValue []
+
+                _ ->
+                    List.map boolFromValue list
+                        |> Maybe.Extra.combine
+                        |> Maybe.map (apply >> valueFromBool)
+                        |> Maybe.withDefault (ListValue [])
+        )
 
 
 kernelFunctionExpectingExactlyTwoArguments :
@@ -421,24 +426,36 @@ kernelFunctionExpectingExactlyTwoArguments :
     }
     -> KernelFunction
 kernelFunctionExpectingExactlyTwoArguments configuration =
-    decodePineListValue
-        >> Result.andThen decodeListWithExactlyTwoElements
-        >> Result.mapError DescribePathEnd
-        >> Result.andThen
-            (\( arg0Value, arg1Value ) ->
-                arg0Value
-                    |> configuration.mapArg0
-                    |> Result.mapError (DescribePathNode "Failed to map argument 0")
-                    |> Result.andThen
-                        (\arg0 ->
-                            arg1Value
-                                |> configuration.mapArg1
-                                |> Result.mapError (DescribePathNode "Failed to map argument 1")
-                                |> Result.map (Tuple.pair arg0)
-                        )
-            )
-        >> Result.andThen
-            (\( arg0, arg1 ) -> configuration.apply arg0 arg1)
+    kernelFunctionExpectingList
+        (\list ->
+            case list of
+                [ arg0Value, arg1Value ] ->
+                    case configuration.mapArg0 arg0Value of
+                        Err _ ->
+                            ListValue []
+
+                        Ok arg0 ->
+                            case configuration.mapArg1 arg1Value of
+                                Err _ ->
+                                    ListValue []
+
+                                Ok arg1 ->
+                                    configuration.apply arg0 arg1
+                                        |> Result.withDefault (ListValue [])
+
+                _ ->
+                    ListValue []
+        )
+
+
+kernelFunctionExpectingList : (List Value -> Value) -> KernelFunction
+kernelFunctionExpectingList continueWithList value =
+    case value of
+        ListValue list ->
+            continueWithList list
+
+        _ ->
+            ListValue []
 
 
 boolFromValue : Value -> Maybe Bool

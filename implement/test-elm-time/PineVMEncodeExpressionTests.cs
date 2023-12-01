@@ -35,7 +35,7 @@ public class PineVMEncodeExpressionTests
             new Expression.KernelApplicationExpression(
                 functionName: nameof(KernelFunction.length),
                 argument: new Expression.LiteralExpression(PineValueAsString.ValueFromString("kernel app arg")),
-                function: _ => Result<string, PineValue>.err("Not implemented")),
+                function: _ => throw new System.NotImplementedException()),
 
             new Expression.StringTagExpression(
                 tag: "tag text",
