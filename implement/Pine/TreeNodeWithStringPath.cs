@@ -175,6 +175,28 @@ public abstract record TreeNodeWithStringPath : IEquatable<TreeNodeWithStringPat
         return SortedTree(treeEntries);
     }
 
+    public static TreeNodeWithStringPath FilterNodes(
+        TreeNodeWithStringPath node,
+        Func<IReadOnlyList<string>, bool> pathFilter,
+        IReadOnlyList<string>? currentPrefix = null) =>
+        node switch
+        {
+            BlobNode blob => blob,
+
+            TreeNode tree =>
+            new TreeNode(
+                tree.Elements
+                .Where(treeNode => pathFilter([.. (currentPrefix ?? []), treeNode.name]))
+                .Select(treeNode => (treeNode.name,
+                FilterNodes(
+                    treeNode.component,
+                    pathFilter,
+                    currentPrefix: [.. currentPrefix ?? [], treeNode.name])))
+                .ToImmutableList()),
+
+            _ => throw new NotImplementedException()
+        };
+
     public static TreeNodeWithStringPath Sort(TreeNodeWithStringPath node) =>
         node switch
         {

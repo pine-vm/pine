@@ -13,10 +13,27 @@ public static class ElmModule
         IReadOnlyList<string> ModuleName,
         IImmutableSet<IReadOnlyList<string>> ImportedModulesNames);
 
-    public static IReadOnlyList<string> ModulesTextOrderedForCompilationByDependencies(IReadOnlyList<string> modulesTexts)
+    public static IReadOnlyList<string> ModulesTextOrderedForCompilationByDependencies(
+        IReadOnlyList<string> modulesTexts) =>
+        ModulesTextOrderedForCompilationByDependencies(
+            rootModulesTexts: modulesTexts,
+            availableModulesTexts: []);
+
+    public static IReadOnlyList<string> ModulesTextOrderedForCompilationByDependencies(
+        IReadOnlyList<string> rootModulesTexts,
+        IReadOnlyList<string> availableModulesTexts)
     {
+        var allModulesTexts =
+            rootModulesTexts
+            .Concat(availableModulesTexts)
+            .Distinct()
+            .ToImmutableList();
+
+        bool IsRootModule(string moduleText) =>
+            rootModulesTexts.Contains(moduleText);
+
         var parsedModules =
-            modulesTexts
+            allModulesTexts
             .Select(
                 moduleText =>
                 (moduleText,
@@ -44,6 +61,18 @@ public static class ElmModule
                 EnumerateImportsOfModuleTransitive(importedModuleName)
                 .Prepend(importedModuleName));
 
+        var parsedRootModules =
+            parsedModules
+            .Where(parsedModule => IsRootModule(parsedModule.moduleText))
+            .ToImmutableList();
+
+        var includedModulesNames =
+            parsedRootModules
+            .SelectMany(rootModule =>
+            EnumerateImportsOfModuleTransitive(rootModule.parsedModule.ModuleName)
+            .Prepend(rootModule.parsedModule.ModuleName))
+            .ToImmutableHashSet(EnumerableExtension.EqualityComparer<IReadOnlyList<string>>());
+
         bool FirstModuleImportsSecondModuleTransitive(
             IReadOnlyList<string> moduleA,
             IReadOnlyList<string> moduleB) =>
@@ -61,6 +90,10 @@ public static class ElmModule
 
         return
             parsedModules
+            .Where(parsedModule =>
+            includedModulesNames.Contains(
+                parsedModule.parsedModule.ModuleName,
+                EnumerableExtension.EqualityComparer<IReadOnlyList<string>>()))
             .OrderBy(
                 parsedModule => parsedModule.parsedModule.ModuleName,
                 new DelegateComparer<IReadOnlyList<string>>(ModuleSortOrder!))
