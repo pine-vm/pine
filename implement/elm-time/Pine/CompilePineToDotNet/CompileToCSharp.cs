@@ -459,9 +459,11 @@ public partial class CompileToCSharp
         {
             return
                 Result<string, CompiledExpression>.ok(
-                    CompiledExpression.WithTypeResult(
-                        SyntaxFactory.IdentifierName(letBinding.DeclarationName))
-                    .MergeDependencies(letBinding.Expression.Dependencies));
+                    new CompiledExpression(
+                        Syntax: SyntaxFactory.IdentifierName(letBinding.DeclarationName),
+                        IsTypeResult: letBinding.Expression.IsTypeResult,
+                        LetBindings: CompiledExpression.NoLetBindings,
+                        Dependencies: letBinding.Expression.Dependencies));
         }
 
         var letBindingsAvailableFromParentKeys =

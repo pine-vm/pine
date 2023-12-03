@@ -235,7 +235,7 @@ public record CompiledExpression(
                         SyntaxFactory.VariableDeclarator(
                             SyntaxFactory.Identifier(letBinding.DeclarationName))
                         .WithInitializer(
-                            SyntaxFactory.EqualsValueClause(letBinding.Expression.AsCsWithTypeResult())))))))
+                            SyntaxFactory.EqualsValueClause(letBinding.Expression.Syntax)))))))
             .ToImmutableArray();
     }
 
