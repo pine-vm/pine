@@ -17,6 +17,8 @@ namespace Pine.PineVM;
 /// </summary>
 public class DynamicPGOShare : IDisposable
 {
+    public int CompiledExpressionsCountLimit { init; get; }
+
     private record SubmissionProfileMutableContainer(
         ConcurrentQueue<IReadOnlyDictionary<Expression, ExpressionUsageProfile>> Iterations);
 
@@ -40,7 +42,16 @@ public class DynamicPGOShare : IDisposable
         completedCompilations.ToImmutableList();
 
     public DynamicPGOShare()
+        :
+        this(compiledExpressionsCountLimit: 100)
     {
+    }
+
+    public DynamicPGOShare(
+        int compiledExpressionsCountLimit)
+    {
+        CompiledExpressionsCountLimit = compiledExpressionsCountLimit;
+
         dynamicCompilationTask = Task.Run(() =>
         {
             while (!disposedCancellationTokenSource.IsCancellationRequested)
@@ -229,20 +240,20 @@ public class DynamicPGOShare : IDisposable
         if (Compilations.LastOrDefault()?.InputProfiles.Count == inputProfiles.Count)
             return;
 
-        var maybeNewCompilation =
-            Compile(
+        var compilation =
+            GetOrCreateCompilationForProfiles(
                 inputProfiles,
-                limitNumber: 100,
-                previousCompilation: Compilations.LastOrDefault());
+                limitNumber: CompiledExpressionsCountLimit,
+                previousCompilations: completedCompilations.ToImmutableArray());
 
-        foreach (var compilation in maybeNewCompilation.Map(ImmutableList.Create).WithDefault([]))
+        if (!completedCompilations.Contains(compilation))
             completedCompilations.Enqueue(compilation);
     }
 
-    private static Maybe<Compilation> Compile(
+    private static Compilation GetOrCreateCompilationForProfiles(
         IReadOnlyList<IReadOnlyDictionary<Expression, ExpressionUsageProfile>> inputProfiles,
         int limitNumber,
-        Compilation? previousCompilation)
+        IReadOnlyList<Compilation> previousCompilations)
     {
         var totalStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
@@ -257,8 +268,8 @@ public class DynamicPGOShare : IDisposable
             .Select(expressionAndProfile => expressionAndProfile.Key)
             .ToImmutableHashSet();
 
-        if (expressionsToCompile.SetEquals(previousCompilation?.CompiledExpressions ?? []))
-            return Maybe<Compilation>.nothing();
+        if (previousCompilations.FirstOrDefault(c => expressionsToCompile.SetEquals(c.CompiledExpressions)) is { } matchigPrevious)
+            return matchigPrevious;
 
         var selectExpressionsDuration = totalStopwatch.Elapsed;
 
@@ -273,7 +284,8 @@ public class DynamicPGOShare : IDisposable
             CompilePineToDotNet.CompileToCSharp.CompileExpressionsToCSharpClass(
                 expressionsToCompile,
                 syntaxContainerConfig)
-            .AndThen(CompilePineToDotNet.CompileToAssembly.Compile);
+            .AndThen(compiledToCSharp => CompilePineToDotNet.CompileToAssembly.Compile(
+                compiledToCSharp, Microsoft.CodeAnalysis.OptimizationLevel.Release));
 
         var dictionary =
             compileToAssemblyResult
@@ -285,15 +297,14 @@ public class DynamicPGOShare : IDisposable
                 ok => ok.BuildCompiledExpressionsDictionary());
 
         return
-            Maybe<Compilation>.just(
-                new Compilation(
-                    inputProfiles,
-                    expressionsToCompile,
-                    compileToAssemblyResult,
-                    dictionary,
-                    TotalDuration: totalStopwatch.Elapsed,
-                    SelectExpressionsDuration: selectExpressionsDuration,
-                    CompileDuration: compileStopwatch.Elapsed));
+            new Compilation(
+                inputProfiles,
+                expressionsToCompile,
+                compileToAssemblyResult,
+                dictionary,
+                TotalDuration: totalStopwatch.Elapsed,
+                SelectExpressionsDuration: selectExpressionsDuration,
+                CompileDuration: compileStopwatch.Elapsed);
     }
 
     public void Dispose()
