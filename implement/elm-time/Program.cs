@@ -1410,7 +1410,7 @@ public class Program
                         var pathToElmFile = pathToElmFileArgument.Value;
 
                         if (pathToElmFile.StartsWith("./"))
-                            pathToElmFile = pathToElmFile.Substring(2);
+                            pathToElmFile = pathToElmFile[2..];
 
                         if (sourceDirectoriesNotInInputDirectory.IsEmpty)
                         {
@@ -1421,7 +1421,7 @@ public class Program
                                         pathToElmFile.Replace('\\', '/').Split('/')));
                         }
 
-                        if (loadInputDirectoryOk.origin.FromLocalFileSystem is null)
+                        if (loadInputDirectoryOk.origin is not LoadCompositionOrigin.FromLocalFileSystem)
                         {
                             return
                                 Result<string, LoadForMakeResult>.err(

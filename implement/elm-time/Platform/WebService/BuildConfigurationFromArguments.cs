@@ -24,7 +24,7 @@ public static class BuildConfigurationFromArguments
         TODO: Provide a better way to avoid unnecessary files ending up in the config: Get the source files from git.
         */
         var filteredSourceTree =
-            loadCompositionResult.origin?.FromLocalFileSystem is not null
+            loadCompositionResult.origin is LoadCompositionOrigin.FromLocalFileSystem
             ?
             RemoveNoiseFromTreeComingFromLocalFileSystem(sourceTree)
             :

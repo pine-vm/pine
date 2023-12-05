@@ -56,7 +56,7 @@ namespace Pine
                     if (removeBytes != null)
                     {
                         return (
-                            originalBlobRemainingBytes.Slice(removeBytes.Value),
+                            originalBlobRemainingBytes[removeBytes.Value..],
                             changedBlobBytes);
                     }
 

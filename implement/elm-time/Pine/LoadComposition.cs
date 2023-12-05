@@ -3,11 +3,22 @@ using System.Collections.Generic;
 
 namespace Pine;
 
-public record LoadCompositionOrigin(
-    LoadFromGitHubOrGitLab.LoadFromUrlSuccess? FromGit = null,
-    object? FromLocalFileSystem = null,
-    LoadFromElmEditor.ParseUrlResult? FromEditor = null,
-    object? FromHttp = null);
+public abstract record LoadCompositionOrigin
+{
+    public sealed record FromGit(
+        LoadFromGitHubOrGitLab.LoadFromUrlSuccess Success)
+        : LoadCompositionOrigin;
+
+    public sealed record FromLocalFileSystem
+        : LoadCompositionOrigin;
+
+    public sealed record FromEditor(
+        LoadFromElmEditor.ParseUrlResult ParsedUrl)
+        : LoadCompositionOrigin;
+
+    public sealed record FromHttp
+        : LoadCompositionOrigin;
+}
 
 public static class LoadComposition
 {
@@ -15,23 +26,25 @@ public static class LoadComposition
     {
         var asProcess = AsProcessWithStringLog(sourcePath);
 
-        if (LoadFromGitHubOrGitLab.ParseUrl(sourcePath) != null)
+        if (LoadFromGitHubOrGitLab.ParseUrl(sourcePath) is not null)
         {
             return
                 asProcess
                 .WithLogEntryAdded("This path looks like a URL into a remote git repository. Trying to load from there...")
                 .MapResult(LoadFromGitHubOrGitLab.LoadFromUrl)
                 .ResultAddLogEntriesIfOk(LogEntriesForLoadFromGitSuccess)
-                .ResultMap(loadFromGitOk => (loadFromGitOk.tree, new LoadCompositionOrigin(FromGit: loadFromGitOk)));
+                .ResultMap(loadFromGitOk =>
+                (loadFromGitOk.tree, (LoadCompositionOrigin)new LoadCompositionOrigin.FromGit(loadFromGitOk)));
         }
 
-        if (LoadFromElmEditor.ParseUrl(sourcePath) != null)
+        if (LoadFromElmEditor.ParseUrl(sourcePath) is not null)
         {
             return
                 asProcess
                 .WithLogEntryAdded("This path looks like a URL into a code editor. Trying to load from there...")
                 .MapResult(LoadFromElmEditor.LoadFromUrl)
-                .ResultMap(loadFromEditorOk => (loadFromEditorOk.tree, new LoadCompositionOrigin(FromEditor: loadFromEditorOk.parsedUrl)));
+                .ResultMap(loadFromEditorOk =>
+                (loadFromEditorOk.tree, (LoadCompositionOrigin)new LoadCompositionOrigin.FromEditor(loadFromEditorOk.parsedUrl)));
         }
 
         if (System.Text.RegularExpressions.Regex.Match(sourcePath, "^http(s|)\\:", System.Text.RegularExpressions.RegexOptions.IgnoreCase).Success)
@@ -41,7 +54,7 @@ public static class LoadComposition
                 .WithLogEntryAdded("Loading via HTTP...")
                 .MapResult(BlobLibrary.DownloadBlobViaHttpGetResponseBody)
                 .ResultMap(loadFromHttpGet =>
-                (TreeNodeWithStringPath.Blob(loadFromHttpGet), new LoadCompositionOrigin(FromHttp: new object())));
+                (TreeNodeWithStringPath.Blob(loadFromHttpGet), (LoadCompositionOrigin)new LoadCompositionOrigin.FromHttp()));
         }
 
         return
@@ -53,7 +66,7 @@ public static class LoadComposition
                 {
                     var treeComponentFromSource = LoadFromLocalFilesystem.LoadSortedTreeFromPath(sourcePath);
 
-                    if (treeComponentFromSource == null)
+                    if (treeComponentFromSource is null)
                         return Result<string, TreeNodeWithStringPath>.err("I did not find a file or directory at '" + sourcePath + "'.");
 
                     return Result<string, TreeNodeWithStringPath>.ok(treeComponentFromSource);
@@ -63,7 +76,7 @@ public static class LoadComposition
                     return Result<string, TreeNodeWithStringPath>.err("Failed to load from local file system: " + e);
                 }
             })
-            .ResultMap(tree => (tree, new LoadCompositionOrigin(FromLocalFileSystem: new object())));
+            .ResultMap(tree => (tree, (LoadCompositionOrigin)new LoadCompositionOrigin.FromLocalFileSystem()));
     }
 
     public static IEnumerable<string> LogEntriesForLoadFromGitSuccess(LoadFromGitHubOrGitLab.LoadFromUrlSuccess loadFromGitSuccess)
