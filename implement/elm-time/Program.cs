@@ -18,7 +18,7 @@ namespace ElmTime;
 
 public class Program
 {
-    public static string AppVersionId => "2023-12-04";
+    public static string AppVersionId => "2023-12-05";
 
     private static int AdminInterfaceDefaultPort => 4000;
 
@@ -1392,7 +1392,26 @@ public class Program
                 loadInputDirectoryResult
                     .AndThen(loadInputDirectoryOk =>
                     {
-                        if (loadInputDirectoryOk.tree.GetNodeAtPath(ImmutableList.Create("elm.json")) is not
+                        var filteredSourceTree =
+                            loadInputDirectoryOk.origin is LoadCompositionOrigin.FromLocalFileSystem
+                            ?
+                            LoadFromLocalFilesystem.RemoveNoiseFromTree(
+                                loadInputDirectoryOk.tree, discardGitDirectory: true)
+                            :
+                            loadInputDirectoryOk.tree;
+
+                        var discardedBlobs =
+                        loadInputDirectoryOk.tree
+                        .EnumerateBlobsTransitive()
+                        .Where(originalBlob => filteredSourceTree.GetNodeAtPath(originalBlob.path) is not TreeNodeWithStringPath.BlobNode)
+                        .ToImmutableArray();
+
+                        if (0 < discardedBlobs.Length)
+                        {
+                            Console.WriteLine("Discarded " + discardedBlobs.Length + " blobs from the input directory.");
+                        }
+
+                        if (filteredSourceTree.GetNodeAtPath(ImmutableList.Create("elm.json")) is not
                             TreeNodeWithStringPath.BlobNode elmJsonFile)
                             return Result<string, LoadForMakeResult>.err(
                                 "Did not find elm.json file in that directory.");
@@ -1416,7 +1435,7 @@ public class Program
                         {
                             return
                                 Result<string, LoadForMakeResult>.ok(
-                                    new LoadForMakeResult(loadInputDirectoryOk.tree,
+                                    new LoadForMakeResult(filteredSourceTree,
                                         [],
                                         pathToElmFile.Replace('\\', '/').Split('/')));
                         }
@@ -1485,8 +1504,7 @@ public class Program
                                             .Aggregate(
                                                 seed:
                                                 TreeNodeWithStringPath.EmptyTree
-                                                    .SetNodeAtPathSorted(workingDirectoryRelative,
-                                                        loadInputDirectoryOk.tree),
+                                                    .SetNodeAtPathSorted(workingDirectoryRelative, filteredSourceTree),
                                                 func:
                                                 (aggregate, nextSourceDir) =>
                                                     aggregate.SetNodeAtPathSorted(nextSourceDir.relativePath,

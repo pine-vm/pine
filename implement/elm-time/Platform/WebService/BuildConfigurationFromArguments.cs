@@ -1,6 +1,5 @@
 using Pine;
 using System;
-using System.Collections.Immutable;
 using System.Linq;
 
 namespace ElmTime.Platform.WebService;
@@ -26,7 +25,7 @@ public static class BuildConfigurationFromArguments
         var filteredSourceTree =
             loadCompositionResult.origin is LoadCompositionOrigin.FromLocalFileSystem
             ?
-            RemoveNoiseFromTreeComingFromLocalFileSystem(sourceTree)
+            LoadFromLocalFilesystem.RemoveNoiseFromTree(sourceTree, discardGitDirectory: true)
             :
             sourceTree;
 
@@ -40,32 +39,6 @@ public static class BuildConfigurationFromArguments
             BuildConfigurationZipArchive(sourceComposition: filteredSourceComposition);
 
         return (sourceTree, filteredSourceCompositionId, configZipArchive);
-    }
-
-    public static TreeNodeWithStringPath RemoveNoiseFromTreeComingFromLocalFileSystem(
-        TreeNodeWithStringPath originalTree)
-    {
-        if (originalTree is not TreeNodeWithStringPath.TreeNode tree)
-            return originalTree;
-
-        TreeNodeWithStringPath? getValueFromStringName(string name) =>
-            tree.Elements.FirstOrDefault(c => c.name == name).component;
-
-        var elmJson = getValueFromStringName("elm.json");
-
-        bool keepNode((string name, TreeNodeWithStringPath component) node)
-        {
-            if (elmJson != null && node.name == "elm-stuff")
-                return false;
-
-            return true;
-        }
-
-        return TreeNodeWithStringPath.SortedTree(
-            treeContent:
-                tree.Elements
-                .Where(keepNode)
-                .Select(child => (child.name, RemoveNoiseFromTreeComingFromLocalFileSystem(child.component))).ToImmutableList());
     }
 
     public static byte[] BuildConfigurationZipArchive(PineValue sourceComposition)
