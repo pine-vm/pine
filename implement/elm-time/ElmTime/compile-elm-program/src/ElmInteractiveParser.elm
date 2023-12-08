@@ -282,24 +282,34 @@ parseElmModuleTextToJson elmModule =
 parseInteractiveSubmissionFromString : String -> Result String InteractiveSubmission
 parseInteractiveSubmissionFromString submission =
     let
-        unified =
-            String.replace "\n" " " submission
+        looksLikeDeclaration =
+            case String.split "=" submission of
+                leftOfEquals :: _ :: _ ->
+                    case String.toList (String.reverse (String.trim leftOfEquals)) of
+                        [] ->
+                            False
+
+                        lastCharBeforeEquals :: _ ->
+                            (Char.isAlphaNum lastCharBeforeEquals || lastCharBeforeEquals == '_')
+                                && not (String.startsWith "let " (String.trim (String.replace "\n" " " leftOfEquals)))
+                                && not (String.contains "{" leftOfEquals)
+
+                _ ->
+                    False
     in
-    if
-        String.contains " = " unified
-            && not (String.startsWith "let " (String.trim unified))
-            && not (String.startsWith "{" (String.trim submission))
-    then
+    if looksLikeDeclaration then
         parseDeclarationFromString submission
             |> Result.mapError parserDeadEndsToString
             |> Result.Extra.join
             |> Result.map DeclarationSubmission
+            |> Result.mapError ((++) "Failed to parse as declaration: ")
 
     else
         parseExpressionFromString submission
             |> Result.mapError parserDeadEndsToString
             |> Result.Extra.join
             |> Result.map ExpressionSubmission
+            |> Result.mapError ((++) "Failed to parse as expression: ")
 
 
 parseExpressionFromString : String -> Result (List Parser.DeadEnd) (Result String Elm.Syntax.Expression.Expression)
