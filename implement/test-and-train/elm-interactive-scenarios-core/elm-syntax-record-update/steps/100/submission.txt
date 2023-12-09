@@ -1,0 +1,7 @@
+updateRecord record fieldIndex fieldNewVal =
+    case fieldIndex of
+        0 -> { record | alfa = fieldNewVal }
+        1 -> { record | beta = fieldNewVal }
+        2 -> { record | gamma = fieldNewVal }
+        _ -> record
+

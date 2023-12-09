@@ -1,0 +1,1 @@
+{ alfa = 11, beta = 21, gamma = 17 }

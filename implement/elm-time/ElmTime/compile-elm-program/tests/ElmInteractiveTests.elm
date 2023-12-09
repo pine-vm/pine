@@ -536,3 +536,139 @@ encodeDecodeChoiceTypeTest =
                         { tagsNames = Set.fromList [ "Variant_Alfa", "Variant_Beta", "Variant_Gamma" ]
                         }
                     )
+
+
+testCompileRecordAccessPineExpression : Test.Test
+testCompileRecordAccessPineExpression =
+    Test.test "Compile record access pine expression" <|
+        \_ ->
+            let
+                recordValue =
+                    Pine.ListValue
+                        [ Pine.valueFromString ElmInteractive.elmRecordTypeTagName
+                        , Pine.ListValue
+                            [ Pine.ListValue
+                                [ Pine.ListValue
+                                    [ Pine.valueFromString "alfa"
+                                    , Pine.valueFromBigInt (BigInt.fromInt 123)
+                                    ]
+                                ]
+                            ]
+                        ]
+            in
+            recordValue
+                |> Pine.LiteralExpression
+                |> ElmInteractive.pineExpressionForRecordAccess "alfa"
+                |> Pine.evaluateExpression Pine.emptyEvalContext
+                |> Result.mapError Pine.displayStringFromPineError
+                |> Result.andThen ElmInteractive.pineValueAsElmValue
+                |> Expect.equal (Ok (ElmInteractive.ElmInteger (BigInt.fromInt 123)))
+
+
+testCompileRecordUpdatePineExpression : Test.Test
+testCompileRecordUpdatePineExpression =
+    Test.describe "Compile record update pine expression"
+        [ Test.test "Single field - update first" <|
+            \_ ->
+                let
+                    recordValue =
+                        Pine.ListValue
+                            [ Pine.valueFromString ElmInteractive.elmRecordTypeTagName
+                            , Pine.ListValue
+                                [ Pine.ListValue
+                                    [ Pine.ListValue
+                                        [ Pine.valueFromString "alfa"
+                                        , Pine.valueFromBigInt (BigInt.fromInt 123)
+                                        ]
+                                    ]
+                                ]
+                            ]
+                in
+                recordValue
+                    |> Pine.LiteralExpression
+                    |> ElmInteractive.pineExpressionForRecordUpdate
+                        "alfa"
+                        (Pine.LiteralExpression (Pine.valueFromBigInt (BigInt.fromInt 456)))
+                    |> Pine.evaluateExpression Pine.emptyEvalContext
+                    |> Result.mapError Pine.displayStringFromPineError
+                    |> Result.andThen ElmInteractive.pineValueAsElmValue
+                    |> Expect.equal
+                        (Ok
+                            (ElmInteractive.ElmRecord
+                                [ ( "alfa", ElmInteractive.ElmInteger (BigInt.fromInt 456) )
+                                ]
+                            )
+                        )
+        , Test.test "Two fields - update first" <|
+            \_ ->
+                let
+                    recordValue =
+                        Pine.ListValue
+                            [ Pine.valueFromString ElmInteractive.elmRecordTypeTagName
+                            , Pine.ListValue
+                                [ Pine.ListValue
+                                    [ Pine.ListValue
+                                        [ Pine.valueFromString "alfa"
+                                        , Pine.valueFromBigInt (BigInt.fromInt 11)
+                                        ]
+                                    , Pine.ListValue
+                                        [ Pine.valueFromString "beta"
+                                        , Pine.valueFromBigInt (BigInt.fromInt 13)
+                                        ]
+                                    ]
+                                ]
+                            ]
+                in
+                recordValue
+                    |> Pine.LiteralExpression
+                    |> ElmInteractive.pineExpressionForRecordUpdate
+                        "alfa"
+                        (Pine.LiteralExpression (Pine.valueFromBigInt (BigInt.fromInt 21)))
+                    |> Pine.evaluateExpression Pine.emptyEvalContext
+                    |> Result.mapError Pine.displayStringFromPineError
+                    |> Result.andThen ElmInteractive.pineValueAsElmValue
+                    |> Expect.equal
+                        (Ok
+                            (ElmInteractive.ElmRecord
+                                [ ( "alfa", ElmInteractive.ElmInteger (BigInt.fromInt 21) )
+                                , ( "beta", ElmInteractive.ElmInteger (BigInt.fromInt 13) )
+                                ]
+                            )
+                        )
+        , Test.test "Two fields - update second" <|
+            \_ ->
+                let
+                    recordValue =
+                        Pine.ListValue
+                            [ Pine.valueFromString ElmInteractive.elmRecordTypeTagName
+                            , Pine.ListValue
+                                [ Pine.ListValue
+                                    [ Pine.ListValue
+                                        [ Pine.valueFromString "alfa"
+                                        , Pine.valueFromBigInt (BigInt.fromInt 11)
+                                        ]
+                                    , Pine.ListValue
+                                        [ Pine.valueFromString "beta"
+                                        , Pine.valueFromBigInt (BigInt.fromInt 13)
+                                        ]
+                                    ]
+                                ]
+                            ]
+                in
+                recordValue
+                    |> Pine.LiteralExpression
+                    |> ElmInteractive.pineExpressionForRecordUpdate
+                        "beta"
+                        (Pine.LiteralExpression (Pine.valueFromBigInt (BigInt.fromInt 31)))
+                    |> Pine.evaluateExpression Pine.emptyEvalContext
+                    |> Result.mapError Pine.displayStringFromPineError
+                    |> Result.andThen ElmInteractive.pineValueAsElmValue
+                    |> Expect.equal
+                        (Ok
+                            (ElmInteractive.ElmRecord
+                                [ ( "alfa", ElmInteractive.ElmInteger (BigInt.fromInt 11) )
+                                , ( "beta", ElmInteractive.ElmInteger (BigInt.fromInt 31) )
+                                ]
+                            )
+                        )
+        ]
