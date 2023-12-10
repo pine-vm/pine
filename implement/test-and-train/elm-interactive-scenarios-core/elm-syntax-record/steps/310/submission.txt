@@ -1,0 +1,1 @@
+getAlfa { alfa = 31, beta = 37 }

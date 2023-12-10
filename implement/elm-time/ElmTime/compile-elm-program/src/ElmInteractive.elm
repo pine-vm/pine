@@ -1212,6 +1212,17 @@ compileElmSyntaxExpression stack elmExpression =
                 (Elm.Syntax.Node.value nameNode)
                 (Elm.Syntax.Node.value expressionNode)
 
+        Elm.Syntax.Expression.RecordAccessFunction accessSyntax ->
+            let
+                fieldName =
+                    if String.startsWith "." accessSyntax then
+                        String.dropLeft 1 accessSyntax
+
+                    else
+                        accessSyntax
+            in
+            Ok (compileElmSyntaxRecordAccessFunction fieldName)
+
         Elm.Syntax.Expression.RecordUpdateExpression recordNameNode settersNodes ->
             compileElmSyntaxRecordUpdate
                 stack
@@ -1950,6 +1961,18 @@ compileElmSyntaxRecordAccess stack fieldName recordElmExpression =
     compileElmSyntaxExpression stack recordElmExpression
         |> Result.mapError ((++) "Failed to compile record expression: ")
         |> Result.map (RecordAccessExpression fieldName)
+
+
+compileElmSyntaxRecordAccessFunction : String -> Expression
+compileElmSyntaxRecordAccessFunction fieldName =
+    FunctionExpression
+        [ [ ( "record_param", [] ) ] ]
+        (PineFunctionApplicationExpression
+            (pineExpressionForRecordAccess fieldName Pine.EnvironmentExpression
+                |> Pine.encodeExpressionAsValue
+            )
+            (ReferenceExpression "record_param")
+        )
 
 
 compileElmSyntaxRecordUpdate :

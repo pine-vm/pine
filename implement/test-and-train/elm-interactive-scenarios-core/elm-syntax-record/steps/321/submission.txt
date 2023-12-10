@@ -1,0 +1,1 @@
+getBeta { beta = 37, alfa = 39 }
