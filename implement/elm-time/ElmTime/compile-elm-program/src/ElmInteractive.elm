@@ -72,8 +72,6 @@ type Expression
     | FunctionApplicationExpression Expression (List Expression)
     | LetBlockExpression LetBlockStruct
     | StringTagExpression String Expression
-      -- TODO: Explore translate RecordAccess
-    | RecordAccessExpression String Expression
     | PineFunctionApplicationExpression Pine.Value Expression
 
 
@@ -1415,7 +1413,7 @@ expressionForDeconstruction : Deconstruction -> Expression -> Expression
 expressionForDeconstruction deconstruction =
     case deconstruction of
         RecordFieldDeconstruction fieldName ->
-            RecordAccessExpression fieldName
+            compileRecordAccessExpression fieldName
 
         ListItemDeconstruction index ->
             listItemFromIndexExpression index
@@ -1491,9 +1489,6 @@ listDependenciesOfExpression dependenciesRelations expression =
 
         StringTagExpression _ tagged ->
             listDependenciesOfExpression dependenciesRelations tagged
-
-        RecordAccessExpression _ recordExpression ->
-            listDependenciesOfExpression dependenciesRelations recordExpression
 
         PineFunctionApplicationExpression _ argument ->
             argument
@@ -1960,7 +1955,14 @@ compileElmSyntaxRecordAccess :
 compileElmSyntaxRecordAccess stack fieldName recordElmExpression =
     compileElmSyntaxExpression stack recordElmExpression
         |> Result.mapError ((++) "Failed to compile record expression: ")
-        |> Result.map (RecordAccessExpression fieldName)
+        |> Result.map (compileRecordAccessExpression fieldName)
+
+
+compileRecordAccessExpression : String -> Expression -> Expression
+compileRecordAccessExpression fieldName =
+    List.singleton
+        >> FunctionApplicationExpression
+            (compileElmSyntaxRecordAccessFunction fieldName)
 
 
 compileElmSyntaxRecordAccessFunction : String -> Expression
@@ -2418,11 +2420,6 @@ emitExpression stack expression =
             tagged
                 |> emitExpression stack
                 |> Result.map (Pine.StringTagExpression tag)
-
-        RecordAccessExpression fieldName recordExpr ->
-            recordExpr
-                |> emitExpression stack
-                |> Result.map (pineExpressionForRecordAccess fieldName)
 
         PineFunctionApplicationExpression pineFunctionValue argument ->
             emitExpression stack argument
@@ -3211,9 +3208,6 @@ mapReferencesForClosureCaptures closureCapturesByFunctionName expression =
         StringTagExpression tag tagged ->
             StringTagExpression tag (mapReferencesForClosureCaptures closureCapturesByFunctionName tagged)
 
-        RecordAccessExpression field record ->
-            RecordAccessExpression field (mapReferencesForClosureCaptures closureCapturesByFunctionName record)
-
         PineFunctionApplicationExpression pineFunctionValue arguments ->
             PineFunctionApplicationExpression
                 pineFunctionValue
@@ -3393,9 +3387,6 @@ closurizeFunctionExpressions stack capturesFromFunctionName expression =
         StringTagExpression tag tagged ->
             StringTagExpression tag (closurizeFunctionExpressions stack capturesFromFunctionName tagged)
 
-        RecordAccessExpression field record ->
-            RecordAccessExpression field (closurizeFunctionExpressions stack capturesFromFunctionName record)
-
         PineFunctionApplicationExpression pineFunctionValue argument ->
             PineFunctionApplicationExpression
                 pineFunctionValue
@@ -3498,15 +3489,6 @@ liftDeclsFromLetBlocksRecursively expression =
                 |> liftDeclsFromLetBlocksRecursively
                 |> Tuple.mapSecond (StringTagExpression tag)
 
-        RecordAccessExpression fieldName record ->
-            let
-                ( recordDeclarations, recordExpression ) =
-                    liftDeclsFromLetBlocksRecursively record
-            in
-            ( recordDeclarations
-            , RecordAccessExpression fieldName recordExpression
-            )
-
         PineFunctionApplicationExpression pineFunctionValue argument ->
             liftDeclsFromLetBlocksRecursively argument
                 |> Tuple.mapSecond (PineFunctionApplicationExpression pineFunctionValue)
@@ -3600,11 +3582,6 @@ mapLocalDeclarationNamesInDescendants localSet mapDeclarationName expression =
             StringTagExpression
                 tag
                 (mapLocalDeclarationNamesInDescendants localSet mapDeclarationName tagged)
-
-        RecordAccessExpression field record ->
-            RecordAccessExpression
-                field
-                (mapLocalDeclarationNamesInDescendants localSet mapDeclarationName record)
 
         PineFunctionApplicationExpression pineFunctionValue argument ->
             PineFunctionApplicationExpression
@@ -3983,9 +3960,6 @@ transformExpressionWithOptionalReplacement findReplacement expression =
 
                 StringTagExpression tag tagged ->
                     StringTagExpression tag (transformExpressionWithOptionalReplacement findReplacement tagged)
-
-                RecordAccessExpression field record ->
-                    RecordAccessExpression field (transformExpressionWithOptionalReplacement findReplacement record)
 
                 PineFunctionApplicationExpression pineFunctionValue argument ->
                     PineFunctionApplicationExpression
@@ -5361,12 +5335,6 @@ expressionAsJson expression =
                     [ ( "tag", Json.Encode.string tag )
                     , ( "expr", expressionAsJson expr )
                     ]
-              )
-            ]
-
-        RecordAccessExpression _ _ ->
-            [ ( "RecordAccess"
-              , Json.Encode.object []
               )
             ]
 
