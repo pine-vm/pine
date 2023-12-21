@@ -193,10 +193,17 @@ namespace ElmTime
                             IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> elmCodeFiles,
                             IImmutableList<string> pathToFileWithElmEntryPoint,
                             bool makeJavascript,
-                            bool enableDebug)
+                            bool enableDebug,
+                            bool enableOptimize)
                         {
-                            var elmMakeCommandAppendix =
-                                enableDebug ? "--debug" : null;
+                            var elmMakeCommandAppendix = new[]
+                            {
+                                enableDebug ? "--debug" : null,
+                                enableOptimize ? "--optimize" : null
+                            }.Where(flag => !string.IsNullOrEmpty(flag))
+                            .Aggregate(
+                                seed: (string?)null,
+                                (current, next) => current + " " + next);
 
                             return
                             Elm019Binaries.ElmMake(
@@ -239,7 +246,8 @@ namespace ElmTime
                                                 elmCodeFiles: elmMakeRequestFiles,
                                                 pathToFileWithElmEntryPoint: elmMakeRequest.entryPointFilePath.ToImmutableList(),
                                                 makeJavascript: elmMakeRequest.outputType.ElmMakeOutputTypeJs != null,
-                                                enableDebug: elmMakeRequest.enableDebug);
+                                                enableDebug: elmMakeRequest.enableDebug,
+                                                enableOptimize: elmMakeRequest.enableOptimize);
                                         }
                                         catch (Exception e)
                                         {
@@ -671,7 +679,8 @@ namespace ElmTime
             IReadOnlyList<AppCodeEntry> files,
             IReadOnlyList<string> entryPointFilePath,
             ElmMakeOutputType outputType,
-            bool enableDebug);
+            bool enableDebug,
+            bool enableOptimize);
 
         public record ElmMakeOutputType(
             IReadOnlyList<object>? ElmMakeOutputTypeHtml = null,

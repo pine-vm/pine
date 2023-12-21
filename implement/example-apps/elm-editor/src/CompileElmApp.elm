@@ -132,6 +132,7 @@ type alias InterfaceElmMakeFunctionLeafConfig =
 type alias InterfaceElmMakeConfig =
     { outputType : ElmMakeOutputType
     , enableDebug : Bool
+    , enableOptimize : Bool
     }
 
 
@@ -3611,6 +3612,11 @@ prepareElmMakeFunctionForEmit sourceDirs sourceFiles dependencies { filePathRepr
 
                       else
                         []
+                    , if leafConfig.enableOptimize then
+                        [ "optimize" ]
+
+                      else
+                        []
                     , case leafConfig.outputType of
                         ElmMakeOutputTypeHtml ->
                             [ "html" ]
@@ -4232,7 +4238,11 @@ parseElmMakeFunctionConfigFromTypeAnnotation currentModule typeAnnotationNode =
 
 parseElmMakeFunctionConfigFromRecordTree : CompilationInterfaceRecordTreeNode a -> Result String InterfaceElmMakeFunctionConfig
 parseElmMakeFunctionConfigFromRecordTree =
-    parseElmMakeFunctionConfigFromRecordTreeInternal { enableDebug = False, outputType = ElmMakeOutputTypeHtml }
+    parseElmMakeFunctionConfigFromRecordTreeInternal
+        { enableDebug = False
+        , enableOptimize = False
+        , outputType = ElmMakeOutputTypeHtml
+        }
 
 
 parseElmMakeFunctionConfigFromRecordTreeInternal :
@@ -4367,6 +4377,9 @@ integrateElmMakeFunctionRecordFieldName fieldName configBefore =
     case fieldName of
         "debug" ->
             Ok { configBefore | enableDebug = True }
+
+        "optimize" ->
+            Ok { configBefore | enableOptimize = True }
 
         "html" ->
             Ok { configBefore | outputType = ElmMakeOutputTypeHtml }
