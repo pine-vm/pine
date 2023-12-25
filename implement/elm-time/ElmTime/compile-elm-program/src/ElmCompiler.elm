@@ -23,18 +23,18 @@ import FirCompiler
         , LetBlockStruct
         , ModuleImports
         , countListElementsExpression
-        , elmRecordTypeTagName
         , emitExpressionInDeclarationBlock
         , emitWrapperForPartialApplication
         , equalCondition
+        , equalCondition_Pine
         , estimatePineValueSize
         , evaluateAsIndependentExpression
         , listItemFromIndexExpression
         , listItemFromIndexExpression_Pine
         , listSkipExpression
-        , pineExpressionForRecordAccess
-        , pineExpressionForRecordUpdate
+        , listSkipExpression_Pine
         , pineKernel_ListHead
+        , pineKernel_ListHead_Pine
         )
 import Json.Encode
 import List.Extra
@@ -95,6 +95,11 @@ pineKernelModuleName =
 elmStringTypeTagName : String
 elmStringTypeTagName =
     "String"
+
+
+elmRecordTypeTagName : String
+elmRecordTypeTagName =
+    "Elm_Record"
 
 
 operatorPrecendencePriority : Dict.Dict String Int
@@ -1402,7 +1407,15 @@ compileElmSyntaxPattern elmPattern =
                 , declarations =
                     fieldsElements
                         |> List.map Elm.Syntax.Node.value
-                        |> List.map (\fieldName -> ( fieldName, [ RecordFieldDeconstruction fieldName ] ))
+                        |> List.map
+                            (\fieldName ->
+                                ( fieldName
+                                , [ pineExpressionForRecordAccess fieldName Pine.EnvironmentExpression
+                                        |> Pine.encodeExpressionAsValue
+                                        |> PineFunctionApplicationDeconstruction
+                                  ]
+                                )
+                            )
                 }
 
         Elm.Syntax.Pattern.AsPattern (Elm.Syntax.Node.Node _ aliasedPattern) (Elm.Syntax.Node.Node _ alias) ->
@@ -1540,14 +1553,226 @@ expressionForDeconstructions =
 expressionForDeconstruction : Deconstruction -> Expression -> Expression
 expressionForDeconstruction deconstruction =
     case deconstruction of
-        RecordFieldDeconstruction fieldName ->
-            compileRecordAccessExpression fieldName
-
         ListItemDeconstruction index ->
             listItemFromIndexExpression index
 
         SkipItemsDeconstruction count ->
             listSkipExpression count
+
+        PineFunctionApplicationDeconstruction pineFunctionValue ->
+            PineFunctionApplicationExpression pineFunctionValue
+
+
+pineExpressionForRecordUpdate : String -> Pine.Expression -> Pine.Expression -> Pine.Expression
+pineExpressionForRecordUpdate fieldName fieldNewVal recordExpression =
+    let
+        recordFieldsExpression =
+            pineKernel_ListHead_Pine (listItemFromIndexExpression_Pine 1 recordExpression)
+    in
+    Pine.ConditionalExpression
+        { condition =
+            equalCondition_Pine
+                [ Pine.LiteralExpression (Pine.valueFromString elmRecordTypeTagName)
+                , pineKernel_ListHead_Pine recordExpression
+                ]
+        , ifTrue =
+            Pine.ListExpression
+                [ Pine.LiteralExpression (Pine.valueFromString elmRecordTypeTagName)
+                , Pine.ListExpression
+                    [ pineExpressionRecordUpdateFieldsList fieldName fieldNewVal recordFieldsExpression
+                    ]
+                ]
+        , ifFalse = Pine.ListExpression []
+        }
+
+
+pineExpressionRecordUpdateFieldsList : String -> Pine.Expression -> Pine.Expression -> Pine.Expression
+pineExpressionRecordUpdateFieldsList fieldName fieldNewVal recordFieldsExpression =
+    let
+        expressionEncoded =
+            Pine.LiteralExpression (Pine.encodeExpressionAsValue buildRecursiveFunctionToUpdateFieldInRecord)
+    in
+    Pine.DecodeAndEvaluateExpression
+        { expression = expressionEncoded
+        , environment =
+            Pine.ListExpression
+                [ expressionEncoded
+                , Pine.LiteralExpression (Pine.valueFromString fieldName)
+                , fieldNewVal
+                , Pine.ListExpression []
+                , recordFieldsExpression
+                ]
+        }
+
+
+{-| Recursively scans through the record fields and replaces every field with the same name as the one to update.
+If the field is not found, the original record is returned.
+Takes the following arguments:
+
+1.  The function itself, so that we don't have to depend on recursion in the environment.
+2.  The name of the field to update.
+3.  The new value for the field.
+4.  The list of fields that have been processed so far.
+5.  The list of fields that are yet to be processed.
+
+-}
+buildRecursiveFunctionToUpdateFieldInRecord : Pine.Expression
+buildRecursiveFunctionToUpdateFieldInRecord =
+    let
+        functionReferenceLocalExpression : Pine.Expression
+        functionReferenceLocalExpression =
+            listItemFromIndexExpression_Pine 0 Pine.EnvironmentExpression
+
+        fieldNameLocalExpression : Pine.Expression
+        fieldNameLocalExpression =
+            listItemFromIndexExpression_Pine 1 Pine.EnvironmentExpression
+
+        fieldValueLocalExpression : Pine.Expression
+        fieldValueLocalExpression =
+            listItemFromIndexExpression_Pine 2 Pine.EnvironmentExpression
+
+        processedFieldsLocalExpression : Pine.Expression
+        processedFieldsLocalExpression =
+            listItemFromIndexExpression_Pine 3 Pine.EnvironmentExpression
+
+        remainingFieldsLocalExpression : Pine.Expression
+        remainingFieldsLocalExpression =
+            listItemFromIndexExpression_Pine 4 Pine.EnvironmentExpression
+
+        remainingFieldsNextLocalExpression : Pine.Expression
+        remainingFieldsNextLocalExpression =
+            listItemFromIndexExpression_Pine 0 remainingFieldsLocalExpression
+    in
+    Pine.ConditionalExpression
+        { condition =
+            equalCondition_Pine
+                [ Pine.ListExpression []
+                , remainingFieldsLocalExpression
+                ]
+        , ifTrue = processedFieldsLocalExpression
+        , ifFalse =
+            Pine.ConditionalExpression
+                { condition =
+                    equalCondition_Pine
+                        [ listItemFromIndexExpression_Pine 0 remainingFieldsNextLocalExpression
+                        , fieldNameLocalExpression
+                        ]
+                , ifTrue =
+                    Pine.DecodeAndEvaluateExpression
+                        { expression = functionReferenceLocalExpression
+                        , environment =
+                            Pine.ListExpression
+                                [ functionReferenceLocalExpression
+                                , fieldNameLocalExpression
+                                , fieldValueLocalExpression
+                                , Pine.KernelApplicationExpression
+                                    { functionName = "concat"
+                                    , argument =
+                                        Pine.ListExpression
+                                            [ processedFieldsLocalExpression
+                                            , Pine.ListExpression
+                                                [ Pine.ListExpression
+                                                    [ fieldNameLocalExpression
+                                                    , fieldValueLocalExpression
+                                                    ]
+                                                ]
+                                            ]
+                                    }
+                                , listSkipExpression_Pine 1 remainingFieldsLocalExpression
+                                ]
+                        }
+                , ifFalse =
+                    Pine.DecodeAndEvaluateExpression
+                        { expression = functionReferenceLocalExpression
+                        , environment =
+                            Pine.ListExpression
+                                [ functionReferenceLocalExpression
+                                , fieldNameLocalExpression
+                                , fieldValueLocalExpression
+                                , Pine.KernelApplicationExpression
+                                    { functionName = "concat"
+                                    , argument =
+                                        Pine.ListExpression
+                                            [ processedFieldsLocalExpression
+                                            , Pine.ListExpression
+                                                [ remainingFieldsNextLocalExpression ]
+                                            ]
+                                    }
+                                , listSkipExpression_Pine 1 remainingFieldsLocalExpression
+                                ]
+                        }
+                }
+        }
+
+
+pineExpressionForRecordAccess : String -> Pine.Expression -> Pine.Expression
+pineExpressionForRecordAccess fieldName recordExpression =
+    let
+        recordFieldsExpression =
+            pineKernel_ListHead_Pine (listItemFromIndexExpression_Pine 1 recordExpression)
+    in
+    Pine.ConditionalExpression
+        { condition =
+            equalCondition_Pine
+                [ Pine.LiteralExpression (Pine.valueFromString elmRecordTypeTagName)
+                , pineKernel_ListHead_Pine recordExpression
+                ]
+        , ifTrue = buildRecursiveFunctionToLookupFieldInRecord fieldName recordFieldsExpression
+        , ifFalse = Pine.ListExpression []
+        }
+
+
+buildRecursiveFunctionToLookupFieldInRecord : String -> Pine.Expression -> Pine.Expression
+buildRecursiveFunctionToLookupFieldInRecord fieldName recordFieldsExpression =
+    let
+        fieldNameValue =
+            Pine.valueFromString fieldName
+
+        remainingFieldsLocalExpression =
+            listItemFromIndexExpression_Pine 1 Pine.EnvironmentExpression
+
+        continueWithRemainingExpression =
+            Pine.DecodeAndEvaluateExpression
+                { expression = listItemFromIndexExpression_Pine 0 Pine.EnvironmentExpression
+                , environment =
+                    Pine.ListExpression
+                        [ listItemFromIndexExpression_Pine 0 Pine.EnvironmentExpression
+                        , listSkipExpression_Pine 1 remainingFieldsLocalExpression
+                        ]
+                }
+
+        recursivePart =
+            Pine.ConditionalExpression
+                { condition =
+                    equalCondition_Pine
+                        [ Pine.ListExpression []
+                        , remainingFieldsLocalExpression
+                        ]
+                , ifTrue = continueWithRemainingExpression
+                , ifFalse =
+                    Pine.ConditionalExpression
+                        { condition =
+                            equalCondition_Pine
+                                [ listItemFromIndexExpression_Pine 0 (listItemFromIndexExpression_Pine 0 remainingFieldsLocalExpression)
+                                , Pine.LiteralExpression fieldNameValue
+                                ]
+                        , ifTrue =
+                            listItemFromIndexExpression_Pine 1 (listItemFromIndexExpression_Pine 0 remainingFieldsLocalExpression)
+                        , ifFalse = continueWithRemainingExpression
+                        }
+                }
+
+        expressionEncoded =
+            Pine.LiteralExpression (Pine.encodeExpressionAsValue recursivePart)
+    in
+    Pine.DecodeAndEvaluateExpression
+        { expression = expressionEncoded
+        , environment =
+            Pine.ListExpression
+                [ expressionEncoded
+                , recordFieldsExpression
+                ]
+        }
 
 
 compileElmFunctionOrValueLookup : ( List String, String ) -> CompilationStack -> Result String Expression

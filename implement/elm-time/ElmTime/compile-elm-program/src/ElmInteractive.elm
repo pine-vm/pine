@@ -12,6 +12,7 @@ import ElmCompiler
         ( CompilationStack
         , InternalDeclaration(..)
         , ProjectParsedElmFile
+        , elmRecordTypeTagName
         , elmStringTypeTagName
         , elmValuesToExposeToGlobalDefault
         , expressionForDeconstructions
@@ -24,7 +25,6 @@ import FirCompiler
         ( ElmModuleInCompilation
         , EmitStack
         , Expression(..)
-        , elmRecordTypeTagName
         , listDependenciesOfExpression
         , parseFunctionParameters
         )
