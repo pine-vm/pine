@@ -6,22 +6,22 @@ import Elm.Syntax.Declaration
 import Elm.Syntax.Expression
 import Elm.Syntax.File
 import Elm.Syntax.Node
+import ElmCompiler
+    exposing
+        ( ProjectParsedElmFile
+        , compileElmSyntaxFunction
+        , emitExpressionInDeclarationBlock
+        , getDeclarationsFromEnvironment
+        , separateEnvironmentDeclarations
+        )
 import ElmInteractive
     exposing
         ( ElmCoreModulesExtent(..)
         , InteractiveContext(..)
         , InteractiveSubmission(..)
-        , ProjectParsedElmFile
         , SubmissionResponse
         , compilationAndEmitStackFromInteractiveEnvironment
-        , compileElmSyntaxExpression
-        , compileElmSyntaxFunction
-        , emitExpressionInDeclarationBlock
-        , evaluateAsIndependentExpression
-        , expandElmInteractiveEnvironmentWithModules
-        , getDeclarationsFromEnvironment
         , parsedElmFileRecordFromSeparatelyParsedSyntax
-        , separateEnvironmentDeclarations
         , submissionResponseFromResponsePineValue
         )
 import ElmInteractiveCoreModules
@@ -70,7 +70,7 @@ expandElmInteractiveEnvironmentWithModuleTexts environmentBefore contextModulesT
         |> Result.Extra.combine
         |> Result.andThen
             (\parsedModules ->
-                expandElmInteractiveEnvironmentWithModules environmentBefore parsedModules
+                ElmCompiler.expandElmInteractiveEnvironmentWithModules environmentBefore parsedModules
             )
 
 
@@ -182,7 +182,7 @@ compileInteractiveSubmission environment submission =
                                                 (Dict.singleton declarationName functionDeclarationCompilation)
                                                 functionDeclarationCompilation
                                         )
-                                    |> Result.andThen evaluateAsIndependentExpression
+                                    |> Result.andThen ElmCompiler.evaluateAsIndependentExpression
                             of
                                 Err error ->
                                     Err ("Failed to compile Elm function declaration: " ++ error)
@@ -228,7 +228,7 @@ compileInteractiveSubmission environment submission =
 
                 Ok (ExpressionSubmission elmExpression) ->
                     case
-                        compileElmSyntaxExpression defaultCompilationStack elmExpression
+                        ElmCompiler.compileElmSyntaxExpression defaultCompilationStack elmExpression
                             |> Result.andThen (emitExpressionInDeclarationBlock emitStack Dict.empty)
                     of
                         Err error ->
