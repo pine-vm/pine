@@ -10,8 +10,11 @@ import Set
 type Expression
     = LiteralExpression Pine.Value
     | ListExpression (List Expression)
-    | KernelApplicationExpression KernelApplicationExpressionStructure
-    | ConditionalExpression ConditionalExpressionStructure
+    | KernelApplicationExpression KernelApplicationExpressionStruct
+    | ConditionalExpression ConditionalExpressionStruct
+      {-
+         The reference expression case references a declaration from a parent declaration block, thus enabling recursion.
+      -}
     | ReferenceExpression String
     | FunctionExpression (List FunctionParam) Expression
       {-
@@ -19,28 +22,22 @@ type Expression
          The emission of specialized code for these cases reduces runtime expenses.
       -}
     | FunctionApplicationExpression Expression (List Expression)
-    | LetBlockExpression LetBlockStruct
+    | DeclarationBlockExpression (Dict.Dict String Expression) Expression
     | PineFunctionApplicationExpression Pine.Value Expression
       -- The tag expression case is only a wrapper to label a node for inspection and does not influence the evaluation result.
     | StringTagExpression String Expression
 
 
-type alias KernelApplicationExpressionStructure =
+type alias KernelApplicationExpressionStruct =
     { functionName : String
     , argument : Expression
     }
 
 
-type alias ConditionalExpressionStructure =
+type alias ConditionalExpressionStruct =
     { condition : Expression
     , ifTrue : Expression
     , ifFalse : Expression
-    }
-
-
-type alias LetBlockStruct =
-    { declarations : List ( String, Expression )
-    , expression : Expression
     }
 
 
@@ -148,8 +145,8 @@ emitExpression stack expression =
         FunctionApplicationExpression functionExpression arguments ->
             emitFunctionApplicationExpression functionExpression arguments stack
 
-        LetBlockExpression letBlock ->
-            emitLetBlock stack letBlock
+        DeclarationBlockExpression declarations innerExpression ->
+            emitExpressionInDeclarationBlock stack declarations innerExpression
 
         StringTagExpression tag tagged ->
             tagged
@@ -173,14 +170,6 @@ emitFunctionExpression stack functionParams functionBody =
         stack
         Dict.empty
         (FunctionExpression functionParams functionBody)
-
-
-emitLetBlock : EmitStack -> LetBlockStruct -> Result String Pine.Expression
-emitLetBlock stackBefore letBlock =
-    emitExpressionInDeclarationBlock
-        stackBefore
-        (Dict.fromList letBlock.declarations)
-        letBlock.expression
 
 
 emitExpressionInDeclarationBlock :
@@ -332,7 +321,7 @@ emitExpressionInDeclarationBlockLessClosure stackBeforeAddingDeps originalBlockD
                     parseFunctionParameters expression
 
                 ( liftedDeclarationsBeforeParsingFun, expressionAfterLiftingDecls ) =
-                    liftDeclsFromLetBlocksRecursively functionInnerExpr
+                    liftDeclsFromDeclBlocksRecursively functionInnerExpr
             in
             { functionParameters = functionParameters
             , liftedDeclarations =
@@ -650,15 +639,15 @@ listDependenciesOfExpression dependenciesRelations expression =
                 :: arguments
                 |> listDependenciesOfExpressions dependenciesRelations
 
-        LetBlockExpression letBlock ->
+        DeclarationBlockExpression declarations innerExpression ->
             let
                 innerDependencies =
-                    letBlock.expression
-                        :: List.map Tuple.second letBlock.declarations
+                    innerExpression
+                        :: Dict.values declarations
                         |> listDependenciesOfExpressions dependenciesRelations
             in
-            letBlock.declarations
-                |> List.map Tuple.first
+            declarations
+                |> Dict.keys
                 |> List.foldl Set.remove innerDependencies
 
         StringTagExpression _ tagged ->
@@ -798,7 +787,7 @@ mapReferencesForClosureCaptures closureCapturesByFunctionName expression =
                 _ ->
                     continueWithoutClosureForFunction ()
 
-        LetBlockExpression _ ->
+        DeclarationBlockExpression _ _ ->
             expression
 
         StringTagExpression tag tagged ->
@@ -913,7 +902,7 @@ closurizeFunctionExpressions stack capturesFromFunctionName expression =
                 mappedFunctionExpressionMerged
                 mappedArgumentsMerged
 
-        LetBlockExpression letBlock ->
+        DeclarationBlockExpression declarations innerExpression ->
             let
                 processLetDeclaration : Expression -> Maybe ( List String, Expression )
                 processLetDeclaration declExpression =
@@ -948,21 +937,20 @@ closurizeFunctionExpressions stack capturesFromFunctionName expression =
                         _ ->
                             Nothing
 
-                declarationsBeforeMappingApplications : List ( String, ( Dict.Dict String (List String), Expression ) )
+                declarationsBeforeMappingApplications : Dict.Dict String ( Dict.Dict String (List String), Expression )
                 declarationsBeforeMappingApplications =
-                    letBlock.declarations
-                        |> List.map
-                            (\( declName, declExpression ) ->
-                                ( declName
-                                , processLetDeclaration declExpression
+                    declarations
+                        |> Dict.map
+                            (\declName declExpression ->
+                                processLetDeclaration declExpression
                                     |> Maybe.map (Tuple.mapFirst (Dict.singleton declName))
                                     |> Maybe.withDefault ( Dict.empty, declExpression )
-                                )
                             )
 
                 newClosureInstructions =
                     declarationsBeforeMappingApplications
-                        |> List.map (Tuple.second >> Tuple.first)
+                        |> Dict.values
+                        |> List.map Tuple.first
                         |> List.foldl Dict.union Dict.empty
 
                 closurizeFunctionExpressionsInner =
@@ -970,15 +958,11 @@ closurizeFunctionExpressions stack capturesFromFunctionName expression =
                         stack
                         (Dict.union capturesFromFunctionName newClosureInstructions)
             in
-            LetBlockExpression
-                { letBlock
-                    | declarations =
-                        declarationsBeforeMappingApplications
-                            |> List.map (Tuple.mapSecond Tuple.second)
-                            |> List.map (Tuple.mapSecond closurizeFunctionExpressionsInner)
-                    , expression =
-                        closurizeFunctionExpressionsInner letBlock.expression
-                }
+            DeclarationBlockExpression
+                (declarationsBeforeMappingApplications
+                    |> Dict.map (always (Tuple.second >> closurizeFunctionExpressionsInner))
+                )
+                (closurizeFunctionExpressionsInner innerExpression)
 
         StringTagExpression tag tagged ->
             StringTagExpression tag (closurizeFunctionExpressions stack capturesFromFunctionName tagged)
@@ -1057,30 +1041,29 @@ mapLocalDeclarationNamesInDescendants localSet mapDeclarationName expression =
                 (mapLocalDeclarationNamesInDescendants localSet mapDeclarationName functionExpression)
                 (List.map (mapLocalDeclarationNamesInDescendants localSet mapDeclarationName) arguments)
 
-        LetBlockExpression letBlock ->
+        DeclarationBlockExpression declarations innerExpression ->
             let
                 localSetWithDeclarations =
-                    List.foldl
-                        (Tuple.first >> Set.insert)
-                        localSet
-                        letBlock.declarations
+                    declarations
+                        |> Dict.keys
+                        |> List.foldl Set.insert localSet
 
                 mappedDeclarations =
-                    List.map
-                        (Tuple.mapFirst mapDeclarationName
-                            >> Tuple.mapSecond
-                                (mapLocalDeclarationNamesInDescendants localSetWithDeclarations mapDeclarationName)
-                        )
-                        letBlock.declarations
+                    declarations
+                        |> Dict.toList
+                        |> List.map
+                            (Tuple.mapFirst mapDeclarationName
+                                >> Tuple.mapSecond
+                                    (mapLocalDeclarationNamesInDescendants localSetWithDeclarations mapDeclarationName)
+                            )
             in
-            LetBlockExpression
-                { declarations = mappedDeclarations
-                , expression =
-                    mapLocalDeclarationNamesInDescendants
-                        localSetWithDeclarations
-                        mapDeclarationName
-                        letBlock.expression
-                }
+            DeclarationBlockExpression
+                (Dict.fromList mappedDeclarations)
+                (mapLocalDeclarationNamesInDescendants
+                    localSetWithDeclarations
+                    mapDeclarationName
+                    innerExpression
+                )
 
         StringTagExpression tag tagged ->
             StringTagExpression
@@ -1093,8 +1076,8 @@ mapLocalDeclarationNamesInDescendants localSet mapDeclarationName expression =
                 (mapLocalDeclarationNamesInDescendants localSet mapDeclarationName argument)
 
 
-liftDeclsFromLetBlocksRecursively : Expression -> ( List ( String, Expression ), Expression )
-liftDeclsFromLetBlocksRecursively expression =
+liftDeclsFromDeclBlocksRecursively : Expression -> ( List ( String, Expression ), Expression )
+liftDeclsFromDeclBlocksRecursively expression =
     case expression of
         LiteralExpression _ ->
             ( [], expression )
@@ -1102,7 +1085,7 @@ liftDeclsFromLetBlocksRecursively expression =
         ListExpression list ->
             let
                 elements =
-                    List.map liftDeclsFromLetBlocksRecursively list
+                    List.map liftDeclsFromDeclBlocksRecursively list
             in
             ( List.concatMap Tuple.first elements
             , ListExpression (List.map Tuple.second elements)
@@ -1110,7 +1093,7 @@ liftDeclsFromLetBlocksRecursively expression =
 
         KernelApplicationExpression kernelApplication ->
             kernelApplication.argument
-                |> liftDeclsFromLetBlocksRecursively
+                |> liftDeclsFromDeclBlocksRecursively
                 |> Tuple.mapSecond
                     (\argument ->
                         KernelApplicationExpression { kernelApplication | argument = argument }
@@ -1119,13 +1102,13 @@ liftDeclsFromLetBlocksRecursively expression =
         ConditionalExpression conditional ->
             let
                 ( conditionDeclarations, conditionExpression ) =
-                    liftDeclsFromLetBlocksRecursively conditional.condition
+                    liftDeclsFromDeclBlocksRecursively conditional.condition
 
                 ( ifTrueDeclarations, ifTrueExpression ) =
-                    liftDeclsFromLetBlocksRecursively conditional.ifTrue
+                    liftDeclsFromDeclBlocksRecursively conditional.ifTrue
 
                 ( ifFalseDeclarations, ifFalseExpression ) =
-                    liftDeclsFromLetBlocksRecursively conditional.ifFalse
+                    liftDeclsFromDeclBlocksRecursively conditional.ifFalse
             in
             ( conditionDeclarations ++ ifTrueDeclarations ++ ifFalseDeclarations
             , ConditionalExpression
@@ -1147,12 +1130,12 @@ liftDeclsFromLetBlocksRecursively expression =
             let
                 ( argumentsDeclarations, argumentsExpressions ) =
                     arguments
-                        |> List.map liftDeclsFromLetBlocksRecursively
+                        |> List.map liftDeclsFromDeclBlocksRecursively
                         |> List.unzip
 
                 ( functionDeclarations, functionExpression ) =
                     function
-                        |> liftDeclsFromLetBlocksRecursively
+                        |> liftDeclsFromDeclBlocksRecursively
             in
             ( List.concat argumentsDeclarations ++ functionDeclarations
             , FunctionApplicationExpression
@@ -1160,22 +1143,22 @@ liftDeclsFromLetBlocksRecursively expression =
                 argumentsExpressions
             )
 
-        LetBlockExpression letBlock ->
+        DeclarationBlockExpression declarations innerExpression ->
             let
                 ( innerDecls, mappedExpression ) =
-                    liftDeclsFromLetBlocksRecursively letBlock.expression
+                    liftDeclsFromDeclBlocksRecursively innerExpression
             in
-            ( letBlock.declarations ++ innerDecls
+            ( Dict.toList declarations ++ innerDecls
             , mappedExpression
             )
 
         StringTagExpression tag tagged ->
             tagged
-                |> liftDeclsFromLetBlocksRecursively
+                |> liftDeclsFromDeclBlocksRecursively
                 |> Tuple.mapSecond (StringTagExpression tag)
 
         PineFunctionApplicationExpression pineFunctionValue argument ->
-            liftDeclsFromLetBlocksRecursively argument
+            liftDeclsFromDeclBlocksRecursively argument
                 |> Tuple.mapSecond (PineFunctionApplicationExpression pineFunctionValue)
 
 

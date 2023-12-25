@@ -845,14 +845,14 @@ emitClosureExpressionTests =
       )
     , ( "let block returning literal"
       , { functionInnerExpr =
-            FirCompiler.LetBlockExpression
-                { declarations =
-                    [ ( "decl_from_let"
-                      , FirCompiler.LiteralExpression (Pine.valueFromString "constant_in_let")
-                      )
-                    ]
-                , expression = FirCompiler.ReferenceExpression "decl_from_let"
-                }
+            FirCompiler.DeclarationBlockExpression
+                ([ ( "decl_from_let"
+                   , FirCompiler.LiteralExpression (Pine.valueFromString "constant_in_let")
+                   )
+                 ]
+                    |> Dict.fromList
+                )
+                (FirCompiler.ReferenceExpression "decl_from_let")
         , functionParams = []
         , arguments = []
         , environmentFunctions = []
@@ -861,17 +861,17 @@ emitClosureExpressionTests =
       )
     , ( "let block returning from other decl in same block"
       , { functionInnerExpr =
-            FirCompiler.LetBlockExpression
-                { declarations =
-                    [ ( "decl_from_let"
-                      , FirCompiler.ReferenceExpression "other_decl_from_let"
-                      )
-                    , ( "other_decl_from_let"
-                      , FirCompiler.LiteralExpression (Pine.valueFromString "constant_in_let")
-                      )
-                    ]
-                , expression = FirCompiler.ReferenceExpression "decl_from_let"
-                }
+            FirCompiler.DeclarationBlockExpression
+                ([ ( "decl_from_let"
+                   , FirCompiler.ReferenceExpression "other_decl_from_let"
+                   )
+                 , ( "other_decl_from_let"
+                   , FirCompiler.LiteralExpression (Pine.valueFromString "constant_in_let")
+                   )
+                 ]
+                    |> Dict.fromList
+                )
+                (FirCompiler.ReferenceExpression "decl_from_let")
         , functionParams = []
         , arguments = []
         , environmentFunctions = []
@@ -880,14 +880,14 @@ emitClosureExpressionTests =
       )
     , ( "let block returning only parent function arg"
       , { functionInnerExpr =
-            FirCompiler.LetBlockExpression
-                { declarations =
-                    [ ( "decl_from_let"
-                      , FirCompiler.ReferenceExpression "param_0"
-                      )
-                    ]
-                , expression = FirCompiler.ReferenceExpression "decl_from_let"
-                }
+            FirCompiler.DeclarationBlockExpression
+                ([ ( "decl_from_let"
+                   , FirCompiler.ReferenceExpression "param_0"
+                   )
+                 ]
+                    |> Dict.fromList
+                )
+                (FirCompiler.ReferenceExpression "decl_from_let")
         , functionParams =
             [ [ ( "param_0", [] ) ]
             ]
@@ -898,22 +898,22 @@ emitClosureExpressionTests =
       )
     , ( "let block in let block returning only parent function arg"
       , { functionInnerExpr =
-            FirCompiler.LetBlockExpression
-                { declarations =
-                    [ ( "decl_from_let"
-                      , FirCompiler.ReferenceExpression "param_0"
-                      )
-                    ]
-                , expression =
-                    FirCompiler.LetBlockExpression
-                        { declarations =
-                            [ ( "decl_from_let_inner"
-                              , FirCompiler.ReferenceExpression "decl_from_let"
-                              )
-                            ]
-                        , expression = FirCompiler.ReferenceExpression "decl_from_let_inner"
-                        }
-                }
+            FirCompiler.DeclarationBlockExpression
+                ([ ( "decl_from_let"
+                   , FirCompiler.ReferenceExpression "param_0"
+                   )
+                 ]
+                    |> Dict.fromList
+                )
+                (FirCompiler.DeclarationBlockExpression
+                    ([ ( "decl_from_let_inner"
+                       , FirCompiler.ReferenceExpression "decl_from_let"
+                       )
+                     ]
+                        |> Dict.fromList
+                    )
+                    (FirCompiler.ReferenceExpression "decl_from_let_inner")
+                )
         , functionParams =
             [ [ ( "param_0", [] ) ]
             ]
@@ -924,14 +924,14 @@ emitClosureExpressionTests =
       )
     , ( "let block returning second parent function arg"
       , { functionInnerExpr =
-            FirCompiler.LetBlockExpression
-                { declarations =
-                    [ ( "decl_from_let"
-                      , FirCompiler.ReferenceExpression "param_1"
-                      )
-                    ]
-                , expression = FirCompiler.ReferenceExpression "decl_from_let"
-                }
+            FirCompiler.DeclarationBlockExpression
+                ([ ( "decl_from_let"
+                   , FirCompiler.ReferenceExpression "param_1"
+                   )
+                 ]
+                    |> Dict.fromList
+                )
+                (FirCompiler.ReferenceExpression "decl_from_let")
         , functionParams =
             [ [ ( "param_0", [] ) ]
             , [ ( "param_1", [] ) ]
@@ -946,41 +946,41 @@ emitClosureExpressionTests =
       )
     , ( "partial application only for closure - one original param"
       , { functionInnerExpr =
-            FirCompiler.LetBlockExpression
-                { declarations =
-                    [ ( "decl_from_let"
-                      , FirCompiler.FunctionExpression
-                            [ [ ( "final_func_param_0"
-                                , []
-                                )
-                              ]
-                            ]
-                            (FirCompiler.FunctionApplicationExpression
-                                (FirCompiler.ReferenceExpression "final_func_param_0")
-                                [ FirCompiler.LiteralExpression (Pine.valueFromString "literal_0")
-                                ]
+            FirCompiler.DeclarationBlockExpression
+                ([ ( "decl_from_let"
+                   , FirCompiler.FunctionExpression
+                        [ [ ( "final_func_param_0"
+                            , []
                             )
-                      )
-                    , ( "closure_func"
-                      , FirCompiler.FunctionExpression
-                            [ [ ( "closure_func_param_0"
-                                , []
-                                )
-                              ]
-                            ]
-                            (FirCompiler.ListExpression
-                                [ FirCompiler.ReferenceExpression "closure_func_param_0"
-                                , FirCompiler.ReferenceExpression "param_0"
-                                ]
-                            )
-                      )
-                    ]
-                , expression =
-                    FirCompiler.FunctionApplicationExpression
-                        (FirCompiler.ReferenceExpression "decl_from_let")
-                        [ FirCompiler.ReferenceExpression "closure_func"
+                          ]
                         ]
-                }
+                        (FirCompiler.FunctionApplicationExpression
+                            (FirCompiler.ReferenceExpression "final_func_param_0")
+                            [ FirCompiler.LiteralExpression (Pine.valueFromString "literal_0")
+                            ]
+                        )
+                   )
+                 , ( "closure_func"
+                   , FirCompiler.FunctionExpression
+                        [ [ ( "closure_func_param_0"
+                            , []
+                            )
+                          ]
+                        ]
+                        (FirCompiler.ListExpression
+                            [ FirCompiler.ReferenceExpression "closure_func_param_0"
+                            , FirCompiler.ReferenceExpression "param_0"
+                            ]
+                        )
+                   )
+                 ]
+                    |> Dict.fromList
+                )
+                (FirCompiler.FunctionApplicationExpression
+                    (FirCompiler.ReferenceExpression "decl_from_let")
+                    [ FirCompiler.ReferenceExpression "closure_func"
+                    ]
+                )
         , functionParams =
             [ [ ( "param_0", [] )
               ]
@@ -998,14 +998,14 @@ emitClosureExpressionTests =
       )
     , ( "let block returning from other outside decl"
       , { functionInnerExpr =
-            FirCompiler.LetBlockExpression
-                { declarations =
-                    [ ( "decl_from_let"
-                      , FirCompiler.ReferenceExpression "env_func"
-                      )
-                    ]
-                , expression = FirCompiler.ReferenceExpression "decl_from_let"
-                }
+            FirCompiler.DeclarationBlockExpression
+                ([ ( "decl_from_let"
+                   , FirCompiler.ReferenceExpression "env_func"
+                   )
+                 ]
+                    |> Dict.fromList
+                )
+                (FirCompiler.ReferenceExpression "decl_from_let")
         , functionParams =
             [ [ ( "param_0", [] ) ]
             ]

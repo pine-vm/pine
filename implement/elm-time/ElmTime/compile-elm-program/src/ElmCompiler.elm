@@ -20,7 +20,6 @@ import FirCompiler
         , ElmModuleInCompilation
         , EmitStack
         , Expression(..)
-        , LetBlockStruct
         , ModuleImports
         , countListElementsExpression
         , emitExpressionInDeclarationBlock
@@ -775,7 +774,6 @@ compileElmSyntaxExpression stack elmExpression =
 
         Elm.Syntax.Expression.LetExpression letBlock ->
             compileElmSyntaxLetBlock stack letBlock
-                |> Result.map LetBlockExpression
 
         Elm.Syntax.Expression.ParenthesizedExpression parenthesizedExpression ->
             compileElmSyntaxExpression stack (Elm.Syntax.Node.value parenthesizedExpression)
@@ -885,7 +883,7 @@ compileElmSyntaxApplication stack appliedFunctionElmSyntax argumentsElmSyntax =
 compileElmSyntaxLetBlock :
     CompilationStack
     -> Elm.Syntax.Expression.LetBlock
-    -> Result String LetBlockStruct
+    -> Result String Expression
 compileElmSyntaxLetBlock stackBefore letBlock =
     letBlock.declarations
         |> List.concatMap
@@ -937,11 +935,7 @@ compileElmSyntaxLetBlock stackBefore letBlock =
                     Ok letEntries ->
                         compileElmSyntaxExpression stack (Elm.Syntax.Node.value letBlock.expression)
                             |> Result.map
-                                (\expression ->
-                                    { declarations = List.concat letEntries
-                                    , expression = expression
-                                    }
-                                )
+                                (DeclarationBlockExpression (Dict.fromList (List.concat letEntries)))
             )
 
 
@@ -1174,6 +1168,7 @@ compileElmSyntaxCaseBlockCase stackBefore caseBlockValueExpression ( elmPatternN
                                     >> (|>) caseBlockValueExpression
                                 )
                             )
+                        |> Dict.fromList
 
                 stack =
                     { stackBefore
@@ -1181,7 +1176,7 @@ compileElmSyntaxCaseBlockCase stackBefore caseBlockValueExpression ( elmPatternN
                             stackBefore.availableDeclarations
                                 |> Dict.union
                                     (Dict.map (always DeconstructionDeclaration)
-                                        (Dict.fromList deconstructionDeclarations)
+                                        deconstructionDeclarations
                                     )
                     }
             in
@@ -1196,10 +1191,9 @@ compileElmSyntaxCaseBlockCase stackBefore caseBlockValueExpression ( elmPatternN
                                 expression
 
                             else
-                                LetBlockExpression
-                                    { declarations = deconstructionDeclarations
-                                    , expression = expression
-                                    }
+                                DeclarationBlockExpression
+                                    deconstructionDeclarations
+                                    expression
                         }
                     )
 

@@ -634,15 +634,12 @@ transformExpressionWithOptionalReplacement findReplacement expression =
                         mappedFunctionExpression
                         mappedArguments
 
-                LetBlockExpression letBlock ->
-                    LetBlockExpression
-                        { letBlock
-                            | declarations =
-                                letBlock.declarations
-                                    |> List.map (Tuple.mapSecond (transformExpressionWithOptionalReplacement findReplacement))
-                            , expression =
-                                transformExpressionWithOptionalReplacement findReplacement letBlock.expression
-                        }
+                DeclarationBlockExpression declarations innerExpression ->
+                    DeclarationBlockExpression
+                        (declarations
+                            |> Dict.map (always (transformExpressionWithOptionalReplacement findReplacement))
+                        )
+                        (transformExpressionWithOptionalReplacement findReplacement innerExpression)
 
                 StringTagExpression tag tagged ->
                     StringTagExpression tag (transformExpressionWithOptionalReplacement findReplacement tagged)
@@ -1090,8 +1087,8 @@ expressionAsJson expression =
               )
             ]
 
-        LetBlockExpression _ ->
-            [ ( "LetBlock"
+        DeclarationBlockExpression _ _ ->
+            [ ( "DeclarationBlock"
               , []
                     |> Json.Encode.object
               )
