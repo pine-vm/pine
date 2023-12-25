@@ -10,20 +10,23 @@ import Elm.Syntax.Node
 import ElmCompiler
     exposing
         ( CompilationStack
-        , ElmModuleInCompilation
-        , EmitStack
-        , Expression(..)
         , InternalDeclaration(..)
         , ProjectParsedElmFile
-        , elmRecordTypeTagName
         , elmStringTypeTagName
         , elmValuesToExposeToGlobalDefault
         , expressionForDeconstructions
-        , listDependenciesOfExpression
         , moduleImportsFromCompilationStack
         , moduleNameFromSyntaxFile
-        , parseFunctionParameters
         , stringStartsWithUpper
+        )
+import FirCompiler
+    exposing
+        ( ElmModuleInCompilation
+        , EmitStack
+        , Expression(..)
+        , elmRecordTypeTagName
+        , listDependenciesOfExpression
+        , parseFunctionParameters
         )
 import Json.Decode
 import Json.Encode

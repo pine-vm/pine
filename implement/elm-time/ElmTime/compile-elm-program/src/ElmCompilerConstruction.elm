@@ -1,7 +1,7 @@
 module ElmCompilerConstruction exposing (..)
 
 import BigInt
-import ElmCompiler
+import FirCompiler
 import Pine
 
 
@@ -96,7 +96,7 @@ buildPineExpressionSyntax config expression =
             if not config.attemptEncodeExpression then
                 Nothing
 
-            else if ElmCompiler.pineExpressionIsIndependent expression then
+            else if FirCompiler.pineExpressionIsIndependent expression then
                 case Pine.evaluateExpression Pine.emptyEvalContext expression of
                     Err _ ->
                         Nothing

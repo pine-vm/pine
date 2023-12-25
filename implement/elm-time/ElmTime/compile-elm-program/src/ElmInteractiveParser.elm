@@ -10,7 +10,6 @@ import ElmCompiler
     exposing
         ( ProjectParsedElmFile
         , compileElmSyntaxFunction
-        , emitExpressionInDeclarationBlock
         , getDeclarationsFromEnvironment
         , separateEnvironmentDeclarations
         )
@@ -26,6 +25,7 @@ import ElmInteractive
         )
 import ElmInteractiveCoreModules
 import ElmInteractiveKernelModules
+import FirCompiler exposing (emitExpressionInDeclarationBlock)
 import Json.Encode
 import Parser
 import Pine
@@ -182,7 +182,7 @@ compileInteractiveSubmission environment submission =
                                                 (Dict.singleton declarationName functionDeclarationCompilation)
                                                 functionDeclarationCompilation
                                         )
-                                    |> Result.andThen ElmCompiler.evaluateAsIndependentExpression
+                                    |> Result.andThen FirCompiler.evaluateAsIndependentExpression
                             of
                                 Err error ->
                                     Err ("Failed to compile Elm function declaration: " ++ error)

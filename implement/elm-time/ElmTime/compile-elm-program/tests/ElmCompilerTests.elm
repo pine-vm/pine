@@ -4,6 +4,7 @@ import BigInt
 import Dict
 import ElmCompiler
 import Expect
+import FirCompiler
 import Pine
 import Result.Extra
 import Test
@@ -58,10 +59,10 @@ compiler_reduces_decode_and_eval_test_cases =
                 Pine.EnvironmentExpression
                     |> Pine.encodeExpressionAsValue
                     |> Pine.LiteralExpression
-            , environment = ElmCompiler.pineKernel_ListHead_Pine Pine.EnvironmentExpression
+            , environment = FirCompiler.pineKernel_ListHead_Pine Pine.EnvironmentExpression
             }
         , expected =
-            ElmCompiler.pineKernel_ListHead_Pine Pine.EnvironmentExpression
+            FirCompiler.pineKernel_ListHead_Pine Pine.EnvironmentExpression
         , additionalTestEnvironments = []
         }
       )
@@ -69,25 +70,25 @@ compiler_reduces_decode_and_eval_test_cases =
       , { original =
             { expression =
                 Pine.EnvironmentExpression
-                    |> ElmCompiler.listSkipExpression_Pine 2
-                    |> ElmCompiler.pineKernel_ListHead_Pine
+                    |> FirCompiler.listSkipExpression_Pine 2
+                    |> FirCompiler.pineKernel_ListHead_Pine
                     |> Pine.encodeExpressionAsValue
                     |> Pine.LiteralExpression
             , environment =
                 Pine.ListExpression
                     [ Pine.EnvironmentExpression
-                        |> ElmCompiler.listSkipExpression_Pine 4
+                        |> FirCompiler.listSkipExpression_Pine 4
                     , Pine.EnvironmentExpression
-                        |> ElmCompiler.listSkipExpression_Pine 3
+                        |> FirCompiler.listSkipExpression_Pine 3
                     , Pine.EnvironmentExpression
-                        |> ElmCompiler.listSkipExpression_Pine 3
+                        |> FirCompiler.listSkipExpression_Pine 3
                     , Pine.EnvironmentExpression
-                        |> ElmCompiler.listSkipExpression_Pine 2
+                        |> FirCompiler.listSkipExpression_Pine 2
                     ]
             }
         , expected =
             Pine.EnvironmentExpression
-                |> ElmCompiler.listSkipExpression_Pine 3
+                |> FirCompiler.listSkipExpression_Pine 3
         , additionalTestEnvironments = []
         }
       )
@@ -95,10 +96,10 @@ compiler_reduces_decode_and_eval_test_cases =
       , { original =
             { expression =
                 Pine.EnvironmentExpression
-                    |> ElmCompiler.listSkipExpression_Pine 2
-                    |> ElmCompiler.pineKernel_ListHead_Pine
-                    |> ElmCompiler.listSkipExpression_Pine 1
-                    |> ElmCompiler.pineKernel_ListHead_Pine
+                    |> FirCompiler.listSkipExpression_Pine 2
+                    |> FirCompiler.pineKernel_ListHead_Pine
+                    |> FirCompiler.listSkipExpression_Pine 1
+                    |> FirCompiler.pineKernel_ListHead_Pine
                     |> Pine.encodeExpressionAsValue
                     |> Pine.LiteralExpression
             , environment =
@@ -106,28 +107,28 @@ compiler_reduces_decode_and_eval_test_cases =
                     [ Pine.ListExpression
                         [ Pine.ListExpression []
                         , Pine.EnvironmentExpression
-                            |> ElmCompiler.listSkipExpression_Pine 4
+                            |> FirCompiler.listSkipExpression_Pine 4
                         ]
                     , Pine.ListExpression
                         [ Pine.ListExpression []
                         , Pine.EnvironmentExpression
-                            |> ElmCompiler.listSkipExpression_Pine 3
+                            |> FirCompiler.listSkipExpression_Pine 3
                         ]
                     , Pine.ListExpression
                         [ Pine.ListExpression []
                         , Pine.EnvironmentExpression
-                            |> ElmCompiler.listSkipExpression_Pine 3
+                            |> FirCompiler.listSkipExpression_Pine 3
                         ]
                     , Pine.ListExpression
                         [ Pine.ListExpression []
                         , Pine.EnvironmentExpression
-                            |> ElmCompiler.listSkipExpression_Pine 2
+                            |> FirCompiler.listSkipExpression_Pine 2
                         ]
                     ]
             }
         , expected =
             Pine.EnvironmentExpression
-                |> ElmCompiler.listSkipExpression_Pine 3
+                |> FirCompiler.listSkipExpression_Pine 3
         , additionalTestEnvironments = []
         }
       )
@@ -183,7 +184,7 @@ compilerReducesDecodeAndEvaluateExpression =
                 Test.test ("Expression " ++ String.fromInt testCaseIndex ++ " - " ++ testCaseName) <|
                     \_ ->
                         testCase.original
-                            |> ElmCompiler.attemptReduceDecodeAndEvaluateExpressionRecursive { maxDepth = 4 }
+                            |> FirCompiler.attemptReduceDecodeAndEvaluateExpressionRecursive { maxDepth = 4 }
                             |> Expect.equal testCase.expected
             )
         |> Test.describe "Compiler reduces decode and eval expression"
@@ -193,7 +194,7 @@ emitClosureExpressionTests : Test.Test
 emitClosureExpressionTests =
     [ ( "Zero parameters"
       , { functionInnerExpr =
-            ElmCompiler.LiteralExpression (Pine.valueFromString "test")
+            FirCompiler.LiteralExpression (Pine.valueFromString "test")
         , functionParams = []
         , arguments = []
         , environmentFunctions = []
@@ -202,18 +203,18 @@ emitClosureExpressionTests =
       )
     , ( "Zero parameters - return from function with one param"
       , { functionInnerExpr =
-            ElmCompiler.FunctionApplicationExpression
-                (ElmCompiler.ReferenceExpression "repeat_three_times")
-                [ ElmCompiler.LiteralExpression (Pine.valueFromString "argument_alfa") ]
+            FirCompiler.FunctionApplicationExpression
+                (FirCompiler.ReferenceExpression "repeat_three_times")
+                [ FirCompiler.LiteralExpression (Pine.valueFromString "argument_alfa") ]
         , functionParams = []
         , arguments = []
         , environmentFunctions =
             [ ( "repeat_three_times"
               , { functionInnerExpr =
-                    ElmCompiler.ListExpression
-                        [ ElmCompiler.ReferenceExpression "param_name"
-                        , ElmCompiler.ReferenceExpression "param_name"
-                        , ElmCompiler.ReferenceExpression "param_name"
+                    FirCompiler.ListExpression
+                        [ FirCompiler.ReferenceExpression "param_name"
+                        , FirCompiler.ReferenceExpression "param_name"
+                        , FirCompiler.ReferenceExpression "param_name"
                         ]
                 , functionParams =
                     [ [ ( "param_name", [] ) ] ]
@@ -230,15 +231,15 @@ emitClosureExpressionTests =
       )
     , ( "Zero parameters - return literal from function with zero param - once"
       , { functionInnerExpr =
-            ElmCompiler.FunctionApplicationExpression
-                (ElmCompiler.ReferenceExpression "return_constant_literal")
+            FirCompiler.FunctionApplicationExpression
+                (FirCompiler.ReferenceExpression "return_constant_literal")
                 []
         , functionParams = []
         , arguments = []
         , environmentFunctions =
             [ ( "return_constant_literal"
               , { functionInnerExpr =
-                    ElmCompiler.LiteralExpression (Pine.valueFromString "constant")
+                    FirCompiler.LiteralExpression (Pine.valueFromString "constant")
                 , functionParams = []
                 }
               )
@@ -248,23 +249,23 @@ emitClosureExpressionTests =
       )
     , ( "Zero parameters - return literal from function with zero param - twice"
       , { functionInnerExpr =
-            ElmCompiler.FunctionApplicationExpression
-                (ElmCompiler.ReferenceExpression "return_constant_literal_first")
+            FirCompiler.FunctionApplicationExpression
+                (FirCompiler.ReferenceExpression "return_constant_literal_first")
                 []
         , functionParams = []
         , arguments = []
         , environmentFunctions =
             [ ( "return_constant_literal_first"
               , { functionInnerExpr =
-                    ElmCompiler.FunctionApplicationExpression
-                        (ElmCompiler.ReferenceExpression "return_constant_literal_second")
+                    FirCompiler.FunctionApplicationExpression
+                        (FirCompiler.ReferenceExpression "return_constant_literal_second")
                         []
                 , functionParams = []
                 }
               )
             , ( "return_constant_literal_second"
               , { functionInnerExpr =
-                    ElmCompiler.LiteralExpression (Pine.valueFromString "constant")
+                    FirCompiler.LiteralExpression (Pine.valueFromString "constant")
                 , functionParams = []
                 }
               )
@@ -274,7 +275,7 @@ emitClosureExpressionTests =
       )
     , ( "One parameter - literal"
       , { functionInnerExpr =
-            ElmCompiler.LiteralExpression (Pine.valueFromString "test-literal")
+            FirCompiler.LiteralExpression (Pine.valueFromString "test-literal")
         , functionParams = [ [ ( "param-name", [] ) ] ]
         , arguments = [ Pine.valueFromString "test-123" ]
         , environmentFunctions = []
@@ -283,7 +284,7 @@ emitClosureExpressionTests =
       )
     , ( "One parameter - reference"
       , { functionInnerExpr =
-            ElmCompiler.ReferenceExpression "param-name"
+            FirCompiler.ReferenceExpression "param-name"
         , functionParams = [ [ ( "param-name", [] ) ] ]
         , arguments = [ Pine.valueFromString "test-345" ]
         , environmentFunctions = []
@@ -292,10 +293,10 @@ emitClosureExpressionTests =
       )
     , ( "One parameter - reference decons tuple second"
       , { functionInnerExpr =
-            ElmCompiler.ReferenceExpression "param-name"
+            FirCompiler.ReferenceExpression "param-name"
         , functionParams =
             [ [ ( "param-name"
-                , [ ElmCompiler.ListItemDeconstruction 1 ]
+                , [ FirCompiler.ListItemDeconstruction 1 ]
                 )
               ]
             ]
@@ -311,20 +312,20 @@ emitClosureExpressionTests =
       )
     , ( "One parameter - repeat"
       , { functionInnerExpr =
-            ElmCompiler.FunctionApplicationExpression
-                (ElmCompiler.ReferenceExpression "repeat_help")
-                [ ElmCompiler.ListExpression
-                    [ ElmCompiler.LiteralExpression (Pine.ListValue [])
-                    , ElmCompiler.ReferenceExpression "count"
-                    , ElmCompiler.ReferenceExpression "value"
+            FirCompiler.FunctionApplicationExpression
+                (FirCompiler.ReferenceExpression "repeat_help")
+                [ FirCompiler.ListExpression
+                    [ FirCompiler.LiteralExpression (Pine.ListValue [])
+                    , FirCompiler.ReferenceExpression "count"
+                    , FirCompiler.ReferenceExpression "value"
                     ]
                 ]
         , functionParams =
             [ [ ( "count"
-                , [ ElmCompiler.ListItemDeconstruction 0 ]
+                , [ FirCompiler.ListItemDeconstruction 0 ]
                 )
               , ( "value"
-                , [ ElmCompiler.ListItemDeconstruction 1 ]
+                , [ FirCompiler.ListItemDeconstruction 1 ]
                 )
               ]
             ]
@@ -337,53 +338,53 @@ emitClosureExpressionTests =
         , environmentFunctions =
             [ ( "repeat_help"
               , { functionInnerExpr =
-                    ElmCompiler.ConditionalExpression
+                    FirCompiler.ConditionalExpression
                         { condition =
-                            ElmCompiler.KernelApplicationExpression
+                            FirCompiler.KernelApplicationExpression
                                 { functionName = "is_sorted_ascending_int"
                                 , argument =
-                                    ElmCompiler.ListExpression
-                                        [ ElmCompiler.ReferenceExpression "remainingCount"
-                                        , ElmCompiler.LiteralExpression (Pine.valueFromBigInt (BigInt.fromInt 0))
+                                    FirCompiler.ListExpression
+                                        [ FirCompiler.ReferenceExpression "remainingCount"
+                                        , FirCompiler.LiteralExpression (Pine.valueFromBigInt (BigInt.fromInt 0))
                                         ]
                                 }
                         , ifTrue =
-                            ElmCompiler.ReferenceExpression "result"
+                            FirCompiler.ReferenceExpression "result"
                         , ifFalse =
-                            ElmCompiler.FunctionApplicationExpression
-                                (ElmCompiler.ReferenceExpression "repeat_help")
-                                [ ElmCompiler.ListExpression
-                                    [ ElmCompiler.KernelApplicationExpression
+                            FirCompiler.FunctionApplicationExpression
+                                (FirCompiler.ReferenceExpression "repeat_help")
+                                [ FirCompiler.ListExpression
+                                    [ FirCompiler.KernelApplicationExpression
                                         { functionName = "concat"
                                         , argument =
-                                            ElmCompiler.ListExpression
-                                                [ ElmCompiler.ListExpression
-                                                    [ ElmCompiler.ReferenceExpression "value"
+                                            FirCompiler.ListExpression
+                                                [ FirCompiler.ListExpression
+                                                    [ FirCompiler.ReferenceExpression "value"
                                                     ]
-                                                , ElmCompiler.ReferenceExpression "result"
+                                                , FirCompiler.ReferenceExpression "result"
                                                 ]
                                         }
-                                    , ElmCompiler.KernelApplicationExpression
+                                    , FirCompiler.KernelApplicationExpression
                                         { functionName = "add_int"
                                         , argument =
-                                            ElmCompiler.ListExpression
-                                                [ ElmCompiler.ReferenceExpression "remainingCount"
-                                                , ElmCompiler.LiteralExpression (Pine.valueFromBigInt (BigInt.fromInt -1))
+                                            FirCompiler.ListExpression
+                                                [ FirCompiler.ReferenceExpression "remainingCount"
+                                                , FirCompiler.LiteralExpression (Pine.valueFromBigInt (BigInt.fromInt -1))
                                                 ]
                                         }
-                                    , ElmCompiler.ReferenceExpression "value"
+                                    , FirCompiler.ReferenceExpression "value"
                                     ]
                                 ]
                         }
                 , functionParams =
                     [ [ ( "result"
-                        , [ ElmCompiler.ListItemDeconstruction 0 ]
+                        , [ FirCompiler.ListItemDeconstruction 0 ]
                         )
                       , ( "remainingCount"
-                        , [ ElmCompiler.ListItemDeconstruction 1 ]
+                        , [ FirCompiler.ListItemDeconstruction 1 ]
                         )
                       , ( "value"
-                        , [ ElmCompiler.ListItemDeconstruction 2 ]
+                        , [ FirCompiler.ListItemDeconstruction 2 ]
                         )
                       ]
                     ]
@@ -398,20 +399,20 @@ emitClosureExpressionTests =
       )
     , ( "One parameter - repeat - separate <= 0"
       , { functionInnerExpr =
-            ElmCompiler.FunctionApplicationExpression
-                (ElmCompiler.ReferenceExpression "repeat_help")
-                [ ElmCompiler.ListExpression
-                    [ ElmCompiler.LiteralExpression (Pine.ListValue [])
-                    , ElmCompiler.ReferenceExpression "count"
-                    , ElmCompiler.ReferenceExpression "value"
+            FirCompiler.FunctionApplicationExpression
+                (FirCompiler.ReferenceExpression "repeat_help")
+                [ FirCompiler.ListExpression
+                    [ FirCompiler.LiteralExpression (Pine.ListValue [])
+                    , FirCompiler.ReferenceExpression "count"
+                    , FirCompiler.ReferenceExpression "value"
                     ]
                 ]
         , functionParams =
             [ [ ( "count"
-                , [ ElmCompiler.ListItemDeconstruction 0 ]
+                , [ FirCompiler.ListItemDeconstruction 0 ]
                 )
               , ( "value"
-                , [ ElmCompiler.ListItemDeconstruction 1 ]
+                , [ FirCompiler.ListItemDeconstruction 1 ]
                 )
               ]
             ]
@@ -424,12 +425,12 @@ emitClosureExpressionTests =
         , environmentFunctions =
             [ ( "is_less_than_or_equal_to_zero"
               , { functionInnerExpr =
-                    ElmCompiler.KernelApplicationExpression
+                    FirCompiler.KernelApplicationExpression
                         { functionName = "is_sorted_ascending_int"
                         , argument =
-                            ElmCompiler.ListExpression
-                                [ ElmCompiler.ReferenceExpression "num"
-                                , ElmCompiler.LiteralExpression (Pine.valueFromBigInt (BigInt.fromInt 0))
+                            FirCompiler.ListExpression
+                                [ FirCompiler.ReferenceExpression "num"
+                                , FirCompiler.LiteralExpression (Pine.valueFromBigInt (BigInt.fromInt 0))
                                 ]
                         }
                 , functionParams =
@@ -440,49 +441,49 @@ emitClosureExpressionTests =
               )
             , ( "repeat_help"
               , { functionInnerExpr =
-                    ElmCompiler.ConditionalExpression
+                    FirCompiler.ConditionalExpression
                         { condition =
-                            ElmCompiler.FunctionApplicationExpression
-                                (ElmCompiler.ReferenceExpression "is_less_than_or_equal_to_zero")
-                                [ ElmCompiler.ReferenceExpression "remainingCount"
+                            FirCompiler.FunctionApplicationExpression
+                                (FirCompiler.ReferenceExpression "is_less_than_or_equal_to_zero")
+                                [ FirCompiler.ReferenceExpression "remainingCount"
                                 ]
                         , ifTrue =
-                            ElmCompiler.ReferenceExpression "result"
+                            FirCompiler.ReferenceExpression "result"
                         , ifFalse =
-                            ElmCompiler.FunctionApplicationExpression
-                                (ElmCompiler.ReferenceExpression "repeat_help")
-                                [ ElmCompiler.ListExpression
-                                    [ ElmCompiler.KernelApplicationExpression
+                            FirCompiler.FunctionApplicationExpression
+                                (FirCompiler.ReferenceExpression "repeat_help")
+                                [ FirCompiler.ListExpression
+                                    [ FirCompiler.KernelApplicationExpression
                                         { functionName = "concat"
                                         , argument =
-                                            ElmCompiler.ListExpression
-                                                [ ElmCompiler.ListExpression
-                                                    [ ElmCompiler.ReferenceExpression "value"
+                                            FirCompiler.ListExpression
+                                                [ FirCompiler.ListExpression
+                                                    [ FirCompiler.ReferenceExpression "value"
                                                     ]
-                                                , ElmCompiler.ReferenceExpression "result"
+                                                , FirCompiler.ReferenceExpression "result"
                                                 ]
                                         }
-                                    , ElmCompiler.KernelApplicationExpression
+                                    , FirCompiler.KernelApplicationExpression
                                         { functionName = "add_int"
                                         , argument =
-                                            ElmCompiler.ListExpression
-                                                [ ElmCompiler.ReferenceExpression "remainingCount"
-                                                , ElmCompiler.LiteralExpression (Pine.valueFromBigInt (BigInt.fromInt -1))
+                                            FirCompiler.ListExpression
+                                                [ FirCompiler.ReferenceExpression "remainingCount"
+                                                , FirCompiler.LiteralExpression (Pine.valueFromBigInt (BigInt.fromInt -1))
                                                 ]
                                         }
-                                    , ElmCompiler.ReferenceExpression "value"
+                                    , FirCompiler.ReferenceExpression "value"
                                     ]
                                 ]
                         }
                 , functionParams =
                     [ [ ( "result"
-                        , [ ElmCompiler.ListItemDeconstruction 0 ]
+                        , [ FirCompiler.ListItemDeconstruction 0 ]
                         )
                       , ( "remainingCount"
-                        , [ ElmCompiler.ListItemDeconstruction 1 ]
+                        , [ FirCompiler.ListItemDeconstruction 1 ]
                         )
                       , ( "value"
-                        , [ ElmCompiler.ListItemDeconstruction 2 ]
+                        , [ FirCompiler.ListItemDeconstruction 2 ]
                         )
                       ]
                     ]
@@ -496,7 +497,7 @@ emitClosureExpressionTests =
         }
       )
     , ( "Two parameters - return literal"
-      , { functionInnerExpr = ElmCompiler.LiteralExpression (Pine.valueFromString "constant-literal")
+      , { functionInnerExpr = FirCompiler.LiteralExpression (Pine.valueFromString "constant-literal")
         , functionParams =
             [ [ ( "param_alfa", [] )
               ]
@@ -512,7 +513,7 @@ emitClosureExpressionTests =
         }
       )
     , ( "Two parameters - return second"
-      , { functionInnerExpr = ElmCompiler.ReferenceExpression "param_beta"
+      , { functionInnerExpr = FirCompiler.ReferenceExpression "param_beta"
         , functionParams =
             [ [ ( "param_alfa", [] )
               ]
@@ -528,7 +529,7 @@ emitClosureExpressionTests =
         }
       )
     , ( "Two parameters - return first"
-      , { functionInnerExpr = ElmCompiler.ReferenceExpression "param_alfa"
+      , { functionInnerExpr = FirCompiler.ReferenceExpression "param_alfa"
         , functionParams =
             [ [ ( "param_alfa", [] )
               ]
@@ -544,7 +545,7 @@ emitClosureExpressionTests =
         }
       )
     , ( "Three parameters - return literal"
-      , { functionInnerExpr = ElmCompiler.LiteralExpression (Pine.valueFromString "constant-literal")
+      , { functionInnerExpr = FirCompiler.LiteralExpression (Pine.valueFromString "constant-literal")
         , functionParams =
             [ [ ( "param_alfa", [] )
               ]
@@ -563,7 +564,7 @@ emitClosureExpressionTests =
         }
       )
     , ( "Three parameters - return third"
-      , { functionInnerExpr = ElmCompiler.ReferenceExpression "param_gamma"
+      , { functionInnerExpr = FirCompiler.ReferenceExpression "param_gamma"
         , functionParams =
             [ [ ( "param_alfa", [] )
               ]
@@ -582,7 +583,7 @@ emitClosureExpressionTests =
         }
       )
     , ( "Three parameters - return second"
-      , { functionInnerExpr = ElmCompiler.ReferenceExpression "param_beta"
+      , { functionInnerExpr = FirCompiler.ReferenceExpression "param_beta"
         , functionParams =
             [ [ ( "param_alfa", [] ) ]
             , [ ( "param_beta", [] ) ]
@@ -598,7 +599,7 @@ emitClosureExpressionTests =
         }
       )
     , ( "Three parameters - return first"
-      , { functionInnerExpr = ElmCompiler.ReferenceExpression "param_alfa"
+      , { functionInnerExpr = FirCompiler.ReferenceExpression "param_alfa"
         , functionParams =
             [ [ ( "param_alfa", [] ) ]
             , [ ( "param_beta", [] ) ]
@@ -615,9 +616,9 @@ emitClosureExpressionTests =
       )
     , ( "Three parameters - return from function with one param"
       , { functionInnerExpr =
-            ElmCompiler.FunctionApplicationExpression
-                (ElmCompiler.ReferenceExpression "repeat_three_times")
-                [ ElmCompiler.ReferenceExpression "param_alfa" ]
+            FirCompiler.FunctionApplicationExpression
+                (FirCompiler.ReferenceExpression "repeat_three_times")
+                [ FirCompiler.ReferenceExpression "param_alfa" ]
         , functionParams =
             [ [ ( "param_alfa", [] ) ]
             , [ ( "param_beta", [] ) ]
@@ -631,10 +632,10 @@ emitClosureExpressionTests =
         , environmentFunctions =
             [ ( "repeat_three_times"
               , { functionInnerExpr =
-                    ElmCompiler.ListExpression
-                        [ ElmCompiler.ReferenceExpression "param_name"
-                        , ElmCompiler.ReferenceExpression "param_name"
-                        , ElmCompiler.ReferenceExpression "param_name"
+                    FirCompiler.ListExpression
+                        [ FirCompiler.ReferenceExpression "param_name"
+                        , FirCompiler.ReferenceExpression "param_name"
+                        , FirCompiler.ReferenceExpression "param_name"
                         ]
                 , functionParams =
                     [ [ ( "param_name", [] ) ] ]
@@ -651,10 +652,10 @@ emitClosureExpressionTests =
       )
     , ( "Three parameters - return from function with two param - first"
       , { functionInnerExpr =
-            ElmCompiler.FunctionApplicationExpression
-                (ElmCompiler.ReferenceExpression "repeat_three_times")
-                [ ElmCompiler.ReferenceExpression "param_alfa"
-                , ElmCompiler.ReferenceExpression "param_beta"
+            FirCompiler.FunctionApplicationExpression
+                (FirCompiler.ReferenceExpression "repeat_three_times")
+                [ FirCompiler.ReferenceExpression "param_alfa"
+                , FirCompiler.ReferenceExpression "param_beta"
                 ]
         , functionParams =
             [ [ ( "param_alfa", [] )
@@ -672,10 +673,10 @@ emitClosureExpressionTests =
         , environmentFunctions =
             [ ( "repeat_three_times"
               , { functionInnerExpr =
-                    ElmCompiler.ListExpression
-                        [ ElmCompiler.ReferenceExpression "param_name_a"
-                        , ElmCompiler.ReferenceExpression "param_name_a"
-                        , ElmCompiler.ReferenceExpression "param_name_a"
+                    FirCompiler.ListExpression
+                        [ FirCompiler.ReferenceExpression "param_name_a"
+                        , FirCompiler.ReferenceExpression "param_name_a"
+                        , FirCompiler.ReferenceExpression "param_name_a"
                         ]
                 , functionParams =
                     [ [ ( "param_name_a", [] )
@@ -696,12 +697,12 @@ emitClosureExpressionTests =
       )
     , ( "Two parameters - repeat"
       , { functionInnerExpr =
-            ElmCompiler.FunctionApplicationExpression
-                (ElmCompiler.ReferenceExpression "repeat_help")
-                [ ElmCompiler.LiteralExpression (Pine.ListValue [])
-                , ElmCompiler.ListExpression
-                    [ ElmCompiler.ReferenceExpression "count"
-                    , ElmCompiler.ReferenceExpression "value"
+            FirCompiler.FunctionApplicationExpression
+                (FirCompiler.ReferenceExpression "repeat_help")
+                [ FirCompiler.LiteralExpression (Pine.ListValue [])
+                , FirCompiler.ListExpression
+                    [ FirCompiler.ReferenceExpression "count"
+                    , FirCompiler.ReferenceExpression "value"
                     ]
                 ]
         , functionParams =
@@ -717,40 +718,40 @@ emitClosureExpressionTests =
         , environmentFunctions =
             [ ( "repeat_help"
               , { functionInnerExpr =
-                    ElmCompiler.ConditionalExpression
+                    FirCompiler.ConditionalExpression
                         { condition =
-                            ElmCompiler.KernelApplicationExpression
+                            FirCompiler.KernelApplicationExpression
                                 { functionName = "is_sorted_ascending_int"
                                 , argument =
-                                    ElmCompiler.ListExpression
-                                        [ ElmCompiler.ReferenceExpression "remainingCount"
-                                        , ElmCompiler.LiteralExpression (Pine.valueFromBigInt (BigInt.fromInt 0))
+                                    FirCompiler.ListExpression
+                                        [ FirCompiler.ReferenceExpression "remainingCount"
+                                        , FirCompiler.LiteralExpression (Pine.valueFromBigInt (BigInt.fromInt 0))
                                         ]
                                 }
-                        , ifTrue = ElmCompiler.ReferenceExpression "result"
+                        , ifTrue = FirCompiler.ReferenceExpression "result"
                         , ifFalse =
-                            ElmCompiler.FunctionApplicationExpression
-                                (ElmCompiler.ReferenceExpression "repeat_help")
-                                [ ElmCompiler.KernelApplicationExpression
+                            FirCompiler.FunctionApplicationExpression
+                                (FirCompiler.ReferenceExpression "repeat_help")
+                                [ FirCompiler.KernelApplicationExpression
                                     { functionName = "concat"
                                     , argument =
-                                        ElmCompiler.ListExpression
-                                            [ ElmCompiler.ListExpression
-                                                [ ElmCompiler.ReferenceExpression "value"
+                                        FirCompiler.ListExpression
+                                            [ FirCompiler.ListExpression
+                                                [ FirCompiler.ReferenceExpression "value"
                                                 ]
-                                            , ElmCompiler.ReferenceExpression "result"
+                                            , FirCompiler.ReferenceExpression "result"
                                             ]
                                     }
-                                , ElmCompiler.ListExpression
-                                    [ ElmCompiler.KernelApplicationExpression
+                                , FirCompiler.ListExpression
+                                    [ FirCompiler.KernelApplicationExpression
                                         { functionName = "add_int"
                                         , argument =
-                                            ElmCompiler.ListExpression
-                                                [ ElmCompiler.ReferenceExpression "remainingCount"
-                                                , ElmCompiler.LiteralExpression (Pine.valueFromBigInt (BigInt.fromInt -1))
+                                            FirCompiler.ListExpression
+                                                [ FirCompiler.ReferenceExpression "remainingCount"
+                                                , FirCompiler.LiteralExpression (Pine.valueFromBigInt (BigInt.fromInt -1))
                                                 ]
                                         }
-                                    , ElmCompiler.ReferenceExpression "value"
+                                    , FirCompiler.ReferenceExpression "value"
                                     ]
                                 ]
                         }
@@ -758,10 +759,10 @@ emitClosureExpressionTests =
                     [ [ ( "result", [] )
                       ]
                     , [ ( "remainingCount"
-                        , [ ElmCompiler.ListItemDeconstruction 0 ]
+                        , [ FirCompiler.ListItemDeconstruction 0 ]
                         )
                       , ( "value"
-                        , [ ElmCompiler.ListItemDeconstruction 1 ]
+                        , [ FirCompiler.ListItemDeconstruction 1 ]
                         )
                       ]
                     ]
@@ -776,9 +777,9 @@ emitClosureExpressionTests =
       )
     , ( "Three parameters - repeat"
       , { functionInnerExpr =
-            ElmCompiler.FunctionApplicationExpression
-                (ElmCompiler.ReferenceExpression "repeat_help")
-                (List.map ElmCompiler.LiteralExpression
+            FirCompiler.FunctionApplicationExpression
+                (FirCompiler.ReferenceExpression "repeat_help")
+                (List.map FirCompiler.LiteralExpression
                     [ Pine.ListValue []
                     , Pine.valueFromBigInt (BigInt.fromInt 3)
                     , Pine.valueFromString "test_elem"
@@ -789,40 +790,40 @@ emitClosureExpressionTests =
         , environmentFunctions =
             [ ( "repeat_help"
               , { functionInnerExpr =
-                    ElmCompiler.ConditionalExpression
+                    FirCompiler.ConditionalExpression
                         { condition =
-                            ElmCompiler.KernelApplicationExpression
+                            FirCompiler.KernelApplicationExpression
                                 { functionName = "is_sorted_ascending_int"
                                 , argument =
-                                    ElmCompiler.ListExpression
-                                        [ ElmCompiler.ReferenceExpression "remainingCount"
-                                        , ElmCompiler.LiteralExpression (Pine.valueFromBigInt (BigInt.fromInt 0))
+                                    FirCompiler.ListExpression
+                                        [ FirCompiler.ReferenceExpression "remainingCount"
+                                        , FirCompiler.LiteralExpression (Pine.valueFromBigInt (BigInt.fromInt 0))
                                         ]
                                 }
                         , ifTrue =
-                            ElmCompiler.ReferenceExpression "result"
+                            FirCompiler.ReferenceExpression "result"
                         , ifFalse =
-                            ElmCompiler.FunctionApplicationExpression
-                                (ElmCompiler.ReferenceExpression "repeat_help")
-                                [ ElmCompiler.KernelApplicationExpression
+                            FirCompiler.FunctionApplicationExpression
+                                (FirCompiler.ReferenceExpression "repeat_help")
+                                [ FirCompiler.KernelApplicationExpression
                                     { functionName = "concat"
                                     , argument =
-                                        ElmCompiler.ListExpression
-                                            [ ElmCompiler.ListExpression
-                                                [ ElmCompiler.ReferenceExpression "value"
+                                        FirCompiler.ListExpression
+                                            [ FirCompiler.ListExpression
+                                                [ FirCompiler.ReferenceExpression "value"
                                                 ]
-                                            , ElmCompiler.ReferenceExpression "result"
+                                            , FirCompiler.ReferenceExpression "result"
                                             ]
                                     }
-                                , ElmCompiler.KernelApplicationExpression
+                                , FirCompiler.KernelApplicationExpression
                                     { functionName = "add_int"
                                     , argument =
-                                        ElmCompiler.ListExpression
-                                            [ ElmCompiler.ReferenceExpression "remainingCount"
-                                            , ElmCompiler.LiteralExpression (Pine.valueFromBigInt (BigInt.fromInt -1))
+                                        FirCompiler.ListExpression
+                                            [ FirCompiler.ReferenceExpression "remainingCount"
+                                            , FirCompiler.LiteralExpression (Pine.valueFromBigInt (BigInt.fromInt -1))
                                             ]
                                     }
-                                , ElmCompiler.ReferenceExpression "value"
+                                , FirCompiler.ReferenceExpression "value"
                                 ]
                         }
                 , functionParams =
@@ -844,13 +845,13 @@ emitClosureExpressionTests =
       )
     , ( "let block returning literal"
       , { functionInnerExpr =
-            ElmCompiler.LetBlockExpression
+            FirCompiler.LetBlockExpression
                 { declarations =
                     [ ( "decl_from_let"
-                      , ElmCompiler.LiteralExpression (Pine.valueFromString "constant_in_let")
+                      , FirCompiler.LiteralExpression (Pine.valueFromString "constant_in_let")
                       )
                     ]
-                , expression = ElmCompiler.ReferenceExpression "decl_from_let"
+                , expression = FirCompiler.ReferenceExpression "decl_from_let"
                 }
         , functionParams = []
         , arguments = []
@@ -860,16 +861,16 @@ emitClosureExpressionTests =
       )
     , ( "let block returning from other decl in same block"
       , { functionInnerExpr =
-            ElmCompiler.LetBlockExpression
+            FirCompiler.LetBlockExpression
                 { declarations =
                     [ ( "decl_from_let"
-                      , ElmCompiler.ReferenceExpression "other_decl_from_let"
+                      , FirCompiler.ReferenceExpression "other_decl_from_let"
                       )
                     , ( "other_decl_from_let"
-                      , ElmCompiler.LiteralExpression (Pine.valueFromString "constant_in_let")
+                      , FirCompiler.LiteralExpression (Pine.valueFromString "constant_in_let")
                       )
                     ]
-                , expression = ElmCompiler.ReferenceExpression "decl_from_let"
+                , expression = FirCompiler.ReferenceExpression "decl_from_let"
                 }
         , functionParams = []
         , arguments = []
@@ -879,13 +880,13 @@ emitClosureExpressionTests =
       )
     , ( "let block returning only parent function arg"
       , { functionInnerExpr =
-            ElmCompiler.LetBlockExpression
+            FirCompiler.LetBlockExpression
                 { declarations =
                     [ ( "decl_from_let"
-                      , ElmCompiler.ReferenceExpression "param_0"
+                      , FirCompiler.ReferenceExpression "param_0"
                       )
                     ]
-                , expression = ElmCompiler.ReferenceExpression "decl_from_let"
+                , expression = FirCompiler.ReferenceExpression "decl_from_let"
                 }
         , functionParams =
             [ [ ( "param_0", [] ) ]
@@ -897,20 +898,20 @@ emitClosureExpressionTests =
       )
     , ( "let block in let block returning only parent function arg"
       , { functionInnerExpr =
-            ElmCompiler.LetBlockExpression
+            FirCompiler.LetBlockExpression
                 { declarations =
                     [ ( "decl_from_let"
-                      , ElmCompiler.ReferenceExpression "param_0"
+                      , FirCompiler.ReferenceExpression "param_0"
                       )
                     ]
                 , expression =
-                    ElmCompiler.LetBlockExpression
+                    FirCompiler.LetBlockExpression
                         { declarations =
                             [ ( "decl_from_let_inner"
-                              , ElmCompiler.ReferenceExpression "decl_from_let"
+                              , FirCompiler.ReferenceExpression "decl_from_let"
                               )
                             ]
-                        , expression = ElmCompiler.ReferenceExpression "decl_from_let_inner"
+                        , expression = FirCompiler.ReferenceExpression "decl_from_let_inner"
                         }
                 }
         , functionParams =
@@ -923,13 +924,13 @@ emitClosureExpressionTests =
       )
     , ( "let block returning second parent function arg"
       , { functionInnerExpr =
-            ElmCompiler.LetBlockExpression
+            FirCompiler.LetBlockExpression
                 { declarations =
                     [ ( "decl_from_let"
-                      , ElmCompiler.ReferenceExpression "param_1"
+                      , FirCompiler.ReferenceExpression "param_1"
                       )
                     ]
-                , expression = ElmCompiler.ReferenceExpression "decl_from_let"
+                , expression = FirCompiler.ReferenceExpression "decl_from_let"
                 }
         , functionParams =
             [ [ ( "param_0", [] ) ]
@@ -945,39 +946,39 @@ emitClosureExpressionTests =
       )
     , ( "partial application only for closure - one original param"
       , { functionInnerExpr =
-            ElmCompiler.LetBlockExpression
+            FirCompiler.LetBlockExpression
                 { declarations =
                     [ ( "decl_from_let"
-                      , ElmCompiler.FunctionExpression
+                      , FirCompiler.FunctionExpression
                             [ [ ( "final_func_param_0"
                                 , []
                                 )
                               ]
                             ]
-                            (ElmCompiler.FunctionApplicationExpression
-                                (ElmCompiler.ReferenceExpression "final_func_param_0")
-                                [ ElmCompiler.LiteralExpression (Pine.valueFromString "literal_0")
+                            (FirCompiler.FunctionApplicationExpression
+                                (FirCompiler.ReferenceExpression "final_func_param_0")
+                                [ FirCompiler.LiteralExpression (Pine.valueFromString "literal_0")
                                 ]
                             )
                       )
                     , ( "closure_func"
-                      , ElmCompiler.FunctionExpression
+                      , FirCompiler.FunctionExpression
                             [ [ ( "closure_func_param_0"
                                 , []
                                 )
                               ]
                             ]
-                            (ElmCompiler.ListExpression
-                                [ ElmCompiler.ReferenceExpression "closure_func_param_0"
-                                , ElmCompiler.ReferenceExpression "param_0"
+                            (FirCompiler.ListExpression
+                                [ FirCompiler.ReferenceExpression "closure_func_param_0"
+                                , FirCompiler.ReferenceExpression "param_0"
                                 ]
                             )
                       )
                     ]
                 , expression =
-                    ElmCompiler.FunctionApplicationExpression
-                        (ElmCompiler.ReferenceExpression "decl_from_let")
-                        [ ElmCompiler.ReferenceExpression "closure_func"
+                    FirCompiler.FunctionApplicationExpression
+                        (FirCompiler.ReferenceExpression "decl_from_let")
+                        [ FirCompiler.ReferenceExpression "closure_func"
                         ]
                 }
         , functionParams =
@@ -997,13 +998,13 @@ emitClosureExpressionTests =
       )
     , ( "let block returning from other outside decl"
       , { functionInnerExpr =
-            ElmCompiler.LetBlockExpression
+            FirCompiler.LetBlockExpression
                 { declarations =
                     [ ( "decl_from_let"
-                      , ElmCompiler.ReferenceExpression "env_func"
+                      , FirCompiler.ReferenceExpression "env_func"
                       )
                     ]
-                , expression = ElmCompiler.ReferenceExpression "decl_from_let"
+                , expression = FirCompiler.ReferenceExpression "decl_from_let"
                 }
         , functionParams =
             [ [ ( "param_0", [] ) ]
@@ -1011,7 +1012,7 @@ emitClosureExpressionTests =
         , arguments = [ Pine.valueFromString "argument_0" ]
         , environmentFunctions =
             [ ( "env_func"
-              , { functionInnerExpr = ElmCompiler.LiteralExpression (Pine.valueFromString "const_from_env_func")
+              , { functionInnerExpr = FirCompiler.LiteralExpression (Pine.valueFromString "const_from_env_func")
                 , functionParams = []
                 }
               )
@@ -1021,15 +1022,15 @@ emitClosureExpressionTests =
       )
     , ( "Partial application - two - return literal"
       , { functionInnerExpr =
-            ElmCompiler.FunctionApplicationExpression
-                (ElmCompiler.ReferenceExpression "second_function_partially_applied")
-                [ ElmCompiler.LiteralExpression (Pine.valueFromString "second_arg")
+            FirCompiler.FunctionApplicationExpression
+                (FirCompiler.ReferenceExpression "second_function_partially_applied")
+                [ FirCompiler.LiteralExpression (Pine.valueFromString "second_arg")
                 ]
         , functionParams = []
         , arguments = []
         , environmentFunctions =
             [ ( "second_function"
-              , { functionInnerExpr = ElmCompiler.LiteralExpression (Pine.valueFromString "constant-literal")
+              , { functionInnerExpr = FirCompiler.LiteralExpression (Pine.valueFromString "constant-literal")
                 , functionParams =
                     [ [ ( "second_function_param_alfa", [] ) ]
                     , [ ( "second_function_param_beta", [] ) ]
@@ -1038,9 +1039,9 @@ emitClosureExpressionTests =
               )
             , ( "second_function_partially_applied"
               , { functionInnerExpr =
-                    ElmCompiler.FunctionApplicationExpression
-                        (ElmCompiler.ReferenceExpression "second_function")
-                        [ ElmCompiler.LiteralExpression (Pine.valueFromString "first_arg")
+                    FirCompiler.FunctionApplicationExpression
+                        (FirCompiler.ReferenceExpression "second_function")
+                        [ FirCompiler.LiteralExpression (Pine.valueFromString "first_arg")
                         ]
                 , functionParams = []
                 }
@@ -1056,7 +1057,7 @@ emitClosureExpressionTests =
                     \_ ->
                         let
                             declarationBlockOuterExprFromFunctionParamsAndInnerExpr params innerExpr =
-                                ElmCompiler.FunctionExpression params innerExpr
+                                FirCompiler.FunctionExpression params innerExpr
 
                             environmentFunctions =
                                 testCase.environmentFunctions
@@ -1089,7 +1090,7 @@ emitClosureExpressionTests =
                                     testCase.functionInnerExpr
 
                             emitClosureResult =
-                                ElmCompiler.emitExpressionInDeclarationBlock
+                                FirCompiler.emitExpressionInDeclarationBlock
                                     emptyEmitStack
                                     (Dict.fromList environmentFunctions)
                                     rootAsExpression
@@ -1097,7 +1098,7 @@ emitClosureExpressionTests =
                         emitClosureResult
                             |> Result.andThen
                                 ((\partialApplicable ->
-                                    ElmCompiler.partialApplicationExpressionFromListOfArguments
+                                    FirCompiler.partialApplicationExpressionFromListOfArguments
                                         (testCase.arguments |> List.map Pine.LiteralExpression)
                                         partialApplicable
                                         |> Pine.evaluateExpression { environment = Pine.ListValue [] }

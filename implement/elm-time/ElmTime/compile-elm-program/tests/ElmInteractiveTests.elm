@@ -5,6 +5,7 @@ import ElmCompiler
 import ElmInteractive exposing (ElmCoreModulesExtent(..), InteractiveContext(..))
 import ElmInteractiveParser
 import Expect
+import FirCompiler
 import Json.Encode
 import Pine
 import Set
@@ -546,7 +547,7 @@ testCompileRecordAccessPineExpression =
             let
                 recordValue =
                     Pine.ListValue
-                        [ Pine.valueFromString ElmCompiler.elmRecordTypeTagName
+                        [ Pine.valueFromString FirCompiler.elmRecordTypeTagName
                         , Pine.ListValue
                             [ Pine.ListValue
                                 [ Pine.ListValue
@@ -559,7 +560,7 @@ testCompileRecordAccessPineExpression =
             in
             recordValue
                 |> Pine.LiteralExpression
-                |> ElmCompiler.pineExpressionForRecordAccess "alfa"
+                |> FirCompiler.pineExpressionForRecordAccess "alfa"
                 |> Pine.evaluateExpression Pine.emptyEvalContext
                 |> Result.mapError Pine.displayStringFromPineError
                 |> Result.andThen ElmInteractive.pineValueAsElmValue
@@ -574,7 +575,7 @@ testCompileRecordUpdatePineExpression =
                 let
                     recordValue =
                         Pine.ListValue
-                            [ Pine.valueFromString ElmCompiler.elmRecordTypeTagName
+                            [ Pine.valueFromString FirCompiler.elmRecordTypeTagName
                             , Pine.ListValue
                                 [ Pine.ListValue
                                     [ Pine.ListValue
@@ -587,7 +588,7 @@ testCompileRecordUpdatePineExpression =
                 in
                 recordValue
                     |> Pine.LiteralExpression
-                    |> ElmCompiler.pineExpressionForRecordUpdate
+                    |> FirCompiler.pineExpressionForRecordUpdate
                         "alfa"
                         (Pine.LiteralExpression (Pine.valueFromBigInt (BigInt.fromInt 456)))
                     |> Pine.evaluateExpression Pine.emptyEvalContext
@@ -605,7 +606,7 @@ testCompileRecordUpdatePineExpression =
                 let
                     recordValue =
                         Pine.ListValue
-                            [ Pine.valueFromString ElmCompiler.elmRecordTypeTagName
+                            [ Pine.valueFromString FirCompiler.elmRecordTypeTagName
                             , Pine.ListValue
                                 [ Pine.ListValue
                                     [ Pine.ListValue
@@ -622,7 +623,7 @@ testCompileRecordUpdatePineExpression =
                 in
                 recordValue
                     |> Pine.LiteralExpression
-                    |> ElmCompiler.pineExpressionForRecordUpdate
+                    |> FirCompiler.pineExpressionForRecordUpdate
                         "alfa"
                         (Pine.LiteralExpression (Pine.valueFromBigInt (BigInt.fromInt 21)))
                     |> Pine.evaluateExpression Pine.emptyEvalContext
@@ -641,7 +642,7 @@ testCompileRecordUpdatePineExpression =
                 let
                     recordValue =
                         Pine.ListValue
-                            [ Pine.valueFromString ElmCompiler.elmRecordTypeTagName
+                            [ Pine.valueFromString FirCompiler.elmRecordTypeTagName
                             , Pine.ListValue
                                 [ Pine.ListValue
                                     [ Pine.ListValue
@@ -658,7 +659,7 @@ testCompileRecordUpdatePineExpression =
                 in
                 recordValue
                     |> Pine.LiteralExpression
-                    |> ElmCompiler.pineExpressionForRecordUpdate
+                    |> FirCompiler.pineExpressionForRecordUpdate
                         "beta"
                         (Pine.LiteralExpression (Pine.valueFromBigInt (BigInt.fromInt 31)))
                     |> Pine.evaluateExpression Pine.emptyEvalContext
