@@ -23,7 +23,7 @@ type Expression
       -}
     | FunctionApplicationExpression Expression (List Expression)
     | DeclarationBlockExpression (Dict.Dict String Expression) Expression
-    | PineFunctionApplicationExpression Pine.Value Expression
+    | PineFunctionApplicationExpression Pine.Expression Expression
       -- The tag expression case is only a wrapper to label a node for inspection and does not influence the evaluation result.
     | StringTagExpression String Expression
 
@@ -48,7 +48,7 @@ type alias FunctionParam =
 type Deconstruction
     = ListItemDeconstruction Int
     | SkipItemsDeconstruction Int
-    | PineFunctionApplicationDeconstruction Pine.Value
+    | PineFunctionApplicationDeconstruction Pine.Expression
 
 
 type alias EmitStack =
@@ -153,12 +153,15 @@ emitExpression stack expression =
                 |> emitExpression stack
                 |> Result.map (Pine.StringTagExpression tag)
 
-        PineFunctionApplicationExpression pineFunctionValue argument ->
+        PineFunctionApplicationExpression pineFunctionExpression argument ->
             emitExpression stack argument
                 |> Result.map
                     (\emittedArgument ->
                         Pine.DecodeAndEvaluateExpression
-                            { expression = Pine.LiteralExpression pineFunctionValue
+                            { expression =
+                                pineFunctionExpression
+                                    |> Pine.encodeExpressionAsValue
+                                    |> Pine.LiteralExpression
                             , environment = emittedArgument
                             }
                     )
@@ -552,10 +555,13 @@ pineExpressionForDeconstruction deconstruction =
         SkipItemsDeconstruction count ->
             listSkipExpression_Pine count
 
-        PineFunctionApplicationDeconstruction pineFunctionValue ->
+        PineFunctionApplicationDeconstruction pineFunctionExpression ->
             \emittedArgument ->
                 Pine.DecodeAndEvaluateExpression
-                    { expression = Pine.LiteralExpression pineFunctionValue
+                    { expression =
+                        pineFunctionExpression
+                            |> Pine.encodeExpressionAsValue
+                            |> Pine.LiteralExpression
                     , environment = emittedArgument
                     }
 

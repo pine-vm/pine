@@ -1056,9 +1056,7 @@ compileElmSyntaxRecordAccessFunction fieldName =
     FunctionExpression
         [ [ ( "record_param", [] ) ] ]
         (PineFunctionApplicationExpression
-            (pineExpressionForRecordAccess fieldName Pine.EnvironmentExpression
-                |> Pine.encodeExpressionAsValue
-            )
+            (pineExpressionForRecordAccess fieldName Pine.EnvironmentExpression)
             (ReferenceExpression "record_param")
         )
 
@@ -1086,7 +1084,6 @@ compileElmSyntaxRecordUpdate stack setters recordName =
                                 fieldName
                                 (listItemFromIndexExpression_Pine 0 Pine.EnvironmentExpression)
                                 (listItemFromIndexExpression_Pine 1 Pine.EnvironmentExpression)
-                                |> Pine.encodeExpressionAsValue
                             )
                             (ListExpression
                                 [ fieldExpr
@@ -1405,7 +1402,6 @@ compileElmSyntaxPattern elmPattern =
                             (\fieldName ->
                                 ( fieldName
                                 , [ pineExpressionForRecordAccess fieldName Pine.EnvironmentExpression
-                                        |> Pine.encodeExpressionAsValue
                                         |> PineFunctionApplicationDeconstruction
                                   ]
                                 )
