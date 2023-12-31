@@ -25,7 +25,7 @@ import FirCompiler
         ( ElmModuleInCompilation
         , EmitStack
         , Expression(..)
-        , listDependenciesOfExpression
+        , listTransitiveDependenciesOfExpression
         , parseFunctionParameters
         )
 import Json.Decode
@@ -507,7 +507,7 @@ inlineApplicationsOfEnvironmentDeclarations stackBeforeAddingDeps environmentDec
     let
         newReferencesDependencies =
             environmentDeclarations
-                |> List.map (Tuple.mapSecond (listDependenciesOfExpression stackBeforeAddingDeps))
+                |> List.map (Tuple.mapSecond (listTransitiveDependenciesOfExpression stackBeforeAddingDeps))
                 |> Dict.fromList
 
         stackWithEnvironmentDeclDeps =
@@ -527,14 +527,14 @@ inlineApplicationsOfEnvironmentDeclarations stackBeforeAddingDeps environmentDec
 
                         Just appliedFunction ->
                             let
-                                ( appliedFunctionParams, appliedFunctionBody ) =
+                                appliedFunctionParsed =
                                     parseFunctionParameters appliedFunction
 
                                 dependencies =
-                                    listDependenciesOfExpression stackWithEnvironmentDeclDeps appliedFunction
+                                    listTransitiveDependenciesOfExpression stackWithEnvironmentDeclDeps appliedFunction
                             in
                             if
-                                (List.length arguments /= List.length appliedFunctionParams)
+                                (List.length arguments /= List.length appliedFunctionParsed.parameters)
                                     || Set.member functionName dependencies
                             then
                                 Nothing
@@ -543,7 +543,7 @@ inlineApplicationsOfEnvironmentDeclarations stackBeforeAddingDeps environmentDec
                                 let
                                     replacementsDict : Dict.Dict String Expression
                                     replacementsDict =
-                                        appliedFunctionParams
+                                        appliedFunctionParsed.parameters
                                             |> List.indexedMap
                                                 (\paramIndex paramDeconstructions ->
                                                     arguments
@@ -572,7 +572,7 @@ inlineApplicationsOfEnvironmentDeclarations stackBeforeAddingDeps environmentDec
                                             _ ->
                                                 Nothing
                                 in
-                                appliedFunctionBody
+                                appliedFunctionParsed.innerExpression
                                     |> transformExpressionWithOptionalReplacement findReplacementForReference
                                     |> inlineApplicationsOfEnvironmentDeclarations stackWithEnvironmentDeclDeps environmentDeclarations
                                     |> Just

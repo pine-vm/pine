@@ -1962,7 +1962,7 @@ compileElmSyntaxValueConstructor valueConstructor =
                         )
                     |> Pine.ListExpression
                 ]
-                |> emitWrapperForPartialApplication [] argumentsCount
+                |> emitWrapperForPartialApplication (Pine.ListExpression []) argumentsCount
                 |> evaluateAsIndependentExpression
                 |> Result.withDefault
                     (Pine.valueFromString "Failed to compile choice type tag constructor")
