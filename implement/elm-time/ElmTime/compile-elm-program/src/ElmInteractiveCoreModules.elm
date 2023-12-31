@@ -56,7 +56,40 @@ type Order = LT | EQ | GT
 
 eq : a -> a -> Bool
 eq a b =
-    Pine_kernel.equal [ a, b ]
+    case a of
+        RBNode_elm_builtin _ _ _ _ _ ->
+            Pine_kernel.equal [ dictToList a, dictToList b ]
+
+        Set_elm_builtin _ ->
+            Pine_kernel.equal [ setToList a, setToList b ]
+
+        _ ->
+            Pine_kernel.equal [ a, b ]
+
+
+setToList : Set a -> List a
+setToList (Set_elm_builtin dict) =
+    dictKeys dict
+
+
+dictToList : Dict k v -> List (k,v)
+dictToList dict =
+    dictFoldr (\\key value list -> Pine_kernel.concat [ [(key, value)], list ]) [] dict
+
+
+dictKeys : Dict k v -> List k
+dictKeys dict =
+  dictFoldr (\\key value keyList -> Pine_kernel.concat [ [ key ], keyList ]) [] dict
+
+
+dictFoldr : (k -> v -> b -> b) -> b -> Dict k v -> b
+dictFoldr func acc t =
+  case t of
+    RBEmpty_elm_builtin ->
+      acc
+
+    RBNode_elm_builtin _ key value left right ->
+      dictFoldr func (func key value (dictFoldr func acc right)) left
 
 
 neq : a -> a -> Bool

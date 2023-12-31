@@ -1,0 +1,2 @@
+(Dict.insert 0 () (Dict.insert 1 () (Dict.insert 2 () (Dict.insert 3 () Dict.empty)))) ==
+(Dict.insert 3 () (Dict.insert 2 () (Dict.insert 1 () (Dict.insert 0 () Dict.empty))))
