@@ -12,16 +12,18 @@ type Expression
     | ListExpression (List Expression)
     | KernelApplicationExpression KernelApplicationExpressionStruct
     | ConditionalExpression ConditionalExpressionStruct
-      {-
-         The reference expression case references a declaration from a parent declaration block, thus enabling recursion.
-      -}
-    | ReferenceExpression String
     | FunctionExpression (List FunctionParam) Expression
       {-
          Keeping a specialized function application model enables distinguishing cases with immediate full application.
          The emission of specialized code for these cases reduces runtime expenses.
       -}
     | FunctionApplicationExpression Expression (List Expression)
+      {-
+         The reference expression references a name introduced by a parent declaration block or function param deconstruction.
+         Referencing a declaration from a declaration block enables (mutual) recursion.
+         References, in general, enable modeling closures.
+      -}
+    | ReferenceExpression String
     | DeclarationBlockExpression (Dict.Dict String Expression) Expression
     | PineFunctionApplicationExpression Pine.Expression Expression
       -- The tag expression case is only a wrapper to label a node for inspection and does not influence the evaluation result.
