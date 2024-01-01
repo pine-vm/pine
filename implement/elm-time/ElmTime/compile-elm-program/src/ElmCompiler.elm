@@ -22,7 +22,6 @@ import FirCompiler
         , Expression(..)
         , ModuleImports
         , countListElementsExpression
-        , emitExpressionInDeclarationBlock
         , emitWrapperForPartialApplication
         , equalCondition
         , equalCondition_Pine
@@ -1807,35 +1806,90 @@ getDeclarationValueFromCompilation ( localModuleName, nameInModule ) compilation
         canonicalModuleName =
             Dict.get localModuleName compilation.moduleAliases
                 |> Maybe.withDefault localModuleName
-    in
-    case compilation.availableModules |> Dict.get canonicalModuleName of
-        Nothing ->
-            Err
-                ("Did not find module '"
-                    ++ String.join "." canonicalModuleName
-                    ++ "'. There are "
-                    ++ (String.fromInt (Dict.size compilation.availableModules)
-                            ++ " declarations in this scope: "
-                            ++ String.join ", " (List.map (String.join ".") (Dict.keys compilation.availableModules))
-                       )
-                )
 
-        Just moduleValue ->
-            case Dict.get nameInModule moduleValue.declarations of
+        continueWithDefault () =
+            case compilation.availableModules |> Dict.get canonicalModuleName of
                 Nothing ->
                     Err
-                        ("Did not find '"
-                            ++ nameInModule
-                            ++ "' in module '"
+                        ("Did not find module '"
                             ++ String.join "." canonicalModuleName
                             ++ "'. There are "
-                            ++ String.fromInt (Dict.size moduleValue.declarations)
-                            ++ " names available in that module: "
-                            ++ String.join ", " (Dict.keys moduleValue.declarations)
+                            ++ (String.fromInt (Dict.size compilation.availableModules)
+                                    ++ " declarations in this scope: "
+                                    ++ String.join ", " (List.map (String.join ".") (Dict.keys compilation.availableModules))
+                               )
                         )
 
-                Just declarationValue ->
-                    Ok declarationValue
+                Just moduleValue ->
+                    case Dict.get nameInModule moduleValue.declarations of
+                        Nothing ->
+                            Err
+                                ("Did not find '"
+                                    ++ nameInModule
+                                    ++ "' in module '"
+                                    ++ String.join "." canonicalModuleName
+                                    ++ "'. There are "
+                                    ++ String.fromInt (Dict.size moduleValue.declarations)
+                                    ++ " names available in that module: "
+                                    ++ String.join ", " (Dict.keys moduleValue.declarations)
+                                )
+
+                        Just declarationValue ->
+                            Ok declarationValue
+    in
+    case Dict.get canonicalModuleName getDeclarationValueFromCompilationOverrides of
+        Nothing ->
+            continueWithDefault ()
+
+        Just overrides ->
+            case Dict.get nameInModule overrides of
+                Just overrideValue ->
+                    overrideValue
+
+                Nothing ->
+                    continueWithDefault ()
+
+
+getDeclarationValueFromCompilationOverrides : Dict.Dict (List String) (Dict.Dict String (Result String Pine.Value))
+getDeclarationValueFromCompilationOverrides =
+    [ ( [ "Debug" ]
+      , [ ( "log"
+            -- TODO: mapping for Debug.log so we can get messages.
+          , FunctionExpression
+                [ [ ( "message", [] ) ], [ ( "payload", [] ) ] ]
+                (ReferenceExpression "payload")
+                |> FirCompiler.emitExpression
+                    { moduleImports =
+                        { importedModules = Dict.empty
+                        , importedDeclarations = Dict.empty
+                        }
+                    , declarationsDependencies = Dict.empty
+                    , environmentFunctions = []
+                    , environmentDeconstructions = Dict.empty
+                    }
+                |> Result.andThen evaluateAsIndependentExpression
+          )
+        , ( "toString"
+            -- TODO: mapping for Debug.toString
+          , FunctionExpression
+                [ [ ( "elm_value", [] ) ] ]
+                (LiteralExpression (valueFromString "Debug.toString is not implemented yet"))
+                |> FirCompiler.emitExpression
+                    { moduleImports =
+                        { importedModules = Dict.empty
+                        , importedDeclarations = Dict.empty
+                        }
+                    , declarationsDependencies = Dict.empty
+                    , environmentFunctions = []
+                    , environmentDeconstructions = Dict.empty
+                    }
+                |> Result.andThen evaluateAsIndependentExpression
+          )
+        ]
+            |> Dict.fromList
+      )
+    ]
+        |> Dict.fromList
 
 
 compileLookupForInlineableDeclaration : ( List String, String ) -> Pine.Value -> Expression
@@ -1886,7 +1940,7 @@ emitModuleDeclarations :
 emitModuleDeclarations stackBefore declarations =
     declarations.supportingDeclarations
         |> Dict.union declarations.exposedDeclarations
-        |> emitExpressionInDeclarationBlock stackBefore
+        |> FirCompiler.emitExpressionInDeclarationBlock stackBefore
         |> (\builder ->
                 declarations.exposedDeclarations
                     |> Dict.toList
