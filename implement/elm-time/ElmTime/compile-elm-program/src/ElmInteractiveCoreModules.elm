@@ -595,6 +595,21 @@ filter isGood list =
     foldr (\\x xs -> if isGood x then cons x xs else xs) [] list
 
 
+filterMap : (a -> Maybe b) -> List a -> List b
+filterMap f xs =
+    foldr (maybeCons f) [] xs
+
+
+maybeCons : (a -> Maybe b) -> a -> List b -> List b
+maybeCons f mx xs =
+    case f mx of
+        Just x ->
+            cons x xs
+
+        Nothing ->
+            xs
+
+
 length : List a -> Int
 length list =
     Pine_kernel.length list
@@ -610,6 +625,11 @@ member x xs =
     any ((==) x) xs
 
 
+all : (a -> Bool) -> List a -> Bool
+all isOkay list =
+    not (any (not << isOkay) list)
+
+
 any : (a -> Bool) -> List a -> Bool
 any isOkay list =
     case list of
@@ -622,6 +642,31 @@ any isOkay list =
 
             else
                 any isOkay xs
+
+
+minimum : List comparable -> Maybe comparable
+minimum list =
+    case list of
+        x :: xs ->
+            Just (foldl min x xs)
+
+        _ ->
+            Nothing
+
+
+maximum : List comparable -> Maybe comparable
+maximum list =
+    case list of
+        x :: xs ->
+            Just (foldl max x xs)
+
+        _ ->
+            Nothing
+
+
+sum : List number -> number
+sum numbers =
+    foldl (+) 0 numbers
 
 
 append : List a -> List a -> List a
@@ -1274,6 +1319,20 @@ dropWhileList predicate stringList =
                 dropWhileList predicate rest
             else
                 stringList
+
+
+padLeft : Int -> Char -> String -> String
+padLeft n char string =
+    repeat (n - length string) (fromChar char) ++ string
+
+
+lines : String -> List String
+lines string =
+    string
+        |> replace "\\r\\n" "\\n"
+        |> replace "\\r" "\\n"
+        |> split "\\n"
+
 
 """
     , """

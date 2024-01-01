@@ -1,0 +1,7 @@
+let
+    isEven n =
+        modBy 2 n == 0
+in
+    [ List.all isEven [ 0, 4, 6 ]
+    , List.all isEven [ 0, 3, 6 ]
+    ]

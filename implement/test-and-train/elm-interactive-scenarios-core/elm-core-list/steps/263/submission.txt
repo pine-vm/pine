@@ -1,0 +1,1 @@
+List.filterMap String.toInt [ "3", "hi", "12", "4th", "May" ]
