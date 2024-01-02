@@ -707,51 +707,34 @@ compilationAndEmitStackFromInteractiveEnvironment environmentDeclarations =
 json_encode_pineValue : Dict.Dict String Pine.Value -> Pine.Value -> Json.Encode.Value
 json_encode_pineValue dictionary value =
     let
-        blobDict =
-            dictionary
-                |> Dict.toList
-                |> List.filterMap
-                    (\( entryName, entryValue ) ->
-                        case entryValue of
-                            Pine.BlobValue blob ->
-                                Just ( blob, entryName )
+        dicts =
+            Dict.foldl
+                (\entryName entryValue aggregate ->
+                    case entryValue of
+                        Pine.BlobValue blob ->
+                            { aggregate
+                                | blobDict = Dict.insert blob entryName aggregate.blobDict
+                            }
 
-                            _ ->
-                                Nothing
-                    )
-                |> Dict.fromList
+                        Pine.ListValue list ->
+                            let
+                                hash =
+                                    pineListValueFastHash list
 
-        listDict =
-            dictionary
-                |> Dict.toList
-                |> List.filterMap
-                    (\( entryName, entryValue ) ->
-                        case entryValue of
-                            Pine.ListValue list ->
-                                Just ( list, entryName )
-
-                            _ ->
-                                Nothing
-                    )
-                |> List.foldl
-                    (\( nextList, nextName ) intermediateDict ->
-                        let
-                            hash =
-                                pineListValueFastHash nextList
-
-                            assocList =
-                                intermediateDict
-                                    |> Dict.get hash
-                                    |> Maybe.withDefault []
-                                    |> (::) ( nextList, nextName )
-                        in
-                        intermediateDict
-                            |> Dict.insert hash assocList
-                    )
-                    Dict.empty
+                                assocList =
+                                    Dict.get hash aggregate.listDict
+                                        |> Maybe.withDefault []
+                                        |> (::) ( list, entryName )
+                            in
+                            { aggregate
+                                | listDict = Dict.insert hash assocList aggregate.listDict
+                            }
+                )
+                { blobDict = Dict.empty, listDict = Dict.empty }
+                dictionary
     in
     json_encode_pineValue_Internal
-        { blobDict = blobDict, listDict = listDict }
+        dicts
         value
 
 
@@ -971,20 +954,25 @@ json_decode_pineValueGeneric config =
 
 pineListValueFastHash : List Pine.Value -> Int
 pineListValueFastHash list =
-    list
-        |> List.indexedMap
-            (\index entry ->
-                (case entry of
-                    Pine.BlobValue blob ->
-                        71 * List.length blob
+    let
+        calculateEntryHash : Pine.Value -> Int
+        calculateEntryHash entry =
+            case entry of
+                Pine.BlobValue blob ->
+                    71 * List.length blob
 
-                    Pine.ListValue innerList ->
-                        7919 * List.length innerList
-                )
-                    * (index + 1)
-            )
-        |> List.sum
-        |> (+) (List.length list)
+                Pine.ListValue innerList ->
+                    7919 * List.length innerList
+    in
+    case list of
+        [] ->
+            8831
+
+        [ entry ] ->
+            calculateEntryHash entry * 31
+
+        entry1 :: entry2 :: _ ->
+            calculateEntryHash entry1 * 41 + calculateEntryHash entry2 * 47 + List.length list
 
 
 json_decode_optionalNullableField : String -> Json.Decode.Decoder a -> Json.Decode.Decoder (Maybe a)

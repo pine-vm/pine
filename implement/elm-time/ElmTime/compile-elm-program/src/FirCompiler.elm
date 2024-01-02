@@ -193,19 +193,18 @@ emitExpressionInDeclarationBlock stackBeforeAddingDeps blockDeclarations mainExp
         importedModulesDeclarationsFlat : Dict.Dict String Expression
         importedModulesDeclarationsFlat =
             stackBeforeAddingDeps.moduleImports.importedModules
-                |> Dict.toList
-                |> List.concatMap
-                    (\( moduleName, importedModule ) ->
+                |> Dict.foldl
+                    (\moduleName importedModule aggregate ->
                         importedModule.declarations
-                            |> Dict.toList
-                            |> List.map
-                                (\( declName, declValue ) ->
-                                    ( String.join "." (moduleName ++ [ declName ])
-                                    , LiteralExpression declValue
-                                    )
+                            |> Dict.foldl
+                                (\declName declValue ->
+                                    Dict.insert
+                                        (String.join "." (moduleName ++ [ declName ]))
+                                        (LiteralExpression declValue)
                                 )
+                                aggregate
                     )
-                |> Dict.fromList
+                    Dict.empty
 
         importedDeclarations : Dict.Dict String Expression
         importedDeclarations =

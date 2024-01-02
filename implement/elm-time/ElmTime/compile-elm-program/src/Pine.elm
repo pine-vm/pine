@@ -2,6 +2,7 @@ module Pine exposing (..)
 
 import BigInt
 import Dict
+import Hex
 import Maybe.Extra
 import Result.Extra
 
@@ -144,21 +145,6 @@ evaluateExpression context expression =
 valueFromContextExpansionWithName : ( String, Value ) -> Value
 valueFromContextExpansionWithName ( declName, declValue ) =
     ListValue [ valueFromString declName, declValue ]
-
-
-namedValueFromValue : Value -> Maybe ( String, Value )
-namedValueFromValue value =
-    case value of
-        ListValue [ elementLabelCandidate, elementValue ] ->
-            case stringFromValue elementLabelCandidate of
-                Ok elementLabel ->
-                    Just ( elementLabel, elementValue )
-
-                Err _ ->
-                    Nothing
-
-        _ ->
-            Nothing
 
 
 kernelFunctions : Dict.Dict String KernelFunction
@@ -599,23 +585,36 @@ stringFromValue value =
 
 
 stringFromListValue : List Value -> Result String String
-stringFromListValue =
-    List.map
-        (bigIntFromUnsignedValue
-            >> Result.fromMaybe "Failed to map to big int"
-            >> Result.andThen intFromBigInt
-            >> Result.andThen
-                (\int ->
-                    if int <= 0xFFFF then
-                        Ok int
+stringFromListValue values =
+    let
+        continueRecursive : List Value -> List Char -> Result String (List Char)
+        continueRecursive remaining processed =
+            case remaining of
+                [] ->
+                    Ok processed
 
-                    else
-                        Err "Avoiding codes above 0xFFFF since transfer encoding failed for 0x10000."
-                )
-        )
-        >> Result.Extra.combine
-        >> Result.mapError ((++) "Failed to map list items to chars: ")
-        >> Result.map (List.map Char.fromCode >> String.fromList)
+                value :: rest ->
+                    case value of
+                        BlobValue intValueBytes ->
+                            case intValueBytes of
+                                [ b1 ] ->
+                                    continueRecursive rest (Char.fromCode b1 :: processed)
+
+                                [ b1, b2 ] ->
+                                    continueRecursive rest (Char.fromCode ((b1 * 256) + b2) :: processed)
+
+                                _ ->
+                                    Err
+                                        ("Failed to map to int - unsupported number of bytes: "
+                                            ++ String.fromInt (List.length intValueBytes)
+                                        )
+
+                        _ ->
+                            Err "Failed to map to int - not a BlobValue"
+    in
+    continueRecursive values []
+        |> Result.mapError ((++) "Failed to map list items to chars: ")
+        |> Result.map (String.fromList >> String.reverse)
 
 
 valueFromBigInt : BigInt.BigInt -> Value
@@ -722,16 +721,6 @@ bigIntFromBlobValue blobValue =
                     Err ("Unexpected value for sign byte of integer: " ++ String.fromInt sign)
 
 
-bigIntFromUnsignedValue : Value -> Maybe BigInt.BigInt
-bigIntFromUnsignedValue value =
-    case value of
-        BlobValue intValueBytes ->
-            Just (bigIntFromUnsignedBlobValue intValueBytes)
-
-        _ ->
-            Nothing
-
-
 bigIntFromUnsignedBlobValue : List Int -> BigInt.BigInt
 bigIntFromUnsignedBlobValue intValueBytes =
     intValueBytes
@@ -744,8 +733,7 @@ bigIntFromUnsignedBlobValue intValueBytes =
 
 hexadecimalRepresentationFromBlobValue : List Int -> String
 hexadecimalRepresentationFromBlobValue =
-    List.map BigInt.fromInt
-        >> List.map (BigInt.toHexString >> String.padLeft 2 '0')
+    List.map (Hex.toString >> String.padLeft 2 '0')
         >> String.join ""
 
 
@@ -808,66 +796,71 @@ encodeExpressionAsValue expression =
 
 
 decodeExpressionFromValue : Value -> Result String Expression
-decodeExpressionFromValue value =
-    value
-        |> decodeUnionFromPineValue
-            (Dict.fromList
-                [ ( "Literal"
-                  , LiteralExpression >> Ok
-                  )
-                , ( "List"
-                  , decodePineListValue
-                        >> Result.andThen
-                            (List.indexedMap
-                                (\itemIndex item ->
-                                    item
+decodeExpressionFromValue =
+    decodeUnionFromPineValue decodeExpressionFromValueDict
+
+
+decodeExpressionFromValueDict : Dict.Dict String (Value -> Result String Expression)
+decodeExpressionFromValueDict =
+    Dict.fromList
+        [ ( "Literal"
+          , LiteralExpression >> Ok
+          )
+        , ( "List"
+          , decodePineListValue
+                >> Result.andThen
+                    (List.indexedMap
+                        (\itemIndex item ->
+                            item
+                                |> decodeExpressionFromValue
+                                |> Result.mapError ((++) ("Failed to decode item at index " ++ String.fromInt itemIndex ++ ": "))
+                        )
+                        >> Result.Extra.combine
+                    )
+                >> Result.map ListExpression
+          )
+        , ( "DecodeAndEvaluate"
+          , decodeDecodeAndEvaluateExpression >> Result.map DecodeAndEvaluateExpression
+          )
+        , ( "KernelApplication"
+          , decodeKernelApplicationExpression >> Result.map KernelApplicationExpression
+          )
+        , ( "Conditional"
+          , decodeConditionalExpression >> Result.map ConditionalExpression
+          )
+        , ( "Environment"
+          , always (Ok EnvironmentExpression)
+          )
+        , ( "StringTag"
+          , decodePineListValue
+                >> Result.andThen decodeListWithExactlyTwoElements
+                >> Result.andThen
+                    (\( tagValue, taggedValue ) ->
+                        tagValue
+                            |> stringFromValue
+                            |> Result.mapError ((++) "Failed to decode tag: ")
+                            |> Result.andThen
+                                (\tag ->
+                                    taggedValue
                                         |> decodeExpressionFromValue
-                                        |> Result.mapError ((++) ("Failed to decode item at index " ++ String.fromInt itemIndex ++ ": "))
+                                        |> Result.mapError ((++) "Failed to decoded tagged expression: ")
+                                        |> Result.map (\tagged -> StringTagExpression tag tagged)
                                 )
-                                >> Result.Extra.combine
-                            )
-                        >> Result.map ListExpression
-                  )
-                , ( "DecodeAndEvaluate"
-                  , decodeDecodeAndEvaluateExpression >> Result.map DecodeAndEvaluateExpression
-                  )
-                , ( "KernelApplication"
-                  , decodeKernelApplicationExpression >> Result.map KernelApplicationExpression
-                  )
-                , ( "Conditional"
-                  , decodeConditionalExpression >> Result.map ConditionalExpression
-                  )
-                , ( "Environment"
-                  , always (Ok EnvironmentExpression)
-                  )
-                , ( "StringTag"
-                  , decodePineListValue
-                        >> Result.andThen decodeListWithExactlyTwoElements
-                        >> Result.andThen
-                            (\( tagValue, taggedValue ) ->
-                                tagValue
-                                    |> stringFromValue
-                                    |> Result.mapError ((++) "Failed to decode tag: ")
-                                    |> Result.andThen
-                                        (\tag ->
-                                            taggedValue
-                                                |> decodeExpressionFromValue
-                                                |> Result.mapError ((++) "Failed to decoded tagged expression: ")
-                                                |> Result.map (\tagged -> StringTagExpression tag tagged)
-                                        )
-                            )
-                  )
-                ]
-            )
+                    )
+          )
+        ]
 
 
 decodeDecodeAndEvaluateExpression : Value -> Result String DecodeAndEvaluateExpressionStructure
 decodeDecodeAndEvaluateExpression =
     decodeRecordFromPineValue
         >> Result.andThen
-            (always (Ok DecodeAndEvaluateExpressionStructure)
-                |> decodeRecordField "expression" decodeExpressionFromValue
-                |> decodeRecordField "environment" decodeExpressionFromValue
+            (\recordDict ->
+                (always (Ok DecodeAndEvaluateExpressionStructure)
+                    |> decodeRecordField "expression" decodeExpressionFromValue
+                    |> decodeRecordField "environment" decodeExpressionFromValue
+                )
+                    recordDict
             )
 
 
@@ -875,17 +868,20 @@ decodeKernelApplicationExpression : Value -> Result String KernelApplicationExpr
 decodeKernelApplicationExpression =
     decodeRecordFromPineValue
         >> Result.andThen
-            (always (Ok KernelApplicationExpressionStructure)
-                |> decodeRecordField "functionName"
-                    (stringFromValue
-                        >> Result.andThen
-                            (\functionName ->
-                                functionName
-                                    |> decodeKernelFunctionFromName
-                                    |> Result.map (always functionName)
-                            )
-                    )
-                |> decodeRecordField "argument" decodeExpressionFromValue
+            (\recordDict ->
+                (always (Ok KernelApplicationExpressionStructure)
+                    |> decodeRecordField "functionName"
+                        (stringFromValue
+                            >> Result.andThen
+                                (\functionName ->
+                                    functionName
+                                        |> decodeKernelFunctionFromName
+                                        |> Result.map (always functionName)
+                                )
+                        )
+                    |> decodeRecordField "argument" decodeExpressionFromValue
+                )
+                    recordDict
             )
 
 
@@ -910,10 +906,13 @@ decodeConditionalExpression : Value -> Result String ConditionalExpressionStruct
 decodeConditionalExpression =
     decodeRecordFromPineValue
         >> Result.andThen
-            (always (Ok ConditionalExpressionStructure)
-                |> decodeRecordField "condition" decodeExpressionFromValue
-                |> decodeRecordField "ifTrue" decodeExpressionFromValue
-                |> decodeRecordField "ifFalse" decodeExpressionFromValue
+            (\recordDict ->
+                (always (Ok ConditionalExpressionStructure)
+                    |> decodeRecordField "condition" decodeExpressionFromValue
+                    |> decodeRecordField "ifTrue" decodeExpressionFromValue
+                    |> decodeRecordField "ifFalse" decodeExpressionFromValue
+                )
+                    recordDict
             )
 
 
@@ -942,39 +941,47 @@ decodeRecordField fieldName fieldDecoder finalDecoder =
 
 decodeRecordFromPineValue : Value -> Result String (Dict.Dict String Value)
 decodeRecordFromPineValue =
-    decodePineListValue
-        >> Result.andThen
-            (List.foldl
-                (\fieldAsValue ->
-                    Result.andThen
-                        (\fields ->
-                            fieldAsValue
-                                |> decodePineListValue
-                                |> Result.andThen
-                                    (\fieldList ->
-                                        case fieldList of
-                                            [ fieldNameValue, fieldValue ] ->
-                                                stringFromValue fieldNameValue
-                                                    |> Result.mapError ((++) "Failed to decode field name string: ")
-                                                    |> Result.map (\fieldName -> ( fieldName, fieldValue ) :: fields)
+    let
+        parseListRecursively : Dict.Dict String Value -> List Value -> Result String (Dict.Dict String Value)
+        parseListRecursively aggregate remaining =
+            case remaining of
+                [] ->
+                    Ok aggregate
 
-                                            _ ->
-                                                Err ("Unexpected number of list items for field: " ++ String.fromInt (List.length fieldList))
-                                    )
-                        )
-                )
-                (Ok [])
-            )
-        >> Result.map Dict.fromList
+                fieldAsValue :: rest ->
+                    fieldAsValue
+                        |> decodePineListValue
+                        |> Result.andThen
+                            (\fieldList ->
+                                case fieldList of
+                                    [ fieldNameValue, fieldValue ] ->
+                                        stringFromValue fieldNameValue
+                                            |> Result.mapError ((++) "Failed to decode field name string: ")
+                                            |> Result.andThen
+                                                (\fieldName ->
+                                                    parseListRecursively
+                                                        (Dict.insert fieldName fieldValue aggregate)
+                                                        rest
+                                                )
+
+                                    _ ->
+                                        Err
+                                            ("Unexpected number of list items for field: "
+                                                ++ String.fromInt (List.length fieldList)
+                                            )
+                            )
+    in
+    decodePineListValue
+        >> Result.andThen (parseListRecursively Dict.empty)
 
 
 encodeRecordToPineValue : Dict.Dict String Value -> Value
 encodeRecordToPineValue =
-    Dict.toList
-        >> List.map
-            (\( fieldName, fieldValue ) ->
-                ListValue [ valueFromString fieldName, fieldValue ]
-            )
+    Dict.foldr
+        (\fieldName fieldValue aggregate ->
+            ListValue [ valueFromString fieldName, fieldValue ] :: aggregate
+        )
+        []
         >> ListValue
 
 
