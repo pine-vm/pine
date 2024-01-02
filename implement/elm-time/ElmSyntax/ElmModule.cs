@@ -9,6 +9,17 @@ namespace ElmTime.ElmSyntax;
 
 public static class ElmModule
 {
+    static readonly IReadOnlyList<IReadOnlyList<string>> ElmCoreAutoImportedModulesNames =
+        [
+            ["Basics"],
+            ["Tuple"],
+            ["Maybe"],
+            ["List"],
+            ["Char"],
+            ["String"],
+            ["Result"],
+        ];
+
     record ParsedModule(
         IReadOnlyList<string> ModuleName,
         IImmutableSet<IReadOnlyList<string>> ImportedModulesNames);
@@ -71,34 +82,31 @@ public static class ElmModule
             .SelectMany(rootModule =>
             EnumerateImportsOfModuleTransitive(rootModule.parsedModule.ModuleName)
             .Prepend(rootModule.parsedModule.ModuleName))
+            .Intersect(
+                parsedModules.Select(pm => pm.parsedModule.ModuleName),
+                EnumerableExtension.EqualityComparer<IReadOnlyList<string>>())
             .ToImmutableHashSet(EnumerableExtension.EqualityComparer<IReadOnlyList<string>>());
 
-        bool FirstModuleImportsSecondModuleTransitive(
-            IReadOnlyList<string> moduleA,
-            IReadOnlyList<string> moduleB) =>
-            EnumerateImportsOfModuleTransitive(moduleA)
-            .Contains(moduleB, EnumerableExtension.EqualityComparer<IReadOnlyList<string>>());
+        var includedModulesNamesWithDeps =
+            (IReadOnlyList<IReadOnlyList<string>>)
+            [
+                .. includedModulesNames.SelectMany(moduleName => EnumerateImportsOfModuleTransitive(moduleName).Prepend(moduleName)),
+                .. ElmCoreAutoImportedModulesNames.Reverse()
+                ];
 
-        int ModuleSortOrder(IReadOnlyList<string> moduleA, IReadOnlyList<string> moduleB) =>
-            FirstModuleImportsSecondModuleTransitive(moduleB, moduleA)
-            ?
-            -1 :
-            FirstModuleImportsSecondModuleTransitive(moduleA, moduleB)
-            ?
-            1 :
-            0;
+        var includedModulesNamesOrdered =
+            includedModulesNamesWithDeps
+            .Reverse()
+            .Distinct(EnumerableExtension.EqualityComparer<IReadOnlyList<string>>())
+            .Intersect(
+                includedModulesNames,
+                EnumerableExtension.EqualityComparer<IReadOnlyList<string>>())
+            .ToImmutableArray();
 
         return
-            parsedModules
-            .Where(parsedModule =>
-            includedModulesNames.Contains(
-                parsedModule.parsedModule.ModuleName,
-                EnumerableExtension.EqualityComparer<IReadOnlyList<string>>()))
-            .OrderBy(
-                parsedModule => parsedModule.parsedModule.ModuleName,
-                new DelegateComparer<IReadOnlyList<string>>(ModuleSortOrder!))
-            .Select(parsedModule => parsedModule.moduleText)
-            .ToImmutableList();
+            [.. includedModulesNamesOrdered
+            .Select(moduleName => parsedModulesByName[moduleName])
+            .Select(parsedModule => parsedModule.moduleText)];
     }
 
     public class DelegateComparer<T>(Func<T?, T?, int> func) : IComparer<T>
