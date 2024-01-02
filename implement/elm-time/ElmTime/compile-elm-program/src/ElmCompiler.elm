@@ -13,6 +13,7 @@ import Elm.Syntax.Node
 import Elm.Syntax.Pattern
 import Elm.Syntax.Range
 import Elm.Syntax.Type
+import Elm.Syntax.TypeAnnotation
 import FirCompiler
     exposing
         ( Deconstruction(..)
@@ -363,6 +364,32 @@ compileElmModuleTextIntoNamedExports availableModules moduleToTranslate =
                     )
                 |> Dict.fromList
 
+        declarationsFromTypeAliases : Dict.Dict String Pine.Value
+        declarationsFromTypeAliases =
+            moduleToTranslate.parsedModule.declarations
+                |> List.foldl
+                    (\(Elm.Syntax.Node.Node _ declaration) ->
+                        case declaration of
+                            Elm.Syntax.Declaration.AliasDeclaration aliasDeclaration ->
+                                case aliasDeclaration.typeAnnotation of
+                                    Elm.Syntax.Node.Node _ (Elm.Syntax.TypeAnnotation.Record record) ->
+                                        Dict.insert
+                                            (Elm.Syntax.Node.value aliasDeclaration.name)
+                                            (compileElmSyntaxRecordConstructor record)
+
+                                    Elm.Syntax.Node.Node _ (Elm.Syntax.TypeAnnotation.GenericRecord _ record) ->
+                                        Dict.insert
+                                            (Elm.Syntax.Node.value aliasDeclaration.name)
+                                            (compileElmSyntaxRecordConstructor (Elm.Syntax.Node.value record))
+
+                                    _ ->
+                                        identity
+
+                            _ ->
+                                identity
+                    )
+                    Dict.empty
+
         declarationsFromChoiceTypesTags : Dict.Dict String Pine.Value
         declarationsFromChoiceTypesTags =
             declarationsFromChoiceTypes
@@ -400,7 +427,9 @@ compileElmModuleTextIntoNamedExports availableModules moduleToTranslate =
             { moduleAliases = moduleAliases
             , availableModules = availableModules
             , availableDeclarations =
-                declarationsFromChoiceTypesTags |> Dict.map (always CompiledDeclaration)
+                declarationsFromChoiceTypesTags
+                    |> Dict.union declarationsFromTypeAliases
+                    |> Dict.map (always CompiledDeclaration)
             , elmValuesToExposeToGlobal =
                 elmValuesToExposeToGlobalDefault
                     |> Dict.filter (always ((==) moduleName >> not))
@@ -512,6 +541,7 @@ compileElmModuleTextIntoNamedExports availableModules moduleToTranslate =
                 ( moduleName
                 , { declarations =
                         [ Dict.toList declarationsFromChoiceTypesTags
+                        , Dict.toList declarationsFromTypeAliases
                         , List.filter (Tuple.first >> exposeFunction) functionDeclarations
                         , declarationsValuesForInfix
                         ]
@@ -2017,6 +2047,45 @@ compileElmSyntaxValueConstructor valueConstructor =
                 |> Result.withDefault
                     (Pine.valueFromString "Failed to compile choice type tag constructor")
     )
+
+
+compileElmSyntaxRecordConstructor : Elm.Syntax.TypeAnnotation.RecordDefinition -> Pine.Value
+compileElmSyntaxRecordConstructor record =
+    let
+        recordFieldNames =
+            record |> List.map (Elm.Syntax.Node.value >> Tuple.first >> Elm.Syntax.Node.value)
+    in
+    FunctionExpression
+        (recordFieldNames
+            |> List.map (\fieldName -> [ ( fieldName, [] ) ])
+        )
+        ([ LiteralExpression (Pine.valueFromString elmRecordTypeTagName)
+         , [ recordFieldNames
+                |> List.map
+                    (\fieldName ->
+                        [ LiteralExpression (Pine.valueFromString fieldName)
+                        , ReferenceExpression fieldName
+                        ]
+                            |> ListExpression
+                    )
+                |> ListExpression
+           ]
+            |> ListExpression
+         ]
+            |> ListExpression
+        )
+        |> FirCompiler.emitExpression
+            { moduleImports =
+                { importedModules = Dict.empty
+                , importedDeclarations = Dict.empty
+                }
+            , declarationsDependencies = Dict.empty
+            , environmentFunctions = []
+            , environmentDeconstructions = Dict.empty
+            }
+        |> Result.andThen evaluateAsIndependentExpression
+        |> Result.withDefault
+            (Pine.valueFromString "Failed to compile record constructor")
 
 
 shouldInlineDeclaration : String -> Pine.Value -> Bool

@@ -1,0 +1,1 @@
+RecordTypeAliasAsConstructor.WithOne 47
