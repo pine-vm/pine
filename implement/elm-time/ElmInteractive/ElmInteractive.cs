@@ -594,10 +594,13 @@ public class ElmInteractive
 
     private static TreeNodeWithStringPath? CompileTree(TreeNodeWithStringPath? sourceTree)
     {
-        if (sourceTree == null)
+        if (sourceTree is null)
             return null;
 
         var sourceFiles = TreeToFlatDictionaryWithPathComparer(sourceTree);
+
+        if (sourceFiles.Count == 0)
+            return null;
 
         var compilationRootFilePath = sourceFiles.FirstOrDefault(c => c.Key[c.Key.Count - 1].EndsWith(".elm")).Key;
 
@@ -630,8 +633,11 @@ public class ElmInteractive
             compileElmProgramCodeFiles,
             javaScriptEngineFactory: javaScriptEngineFlavor switch
             {
-                InteractiveSessionJavaScript.JavaScriptEngineFlavor.Jint => JavaScriptEngineJintOptimizedForElmApps.Create,
-                InteractiveSessionJavaScript.JavaScriptEngineFlavor.V8 => JavaScriptEngineFromJavaScriptEngineSwitcher.ConstructJavaScriptEngine,
+                InteractiveSessionJavaScript.JavaScriptEngineFlavor.Jint =>
+                JavaScriptEngineJintOptimizedForElmApps.Create,
+
+                InteractiveSessionJavaScript.JavaScriptEngineFlavor.V8 =>
+                JavaScriptEngineFromJavaScriptEngineSwitcher.ConstructJavaScriptEngine,
 
                 _ => throw new NotImplementedException("Not implemented: " + javaScriptEngineFlavor)
             });

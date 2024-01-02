@@ -138,4 +138,68 @@ public static class ElmModule
 
     public static IEnumerable<string> ModuleLines(this string moduleText) =>
         moduleText.Split('\n', '\r');
+
+
+    public static TreeNodeWithStringPath FilterAppCodeTreeForRootModulesAndDependencies(
+        TreeNodeWithStringPath appCodeTree,
+        Func<IReadOnlyList<string>, bool> moduleNameIsRootModule)
+    {
+        var originalBlobs =
+            appCodeTree.EnumerateBlobsTransitive()
+            .ToImmutableArray();
+
+        var allElmModules =
+            originalBlobs
+            .SelectWhere(
+                blobPathAndContent =>
+                {
+                    try
+                    {
+                        var blobContentAsString = System.Text.Encoding.UTF8.GetString(blobPathAndContent.blobContent.Span);
+
+                        return
+                            ParseModuleName(blobContentAsString)
+                            .Unpack(
+                                fromErr: _ =>
+                                Maybe<(IReadOnlyList<string> path, string content)>.nothing(),
+
+                                fromOk: moduleName =>
+                                Maybe<(IReadOnlyList<string> path, string content)>.just((blobPathAndContent.path, blobContentAsString)));
+                    }
+                    catch
+                    {
+                        return Maybe<(IReadOnlyList<string> path, string content)>.nothing();
+                    }
+                })
+            .ToImmutableArray();
+
+        var rootModulesTexts =
+            allElmModules
+            .Where(moduleNameAndText => moduleNameIsRootModule(ParseModuleName(moduleNameAndText.content).WithDefault([])))
+            .Select(moduleNameAndText => moduleNameAndText.content)
+            .ToImmutableArray();
+
+        var availableModulesTexts =
+            allElmModules
+            .Select(moduleNameAndText => moduleNameAndText.content)
+            .Except(rootModulesTexts)
+            .ToImmutableArray();
+
+        var filteredModules =
+            ModulesTextOrderedForCompilationByDependencies(
+                rootModulesTexts: rootModulesTexts,
+                availableModulesTexts: availableModulesTexts);
+
+        var filteredModulesPaths =
+            filteredModules
+            .Select(moduleText => allElmModules.First(moduleNameAndText => moduleNameAndText.content == moduleText).path)
+            .ToImmutableHashSet(EnumerableExtension.EqualityComparer<IReadOnlyList<string>>());
+
+        return
+            PineValueComposition.SortedTreeFromSetOfBlobs(
+                [.. originalBlobs
+                .Where(pathAndContent =>
+                filteredModulesPaths.Contains(pathAndContent.path) ||
+                pathAndContent.path.LastOrDefault() is "elm.json")]);
+    }
 }

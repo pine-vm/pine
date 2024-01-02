@@ -839,6 +839,13 @@ public class Program
                 .Option(
                     template: "--context-app",
                     description: "Path to an app to use as context. The Elm modules from this app will be available in the interactive environment.",
+                    optionType: CommandOptionType.MultipleValue);
+
+            var contextAppModuleNameFilterOption =
+                interactiveCommand
+                .Option(
+                    template: "--context-app-module-name-filter",
+                    description: "Filter on module names to apply on modules loaded via the '--context-app' option.",
                     optionType: CommandOptionType.SingleValue);
 
             var initStepsOption =
@@ -1146,15 +1153,15 @@ public class Program
                 console.WriteLine(
                     "---- Elm Interactive v" + AppVersionId + " using engine based on " + elmEngineType + " ----");
 
-                var contextAppPath = contextAppOption.Value();
+                var contextAppPaths = contextAppOption.Values;
+
+                var contextAppModuleNameFilterPattern = contextAppModuleNameFilterOption.Value();
 
                 var initStepsPath = initStepsOption.Value();
 
-                TreeNodeWithStringPath? contextAppCodeTree =
-                contextAppPath switch
+                TreeNodeWithStringPath loadContextAppCodeTreeFromPath(string contextAppPath)
                 {
-                    null => null,
-                    not null =>
+                    return
                     LoadComposition.LoadFromPathResolvingNetworkDependencies(contextAppPath)
                     .LogToActions(console.WriteLine)
                     .Map(loaded => loaded.tree)
@@ -1166,8 +1173,44 @@ public class Program
                                 throw new Exception("Found no files under context app path '" + contextAppPath + "'.");
 
                             return tree;
-                        })
-                };
+                        });
+                }
+
+                TreeNodeWithStringPath? contextAppCodeTreeBeforeFilter =
+                contextAppPaths is null
+                ?
+                null
+                :
+                PineValueComposition.Union(contextAppPaths.Select(loadContextAppCodeTreeFromPath!));
+
+                var contextAppModuleNameFilterIncluded =
+                    contextAppModuleNameFilterPattern is null
+                    ?
+                    []
+                    :
+                    contextAppModuleNameFilterPattern
+                    .Split(',')
+                    .Select(moduleName => moduleName.ToLowerInvariant())
+                    .ToImmutableHashSet();
+
+                bool contextAppModuleNameFilter(IReadOnlyList<string> moduleName)
+                {
+                    if (contextAppModuleNameFilterPattern is null)
+                        return true;
+
+                    var flatModuleName = string.Join('.', moduleName).ToLowerInvariant();
+
+                    return contextAppModuleNameFilterIncluded.Contains(flatModuleName);
+                }
+
+                var contextAppCodeTree =
+                contextAppCodeTreeBeforeFilter is null
+                ?
+                null
+                :
+                ElmSyntax.ElmModule.FilterAppCodeTreeForRootModulesAndDependencies(
+                    contextAppCodeTreeBeforeFilter,
+                    moduleNameIsRootModule: contextAppModuleNameFilter);
 
                 var initStepsSubmission =
                 initStepsPath switch
