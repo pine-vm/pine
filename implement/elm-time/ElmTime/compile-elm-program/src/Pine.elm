@@ -242,32 +242,30 @@ kernel_function_concat value =
 
                 (BlobValue _) :: _ ->
                     BlobValue
-                        (list
-                            |> List.map
-                                (\item ->
-                                    case item of
-                                        BlobValue blob ->
-                                            blob
+                        (List.concatMap
+                            (\item ->
+                                case item of
+                                    BlobValue blob ->
+                                        blob
 
-                                        _ ->
-                                            []
-                                )
-                            |> List.concat
+                                    _ ->
+                                        []
+                            )
+                            list
                         )
 
                 (ListValue _) :: _ ->
                     ListValue
-                        (list
-                            |> List.map
-                                (\item ->
-                                    case item of
-                                        ListValue innerList ->
-                                            innerList
+                        (List.concatMap
+                            (\item ->
+                                case item of
+                                    ListValue innerList ->
+                                        innerList
 
-                                        _ ->
-                                            []
-                                )
-                            |> List.concat
+                                    _ ->
+                                        []
+                            )
+                            list
                         )
 
         _ ->
@@ -592,8 +590,8 @@ stringFromListValue values =
                 [] ->
                     Ok processed
 
-                value :: rest ->
-                    case value of
+                charValue :: rest ->
+                    case charValue of
                         BlobValue intValueBytes ->
                             case intValueBytes of
                                 [ b1 ] ->
@@ -602,14 +600,17 @@ stringFromListValue values =
                                 [ b1, b2 ] ->
                                     continueRecursive rest (Char.fromCode ((b1 * 256) + b2) :: processed)
 
+                                [ b1, b2, b3 ] ->
+                                    continueRecursive rest (Char.fromCode ((b1 * 65536) + (b2 * 256) + b3) :: processed)
+
                                 _ ->
                                     Err
-                                        ("Failed to map to int - unsupported number of bytes: "
+                                        ("Failed to map to char - unsupported number of bytes: "
                                             ++ String.fromInt (List.length intValueBytes)
                                         )
 
                         _ ->
-                            Err "Failed to map to int - not a BlobValue"
+                            Err "Failed to map to char - not a BlobValue"
     in
     continueRecursive values []
         |> Result.mapError ((++) "Failed to map list items to chars: ")
@@ -717,35 +718,35 @@ bigIntFromValue value =
             bigIntFromBlobValue blobValue
 
         _ ->
-            Err "Only a BlobValue can represent an integer."
+            Err "Only a BlobValue can encode an integer."
 
 
 bigIntFromBlobValue : List Int -> Result String BigInt.BigInt
 bigIntFromBlobValue blobValue =
     case blobValue of
         [] ->
-            Err "Empty blob is not a valid integer because the sign byte is missing. Did you mean to use an unsigned integer?"
+            Err "Empty blob does not encode an integer."
 
         sign :: intValueBytes ->
             case sign of
                 4 ->
-                    intValueBytes |> bigIntFromUnsignedBlobValue |> Ok
+                    Ok (bigIntFromUnsignedBlobValue intValueBytes)
 
                 2 ->
-                    intValueBytes |> bigIntFromUnsignedBlobValue |> BigInt.negate |> Ok
+                    Ok (BigInt.negate (intValueBytes |> bigIntFromUnsignedBlobValue))
 
                 _ ->
-                    Err ("Unexpected value for sign byte of integer: " ++ String.fromInt sign)
+                    Err ("Unexpected value for sign byte: " ++ String.fromInt sign)
 
 
 bigIntFromUnsignedBlobValue : List Int -> BigInt.BigInt
 bigIntFromUnsignedBlobValue intValueBytes =
-    intValueBytes
-        |> List.foldl
-            (\nextByte aggregate ->
-                BigInt.add (BigInt.fromInt nextByte) (BigInt.mul (BigInt.fromInt 0x0100) aggregate)
-            )
-            (BigInt.fromInt 0)
+    List.foldl
+        (\nextByte aggregate ->
+            BigInt.add (BigInt.fromInt nextByte) (BigInt.mul (BigInt.fromInt 0x0100) aggregate)
+        )
+        (BigInt.fromInt 0)
+        intValueBytes
 
 
 hexadecimalRepresentationFromBlobValue : List Int -> String
@@ -756,60 +757,65 @@ hexadecimalRepresentationFromBlobValue =
 
 encodeExpressionAsValue : Expression -> Value
 encodeExpressionAsValue expression =
-    (case expression of
+    case expression of
         LiteralExpression literal ->
-            ( "Literal"
-            , literal
-            )
+            encodeUnionToPineValue
+                "Literal"
+                literal
 
         ListExpression listExpr ->
-            ( "List"
-            , listExpr |> List.map encodeExpressionAsValue |> ListValue
-            )
+            encodeUnionToPineValue
+                "List"
+                (ListValue (List.map encodeExpressionAsValue listExpr))
 
         DecodeAndEvaluateExpression decodeAndEvaluate ->
-            ( "DecodeAndEvaluate"
-            , [ ( "environment", encodeExpressionAsValue decodeAndEvaluate.environment )
-              , ( "expression", encodeExpressionAsValue decodeAndEvaluate.expression )
-              ]
-                |> Dict.fromList
-                |> encodeRecordToPineValue
-            )
+            encodeUnionToPineValue
+                "DecodeAndEvaluate"
+                ([ ( "environment", encodeExpressionAsValue decodeAndEvaluate.environment )
+                 , ( "expression", encodeExpressionAsValue decodeAndEvaluate.expression )
+                 ]
+                    |> Dict.fromList
+                    |> encodeRecordToPineValue
+                )
 
         KernelApplicationExpression app ->
-            ( "KernelApplication"
-            , [ ( "argument", encodeExpressionAsValue app.argument )
-              , ( "functionName", valueFromString app.functionName )
-              ]
-                |> Dict.fromList
-                |> encodeRecordToPineValue
-            )
+            encodeUnionToPineValue
+                "KernelApplication"
+                ([ ( "argument", encodeExpressionAsValue app.argument )
+                 , ( "functionName", valueFromString app.functionName )
+                 ]
+                    |> Dict.fromList
+                    |> encodeRecordToPineValue
+                )
 
         ConditionalExpression conditional ->
-            ( "Conditional"
-            , [ ( "condition", conditional.condition )
-              , ( "ifFalse", conditional.ifFalse )
-              , ( "ifTrue", conditional.ifTrue )
-              ]
-                |> List.map (Tuple.mapSecond encodeExpressionAsValue)
-                |> Dict.fromList
-                |> encodeRecordToPineValue
-            )
+            encodeUnionToPineValue
+                "Conditional"
+                ([ ( "condition", conditional.condition )
+                 , ( "ifFalse", conditional.ifFalse )
+                 , ( "ifTrue", conditional.ifTrue )
+                 ]
+                    |> List.foldl
+                        (\( fieldName, fieldExpr ) aggregate ->
+                            Dict.insert fieldName (encodeExpressionAsValue fieldExpr) aggregate
+                        )
+                        Dict.empty
+                    |> encodeRecordToPineValue
+                )
 
         EnvironmentExpression ->
-            ( "Environment"
-            , ListValue []
-            )
+            encodeUnionToPineValue
+                "Environment"
+                (ListValue [])
 
         StringTagExpression tag tagged ->
-            ( "StringTag"
-            , [ valueFromString tag
-              , encodeExpressionAsValue tagged
-              ]
-                |> ListValue
-            )
-    )
-        |> (\( tagName, unionTagValue ) -> encodeUnionToPineValue tagName unionTagValue)
+            encodeUnionToPineValue
+                "StringTag"
+                (ListValue
+                    [ valueFromString tag
+                    , encodeExpressionAsValue tagged
+                    ]
+                )
 
 
 decodeExpressionFromValue : Value -> Result String Expression
@@ -901,9 +907,10 @@ decodeDecodeAndEvaluateExpression =
 
 
 decodeKernelApplicationExpression : Value -> Result String KernelApplicationExpressionStructure
-decodeKernelApplicationExpression =
-    decodeRecordFromPineValue
-        >> Result.andThen decodeKernelApplicationExpressionRecord
+decodeKernelApplicationExpression expressionValue =
+    Result.andThen
+        decodeKernelApplicationExpressionRecord
+        (decodeRecordFromPineValue expressionValue)
 
 
 decodeKernelApplicationExpressionRecord : Dict.Dict String Value -> Result String KernelApplicationExpressionStructure
@@ -918,24 +925,25 @@ decodeKernelApplicationExpressionRecord recordDict =
                     Err ("Failed to decode field 'functionName': " ++ error)
 
                 Ok functionName ->
-                    decodeKernelFunctionFromName functionName
-                        |> Result.andThen
-                            (\_ ->
-                                case Dict.get "argument" recordDict of
-                                    Nothing ->
-                                        Err "Did not find field 'argument'"
+                    case decodeKernelFunctionFromName functionName of
+                        Err error ->
+                            Err ("Failed to decode field 'functionName': " ++ error)
 
-                                    Just argumentValue ->
-                                        case decodeExpressionFromValue argumentValue of
-                                            Err error ->
-                                                Err ("Failed to decode field 'argument': " ++ error)
+                        Ok _ ->
+                            case Dict.get "argument" recordDict of
+                                Nothing ->
+                                    Err "Did not find field 'argument'"
 
-                                            Ok argument ->
-                                                Ok
-                                                    { functionName = functionName
-                                                    , argument = argument
-                                                    }
-                            )
+                                Just argumentValue ->
+                                    case decodeExpressionFromValue argumentValue of
+                                        Err error ->
+                                            Err ("Failed to decode field 'argument': " ++ error)
+
+                                        Ok argument ->
+                                            Ok
+                                                { functionName = functionName
+                                                , argument = argument
+                                                }
 
 
 decodeKernelFunctionFromName : String -> Result String KernelFunction
@@ -1001,7 +1009,7 @@ decodeConditionalExpressionRecord recordDict =
 
 
 decodeRecordFromPineValue : Value -> Result String (Dict.Dict String Value)
-decodeRecordFromPineValue =
+decodeRecordFromPineValue value =
     let
         parseListRecursively : Dict.Dict String Value -> List Value -> Result String (Dict.Dict String Value)
         parseListRecursively aggregate remaining =
@@ -1032,18 +1040,21 @@ decodeRecordFromPineValue =
                                             )
                             )
     in
-    decodePineListValue
-        >> Result.andThen (parseListRecursively Dict.empty)
+    Result.andThen
+        (parseListRecursively Dict.empty)
+        (decodePineListValue value)
 
 
 encodeRecordToPineValue : Dict.Dict String Value -> Value
-encodeRecordToPineValue =
-    Dict.foldr
-        (\fieldName fieldValue aggregate ->
-            ListValue [ valueFromString fieldName, fieldValue ] :: aggregate
+encodeRecordToPineValue recordDict =
+    ListValue
+        (Dict.foldr
+            (\fieldName fieldValue aggregate ->
+                ListValue [ valueFromString fieldName, fieldValue ] :: aggregate
+            )
+            []
+            recordDict
         )
-        []
-        >> ListValue
 
 
 encodeUnionToPineValue : String -> Value -> Value
@@ -1053,30 +1064,31 @@ encodeUnionToPineValue tagName unionTagValue =
 
 decodeUnionFromPineValue : Dict.Dict String (Value -> Result String a) -> Value -> Result String a
 decodeUnionFromPineValue tags value =
-    value
-        |> decodePineListValue
-        |> Result.andThen decodeListWithExactlyTwoElements
-        |> Result.andThen
-            (\( tagNameValue, unionTagValue ) ->
-                stringFromValue tagNameValue
-                    |> Result.mapError ((++) "Failed to decode union tag name: ")
-                    |> Result.andThen
-                        (\tagName ->
-                            case tags |> Dict.get tagName of
-                                Nothing ->
-                                    if tagName == "" then
-                                        Err "Tag name is empty"
+    case Result.andThen decodeListWithExactlyTwoElements (decodePineListValue value) of
+        Err err ->
+            Err ("Failed to decode union: " ++ err)
 
-                                    else
-                                        Err ("Unexpected tag name: " ++ tagName)
+        Ok ( tagNameValue, unionTagValue ) ->
+            case stringFromValue tagNameValue of
+                Err err ->
+                    Err ("Failed to decode union tag name: " ++ err)
 
-                                Just tagDecode ->
-                                    unionTagValue
-                                        |> tagDecode
-                                        |> Result.mapError ((++) ("Failed to decode value for tag " ++ tagName ++ ": "))
-                        )
-            )
-        >> Result.mapError ((++) "Failed to decode union: ")
+                Ok tagName ->
+                    case Dict.get tagName tags of
+                        Nothing ->
+                            if tagName == "" then
+                                Err "Tag name is empty"
+
+                            else
+                                Err ("Unexpected tag name: " ++ tagName)
+
+                        Just tagDecode ->
+                            case tagDecode unionTagValue of
+                                Err err ->
+                                    Err (("Failed to decode value for tag " ++ tagName ++ ": ") ++ err)
+
+                                Ok ok ->
+                                    Ok ok
 
 
 decodeListWithExactlyTwoElements : List a -> Result String ( a, a )
