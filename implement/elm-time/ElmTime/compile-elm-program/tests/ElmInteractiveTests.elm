@@ -35,7 +35,7 @@ interactiveScenarios =
         , Test.test "Concat string literal" <|
             \_ ->
                 expectationForElmInteractiveScenario
-                    { context = DefaultContext
+                    { context = CustomModulesContext { includeCoreModules = Just OnlyCoreModules, modulesTexts = [] }
                     , previousSubmissions = []
                     , submission = """ "first literal " ++ " second literal ✔️" """
                     , expectedValueElmExpression = "\"first literal  second literal ✔️\""
@@ -43,7 +43,7 @@ interactiveScenarios =
         , Test.test "Apply String.fromInt" <|
             \_ ->
                 expectationForElmInteractiveScenario
-                    { context = DefaultContext
+                    { context = CustomModulesContext { includeCoreModules = Just OnlyCoreModules, modulesTexts = [] }
                     , previousSubmissions = []
                     , submission = " String.fromInt 123 "
                     , expectedValueElmExpression = "\"123\""
@@ -51,7 +51,7 @@ interactiveScenarios =
         , Test.test "Add integers" <|
             \_ ->
                 expectationForElmInteractiveScenario
-                    { context = DefaultContext
+                    { context = CustomModulesContext { includeCoreModules = Just OnlyCoreModules, modulesTexts = [] }
                     , previousSubmissions = []
                     , submission = " 1 + 3 "
                     , expectedValueElmExpression = "4"
@@ -59,7 +59,7 @@ interactiveScenarios =
         , Test.test "Multiply integers" <|
             \_ ->
                 expectationForElmInteractiveScenario
-                    { context = DefaultContext
+                    { context = CustomModulesContext { includeCoreModules = Just OnlyCoreModules, modulesTexts = [] }
                     , previousSubmissions = []
                     , submission = " 17 * 41 "
                     , expectedValueElmExpression = "697"
@@ -132,7 +132,7 @@ function_with_two_parameters "argument 0" "argument 1"
         , Test.test "Partial application two arguments" <|
             \_ ->
                 expectationForElmInteractiveScenario
-                    { context = DefaultContext
+                    { context = CustomModulesContext { includeCoreModules = Just OnlyCoreModules, modulesTexts = [] }
                     , previousSubmissions = []
                     , submission = """
 let
@@ -150,7 +150,7 @@ partially_applied_a "argument 1"
         , Test.test "Partial application three arguments in two groups" <|
             \_ ->
                 expectationForElmInteractiveScenario
-                    { context = DefaultContext
+                    { context = CustomModulesContext { includeCoreModules = Just OnlyCoreModules, modulesTexts = [] }
                     , previousSubmissions = []
                     , submission = """
 let
@@ -184,7 +184,7 @@ partially_applied_a "argument 2"
         , Test.test "Case of expression deconstructing List into empty and non-empty" <|
             \_ ->
                 expectationForElmInteractiveScenario
-                    { context = DefaultContext
+                    { context = CustomModulesContext { includeCoreModules = Just OnlyCoreModules, modulesTexts = [] }
                     , previousSubmissions = []
                     , submission = """
 let
@@ -203,7 +203,7 @@ in
         , Test.test "Simple List.foldl" <|
             \_ ->
                 expectationForElmInteractiveScenario
-                    { context = DefaultContext
+                    { context = CustomModulesContext { includeCoreModules = Just OnlyCoreModules, modulesTexts = [] }
                     , previousSubmissions = []
                     , submission = """
            let
@@ -273,7 +273,7 @@ named_literal =
         , Test.test "Use value from previous submission" <|
             \_ ->
                 expectationForElmInteractiveScenario
-                    { context = DefaultContext
+                    { context = CustomModulesContext { includeCoreModules = Just OnlyCoreModules, modulesTexts = [] }
                     , previousSubmissions = [ """custom_name = "hello" """ ]
                     , submission = """ custom_name ++ " world!" """
                     , expectedValueElmExpression = "hello world!" |> Json.Encode.string |> Json.Encode.encode 0
@@ -281,7 +281,7 @@ named_literal =
         , Test.test "1 < 3 evaluates to True" <|
             \_ ->
                 expectationForElmInteractiveScenario
-                    { context = DefaultContext
+                    { context = CustomModulesContext { includeCoreModules = Just OnlyCoreModules, modulesTexts = [] }
                     , previousSubmissions = []
                     , submission = """ 1 < 3 """
                     , expectedValueElmExpression = "True"
@@ -450,7 +450,7 @@ evolutionStagesToMakeElmFunction =
                     (Pine.emptyEvalContext
                         |> Pine.addToEnvironment
                             [ Pine.valueFromContextExpansionWithName
-                                ( "alfa", Pine.valueFromBigInt (BigInt.fromInt 123) )
+                                ( "alfa", Pine.valueFromInt 123 )
                             ]
                     )
                 |> Result.andThen (Pine.decodeExpressionFromValue >> Result.mapError Pine.DescribePathEnd)
@@ -462,7 +462,7 @@ evolutionStagesToMakeElmFunction =
                                 Pine.LiteralExpression
                                     (Pine.ListValue
                                         [ Pine.valueFromContextExpansionWithName
-                                            ( "alfa", Pine.valueFromBigInt (BigInt.fromInt 123) )
+                                            ( "alfa", Pine.valueFromInt 123 )
                                         ]
                                     )
                             }
@@ -499,7 +499,7 @@ evolutionStagesToMakeElmFunction =
                     (Pine.emptyEvalContext
                         |> Pine.addToEnvironment
                             [ Pine.valueFromContextExpansionWithName
-                                ( "beta", Pine.valueFromBigInt (BigInt.fromInt 345) )
+                                ( "beta", Pine.valueFromInt 345 )
                             ]
                     )
                 |> Result.andThen (Pine.decodeExpressionFromValue >> Result.mapError Pine.DescribePathEnd)
@@ -512,7 +512,7 @@ evolutionStagesToMakeElmFunction =
                                     [ Pine.LiteralExpression
                                         (Pine.ListValue
                                             [ Pine.valueFromContextExpansionWithName
-                                                ( "beta", Pine.valueFromBigInt (BigInt.fromInt 345) )
+                                                ( "beta", Pine.valueFromInt 345 )
                                             ]
                                         )
                                     , Pine.EnvironmentExpression
@@ -551,7 +551,7 @@ testCompileRecordAccessPineExpression =
                             [ Pine.ListValue
                                 [ Pine.ListValue
                                     [ Pine.valueFromString "alfa"
-                                    , Pine.valueFromBigInt (BigInt.fromInt 123)
+                                    , Pine.valueFromInt 123
                                     ]
                                 ]
                             ]
@@ -579,7 +579,7 @@ testCompileRecordUpdatePineExpression =
                                 [ Pine.ListValue
                                     [ Pine.ListValue
                                         [ Pine.valueFromString "alfa"
-                                        , Pine.valueFromBigInt (BigInt.fromInt 123)
+                                        , Pine.valueFromInt 123
                                         ]
                                     ]
                                 ]
@@ -589,7 +589,7 @@ testCompileRecordUpdatePineExpression =
                     |> Pine.LiteralExpression
                     |> ElmCompiler.pineExpressionForRecordUpdate
                         "alfa"
-                        (Pine.LiteralExpression (Pine.valueFromBigInt (BigInt.fromInt 456)))
+                        (Pine.LiteralExpression (Pine.valueFromInt 456))
                     |> Pine.evaluateExpression Pine.emptyEvalContext
                     |> Result.mapError Pine.displayStringFromPineError
                     |> Result.andThen ElmInteractive.pineValueAsElmValue
@@ -610,11 +610,11 @@ testCompileRecordUpdatePineExpression =
                                 [ Pine.ListValue
                                     [ Pine.ListValue
                                         [ Pine.valueFromString "alfa"
-                                        , Pine.valueFromBigInt (BigInt.fromInt 11)
+                                        , Pine.valueFromInt 11
                                         ]
                                     , Pine.ListValue
                                         [ Pine.valueFromString "beta"
-                                        , Pine.valueFromBigInt (BigInt.fromInt 13)
+                                        , Pine.valueFromInt 13
                                         ]
                                     ]
                                 ]
@@ -624,7 +624,7 @@ testCompileRecordUpdatePineExpression =
                     |> Pine.LiteralExpression
                     |> ElmCompiler.pineExpressionForRecordUpdate
                         "alfa"
-                        (Pine.LiteralExpression (Pine.valueFromBigInt (BigInt.fromInt 21)))
+                        (Pine.LiteralExpression (Pine.valueFromInt 21))
                     |> Pine.evaluateExpression Pine.emptyEvalContext
                     |> Result.mapError Pine.displayStringFromPineError
                     |> Result.andThen ElmInteractive.pineValueAsElmValue
@@ -646,11 +646,11 @@ testCompileRecordUpdatePineExpression =
                                 [ Pine.ListValue
                                     [ Pine.ListValue
                                         [ Pine.valueFromString "alfa"
-                                        , Pine.valueFromBigInt (BigInt.fromInt 11)
+                                        , Pine.valueFromInt 11
                                         ]
                                     , Pine.ListValue
                                         [ Pine.valueFromString "beta"
-                                        , Pine.valueFromBigInt (BigInt.fromInt 13)
+                                        , Pine.valueFromInt 13
                                         ]
                                     ]
                                 ]
@@ -660,7 +660,7 @@ testCompileRecordUpdatePineExpression =
                     |> Pine.LiteralExpression
                     |> ElmCompiler.pineExpressionForRecordUpdate
                         "beta"
-                        (Pine.LiteralExpression (Pine.valueFromBigInt (BigInt.fromInt 31)))
+                        (Pine.LiteralExpression (Pine.valueFromInt 31))
                     |> Pine.evaluateExpression Pine.emptyEvalContext
                     |> Result.mapError Pine.displayStringFromPineError
                     |> Result.andThen ElmInteractive.pineValueAsElmValue

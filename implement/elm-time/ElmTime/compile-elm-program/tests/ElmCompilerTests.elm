@@ -331,7 +331,7 @@ emitClosureExpressionTests =
             ]
         , arguments =
             [ Pine.ListValue
-                [ Pine.valueFromBigInt (BigInt.fromInt 3)
+                [ Pine.valueFromInt 3
                 , Pine.valueFromString "test_elem"
                 ]
             ]
@@ -345,7 +345,7 @@ emitClosureExpressionTests =
                                 , argument =
                                     FirCompiler.ListExpression
                                         [ FirCompiler.ReferenceExpression "remainingCount"
-                                        , FirCompiler.LiteralExpression (Pine.valueFromBigInt (BigInt.fromInt 0))
+                                        , FirCompiler.LiteralExpression (Pine.valueFromInt 0)
                                         ]
                                 }
                         , ifTrue =
@@ -369,7 +369,7 @@ emitClosureExpressionTests =
                                         , argument =
                                             FirCompiler.ListExpression
                                                 [ FirCompiler.ReferenceExpression "remainingCount"
-                                                , FirCompiler.LiteralExpression (Pine.valueFromBigInt (BigInt.fromInt -1))
+                                                , FirCompiler.LiteralExpression (Pine.valueFromInt -1)
                                                 ]
                                         }
                                     , FirCompiler.ReferenceExpression "value"
@@ -418,7 +418,7 @@ emitClosureExpressionTests =
             ]
         , arguments =
             [ Pine.ListValue
-                [ Pine.valueFromBigInt (BigInt.fromInt 3)
+                [ Pine.valueFromInt 3
                 , Pine.valueFromString "test_elem"
                 ]
             ]
@@ -430,7 +430,7 @@ emitClosureExpressionTests =
                         , argument =
                             FirCompiler.ListExpression
                                 [ FirCompiler.ReferenceExpression "num"
-                                , FirCompiler.LiteralExpression (Pine.valueFromBigInt (BigInt.fromInt 0))
+                                , FirCompiler.LiteralExpression (Pine.valueFromInt 0)
                                 ]
                         }
                 , functionParams =
@@ -468,7 +468,7 @@ emitClosureExpressionTests =
                                         , argument =
                                             FirCompiler.ListExpression
                                                 [ FirCompiler.ReferenceExpression "remainingCount"
-                                                , FirCompiler.LiteralExpression (Pine.valueFromBigInt (BigInt.fromInt -1))
+                                                , FirCompiler.LiteralExpression (Pine.valueFromInt -1)
                                                 ]
                                         }
                                     , FirCompiler.ReferenceExpression "value"
@@ -712,7 +712,7 @@ emitClosureExpressionTests =
               ]
             ]
         , arguments =
-            [ Pine.valueFromBigInt (BigInt.fromInt 3)
+            [ Pine.valueFromInt 3
             , Pine.valueFromString "test_elem_two"
             ]
         , environmentFunctions =
@@ -725,7 +725,7 @@ emitClosureExpressionTests =
                                 , argument =
                                     FirCompiler.ListExpression
                                         [ FirCompiler.ReferenceExpression "remainingCount"
-                                        , FirCompiler.LiteralExpression (Pine.valueFromBigInt (BigInt.fromInt 0))
+                                        , FirCompiler.LiteralExpression (Pine.valueFromInt 0)
                                         ]
                                 }
                         , ifTrue = FirCompiler.ReferenceExpression "result"
@@ -748,7 +748,7 @@ emitClosureExpressionTests =
                                         , argument =
                                             FirCompiler.ListExpression
                                                 [ FirCompiler.ReferenceExpression "remainingCount"
-                                                , FirCompiler.LiteralExpression (Pine.valueFromBigInt (BigInt.fromInt -1))
+                                                , FirCompiler.LiteralExpression (Pine.valueFromInt -1)
                                                 ]
                                         }
                                     , FirCompiler.ReferenceExpression "value"
@@ -781,7 +781,7 @@ emitClosureExpressionTests =
                 (FirCompiler.ReferenceExpression "repeat_help")
                 (List.map FirCompiler.LiteralExpression
                     [ Pine.ListValue []
-                    , Pine.valueFromBigInt (BigInt.fromInt 3)
+                    , Pine.valueFromInt 3
                     , Pine.valueFromString "test_elem"
                     ]
                 )
@@ -797,7 +797,7 @@ emitClosureExpressionTests =
                                 , argument =
                                     FirCompiler.ListExpression
                                         [ FirCompiler.ReferenceExpression "remainingCount"
-                                        , FirCompiler.LiteralExpression (Pine.valueFromBigInt (BigInt.fromInt 0))
+                                        , FirCompiler.LiteralExpression (Pine.valueFromInt 0)
                                         ]
                                 }
                         , ifTrue =
@@ -820,7 +820,7 @@ emitClosureExpressionTests =
                                     , argument =
                                         FirCompiler.ListExpression
                                             [ FirCompiler.ReferenceExpression "remainingCount"
-                                            , FirCompiler.LiteralExpression (Pine.valueFromBigInt (BigInt.fromInt -1))
+                                            , FirCompiler.LiteralExpression (Pine.valueFromInt -1)
                                             ]
                                     }
                                 , FirCompiler.ReferenceExpression "value"

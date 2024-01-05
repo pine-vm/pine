@@ -208,7 +208,7 @@ elmDeclarationsOverrides =
 expandElmInteractiveEnvironmentWithModules :
     Pine.Value
     -> List ProjectParsedElmFile
-    -> Result String { addedModulesNames : List (List String), environment : Pine.Value }
+    -> Result String { addedModules : List ( List String, Pine.Value ), environment : Pine.Value }
 expandElmInteractiveEnvironmentWithModules environmentBefore newParsedElmModules =
     case getDeclarationsFromEnvironment environmentBefore of
         Err error ->
@@ -299,13 +299,16 @@ expandElmInteractiveEnvironmentWithModules environmentBefore newParsedElmModules
                                             modulesValues =
                                                 contextModules
                                                     |> Dict.toList
-                                                    |> List.map (Tuple.mapFirst (String.join "."))
                                                     |> List.map (Tuple.mapSecond emitModuleValue)
+
+                                            modulesValuesWithFlatNames =
+                                                modulesValues
+                                                    |> List.map (Tuple.mapFirst (String.join "."))
                                         in
-                                        { addedModulesNames = Dict.keys contextModules
+                                        { addedModules = modulesValues
                                         , environment =
                                             Pine.environmentFromDeclarations
-                                                (Dict.toList environmentBeforeDeclarations ++ modulesValues)
+                                                (Dict.toList environmentBeforeDeclarations ++ modulesValuesWithFlatNames)
                                         }
                                     )
 
@@ -717,10 +720,10 @@ compileElmSyntaxExpression stack elmExpression =
             Ok (LiteralExpression (Pine.valueFromChar char))
 
         Elm.Syntax.Expression.Integer integer ->
-            Ok (LiteralExpression (Pine.valueFromBigInt (BigInt.fromInt integer)))
+            Ok (LiteralExpression (Pine.valueFromInt integer))
 
         Elm.Syntax.Expression.Hex integer ->
-            Ok (LiteralExpression (Pine.valueFromBigInt (BigInt.fromInt integer)))
+            Ok (LiteralExpression (Pine.valueFromInt integer))
 
         Elm.Syntax.Expression.Negation negatedElmExpression ->
             case compileElmSyntaxExpression stack (Elm.Syntax.Node.value negatedElmExpression) of
@@ -1267,10 +1270,7 @@ compileElmSyntaxPattern elmPattern =
                             matchesLengthCondition =
                                 \deconstructedExpression ->
                                     equalCondition
-                                        [ LiteralExpression
-                                            (Pine.valueFromBigInt
-                                                (BigInt.fromInt (List.length listItems))
-                                            )
+                                        [ LiteralExpression (Pine.valueFromInt (List.length listItems))
                                         , countListElementsExpression deconstructedExpression
                                         ]
 
@@ -1406,7 +1406,7 @@ compileElmSyntaxPattern elmPattern =
             continueWithOnlyEqualsCondition (LiteralExpression (Pine.valueFromChar char))
 
         Elm.Syntax.Pattern.IntPattern int ->
-            continueWithOnlyEqualsCondition (LiteralExpression (Pine.valueFromBigInt (BigInt.fromInt int)))
+            continueWithOnlyEqualsCondition (LiteralExpression (Pine.valueFromInt int))
 
         Elm.Syntax.Pattern.StringPattern string ->
             continueWithOnlyEqualsCondition (LiteralExpression (valueFromString string))
@@ -1609,7 +1609,7 @@ pineExpressionRecordUpdateFieldsList : String -> Pine.Expression -> Pine.Express
 pineExpressionRecordUpdateFieldsList fieldName fieldNewVal recordFieldsExpression =
     let
         expressionEncoded =
-            Pine.LiteralExpression (Pine.encodeExpressionAsValue buildRecursiveFunctionToUpdateFieldInRecord)
+            Pine.LiteralExpression buildRecursiveFunctionToUpdateFieldInRecordAsValue
     in
     Pine.DecodeAndEvaluateExpression
         { expression = expressionEncoded
@@ -1622,6 +1622,11 @@ pineExpressionRecordUpdateFieldsList fieldName fieldNewVal recordFieldsExpressio
                 , recordFieldsExpression
                 ]
         }
+
+
+buildRecursiveFunctionToUpdateFieldInRecordAsValue : Pine.Value
+buildRecursiveFunctionToUpdateFieldInRecordAsValue =
+    Pine.encodeExpressionAsValue buildRecursiveFunctionToUpdateFieldInRecord
 
 
 {-| Recursively scans through the record fields and replaces every field with the same name as the one to update.

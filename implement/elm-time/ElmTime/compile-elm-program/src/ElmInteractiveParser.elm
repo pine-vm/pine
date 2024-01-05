@@ -63,7 +63,7 @@ compileEvalContextForElmInteractive context =
 expandElmInteractiveEnvironmentWithModuleTexts :
     Pine.Value
     -> List String
-    -> Result String { addedModulesNames : List (List String), environment : Pine.Value }
+    -> Result String { addedModules : List ( List String, Pine.Value ), environment : Pine.Value }
 expandElmInteractiveEnvironmentWithModuleTexts environmentBefore contextModulesTexts =
     contextModulesTexts
         |> List.map parsedElmFileFromOnlyFileText

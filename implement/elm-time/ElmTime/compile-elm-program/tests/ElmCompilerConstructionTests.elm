@@ -1,6 +1,5 @@
 module ElmCompilerConstructionTests exposing (..)
 
-import BigInt
 import ElmCompilerConstruction
 import Expect
 import Pine
@@ -23,7 +22,7 @@ generateTemplateEvaluatingToExpressionTests =
       , Pine.LiteralExpression (Pine.valueFromString "test")
       )
     , ( "Int literal"
-      , Pine.LiteralExpression (Pine.valueFromBigInt (BigInt.fromInt 3))
+      , Pine.LiteralExpression (Pine.valueFromInt 3)
       )
     , ( "DecodeAndEvaluateExpression"
       , Pine.DecodeAndEvaluateExpression

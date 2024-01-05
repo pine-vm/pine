@@ -160,7 +160,7 @@ kernelFunctions =
     , ( "logical_or", kernelFunctionExpectingListOfTypeBool (List.foldl (||) False) )
     , ( "length"
       , mapFromListValueOrBlobValue { fromList = List.length, fromBlob = List.length }
-            >> (BigInt.fromInt >> valueFromBigInt)
+            >> valueFromInt
       )
     , ( "skip"
       , kernelFunctionExpectingExactlyTwoArguments
@@ -563,15 +563,14 @@ prependAllLines prefix text =
 
 
 valueFromString : String -> Value
-valueFromString =
-    String.toList
-        >> List.map valueFromChar
-        >> ListValue
+valueFromString string =
+    ListValue
+        (String.foldr (\char aggregate -> valueFromChar char :: aggregate) [] string)
 
 
 valueFromChar : Char -> Value
-valueFromChar =
-    Char.toCode >> BigInt.fromInt >> unsignedBlobValueFromBigInt >> Maybe.withDefault [] >> BlobValue
+valueFromChar char =
+    BlobValue (unsafeUnsignedBlobValueFromInt (Char.toCode char))
 
 
 stringFromValue : Value -> Result String String
@@ -660,18 +659,36 @@ blobValueFromBigInt bigint =
     signByte :: Maybe.withDefault [] (unsignedBytesFromIntValue value)
 
 
-unsignedBlobValueFromBigInt : BigInt.BigInt -> Maybe (List Int)
-unsignedBlobValueFromBigInt bigint =
-    case blobValueFromBigInt bigint of
-        [] ->
-            Nothing
+valueFromInt : Int -> Value
+valueFromInt =
+    blobValueFromInt >> BlobValue
 
-        signByte :: unsignedBytes ->
-            if signByte == 4 then
-                Just unsignedBytes
+
+blobValueFromInt : Int -> List Int
+blobValueFromInt int =
+    if int < 0 then
+        2 :: unsafeUnsignedBlobValueFromInt (abs int)
+
+    else
+        4 :: unsafeUnsignedBlobValueFromInt int
+
+
+unsafeUnsignedBlobValueFromInt : Int -> List Int
+unsafeUnsignedBlobValueFromInt int =
+    let
+        recursiveFromInt : Int -> List Int -> List Int
+        recursiveFromInt remaining aggregate =
+            if remaining < 0x0100 then
+                remaining :: aggregate
 
             else
-                Nothing
+                let
+                    lower =
+                        modBy 0x0100 remaining
+                in
+                recursiveFromInt (remaining // 0x0100) (lower :: aggregate)
+    in
+    recursiveFromInt int []
 
 
 intFromValue : Value -> Result String Int
@@ -856,33 +873,69 @@ decodeDecodeAndEvaluateExpression =
     decodeRecordFromPineValue
         >> Result.andThen
             (\recordDict ->
-                (always (Ok DecodeAndEvaluateExpressionStructure)
-                    |> decodeRecordField "expression" decodeExpressionFromValue
-                    |> decodeRecordField "environment" decodeExpressionFromValue
-                )
-                    recordDict
+                case Dict.get "expression" recordDict of
+                    Nothing ->
+                        Err "Did not find field 'expression'"
+
+                    Just expressionValue ->
+                        case decodeExpressionFromValue expressionValue of
+                            Err error ->
+                                Err ("Failed to decode field 'expression': " ++ error)
+
+                            Ok expression ->
+                                case Dict.get "environment" recordDict of
+                                    Nothing ->
+                                        Err "Did not find field 'environment'"
+
+                                    Just environmentValue ->
+                                        case decodeExpressionFromValue environmentValue of
+                                            Err error ->
+                                                Err ("Failed to decode field 'environment': " ++ error)
+
+                                            Ok environment ->
+                                                Ok
+                                                    { expression = expression
+                                                    , environment = environment
+                                                    }
             )
 
 
 decodeKernelApplicationExpression : Value -> Result String KernelApplicationExpressionStructure
 decodeKernelApplicationExpression =
     decodeRecordFromPineValue
-        >> Result.andThen
-            (\recordDict ->
-                (always (Ok KernelApplicationExpressionStructure)
-                    |> decodeRecordField "functionName"
-                        (stringFromValue
-                            >> Result.andThen
-                                (\functionName ->
-                                    functionName
-                                        |> decodeKernelFunctionFromName
-                                        |> Result.map (always functionName)
-                                )
-                        )
-                    |> decodeRecordField "argument" decodeExpressionFromValue
-                )
-                    recordDict
-            )
+        >> Result.andThen decodeKernelApplicationExpressionRecord
+
+
+decodeKernelApplicationExpressionRecord : Dict.Dict String Value -> Result String KernelApplicationExpressionStructure
+decodeKernelApplicationExpressionRecord recordDict =
+    case Dict.get "functionName" recordDict of
+        Nothing ->
+            Err "Did not find field 'functionName'"
+
+        Just functionNameValue ->
+            case stringFromValue functionNameValue of
+                Err error ->
+                    Err ("Failed to decode field 'functionName': " ++ error)
+
+                Ok functionName ->
+                    decodeKernelFunctionFromName functionName
+                        |> Result.andThen
+                            (\_ ->
+                                case Dict.get "argument" recordDict of
+                                    Nothing ->
+                                        Err "Did not find field 'argument'"
+
+                                    Just argumentValue ->
+                                        case decodeExpressionFromValue argumentValue of
+                                            Err error ->
+                                                Err ("Failed to decode field 'argument': " ++ error)
+
+                                            Ok argument ->
+                                                Ok
+                                                    { functionName = functionName
+                                                    , argument = argument
+                                                    }
+                            )
 
 
 decodeKernelFunctionFromName : String -> Result String KernelFunction
@@ -905,38 +958,46 @@ decodeKernelFunctionFromName functionName =
 decodeConditionalExpression : Value -> Result String ConditionalExpressionStructure
 decodeConditionalExpression =
     decodeRecordFromPineValue
-        >> Result.andThen
-            (\recordDict ->
-                (always (Ok ConditionalExpressionStructure)
-                    |> decodeRecordField "condition" decodeExpressionFromValue
-                    |> decodeRecordField "ifTrue" decodeExpressionFromValue
-                    |> decodeRecordField "ifFalse" decodeExpressionFromValue
-                )
-                    recordDict
-            )
+        >> Result.andThen decodeConditionalExpressionRecord
 
 
-decodeRecordField :
-    String
-    -> (recordfield -> Result String field)
-    -> (Dict.Dict String recordfield -> Result String (field -> record))
-    -> (Dict.Dict String recordfield -> Result String record)
-decodeRecordField fieldName fieldDecoder finalDecoder =
-    \recordDict ->
-        case Dict.get fieldName recordDict of
-            Nothing ->
-                Err ("Did not find field with name " ++ fieldName)
+decodeConditionalExpressionRecord : Dict.Dict String Value -> Result String ConditionalExpressionStructure
+decodeConditionalExpressionRecord recordDict =
+    case Dict.get "condition" recordDict of
+        Nothing ->
+            Err "Did not find field 'condition'"
 
-            Just fieldValue ->
-                fieldValue
-                    |> fieldDecoder
-                    |> Result.mapError ((++) ("Failed to decode field '" ++ fieldName ++ "': "))
-                    |> Result.andThen
-                        (\fieldValueDecoded ->
-                            recordDict
-                                |> finalDecoder
-                                |> Result.map (\dec -> dec fieldValueDecoded)
-                        )
+        Just conditionValue ->
+            case decodeExpressionFromValue conditionValue of
+                Err error ->
+                    Err ("Failed to decode field 'condition': " ++ error)
+
+                Ok condition ->
+                    case Dict.get "ifTrue" recordDict of
+                        Nothing ->
+                            Err "Did not find field 'ifTrue'"
+
+                        Just ifTrueValue ->
+                            case decodeExpressionFromValue ifTrueValue of
+                                Err error ->
+                                    Err ("Failed to decode field 'ifTrue': " ++ error)
+
+                                Ok ifTrue ->
+                                    case Dict.get "ifFalse" recordDict of
+                                        Nothing ->
+                                            Err "Did not find field 'ifFalse'"
+
+                                        Just ifFalseValue ->
+                                            case decodeExpressionFromValue ifFalseValue of
+                                                Err error ->
+                                                    Err ("Failed to decode field 'ifFalse': " ++ error)
+
+                                                Ok ifFalse ->
+                                                    Ok
+                                                        { condition = condition
+                                                        , ifTrue = ifTrue
+                                                        , ifFalse = ifFalse
+                                                        }
 
 
 decodeRecordFromPineValue : Value -> Result String (Dict.Dict String Value)

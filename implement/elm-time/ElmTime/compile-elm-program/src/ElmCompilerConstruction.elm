@@ -184,7 +184,7 @@ buildPineExpressionSyntax config expression =
                 Pine.BlobValue blob ->
                     case Pine.bigIntFromBlobValue blob of
                         Ok asInt ->
-                            [ "Pine.valueFromBigInt (BigInt.fromInt " ++ BigInt.toString asInt ++ ")" ]
+                            [ "Pine.valueFromInt (" ++ BigInt.toString asInt ++ ")" ]
 
                         Err _ ->
                             [ "other-blob" ]

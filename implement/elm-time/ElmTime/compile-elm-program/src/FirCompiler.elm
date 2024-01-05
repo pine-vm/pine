@@ -372,7 +372,7 @@ emitExpressionInDeclarationBlock stackBeforeAddingDeps blockDeclarations mainExp
                                                             , argument =
                                                                 Pine.ListExpression
                                                                     [ Pine.LiteralExpression
-                                                                        (Pine.valueFromBigInt (BigInt.fromInt (List.length stackBefore.environmentFunctions)))
+                                                                        (Pine.valueFromInt (List.length stackBefore.environmentFunctions))
                                                                     , Pine.EnvironmentExpression
                                                                         |> listItemFromIndexExpression_Pine 0
                                                                     ]
@@ -465,17 +465,15 @@ listDirectDependenciesOfExpression expression =
             Set.empty
 
         ListExpression list ->
-            list
-                |> List.map listDirectDependenciesOfExpression
-                |> List.foldl Set.union Set.empty
+            List.foldl (listDirectDependenciesOfExpression >> Set.union) Set.empty list
 
         KernelApplicationExpression application ->
             listDirectDependenciesOfExpression application.argument
 
         ConditionalExpression conditional ->
-            [ conditional.condition, conditional.ifTrue, conditional.ifFalse ]
-                |> List.map listDirectDependenciesOfExpression
-                |> List.foldl Set.union Set.empty
+            listDirectDependenciesOfExpression conditional.condition
+                |> Set.union (listDirectDependenciesOfExpression conditional.ifTrue)
+                |> Set.union (listDirectDependenciesOfExpression conditional.ifFalse)
 
         ReferenceExpression reference ->
             Set.singleton reference
@@ -484,28 +482,37 @@ listDirectDependenciesOfExpression expression =
             let
                 functionBodyDependencies =
                     listDirectDependenciesOfExpression functionBody
+
+                functionParamNames =
+                    List.foldl
+                        (\param aggregate ->
+                            List.foldl Set.insert
+                                aggregate
+                                (List.map Tuple.first param)
+                        )
+                        Set.empty
+                        functionParam
             in
-            functionParam
-                |> List.concatMap (List.map Tuple.first)
-                |> List.foldl Set.remove functionBodyDependencies
+            Set.diff functionBodyDependencies functionParamNames
 
         FunctionApplicationExpression functionExpression arguments ->
-            functionExpression
-                :: arguments
-                |> List.map listDirectDependenciesOfExpression
-                |> List.foldl Set.union Set.empty
+            List.foldl
+                (listDirectDependenciesOfExpression >> Set.union)
+                (listDirectDependenciesOfExpression functionExpression)
+                arguments
 
         DeclarationBlockExpression declarations innerExpression ->
             let
                 innerDependencies =
-                    innerExpression
-                        :: Dict.values declarations
-                        |> List.map listDirectDependenciesOfExpression
-                        |> List.foldl Set.union Set.empty
+                    Dict.foldl
+                        (always (listDirectDependenciesOfExpression >> Set.union))
+                        (listDirectDependenciesOfExpression innerExpression)
+                        declarations
             in
-            declarations
-                |> Dict.keys
-                |> List.foldl Set.remove innerDependencies
+            Dict.foldl
+                (\declName _ -> Set.remove declName)
+                innerDependencies
+                declarations
 
         StringTagExpression _ tagged ->
             listDirectDependenciesOfExpression tagged
@@ -788,15 +795,18 @@ adaptivePartialApplicationExpression : { function : Pine.Expression, argument : 
 adaptivePartialApplicationExpression { function, argument } =
     Pine.DecodeAndEvaluateExpression
         { expression =
-            adaptivePartialApplicationExpressionStaticPart
-                |> Pine.encodeExpressionAsValue
-                |> Pine.LiteralExpression
+            Pine.LiteralExpression adaptivePartialApplicationExpressionStaticPartAsValue
         , environment =
             Pine.ListExpression
                 [ function
                 , argument
                 ]
         }
+
+
+adaptivePartialApplicationExpressionStaticPartAsValue : Pine.Value
+adaptivePartialApplicationExpressionStaticPartAsValue =
+    Pine.encodeExpressionAsValue adaptivePartialApplicationExpressionStaticPart
 
 
 adaptivePartialApplicationExpressionStaticPart : Pine.Expression
@@ -906,7 +916,7 @@ buildRecordOfPartiallyAppliedFunction config =
         { getFunctionInnerExpression = config.getFunctionInnerExpression
         , getEnvFunctionsExpression = config.getEnvFunctionsExpression
         , functionParameterCountExpression =
-            Pine.LiteralExpression (Pine.valueFromBigInt (BigInt.fromInt config.functionParameterCount))
+            Pine.LiteralExpression (Pine.valueFromInt config.functionParameterCount)
         , argumentsAlreadyCollectedExpression = Pine.ListExpression config.argumentsAlreadyCollected
         }
 
@@ -1366,7 +1376,7 @@ listSkipExpression numberToDrop listExpression =
     else
         applyKernelFunctionWithTwoArguments
             "skip"
-            (LiteralExpression (Pine.valueFromBigInt (BigInt.fromInt numberToDrop)))
+            (LiteralExpression (Pine.valueFromInt numberToDrop))
             listExpression
 
 
@@ -1415,7 +1425,7 @@ listSkipExpression_Pine numberToDrop listExpression =
     else
         applyKernelFunctionWithTwoArguments_Pine
             "skip"
-            (Pine.LiteralExpression (Pine.valueFromBigInt (BigInt.fromInt numberToDrop)))
+            (Pine.LiteralExpression (Pine.valueFromInt numberToDrop))
             listExpression
 
 
@@ -1479,4 +1489,19 @@ estimatePineValueSize value =
             10 + List.length blob
 
         Pine.ListValue list ->
-            10 + List.sum (List.map estimatePineValueSize list)
+            -- Reduce stack depths by matching the most common cases with up to two elements inline.
+            case list of
+                [] ->
+                    10
+
+                [ single ] ->
+                    10 + estimatePineValueSize single
+
+                first :: second :: remaining ->
+                    10
+                        + estimatePineValueSize first
+                        + estimatePineValueSize second
+                        + List.foldl
+                            (\item sum -> sum + estimatePineValueSize item)
+                            0
+                            remaining
