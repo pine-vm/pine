@@ -10,13 +10,11 @@ import Elm.Syntax.Node
 import ElmCompiler
     exposing
         ( CompilationStack
-        , InternalDeclaration(..)
         , ProjectParsedElmFile
+        , compilationAndEmitStackFromModulesInCompilation
         , elmRecordTypeTagName
         , elmStringTypeTagName
-        , elmValuesToExposeToGlobalDefault
         , expressionForDeconstructions
-        , moduleImportsFromCompilationStack
         , moduleNameFromSyntaxFile
         , stringStartsWithUpper
         )
@@ -657,15 +655,7 @@ compilationAndEmitStackFromInteractiveEnvironment :
     -> ( CompilationStack, EmitStack )
 compilationAndEmitStackFromInteractiveEnvironment environmentDeclarations =
     let
-        defaultCompilationStack =
-            { moduleAliases = Dict.empty
-            , availableModules = environmentDeclarations.modules
-            , availableDeclarations =
-                environmentDeclarations.otherDeclarations |> Dict.map (always CompiledDeclaration)
-            , elmValuesToExposeToGlobal = elmValuesToExposeToGlobalDefault
-            }
-
-        implicitImportStatements =
+        interactiveImplicitImportStatements =
             environmentDeclarations.modules
                 |> Dict.keys
                 |> List.map
@@ -676,32 +666,30 @@ compilationAndEmitStackFromInteractiveEnvironment environmentDeclarations =
                         }
                     )
 
-        moduleImports =
-            moduleImportsFromCompilationStack implicitImportStatements defaultCompilationStack
-
-        importedDeclarations =
-            moduleImports.importedDeclarations
-                |> Dict.union environmentDeclarations.otherDeclarations
+        ( defaultCompilationStack, emitStack ) =
+            compilationAndEmitStackFromModulesInCompilation
+                environmentDeclarations.modules
+                { moduleAliases = Dict.empty
+                , parsedImports = interactiveImplicitImportStatements
+                , localTypeDeclarations = Dict.empty
+                }
 
         compilationStack =
-            { moduleAliases = Dict.empty
-            , availableModules = environmentDeclarations.modules
-            , availableDeclarations =
-                environmentDeclarations.otherDeclarations |> Dict.map (always CompiledDeclaration)
-            , elmValuesToExposeToGlobal = elmValuesToExposeToGlobalDefault
-            }
-
-        emitStack =
-            { moduleImports =
-                { moduleImports
-                    | importedDeclarations = importedDeclarations
-                }
-            , declarationsDependencies = Dict.empty
-            , environmentFunctions = []
-            , environmentDeconstructions = Dict.empty
+            { defaultCompilationStack
+                | availableDeclarations =
+                    defaultCompilationStack.availableDeclarations
+                        |> Dict.union
+                            (environmentDeclarations.otherDeclarations
+                                |> Dict.map
+                                    (always
+                                        (LiteralExpression >> ElmCompiler.applicableDeclarationFromConstructorExpression)
+                                    )
+                            )
             }
     in
-    ( compilationStack, emitStack )
+    ( compilationStack
+    , emitStack
+    )
 
 
 json_encode_pineValue : Dict.Dict String Pine.Value -> Pine.Value -> Json.Encode.Value

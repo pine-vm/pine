@@ -1,13 +1,14 @@
 module ElmInteractiveTests exposing (..)
 
 import BigInt
+import Dict
 import ElmCompiler
 import ElmInteractive exposing (ElmCoreModulesExtent(..), InteractiveContext(..))
 import ElmInteractiveParser
 import Expect
+import FirCompiler
 import Json.Encode
 import Pine
-import Set
 import Test
 
 
@@ -524,18 +525,31 @@ evolutionStagesToMakeElmFunction =
         |> Test.describe "Make Elm Function"
 
 
-encodeDecodeChoiceTypeTest : Test.Test
-encodeDecodeChoiceTypeTest =
+encodeDecodeChoiceTypeDeclarationTest : Test.Test
+encodeDecodeChoiceTypeDeclarationTest =
     Test.test "Encode and decode Elm module choice type" <|
         \_ ->
-            { tagsNames = Set.fromList [ "Variant_Alfa", "Variant_Beta", "Variant_Gamma" ]
+            { tags =
+                Dict.fromList
+                    [ ( "Variant_Alfa", { argumentsCount = 0 } )
+                    , ( "Variant_Beta", { argumentsCount = 1 } )
+                    , ( "Variant_Gamma", { argumentsCount = 2 } )
+                    ]
             }
-                |> ElmCompiler.emitChoiceTypeValue
-                |> ElmCompiler.parseChoiceTypeRecordFromValueTagged
+                |> FirCompiler.ElmModuleChoiceTypeDeclaration
+                |> ElmCompiler.emitTypeDeclarationValue
+                |> ElmCompiler.parseTypeDeclarationFromValueTagged
                 |> Expect.equal
                     (Ok
-                        { tagsNames = Set.fromList [ "Variant_Alfa", "Variant_Beta", "Variant_Gamma" ]
-                        }
+                        (FirCompiler.ElmModuleChoiceTypeDeclaration
+                            { tags =
+                                Dict.fromList
+                                    [ ( "Variant_Alfa", { argumentsCount = 0 } )
+                                    , ( "Variant_Beta", { argumentsCount = 1 } )
+                                    , ( "Variant_Gamma", { argumentsCount = 2 } )
+                                    ]
+                            }
+                        )
                     )
 
 

@@ -67,7 +67,7 @@ type alias EmitStack =
 
 type alias ModuleImports =
     { importedModules : Dict.Dict (List String) ElmModuleInCompilation
-    , importedDeclarations : Dict.Dict String Pine.Value
+    , importedDeclarations : Dict.Dict String (List Expression -> Expression)
     }
 
 
@@ -82,13 +82,18 @@ type alias EnvironmentDeconstructionEntry =
 
 
 type alias ElmModuleInCompilation =
-    { declarations : Dict.Dict String Pine.Value
-    , choiceTypes : Dict.Dict String ElmModuleChoiceType
+    { functionDeclarations : Dict.Dict String (List Expression -> Expression)
+    , typeDeclarations : Dict.Dict String ElmModuleTypeDeclaration
     }
 
 
+type ElmModuleTypeDeclaration
+    = ElmModuleChoiceTypeDeclaration ElmModuleChoiceType
+    | ElmModuleRecordTypeDeclaration (List String)
+
+
 type alias ElmModuleChoiceType =
-    { tagsNames : Set.Set String
+    { tags : Dict.Dict String { argumentsCount : Int }
     }
 
 
@@ -145,7 +150,7 @@ emitExpression stack expression =
             emitFunctionExpression stack functionParams functionBody
 
         FunctionApplicationExpression functionExpression arguments ->
-            emitFunctionApplicationExpression functionExpression arguments stack
+            emitFunctionApplication functionExpression arguments stack
 
         DeclarationBlockExpression declarations innerExpression ->
             emitExpressionInDeclarationBlock stack declarations innerExpression
@@ -190,30 +195,29 @@ emitExpressionInDeclarationBlock :
     -> Result String Pine.Expression
 emitExpressionInDeclarationBlock stackBeforeAddingDeps blockDeclarations mainExpression =
     let
-        importedModulesDeclarationsFlat : Dict.Dict String Expression
+        importedModulesDeclarationsFlat : Dict.Dict String (List Expression -> Expression)
         importedModulesDeclarationsFlat =
             stackBeforeAddingDeps.moduleImports.importedModules
                 |> Dict.foldl
                     (\moduleName importedModule aggregate ->
-                        importedModule.declarations
+                        importedModule.functionDeclarations
                             |> Dict.foldl
-                                (\declName declValue ->
-                                    Dict.insert
-                                        (String.join "." (moduleName ++ [ declName ]))
-                                        (LiteralExpression declValue)
+                                (\declName ->
+                                    Dict.insert (String.join "." (moduleName ++ [ declName ]))
                                 )
                                 aggregate
                     )
                     Dict.empty
 
-        importedDeclarations : Dict.Dict String Expression
+        importedDeclarations : Dict.Dict String (List Expression -> Expression)
         importedDeclarations =
             stackBeforeAddingDeps.moduleImports.importedDeclarations
-                |> Dict.map (always LiteralExpression)
+                |> Dict.filter (stringStartsWithUpper >> not >> always)
 
         blockDeclarationsIncludingImports =
             importedModulesDeclarationsFlat
                 |> Dict.union importedDeclarations
+                |> Dict.map (\_ applyDecl -> applyDecl [])
                 |> Dict.union blockDeclarations
 
         blockDeclarationsDirectDependencies =
@@ -589,55 +593,59 @@ closureParameterFromParameters =
         >> List.concat
 
 
-emitFunctionApplicationExpression : Expression -> List Expression -> EmitStack -> Result String Pine.Expression
-emitFunctionApplicationExpression functionExpression arguments compilation =
-    arguments
-        |> List.indexedMap
-            (\argumentIndex ->
-                emitExpression compilation
-                    >> Result.mapError
-                        ((++)
-                            ("Failed emitting argument "
-                                ++ String.fromInt argumentIndex
-                                ++ " for function application: "
+emitFunctionApplication : Expression -> List Expression -> EmitStack -> Result String Pine.Expression
+emitFunctionApplication functionExpression arguments compilation =
+    if arguments == [] then
+        emitExpression compilation functionExpression
+
+    else
+        arguments
+            |> List.indexedMap
+                (\argumentIndex ->
+                    emitExpression compilation
+                        >> Result.mapError
+                            ((++)
+                                ("Failed emitting argument "
+                                    ++ String.fromInt argumentIndex
+                                    ++ " for function application: "
+                                )
                             )
-                        )
-            )
-        |> Result.Extra.combine
-        |> Result.andThen
-            (\argumentsPine ->
-                let
-                    genericFunctionApplication () =
-                        emitExpression compilation functionExpression
-                            |> Result.mapError ((++) "Failed emitting function expression: ")
-                            |> Result.andThen (emitFunctionApplicationExpressionPine argumentsPine)
-                in
-                case functionExpression of
-                    ReferenceExpression functionName ->
-                        case
-                            compilation.environmentFunctions
-                                |> List.indexedMap Tuple.pair
-                                |> List.filter (Tuple.second >> .functionName >> (==) functionName)
-                                |> List.head
-                        of
-                            Just ( functionIndexInEnv, function ) ->
-                                emitApplyFunctionFromCurrentEnvironment
-                                    { functionIndexInEnv = functionIndexInEnv
-                                    , function = function
-                                    }
-                                    argumentsPine
-                                    |> Ok
+                )
+            |> Result.Extra.combine
+            |> Result.andThen
+                (\argumentsPine ->
+                    let
+                        genericFunctionApplication () =
+                            emitExpression compilation functionExpression
+                                |> Result.mapError ((++) "Failed emitting function expression: ")
+                                |> Result.andThen (emitFunctionApplicationPine argumentsPine)
+                    in
+                    case functionExpression of
+                        ReferenceExpression functionName ->
+                            case
+                                compilation.environmentFunctions
+                                    |> List.indexedMap Tuple.pair
+                                    |> List.filter (Tuple.second >> .functionName >> (==) functionName)
+                                    |> List.head
+                            of
+                                Just ( functionIndexInEnv, function ) ->
+                                    emitApplyFunctionFromCurrentEnvironment
+                                        { functionIndexInEnv = functionIndexInEnv
+                                        , function = function
+                                        }
+                                        argumentsPine
+                                        |> Ok
 
-                            Nothing ->
-                                genericFunctionApplication ()
+                                Nothing ->
+                                    genericFunctionApplication ()
 
-                    _ ->
-                        genericFunctionApplication ()
-            )
+                        _ ->
+                            genericFunctionApplication ()
+                )
 
 
-emitFunctionApplicationExpressionPine : List Pine.Expression -> Pine.Expression -> Result String Pine.Expression
-emitFunctionApplicationExpressionPine arguments functionExpressionPine =
+emitFunctionApplicationPine : List Pine.Expression -> Pine.Expression -> Result String Pine.Expression
+emitFunctionApplicationPine arguments functionExpressionPine =
     let
         genericPartialApplication () =
             partialApplicationExpressionFromListOfArguments arguments
@@ -1505,3 +1513,8 @@ estimatePineValueSize value =
                             (\item sum -> sum + estimatePineValueSize item)
                             0
                             remaining
+
+
+stringStartsWithUpper : String -> Bool
+stringStartsWithUpper =
+    String.uncons >> Maybe.map (Tuple.first >> Char.isUpper) >> Maybe.withDefault False
