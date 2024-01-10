@@ -35,11 +35,13 @@ import Result.Extra
 compileEvalContextForElmInteractive : InteractiveContext -> Result String Pine.EvalContext
 compileEvalContextForElmInteractive context =
     let
-        contextModulesTexts =
+        contextModulesTextsBatches : List (List String)
+        contextModulesTextsBatches =
             case context of
                 DefaultContext ->
-                    ElmInteractiveCoreModules.elmCoreModulesTexts
+                    [ ElmInteractiveCoreModules.elmCoreModulesTexts
                         ++ ElmInteractiveKernelModules.elmKernelModulesTexts
+                    ]
 
                 CustomModulesContext { includeCoreModules, modulesTexts } ->
                     [ case includeCoreModules of
@@ -54,10 +56,18 @@ compileEvalContextForElmInteractive context =
                                 ++ ElmInteractiveKernelModules.elmKernelModulesTexts
                     , modulesTexts
                     ]
-                        |> List.concat
     in
-    expandElmInteractiveEnvironmentWithModuleTexts Pine.emptyEvalContext.environment contextModulesTexts
-        |> Result.map (\result -> { environment = result.environment })
+    contextModulesTextsBatches
+        |> List.foldl
+            (\batchModuleTexts ->
+                Result.andThen
+                    (\prevEnvValue ->
+                        expandElmInteractiveEnvironmentWithModuleTexts prevEnvValue batchModuleTexts
+                            |> Result.map .environment
+                    )
+            )
+            (Ok Pine.emptyEvalContext.environment)
+        |> Result.map (\environmentValue -> { environment = environmentValue })
 
 
 expandElmInteractiveEnvironmentWithModuleTexts :
