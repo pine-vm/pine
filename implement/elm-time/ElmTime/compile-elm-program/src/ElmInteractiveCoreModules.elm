@@ -1230,62 +1230,64 @@ fromIntAsList int =
 
 fromUnsignedIntAsList : Int -> List Char
 fromUnsignedIntAsList int =
-    fromUnsignedIntAsListHelper
-        int
-        (int // 10)
+    fromUnsignedIntAsListHelper int []
 
 
-fromUnsignedIntAsListHelper : Int -> Int -> List Char
-fromUnsignedIntAsListHelper int upperDigitsValue =
-    let
-        upperDigitsString =
-            if upperDigitsValue < 1 then
-                []
+fromUnsignedIntAsListHelper : Int -> List Char -> List Char
+fromUnsignedIntAsListHelper int lowerDigits =
+    if int < 1 then
+        if lowerDigits == [] then
+            [ '0' ]
 
-            else
-                fromUnsignedIntAsList upperDigitsValue
+        else
+            lowerDigits
 
-        lastDigitChar =
-            digitCharacterFromValue (int - (upperDigitsValue * 10))
-    in
-    upperDigitsString ++ [ Maybe.withDefault 'e' lastDigitChar ]
+    else
+        let
+            upperDigitsValue =
+                int // 10
+
+            digitChar =
+                unsafeDigitCharacterFromValue (int - (upperDigitsValue * 10))
+        in
+        fromUnsignedIntAsListHelper upperDigitsValue (digitChar :: lowerDigits)
 
 
-digitCharacterFromValue : Int -> Maybe Char
-digitCharacterFromValue digitValue =
+unsafeDigitCharacterFromValue : Int -> Char
+unsafeDigitCharacterFromValue digitValue =
     case digitValue of
         0 ->
-            Just '0'
+            '0'
 
         1 ->
-            Just '1'
+            '1'
 
         2 ->
-            Just '2'
+            '2'
 
         3 ->
-            Just '3'
+            '3'
 
         4 ->
-            Just '4'
+            '4'
 
         5 ->
-            Just '5'
+            '5'
 
         6 ->
-            Just '6'
+            '6'
 
         7 ->
-            Just '7'
+            '7'
 
         8 ->
-            Just '8'
+            '8'
 
         9 ->
-            Just '9'
+            '9'
 
         _ ->
-            Nothing                
+            unsafeDigitCharacterFromValue digitValue
 
 
 trim : String -> String
@@ -1332,6 +1334,11 @@ lines string =
         |> replace "\\r\\n" "\\n"
         |> replace "\\r" "\\n"
         |> split "\\n"
+
+
+foldr : (Char -> b -> b) -> b -> String -> b
+foldr func acc string =
+    List.foldr func acc (toList string)
 
 
 """
