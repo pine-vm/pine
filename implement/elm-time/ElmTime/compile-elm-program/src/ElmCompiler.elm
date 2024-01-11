@@ -1846,14 +1846,14 @@ pineExpressionForRecordUpdate fieldName fieldNewVal recordExpression =
 pineExpressionRecordUpdateFieldsList : String -> Pine.Expression -> Pine.Expression -> Pine.Expression
 pineExpressionRecordUpdateFieldsList fieldName fieldNewVal recordFieldsExpression =
     let
-        expressionEncoded =
-            Pine.LiteralExpression buildRecursiveFunctionToUpdateFieldInRecordAsValue
+        recordUpdateFunctionEncoded =
+            Pine.LiteralExpression recursiveFunctionToUpdateFieldInRecordAsValue
     in
     Pine.DecodeAndEvaluateExpression
-        { expression = expressionEncoded
+        { expression = recordUpdateFunctionEncoded
         , environment =
             Pine.ListExpression
-                [ expressionEncoded
+                [ recordUpdateFunctionEncoded
                 , Pine.LiteralExpression (Pine.valueFromString fieldName)
                 , fieldNewVal
                 , Pine.ListExpression []
@@ -1862,9 +1862,9 @@ pineExpressionRecordUpdateFieldsList fieldName fieldNewVal recordFieldsExpressio
         }
 
 
-buildRecursiveFunctionToUpdateFieldInRecordAsValue : Pine.Value
-buildRecursiveFunctionToUpdateFieldInRecordAsValue =
-    Pine.encodeExpressionAsValue buildRecursiveFunctionToUpdateFieldInRecord
+recursiveFunctionToUpdateFieldInRecordAsValue : Pine.Value
+recursiveFunctionToUpdateFieldInRecordAsValue =
+    Pine.encodeExpressionAsValue recursiveFunctionToUpdateFieldInRecord
 
 
 {-| Recursively scans through the record fields and replaces every field with the same name as the one to update.
@@ -1878,8 +1878,8 @@ Takes the following arguments:
 5.  The list of fields that are yet to be processed.
 
 -}
-buildRecursiveFunctionToUpdateFieldInRecord : Pine.Expression
-buildRecursiveFunctionToUpdateFieldInRecord =
+recursiveFunctionToUpdateFieldInRecord : Pine.Expression
+recursiveFunctionToUpdateFieldInRecord =
     let
         functionReferenceLocalExpression : Pine.Expression
         functionReferenceLocalExpression =
@@ -1970,6 +1970,9 @@ buildRecursiveFunctionToUpdateFieldInRecord =
 pineExpressionForRecordAccess : String -> Pine.Expression -> Pine.Expression
 pineExpressionForRecordAccess fieldName recordExpression =
     let
+        fieldNameValue =
+            Pine.valueFromString fieldName
+
         recordFieldsExpression =
             pineKernel_ListHead_Pine (listItemFromIndexExpression_Pine 1 recordExpression)
     in
@@ -1979,19 +1982,33 @@ pineExpressionForRecordAccess fieldName recordExpression =
                 [ Pine.LiteralExpression (Pine.valueFromString elmRecordTypeTagName)
                 , pineKernel_ListHead_Pine recordExpression
                 ]
-        , ifTrue = buildRecursiveFunctionToLookupFieldInRecord fieldName recordFieldsExpression
+        , ifTrue =
+            Pine.DecodeAndEvaluateExpression
+                { expression = Pine.LiteralExpression recursiveFunctionToLookupFieldInRecordAsValue
+                , environment =
+                    Pine.ListExpression
+                        [ Pine.LiteralExpression recursiveFunctionToLookupFieldInRecordAsValue
+                        , Pine.LiteralExpression fieldNameValue
+                        , recordFieldsExpression
+                        ]
+                }
         , ifFalse = Pine.ListExpression []
         }
 
 
-buildRecursiveFunctionToLookupFieldInRecord : String -> Pine.Expression -> Pine.Expression
-buildRecursiveFunctionToLookupFieldInRecord fieldName recordFieldsExpression =
+recursiveFunctionToLookupFieldInRecordAsValue : Pine.Value
+recursiveFunctionToLookupFieldInRecordAsValue =
+    Pine.encodeExpressionAsValue recursiveFunctionToLookupFieldInRecord
+
+
+recursiveFunctionToLookupFieldInRecord : Pine.Expression
+recursiveFunctionToLookupFieldInRecord =
     let
-        fieldNameValue =
-            Pine.valueFromString fieldName
+        fieldNameLocalExpression =
+            listItemFromIndexExpression_Pine 1 Pine.EnvironmentExpression
 
         remainingFieldsLocalExpression =
-            listItemFromIndexExpression_Pine 1 Pine.EnvironmentExpression
+            listItemFromIndexExpression_Pine 2 Pine.EnvironmentExpression
 
         continueWithRemainingExpression =
             Pine.DecodeAndEvaluateExpression
@@ -1999,41 +2016,33 @@ buildRecursiveFunctionToLookupFieldInRecord fieldName recordFieldsExpression =
                 , environment =
                     Pine.ListExpression
                         [ listItemFromIndexExpression_Pine 0 Pine.EnvironmentExpression
+                        , fieldNameLocalExpression
                         , listSkipExpression_Pine 1 remainingFieldsLocalExpression
                         ]
                 }
-
-        recursivePart =
+    in
+    Pine.ConditionalExpression
+        { condition =
+            equalCondition_Pine
+                [ Pine.ListExpression []
+                , remainingFieldsLocalExpression
+                ]
+        , ifTrue = continueWithRemainingExpression
+        , ifFalse =
             Pine.ConditionalExpression
                 { condition =
                     equalCondition_Pine
-                        [ Pine.ListExpression []
-                        , remainingFieldsLocalExpression
+                        [ remainingFieldsLocalExpression
+                            |> listItemFromIndexExpression_Pine 0
+                            |> listItemFromIndexExpression_Pine 0
+                        , fieldNameLocalExpression
                         ]
-                , ifTrue = continueWithRemainingExpression
-                , ifFalse =
-                    Pine.ConditionalExpression
-                        { condition =
-                            equalCondition_Pine
-                                [ listItemFromIndexExpression_Pine 0 (listItemFromIndexExpression_Pine 0 remainingFieldsLocalExpression)
-                                , Pine.LiteralExpression fieldNameValue
-                                ]
-                        , ifTrue =
-                            listItemFromIndexExpression_Pine 1 (listItemFromIndexExpression_Pine 0 remainingFieldsLocalExpression)
-                        , ifFalse = continueWithRemainingExpression
-                        }
+                , ifTrue =
+                    remainingFieldsLocalExpression
+                        |> listItemFromIndexExpression_Pine 0
+                        |> listItemFromIndexExpression_Pine 1
+                , ifFalse = continueWithRemainingExpression
                 }
-
-        expressionEncoded =
-            Pine.LiteralExpression (Pine.encodeExpressionAsValue recursivePart)
-    in
-    Pine.DecodeAndEvaluateExpression
-        { expression = expressionEncoded
-        , environment =
-            Pine.ListExpression
-                [ expressionEncoded
-                , recordFieldsExpression
-                ]
         }
 
 
