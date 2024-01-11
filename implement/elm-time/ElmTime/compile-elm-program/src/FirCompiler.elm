@@ -1,6 +1,7 @@
 module FirCompiler exposing (..)
 
 import BigInt
+import Common
 import Dict
 import Pine
 import Result.Extra
@@ -421,9 +422,14 @@ emitReferenceExpression : String -> EmitStack -> Result String Pine.Expression
 emitReferenceExpression name compilation =
     case
         compilation.environmentFunctions
-            |> List.indexedMap Tuple.pair
-            |> List.filter (Tuple.second >> .functionName >> (==) name)
-            |> List.head
+            |> Common.listFindIndexedMap
+                (\index envEntry ->
+                    if envEntry.functionName == name then
+                        Just ( index, envEntry )
+
+                    else
+                        Nothing
+                )
     of
         Just ( functionIndexInEnv, function ) ->
             emitApplyFunctionFromCurrentEnvironment
@@ -624,9 +630,14 @@ emitFunctionApplication functionExpression arguments compilation =
                         ReferenceExpression functionName ->
                             case
                                 compilation.environmentFunctions
-                                    |> List.indexedMap Tuple.pair
-                                    |> List.filter (Tuple.second >> .functionName >> (==) functionName)
-                                    |> List.head
+                                    |> Common.listFindIndexedMap
+                                        (\index envEntry ->
+                                            if envEntry.functionName == functionName then
+                                                Just ( index, envEntry )
+
+                                            else
+                                                Nothing
+                                        )
                             of
                                 Just ( functionIndexInEnv, function ) ->
                                     emitApplyFunctionFromCurrentEnvironment
