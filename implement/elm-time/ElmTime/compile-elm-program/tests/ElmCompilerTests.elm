@@ -1073,7 +1073,7 @@ emitClosureExpressionTests =
                             compilationConfig =
                                 { moduleAliases = Dict.empty
                                 , availableModules = Dict.empty
-                                , availableDeclarations = Dict.empty
+                                , inlineableDeclarations = Dict.empty
                                 , elmValuesToExposeToGlobal = Dict.empty
                                 }
 

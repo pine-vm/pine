@@ -676,8 +676,8 @@ compilationAndEmitStackFromInteractiveEnvironment environmentDeclarations =
 
         compilationStack =
             { defaultCompilationStack
-                | availableDeclarations =
-                    defaultCompilationStack.availableDeclarations
+                | inlineableDeclarations =
+                    defaultCompilationStack.inlineableDeclarations
                         |> Dict.union
                             (environmentDeclarations.otherDeclarations
                                 |> Dict.map

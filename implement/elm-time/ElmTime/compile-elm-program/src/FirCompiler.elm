@@ -68,7 +68,8 @@ type alias EmitStack =
 
 type alias ModuleImports =
     { importedModules : Dict.Dict (List String) ElmModuleInCompilation
-    , importedDeclarations : Dict.Dict String (List Expression -> Expression)
+    , importedFunctions : Dict.Dict String Pine.Value
+    , importedTypes : Dict.Dict String ElmModuleTypeDeclaration
     }
 
 
@@ -83,7 +84,7 @@ type alias EnvironmentDeconstructionEntry =
 
 
 type alias ElmModuleInCompilation =
-    { functionDeclarations : Dict.Dict String (List Expression -> Expression)
+    { functionDeclarations : Dict.Dict String Pine.Value
     , typeDeclarations : Dict.Dict String ElmModuleTypeDeclaration
     }
 
@@ -196,29 +197,29 @@ emitExpressionInDeclarationBlock :
     -> Result String Pine.Expression
 emitExpressionInDeclarationBlock stackBeforeAddingDeps blockDeclarations mainExpression =
     let
-        importedModulesDeclarationsFlat : Dict.Dict String (List Expression -> Expression)
+        importedModulesDeclarationsFlat : Dict.Dict String Pine.Value
         importedModulesDeclarationsFlat =
             stackBeforeAddingDeps.moduleImports.importedModules
                 |> Dict.foldl
-                    (\moduleName importedModule aggregate ->
+                    (\moduleName importedModule modulesAggregate ->
                         importedModule.functionDeclarations
                             |> Dict.foldl
                                 (\declName ->
                                     Dict.insert (String.join "." (moduleName ++ [ declName ]))
                                 )
-                                aggregate
+                                modulesAggregate
                     )
                     Dict.empty
 
-        importedDeclarations : Dict.Dict String (List Expression -> Expression)
+        importedDeclarations : Dict.Dict String Pine.Value
         importedDeclarations =
-            stackBeforeAddingDeps.moduleImports.importedDeclarations
+            stackBeforeAddingDeps.moduleImports.importedFunctions
                 |> Dict.filter (stringStartsWithUpper >> not >> always)
 
         blockDeclarationsIncludingImports =
             importedModulesDeclarationsFlat
                 |> Dict.union importedDeclarations
-                |> Dict.map (\_ applyDecl -> applyDecl [])
+                |> Dict.map (always LiteralExpression)
                 |> Dict.union blockDeclarations
 
         blockDeclarationsDirectDependencies =

@@ -177,8 +177,8 @@ compileInteractiveSubmission environment submission =
 
                                 compilationStack =
                                     { defaultCompilationStack
-                                        | availableDeclarations =
-                                            defaultCompilationStack.availableDeclarations
+                                        | inlineableDeclarations =
+                                            defaultCompilationStack.inlineableDeclarations
                                                 |> Dict.remove declarationName
                                     }
                             in
