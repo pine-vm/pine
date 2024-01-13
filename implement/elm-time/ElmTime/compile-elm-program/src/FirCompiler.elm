@@ -55,7 +55,7 @@ type Deconstruction
 
 
 type alias EmitStack =
-    { moduleImports : ModuleImports
+    { importedFunctions : Dict.Dict String Pine.Value
     , declarationsDependencies : Dict.Dict String (Set.Set String)
 
     -- The functions in the first item in the environment list
@@ -63,13 +63,6 @@ type alias EmitStack =
 
     -- Deconstructions we can derive from the second item in the environment list
     , environmentDeconstructions : Dict.Dict String EnvironmentDeconstructionEntry
-    }
-
-
-type alias ModuleImports =
-    { importedModules : Dict.Dict (List String) ElmModuleInCompilation
-    , importedFunctions : Dict.Dict String Pine.Value
-    , importedTypes : Dict.Dict String ElmModuleTypeDeclaration
     }
 
 
@@ -81,22 +74,6 @@ type alias EnvironmentFunctionEntry =
 
 type alias EnvironmentDeconstructionEntry =
     List Deconstruction
-
-
-type alias ElmModuleInCompilation =
-    { functionDeclarations : Dict.Dict String Pine.Value
-    , typeDeclarations : Dict.Dict String ElmModuleTypeDeclaration
-    }
-
-
-type ElmModuleTypeDeclaration
-    = ElmModuleChoiceTypeDeclaration ElmModuleChoiceType
-    | ElmModuleRecordTypeDeclaration (List String)
-
-
-type alias ElmModuleChoiceType =
-    { tags : Dict.Dict String { argumentsCount : Int }
-    }
 
 
 emitExpression : EmitStack -> Expression -> Result String Pine.Expression
@@ -197,28 +174,8 @@ emitExpressionInDeclarationBlock :
     -> Result String Pine.Expression
 emitExpressionInDeclarationBlock stackBeforeAddingDeps blockDeclarations mainExpression =
     let
-        importedModulesDeclarationsFlat : Dict.Dict String Pine.Value
-        importedModulesDeclarationsFlat =
-            stackBeforeAddingDeps.moduleImports.importedModules
-                |> Dict.foldl
-                    (\moduleName importedModule modulesAggregate ->
-                        importedModule.functionDeclarations
-                            |> Dict.foldl
-                                (\declName ->
-                                    Dict.insert (String.join "." (moduleName ++ [ declName ]))
-                                )
-                                modulesAggregate
-                    )
-                    Dict.empty
-
-        importedDeclarations : Dict.Dict String Pine.Value
-        importedDeclarations =
-            stackBeforeAddingDeps.moduleImports.importedFunctions
-                |> Dict.filter (stringStartsWithUpper >> not >> always)
-
         blockDeclarationsIncludingImports =
-            importedModulesDeclarationsFlat
-                |> Dict.union importedDeclarations
+            stackBeforeAddingDeps.importedFunctions
                 |> Dict.map (always LiteralExpression)
                 |> Dict.union blockDeclarations
 
@@ -299,7 +256,7 @@ emitExpressionInDeclarationBlock stackBeforeAddingDeps blockDeclarations mainExp
             emitFunction functionEntry =
                 let
                     functionEmitStack =
-                        { moduleImports = stackBefore.moduleImports
+                        { importedFunctions = stackBefore.importedFunctions
                         , declarationsDependencies = stackBefore.declarationsDependencies
                         , environmentFunctions = environmentFunctions
                         , environmentDeconstructions =
@@ -1525,8 +1482,3 @@ estimatePineValueSize value =
                             (\item sum -> sum + estimatePineValueSize item)
                             0
                             remaining
-
-
-stringStartsWithUpper : String -> Bool
-stringStartsWithUpper =
-    String.uncons >> Maybe.map (Tuple.first >> Char.isUpper) >> Maybe.withDefault False

@@ -15,12 +15,8 @@ import Elm.Syntax.TypeAnnotation
 import FirCompiler
     exposing
         ( Deconstruction(..)
-        , ElmModuleChoiceType
-        , ElmModuleInCompilation
-        , ElmModuleTypeDeclaration(..)
         , EmitStack
         , Expression(..)
-        , ModuleImports
         , countListElementsExpression
         , emitWrapperForPartialApplication
         , equalCondition
@@ -77,6 +73,29 @@ type ModuleImportExposing
 type alias ModuleImportTopLevelExpose =
     { name : String
     , open : Bool
+    }
+
+
+type alias ModuleImports =
+    { importedModules : Dict.Dict (List String) ElmModuleInCompilation
+    , importedFunctions : Dict.Dict String Pine.Value
+    , importedTypes : Dict.Dict String ElmModuleTypeDeclaration
+    }
+
+
+type alias ElmModuleInCompilation =
+    { functionDeclarations : Dict.Dict String Pine.Value
+    , typeDeclarations : Dict.Dict String ElmModuleTypeDeclaration
+    }
+
+
+type ElmModuleTypeDeclaration
+    = ElmModuleChoiceTypeDeclaration ElmModuleChoiceType
+    | ElmModuleRecordTypeDeclaration (List String)
+
+
+type alias ElmModuleChoiceType =
+    { tags : Dict.Dict String { argumentsCount : Int }
     }
 
 
@@ -787,22 +806,41 @@ compilationAndEmitStackFromModulesInCompilation availableModules { moduleAliases
                             }
                     )
 
-        initialCompilationStack =
+        compilationStack =
             { compilationStackForImport
                 | inlineableDeclarations =
                     declarationsFromChoiceTypes
                         |> Dict.union declarationsFromTypeAliases
             }
 
-        initialEmitStack =
-            { moduleImports = moduleImports
+        importedModulesDeclarationsFlat : Dict.Dict String Pine.Value
+        importedModulesDeclarationsFlat =
+            moduleImports.importedModules
+                |> Dict.foldl
+                    (\moduleName importedModule modulesAggregate ->
+                        importedModule.functionDeclarations
+                            |> Dict.foldl
+                                (\declName ->
+                                    Dict.insert (String.join "." (moduleName ++ [ declName ]))
+                                )
+                                modulesAggregate
+                    )
+                    Dict.empty
+
+        importedFunctions : Dict.Dict String Pine.Value
+        importedFunctions =
+            moduleImports.importedFunctions
+                |> Dict.union importedModulesDeclarationsFlat
+
+        emitStack =
+            { importedFunctions = importedFunctions
             , declarationsDependencies = Dict.empty
             , environmentFunctions = []
             , environmentDeconstructions = Dict.empty
             }
     in
-    ( initialCompilationStack
-    , initialEmitStack
+    ( compilationStack
+    , emitStack
     )
 
 
@@ -2168,11 +2206,7 @@ getDeclarationValueFromCompilationOverrides =
                 [ [ ( "message", [] ) ], [ ( "payload", [] ) ] ]
                 (ReferenceExpression "payload")
                 |> FirCompiler.emitExpression
-                    { moduleImports =
-                        { importedModules = Dict.empty
-                        , importedFunctions = Dict.empty
-                        , importedTypes = Dict.empty
-                        }
+                    { importedFunctions = Dict.empty
                     , declarationsDependencies = Dict.empty
                     , environmentFunctions = []
                     , environmentDeconstructions = Dict.empty
@@ -2185,11 +2219,7 @@ getDeclarationValueFromCompilationOverrides =
                 [ [ ( "elm_value", [] ) ] ]
                 (LiteralExpression (valueFromString "Debug.toString is not implemented yet"))
                 |> FirCompiler.emitExpression
-                    { moduleImports =
-                        { importedModules = Dict.empty
-                        , importedFunctions = Dict.empty
-                        , importedTypes = Dict.empty
-                        }
+                    { importedFunctions = Dict.empty
                     , declarationsDependencies = Dict.empty
                     , environmentFunctions = []
                     , environmentDeconstructions = Dict.empty

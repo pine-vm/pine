@@ -2,7 +2,6 @@ module ElmCompilerTests exposing (..)
 
 import BigInt
 import Dict
-import ElmCompiler
 import Expect
 import FirCompiler
 import Pine
@@ -1070,15 +1069,8 @@ emitClosureExpressionTests =
                                             )
                                         )
 
-                            compilationConfig =
-                                { moduleAliases = Dict.empty
-                                , availableModules = Dict.empty
-                                , inlineableDeclarations = Dict.empty
-                                , elmValuesToExposeToGlobal = Dict.empty
-                                }
-
                             emptyEmitStack =
-                                { moduleImports = ElmCompiler.moduleImportsFromCompilationStack [] compilationConfig
+                                { importedFunctions = Dict.empty
                                 , declarationsDependencies = Dict.empty
                                 , environmentFunctions = []
                                 , environmentDeconstructions = Dict.empty

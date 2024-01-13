@@ -10,6 +10,7 @@ import Elm.Syntax.Node
 import ElmCompiler
     exposing
         ( CompilationStack
+        , ElmModuleInCompilation
         , ProjectParsedElmFile
         , compilationAndEmitStackFromModulesInCompilation
         , elmRecordTypeTagName
@@ -20,8 +21,7 @@ import ElmCompiler
         )
 import FirCompiler
     exposing
-        ( ElmModuleInCompilation
-        , EmitStack
+        ( EmitStack
         , Expression(..)
         , listTransitiveDependenciesOfExpression
         , parseFunctionParameters

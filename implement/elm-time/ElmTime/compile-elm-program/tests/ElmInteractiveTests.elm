@@ -536,12 +536,12 @@ encodeDecodeChoiceTypeDeclarationTest =
                     , ( "Variant_Gamma", { argumentsCount = 2 } )
                     ]
             }
-                |> FirCompiler.ElmModuleChoiceTypeDeclaration
+                |> ElmCompiler.ElmModuleChoiceTypeDeclaration
                 |> ElmCompiler.emitTypeDeclarationValue
                 |> ElmCompiler.parseTypeDeclarationFromValueTagged
                 |> Expect.equal
                     (Ok
-                        (FirCompiler.ElmModuleChoiceTypeDeclaration
+                        (ElmCompiler.ElmModuleChoiceTypeDeclaration
                             { tags =
                                 Dict.fromList
                                     [ ( "Variant_Alfa", { argumentsCount = 0 } )
