@@ -89,8 +89,10 @@ compileInteractiveEnvironment =
         >> Result.mapError (Json.Decode.errorToString >> (++) "Failed to decode arguments: ")
         >> Result.andThen
             (\( environmentDict, { modulesTexts, environmentBefore } ) ->
-                ElmInteractiveParser.expandElmInteractiveEnvironmentWithModuleTexts environmentBefore
+                ElmInteractiveParser.expandElmInteractiveEnvironmentWithModuleTexts
                     modulesTexts
+                    |> Result.andThen
+                        (\( _, addModules ) -> addModules environmentBefore)
                     |> Result.mapError ((++) "Failed to prepare the initial context: ")
                     |> Result.map (.environment >> json_encode_pineValue environmentDict)
             )

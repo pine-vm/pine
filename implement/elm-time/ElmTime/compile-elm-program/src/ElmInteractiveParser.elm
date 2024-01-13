@@ -62,8 +62,11 @@ compileEvalContextForElmInteractive context =
             (\batchModuleTexts ->
                 Result.andThen
                     (\prevEnvValue ->
-                        expandElmInteractiveEnvironmentWithModuleTexts prevEnvValue batchModuleTexts
-                            |> Result.map .environment
+                        expandElmInteractiveEnvironmentWithModuleTexts batchModuleTexts
+                            |> Result.andThen
+                                (\( _, addModules ) ->
+                                    Result.map .environment (addModules prevEnvValue)
+                                )
                     )
             )
             (Ok Pine.emptyEvalContext.environment)
@@ -71,16 +74,22 @@ compileEvalContextForElmInteractive context =
 
 
 expandElmInteractiveEnvironmentWithModuleTexts :
-    Pine.Value
-    -> List String
-    -> Result String { addedModules : List ( List String, Pine.Value ), environment : Pine.Value }
-expandElmInteractiveEnvironmentWithModuleTexts environmentBefore contextModulesTexts =
+    List String
+    ->
+        Result
+            String
+            ( List ProjectParsedElmFile
+            , Pine.Value -> Result String { addedModules : List ( List String, Pine.Value ), environment : Pine.Value }
+            )
+expandElmInteractiveEnvironmentWithModuleTexts contextModulesTexts =
     contextModulesTexts
         |> List.map parsedElmFileFromOnlyFileText
         |> Result.Extra.combine
-        |> Result.andThen
+        |> Result.map
             (\parsedModules ->
-                ElmCompiler.expandElmInteractiveEnvironmentWithModules environmentBefore parsedModules
+                ( parsedModules
+                , \environmentBefore -> ElmCompiler.expandElmInteractiveEnvironmentWithModules environmentBefore parsedModules
+                )
             )
 
 
