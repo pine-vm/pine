@@ -193,6 +193,15 @@ emitExpressionInDeclarationBlock stackBeforeAddingDeps blockDeclarations mainExp
         mainExpressionOuterDependencies =
             listTransitiveDependenciesOfExpression stackBefore mainExpression
 
+        beforeEnvironmentFunctionsNames : Set.Set String
+        beforeEnvironmentFunctionsNames =
+            stackBefore.environmentFunctions
+                |> List.foldl
+                    (\beforeEnvFunction aggregate ->
+                        Set.insert beforeEnvFunction.functionName aggregate
+                    )
+                    Set.empty
+
         usedBlockDeclarations =
             blockDeclarationsIncludingImports
                 |> Dict.filter (Set.member >> (|>) mainExpressionOuterDependencies >> always)
@@ -201,7 +210,7 @@ emitExpressionInDeclarationBlock stackBeforeAddingDeps blockDeclarations mainExp
                     (\declName _ ->
                         not
                             -- Not supporting shadowing at the moment: Filter out every name we already have from a parent scope.
-                            (List.any (.functionName >> (==) declName) stackBefore.environmentFunctions)
+                            (Set.member declName beforeEnvironmentFunctionsNames)
                     )
                 |> Dict.map (always parseFunctionParameters)
 
@@ -209,11 +218,12 @@ emitExpressionInDeclarationBlock stackBeforeAddingDeps blockDeclarations mainExp
         mainExpressionAsFunction =
             parseFunctionParameters mainExpression
 
+        closureCaptures : List ( String, EnvironmentDeconstructionEntry )
         closureCaptures =
-            blockDeclarationsIncludingImports
-                |> Dict.keys
-                |> List.foldl Set.remove mainExpressionOuterDependencies
-                |> Set.toList
+            stackBefore.environmentDeconstructions
+                |> Dict.toList
+                |> List.filter
+                    (\( declName, _ ) -> Set.member declName mainExpressionOuterDependencies)
     in
     if mainExpressionAsFunction.parameters == [] && Dict.isEmpty usedBlockDeclarations then
         emitExpression stackBeforeAddingDeps mainExpressionAsFunction.innerExpression
@@ -239,7 +249,7 @@ emitExpressionInDeclarationBlock stackBeforeAddingDeps blockDeclarations mainExp
             newEnvironmentFunctionsFromClosureCaptures =
                 closureCaptures
                     |> List.map
-                        (\captureName ->
+                        (\( captureName, _ ) ->
                             { functionName = captureName
                             , argumentsCount = 0
                             }
@@ -277,80 +287,83 @@ emitExpressionInDeclarationBlock stackBeforeAddingDeps blockDeclarations mainExp
                                 |> Result.map (Tuple.pair functionName)
                         )
                     |> Result.Extra.combine
+
+            closureCapturesExpressions =
+                closureCaptures
+                    |> List.map
+                        (\( _, deconstruction ) ->
+                            Pine.EnvironmentExpression
+                                |> listItemFromIndexExpression_Pine 1
+                                |> pineExpressionForDeconstructions deconstruction
+                        )
         in
-        closureCaptures
-            |> List.map (emitReferenceExpression >> (|>) stackBefore)
-            |> Result.Extra.combine
+        emitBlockDeclarationsResult
             |> Result.andThen
-                (\closureCapturesExpressions ->
-                    emitBlockDeclarationsResult
-                        |> Result.andThen
-                            (\blockDeclarationsEmitted ->
-                                let
-                                    newEnvFunctionsValues =
-                                        blockDeclarationsEmitted
-                                            |> List.map
-                                                (\( declName, declExpr ) ->
-                                                    ( declName
-                                                    , Pine.encodeExpressionAsValue declExpr
-                                                    )
-                                                )
+                (\blockDeclarationsEmitted ->
+                    let
+                        newEnvFunctionsValues =
+                            blockDeclarationsEmitted
+                                |> List.map
+                                    (\( declName, declExpr ) ->
+                                        ( declName
+                                        , Pine.encodeExpressionAsValue declExpr
+                                        )
+                                    )
 
-                                    newEnvFunctionsExpressionsFromDecls : List Pine.Expression
-                                    newEnvFunctionsExpressionsFromDecls =
-                                        newEnvFunctionsValues
-                                            |> List.map (Tuple.second >> Pine.LiteralExpression)
+                        newEnvFunctionsExpressionsFromDecls : List Pine.Expression
+                        newEnvFunctionsExpressionsFromDecls =
+                            newEnvFunctionsValues
+                                |> List.map (Tuple.second >> Pine.LiteralExpression)
 
-                                    closureCapturesExpressionsWrapped =
-                                        closureCapturesExpressions
-                                            |> List.map
-                                                (\captureExpression ->
-                                                    Pine.ListExpression
-                                                        [ Pine.LiteralExpression (Pine.valueFromString "Literal")
-                                                        , captureExpression
-                                                        ]
-                                                )
+                        closureCapturesExpressionsWrapped =
+                            closureCapturesExpressions
+                                |> List.map
+                                    (\captureExpression ->
+                                        Pine.ListExpression
+                                            [ Pine.LiteralExpression (Pine.valueFromString "Literal")
+                                            , captureExpression
+                                            ]
+                                    )
 
-                                    appendedEnvFunctionsExpressions : List Pine.Expression
-                                    appendedEnvFunctionsExpressions =
-                                        newEnvFunctionsExpressionsFromDecls
-                                            ++ closureCapturesExpressionsWrapped
+                        appendedEnvFunctionsExpressions : List Pine.Expression
+                        appendedEnvFunctionsExpressions =
+                            newEnvFunctionsExpressionsFromDecls
+                                ++ closureCapturesExpressionsWrapped
 
-                                    envFunctionsExpression =
-                                        if stackBefore.environmentFunctions == [] then
-                                            Pine.ListExpression appendedEnvFunctionsExpressions
+                        envFunctionsExpression =
+                            if stackBefore.environmentFunctions == [] then
+                                Pine.ListExpression appendedEnvFunctionsExpressions
 
-                                        else
-                                            Pine.KernelApplicationExpression
-                                                { functionName = "concat"
+                            else
+                                Pine.KernelApplicationExpression
+                                    { functionName = "concat"
+                                    , argument =
+                                        Pine.ListExpression
+                                            [ {-
+                                                 Here we depend on the returned list having the same layout as stackBefore.environmentFunctions.
+                                                 2023-12-31: Observed some tests failing, and fixed this by wrapping into the application of 'take'.
+                                                 This observation indicates that some part of the compiler emitted a longer list than is described in stackBefore.environmentFunctions.
+                                              -}
+                                              Pine.KernelApplicationExpression
+                                                { functionName = "take"
                                                 , argument =
                                                     Pine.ListExpression
-                                                        [ {-
-                                                             Here we depend on the returned list having the same layout as stackBefore.environmentFunctions.
-                                                             2023-12-31: Observed some tests failing, and fixed this by wrapping into the application of 'take'.
-                                                             This observation indicates that some part of the compiler emitted a longer list than is described in stackBefore.environmentFunctions.
-                                                          -}
-                                                          Pine.KernelApplicationExpression
-                                                            { functionName = "take"
-                                                            , argument =
-                                                                Pine.ListExpression
-                                                                    [ Pine.LiteralExpression
-                                                                        (Pine.valueFromInt (List.length stackBefore.environmentFunctions))
-                                                                    , Pine.EnvironmentExpression
-                                                                        |> listItemFromIndexExpression_Pine 0
-                                                                    ]
-                                                            }
-                                                        , Pine.ListExpression appendedEnvFunctionsExpressions
+                                                        [ Pine.LiteralExpression
+                                                            (Pine.valueFromInt (List.length stackBefore.environmentFunctions))
+                                                        , Pine.EnvironmentExpression
+                                                            |> listItemFromIndexExpression_Pine 0
                                                         ]
                                                 }
-                                in
-                                mainExpressionAsFunction
-                                    |> emitFunction
-                                    |> Result.map
-                                        (emitWrapperForPartialApplication
-                                            envFunctionsExpression
-                                            (List.length mainExpressionAsFunction.parameters)
-                                        )
+                                            , Pine.ListExpression appendedEnvFunctionsExpressions
+                                            ]
+                                    }
+                    in
+                    mainExpressionAsFunction
+                        |> emitFunction
+                        |> Result.map
+                            (emitWrapperForPartialApplication
+                                envFunctionsExpression
+                                (List.length mainExpressionAsFunction.parameters)
                             )
                 )
 
@@ -1186,7 +1199,7 @@ searchForExpressionReduction expression =
                             attemptReduceViaEval ()
 
                 _ ->
-                            attemptReduceViaEval ()
+                    attemptReduceViaEval ()
 
         _ ->
             attemptReduceViaEval ()
