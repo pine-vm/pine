@@ -802,7 +802,7 @@ adaptivePartialApplicationExpressionStaticPart =
             -}
             equalCondition_Pine
                 [ listItemFromIndexExpression_Pine 0 functionExpression
-                , Pine.LiteralExpression (Pine.valueFromString "Function")
+                , Pine.LiteralExpression Pine.stringAsValue_Function
                 ]
         , ifTrue =
             {-
@@ -907,7 +907,7 @@ updateRecordOfPartiallyAppliedFunction :
     -> Pine.Expression
 updateRecordOfPartiallyAppliedFunction config =
     Pine.ListExpression
-        [ Pine.LiteralExpression (Pine.valueFromString "Function")
+        [ Pine.LiteralExpression Pine.stringAsValue_Function
         , Pine.ListExpression
             [ config.getFunctionInnerExpression
             , config.functionParameterCountExpression
@@ -935,7 +935,7 @@ parseFunctionRecordFromValueTagged value =
         Pine.ListValue listItems ->
             case listItems of
                 [ functionTag, functionRecord ] ->
-                    if functionTag == Pine.valueFromString "Function" then
+                    if functionTag == Pine.stringAsValue_Function then
                         parseFunctionRecordFromValue functionRecord
 
                     else
@@ -1186,7 +1186,7 @@ searchForExpressionReduction expression =
                             attemptReduceViaEval ()
 
                 _ ->
-                    attemptReduceViaEval ()
+                            attemptReduceViaEval ()
 
         _ ->
             attemptReduceViaEval ()

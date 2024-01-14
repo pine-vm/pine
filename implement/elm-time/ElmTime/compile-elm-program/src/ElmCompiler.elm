@@ -1,5 +1,6 @@
 module ElmCompiler exposing (..)
 
+import Common
 import Dict
 import Elm.Syntax.Declaration
 import Elm.Syntax.Exposing
@@ -109,9 +110,19 @@ elmStringTypeTagName =
     "String"
 
 
+elmStringTypeTagNameAsValue : Pine.Value
+elmStringTypeTagNameAsValue =
+    Pine.valueFromString elmStringTypeTagName
+
+
 elmRecordTypeTagName : String
 elmRecordTypeTagName =
     "Elm_Record"
+
+
+elmRecordTypeTagNameAsValue : Pine.Value
+elmRecordTypeTagNameAsValue =
+    Pine.valueFromString elmRecordTypeTagName
 
 
 operatorPrecendencePriority : Dict.Dict String Int
@@ -298,7 +309,7 @@ expandElmInteractiveEnvironmentWithModules environmentBefore newParsedElmModules
                                 |> List.filterMap
                                     (\moduleName ->
                                         modulesWithDependencies
-                                            |> List.Extra.find
+                                            |> Common.listFind
                                                 (Tuple.first
                                                     >> .parsedModule
                                                     >> .moduleDefinition
@@ -570,7 +581,7 @@ compileElmModuleIntoNamedExports availableModules moduleToTranslate =
                         |> List.filterMap
                             (\( name, function ) ->
                                 functionDeclarations
-                                    |> List.Extra.find (Tuple.first >> (==) function)
+                                    |> Common.listFind (Tuple.first >> (==) function)
                                     |> Maybe.map (Tuple.second >> Tuple.pair name)
                             )
 
@@ -1360,7 +1371,13 @@ compileElmSyntaxRecord stack recordSetters =
                             )
             )
         |> Result.Extra.combine
-        |> Result.map (ListExpression >> List.singleton >> FirCompiler.tagValueExpression elmRecordTypeTagName)
+        |> Result.map
+            (\fieldsExpressions ->
+                ListExpression
+                    [ LiteralExpression elmRecordTypeTagNameAsValue
+                    , ListExpression [ ListExpression fieldsExpressions ]
+                    ]
+            )
 
 
 compileElmSyntaxRecordAccess :
@@ -1884,12 +1901,12 @@ pineExpressionForRecordUpdate fieldName fieldNewVal recordExpression =
     Pine.ConditionalExpression
         { condition =
             equalCondition_Pine
-                [ Pine.LiteralExpression (Pine.valueFromString elmRecordTypeTagName)
+                [ Pine.LiteralExpression elmRecordTypeTagNameAsValue
                 , pineKernel_ListHead_Pine recordExpression
                 ]
         , ifTrue =
             Pine.ListExpression
-                [ Pine.LiteralExpression (Pine.valueFromString elmRecordTypeTagName)
+                [ Pine.LiteralExpression elmRecordTypeTagNameAsValue
                 , Pine.ListExpression
                     [ pineExpressionRecordUpdateFieldsList fieldName fieldNewVal recordFieldsExpression
                     ]
@@ -2034,7 +2051,7 @@ pineExpressionForRecordAccess fieldName recordExpression =
     Pine.ConditionalExpression
         { condition =
             equalCondition_Pine
-                [ Pine.LiteralExpression (Pine.valueFromString elmRecordTypeTagName)
+                [ Pine.LiteralExpression elmRecordTypeTagNameAsValue
                 , pineKernel_ListHead_Pine recordExpression
                 ]
         , ifTrue =
@@ -2391,17 +2408,17 @@ compileElmChoiceTypeTagConstructorValue { tagName, argumentsCount } =
 
         2 ->
             Pine.ListExpression
-                [ Pine.LiteralExpression (Pine.valueFromString "List")
+                [ Pine.LiteralExpression Pine.stringAsValue_List
                 , Pine.ListExpression
                     [ Pine.ListExpression
-                        [ Pine.LiteralExpression (Pine.valueFromString "Literal")
+                        [ Pine.LiteralExpression Pine.stringAsValue_Literal
                         , Pine.LiteralExpression (Pine.valueFromString tagName)
                         ]
                     , Pine.ListExpression
-                        [ Pine.LiteralExpression (Pine.valueFromString "List")
+                        [ Pine.LiteralExpression Pine.stringAsValue_List
                         , Pine.ListExpression
                             [ Pine.ListExpression
-                                [ Pine.LiteralExpression (Pine.valueFromString "Literal")
+                                [ Pine.LiteralExpression Pine.stringAsValue_Literal
                                 , Pine.EnvironmentExpression
                                 ]
                             , Pine.EnvironmentExpression
@@ -2441,7 +2458,7 @@ compileElmRecordConstructor recordFieldNames =
     in
     \arguments ->
         if List.length arguments == List.length recordFieldNamesStringAndValue then
-            [ LiteralExpression (Pine.valueFromString elmRecordTypeTagName)
+            [ LiteralExpression elmRecordTypeTagNameAsValue
             , [ List.map2
                     (\( _, fieldNameValue ) argument ->
                         [ LiteralExpression fieldNameValue
@@ -2463,7 +2480,7 @@ compileElmRecordConstructor recordFieldNames =
                     (recordFieldNamesStringAndValue
                         |> List.map (\( fieldName, _ ) -> [ ( fieldName, [] ) ])
                     )
-                    ([ LiteralExpression (Pine.valueFromString elmRecordTypeTagName)
+                    ([ LiteralExpression elmRecordTypeTagNameAsValue
                      , [ recordFieldNamesStringAndValue
                             |> List.map
                                 (\( fieldName, fieldNameValue ) ->
@@ -2532,7 +2549,7 @@ listModuleTransitiveDependenciesExcludingModules excluded allFiles file =
                 (\currentDependency ->
                     case
                         allFiles
-                            |> List.Extra.find
+                            |> Common.listFind
                                 (.moduleDefinition
                                     >> Elm.Syntax.Node.value
                                     >> Elm.Syntax.Module.moduleName
@@ -2573,13 +2590,11 @@ getDirectDependenciesFromModule file =
 
 
 valueFromString : String -> Pine.Value
-valueFromString =
-    Pine.valueFromString >> List.singleton >> tagValue elmStringTypeTagName
-
-
-tagValue : String -> List Pine.Value -> Pine.Value
-tagValue tagName tagArguments =
-    Pine.ListValue [ Pine.valueFromString tagName, Pine.ListValue tagArguments ]
+valueFromString string =
+    Pine.ListValue
+        [ elmStringTypeTagNameAsValue
+        , Pine.ListValue [ Pine.valueFromString string ]
+        ]
 
 
 moduleNameFromSyntaxFile : Elm.Syntax.File.File -> Elm.Syntax.Node.Node (List String)

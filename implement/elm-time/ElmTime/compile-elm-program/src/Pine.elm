@@ -1,6 +1,7 @@
 module Pine exposing (..)
 
 import BigInt
+import Common
 import Dict
 import Hex
 import Maybe.Extra
@@ -212,6 +213,13 @@ kernelFunctions =
       )
     ]
         |> Dict.fromList
+
+
+kernelFunctionsNames : List ( String, Value )
+kernelFunctionsNames =
+    kernelFunctions
+        |> Dict.keys
+        |> List.map (\name -> ( name, valueFromString name ))
 
 
 kernelFunction_Negate : KernelFunction
@@ -760,57 +768,50 @@ encodeExpressionAsValue expression =
     case expression of
         LiteralExpression literal ->
             encodeUnionToPineValue
-                "Literal"
+                stringAsValue_Literal
                 literal
 
         ListExpression listExpr ->
             encodeUnionToPineValue
-                "List"
+                stringAsValue_List
                 (ListValue (List.map encodeExpressionAsValue listExpr))
 
         DecodeAndEvaluateExpression decodeAndEvaluate ->
             encodeUnionToPineValue
-                "DecodeAndEvaluate"
-                ([ ( "environment", encodeExpressionAsValue decodeAndEvaluate.environment )
-                 , ( "expression", encodeExpressionAsValue decodeAndEvaluate.expression )
-                 ]
-                    |> Dict.fromList
-                    |> encodeRecordToPineValue
+                stringAsValue_DecodeAndEvaluate
+                (ListValue
+                    [ ListValue [ stringAsValue_environment, encodeExpressionAsValue decodeAndEvaluate.environment ]
+                    , ListValue [ stringAsValue_expression, encodeExpressionAsValue decodeAndEvaluate.expression ]
+                    ]
                 )
 
         KernelApplicationExpression app ->
             encodeUnionToPineValue
-                "KernelApplication"
-                ([ ( "argument", encodeExpressionAsValue app.argument )
-                 , ( "functionName", valueFromString app.functionName )
-                 ]
-                    |> Dict.fromList
-                    |> encodeRecordToPineValue
+                stringAsValue_KernelApplication
+                (ListValue
+                    [ ListValue [ stringAsValue_argument, encodeExpressionAsValue app.argument ]
+                    , ListValue [ stringAsValue_functionName, valueFromString app.functionName ]
+                    ]
                 )
 
         ConditionalExpression conditional ->
             encodeUnionToPineValue
-                "Conditional"
-                ([ ( "condition", conditional.condition )
-                 , ( "ifFalse", conditional.ifFalse )
-                 , ( "ifTrue", conditional.ifTrue )
-                 ]
-                    |> List.foldl
-                        (\( fieldName, fieldExpr ) aggregate ->
-                            Dict.insert fieldName (encodeExpressionAsValue fieldExpr) aggregate
-                        )
-                        Dict.empty
-                    |> encodeRecordToPineValue
+                stringAsValue_Conditional
+                (ListValue
+                    [ ListValue [ stringAsValue_condition, encodeExpressionAsValue conditional.condition ]
+                    , ListValue [ stringAsValue_ifFalse, encodeExpressionAsValue conditional.ifFalse ]
+                    , ListValue [ stringAsValue_ifTrue, encodeExpressionAsValue conditional.ifTrue ]
+                    ]
                 )
 
         EnvironmentExpression ->
             encodeUnionToPineValue
-                "Environment"
+                stringAsValue_Environment
                 (ListValue [])
 
         StringTagExpression tag tagged ->
             encodeUnionToPineValue
-                "StringTag"
+                stringAsValue_StringTag
                 (ListValue
                     [ valueFromString tag
                     , encodeExpressionAsValue tagged
@@ -823,127 +824,182 @@ decodeExpressionFromValue =
     decodeUnionFromPineValue decodeExpressionFromValueDict
 
 
-decodeExpressionFromValueDict : Dict.Dict String (Value -> Result String Expression)
+decodeExpressionFromValueDict : List ( ( String, Value ), Value -> Result String Expression )
 decodeExpressionFromValueDict =
-    Dict.fromList
-        [ ( "Literal"
-          , LiteralExpression >> Ok
-          )
-        , ( "List"
-          , decodePineListValue
-                >> Result.andThen
-                    (List.indexedMap
-                        (\itemIndex item ->
-                            item
-                                |> decodeExpressionFromValue
-                                |> Result.mapError ((++) ("Failed to decode item at index " ++ String.fromInt itemIndex ++ ": "))
-                        )
-                        >> Result.Extra.combine
-                    )
-                >> Result.map ListExpression
-          )
-        , ( "DecodeAndEvaluate"
-          , decodeDecodeAndEvaluateExpression >> Result.map DecodeAndEvaluateExpression
-          )
-        , ( "KernelApplication"
-          , decodeKernelApplicationExpression >> Result.map KernelApplicationExpression
-          )
-        , ( "Conditional"
-          , decodeConditionalExpression >> Result.map ConditionalExpression
-          )
-        , ( "Environment"
-          , always (Ok EnvironmentExpression)
-          )
-        , ( "StringTag"
-          , decodePineListValue
-                >> Result.andThen decodeListWithExactlyTwoElements
-                >> Result.andThen
-                    (\( tagValue, taggedValue ) ->
-                        tagValue
-                            |> stringFromValue
-                            |> Result.mapError ((++) "Failed to decode tag: ")
-                            |> Result.andThen
-                                (\tag ->
-                                    taggedValue
-                                        |> decodeExpressionFromValue
-                                        |> Result.mapError ((++) "Failed to decoded tagged expression: ")
-                                        |> Result.map (\tagged -> StringTagExpression tag tagged)
+    [ ( "Literal"
+      , LiteralExpression >> Ok
+      )
+    , ( "List"
+      , decodeListExpression
+      )
+    , ( "DecodeAndEvaluate"
+      , decodeDecodeAndEvaluateExpression >> Result.map DecodeAndEvaluateExpression
+      )
+    , ( "KernelApplication"
+      , decodeKernelApplicationExpression >> Result.map KernelApplicationExpression
+      )
+    , ( "Conditional"
+      , decodeConditionalExpression >> Result.map ConditionalExpression
+      )
+    , ( "Environment"
+      , always (Ok EnvironmentExpression)
+      )
+    , ( "StringTag"
+      , decodePineListValue
+            >> Result.andThen decodeListWithExactlyTwoElements
+            >> Result.andThen
+                (\( tagValue, taggedValue ) ->
+                    tagValue
+                        |> stringFromValue
+                        |> Result.mapError ((++) "Failed to decode tag: ")
+                        |> Result.andThen
+                            (\tag ->
+                                taggedValue
+                                    |> decodeExpressionFromValue
+                                    |> Result.mapError ((++) "Failed to decoded tagged expression: ")
+                                    |> Result.map (\tagged -> StringTagExpression tag tagged)
+                            )
+                )
+      )
+    ]
+        |> List.map (\( tagName, decode ) -> ( ( tagName, valueFromString tagName ), decode ))
+
+
+decodeListExpression : Value -> Result String Expression
+decodeListExpression value =
+    let
+        decodeListRecursively : List Expression -> List Value -> Result String Expression
+        decodeListRecursively aggregate remaining =
+            case remaining of
+                [] ->
+                    Ok (ListExpression (List.reverse aggregate))
+
+                itemValue :: rest ->
+                    case decodeExpressionFromValue itemValue of
+                        Err itemErr ->
+                            Err
+                                ("Failed to decode list item at index "
+                                    ++ String.fromInt (List.length aggregate)
+                                    ++ ": "
+                                    ++ itemErr
                                 )
-                    )
-          )
-        ]
+
+                        Ok item ->
+                            decodeListRecursively (item :: aggregate) rest
+    in
+    case value of
+        BlobValue _ ->
+            Err "Is not list but blob"
+
+        ListValue list ->
+            decodeListRecursively [] list
 
 
 decodeDecodeAndEvaluateExpression : Value -> Result String DecodeAndEvaluateExpressionStructure
-decodeDecodeAndEvaluateExpression =
-    decodeRecordFromPineValue
-        >> Result.andThen
-            (\recordDict ->
-                case Dict.get "expression" recordDict of
-                    Nothing ->
-                        Err "Did not find field 'expression'"
+decodeDecodeAndEvaluateExpression value =
+    case value of
+        BlobValue _ ->
+            Err "Is not list but blob"
 
-                    Just expressionValue ->
-                        case decodeExpressionFromValue expressionValue of
-                            Err error ->
-                                Err ("Failed to decode field 'expression': " ++ error)
+        ListValue list ->
+            case decodeListWithPairs list of
+                Err err ->
+                    Err ("Failed to decode kernel application expression: " ++ err)
 
-                            Ok expression ->
-                                case Dict.get "environment" recordDict of
-                                    Nothing ->
-                                        Err "Did not find field 'environment'"
+                Ok pairs ->
+                    case
+                        Common.listFind
+                            (\( fieldNameValue, _ ) ->
+                                fieldNameValue == stringAsValue_expression
+                            )
+                            pairs
+                    of
+                        Nothing ->
+                            Err "Did not find field 'expression'"
 
-                                    Just environmentValue ->
-                                        case decodeExpressionFromValue environmentValue of
-                                            Err error ->
-                                                Err ("Failed to decode field 'environment': " ++ error)
+                        Just ( _, expressionValue ) ->
+                            case decodeExpressionFromValue expressionValue of
+                                Err error ->
+                                    Err ("Failed to decode field 'expression': " ++ error)
 
-                                            Ok environment ->
-                                                Ok
-                                                    { expression = expression
-                                                    , environment = environment
-                                                    }
-            )
+                                Ok expression ->
+                                    case
+                                        Common.listFind
+                                            (\( fieldNameValue, _ ) ->
+                                                fieldNameValue == stringAsValue_environment
+                                            )
+                                            pairs
+                                    of
+                                        Nothing ->
+                                            Err "Did not find field 'environment'"
+
+                                        Just ( _, environmentValue ) ->
+                                            case decodeExpressionFromValue environmentValue of
+                                                Err error ->
+                                                    Err ("Failed to decode field 'environment': " ++ error)
+
+                                                Ok environment ->
+                                                    Ok
+                                                        { expression = expression
+                                                        , environment = environment
+                                                        }
 
 
 decodeKernelApplicationExpression : Value -> Result String KernelApplicationExpressionStructure
 decodeKernelApplicationExpression expressionValue =
-    Result.andThen
-        decodeKernelApplicationExpressionRecord
-        (decodeRecordFromPineValue expressionValue)
+    case expressionValue of
+        BlobValue _ ->
+            Err "Is not list but blob"
 
+        ListValue list ->
+            case decodeListWithPairs list of
+                Err err ->
+                    Err ("Failed to decode kernel application expression: " ++ err)
 
-decodeKernelApplicationExpressionRecord : Dict.Dict String Value -> Result String KernelApplicationExpressionStructure
-decodeKernelApplicationExpressionRecord recordDict =
-    case Dict.get "functionName" recordDict of
-        Nothing ->
-            Err "Did not find field 'functionName'"
+                Ok pairs ->
+                    case
+                        Common.listFind
+                            (\( fieldNameValue, _ ) ->
+                                fieldNameValue == stringAsValue_functionName
+                            )
+                            pairs
+                    of
+                        Nothing ->
+                            Err "Did not find field 'functionName'"
 
-        Just functionNameValue ->
-            case stringFromValue functionNameValue of
-                Err error ->
-                    Err ("Failed to decode field 'functionName': " ++ error)
-
-                Ok functionName ->
-                    case decodeKernelFunctionFromName functionName of
-                        Err error ->
-                            Err ("Failed to decode field 'functionName': " ++ error)
-
-                        Ok _ ->
-                            case Dict.get "argument" recordDict of
+                        Just ( _, functionNameValue ) ->
+                            case
+                                Common.listFind
+                                    (\( _, cvalue ) -> cvalue == functionNameValue)
+                                    kernelFunctionsNames
+                            of
                                 Nothing ->
-                                    Err "Did not find field 'argument'"
+                                    Err
+                                        ("Unexpected value for field 'functionName': "
+                                            ++ Result.withDefault "not a string" (stringFromValue functionNameValue)
+                                        )
 
-                                Just argumentValue ->
-                                    case decodeExpressionFromValue argumentValue of
-                                        Err error ->
-                                            Err ("Failed to decode field 'argument': " ++ error)
+                                Just ( functionName, _ ) ->
+                                    case
+                                        Common.listFind
+                                            (\( fieldNameValue, _ ) ->
+                                                fieldNameValue == stringAsValue_argument
+                                            )
+                                            pairs
+                                    of
+                                        Nothing ->
+                                            Err "Did not find field 'argument'"
 
-                                        Ok argument ->
-                                            Ok
-                                                { functionName = functionName
-                                                , argument = argument
-                                                }
+                                        Just ( _, argumentValue ) ->
+                                            case decodeExpressionFromValue argumentValue of
+                                                Err error ->
+                                                    Err ("Failed to decode field 'argument': " ++ error)
+
+                                                Ok argument ->
+                                                    Ok
+                                                        { functionName = functionName
+                                                        , argument = argument
+                                                        }
 
 
 decodeKernelFunctionFromName : String -> Result String KernelFunction
@@ -964,131 +1020,128 @@ decodeKernelFunctionFromName functionName =
 
 
 decodeConditionalExpression : Value -> Result String ConditionalExpressionStructure
-decodeConditionalExpression =
-    decodeRecordFromPineValue
-        >> Result.andThen decodeConditionalExpressionRecord
+decodeConditionalExpression expressionValue =
+    case expressionValue of
+        BlobValue _ ->
+            Err "Is not list but blob"
 
+        ListValue list ->
+            case decodeListWithPairs list of
+                Err err ->
+                    Err ("Failed to decode kernel application expression: " ++ err)
 
-decodeConditionalExpressionRecord : Dict.Dict String Value -> Result String ConditionalExpressionStructure
-decodeConditionalExpressionRecord recordDict =
-    case Dict.get "condition" recordDict of
-        Nothing ->
-            Err "Did not find field 'condition'"
-
-        Just conditionValue ->
-            case decodeExpressionFromValue conditionValue of
-                Err error ->
-                    Err ("Failed to decode field 'condition': " ++ error)
-
-                Ok condition ->
-                    case Dict.get "ifTrue" recordDict of
-                        Nothing ->
-                            Err "Did not find field 'ifTrue'"
-
-                        Just ifTrueValue ->
-                            case decodeExpressionFromValue ifTrueValue of
-                                Err error ->
-                                    Err ("Failed to decode field 'ifTrue': " ++ error)
-
-                                Ok ifTrue ->
-                                    case Dict.get "ifFalse" recordDict of
-                                        Nothing ->
-                                            Err "Did not find field 'ifFalse'"
-
-                                        Just ifFalseValue ->
-                                            case decodeExpressionFromValue ifFalseValue of
-                                                Err error ->
-                                                    Err ("Failed to decode field 'ifFalse': " ++ error)
-
-                                                Ok ifFalse ->
-                                                    Ok
-                                                        { condition = condition
-                                                        , ifTrue = ifTrue
-                                                        , ifFalse = ifFalse
-                                                        }
-
-
-decodeRecordFromPineValue : Value -> Result String (Dict.Dict String Value)
-decodeRecordFromPineValue value =
-    let
-        parseListRecursively : Dict.Dict String Value -> List Value -> Result String (Dict.Dict String Value)
-        parseListRecursively aggregate remaining =
-            case remaining of
-                [] ->
-                    Ok aggregate
-
-                fieldAsValue :: rest ->
-                    fieldAsValue
-                        |> decodePineListValue
-                        |> Result.andThen
-                            (\fieldList ->
-                                case fieldList of
-                                    [ fieldNameValue, fieldValue ] ->
-                                        stringFromValue fieldNameValue
-                                            |> Result.mapError ((++) "Failed to decode field name string: ")
-                                            |> Result.andThen
-                                                (\fieldName ->
-                                                    parseListRecursively
-                                                        (Dict.insert fieldName fieldValue aggregate)
-                                                        rest
-                                                )
-
-                                    _ ->
-                                        Err
-                                            ("Unexpected number of list items for field: "
-                                                ++ String.fromInt (List.length fieldList)
-                                            )
+                Ok pairs ->
+                    case
+                        Common.listFind
+                            (\( fieldNameValue, _ ) ->
+                                fieldNameValue == stringAsValue_condition
                             )
-    in
-    Result.andThen
-        (parseListRecursively Dict.empty)
-        (decodePineListValue value)
+                            pairs
+                    of
+                        Nothing ->
+                            Err "Did not find field 'condition'"
+
+                        Just ( _, conditionValue ) ->
+                            case decodeExpressionFromValue conditionValue of
+                                Err error ->
+                                    Err ("Failed to decode field 'condition': " ++ error)
+
+                                Ok condition ->
+                                    case
+                                        Common.listFind
+                                            (\( fieldNameValue, _ ) ->
+                                                fieldNameValue == stringAsValue_ifTrue
+                                            )
+                                            pairs
+                                    of
+                                        Nothing ->
+                                            Err "Did not find field 'ifTrue'"
+
+                                        Just ( _, ifTrueValue ) ->
+                                            case decodeExpressionFromValue ifTrueValue of
+                                                Err error ->
+                                                    Err ("Failed to decode field 'ifTrue': " ++ error)
+
+                                                Ok ifTrue ->
+                                                    case
+                                                        Common.listFind
+                                                            (\( fieldNameValue, _ ) ->
+                                                                fieldNameValue == stringAsValue_ifFalse
+                                                            )
+                                                            pairs
+                                                    of
+                                                        Nothing ->
+                                                            Err "Did not find field 'ifFalse'"
+
+                                                        Just ( _, ifFalseValue ) ->
+                                                            case decodeExpressionFromValue ifFalseValue of
+                                                                Err error ->
+                                                                    Err ("Failed to decode field 'ifFalse': " ++ error)
+
+                                                                Ok ifFalse ->
+                                                                    Ok
+                                                                        { condition = condition
+                                                                        , ifTrue = ifTrue
+                                                                        , ifFalse = ifFalse
+                                                                        }
 
 
-encodeRecordToPineValue : Dict.Dict String Value -> Value
-encodeRecordToPineValue recordDict =
-    ListValue
-        (Dict.foldr
-            (\fieldName fieldValue aggregate ->
-                ListValue [ valueFromString fieldName, fieldValue ] :: aggregate
-            )
-            []
-            recordDict
-        )
+encodeUnionToPineValue : Value -> Value -> Value
+encodeUnionToPineValue tagNameValue unionTagValue =
+    ListValue [ tagNameValue, unionTagValue ]
 
 
-encodeUnionToPineValue : String -> Value -> Value
-encodeUnionToPineValue tagName unionTagValue =
-    ListValue [ valueFromString tagName, unionTagValue ]
-
-
-decodeUnionFromPineValue : Dict.Dict String (Value -> Result String a) -> Value -> Result String a
+decodeUnionFromPineValue : List ( ( String, Value ), Value -> Result String a ) -> Value -> Result String a
 decodeUnionFromPineValue tags value =
     case Result.andThen decodeListWithExactlyTwoElements (decodePineListValue value) of
         Err err ->
             Err ("Failed to decode union: " ++ err)
 
         Ok ( tagNameValue, unionTagValue ) ->
-            case stringFromValue tagNameValue of
-                Err err ->
-                    Err ("Failed to decode union tag name: " ++ err)
+            case
+                Common.listFind
+                    (\( ( _, availableTagValue ), _ ) -> availableTagValue == tagNameValue)
+                    tags
+            of
+                Nothing ->
+                    Err
+                        ("Unexpected tag name: "
+                            ++ Result.Extra.unpack identity identity (stringFromValue tagNameValue)
+                        )
 
-                Ok tagName ->
-                    case Dict.get tagName tags of
-                        Nothing ->
-                            if tagName == "" then
-                                Err "Tag name is empty"
+                Just ( ( tagName, _ ), tagDecode ) ->
+                    case tagDecode unionTagValue of
+                        Err err ->
+                            Err (("Failed to decode value for tag " ++ tagName ++ ": ") ++ err)
 
-                            else
-                                Err ("Unexpected tag name: " ++ tagName)
+                        Ok ok ->
+                            Ok ok
 
-                        Just tagDecode ->
-                            case tagDecode unionTagValue of
-                                Err err ->
-                                    Err (("Failed to decode value for tag " ++ tagName ++ ": ") ++ err)
 
-                                Ok ok ->
-                                    Ok ok
+decodeListWithPairs : List Value -> Result String (List ( Value, Value ))
+decodeListWithPairs list =
+    let
+        continueRecursive : List Value -> List ( Value, Value ) -> Result String (List ( Value, Value ))
+        continueRecursive remaining aggregate =
+            case remaining of
+                [] ->
+                    Ok (List.reverse aggregate)
+
+                itemValue :: rest ->
+                    case itemValue of
+                        BlobValue _ ->
+                            Err "Is not list but blob"
+
+                        ListValue [ first, second ] ->
+                            continueRecursive rest (( first, second ) :: aggregate)
+
+                        ListValue innerList ->
+                            Err
+                                ("Unexpected number of list items for pair: "
+                                    ++ String.fromInt (List.length innerList)
+                                )
+    in
+    continueRecursive list []
 
 
 decodeListWithExactlyTwoElements : List a -> Result String ( a, a )
@@ -1109,3 +1162,78 @@ decodePineListValue value =
 
         BlobValue _ ->
             Err "Is not list but blob"
+
+
+stringAsValue_Literal : Value
+stringAsValue_Literal =
+    valueFromString "Literal"
+
+
+stringAsValue_List : Value
+stringAsValue_List =
+    valueFromString "List"
+
+
+stringAsValue_DecodeAndEvaluate : Value
+stringAsValue_DecodeAndEvaluate =
+    valueFromString "DecodeAndEvaluate"
+
+
+stringAsValue_KernelApplication : Value
+stringAsValue_KernelApplication =
+    valueFromString "KernelApplication"
+
+
+stringAsValue_Conditional : Value
+stringAsValue_Conditional =
+    valueFromString "Conditional"
+
+
+stringAsValue_Environment : Value
+stringAsValue_Environment =
+    valueFromString "Environment"
+
+
+stringAsValue_Function : Value
+stringAsValue_Function =
+    valueFromString "Function"
+
+
+stringAsValue_StringTag : Value
+stringAsValue_StringTag =
+    valueFromString "StringTag"
+
+
+stringAsValue_functionName : Value
+stringAsValue_functionName =
+    valueFromString "functionName"
+
+
+stringAsValue_argument : Value
+stringAsValue_argument =
+    valueFromString "argument"
+
+
+stringAsValue_condition : Value
+stringAsValue_condition =
+    valueFromString "condition"
+
+
+stringAsValue_ifTrue : Value
+stringAsValue_ifTrue =
+    valueFromString "ifTrue"
+
+
+stringAsValue_ifFalse : Value
+stringAsValue_ifFalse =
+    valueFromString "ifFalse"
+
+
+stringAsValue_environment : Value
+stringAsValue_environment =
+    valueFromString "environment"
+
+
+stringAsValue_expression : Value
+stringAsValue_expression =
+    valueFromString "expression"

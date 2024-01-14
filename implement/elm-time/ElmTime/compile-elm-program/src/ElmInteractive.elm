@@ -1,6 +1,7 @@
 module ElmInteractive exposing (..)
 
 import BigInt
+import Common
 import Dict
 import Elm.Syntax.Declaration
 import Elm.Syntax.Expression
@@ -747,7 +748,7 @@ json_encode_pineValue_Internal dictionary value =
                 case
                     dictionary.listDict
                         |> Dict.get (pineListValueFastHash list)
-                        |> Maybe.andThen (List.Extra.find (Tuple.first >> (==) list))
+                        |> Maybe.andThen (Common.listFind (Tuple.first >> (==) list))
                         |> Maybe.map Tuple.second
                 of
                     Just reference ->
