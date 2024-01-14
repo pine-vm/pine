@@ -1392,18 +1392,22 @@ compileElmSyntaxRecordAccess stack fieldName recordElmExpression =
 
 
 compileRecordAccessExpression : String -> Expression -> Expression
-compileRecordAccessExpression fieldName =
-    List.singleton
-        >> FunctionApplicationExpression
-            (compileElmSyntaxRecordAccessFunction fieldName)
+compileRecordAccessExpression fieldName recordExpression =
+    PineFunctionApplicationExpression
+        pineFunctionForRecordAccess
+        (ListExpression
+            [ recordExpression
+            , LiteralExpression (Pine.valueFromString fieldName)
+            ]
+        )
 
 
 compileElmSyntaxRecordAccessFunction : String -> Expression
 compileElmSyntaxRecordAccessFunction fieldName =
     FunctionExpression
         [ [ ( "record_param", [] ) ] ]
-        (PineFunctionApplicationExpression
-            (pineExpressionForRecordAccess fieldName Pine.EnvironmentExpression)
+        (compileRecordAccessExpression
+            fieldName
             (ReferenceExpression "record_param")
         )
 
@@ -1424,22 +1428,22 @@ compileElmSyntaxRecordUpdate stack setters recordName =
         |> Result.Extra.combine
         |> Result.map
             (\settersExpressions ->
-                List.foldl
-                    (\( fieldName, fieldExpr ) aggregate ->
-                        PineFunctionApplicationExpression
-                            (pineExpressionForRecordUpdate
-                                fieldName
-                                (listItemFromIndexExpression_Pine 0 Pine.EnvironmentExpression)
-                                (listItemFromIndexExpression_Pine 1 Pine.EnvironmentExpression)
+                PineFunctionApplicationExpression
+                    pineFunctionForRecordUpdate
+                    (ListExpression
+                        [ ReferenceExpression recordName
+                        , ListExpression
+                            (List.map
+                                (\( fieldName, fieldExpr ) ->
+                                    ListExpression
+                                        [ LiteralExpression (Pine.valueFromString fieldName)
+                                        , fieldExpr
+                                        ]
+                                )
+                                settersExpressions
                             )
-                            (ListExpression
-                                [ fieldExpr
-                                , aggregate
-                                ]
-                            )
+                        ]
                     )
-                    (ReferenceExpression recordName)
-                    settersExpressions
             )
 
 
@@ -1740,7 +1744,14 @@ compileElmSyntaxPattern elmPattern =
                         |> List.map
                             (\fieldName ->
                                 ( fieldName
-                                , [ pineExpressionForRecordAccess fieldName Pine.EnvironmentExpression
+                                , [ Pine.DecodeAndEvaluateExpression
+                                        { expression = Pine.LiteralExpression pineFunctionForRecordAccessAsValue
+                                        , environment =
+                                            Pine.ListExpression
+                                                [ Pine.EnvironmentExpression
+                                                , Pine.LiteralExpression (Pine.valueFromString fieldName)
+                                                ]
+                                        }
                                         |> PineFunctionApplicationDeconstruction
                                   ]
                                 )
@@ -1892,11 +1903,26 @@ expressionForDeconstruction deconstruction =
             PineFunctionApplicationExpression pineFunctionValue
 
 
-pineExpressionForRecordUpdate : String -> Pine.Expression -> Pine.Expression -> Pine.Expression
-pineExpressionForRecordUpdate fieldName fieldNewVal recordExpression =
+pineFunctionForRecordUpdateAsValue : Pine.Value
+pineFunctionForRecordUpdateAsValue =
+    Pine.encodeExpressionAsValue pineFunctionForRecordUpdate
+
+
+pineFunctionForRecordUpdate : Pine.Expression
+pineFunctionForRecordUpdate =
     let
+        recordExpression =
+            listItemFromIndexExpression_Pine 0 Pine.EnvironmentExpression
+
         recordFieldsExpression =
             pineKernel_ListHead_Pine (listItemFromIndexExpression_Pine 1 recordExpression)
+
+        fieldsUpdatesExpression =
+            listItemFromIndexExpression_Pine 1 Pine.EnvironmentExpression
+
+        recursiveFunction : Pine.Value
+        recursiveFunction =
+            Pine.encodeExpressionAsValue recursiveFunctionToUpdateFieldsInRecord
     in
     Pine.ConditionalExpression
         { condition =
@@ -1908,74 +1934,63 @@ pineExpressionForRecordUpdate fieldName fieldNewVal recordExpression =
             Pine.ListExpression
                 [ Pine.LiteralExpression elmRecordTypeTagNameAsValue
                 , Pine.ListExpression
-                    [ pineExpressionRecordUpdateFieldsList fieldName fieldNewVal recordFieldsExpression
+                    [ Pine.DecodeAndEvaluateExpression
+                        { expression = Pine.LiteralExpression recursiveFunction
+                        , environment =
+                            Pine.ListExpression
+                                [ Pine.LiteralExpression recursiveFunction
+                                , fieldsUpdatesExpression
+                                , Pine.ListExpression []
+                                , recordFieldsExpression
+                                ]
+                        }
                     ]
                 ]
         , ifFalse = Pine.ListExpression []
         }
 
 
-pineExpressionRecordUpdateFieldsList : String -> Pine.Expression -> Pine.Expression -> Pine.Expression
-pineExpressionRecordUpdateFieldsList fieldName fieldNewVal recordFieldsExpression =
-    let
-        recordUpdateFunctionEncoded =
-            Pine.LiteralExpression recursiveFunctionToUpdateFieldInRecordAsValue
-    in
-    Pine.DecodeAndEvaluateExpression
-        { expression = recordUpdateFunctionEncoded
-        , environment =
-            Pine.ListExpression
-                [ recordUpdateFunctionEncoded
-                , Pine.LiteralExpression (Pine.valueFromString fieldName)
-                , fieldNewVal
-                , Pine.ListExpression []
-                , recordFieldsExpression
-                ]
-        }
+{-| Recursively scans through the record fields and replaces every field contained in the argument list.
+The argument list contains pairs of field names and new values.
 
-
-recursiveFunctionToUpdateFieldInRecordAsValue : Pine.Value
-recursiveFunctionToUpdateFieldInRecordAsValue =
-    Pine.encodeExpressionAsValue recursiveFunctionToUpdateFieldInRecord
-
-
-{-| Recursively scans through the record fields and replaces every field with the same name as the one to update.
-If the field is not found, the original record is returned.
 Takes the following arguments:
 
 1.  The function itself, so that we don't have to depend on recursion in the environment.
-2.  The name of the field to update.
-3.  The new value for the field.
-4.  The list of fields that have been processed so far.
-5.  The list of fields that are yet to be processed.
+2.  A list of pairs of field names and new values.
+3.  The list of fields that have been processed so far.
+4.  The list of fields that are yet to be processed.
 
 -}
-recursiveFunctionToUpdateFieldInRecord : Pine.Expression
-recursiveFunctionToUpdateFieldInRecord =
+recursiveFunctionToUpdateFieldsInRecord : Pine.Expression
+recursiveFunctionToUpdateFieldsInRecord =
     let
         functionReferenceLocalExpression : Pine.Expression
         functionReferenceLocalExpression =
             listItemFromIndexExpression_Pine 0 Pine.EnvironmentExpression
 
-        fieldNameLocalExpression : Pine.Expression
-        fieldNameLocalExpression =
+        fieldPairsLocalExpression : Pine.Expression
+        fieldPairsLocalExpression =
             listItemFromIndexExpression_Pine 1 Pine.EnvironmentExpression
-
-        fieldValueLocalExpression : Pine.Expression
-        fieldValueLocalExpression =
-            listItemFromIndexExpression_Pine 2 Pine.EnvironmentExpression
 
         processedFieldsLocalExpression : Pine.Expression
         processedFieldsLocalExpression =
-            listItemFromIndexExpression_Pine 3 Pine.EnvironmentExpression
+            listItemFromIndexExpression_Pine 2 Pine.EnvironmentExpression
 
         remainingFieldsLocalExpression : Pine.Expression
         remainingFieldsLocalExpression =
-            listItemFromIndexExpression_Pine 4 Pine.EnvironmentExpression
+            listItemFromIndexExpression_Pine 3 Pine.EnvironmentExpression
 
         remainingFieldsNextLocalExpression : Pine.Expression
         remainingFieldsNextLocalExpression =
             listItemFromIndexExpression_Pine 0 remainingFieldsLocalExpression
+
+        firstFieldPairLocalExpression : Pine.Expression
+        firstFieldPairLocalExpression =
+            listItemFromIndexExpression_Pine 0 fieldPairsLocalExpression
+
+        firstFieldNameLocalExpression : Pine.Expression
+        firstFieldNameLocalExpression =
+            listItemFromIndexExpression_Pine 0 firstFieldPairLocalExpression
     in
     Pine.ConditionalExpression
         { condition =
@@ -1989,7 +2004,7 @@ recursiveFunctionToUpdateFieldInRecord =
                 { condition =
                     equalCondition_Pine
                         [ listItemFromIndexExpression_Pine 0 remainingFieldsNextLocalExpression
-                        , fieldNameLocalExpression
+                        , firstFieldNameLocalExpression
                         ]
                 , ifTrue =
                     Pine.DecodeAndEvaluateExpression
@@ -1997,19 +2012,14 @@ recursiveFunctionToUpdateFieldInRecord =
                         , environment =
                             Pine.ListExpression
                                 [ functionReferenceLocalExpression
-                                , fieldNameLocalExpression
-                                , fieldValueLocalExpression
+                                , listSkipExpression_Pine 1 fieldPairsLocalExpression
                                 , Pine.KernelApplicationExpression
                                     { functionName = "concat"
                                     , argument =
                                         Pine.ListExpression
                                             [ processedFieldsLocalExpression
                                             , Pine.ListExpression
-                                                [ Pine.ListExpression
-                                                    [ fieldNameLocalExpression
-                                                    , fieldValueLocalExpression
-                                                    ]
-                                                ]
+                                                [ firstFieldPairLocalExpression ]
                                             ]
                                     }
                                 , listSkipExpression_Pine 1 remainingFieldsLocalExpression
@@ -2021,8 +2031,7 @@ recursiveFunctionToUpdateFieldInRecord =
                         , environment =
                             Pine.ListExpression
                                 [ functionReferenceLocalExpression
-                                , fieldNameLocalExpression
-                                , fieldValueLocalExpression
+                                , fieldPairsLocalExpression
                                 , Pine.KernelApplicationExpression
                                     { functionName = "concat"
                                     , argument =
@@ -2039,11 +2048,19 @@ recursiveFunctionToUpdateFieldInRecord =
         }
 
 
-pineExpressionForRecordAccess : String -> Pine.Expression -> Pine.Expression
-pineExpressionForRecordAccess fieldName recordExpression =
+pineFunctionForRecordAccessAsValue : Pine.Value
+pineFunctionForRecordAccessAsValue =
+    Pine.encodeExpressionAsValue pineFunctionForRecordAccess
+
+
+pineFunctionForRecordAccess : Pine.Expression
+pineFunctionForRecordAccess =
     let
-        fieldNameValue =
-            Pine.valueFromString fieldName
+        recordExpression =
+            listItemFromIndexExpression_Pine 0 Pine.EnvironmentExpression
+
+        fieldNameLocalExpression =
+            listItemFromIndexExpression_Pine 1 Pine.EnvironmentExpression
 
         recordFieldsExpression =
             pineKernel_ListHead_Pine (listItemFromIndexExpression_Pine 1 recordExpression)
@@ -2060,7 +2077,7 @@ pineExpressionForRecordAccess fieldName recordExpression =
                 , environment =
                     Pine.ListExpression
                         [ Pine.LiteralExpression recursiveFunctionToLookupFieldInRecordAsValue
-                        , Pine.LiteralExpression fieldNameValue
+                        , fieldNameLocalExpression
                         , recordFieldsExpression
                         ]
                 }
@@ -2076,6 +2093,9 @@ recursiveFunctionToLookupFieldInRecordAsValue =
 recursiveFunctionToLookupFieldInRecord : Pine.Expression
 recursiveFunctionToLookupFieldInRecord =
     let
+        selfFunctionLocalExpression =
+            listItemFromIndexExpression_Pine 0 Pine.EnvironmentExpression
+
         fieldNameLocalExpression =
             listItemFromIndexExpression_Pine 1 Pine.EnvironmentExpression
 
@@ -2084,10 +2104,10 @@ recursiveFunctionToLookupFieldInRecord =
 
         continueWithRemainingExpression =
             Pine.DecodeAndEvaluateExpression
-                { expression = listItemFromIndexExpression_Pine 0 Pine.EnvironmentExpression
+                { expression = selfFunctionLocalExpression
                 , environment =
                     Pine.ListExpression
-                        [ listItemFromIndexExpression_Pine 0 Pine.EnvironmentExpression
+                        [ selfFunctionLocalExpression
                         , fieldNameLocalExpression
                         , listSkipExpression_Pine 1 remainingFieldsLocalExpression
                         ]
@@ -2458,21 +2478,22 @@ compileElmRecordConstructor recordFieldNames =
     in
     \arguments ->
         if List.length arguments == List.length recordFieldNamesStringAndValue then
-            [ LiteralExpression elmRecordTypeTagNameAsValue
-            , [ List.map2
-                    (\( _, fieldNameValue ) argument ->
-                        [ LiteralExpression fieldNameValue
-                        , argument
-                        ]
-                            |> ListExpression
-                    )
-                    recordFieldNamesStringAndValue
-                    arguments
-                    |> ListExpression
-              ]
-                |> ListExpression
-            ]
-                |> ListExpression
+            ListExpression
+                [ LiteralExpression elmRecordTypeTagNameAsValue
+                , ListExpression
+                    [ ListExpression
+                        (List.map2
+                            (\( _, fieldNameValue ) argument ->
+                                ListExpression
+                                    [ LiteralExpression fieldNameValue
+                                    , argument
+                                    ]
+                            )
+                            recordFieldNamesStringAndValue
+                            arguments
+                        )
+                    ]
+                ]
 
         else
             FunctionApplicationExpression
@@ -2480,20 +2501,21 @@ compileElmRecordConstructor recordFieldNames =
                     (recordFieldNamesStringAndValue
                         |> List.map (\( fieldName, _ ) -> [ ( fieldName, [] ) ])
                     )
-                    ([ LiteralExpression elmRecordTypeTagNameAsValue
-                     , [ recordFieldNamesStringAndValue
-                            |> List.map
-                                (\( fieldName, fieldNameValue ) ->
-                                    [ LiteralExpression fieldNameValue
-                                    , ReferenceExpression fieldName
-                                    ]
-                                        |> ListExpression
+                    (ListExpression
+                        [ LiteralExpression elmRecordTypeTagNameAsValue
+                        , ListExpression
+                            [ ListExpression
+                                (List.map
+                                    (\( fieldName, fieldNameValue ) ->
+                                        ListExpression
+                                            [ LiteralExpression fieldNameValue
+                                            , ReferenceExpression fieldName
+                                            ]
+                                    )
+                                    recordFieldNamesStringAndValue
                                 )
-                            |> ListExpression
-                       ]
-                        |> ListExpression
-                     ]
-                        |> ListExpression
+                            ]
+                        ]
                     )
                 )
                 arguments

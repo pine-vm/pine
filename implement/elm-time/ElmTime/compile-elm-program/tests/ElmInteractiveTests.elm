@@ -560,7 +560,7 @@ testCompileRecordAccessPineExpression =
             let
                 recordValue =
                     Pine.ListValue
-                        [ Pine.valueFromString ElmCompiler.elmRecordTypeTagName
+                        [ ElmCompiler.elmRecordTypeTagNameAsValue
                         , Pine.ListValue
                             [ Pine.ListValue
                                 [ Pine.ListValue
@@ -571,9 +571,14 @@ testCompileRecordAccessPineExpression =
                             ]
                         ]
             in
-            recordValue
-                |> Pine.LiteralExpression
-                |> ElmCompiler.pineExpressionForRecordAccess "alfa"
+            Pine.DecodeAndEvaluateExpression
+                { expression = Pine.LiteralExpression ElmCompiler.pineFunctionForRecordAccessAsValue
+                , environment =
+                    Pine.ListExpression
+                        [ Pine.LiteralExpression recordValue
+                        , Pine.LiteralExpression (Pine.valueFromString "alfa")
+                        ]
+                }
                 |> Pine.evaluateExpression Pine.emptyEvalContext
                 |> Result.mapError Pine.displayStringFromPineError
                 |> Result.andThen ElmInteractive.pineValueAsElmValue
@@ -588,7 +593,7 @@ testCompileRecordUpdatePineExpression =
                 let
                     recordValue =
                         Pine.ListValue
-                            [ Pine.valueFromString ElmCompiler.elmRecordTypeTagName
+                            [ ElmCompiler.elmRecordTypeTagNameAsValue
                             , Pine.ListValue
                                 [ Pine.ListValue
                                     [ Pine.ListValue
@@ -599,11 +604,19 @@ testCompileRecordUpdatePineExpression =
                                 ]
                             ]
                 in
-                recordValue
-                    |> Pine.LiteralExpression
-                    |> ElmCompiler.pineExpressionForRecordUpdate
-                        "alfa"
-                        (Pine.LiteralExpression (Pine.valueFromInt 456))
+                Pine.DecodeAndEvaluateExpression
+                    { expression = Pine.LiteralExpression ElmCompiler.pineFunctionForRecordUpdateAsValue
+                    , environment =
+                        Pine.ListExpression
+                            [ Pine.LiteralExpression recordValue
+                            , Pine.ListExpression
+                                [ Pine.ListExpression
+                                    [ Pine.LiteralExpression (Pine.valueFromString "alfa")
+                                    , Pine.LiteralExpression (Pine.valueFromInt 456)
+                                    ]
+                                ]
+                            ]
+                    }
                     |> Pine.evaluateExpression Pine.emptyEvalContext
                     |> Result.mapError Pine.displayStringFromPineError
                     |> Result.andThen ElmInteractive.pineValueAsElmValue
@@ -619,7 +632,7 @@ testCompileRecordUpdatePineExpression =
                 let
                     recordValue =
                         Pine.ListValue
-                            [ Pine.valueFromString ElmCompiler.elmRecordTypeTagName
+                            [ ElmCompiler.elmRecordTypeTagNameAsValue
                             , Pine.ListValue
                                 [ Pine.ListValue
                                     [ Pine.ListValue
@@ -634,11 +647,19 @@ testCompileRecordUpdatePineExpression =
                                 ]
                             ]
                 in
-                recordValue
-                    |> Pine.LiteralExpression
-                    |> ElmCompiler.pineExpressionForRecordUpdate
-                        "alfa"
-                        (Pine.LiteralExpression (Pine.valueFromInt 21))
+                Pine.DecodeAndEvaluateExpression
+                    { expression = Pine.LiteralExpression ElmCompiler.pineFunctionForRecordUpdateAsValue
+                    , environment =
+                        Pine.ListExpression
+                            [ Pine.LiteralExpression recordValue
+                            , Pine.ListExpression
+                                [ Pine.ListExpression
+                                    [ Pine.LiteralExpression (Pine.valueFromString "alfa")
+                                    , Pine.LiteralExpression (Pine.valueFromInt 21)
+                                    ]
+                                ]
+                            ]
+                    }
                     |> Pine.evaluateExpression Pine.emptyEvalContext
                     |> Result.mapError Pine.displayStringFromPineError
                     |> Result.andThen ElmInteractive.pineValueAsElmValue
@@ -655,7 +676,7 @@ testCompileRecordUpdatePineExpression =
                 let
                     recordValue =
                         Pine.ListValue
-                            [ Pine.valueFromString ElmCompiler.elmRecordTypeTagName
+                            [ ElmCompiler.elmRecordTypeTagNameAsValue
                             , Pine.ListValue
                                 [ Pine.ListValue
                                     [ Pine.ListValue
@@ -670,11 +691,19 @@ testCompileRecordUpdatePineExpression =
                                 ]
                             ]
                 in
-                recordValue
-                    |> Pine.LiteralExpression
-                    |> ElmCompiler.pineExpressionForRecordUpdate
-                        "beta"
-                        (Pine.LiteralExpression (Pine.valueFromInt 31))
+                Pine.DecodeAndEvaluateExpression
+                    { expression = Pine.LiteralExpression ElmCompiler.pineFunctionForRecordUpdateAsValue
+                    , environment =
+                        Pine.ListExpression
+                            [ Pine.LiteralExpression recordValue
+                            , Pine.ListExpression
+                                [ Pine.ListExpression
+                                    [ Pine.LiteralExpression (Pine.valueFromString "beta")
+                                    , Pine.LiteralExpression (Pine.valueFromInt 31)
+                                    ]
+                                ]
+                            ]
+                    }
                     |> Pine.evaluateExpression Pine.emptyEvalContext
                     |> Result.mapError Pine.displayStringFromPineError
                     |> Result.andThen ElmInteractive.pineValueAsElmValue
