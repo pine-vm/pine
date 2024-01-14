@@ -1,6 +1,5 @@
 using Jint;
 using Jint.Native;
-using Jint.Runtime;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
@@ -13,7 +12,8 @@ public class JavaScriptEngineJint : IJavaScriptEngine
     public record FunctionDelegateIntoHost(
         string delegatedJavaScriptFunctionName,
         Func<string, Esprima.Ast.Node, Esprima.Ast.Expression> buildWrapperJavaScript,
-        Func<Engine, JsValue, JsValue[], JsValue> hostFunc);
+        Func<Engine, JsValue, JsValue[], JsValue> hostFunc,
+        int parameterCount);
 
     private readonly Engine engine = new();
 
@@ -27,11 +27,11 @@ public class JavaScriptEngineJint : IJavaScriptEngine
 
         foreach (var functionDelegate in this.functionDelegatesIntoHost)
         {
-            var functionJint = new DelegatingFunctionInstance(
+            var functionJint = BuildDelegatingFunctionInstance(
                 engine,
-                engine.Realm,
-                name: new JsString("delegating_" + functionDelegate.delegatedJavaScriptFunctionName + "_into_host"),
-                func: (jsThis, jsArguments) => functionDelegate.hostFunc(engine, jsThis, jsArguments));
+                name: "delegating_" + functionDelegate.delegatedJavaScriptFunctionName + "_into_host",
+                func: (jsThis, jsArguments) => functionDelegate.hostFunc(engine, jsThis, jsArguments),
+                parameterCount: functionDelegate.parameterCount);
 
             engine.SetValue(functionDelegate.delegatedJavaScriptFunctionName + "_delegate_to_host", functionJint);
         }
@@ -127,16 +127,10 @@ public class JavaScriptEngineJint : IJavaScriptEngine
         }
     }
 
-    private class DelegatingFunctionInstance(
+    public static Jint.Native.Function.FunctionInstance BuildDelegatingFunctionInstance(
         Engine engine,
-        Realm realm,
-        JsString? name,
-        Func<JsValue, JsValue[], JsValue> func)
-        : Jint.Native.Function.FunctionInstance(engine, realm, name)
-    {
-        protected override JsValue Call(JsValue thisObject, JsValue[] arguments)
-        {
-            return func(thisObject, arguments);
-        }
-    }
+        string name,
+        Func<JsValue, JsValue[], JsValue> func,
+        int parameterCount) =>
+        new Jint.Runtime.Interop.ClrFunctionInstance(engine, name, func, length: parameterCount);
 }

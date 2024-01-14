@@ -63,7 +63,8 @@ public class JavaScriptEngineJintOptimizedForElmApps
                 var argument = arguments.Single();
 
                 return Convert.ToBase64String(JintInterop.GetBytesOfArrayBuffer(argument));
-            });
+            },
+            parameterCount: 1);
 
         yield return new FunctionDelegateIntoHost(
             // https://github.com/danfishgold/base64-bytes/blob/ee966331d3819f56244145ed485ab13b0dc4f45a/src/Encode.elm#L8-L10
@@ -84,7 +85,8 @@ public class JavaScriptEngineJintOptimizedForElmApps
                 var arrayBuffer = JintInterop.NewArrayBufferFromBytes(engine, bytes.AsSpan()[..bytesWritten].ToArray());
 
                 return ElmInteropJint.ElmMaybeJust(engine, JintInterop.NewDataViewFromArrayBuffer(engine, arrayBuffer));
-            });
+            },
+            parameterCount: 1);
 
         yield return new FunctionDelegateIntoHost(
             // https://github.com/elm/bytes/blob/2bce2aeda4ef18c3dcccd84084647d22a7af36a6/src/Elm/Kernel/Bytes.js#L74-L85
@@ -97,7 +99,8 @@ public class JavaScriptEngineJintOptimizedForElmApps
                 var argumentString = argument.AsString();
 
                 return new JsNumber(Encoding.UTF8.GetByteCount(argumentString));
-            });
+            },
+            parameterCount: 1);
 
         yield return new FunctionDelegateIntoHost(
             // https://github.com/elm/bytes/blob/2bce2aeda4ef18c3dcccd84084647d22a7af36a6/src/Elm/Kernel/Bytes.js#L58-L69
@@ -124,7 +127,8 @@ public class JavaScriptEngineJintOptimizedForElmApps
                 Buffer.BlockCopy(sourceBytes, 0, destBufferBytes, offset, sourceBytes.Length);
 
                 return new JsNumber(offset + sourceBytes.Length);
-            });
+            },
+            parameterCount: 3);
 
         yield return new FunctionDelegateIntoHost(
             // https://github.com/elm/bytes/blob/2bce2aeda4ef18c3dcccd84084647d22a7af36a6/src/Elm/Kernel/Bytes.js#L87-L124
@@ -149,7 +153,8 @@ public class JavaScriptEngineJintOptimizedForElmApps
                 Buffer.BlockCopy(utf8String, 0, destBufferBytes, offset, utf8String.Length);
 
                 return new JsNumber(offset + utf8String.Length);
-            });
+            },
+            parameterCount: 3);
 
         yield return new FunctionDelegateIntoHost(
             // https://github.com/elm/bytes/blob/2bce2aeda4ef18c3dcccd84084647d22a7af36a6/src/Elm/Kernel/Bytes.js#L152-L182
@@ -174,7 +179,8 @@ public class JavaScriptEngineJintOptimizedForElmApps
                 var newOffset = offset + len;
 
                 return ElmInteropJint.NewElmTuple2(sourceDataView.Engine, newOffset, readString);
-            });
+            },
+            parameterCount: 3);
 
         yield return new FunctionDelegateIntoHost(
             // https://github.com/folkertdev/elm-sha2/blob/2a106ca6850c3f8197e02c7e6a3e3797f599e87a/src/SHA256.elm#L103-L105
@@ -202,7 +208,8 @@ public class JavaScriptEngineJintOptimizedForElmApps
                         engine,
                         "Tuple8",
                         integersForElmTuple8.Select(i => new JsNumber(i)).ToArray()));
-            });
+            },
+            parameterCount: 1);
 
         yield return new FunctionDelegateIntoHost(
             // https://github.com/folkertdev/elm-sha2/blob/2a106ca6850c3f8197e02c7e6a3e3797f599e87a/src/SHA256.elm#L67-L69
@@ -228,6 +235,7 @@ public class JavaScriptEngineJintOptimizedForElmApps
                         engine,
                         "Tuple8",
                         integersForElmTuple8.Select(i => new JsNumber(i)).ToArray()));
-            });
+            },
+            parameterCount: 1);
     }
 }
