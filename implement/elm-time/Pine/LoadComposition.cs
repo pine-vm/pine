@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 
 namespace Pine;
 
@@ -22,7 +23,10 @@ public abstract record LoadCompositionOrigin
 
 public static class LoadComposition
 {
-    public static ProcessWithLog<string, Result<string, (TreeNodeWithStringPath tree, LoadCompositionOrigin origin)>> LoadFromPathResolvingNetworkDependencies(string sourcePath)
+    public static ProcessWithLog<string, Result<string, (TreeNodeWithStringPath tree, LoadCompositionOrigin origin)>>
+        LoadFromPathResolvingNetworkDependencies(
+        string sourcePath,
+        Func<IReadOnlyList<string>, IOException, bool>? ignoreFileOnIOException = null)
     {
         var asProcess = AsProcessWithStringLog(sourcePath);
 
@@ -64,7 +68,9 @@ public static class LoadComposition
             {
                 try
                 {
-                    var treeComponentFromSource = LoadFromLocalFilesystem.LoadSortedTreeFromPath(sourcePath);
+                    var treeComponentFromSource = LoadFromLocalFilesystem.LoadSortedTreeFromPath(
+                        sourcePath,
+                        ignoreFileOnIOException: ignoreFileOnIOException);
 
                     if (treeComponentFromSource is null)
                         return Result<string, TreeNodeWithStringPath>.err("I did not find a file or directory at '" + sourcePath + "'.");

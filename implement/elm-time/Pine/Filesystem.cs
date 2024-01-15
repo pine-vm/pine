@@ -14,20 +14,36 @@ public static class Filesystem
             Environment.GetEnvironmentVariable(RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? "LOCALAPPDATA" : "HOME")!,
             "pine", ".cache");
 
-    public static IReadOnlyCollection<(IReadOnlyList<string> path, ReadOnlyMemory<byte> content)> GetAllFilesFromDirectory(string directoryPath) =>
+    public static IReadOnlyCollection<(IReadOnlyList<string> path, ReadOnlyMemory<byte> content)> GetAllFilesFromDirectory(
+        string directoryPath,
+        Func<IReadOnlyList<string>, IOException, bool>? ignoreFileOnIOException = null) =>
         GetFilesFromDirectory(
             directoryPath: directoryPath,
-            filterByRelativeName: _ => true);
+            filterByRelativeName: _ => true,
+            ignoreFileOnIOException: ignoreFileOnIOException);
 
     public static IReadOnlyCollection<(IReadOnlyList<string> path, ReadOnlyMemory<byte> content)> GetFilesFromDirectory(
         string directoryPath,
-        Func<IReadOnlyList<string>, bool> filterByRelativeName) =>
+        Func<IReadOnlyList<string>, bool> filterByRelativeName,
+        Func<IReadOnlyList<string>, IOException, bool>? ignoreFileOnIOException = null) =>
         Directory.GetFiles(directoryPath, "*", SearchOption.AllDirectories)
         .Select(filePath =>
             (absolutePath: filePath,
             relativePath: (IReadOnlyList<string>)GetRelativePath(directoryPath, filePath).Split(Path.DirectorySeparatorChar)))
         .Where(filePath => filterByRelativeName(filePath.relativePath))
-        .Select(filePath => (filePath.relativePath, (ReadOnlyMemory<byte>)File.ReadAllBytes(filePath.absolutePath)))
+        .SelectMany(filePath =>
+        {
+            try
+            {
+                return
+                (IReadOnlyCollection<(IReadOnlyList<string> path, ReadOnlyMemory<byte> content)>)
+                [(filePath.relativePath, (ReadOnlyMemory<byte>)File.ReadAllBytes(filePath.absolutePath))];
+            }
+            catch (IOException exception) when (ignoreFileOnIOException?.Invoke(filePath.relativePath, exception) ?? false)
+            {
+                return [];
+            }
+        })
         .ToList();
 
     public static string GetRelativePath(

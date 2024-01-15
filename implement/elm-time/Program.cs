@@ -18,7 +18,7 @@ namespace ElmTime;
 
 public class Program
 {
-    public static string AppVersionId => "2024-01-14";
+    public static string AppVersionId => "2024-01-15";
 
     private static int AdminInterfaceDefaultPort => 4000;
 
@@ -1417,8 +1417,18 @@ public class Program
 
                 var outputPathArgument = outputOption.Value() ?? "make-default-output.html";
 
+                var loadInputDirectoryFailedFiles =
+                new Dictionary<IReadOnlyList<string>, System.IO.IOException>(
+                    comparer: EnumerableExtension.EqualityComparer<IReadOnlyList<string>>());
+
                 var loadInputDirectoryResult =
-                    LoadComposition.LoadFromPathResolvingNetworkDependencies(inputDirectory)
+                    LoadComposition.LoadFromPathResolvingNetworkDependencies(
+                        inputDirectory,
+                        ignoreFileOnIOException: (filePath, ioException) =>
+                        {
+                            loadInputDirectoryFailedFiles[filePath] = ioException;
+                            return true;
+                        })
                     .LogToActions(Console.WriteLine);
 
                 var elmMakeCommandOptions =
@@ -1435,6 +1445,26 @@ public class Program
                 loadInputDirectoryResult
                     .AndThen(loadInputDirectoryOk =>
                     {
+                        if (0 < loadInputDirectoryFailedFiles.Count)
+                        {
+                            var shownPaths =
+                                loadInputDirectoryFailedFiles
+                                .Take(3)
+                                .Select(pathAndException =>
+                                string.Join("/", pathAndException.Key) + " (" + pathAndException.Value.Message + ")")
+                                .ToImmutableList();
+
+                            Console.WriteLine(
+                                string.Join(
+                                    "\n",
+                                    "Ignored " + loadInputDirectoryFailedFiles.Count + " files due to IO exceptions:",
+                                    string.Join(
+                                        "\n",
+                                        [.. shownPaths,
+                                            shownPaths.Count < loadInputDirectoryFailedFiles.Count ? "..." : null]
+                                        )));
+                        }
+
                         var filteredSourceTree =
                             loadInputDirectoryOk.origin is LoadCompositionOrigin.FromLocalFileSystem
                             ?
@@ -1443,15 +1473,15 @@ public class Program
                             :
                             loadInputDirectoryOk.tree;
 
-                        var discardedBlobs =
+                        var discardedFiles =
                         loadInputDirectoryOk.tree
                         .EnumerateBlobsTransitive()
                         .Where(originalBlob => filteredSourceTree.GetNodeAtPath(originalBlob.path) is not TreeNodeWithStringPath.BlobNode)
                         .ToImmutableArray();
 
-                        if (0 < discardedBlobs.Length)
+                        if (0 < discardedFiles.Length)
                         {
-                            Console.WriteLine("Discarded " + discardedBlobs.Length + " blobs from the input directory.");
+                            Console.WriteLine("Discarded " + discardedFiles.Length + " files from the input directory.");
                         }
 
                         if (filteredSourceTree.GetNodeAtPath(ImmutableList.Create("elm.json")) is not

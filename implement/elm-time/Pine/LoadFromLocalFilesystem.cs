@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+using System;
 using System.IO;
 using System.Linq;
 
@@ -5,7 +7,9 @@ namespace Pine;
 
 public static class LoadFromLocalFilesystem
 {
-    public static TreeNodeWithStringPath? LoadSortedTreeFromPath(string path)
+    public static TreeNodeWithStringPath? LoadSortedTreeFromPath(
+        string path,
+        Func<IReadOnlyList<string>, IOException, bool>? ignoreFileOnIOException = null)
     {
         if (File.Exists(path))
             return TreeNodeWithStringPath.Blob(blobContent: File.ReadAllBytes(path));
@@ -13,7 +17,9 @@ public static class LoadFromLocalFilesystem
         if (!Directory.Exists(path))
             return null;
 
-        var blobs = Filesystem.GetAllFilesFromDirectory(path);
+        var blobs = Filesystem.GetAllFilesFromDirectory(
+            path,
+            ignoreFileOnIOException: ignoreFileOnIOException);
 
         return PineValueComposition.SortedTreeFromSetOfBlobsWithStringPath(blobs);
     }
