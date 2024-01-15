@@ -1,0 +1,1 @@
+Dict.map (\key value -> [ 13, value ]) (Dict.insert 31 71 (Dict.insert 37 79 Dict.empty))

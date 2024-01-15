@@ -2151,6 +2151,18 @@ diff t1 t2 =
   foldl (\\k v t -> remove k t) t1 t2
 
 
+{-| Apply a function to all values in a dictionary.
+-}
+map : (k -> a -> b) -> Dict k a -> Dict k b
+map func dict =
+  case dict of
+    RBEmpty_elm_builtin ->
+      RBEmpty_elm_builtin
+
+    RBNode_elm_builtin color key value left right ->
+      RBNode_elm_builtin color key (func key value) (map func left) (map func right)
+
+
 {-| Fold over the key-value pairs in a dictionary from lowest key to highest key.
 
     import Dict exposing (Dict)
