@@ -756,44 +756,40 @@ compilationAndEmitStackFromModulesInCompilation availableModules { moduleAliases
                 |> List.concat
                 |> Dict.fromList
 
-        localRecordTypeDeclarations : Dict.Dict String (List String)
-        localRecordTypeDeclarations =
+        localTypeDeclarationsSeparate =
             localTypeDeclarations
                 |> Dict.foldl
-                    (\typeName typeDeclaration ->
-                        case typeDeclaration of
-                            ElmModuleRecordTypeDeclaration fields ->
-                                Dict.insert typeName fields
-
-                            _ ->
-                                identity
-                    )
-                    Dict.empty
-
-        localChoiceTypeTagConstructorDeclarations : Dict.Dict String { argumentsCount : Int }
-        localChoiceTypeTagConstructorDeclarations =
-            localTypeDeclarations
-                |> Dict.foldl
-                    (\_ typeDeclaration ->
+                    (\typeName typeDeclaration aggregate ->
                         case typeDeclaration of
                             ElmModuleChoiceTypeDeclaration choiceTypeDeclaration ->
-                                choiceTypeDeclaration.tags
-                                    |> Dict.map (\_ tag -> { argumentsCount = tag.argumentsCount })
-                                    |> Dict.union
+                                { aggregate
+                                    | choiceTypeTagDeclarations =
+                                        Dict.union
+                                            (Dict.map
+                                                (\_ tag -> { argumentsCount = tag.argumentsCount })
+                                                choiceTypeDeclaration.tags
+                                            )
+                                            aggregate.choiceTypeTagDeclarations
+                                }
 
-                            _ ->
-                                identity
+                            ElmModuleRecordTypeDeclaration fields ->
+                                { aggregate
+                                    | recordTypeDeclarations =
+                                        Dict.insert typeName fields aggregate.recordTypeDeclarations
+                                }
                     )
-                    Dict.empty
+                    { recordTypeDeclarations = Dict.empty
+                    , choiceTypeTagDeclarations = Dict.empty
+                    }
 
         declarationsFromTypeAliasesFieldsNames =
             Dict.union
-                localRecordTypeDeclarations
+                localTypeDeclarationsSeparate.recordTypeDeclarations
                 importedRecordConstructorsFieldsNames
 
         choiceTypeTagConstructorDeclarations =
             Dict.union
-                localChoiceTypeTagConstructorDeclarations
+                localTypeDeclarationsSeparate.choiceTypeTagDeclarations
                 importedChoiceTypeTagConstructorDeclarations
 
         declarationsFromTypeAliases : Dict.Dict String (List Expression -> Expression)
