@@ -15,7 +15,7 @@ public class JavaScriptEngineJint : IJavaScriptEngine
         Func<Engine, JsValue, JsValue[], JsValue> hostFunc,
         int parameterCount);
 
-    private readonly Engine engine = new();
+    private readonly Engine engine = new(new Options { Json = new JsonOptions { MaxParseDepth = 1_000 } });
 
     private readonly IReadOnlyList<FunctionDelegateIntoHost> functionDelegatesIntoHost;
 

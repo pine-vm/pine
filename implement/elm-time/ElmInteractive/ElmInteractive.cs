@@ -182,7 +182,11 @@ public class ElmInteractive
             new CompileElmInteractiveEnvironmentRequest(
                 modulesTexts: elmModulesTexts,
                 environmentBefore: environmentBefore),
-            options: new System.Text.Json.JsonSerializerOptions { MaxDepth = 1000 });
+            options: new System.Text.Json.JsonSerializerOptions
+            {
+                DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+                MaxDepth = 1000
+            });
 
         var responseJson =
             evalElmPreparedJavaScriptEngine.CallFunction("compileInteractiveEnvironment", argumentsJson).ToString()!;
