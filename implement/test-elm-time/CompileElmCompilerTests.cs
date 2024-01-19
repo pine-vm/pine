@@ -16,13 +16,79 @@ public class CompileElmCompilerTests
             "https://github.com/elm-community/maybe-extra/tree/2a9e2c6143dcee04180b265c840b6052b0a053c2/",
             "https://github.com/elm-community/list-extra/tree/5a083cf0400260537adef75f96fbd48bfcedc7c0/",
             "https://github.com/Viir/result-extra/tree/e3b2e4358ac701d66e75ccbfdc4256513dc70694",
-            "https://github.com/Viir/elm-bigint/tree/d452b489c5795f8deed19658a7b8f7bf5ef1e9a4/"
+            "https://github.com/Viir/elm-bigint/tree/d452b489c5795f8deed19658a7b8f7bf5ef1e9a4/",
+
+            /*
+             * Remove usages of Json.Decode and Json.Encode to speed up bootstrapping of the Elm compiler.
+             * */
+            "https://github.com/Viir/elm-syntax/tree/f7d9be0a1f346b22dfaa7b55679659874c72714b/"
         ];
+
+    [TestMethod]
+    public void Test_compile_Basics_and_call_modBy()
+    {
+        using var pgoShare = new Pine.PineVM.DynamicPGOShare();
+
+        var compilerProgram = IInteractiveSession.CompileElmProgramCodeFilesDefault.Value;
+
+        using var interactiveSession =
+            new InteractiveSessionPine(
+                compilerProgram,
+                appCodeTree: null,
+                caching: true,
+                autoPGO: pgoShare);
+
+        // Force compilation of the 'Basics' module.
+        var testSubmissionResult = interactiveSession.Submit(" Basics.modBy  13 17 ");
+
+        var testSubmissionResponse =
+            testSubmissionResult.Extract(err => throw new System.Exception(err));
+
+        Assert.AreEqual("4", testSubmissionResponse.interactiveResponse.displayText);
+
+        var interactiveEnvironmentValue = interactiveSession.CurrentEnvironmentValue();
+
+        var pineVM = new Pine.PineVM.PineVM();
+
+        var modByFunction =
+            ElmInteractiveEnvironment.ParseFunctionFromElmModule(
+                interactiveEnvironment: interactiveEnvironmentValue,
+                moduleName: "Basics",
+                declarationName: "modBy",
+                pineVM: pineVM)
+            .Extract(err => throw new System.Exception(err));
+
+        var modByApplicationResult =
+            ElmInteractiveEnvironment.ApplyFunction(
+                pineVM,
+                modByFunction,
+                arguments:
+                [PineValueAsInteger.ValueFromSignedInteger(13),
+                    PineValueAsInteger.ValueFromSignedInteger(17)]);
+
+        Assert.AreEqual(
+            PineValueAsInteger.ValueFromSignedInteger(4),
+            modByApplicationResult.Extract(err => throw new System.Exception(err)));
+
+        modByApplicationResult =
+            ElmInteractiveEnvironment.ApplyFunction(
+                pineVM,
+                modByFunction,
+                arguments:
+                [PineValueAsInteger.ValueFromSignedInteger(41),
+                    PineValueAsInteger.ValueFromSignedInteger(47)]);
+
+        Assert.AreEqual(
+            PineValueAsInteger.ValueFromSignedInteger(6),
+            modByApplicationResult.Extract(err => throw new System.Exception(err)));
+    }
 
     [Ignore("Productive side not ready yet")]
     [TestMethod]
     public void Test_compile_elm_compiler()
     {
+        using var pgoShare = new Pine.PineVM.DynamicPGOShare();
+
         var compilerProgram = IInteractiveSession.CompileElmProgramCodeFilesDefault.Value;
 
         using var compileJavaScriptEngine =
@@ -88,7 +154,7 @@ public class CompileElmCompilerTests
             compileElmProgramCodeFiles: compilerProgram,
             appCodeTree: compilerWithPackagesTree,
             caching: true,
-            autoPGO: null);
+            autoPGO: pgoShare);
 
         Assert.AreEqual(
             "4",

@@ -233,6 +233,14 @@ public class InteractiveSessionPine : IInteractiveSession
         }
     }
 
+    public PineValue CurrentEnvironmentValue()
+    {
+        lock (submissionLock)
+        {
+            return buildPineEvalContextTask.Result.Extract(err => throw new Exception(err));
+        }
+    }
+
     void IDisposable.Dispose()
     {
         if (compileElmPreparedJavaScriptEngine.IsValueCreated)

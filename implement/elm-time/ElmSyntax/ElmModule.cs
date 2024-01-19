@@ -79,6 +79,7 @@ public static class ElmModule
 
         var includedModulesNames =
             parsedRootModules
+            .OrderByDescending(parsedModule => parsedModule.moduleText.Length)
             .SelectMany(rootModule =>
             EnumerateImportsOfModuleTransitive(rootModule.parsedModule.ModuleName)
             .Prepend(rootModule.parsedModule.ModuleName))
