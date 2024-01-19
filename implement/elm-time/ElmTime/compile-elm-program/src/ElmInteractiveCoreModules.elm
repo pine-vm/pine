@@ -933,6 +933,24 @@ isHexDigit char =
         || (0x41 <= code && code <= 0x46)
         || (0x61 <= code && code <= 0x66)
 
+
+isUpper : Char -> Bool
+isUpper char =
+    let
+        code =
+            toCode char
+    in
+    (0x41 <= code) && (code <= 0x5A)
+
+
+isLower : Char -> Bool
+isLower char =
+    let
+        code =
+            toCode char
+    in
+    (0x61 <= code) && (code <= 0x7A)
+
 """
     , """
 module String exposing

@@ -214,7 +214,15 @@ escapeChar char =
 
 """
     , """
-module Json.Decode exposing (..)
+module Json.Decode exposing
+  ( Decoder, string, bool, int, float
+  , nullable, list, array, dict, keyValuePairs, oneOrMore
+  , field, at, index
+  , maybe, oneOf
+  , decodeString, decodeValue, Value, Error(..), errorToString
+  , map, map2, map3, map4, map5, map6, map7, map8
+  , lazy, value, null, succeed, fail, andThen
+  )
 
 
 import Json.Encode exposing (Value(..))
