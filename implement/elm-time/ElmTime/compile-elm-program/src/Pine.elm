@@ -203,10 +203,10 @@ kernelFunctions =
             (List.head >> Maybe.withDefault (ListValue []))
       )
     , ( "add_int"
-      , kernelFunctionExpectingListOfBigIntAndProducingBigInt (List.foldl BigInt.add (BigInt.fromInt 0))
+      , kernelFunctionExpectingListOfBigIntAndProducingBigInt BigInt.add (BigInt.fromInt 0)
       )
     , ( "mul_int"
-      , kernelFunctionExpectingListOfBigIntAndProducingBigInt (List.foldl BigInt.mul (BigInt.fromInt 1))
+      , kernelFunctionExpectingListOfBigIntAndProducingBigInt BigInt.mul (BigInt.fromInt 1)
       )
     , ( "is_sorted_ascending_int"
       , is_sorted_ascending_int >> valueFromBool
@@ -378,21 +378,27 @@ evaluateDecodeAndEvaluate context decodeAndEvaluate =
 
 
 kernelFunctionExpectingListOfBigIntAndProducingBigInt :
-    (List BigInt.BigInt -> BigInt.BigInt)
+    (BigInt.BigInt -> BigInt.BigInt -> BigInt.BigInt)
+    -> BigInt.BigInt
     -> KernelFunction
-kernelFunctionExpectingListOfBigIntAndProducingBigInt aggregate =
-    kernelFunctionExpectingListOfBigInt
-        (aggregate >> valueFromBigInt)
+kernelFunctionExpectingListOfBigIntAndProducingBigInt combine seed =
+    let
+        combineRecursive : List Value -> BigInt.BigInt -> Value
+        combineRecursive remainingList aggregate =
+            case remainingList of
+                [] ->
+                    valueFromBigInt aggregate
 
+                itemValue :: following ->
+                    case bigIntFromValue itemValue of
+                        Err _ ->
+                            ListValue []
 
-kernelFunctionExpectingListOfBigInt : (List BigInt.BigInt -> Value) -> KernelFunction
-kernelFunctionExpectingListOfBigInt apply =
+                        Ok itemInt ->
+                            combineRecursive following (combine aggregate itemInt)
+    in
     kernelFunctionExpectingList
-        (List.map bigIntFromValue
-            >> Result.Extra.combine
-            >> Result.map apply
-            >> Result.withDefault (ListValue [])
-        )
+        (\list -> combineRecursive list seed)
 
 
 kernelFunctionExpectingListOfTypeBool : (List Bool -> Bool) -> KernelFunction
@@ -432,8 +438,12 @@ kernelFunctionExpectingExactlyTwoArguments configuration =
                                     ListValue []
 
                                 Ok arg1 ->
-                                    configuration.apply arg0 arg1
-                                        |> Result.withDefault (ListValue [])
+                                    case configuration.apply arg0 arg1 of
+                                        Err _ ->
+                                            ListValue []
+
+                                        Ok ok ->
+                                            ok
 
                 _ ->
                     ListValue []
@@ -620,14 +630,17 @@ stringFromListValue values =
                         _ ->
                             Err "Failed to map to char - not a BlobValue"
     in
-    continueRecursive values []
-        |> Result.mapError ((++) "Failed to map list items to chars: ")
-        |> Result.map (String.fromList >> String.reverse)
+    case continueRecursive values [] of
+        Err err ->
+            Err ("Failed to map list items to chars: " ++ err)
+
+        Ok chars ->
+            Ok (String.fromList (List.reverse chars))
 
 
 valueFromBigInt : BigInt.BigInt -> Value
-valueFromBigInt =
-    blobValueFromBigInt >> BlobValue
+valueFromBigInt bigInt =
+    BlobValue (blobValueFromBigInt bigInt)
 
 
 blobValueFromBigInt : BigInt.BigInt -> List Int
@@ -669,8 +682,8 @@ blobValueFromBigInt bigint =
 
 
 valueFromInt : Int -> Value
-valueFromInt =
-    blobValueFromInt >> BlobValue
+valueFromInt int =
+    BlobValue (blobValueFromInt int)
 
 
 blobValueFromInt : Int -> List Int
@@ -701,8 +714,57 @@ unsafeUnsignedBlobValueFromInt int =
 
 
 intFromValue : Value -> Result String Int
-intFromValue =
-    bigIntFromValue >> Result.andThen intFromBigInt
+intFromValue value =
+    case value of
+        ListValue _ ->
+            Err "Only a BlobValue can encode an integer."
+
+        BlobValue blobBytes ->
+            case blobBytes of
+                [] ->
+                    Err "Empty blob does not encode an integer."
+
+                sign :: intValueBytes ->
+                    case sign of
+                        4 ->
+                            intFromUnsignedBlobValue intValueBytes
+
+                        2 ->
+                            Result.map negate (intFromUnsignedBlobValue intValueBytes)
+
+                        _ ->
+                            Err ("Unexpected value for sign byte: " ++ String.fromInt sign)
+
+
+intFromUnsignedBlobValue : List Int -> Result String Int
+intFromUnsignedBlobValue intValueBytes =
+    case intValueBytes of
+        [] ->
+            Err "Empty blob does not encode an integer."
+
+        [ b1 ] ->
+            Ok b1
+
+        [ b1, b2 ] ->
+            Ok ((b1 * 256) + b2)
+
+        [ b1, b2, b3 ] ->
+            Ok ((b1 * 65536) + (b2 * 256) + b3)
+
+        [ b1, b2, b3, b4 ] ->
+            Ok ((b1 * 16777216) + (b2 * 65536) + (b3 * 256) + b4)
+
+        [ b1, b2, b3, b4, b5 ] ->
+            Ok ((b1 * 4294967296) + (b2 * 16777216) + (b3 * 65536) + (b4 * 256) + b5)
+
+        [ b1, b2, b3, b4, b5, b6 ] ->
+            Ok ((b1 * 1099511627776) + (b2 * 4294967296) + (b3 * 16777216) + (b4 * 65536) + (b5 * 256) + b6)
+
+        _ ->
+            Err
+                ("Failed to map to int - unsupported number of bytes: "
+                    ++ String.fromInt (List.length intValueBytes)
+                )
 
 
 intFromBigInt : BigInt.BigInt -> Result String Int

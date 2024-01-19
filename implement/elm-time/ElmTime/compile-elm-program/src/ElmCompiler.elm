@@ -1,4 +1,26 @@
-module ElmCompiler exposing (..)
+module ElmCompiler exposing
+    ( CompilationStack
+    , ElmModuleInCompilation
+    , ElmModuleTypeDeclaration(..)
+    , ProjectParsedElmFile
+    , applicableDeclarationFromConstructorExpression
+    , compilationAndEmitStackFromModulesInCompilation
+    , compileElmSyntaxExpression
+    , compileElmSyntaxFunction
+    , elmRecordTypeTagName
+    , elmRecordTypeTagNameAsValue
+    , elmStringTypeTagName
+    , emitTypeDeclarationValue
+    , expandElmInteractiveEnvironmentWithModules
+    , expressionForDeconstructions
+    , getDeclarationsFromEnvironment
+    , moduleNameFromSyntaxFile
+    , parseTypeDeclarationFromValueTagged
+    , pineFunctionForRecordAccessAsValue
+    , pineFunctionForRecordUpdateAsValue
+    , separateEnvironmentDeclarations
+    , stringStartsWithUpper
+    )
 
 import Common
 import Dict
@@ -31,7 +53,6 @@ import FirCompiler
         , pineKernel_ListHead
         , pineKernel_ListHead_Pine
         )
-import Json.Encode
 import List.Extra
 import Pine
 import Result.Extra
@@ -1150,11 +1171,14 @@ compileElmSyntaxExpression stack elmExpression =
         Elm.Syntax.Expression.UnitExpr ->
             Ok (ListExpression [])
 
-        _ ->
-            Err
-                ("Unsupported type of expression: "
-                    ++ (elmExpression |> Elm.Syntax.Expression.encode |> Json.Encode.encode 0)
-                )
+        Elm.Syntax.Expression.GLSLExpression _ ->
+            Err "Unsupported type of expression: GLSLExpression"
+
+        Elm.Syntax.Expression.Floatable _ ->
+            Err "Unsupported type of expression: Floatable"
+
+        Elm.Syntax.Expression.Operator operator ->
+            Err ("Unsupported type of expression: Operator: " ++ operator)
 
 
 compileElmSyntaxApplication :
@@ -1772,11 +1796,11 @@ compileElmSyntaxPattern elmPattern =
                 , declarations = []
                 }
 
-        _ ->
-            Err
-                ("Unsupported type of pattern: "
-                    ++ Json.Encode.encode 0 (Elm.Syntax.Pattern.encode elmPattern)
-                )
+        Elm.Syntax.Pattern.FloatPattern _ ->
+            Err "Unsupported type of pattern: FloatPattern"
+
+        Elm.Syntax.Pattern.HexPattern _ ->
+            Err "Unsupported type of pattern: HexPattern"
 
 
 mapExpressionForOperatorPrecedence : Elm.Syntax.Expression.Expression -> Elm.Syntax.Expression.Expression
@@ -2637,31 +2661,35 @@ separateEnvironmentDeclarations :
             , otherDeclarations : Dict.Dict String Pine.Value
             }
 separateEnvironmentDeclarations environmentDeclarations =
-    let
-        otherDeclarations : Dict.Dict String Pine.Value
-        otherDeclarations =
-            environmentDeclarations
-                |> Dict.filter (stringStartsWithUpper >> not >> always)
-    in
-    environmentDeclarations
-        |> Dict.filter (stringStartsWithUpper >> always)
-        |> Dict.toList
-        |> List.map (Tuple.mapFirst (String.split "."))
-        |> List.map
-            (\( moduleName, moduleValue ) ->
-                getDeclarationsFromEnvironment moduleValue
-                    |> Result.andThen parseDeclarationsFromModuleValues
-                    |> Result.map (Tuple.pair moduleName)
-                    |> Result.mapError ((++) ("Failed to parse declarations from module " ++ String.join "." moduleName))
-            )
-        |> Result.Extra.combine
-        |> Result.map Dict.fromList
-        |> Result.map
-            (\environmentModules ->
-                { modules = environmentModules
-                , otherDeclarations = otherDeclarations
-                }
-            )
+    Dict.foldl
+        (\declNameFlat declValue ->
+            Result.andThen
+                (\aggregate ->
+                    if stringStartsWithUpper declNameFlat then
+                        getDeclarationsFromEnvironment declValue
+                            |> Result.andThen parseModuleValue
+                            |> Result.mapError ((++) ("Failed to parse module " ++ declNameFlat))
+                            |> Result.map
+                                (\moduleDeclarations ->
+                                    { aggregate
+                                        | modules =
+                                            Dict.insert
+                                                (String.split "." declNameFlat)
+                                                moduleDeclarations
+                                                aggregate.modules
+                                    }
+                                )
+
+                    else
+                        { aggregate
+                            | otherDeclarations =
+                                Dict.insert declNameFlat declValue aggregate.otherDeclarations
+                        }
+                            |> Ok
+                )
+        )
+        (Ok { modules = Dict.empty, otherDeclarations = Dict.empty })
+        environmentDeclarations
 
 
 getDeclarationsFromEnvironment : Pine.Value -> Result String (Dict.Dict String Pine.Value)
@@ -2697,8 +2725,8 @@ getDeclarationsFromEnvironment environment =
 
 {-| Reverses the encoding implemented in emitModuleValue, parsing the Elm module from the transportable form.
 -}
-parseDeclarationsFromModuleValues : Dict.Dict String Pine.Value -> Result String ElmModuleInCompilation
-parseDeclarationsFromModuleValues moduleValues =
+parseModuleValue : Dict.Dict String Pine.Value -> Result String ElmModuleInCompilation
+parseModuleValue moduleValues =
     moduleValues
         |> Dict.foldl
             (\declName declValue ->
@@ -2824,5 +2852,10 @@ parseRecordConstructorFromValue value =
 
 
 stringStartsWithUpper : String -> Bool
-stringStartsWithUpper =
-    String.uncons >> Maybe.map (Tuple.first >> Char.isUpper) >> Maybe.withDefault False
+stringStartsWithUpper string =
+    case String.uncons string of
+        Nothing ->
+            False
+
+        Just ( firstChar, _ ) ->
+            Char.isUpper firstChar

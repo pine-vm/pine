@@ -1,4 +1,27 @@
-module FirCompiler exposing (..)
+module FirCompiler exposing
+    ( Deconstruction(..)
+    , EmitStack
+    , Expression(..)
+    , attemptReduceDecodeAndEvaluateExpressionRecursive
+    , countListElementsExpression
+    , emitExpression
+    , emitExpressionInDeclarationBlock
+    , emitWrapperForPartialApplication
+    , equalCondition
+    , equalCondition_Pine
+    , estimatePineValueSize
+    , evaluateAsIndependentExpression
+    , listItemFromIndexExpression
+    , listItemFromIndexExpression_Pine
+    , listSkipExpression
+    , listSkipExpression_Pine
+    , listTransitiveDependenciesOfExpression
+    , parseFunctionParameters
+    , partialApplicationExpressionFromListOfArguments
+    , pineExpressionIsIndependent
+    , pineKernel_ListHead
+    , pineKernel_ListHead_Pine
+    )
 
 import BigInt
 import Common
@@ -438,9 +461,9 @@ emitReferenceExpression name compilation =
 
 
 listTransitiveDependenciesOfExpression : EmitStack -> Expression -> Set.Set String
-listTransitiveDependenciesOfExpression dependenciesRelations =
-    listDirectDependenciesOfExpression
-        >> getTransitiveDependencies dependenciesRelations.declarationsDependencies
+listTransitiveDependenciesOfExpression dependenciesRelations expression =
+    getTransitiveDependencies dependenciesRelations.declarationsDependencies
+        (listDirectDependenciesOfExpression expression)
 
 
 listDirectDependenciesOfExpression : Expression -> Set.Set String
@@ -510,9 +533,8 @@ getTransitiveDependencies : Dict.Dict String (Set.Set String) -> Set.Set String 
 getTransitiveDependencies dependenciesDependencies current =
     let
         stepResult =
-            current
-                |> getTransitiveDependenciesStep dependenciesDependencies
-                |> Set.union current
+            Set.union current
+                (getTransitiveDependenciesStep dependenciesDependencies current)
     in
     if stepResult == current then
         stepResult
@@ -522,21 +544,28 @@ getTransitiveDependencies dependenciesDependencies current =
 
 
 getTransitiveDependenciesStep : Dict.Dict String (Set.Set String) -> Set.Set String -> Set.Set String
-getTransitiveDependenciesStep dependenciesDependencies =
-    Set.toList
-        >> List.foldl
-            (Dict.get
-                >> (|>) dependenciesDependencies
-                >> Maybe.withDefault Set.empty
-                >> Set.union
-            )
-            Set.empty
+getTransitiveDependenciesStep dependenciesDependencies references =
+    Set.foldl
+        (\reference aggregate ->
+            case Dict.get reference dependenciesDependencies of
+                Nothing ->
+                    aggregate
+
+                Just dependencies ->
+                    Set.union dependencies aggregate
+        )
+        Set.empty
+        references
 
 
 pineExpressionForDeconstructions : List Deconstruction -> Pine.Expression -> Pine.Expression
-pineExpressionForDeconstructions =
-    List.map pineExpressionForDeconstruction
-        >> List.foldr (>>) identity
+pineExpressionForDeconstructions deconstructions expression =
+    List.foldl
+        (\deconstruction aggregate ->
+            pineExpressionForDeconstruction deconstruction aggregate
+        )
+        expression
+        deconstructions
 
 
 pineExpressionForDeconstruction : Deconstruction -> Pine.Expression -> Pine.Expression
@@ -1031,9 +1060,8 @@ attemptReduceDecodeAndEvaluateExpressionRecursiveWithDefaultDepth :
 attemptReduceDecodeAndEvaluateExpressionRecursiveWithDefaultDepth originalExpression =
     let
         sizeBeforeReduction =
-            [ originalExpression.expression, originalExpression.environment ]
-                |> List.map (countPineExpressionSize estimatePineValueSize)
-                |> List.sum
+            countPineExpressionSize estimatePineValueSize originalExpression.expression
+                + countPineExpressionSize estimatePineValueSize originalExpression.environment
 
         reductionMaxDepth =
             if sizeBeforeReduction < 10 * 1000 then
@@ -1390,14 +1418,6 @@ applyKernelFunctionWithTwoArguments kernelFunctionName argA argB =
         }
 
 
-tagValueExpression : String -> List Expression -> Expression
-tagValueExpression tagName tagArgumentsExpressions =
-    ListExpression
-        [ LiteralExpression (Pine.valueFromString tagName)
-        , ListExpression tagArgumentsExpressions
-        ]
-
-
 countListElementsExpression_Pine : Pine.Expression -> Pine.Expression
 countListElementsExpression_Pine listExpression =
     Pine.KernelApplicationExpression
@@ -1454,20 +1474,21 @@ countPineExpressionSize countValueSize expression =
             countValueSize literal
 
         Pine.ListExpression list ->
-            1 + List.sum (List.map (countPineExpressionSize countValueSize) list)
+            List.foldl (\item sum -> sum + countPineExpressionSize countValueSize item)
+                1
+                list
 
         Pine.DecodeAndEvaluateExpression decodeAndEval ->
-            [ decodeAndEval.environment, decodeAndEval.expression ]
-                |> List.map (countPineExpressionSize countValueSize)
-                |> List.sum
+            countPineExpressionSize countValueSize decodeAndEval.expression
+                + countPineExpressionSize countValueSize decodeAndEval.environment
 
         Pine.KernelApplicationExpression kernelApp ->
             2 + countPineExpressionSize countValueSize kernelApp.argument
 
         Pine.ConditionalExpression conditional ->
-            [ conditional.condition, conditional.ifTrue, conditional.ifFalse ]
-                |> List.map (countPineExpressionSize countValueSize)
-                |> List.sum
+            countPineExpressionSize countValueSize conditional.condition
+                + countPineExpressionSize countValueSize conditional.ifTrue
+                + countPineExpressionSize countValueSize conditional.ifFalse
 
         Pine.EnvironmentExpression ->
             1
