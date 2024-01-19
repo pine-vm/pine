@@ -2815,14 +2815,14 @@ parseChoiceTypeFromValue value =
                                     |> Result.mapError ((++) "Failed to decode string: ")
                                     |> Result.andThen
                                         (\tagName ->
-                                            Pine.bigIntFromValue argumentCountValue
-                                                |> Result.andThen Pine.intFromBigInt
-                                                |> Result.mapError ((++) "Failed to decode int: ")
-                                                |> Result.map
-                                                    (\argumentsCount ->
+                                            case Pine.intFromValue argumentCountValue of
+                                                Err err ->
+                                                    Err ("Failed to decode int: " ++ err)
+
+                                                Ok argumentsCount ->
+                                                    Ok
                                                         ( tagName
                                                         , { argumentsCount = argumentsCount }
-                                                        )
                                                     )
                                         )
 

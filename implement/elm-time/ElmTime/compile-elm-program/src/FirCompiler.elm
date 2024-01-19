@@ -23,7 +23,6 @@ module FirCompiler exposing
     , pineKernel_ListHead_Pine
     )
 
-import BigInt
 import Common
 import Dict
 import Pine
@@ -1014,15 +1013,7 @@ parseFunctionRecordFromValue value =
                             Err ("Failed to decode inner function: " ++ err)
 
                         Ok innerFunction ->
-                            case
-                                functionParameterCountValue
-                                    |> Pine.bigIntFromValue
-                                    |> Result.andThen
-                                        (BigInt.toString
-                                            >> String.toInt
-                                            >> Result.fromMaybe "Failed to map from BigInt to Int"
-                                        )
-                            of
+                            case Pine.intFromValue functionParameterCountValue of
                                 Err err ->
                                     Err ("Failed to decode function parameter count: " ++ err)
 
@@ -1212,16 +1203,11 @@ searchForExpressionReduction expression =
                 "skip" ->
                     case rootKernelApp.argument of
                         Pine.ListExpression [ Pine.LiteralExpression skipCountLiteral, Pine.ListExpression expressionList ] ->
-                            case
-                                skipCountLiteral
-                                    |> Pine.bigIntFromValue
-                                    |> Result.toMaybe
-                                    |> Maybe.andThen (BigInt.toString >> String.toInt)
-                            of
-                                Nothing ->
+                            case Pine.intFromValue skipCountLiteral of
+                                Err _ ->
                                     attemptReduceViaEval ()
 
-                                Just skipCount ->
+                                Ok skipCount ->
                                     expressionList
                                         |> List.drop skipCount
                                         |> Pine.ListExpression
