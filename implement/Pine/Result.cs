@@ -55,8 +55,12 @@ public abstract record Result<ErrT, OkT>
     public Result<ErrT, MappedOkT> Map<MappedOkT>(Func<OkT, MappedOkT> okMap) =>
         this switch
         {
-            Ok ok => new Result<ErrT, MappedOkT>.Ok(okMap(ok.Value)),
-            Err err => new Result<ErrT, MappedOkT>.Err(err.Value),
+            Ok ok =>
+            new Result<ErrT, MappedOkT>.Ok(okMap(ok.Value)),
+
+            Err err =>
+            new Result<ErrT, MappedOkT>.Err(err.Value),
+
             _ => throw new NotImplementedException()
         };
 

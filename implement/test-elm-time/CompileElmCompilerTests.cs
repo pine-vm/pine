@@ -1,6 +1,8 @@
 ﻿using ElmTime.ElmInteractive;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Pine;
+using Pine.PineVM;
+using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
@@ -25,9 +27,9 @@ public class CompileElmCompilerTests
         ];
 
     [TestMethod]
-    public void Test_compile_Basics_and_call_modBy()
+    public void Test_call_Basics_modBy()
     {
-        using var pgoShare = new Pine.PineVM.DynamicPGOShare();
+        using var pgoShare = new DynamicPGOShare();
 
         var compilerProgram = IInteractiveSession.CompileElmProgramCodeFilesDefault.Value;
 
@@ -38,17 +40,17 @@ public class CompileElmCompilerTests
                 caching: true,
                 autoPGO: pgoShare);
 
-        // Force compilation of the 'Basics' module.
+        // Force integration of the 'Basics' module.
         var testSubmissionResult = interactiveSession.Submit(" Basics.modBy  13 17 ");
 
         var testSubmissionResponse =
-            testSubmissionResult.Extract(err => throw new System.Exception(err));
+            testSubmissionResult.Extract(err => throw new Exception(err));
 
         Assert.AreEqual("4", testSubmissionResponse.interactiveResponse.displayText);
 
         var interactiveEnvironmentValue = interactiveSession.CurrentEnvironmentValue();
 
-        var pineVM = new Pine.PineVM.PineVM();
+        var pineVM = new PineVM();
 
         var modByFunction =
             ElmInteractiveEnvironment.ParseFunctionFromElmModule(
@@ -56,7 +58,7 @@ public class CompileElmCompilerTests
                 moduleName: "Basics",
                 declarationName: "modBy",
                 pineVM: pineVM)
-            .Extract(err => throw new System.Exception(err));
+            .Extract(err => throw new Exception(err));
 
         var modByApplicationResult =
             ElmInteractiveEnvironment.ApplyFunction(
@@ -68,7 +70,7 @@ public class CompileElmCompilerTests
 
         Assert.AreEqual(
             PineValueAsInteger.ValueFromSignedInteger(4),
-            modByApplicationResult.Extract(err => throw new System.Exception(err)));
+            modByApplicationResult.Extract(err => throw new Exception(err)));
 
         modByApplicationResult =
             ElmInteractiveEnvironment.ApplyFunction(
@@ -80,14 +82,69 @@ public class CompileElmCompilerTests
 
         Assert.AreEqual(
             PineValueAsInteger.ValueFromSignedInteger(6),
-            modByApplicationResult.Extract(err => throw new System.Exception(err)));
+            modByApplicationResult.Extract(err => throw new Exception(err)));
+    }
+
+
+    [TestMethod]
+    public void Test_call_String_split()
+    {
+        using var pgoShare = new DynamicPGOShare();
+
+        var compilerProgram = IInteractiveSession.CompileElmProgramCodeFilesDefault.Value;
+
+        using var interactiveSession =
+            new InteractiveSessionPine(
+                compilerProgram,
+                appCodeTree: null,
+                caching: true,
+                autoPGO: pgoShare);
+
+        // Force integration of the 'String' module.
+        var testSubmissionResult = interactiveSession.Submit(""" String.isEmpty  "test" """);
+
+        var testSubmissionResponse =
+            testSubmissionResult.Extract(err => throw new Exception(err));
+
+        Assert.AreEqual("False", testSubmissionResponse.interactiveResponse.displayText);
+
+        var interactiveEnvironmentValue = interactiveSession.CurrentEnvironmentValue();
+
+        var pineVM = new PineVM();
+
+        var stringSplitFunction =
+            ElmInteractiveEnvironment.ParseFunctionFromElmModule(
+                interactiveEnvironment: interactiveEnvironmentValue,
+                moduleName: "String",
+                declarationName: "split",
+                pineVM: pineVM)
+            .Extract(err => throw new Exception(err));
+
+        var stringSplitApplicationResult =
+            ElmInteractiveEnvironment.ApplyFunction(
+                pineVM,
+                stringSplitFunction,
+                arguments:
+                [ElmValue.ElmValueAsPineValue(new ElmValue.ElmString(",")),
+                    ElmValue.ElmValueAsPineValue(new ElmValue.ElmString("pizza,risotto,focaccia"))]);
+
+        var stringSplitResultElmValue =
+            ElmValue.PineValueAsElmValue(stringSplitApplicationResult.Extract(err => throw new Exception(err)))
+            .Extract(err => throw new Exception(err));
+
+        Assert.AreEqual(
+            new ElmValue.ElmList(
+                [new ElmValue.ElmString("pizza"),
+                    new ElmValue.ElmString("risotto"),
+                    new ElmValue.ElmString("focaccia")]),
+            stringSplitResultElmValue);
     }
 
     [Ignore("Productive side not ready yet")]
     [TestMethod]
     public void Test_compile_elm_compiler()
     {
-        using var pgoShare = new Pine.PineVM.DynamicPGOShare();
+        using var pgoShare = new DynamicPGOShare();
 
         var compilerProgram = IInteractiveSession.CompileElmProgramCodeFilesDefault.Value;
 
@@ -100,7 +157,7 @@ public class CompileElmCompilerTests
             CompilerPackageSources
             .Select(LoadFromGitHubOrGitLab.LoadFromUrl)
             .ListCombine()
-            .Extract(err => throw new System.Exception(err));
+            .Extract(err => throw new Exception(err));
 
         var compilerPackageSourcesFiles =
             compilerPackageSourcesTrees
@@ -159,7 +216,7 @@ public class CompileElmCompilerTests
         Assert.AreEqual(
             "4",
             compilerInteractiveSession.Submit("1 + 3")
-            .Extract(err => throw new System.Exception(err))
+            .Extract(err => throw new Exception(err))
             .ToString());
     }
 }

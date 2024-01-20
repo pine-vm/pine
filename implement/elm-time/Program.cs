@@ -18,7 +18,7 @@ namespace ElmTime;
 
 public class Program
 {
-    public static string AppVersionId => "2024-01-18";
+    public static string AppVersionId => "2024-01-19";
 
     private static int AdminInterfaceDefaultPort => 4000;
 
@@ -1418,7 +1418,7 @@ public class Program
                 var outputPathArgument = outputOption.Value() ?? "make-default-output.html";
 
                 var loadInputDirectoryFailedFiles =
-                new Dictionary<IReadOnlyList<string>, System.IO.IOException>(
+                new Dictionary<IReadOnlyList<string>, IOException>(
                     comparer: EnumerableExtension.EqualityComparer<IReadOnlyList<string>>());
 
                 var loadInputDirectoryResult =

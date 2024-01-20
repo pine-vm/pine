@@ -350,7 +350,7 @@ public class WebServiceTests
     {
         const string adminPassword = "Password_1234567";
 
-        static System.Threading.Tasks.Task<HttpResponseMessage> HttpSetElmAppState(
+        static Task<HttpResponseMessage> HttpSetElmAppState(
             HttpClient client, string state) =>
             client.PostAsync(
                 StartupAdminInterface.PathApiElmAppState,
@@ -574,7 +574,7 @@ public class WebServiceTests
     {
         using var testSetup = WebHostAdminInterfaceTestSetup.Setup(deployAppAndInitElmState: ElmWebServiceAppTests.CounterWebApp);
 
-        async System.Threading.Tasks.Task<HttpResponseMessage> postStringContentToPublicApp(string postContent)
+        async Task<HttpResponseMessage> postStringContentToPublicApp(string postContent)
         {
             using var publicAppClient = testSetup.BuildPublicAppHttpClient();
 
