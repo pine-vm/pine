@@ -36,4 +36,37 @@ public class ElmValueTests
             Assert.AreEqual(testCase, roundtrip);
         }
     }
+
+    [TestMethod]
+    public void Test_ElmValueAsExpression()
+    {
+        var testCases =
+            (IReadOnlyList<(ElmValue, string)>)
+            [
+                (new ElmValue.ElmInteger(42), "42"),
+
+                (new ElmValue.ElmChar('a'), "'a'"),
+
+                (new ElmValue.ElmString("Hello, world!"), "\"Hello, world!\""),
+
+                (new ElmValue.ElmList([
+                new ElmValue.ElmInteger(31),
+                    new ElmValue.ElmInteger(37),
+                    new ElmValue.ElmInteger(39)]),
+                    "[31,37,39]"),
+
+                (new ElmValue.ElmRecord([
+                ("alfa", new ElmValue.ElmInteger(1)),
+                    ("beta", new ElmValue.ElmInteger(2)),
+                    ("gamma", new ElmValue.ElmInteger(3))]),
+                "{ alfa = 1, beta = 2, gamma = 3 }"),
+            ];
+
+        foreach (var (elmValue, expectedExpression) in testCases)
+        {
+            var (expressionString, needsParens) = ElmValue.ElmValueAsExpression(elmValue);
+
+            Assert.AreEqual(expectedExpression, expressionString);
+        }
+    }
 }

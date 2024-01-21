@@ -2,6 +2,7 @@ using Pine;
 using Pine.PineVM;
 using System;
 using System.Collections.Generic;
+using System.Collections.Immutable;
 using System.Linq;
 
 namespace ElmTime.ElmInteractive;
@@ -27,6 +28,14 @@ public abstract record ElmValue
     public static readonly ElmValue TrueValue = new ElmTag("True", []);
 
     public static readonly ElmValue FalseValue = new ElmTag("False", []);
+
+    override public string ToString() =>
+        ElmValueAsExpression(this).expressionString;
+
+    public static readonly string ElmRecordTypeTagName = "Elm_Record";
+
+    public static readonly PineValue ElmRecordTypeTagNameAsValue =
+        PineValueAsString.ValueFromString(ElmRecordTypeTagName);
 
     public record ElmInteger(System.Numerics.BigInteger Value)
         : ElmValue;
@@ -56,6 +65,9 @@ public abstract record ElmValue
 
         public override int GetHashCode() =>
             Elements.Select(e => e.GetHashCode()).Aggregate((a, b) => a ^ b);
+
+        public override string ToString() =>
+            ElmValueAsExpression(this).expressionString;
     }
 
     public record ElmString(string Value)
@@ -89,6 +101,9 @@ public abstract record ElmValue
 
         public override int GetHashCode() =>
             Fields.Select(f => f.GetHashCode()).Aggregate((a, b) => a ^ b);
+
+        public override string ToString() =>
+            ElmValueAsExpression(this).expressionString;
     }
 
     public record ElmInternal(string Value)
@@ -152,7 +167,7 @@ public abstract record ElmValue
                         {
                             if (0 < tagName.Value.Length && char.IsUpper(tagName.Value[0]))
                             {
-                                if (tagName.Value == "Record")
+                                if (tagName.Value == ElmRecordTypeTagName)
                                 {
                                     if (tagArgumentsList.Elements.Count == 1)
                                     {
@@ -240,7 +255,7 @@ public abstract record ElmValue
 
                 ElmRecord elmRecord =>
                 PineValue.List(
-                    [PineValueAsString.ValueFromString("Record"),
+                    [ElmRecordTypeTagNameAsValue,
                         PineValue.List(
                             [PineValue.List(
                             [.. elmRecord.Fields.Select(field =>
@@ -328,4 +343,177 @@ public abstract record ElmValue
             _ =>
             Maybe<char>.nothing()
         };
+
+    public static (string expressionString, bool needsParens) ElmValueAsExpression(ElmValue elmValue)
+    {
+        return
+            elmValue switch
+            {
+                ElmInteger integer =>
+                (integer.Value.ToString(), needsParens: false),
+
+                ElmChar charValue =>
+                ("'" + charValue.Value + "'", needsParens: false),
+
+                ElmList list =>
+                ElmListItemsLookLikeTupleItems(list.Elements).WithDefault(false)
+                ?
+                ("(" + string.Join(",", list.Elements.Select(item => ElmValueAsExpression(item).expressionString)) + ")",
+                needsParens: false)
+                :
+                ("[" + string.Join(",", list.Elements.Select(item => ElmValueAsExpression(item).expressionString)) + "]",
+                needsParens: false),
+
+                ElmString stringValue =>
+                (System.Text.Json.JsonSerializer.Serialize(stringValue.Value), needsParens: false),
+
+                ElmRecord record =>
+                (record.Fields.Count < 1)
+                ?
+                ("{}", needsParens: false)
+                :
+                ("{ " + string.Join(", ", record.Fields.Select(field =>
+                field.FieldName + " = " + ElmValueAsExpression(field.Value).expressionString)) + " }",
+                needsParens: false),
+
+                ElmTag tag =>
+                ElmTagAsExpression(tag),
+
+                ElmInternal internalValue =>
+                ("<" + internalValue.Value + ">", needsParens: false),
+
+                _ =>
+                throw new NotImplementedException(
+                    "Not implemented for value type: " + elmValue.GetType().FullName)
+            };
+    }
+
+    public static (string expressionString, bool needsParens) ElmTagAsExpression(ElmTag elmTag)
+    {
+        static string applyNeedsParens((string expressionString, bool needsParens) tuple) =>
+            tuple.needsParens ? "(" + tuple.expressionString + ")" : tuple.expressionString;
+
+        if (elmTag.TagName == "Set_elm_builtin")
+        {
+            if (elmTag.Arguments.Count == 1)
+            {
+                var singleArgument = elmTag.Arguments[0];
+
+                var singleArgumentDictToList = ElmValueDictToList(singleArgument);
+
+                if (singleArgumentDictToList.Count == 0)
+                    return ("Set.empty", needsParens: false);
+
+                var setElements = singleArgumentDictToList.Select(field => field.key).ToList();
+
+                return
+                    ("Set.fromList [" + string.Join(",", setElements.Select(ElmValueAsExpression).Select(applyNeedsParens)) + "]",
+                    needsParens: true);
+            }
+        }
+
+        if (elmTag.TagName == "RBEmpty_elm_builtin")
+            return ("Dict.empty", needsParens: false);
+
+        var dictToList = ElmValueDictToList(elmTag);
+
+        if (dictToList.Count == 0)
+            return
+                (elmTag.TagName + " " + string.Join(" ", elmTag.Arguments.Select(ElmValueAsExpression).Select(applyNeedsParens)),
+                needsParens: false);
+
+        return ("Dict.fromList [" +
+            string.Join(",",
+            dictToList.Select(field => "(" + ElmValueAsExpression(field.key).expressionString + "," + ElmValueAsExpression(field.value).expressionString + ")")) + "]",
+            needsParens: true);
+    }
+
+    public static IReadOnlyList<(ElmValue key, ElmValue value)> ElmValueDictToList(ElmValue dict) =>
+        ElmValueDictFoldr(
+            (key, value, acc) => acc.Insert(0, (key, value)),
+            ImmutableList<(ElmValue key, ElmValue value)>.Empty,
+            dict);
+
+    public static T ElmValueDictFoldr<T>(Func<ElmValue, ElmValue, T, T> func, T aggregate, ElmValue elmValue)
+    {
+        if (elmValue is ElmTag elmTag && elmTag.TagName == "RBNode_elm_builtin" && elmTag.Arguments.Count == 5)
+        {
+            var key = elmTag.Arguments[0];
+            var value = elmTag.Arguments[1];
+            var left = elmTag.Arguments[2];
+            var right = elmTag.Arguments[3];
+
+            return ElmValueDictFoldr(func, func(key, value, ElmValueDictFoldr(func, aggregate, right)), left);
+        }
+
+        return aggregate;
+    }
+
+    public static Maybe<bool> ElmListItemsLookLikeTupleItems(IReadOnlyList<ElmValue> list)
+    {
+        if (3 < list.Count)
+            return Maybe<bool>.just(false);
+        else
+        {
+            var areAllItemsEqual = AreElmValueListItemTypesEqual(list);
+
+            if (areAllItemsEqual is Maybe<bool>.Just areAllItemsEqualJust)
+                return Maybe<bool>.just(!areAllItemsEqualJust.Value);
+            else
+                return Maybe<bool>.nothing();
+        }
+    }
+
+    public static Maybe<bool> AreElmValueListItemTypesEqual(IReadOnlyList<ElmValue> list)
+    {
+        var pairsTypesEqual =
+            list
+            .SelectMany((left, leftIndex) =>
+            list
+            .Skip(leftIndex + 1)
+            .Select(right => AreElmValueTypesEqual(left, right)))
+            .ToList();
+
+        if (pairsTypesEqual.All(item => item is Maybe<bool>.Just itemJust && itemJust.Value))
+            return Maybe<bool>.just(true);
+
+        if (pairsTypesEqual.Any(item => item is Maybe<bool>.Just itemJust && !itemJust.Value))
+            return Maybe<bool>.just(false);
+
+        return Maybe<bool>.nothing();
+    }
+
+    public static Maybe<bool> AreElmValueTypesEqual(ElmValue valueA, ElmValue valueB)
+    {
+        if (valueA is ElmInteger && valueB is ElmInteger)
+            return Maybe<bool>.just(true);
+
+        if (valueA is ElmChar && valueB is ElmChar)
+            return Maybe<bool>.just(true);
+
+        if (valueA is ElmString && valueB is ElmString)
+            return Maybe<bool>.just(true);
+
+        if (valueA is ElmList && valueB is ElmList)
+            return Maybe<bool>.nothing();
+
+        if (valueA is ElmRecord recordA && valueB is ElmRecord recordB)
+        {
+            var recordAFieldNames = recordA.Fields.Select(field => field.FieldName).ToList();
+            var recordBFieldNames = recordB.Fields.Select(field => field.FieldName).ToList();
+
+            if (!recordAFieldNames.OrderBy(name => name).SequenceEqual(recordBFieldNames))
+                return Maybe<bool>.just(false);
+
+            return Maybe<bool>.nothing();
+        }
+
+        if (valueA is ElmTag && valueB is ElmTag)
+            return Maybe<bool>.nothing();
+
+        if (valueA is ElmInternal && valueB is ElmInternal)
+            return Maybe<bool>.nothing();
+
+        return Maybe<bool>.just(false);
+    }
 }

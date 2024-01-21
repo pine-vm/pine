@@ -5,8 +5,8 @@
     <TargetFramework>net8.0</TargetFramework>
     <RootNamespace>ElmTime</RootNamespace>
     <AssemblyName>elm-time</AssemblyName>
-    <AssemblyVersion>2024.0119.0.0</AssemblyVersion>
-    <FileVersion>2024.0119.0.0</FileVersion>
+    <AssemblyVersion>2024.0120.0.0</AssemblyVersion>
+    <FileVersion>2024.0120.0.0</FileVersion>
     <Nullable>enable</Nullable>
     <GenerateEmbeddedFilesManifest>true</GenerateEmbeddedFilesManifest>
   </PropertyGroup>
