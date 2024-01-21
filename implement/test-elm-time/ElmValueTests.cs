@@ -21,8 +21,10 @@ public class ElmValueTests
             new ElmValue.ElmRecord([
                 ("alfa", new ElmValue.ElmInteger(1)),
                 ("beta", new ElmValue.ElmInteger(2)),
-                ("gamma", new ElmValue.ElmInteger(3))
+                ("gamma", new ElmValue.ElmInteger(3)),
             ]),
+
+            new ElmValue.ElmString("Hello, world 👋"),
         ];
 
         foreach (var testCase in testCases)
@@ -60,6 +62,18 @@ public class ElmValueTests
                     ("beta", new ElmValue.ElmInteger(2)),
                     ("gamma", new ElmValue.ElmInteger(3))]),
                 "{ alfa = 1, beta = 2, gamma = 3 }"),
+
+                (new ElmValue.ElmTag("Just", [new ElmValue.ElmInteger(43)]),
+                "Just 43"),
+
+                (new ElmValue.ElmTag("Nothing", []),
+                "Nothing"),
+
+                (new ElmValue.ElmTag("Just", [new ElmValue.ElmTag("Nothing", [])]),
+                "Just Nothing"),
+
+                (new ElmValue.ElmTag("Just", [new ElmValue.ElmTag("Just", [new ElmValue.ElmInteger(47)])]),
+                "Just (Just 47)"),
             ];
 
         foreach (var (elmValue, expectedExpression) in testCases)

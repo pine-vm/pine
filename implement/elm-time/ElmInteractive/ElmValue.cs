@@ -73,7 +73,7 @@ public abstract record ElmValue
     public record ElmString(string Value)
         : ElmValue;
 
-    public record ElmChar(char Value)
+    public record ElmChar(int Value)
         : ElmValue;
 
     public record ElmRecord(IReadOnlyList<(string FieldName, ElmValue Value)> Fields)
@@ -125,6 +125,13 @@ public abstract record ElmValue
             ?
             Result<string, ElmValue>.ok(new ElmInternal("empty-blob"))
             :
+            blobValue.Bytes.Length > 10
+            ?
+            Result<string, ElmValue>.ok(
+                PineVM.DecodeExpressionFromValueDefault(pineValue)
+                .Map(_ => (ElmValue)new ElmInternal("expression"))
+                .WithDefault(new ElmInternal("___error_skipped_large_blob___")))
+            :
             (blobValue.Bytes.Span[0] switch
             {
                 4 or 2 =>
@@ -132,15 +139,8 @@ public abstract record ElmValue
                 .Map(bigInt => (ElmValue)new ElmInteger(bigInt)),
 
                 _ =>
-                blobValue.Bytes.Length > 10
-                ?
-                Result<string, ElmValue>.ok(
-                    PineVM.DecodeExpressionFromValueDefault(pineValue)
-                    .Map(_ => (ElmValue)new ElmInternal("expression"))
-                    .WithDefault(new ElmInternal("___error_skipped_large_blob___")))
-                :
                 PineValueAsInteger.UnsignedIntegerFromValue(blobValue)
-                .Map(bigInt => (ElmValue)new ElmChar((char)bigInt))
+                .Map(bigInt => (ElmValue)new ElmChar((int)bigInt))
             }),
 
             PineValue.ListValue list =>
@@ -237,7 +237,7 @@ public abstract record ElmValue
                 PineValue.List(elmList.Elements.Select(ElmValueAsPineValue).ToList()),
 
                 ElmChar elmChar =>
-                PineValueAsInteger.ValueFromUnsignedInteger((int)elmChar.Value)
+                PineValueAsInteger.ValueFromUnsignedInteger(elmChar.Value)
                 .Extract(err => throw new Exception(err)),
 
                 ElmInteger elmInteger =>
@@ -332,16 +332,16 @@ public abstract record ElmValue
 
     public static Maybe<string> TryMapElmValueToString(ElmList elmValues) =>
         elmValues.Elements.Select(TryMapElmValueToChar).ListCombine()
-        .Map(chars => new string([.. chars]));
+        .Map(chars => string.Join("", chars.Select(char.ConvertFromUtf32)));
 
-    public static Maybe<char> TryMapElmValueToChar(ElmValue elmValue) =>
+    public static Maybe<int> TryMapElmValueToChar(ElmValue elmValue) =>
         elmValue switch
         {
             ElmChar elmChar =>
-            Maybe<char>.just(elmChar.Value),
+            Maybe<int>.just(elmChar.Value),
 
             _ =>
-            Maybe<char>.nothing()
+            Maybe<int>.nothing()
         };
 
     public static (string expressionString, bool needsParens) ElmValueAsExpression(ElmValue elmValue)
@@ -353,7 +353,7 @@ public abstract record ElmValue
                 (integer.Value.ToString(), needsParens: false),
 
                 ElmChar charValue =>
-                ("'" + charValue.Value + "'", needsParens: false),
+                ("'" + char.ConvertFromUtf32(charValue.Value) + "'", needsParens: false),
 
                 ElmList list =>
                 ElmListItemsLookLikeTupleItems(list.Elements).WithDefault(false)
@@ -365,7 +365,7 @@ public abstract record ElmValue
                 needsParens: false),
 
                 ElmString stringValue =>
-                (System.Text.Json.JsonSerializer.Serialize(stringValue.Value), needsParens: false),
+                ("\"" + stringValue.Value.Replace("\\", "\\\\").Replace("\"", "\\\"") + "\"", needsParens: false),
 
                 ElmRecord record =>
                 (record.Fields.Count < 1)
@@ -418,9 +418,16 @@ public abstract record ElmValue
         var dictToList = ElmValueDictToList(elmTag);
 
         if (dictToList.Count == 0)
-            return
-                (elmTag.TagName + " " + string.Join(" ", elmTag.Arguments.Select(ElmValueAsExpression).Select(applyNeedsParens)),
-                needsParens: false);
+        {
+            var (needsParens, argumentsString) =
+                elmTag.Arguments.Count switch
+                {
+                    0 => (false, ""),
+                    _ => (true, " " + string.Join(" ", elmTag.Arguments.Select(ElmValueAsExpression).Select(applyNeedsParens)))
+                };
+
+            return (elmTag.TagName + argumentsString, needsParens);
+        }
 
         return ("Dict.fromList [" +
             string.Join(",",
