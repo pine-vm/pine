@@ -104,6 +104,9 @@ public abstract record ElmValue
 
         public override string ToString() =>
             ElmValueAsExpression(this).expressionString;
+
+        public ElmValue? this[string fieldName] =>
+            Fields.FirstOrDefault(field => field.FieldName == fieldName).Value;
     }
 
     public record ElmInternal(string Value)

@@ -25,6 +25,7 @@ import ElmInteractive
         )
 import ElmInteractiveCoreModules
 import ElmInteractiveKernelModules
+import EncodeElmSyntaxAsPineValue
 import FirCompiler exposing (emitExpressionInDeclarationBlock)
 import Json.Encode
 import Parser
@@ -88,7 +89,8 @@ expandElmInteractiveEnvironmentWithModuleTexts contextModulesTexts =
         |> Result.map
             (\parsedModules ->
                 ( parsedModules
-                , \environmentBefore -> ElmCompiler.expandElmInteractiveEnvironmentWithModules environmentBefore parsedModules
+                , \environmentBefore ->
+                    ElmCompiler.expandElmInteractiveEnvironmentWithModules environmentBefore parsedModules
                 )
             )
 
@@ -290,12 +292,35 @@ parseElmModuleTextToJson elmModule =
         jsonValue =
             case parseElmModuleText elmModule of
                 Err _ ->
-                    [ ( "Err", "Failed to parse this as module text" |> Json.Encode.string ) ] |> Json.Encode.object
+                    Json.Encode.object
+                        [ ( "Err"
+                          , Json.Encode.string "Failed to parse this as module text"
+                          )
+                        ]
 
                 Ok file ->
-                    [ ( "Ok", file |> Elm.Syntax.File.encode ) ] |> Json.Encode.object
+                    Json.Encode.object
+                        [ ( "Ok"
+                          , Elm.Syntax.File.encode file
+                          )
+                        ]
     in
-    jsonValue |> Json.Encode.encode 0
+    Json.Encode.encode 0 jsonValue
+
+
+parseElmModuleTextToPineValue : String -> Result String Pine.Value
+parseElmModuleTextToPineValue elmModule =
+    case parseElmModuleText elmModule of
+        Err _ ->
+            Err "Failed to parse this as module text"
+
+        Ok file ->
+            case EncodeElmSyntaxAsPineValue.encodeElmSyntaxFileAsPineValue file of
+                Err error ->
+                    Err ("Failed to encode the parsed module as Pine value: " ++ error)
+
+                Ok pineValue ->
+                    Ok pineValue
 
 
 parseInteractiveSubmissionFromString : String -> Result String InteractiveSubmission

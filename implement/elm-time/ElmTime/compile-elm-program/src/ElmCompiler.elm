@@ -20,6 +20,7 @@ module ElmCompiler exposing
     , pineFunctionForRecordUpdateAsValue
     , separateEnvironmentDeclarations
     , stringStartsWithUpper
+    , valueFromString
     )
 
 import Common
@@ -1079,12 +1080,12 @@ compileElmSyntaxExpression stack elmExpression =
                                 |> Result.andThen
                                     (\rightExpression ->
                                         compileElmFunctionOrValueLookup ( [], "(" ++ operator ++ ")" ) stack
-                                            |> Result.map
-                                                (\operationFunction ->
-                                                    FunctionApplicationExpression
-                                                        operationFunction
+                                                    |> Result.map
+                                                        (\operationFunction ->
+                                                            FunctionApplicationExpression
+                                                                operationFunction
                                                         [ leftExpression, rightExpression ]
-                                                )
+                                                        )
                                     )
                         )
                     |> Result.mapError ((++) ("Failed to compile OperatorApplication '" ++ operator ++ "': "))
@@ -1235,7 +1236,7 @@ compileElmSyntaxApplication stack appliedFunctionElmSyntax argumentsElmSyntax =
                                         Ok (applicableDeclaration arguments)
 
                                     _ ->
-                                        continueWithDefaultApplication ()
+                                                continueWithDefaultApplication ()
 
                 _ ->
                     continueWithDefaultApplication ()
@@ -2823,7 +2824,7 @@ parseChoiceTypeFromValue value =
                                                     Ok
                                                         ( tagName
                                                         , { argumentsCount = argumentsCount }
-                                                    )
+                                                        )
                                         )
 
                             Pine.ListValue list ->

@@ -175,7 +175,7 @@ public class ElmInteractive
         CompilationCache compilationCacheBefore)
     {
         var environmentBefore =
-            parentEnvironment is null ? PineValueJson.FromPineValueWithoutBuildingDictionary(PineValue.EmptyList) :
+            parentEnvironment is null ? FromPineValueWithoutBuildingDictionary(PineValue.EmptyList) :
             parentEnvironment.environmentPineValueJson;
 
         var argumentsJson = System.Text.Json.JsonSerializer.Serialize(
@@ -203,7 +203,7 @@ public class ElmInteractive
                 var environmentPineValue = ParsePineValueFromJson(fromJson!, dictionary: parentEnvironment?.environmentDictionary);
 
                 var (environmentJson, compilationCacheTask) =
-                PineValueJson.FromPineValueBuildingDictionary(
+                FromPineValueBuildingDictionary(
                     environmentPineValue, compilationCache: compilationCacheBefore);
 
                 return
@@ -274,7 +274,7 @@ public class ElmInteractive
                 label + " duration: " + CommandLineInterface.FormatIntegerForDisplay(clock.ElapsedMilliseconds) + " ms");
 
         var (environmentJson, compilationCacheTask) =
-            PineValueJson.FromPineValueBuildingDictionary(environment, compilationCacheBefore);
+            FromPineValueBuildingDictionary(environment, compilationCacheBefore);
 
         var requestJson =
             System.Text.Json.JsonSerializer.Serialize(
@@ -315,13 +315,13 @@ public class ElmInteractive
     }
 
     internal record CompilationCache(
-        IImmutableDictionary<PineValue, PineValueJson.PineValueMappedForTransport> valueMappedForTransportCache,
+        IImmutableDictionary<PineValue, PineValueMappedForTransport> valueMappedForTransportCache,
         IImmutableDictionary<PineValue, (PineValueJson, IReadOnlyDictionary<string, PineValue>)> valueJsonCache,
         IImmutableSet<CompileInteractiveEnvironmentResult> compileInteractiveEnvironmentResults)
     {
         internal static CompilationCache Empty =>
             new(
-                ImmutableDictionary<PineValue, PineValueJson.PineValueMappedForTransport>.Empty,
+                ImmutableDictionary<PineValue, PineValueMappedForTransport>.Empty,
                 ImmutableDictionary<PineValue, (PineValueJson, IReadOnlyDictionary<string, PineValue>)>.Empty,
                 ImmutableHashSet<CompileInteractiveEnvironmentResult>.Empty);
     }
@@ -341,7 +341,7 @@ public class ElmInteractive
         var responseJson =
             evalElmPreparedJavaScriptEngine.CallFunction(
                 "submissionResponseFromResponsePineValue",
-                System.Text.Json.JsonSerializer.Serialize(PineValueJson.FromPineValueWithoutBuildingDictionary(response))).ToString()!;
+                System.Text.Json.JsonSerializer.Serialize(FromPineValueWithoutBuildingDictionary(response))).ToString()!;
 
         var responseStructure =
             System.Text.Json.JsonSerializer.Deserialize<Result<string, EvaluatedSctructure>>(responseJson)!;
@@ -349,7 +349,7 @@ public class ElmInteractive
         return responseStructure;
     }
 
-    internal record PineValueJson
+    public record PineValueJson
     {
         public IReadOnlyCollection<DictionaryEntry>? Dictionary { init; get; } = null;
 
@@ -362,209 +362,211 @@ public class ElmInteractive
         public string? Reference { init; get; }
 
         public record DictionaryEntry(string key, PineValueJson value);
+    }
 
-        internal record PineValueMappedForTransport(
-            string? ListAsString,
-            IReadOnlyList<PineValueMappedForTransport>? List,
-            PineValue origin)
-            : IEquatable<PineValueMappedForTransport>
+    internal record PineValueMappedForTransport(
+        string? ListAsString,
+        IReadOnlyList<PineValueMappedForTransport>? List,
+        PineValue origin)
+        : IEquatable<PineValueMappedForTransport>
+    {
+        public virtual bool Equals(PineValueMappedForTransport? other) =>
+            Equals(this, other);
+
+        public override int GetHashCode()
         {
-            public virtual bool Equals(PineValueMappedForTransport? other) =>
-                Equals(this, other);
+            if (ListAsString is not null)
+                return ListAsString.GetHashCode();
 
-            public override int GetHashCode()
-            {
-                if (ListAsString is not null)
-                    return ListAsString.GetHashCode();
-
-                return origin.GetHashCode();
-            }
-
-            public static bool Equals(PineValueMappedForTransport? left, PineValueMappedForTransport? right)
-            {
-                if (left is null && right is null)
-                    return true;
-
-                if (left is null || right is null)
-                    return false;
-
-                if (left.ListAsString is { } leftString && right.ListAsString is { } rightString)
-                    return leftString == rightString;
-
-                return left.origin.Equals(right.origin);
-            }
-
-            public static PineValueMappedForTransport FromPineValue(
-                PineValue pineValue,
-                IDictionary<PineValue, PineValueMappedForTransport>? cache)
-            {
-                if (cache?.TryGetValue(pineValue, out var mapped) ?? false)
-                    return mapped;
-
-                mapped = FromPineValueIgnoringCacheForCurrent(pineValue, cache);
-
-                cache?.Add(pineValue, mapped);
-
-                return mapped;
-            }
-
-            private static PineValueMappedForTransport FromPineValueIgnoringCacheForCurrent(
-                PineValue pineValue,
-                IDictionary<PineValue, PineValueMappedForTransport>? cache)
-            {
-                if (PineValueAsString.StringFromValue(pineValue) is Result<string, string>.Ok asString)
-                    return new PineValueMappedForTransport(ListAsString: asString.Value, List: null, origin: pineValue);
-
-                if (pineValue is PineValue.ListValue listComponent)
-                    return new PineValueMappedForTransport(
-                        ListAsString: null,
-                        List: listComponent.Elements.Select(item => FromPineValue(item, cache)).ToList(),
-                        origin: pineValue);
-
-                return new PineValueMappedForTransport(ListAsString: null, List: null, origin: pineValue);
-            }
+            return origin.GetHashCode();
         }
 
-        public static ((PineValueJson json, IReadOnlyDictionary<string, PineValue> dictionary), System.Threading.Tasks.Task<CompilationCache>)
-            FromPineValueBuildingDictionary(
+        public static bool Equals(PineValueMappedForTransport? left, PineValueMappedForTransport? right)
+        {
+            if (left is null && right is null)
+                return true;
+
+            if (left is null || right is null)
+                return false;
+
+            if (left.ListAsString is { } leftString && right.ListAsString is { } rightString)
+                return leftString == rightString;
+
+            return left.origin.Equals(right.origin);
+        }
+
+        public static PineValueMappedForTransport FromPineValue(
             PineValue pineValue,
-            CompilationCache compilationCache)
+            IDictionary<PineValue, PineValueMappedForTransport>? cache)
         {
-            if (compilationCache.valueJsonCache.TryGetValue(pineValue, out var cached))
-                return (cached, System.Threading.Tasks.Task.FromResult(compilationCache));
+            if (cache?.TryGetValue(pineValue, out var mapped) ?? false)
+                return mapped;
 
-            var valueMappedForTransportCache = new Dictionary<PineValue, PineValueMappedForTransport>(
-                compilationCache.valueMappedForTransportCache);
+            mapped = FromPineValueIgnoringCacheForCurrent(pineValue, cache);
 
-            var intermediate = PineValueMappedForTransport.FromPineValue(pineValue, cache: valueMappedForTransportCache);
+            cache?.Add(pineValue, mapped);
 
-            var usageCountLowerBoundDictionary = new Dictionary<PineValueMappedForTransport, int>();
-
-            void mutatingCountUsagesRecursive(PineValueMappedForTransport mappedForTransport)
-            {
-                if (!usageCountLowerBoundDictionary.TryGetValue(mappedForTransport, out var usageCountLowerBound))
-                    usageCountLowerBound = 0;
-
-                ++usageCountLowerBound;
-
-                usageCountLowerBoundDictionary[mappedForTransport] = usageCountLowerBound;
-
-                if (1 < usageCountLowerBound)
-                    return;
-
-                if (mappedForTransport.ListAsString is null && mappedForTransport.List is { } asList)
-                {
-                    foreach (var item in asList)
-                    {
-                        mutatingCountUsagesRecursive(item);
-                    }
-                }
-            }
-
-            mutatingCountUsagesRecursive(intermediate);
-
-            var valuesUsedMultipleTimes =
-                usageCountLowerBoundDictionary
-                .Where(count => count.Value > 1)
-                .ToImmutableDictionary(x => x.Key, x => x.Value);
-
-            int keyIndex = 0;
-
-            var dictionary = new Dictionary<PineValueMappedForTransport, string>();
-
-            void mutatingBuildDictionaryRecursive(PineValueMappedForTransport mappedForTransport)
-            {
-                if (dictionary.ContainsKey(mappedForTransport))
-                    return;
-
-                if (valuesUsedMultipleTimes!.ContainsKey(mappedForTransport))
-                {
-                    dictionary[mappedForTransport] = keyIndex++.ToString();
-                    return;
-                }
-
-                if (mappedForTransport.List is { } isList)
-                {
-                    foreach (var item in isList)
-                    {
-                        mutatingBuildDictionaryRecursive(item);
-                    }
-                }
-            }
-
-            mutatingBuildDictionaryRecursive(intermediate);
-
-            var dictionaryForSerial =
-                dictionary
-                .Select(entry => new DictionaryEntry(
-                    key: entry.Value,
-                    value: FromPineValueWithoutBuildingDictionary(entry.Key, dictionary, doNotDictionaryOnFirstLevel: true)))
-                .ToImmutableArray();
-
-            var pineValueJson = FromPineValueWithoutBuildingDictionary(
-                intermediate,
-                dictionary: dictionary)
-                with
-            { Dictionary = dictionaryForSerial };
-
-            var decodeResponseDictionary =
-                dictionary
-                .ToImmutableDictionary(
-                    keySelector: entry => entry.Value,
-                    elementSelector: entry => entry.Key.origin);
-
-            var cacheEntry = (json: pineValueJson, dictionary: decodeResponseDictionary);
-
-            var compilationCacheTask = System.Threading.Tasks.Task.Run(() =>
-            {
-                var valueJsonCache = new Dictionary<PineValue, (PineValueJson, IReadOnlyDictionary<string, PineValue>)>(
-                    compilationCache.valueJsonCache)
-                {
-                    [pineValue] = cacheEntry
-                };
-
-                return
-                    compilationCache
-                    with
-                    {
-                        valueMappedForTransportCache = valueMappedForTransportCache.ToImmutableDictionary(),
-                        valueJsonCache = valueJsonCache.ToImmutableDictionary()
-                    };
-            });
-
-            return (cacheEntry, compilationCacheTask);
+            return mapped;
         }
 
-        public static PineValueJson FromPineValueWithoutBuildingDictionary(PineValue pineValue) =>
-            FromPineValueWithoutBuildingDictionary(PineValueMappedForTransport.FromPineValue(pineValue, cache: null));
-
-        private static PineValueJson FromPineValueWithoutBuildingDictionary(
-            PineValueMappedForTransport pineValue,
-            IReadOnlyDictionary<PineValueMappedForTransport, string>? dictionary = null,
-            bool doNotDictionaryOnFirstLevel = false)
+        private static PineValueMappedForTransport FromPineValueIgnoringCacheForCurrent(
+            PineValue pineValue,
+            IDictionary<PineValue, PineValueMappedForTransport>? cache)
         {
-            if (!doNotDictionaryOnFirstLevel && (dictionary?.TryGetValue(pineValue, out var result) ?? false))
-                return new PineValueJson { Reference = result };
+            if (PineValueAsString.StringFromValue(pineValue) is Result<string, string>.Ok asString)
+                return new PineValueMappedForTransport(ListAsString: asString.Value, List: null, origin: pineValue);
 
-            if (pineValue.ListAsString is { } asString)
-                return new PineValueJson { ListAsString = asString };
+            if (pineValue is PineValue.ListValue listComponent)
+                return new PineValueMappedForTransport(
+                    ListAsString: null,
+                    List: listComponent.Elements.Select(item => FromPineValue(item, cache)).ToList(),
+                    origin: pineValue);
 
-            if (pineValue.List is { } asList)
-            {
-                return new PineValueJson
-                {
-                    List = asList.Select(e => FromPineValueWithoutBuildingDictionary(e, dictionary)).ToList()
-                };
-            }
-
-            if (pineValue.origin is PineValue.BlobValue blobComponent)
-                return new PineValueJson { Blob = blobComponent.Bytes.ToArray().Select(b => (int)b).ToImmutableArray() };
-
-            throw new NotImplementedException("Unexpected shape");
+            return new PineValueMappedForTransport(ListAsString: null, List: null, origin: pineValue);
         }
     }
 
-    private static PineValue ParsePineValueFromJson(PineValueJson fromJson, IReadOnlyDictionary<string, PineValue>? dictionary)
+    public static PineValueJson FromPineValueWithoutBuildingDictionary(PineValue pineValue) =>
+        FromPineValueWithoutBuildingDictionary(PineValueMappedForTransport.FromPineValue(pineValue, cache: null));
+
+    private static PineValueJson FromPineValueWithoutBuildingDictionary(
+        PineValueMappedForTransport pineValue,
+        IReadOnlyDictionary<PineValueMappedForTransport, string>? dictionary = null,
+        bool doNotDictionaryOnFirstLevel = false)
+    {
+        if (!doNotDictionaryOnFirstLevel && (dictionary?.TryGetValue(pineValue, out var result) ?? false))
+            return new PineValueJson { Reference = result };
+
+        if (pineValue.ListAsString is { } asString)
+            return new PineValueJson { ListAsString = asString };
+
+        if (pineValue.List is { } asList)
+        {
+            return new PineValueJson
+            {
+                List = asList.Select(e => FromPineValueWithoutBuildingDictionary(e, dictionary)).ToList()
+            };
+        }
+
+        if (pineValue.origin is PineValue.BlobValue blobComponent)
+            return new PineValueJson { Blob = blobComponent.Bytes.ToArray().Select(b => (int)b).ToImmutableArray() };
+
+        throw new NotImplementedException("Unexpected shape");
+    }
+
+    internal static ((PineValueJson json, IReadOnlyDictionary<string, PineValue> dictionary), System.Threading.Tasks.Task<CompilationCache>)
+        FromPineValueBuildingDictionary(
+        PineValue pineValue,
+        CompilationCache compilationCache)
+    {
+        if (compilationCache.valueJsonCache.TryGetValue(pineValue, out var cached))
+            return (cached, System.Threading.Tasks.Task.FromResult(compilationCache));
+
+        var valueMappedForTransportCache = new Dictionary<PineValue, PineValueMappedForTransport>(
+            compilationCache.valueMappedForTransportCache);
+
+        var intermediate = PineValueMappedForTransport.FromPineValue(pineValue, cache: valueMappedForTransportCache);
+
+        var usageCountLowerBoundDictionary = new Dictionary<PineValueMappedForTransport, int>();
+
+        void mutatingCountUsagesRecursive(PineValueMappedForTransport mappedForTransport)
+        {
+            if (!usageCountLowerBoundDictionary.TryGetValue(mappedForTransport, out var usageCountLowerBound))
+                usageCountLowerBound = 0;
+
+            ++usageCountLowerBound;
+
+            usageCountLowerBoundDictionary[mappedForTransport] = usageCountLowerBound;
+
+            if (1 < usageCountLowerBound)
+                return;
+
+            if (mappedForTransport.ListAsString is null && mappedForTransport.List is { } asList)
+            {
+                foreach (var item in asList)
+                {
+                    mutatingCountUsagesRecursive(item);
+                }
+            }
+        }
+
+        mutatingCountUsagesRecursive(intermediate);
+
+        var valuesUsedMultipleTimes =
+            usageCountLowerBoundDictionary
+            .Where(count => count.Value > 1)
+            .ToImmutableDictionary(x => x.Key, x => x.Value);
+
+        int keyIndex = 0;
+
+        var dictionary = new Dictionary<PineValueMappedForTransport, string>();
+
+        void mutatingBuildDictionaryRecursive(PineValueMappedForTransport mappedForTransport)
+        {
+            if (dictionary.ContainsKey(mappedForTransport))
+                return;
+
+            if (valuesUsedMultipleTimes!.ContainsKey(mappedForTransport))
+            {
+                dictionary[mappedForTransport] = keyIndex++.ToString();
+                return;
+            }
+
+            if (mappedForTransport.List is { } isList)
+            {
+                foreach (var item in isList)
+                {
+                    mutatingBuildDictionaryRecursive(item);
+                }
+            }
+        }
+
+        mutatingBuildDictionaryRecursive(intermediate);
+
+        var dictionaryForSerial =
+            dictionary
+            .Select(entry => new PineValueJson.DictionaryEntry(
+                key: entry.Value,
+                value: FromPineValueWithoutBuildingDictionary(entry.Key, dictionary, doNotDictionaryOnFirstLevel: true)))
+            .ToImmutableArray();
+
+        var pineValueJson = FromPineValueWithoutBuildingDictionary(
+            intermediate,
+            dictionary: dictionary)
+            with
+        { Dictionary = dictionaryForSerial };
+
+        var decodeResponseDictionary =
+            dictionary
+            .ToImmutableDictionary(
+                keySelector: entry => entry.Value,
+                elementSelector: entry => entry.Key.origin);
+
+        var cacheEntry = (json: pineValueJson, dictionary: decodeResponseDictionary);
+
+        var compilationCacheTask = System.Threading.Tasks.Task.Run(() =>
+        {
+            var valueJsonCache = new Dictionary<PineValue, (PineValueJson, IReadOnlyDictionary<string, PineValue>)>(
+                compilationCache.valueJsonCache)
+            {
+                [pineValue] = cacheEntry
+            };
+
+            return
+                compilationCache
+                with
+                {
+                    valueMappedForTransportCache = valueMappedForTransportCache.ToImmutableDictionary(),
+                    valueJsonCache = valueJsonCache.ToImmutableDictionary()
+                };
+        });
+
+        return (cacheEntry, compilationCacheTask);
+    }
+
+    public static PineValue ParsePineValueFromJson(
+        PineValueJson fromJson,
+        IReadOnlyDictionary<string, PineValue>? dictionary)
     {
         if (fromJson.List is { } list)
             return PineValue.List(list.Select(item => ParsePineValueFromJson(item, dictionary)).ToImmutableList());
@@ -696,6 +698,10 @@ public class ElmInteractive
 
                 (functionNameInElm: "ElmInteractiveMain.submissionResponseFromResponsePineValue",
                 publicName: "submissionResponseFromResponsePineValue",
+                arity: 1),
+
+                (functionNameInElm: "ElmInteractiveMain.parseElmModuleTextToPineValue",
+                publicName: "parseElmModuleTextToPineValue",
                 arity: 1),
             };
 

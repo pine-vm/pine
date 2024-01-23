@@ -33,6 +33,24 @@ parseElmModuleTextToJson =
     ElmInteractiveParser.parseElmModuleTextToJson
 
 
+parseElmModuleTextToPineValue : String -> String
+parseElmModuleTextToPineValue moduleTextJson =
+    {- 2024-01-21:
+       When using the plain Elm module text as parameter, some characters like emojis arrived in escaped form.
+       Therefore we use the Json.Decode.string decoder to decode the module text.
+    -}
+    let
+        result =
+            moduleTextJson
+                |> Json.Decode.decodeString Json.Decode.string
+                |> Result.mapError Json.Decode.errorToString
+                |> Result.andThen ElmInteractiveParser.parseElmModuleTextToPineValue
+    in
+    result
+        |> json_encode_Result Json.Encode.string (ElmInteractive.json_encode_pineValue Dict.empty)
+        |> Json.Encode.encode 0
+
+
 parseElmModuleText : String -> Result (List Parser.DeadEnd) Elm.Syntax.File.File
 parseElmModuleText =
     ElmInteractiveParser.parseElmModuleText
@@ -188,6 +206,7 @@ main =
             , d = compileInteractiveEnvironment
             , e = submissionResponseFromResponsePineValue
             , f = getDefaultElmCoreModulesTexts
+            , g = parseElmModuleTextToPineValue
             }
                 |> always ( (), Cmd.none )
                 |> always
