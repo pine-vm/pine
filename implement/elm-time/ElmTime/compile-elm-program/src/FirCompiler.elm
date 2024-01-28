@@ -1,16 +1,22 @@
 module FirCompiler exposing
     ( Deconstruction(..)
     , EmitStack
+    , EnvironmentFunctionEntry
     , Expression(..)
     , attemptReduceDecodeAndEvaluateExpressionRecursive
+    , buildRecordOfPartiallyAppliedFunction
     , countListElementsExpression
+    , emitDeclarationBlock
     , emitExpression
     , emitExpressionInDeclarationBlock
     , emitWrapperForPartialApplication
+    , emitWrapperForPartialApplicationZero
     , equalCondition
     , equalCondition_Pine
     , estimatePineValueSize
     , evaluateAsIndependentExpression
+    , getTransitiveDependencies
+    , listDirectDependenciesOfExpression
     , listItemFromIndexExpression
     , listItemFromIndexExpression_Pine
     , listSkipExpression
@@ -21,6 +27,7 @@ module FirCompiler exposing
     , pineExpressionIsIndependent
     , pineKernel_ListHead
     , pineKernel_ListHead_Pine
+    , recursionDomainsFromDeclarationDependencies
     )
 
 import Common
@@ -90,7 +97,8 @@ type alias EmitStack =
 
 type alias EnvironmentFunctionEntry =
     { functionName : String
-    , argumentsCount : Int
+    , parameterCount : Int
+    , expectedEnvironmentFunctions : List String
     }
 
 
@@ -154,7 +162,12 @@ emitExpression stack expression =
             emitFunctionApplication functionExpression arguments stack
 
         DeclarationBlockExpression declarations innerExpression ->
-            emitExpressionInDeclarationBlock stack declarations innerExpression
+            emitExpressionInDeclarationBlock
+                stack
+                { availableEmittedFunctions = [] }
+                declarations
+                innerExpression
+                |> Result.map Tuple.second
 
         StringTagExpression tag tagged ->
             tagged
@@ -165,7 +178,8 @@ emitExpression stack expression =
             emitExpression stack argument
                 |> Result.map
                     (\emittedArgument ->
-                        Pine.DecodeAndEvaluateExpression
+                        attemptReduceDecodeAndEvaluateExpressionRecursive
+                            { maxDepth = 3 }
                             { expression =
                                 pineFunctionExpression
                                     |> Pine.encodeExpressionAsValue
@@ -179,8 +193,10 @@ emitFunctionExpression : EmitStack -> List FunctionParam -> Expression -> Result
 emitFunctionExpression stack functionParams functionBody =
     emitExpressionInDeclarationBlock
         stack
+        { availableEmittedFunctions = [] }
         Dict.empty
         (FunctionExpression functionParams functionBody)
+        |> Result.map Tuple.second
 
 
 type alias DeclarationBlockFunctionEntry =
@@ -189,12 +205,26 @@ type alias DeclarationBlockFunctionEntry =
     }
 
 
+type alias EmitDeclarationBlockPrefix =
+    { availableEmittedFunctions : List ( EnvironmentFunctionEntry, Pine.Value )
+    }
+
+
+type alias EmitDeclarationBlockResult =
+    { newEnvFunctionsValues : List ( EnvironmentFunctionEntry, ( Pine.Expression, Pine.Value ) )
+    , prependedEnvFunctionsExpressions : List Pine.Expression
+    , parseAndEmitFunction : Expression -> ( DeclarationBlockFunctionEntry, Result String Pine.Expression )
+    , envFunctionsExpression : Pine.Expression
+    }
+
+
 emitExpressionInDeclarationBlock :
     EmitStack
+    -> EmitDeclarationBlockPrefix
     -> Dict.Dict String Expression
     -> Expression
-    -> Result String Pine.Expression
-emitExpressionInDeclarationBlock stackBeforeAddingDeps blockDeclarations mainExpression =
+    -> Result String ( EmitDeclarationBlockPrefix, Pine.Expression )
+emitExpressionInDeclarationBlock stackBeforeAddingDeps environmentPrefix blockDeclarations mainExpression =
     let
         blockDeclarationsIncludingImports =
             Dict.union blockDeclarations
@@ -224,13 +254,14 @@ emitExpressionInDeclarationBlock stackBeforeAddingDeps blockDeclarations mainExp
                 Set.empty
                 stackBefore.environmentFunctions
 
+        usedBlockDeclarations : Dict.Dict String Expression
         usedBlockDeclarations =
             Dict.foldl
                 (\declName declExpression aggregate ->
                     if Set.member declName mainExpressionOuterDependencies then
                         -- Not supporting shadowing at the moment: Filter out every name we already have from a parent scope.
                         if not (Set.member declName beforeEnvironmentFunctionsNames) then
-                            Dict.insert declName (parseFunctionParameters declExpression) aggregate
+                            Dict.insert declName declExpression aggregate
 
                         else
                             aggregate
@@ -254,144 +285,366 @@ emitExpressionInDeclarationBlock stackBeforeAddingDeps blockDeclarations mainExp
     in
     if mainExpressionAsFunction.parameters == [] && Dict.isEmpty usedBlockDeclarations then
         emitExpression stackBeforeAddingDeps mainExpressionAsFunction.innerExpression
+            |> Result.map (Tuple.pair { availableEmittedFunctions = [] })
 
     else
-        let
-            blockDeclarationsAsFunctions : List ( String, DeclarationBlockFunctionEntry )
-            blockDeclarationsAsFunctions =
-                Dict.toList usedBlockDeclarations
+        emitDeclarationBlock
+            stackBefore
+            environmentPrefix
+            usedBlockDeclarations
+            { closureCaptures = closureCaptures
+            , additionalImports = mainExpressionOuterDependencies
+            }
+            |> Result.andThen
+                (\( _, blockDeclarationsEmitted ) ->
+                    let
+                        ( _, mainExpressionEmitResult ) =
+                            blockDeclarationsEmitted.parseAndEmitFunction mainExpression
+                    in
+                    case mainExpressionEmitResult of
+                        Err err ->
+                            Err ("Failed emitting main expression: " ++ err)
 
-            newEnvironmentFunctionsFromDecls : List EnvironmentFunctionEntry
-            newEnvironmentFunctionsFromDecls =
-                List.map
-                    (\( functionName, functionEntry ) ->
-                        { functionName = functionName
-                        , argumentsCount = List.length functionEntry.parameters
-                        }
+                        Ok mainExpressionEmitted ->
+                            Ok
+                                ( { availableEmittedFunctions =
+                                        blockDeclarationsEmitted.newEnvFunctionsValues
+                                            |> List.map (Tuple.mapSecond Tuple.second)
+                                  }
+                                , emitWrapperForPartialApplication
+                                    blockDeclarationsEmitted.envFunctionsExpression
+                                    (List.length mainExpressionAsFunction.parameters)
+                                    mainExpressionEmitted
+                                )
+                )
+
+
+emitDeclarationBlock :
+    EmitStack
+    -> EmitDeclarationBlockPrefix
+    -> Dict.Dict String Expression
+    ->
+        { closureCaptures : List ( String, EnvironmentDeconstructionEntry )
+        , additionalImports : Set.Set String
+        }
+    -> Result String ( EmitStack, EmitDeclarationBlockResult )
+emitDeclarationBlock stackBefore environmentPrefix blockDeclarations { closureCaptures, additionalImports } =
+    let
+        availableEmittedDependencies : Dict.Dict String (Set.Set String)
+        availableEmittedDependencies =
+            List.foldl
+                (\( availableEmitted, _ ) ->
+                    Dict.insert
+                        availableEmitted.functionName
+                        (Set.fromList availableEmitted.expectedEnvironmentFunctions)
+                )
+                Dict.empty
+                environmentPrefix.availableEmittedFunctions
+
+        blockDeclarationsDirectDependencies : Dict.Dict String (Set.Set String)
+        blockDeclarationsDirectDependencies =
+            Dict.foldl
+                (\declName declExpression ->
+                    Dict.insert declName (listDirectDependenciesOfExpression declExpression)
+                )
+                Dict.empty
+                blockDeclarations
+
+        dependenciesRelations : Dict.Dict String (Set.Set String)
+        dependenciesRelations =
+            Dict.union availableEmittedDependencies blockDeclarationsDirectDependencies
+
+        allDependencies : Set.Set String
+        allDependencies =
+            Set.union
+                additionalImports
+                (getTransitiveDependencies
+                    dependenciesRelations
+                    (Dict.foldl (\_ dependencies -> Set.union dependencies)
+                        Set.empty
+                        blockDeclarationsDirectDependencies
                     )
-                    blockDeclarationsAsFunctions
+                )
 
-            newEnvironmentFunctionsFromClosureCaptures : List EnvironmentFunctionEntry
-            newEnvironmentFunctionsFromClosureCaptures =
-                List.map
-                    (\( captureName, _ ) ->
-                        { functionName = captureName
-                        , argumentsCount = 0
-                        }
+        usedAvailableEmitted : List ( EnvironmentFunctionEntry, Pine.Expression )
+        usedAvailableEmitted =
+            List.foldl
+                (\( availableEmitted, emittedValue ) aggregate ->
+                    if Set.member availableEmitted.functionName allDependencies then
+                        ( availableEmitted, Pine.LiteralExpression emittedValue ) :: aggregate
+
+                    else
+                        aggregate
+                )
+                []
+                environmentPrefix.availableEmittedFunctions
+
+        blockDeclarationsList : List ( String, Expression )
+        blockDeclarationsList =
+            Dict.toList blockDeclarations
+
+        blockDeclarationsAsFunctions : List ( String, DeclarationBlockFunctionEntry )
+        blockDeclarationsAsFunctions =
+            List.map
+                (\( declName, declExpression ) ->
+                    ( declName
+                    , parseFunctionParameters declExpression
                     )
-                    closureCaptures
+                )
+                blockDeclarationsList
 
-            appendedEnvironmentFunctions : List EnvironmentFunctionEntry
-            appendedEnvironmentFunctions =
-                newEnvironmentFunctionsFromDecls ++ newEnvironmentFunctionsFromClosureCaptures
+        composeEnvironmentFunctions :
+            { prefix : List a
+            , forwarded : List a
+            , appendedFromDecls : List a
+            , appendedFromClosureCaptures : List a
+            }
+            -> List a
+        composeEnvironmentFunctions { prefix, forwarded, appendedFromDecls, appendedFromClosureCaptures } =
+            prefix ++ forwarded ++ appendedFromDecls ++ appendedFromClosureCaptures
 
-            environmentFunctions =
-                stackBefore.environmentFunctions ++ appendedEnvironmentFunctions
+        newEnvironmentFunctionsNames : List String
+        newEnvironmentFunctionsNames =
+            composeEnvironmentFunctions
+                { prefix = List.map (Tuple.first >> .functionName) usedAvailableEmitted
+                , forwarded = List.map .functionName stackBefore.environmentFunctions
+                , appendedFromDecls = List.map Tuple.first blockDeclarationsList
+                , appendedFromClosureCaptures = List.map Tuple.first closureCaptures
+                }
 
-            emitFunction : DeclarationBlockFunctionEntry -> Result String Pine.Expression
-            emitFunction functionEntry =
-                let
-                    functionEmitStack =
-                        { importedFunctions = stackBefore.importedFunctions
-                        , declarationsDependencies = stackBefore.declarationsDependencies
-                        , environmentFunctions = environmentFunctions
-                        , environmentDeconstructions =
+        newEnvironmentFunctionsFromDecls : List EnvironmentFunctionEntry
+        newEnvironmentFunctionsFromDecls =
+            List.map
+                (\( functionName, functionEntry ) ->
+                    { functionName = functionName
+                    , parameterCount = List.length functionEntry.parameters
+                    , expectedEnvironmentFunctions = newEnvironmentFunctionsNames
+                    }
+                )
+                blockDeclarationsAsFunctions
+
+        prefixEnvironmentFunctions : List EnvironmentFunctionEntry
+        prefixEnvironmentFunctions =
+            List.map
+                (\( functionEntry, _ ) -> functionEntry)
+                usedAvailableEmitted
+
+        prependedEnvFunctionsExpressions : List Pine.Expression
+        prependedEnvFunctionsExpressions =
+            List.map Tuple.second usedAvailableEmitted
+
+        newEnvironmentFunctionsFromClosureCaptures : List EnvironmentFunctionEntry
+        newEnvironmentFunctionsFromClosureCaptures =
+            List.map
+                (\( captureName, _ ) ->
+                    { functionName = captureName
+                    , parameterCount = 0
+                    , expectedEnvironmentFunctions = newEnvironmentFunctionsNames
+                    }
+                )
+                closureCaptures
+
+        environmentFunctions : List EnvironmentFunctionEntry
+        environmentFunctions =
+            composeEnvironmentFunctions
+                { prefix = prefixEnvironmentFunctions
+                , forwarded = stackBefore.environmentFunctions
+                , appendedFromDecls = newEnvironmentFunctionsFromDecls
+                , appendedFromClosureCaptures = newEnvironmentFunctionsFromClosureCaptures
+                }
+
+        commonEmitStack : EmitStack
+        commonEmitStack =
+            { importedFunctions = stackBefore.importedFunctions
+            , declarationsDependencies = stackBefore.declarationsDependencies
+            , environmentFunctions = environmentFunctions
+            , environmentDeconstructions = Dict.empty
+            }
+
+        emitFunction : DeclarationBlockFunctionEntry -> Result String Pine.Expression
+        emitFunction functionEntry =
+            let
+                functionEmitStack =
+                    { commonEmitStack
+                        | environmentDeconstructions =
                             functionEntry.parameters
                                 |> environmentDeconstructionsFromFunctionParams
-                        }
-                in
-                emitExpression functionEmitStack functionEntry.innerExpression
+                    }
+            in
+            emitExpression functionEmitStack functionEntry.innerExpression
 
-            emitBlockDeclarationsResult : Result String (List ( String, Pine.Expression ))
-            emitBlockDeclarationsResult =
-                blockDeclarationsAsFunctions
-                    |> List.map
-                        (\( functionName, blockDeclAsFunction ) ->
-                            blockDeclAsFunction
-                                |> emitFunction
-                                |> Result.mapError ((++) ("Failed to emit '" ++ functionName ++ "': "))
-                                |> Result.map (Tuple.pair functionName)
-                        )
-                    |> Result.Extra.combine
-
-            closureCapturesExpressions =
-                List.map
-                    (\( _, deconstruction ) ->
-                        Pine.EnvironmentExpression
-                            |> listItemFromIndexExpression_Pine 1
-                            |> pineExpressionForDeconstructions deconstruction
+        emitBlockDeclarationsResult : Result String (List ( String, ( DeclarationBlockFunctionEntry, Pine.Expression ) ))
+        emitBlockDeclarationsResult =
+            blockDeclarationsAsFunctions
+                |> List.map
+                    (\( functionName, blockDeclAsFunction ) ->
+                        blockDeclAsFunction
+                            |> emitFunction
+                            |> Result.mapError ((++) ("Failed to emit '" ++ functionName ++ "': "))
+                            |> Result.map
+                                (\emittedExpression ->
+                                    ( functionName, ( blockDeclAsFunction, emittedExpression ) )
+                                )
                     )
-                    closureCaptures
-        in
-        emitBlockDeclarationsResult
-            |> Result.andThen
-                (\blockDeclarationsEmitted ->
-                    let
-                        newEnvFunctionsValues =
-                            List.map
-                                (\( declName, declExpr ) ->
-                                    ( declName
-                                    , Pine.encodeExpressionAsValue declExpr
-                                    )
-                                )
-                                blockDeclarationsEmitted
+                |> Result.Extra.combine
 
-                        newEnvFunctionsExpressionsFromDecls : List Pine.Expression
-                        newEnvFunctionsExpressionsFromDecls =
+        closureCapturesExpressions =
+            List.map
+                (\( _, deconstruction ) ->
+                    pineExpressionForDeconstructions
+                        deconstruction
+                        (listItemFromIndexExpression_Pine 1 Pine.EnvironmentExpression)
+                )
+                closureCaptures
+
+        closureCapturesExpressionsWrapped =
+            List.map
+                (\captureExpression ->
+                    Pine.ListExpression
+                        [ Pine.LiteralExpression Pine.stringAsValue_Literal
+                        , captureExpression
+                        ]
+                )
+                closureCapturesExpressions
+    in
+    emitBlockDeclarationsResult
+        |> Result.map
+            (\blockDeclarationsEmitted ->
+                let
+                    newEnvFunctionsValues : List ( EnvironmentFunctionEntry, ( Pine.Expression, Pine.Value ) )
+                    newEnvFunctionsValues =
+                        List.map
+                            (\( declName, ( declAsFunction, declExpr ) ) ->
+                                ( { functionName = declName
+                                  , parameterCount = List.length declAsFunction.parameters
+                                  , expectedEnvironmentFunctions = newEnvironmentFunctionsNames
+                                  }
+                                , ( declExpr
+                                  , Pine.encodeExpressionAsValue declExpr
+                                  )
+                                )
+                            )
+                            blockDeclarationsEmitted
+
+                    newEnvFunctionsExpressionsFromDecls : List Pine.Expression
+                    newEnvFunctionsExpressionsFromDecls =
+                        List.map (Tuple.second >> Tuple.second >> Pine.LiteralExpression)
                             newEnvFunctionsValues
-                                |> List.map (Tuple.second >> Pine.LiteralExpression)
 
-                        closureCapturesExpressionsWrapped =
-                            List.map
-                                (\captureExpression ->
+                    appendedEnvFunctionsExpressions : List Pine.Expression
+                    appendedEnvFunctionsExpressions =
+                        newEnvFunctionsExpressionsFromDecls
+                            ++ closureCapturesExpressionsWrapped
+
+                    envFunctionsExpression =
+                        if stackBefore.environmentFunctions == [] then
+                            Pine.ListExpression
+                                (prependedEnvFunctionsExpressions ++ appendedEnvFunctionsExpressions)
+
+                        else
+                            Pine.KernelApplicationExpression
+                                { functionName = "concat"
+                                , argument =
                                     Pine.ListExpression
-                                        [ Pine.LiteralExpression Pine.stringAsValue_Literal
-                                        , captureExpression
+                                        [ Pine.ListExpression prependedEnvFunctionsExpressions
+                                        , {-
+                                             Here we depend on the returned list having the same layout as stackBefore.environmentFunctions.
+                                             2023-12-31: Observed some tests failing, and fixed this by wrapping into the application of 'take'.
+                                             This observation indicates that some part of the compiler emitted a longer list than is described in stackBefore.environmentFunctions.
+                                          -}
+                                          Pine.KernelApplicationExpression
+                                            { functionName = "take"
+                                            , argument =
+                                                Pine.ListExpression
+                                                    [ Pine.LiteralExpression
+                                                        (Pine.valueFromInt (List.length stackBefore.environmentFunctions))
+                                                    , Pine.EnvironmentExpression
+                                                        |> listItemFromIndexExpression_Pine 0
+                                                    ]
+                                            }
+                                        , Pine.ListExpression appendedEnvFunctionsExpressions
                                         ]
-                                )
-                                closureCapturesExpressions
+                                }
 
-                        appendedEnvFunctionsExpressions : List Pine.Expression
-                        appendedEnvFunctionsExpressions =
-                            newEnvFunctionsExpressionsFromDecls
-                                ++ closureCapturesExpressionsWrapped
+                    parseAndEmitFunction : Expression -> ( DeclarationBlockFunctionEntry, Result String Pine.Expression )
+                    parseAndEmitFunction expression =
+                        let
+                            functionEntry =
+                                parseFunctionParameters expression
+                        in
+                        ( functionEntry
+                        , emitFunction functionEntry
+                        )
+                in
+                ( commonEmitStack
+                , { newEnvFunctionsValues = newEnvFunctionsValues
+                  , prependedEnvFunctionsExpressions = prependedEnvFunctionsExpressions
+                  , parseAndEmitFunction = parseAndEmitFunction
+                  , envFunctionsExpression = envFunctionsExpression
+                  }
+                )
+            )
 
-                        envFunctionsExpression =
-                            if stackBefore.environmentFunctions == [] then
-                                Pine.ListExpression appendedEnvFunctionsExpressions
+
+{-| Derive an ordered list of recursion domains from a dictionary of dependencies with their transitive dependencies.
+Each recursion domain is a set of names of declarations that mutually depend on each other.
+The overall list of recursion domains is ordered by their dependencies on each other.
+The first element in the list is a set of declarations that do not depend on any other declaration.
+-}
+recursionDomainsFromDeclarationDependencies : Dict.Dict String (Set.Set String) -> List (Set.Set String)
+recursionDomainsFromDeclarationDependencies declarationDependencies =
+    let
+        integrateDecl declName declDependencies recursionDomains =
+            let
+                -- Inserts the new domain into the list of domains at the position where the none of the following domains depend on it.
+                insertDomainRecursive :
+                    Set.Set String
+                    -> List (Set.Set String)
+                    -> List (Set.Set String)
+                    -> List (Set.Set String)
+                insertDomainRecursive domainToInsert skipped following =
+                    case following of
+                        [] ->
+                            skipped ++ [ domainToInsert ]
+
+                        next :: rest ->
+                            let
+                                allCurrentAndFollowing =
+                                    List.foldl Set.union next rest
+
+                                dependingOnAnyCurrentOrFollowing : Bool
+                                dependingOnAnyCurrentOrFollowing =
+                                    not (Set.isEmpty (Set.intersect declDependencies allCurrentAndFollowing))
+
+                                allDependenciesOfNext : Set.Set String
+                                allDependenciesOfNext =
+                                    Set.foldl
+                                        (\nextDeclName aggregate ->
+                                            Set.union
+                                                aggregate
+                                                (Maybe.withDefault Set.empty (Dict.get nextDeclName declarationDependencies))
+                                        )
+                                        Set.empty
+                                        next
+
+                                nextDependingOnNewDomain : Bool
+                                nextDependingOnNewDomain =
+                                    Set.member declName allDependenciesOfNext
+                            in
+                            if dependingOnAnyCurrentOrFollowing then
+                                if nextDependingOnNewDomain then
+                                    -- Merge the new domain into the current domain
+                                    skipped ++ [ Set.union domainToInsert next ] ++ rest
+
+                                else
+                                    insertDomainRecursive domainToInsert (skipped ++ [ next ]) rest
 
                             else
-                                Pine.KernelApplicationExpression
-                                    { functionName = "concat"
-                                    , argument =
-                                        Pine.ListExpression
-                                            [ {-
-                                                 Here we depend on the returned list having the same layout as stackBefore.environmentFunctions.
-                                                 2023-12-31: Observed some tests failing, and fixed this by wrapping into the application of 'take'.
-                                                 This observation indicates that some part of the compiler emitted a longer list than is described in stackBefore.environmentFunctions.
-                                              -}
-                                              Pine.KernelApplicationExpression
-                                                { functionName = "take"
-                                                , argument =
-                                                    Pine.ListExpression
-                                                        [ Pine.LiteralExpression
-                                                            (Pine.valueFromInt (List.length stackBefore.environmentFunctions))
-                                                        , Pine.EnvironmentExpression
-                                                            |> listItemFromIndexExpression_Pine 0
-                                                        ]
-                                                }
-                                            , Pine.ListExpression appendedEnvFunctionsExpressions
-                                            ]
-                                    }
-                    in
-                    mainExpressionAsFunction
-                        |> emitFunction
-                        |> Result.map
-                            (emitWrapperForPartialApplication
-                                envFunctionsExpression
-                                (List.length mainExpressionAsFunction.parameters)
-                            )
-                )
+                                skipped ++ [ domainToInsert ] ++ following
+            in
+            insertDomainRecursive (Set.singleton declName) [] recursionDomains
+    in
+    Dict.foldl integrateDecl [] declarationDependencies
 
 
 parseFunctionParameters : Expression -> DeclarationBlockFunctionEntry
@@ -418,23 +671,13 @@ parseFunctionParameters expression =
 emitReferenceExpression : String -> EmitStack -> Result String Pine.Expression
 emitReferenceExpression name compilation =
     case
-        compilation.environmentFunctions
-            |> Common.listFindIndexedMap
-                (\index envEntry ->
-                    if envEntry.functionName == name then
-                        Just ( index, envEntry )
-
-                    else
-                        Nothing
-                )
+        emitApplyFunctionFromCurrentEnvironment
+            compilation
+            { functionName = name }
+            []
     of
-        Just ( functionIndexInEnv, function ) ->
-            emitApplyFunctionFromCurrentEnvironment
-                { functionIndexInEnv = functionIndexInEnv
-                , function = function
-                }
-                []
-                |> Ok
+        Just functionApplicationResult ->
+            functionApplicationResult
 
         Nothing ->
             case Dict.get name compilation.environmentDeconstructions of
@@ -578,7 +821,8 @@ pineExpressionForDeconstruction deconstruction =
 
         PineFunctionApplicationDeconstruction pineFunctionExpression ->
             \emittedArgument ->
-                Pine.DecodeAndEvaluateExpression
+                attemptReduceDecodeAndEvaluateExpressionRecursive
+                    { maxDepth = 3 }
                     { expression =
                         pineFunctionExpression
                             |> Pine.encodeExpressionAsValue
@@ -631,31 +875,63 @@ emitFunctionApplication functionExpression arguments compilation =
                     in
                     case functionExpression of
                         ReferenceExpression functionName ->
-                            case
-                                compilation.environmentFunctions
-                                    |> Common.listFindIndexedMap
-                                        (\index envEntry ->
-                                            if envEntry.functionName == functionName then
-                                                Just ( index, envEntry )
+                            {-
+                               TODO: Test optimize: Inline if number of references to recursive functions does not increase.
+                            -}
+                            if avoidInlineNamedFunctionApplication compilation functionName arguments then
+                                genericFunctionApplication ()
 
-                                            else
-                                                Nothing
-                                        )
-                            of
-                                Just ( functionIndexInEnv, function ) ->
+                            else
+                                case
                                     emitApplyFunctionFromCurrentEnvironment
-                                        { functionIndexInEnv = functionIndexInEnv
-                                        , function = function
-                                        }
+                                        compilation
+                                        { functionName = functionName }
                                         argumentsPine
-                                        |> Ok
+                                of
+                                    Just functionApplicationResult ->
+                                        functionApplicationResult
 
-                                Nothing ->
-                                    genericFunctionApplication ()
+                                    Nothing ->
+                                        genericFunctionApplication ()
 
                         _ ->
                             genericFunctionApplication ()
                 )
+
+
+avoidInlineNamedFunctionApplication : EmitStack -> String -> List Expression -> Bool
+avoidInlineNamedFunctionApplication emitStack _ arguments =
+    {- Do not inline when any of the arguments might contain a recursive call.
+       Since inlining could multiply usage of an argument, this could lead to exponential growth in case of recursion.
+    -}
+    let
+        recursiveFunctions : Set.Set String
+        recursiveFunctions =
+            List.foldl
+                (\envEntry aggregate ->
+                    if Set.member envEntry.functionName (Set.fromList envEntry.expectedEnvironmentFunctions) then
+                        Set.insert envEntry.functionName aggregate
+
+                    else
+                        aggregate
+                )
+                Set.empty
+                emitStack.environmentFunctions
+    in
+    List.any
+        (\applicationArgument ->
+            anySubExpression
+                (\expression ->
+                    case expression of
+                        ReferenceExpression functionName ->
+                            Set.member functionName recursiveFunctions
+
+                        _ ->
+                            False
+                )
+                applicationArgument
+        )
+        arguments
 
 
 emitFunctionApplicationPine : List Pine.Expression -> Pine.Expression -> Result String Pine.Expression
@@ -715,47 +991,115 @@ emitFunctionApplicationPine arguments functionExpressionPine =
 
 
 emitApplyFunctionFromCurrentEnvironment :
-    { functionIndexInEnv : Int
-    , function : EnvironmentFunctionEntry
-    }
+    EmitStack
+    -> { functionName : String }
     -> List Pine.Expression
-    -> Pine.Expression
-emitApplyFunctionFromCurrentEnvironment { functionIndexInEnv, function } arguments =
+    -> Maybe (Result String Pine.Expression)
+emitApplyFunctionFromCurrentEnvironment compilation { functionName } arguments =
     let
-        getEnvFunctionsExpression =
-            Pine.EnvironmentExpression
-                |> listItemFromIndexExpression_Pine 0
-
-        getFunctionExpression =
-            getEnvFunctionsExpression
-                |> listItemFromIndexExpression_Pine functionIndexInEnv
+        currentEnvironmentFunctionEntryFromName : String -> Maybe ( Int, EnvironmentFunctionEntry )
+        currentEnvironmentFunctionEntryFromName name =
+            Common.listFindWithIndex
+                (\envEntry -> envEntry.functionName == name)
+                compilation.environmentFunctions
     in
-    if function.argumentsCount == List.length arguments then
-        Pine.DecodeAndEvaluateExpression
-            { expression = getFunctionExpression
-            , environment =
-                Pine.ListExpression
-                    [ getEnvFunctionsExpression
-                    , Pine.ListExpression arguments
-                    ]
-            }
+    case currentEnvironmentFunctionEntryFromName functionName of
+        Nothing ->
+            Nothing
 
-    else
-        (if function.argumentsCount == 0 then
-            emitWrapperForPartialApplicationZero
-                { getFunctionInnerExpression = getFunctionExpression
-                , getEnvFunctionsExpression = getEnvFunctionsExpression
-                }
+        Just ( functionIndexInEnv, function ) ->
+            let
+                getEnvFunctionsExpression =
+                    Pine.EnvironmentExpression
+                        |> listItemFromIndexExpression_Pine 0
 
-         else
-            buildRecordOfPartiallyAppliedFunction
-                { getFunctionInnerExpression = getFunctionExpression
-                , getEnvFunctionsExpression = getEnvFunctionsExpression
-                , functionParameterCount = function.argumentsCount
-                , argumentsAlreadyCollected = []
-                }
-        )
-            |> partialApplicationExpressionFromListOfArguments arguments
+                getFunctionExpression =
+                    getEnvFunctionsExpression
+                        |> listItemFromIndexExpression_Pine functionIndexInEnv
+
+                currentEnv =
+                    List.map .functionName compilation.environmentFunctions
+
+                currentEnvCoversExpected =
+                    List.take (List.length function.expectedEnvironmentFunctions) currentEnv
+                        == function.expectedEnvironmentFunctions
+
+                buildEnvironmentRecursive :
+                    List Pine.Expression
+                    -> List String
+                    -> Result String Pine.Expression
+                buildEnvironmentRecursive alreadyMapped remainingToBeMapped =
+                    case remainingToBeMapped of
+                        [] ->
+                            Ok (Pine.ListExpression alreadyMapped)
+
+                        nextExpectedFunctionName :: remainingExpectedFunctions ->
+                            case currentEnvironmentFunctionEntryFromName nextExpectedFunctionName of
+                                Nothing ->
+                                    Err
+                                        ("Function '"
+                                            ++ functionName
+                                            ++ "' expects environment function '"
+                                            ++ nextExpectedFunctionName
+                                            ++ "' but it is not in the environment"
+                                        )
+
+                                Just ( indexInEnv, _ ) ->
+                                    buildEnvironmentRecursive
+                                        (alreadyMapped
+                                            ++ [ listItemFromIndexExpression_Pine
+                                                    indexInEnv
+                                                    getEnvFunctionsExpression
+                                               ]
+                                        )
+                                        remainingExpectedFunctions
+
+                buildExpectedEnvironmentResult =
+                    if currentEnvCoversExpected then
+                        Ok getEnvFunctionsExpression
+
+                    else
+                        buildEnvironmentRecursive [] function.expectedEnvironmentFunctions
+            in
+            case buildExpectedEnvironmentResult of
+                Err err ->
+                    Just (Err err)
+
+                Ok expectedEnvironment ->
+                    Just
+                        (Ok
+                            (if function.parameterCount == List.length arguments then
+                                Pine.DecodeAndEvaluateExpression
+                                    { expression = getFunctionExpression
+                                    , environment =
+                                        Pine.ListExpression
+                                            [ expectedEnvironment
+                                            , Pine.ListExpression arguments
+                                            ]
+                                    }
+
+                             else
+                                (if function.parameterCount == 0 then
+                                    Pine.DecodeAndEvaluateExpression
+                                        { expression = getFunctionExpression
+                                        , environment =
+                                            Pine.ListExpression
+                                                [ expectedEnvironment
+                                                , Pine.ListExpression arguments
+                                                ]
+                                        }
+
+                                 else
+                                    buildRecordOfPartiallyAppliedFunction
+                                        { getFunctionInnerExpression = getFunctionExpression
+                                        , getEnvFunctionsExpression = expectedEnvironment
+                                        , functionParameterCount = function.parameterCount
+                                        , argumentsAlreadyCollected = []
+                                        }
+                                )
+                                    |> partialApplicationExpressionFromListOfArguments arguments
+                            )
+                        )
 
 
 partialApplicationExpressionFromListOfArguments : List Pine.Expression -> Pine.Expression -> Pine.Expression
@@ -1311,6 +1655,51 @@ transformPineExpressionWithOptionalReplacement findReplacement expression =
                             (\taggedMapped ->
                                 Pine.StringTagExpression tag taggedMapped
                             )
+
+
+anySubExpression : (Expression -> Bool) -> Expression -> Bool
+anySubExpression predicate expression =
+    if predicate expression then
+        True
+
+    else
+        case expression of
+            LiteralExpression _ ->
+                False
+
+            ListExpression list ->
+                List.any (anySubExpression predicate) list
+
+            KernelApplicationExpression application ->
+                anySubExpression predicate application.argument
+
+            ConditionalExpression conditional ->
+                anySubExpression predicate conditional.condition
+                    || anySubExpression predicate conditional.ifTrue
+                    || anySubExpression predicate conditional.ifFalse
+
+            ReferenceExpression _ ->
+                False
+
+            FunctionExpression _ functionBody ->
+                anySubExpression predicate functionBody
+
+            FunctionApplicationExpression functionExpression arguments ->
+                anySubExpression predicate functionExpression
+                    || List.any (anySubExpression predicate) arguments
+
+            DeclarationBlockExpression declarations innerExpression ->
+                anySubExpression predicate innerExpression
+                    || Dict.foldl
+                        (\_ declExpression _ -> anySubExpression predicate declExpression)
+                        (anySubExpression predicate innerExpression)
+                        declarations
+
+            StringTagExpression _ tagged ->
+                anySubExpression predicate tagged
+
+            PineFunctionApplicationExpression _ argument ->
+                anySubExpression predicate argument
 
 
 evaluateAsIndependentExpression : Pine.Expression -> Result String Pine.Value

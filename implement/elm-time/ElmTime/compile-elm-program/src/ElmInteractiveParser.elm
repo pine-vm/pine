@@ -200,8 +200,10 @@ compileInteractiveSubmission environment submission =
                                         (\functionDeclarationCompilation ->
                                             emitExpressionInDeclarationBlock
                                                 emitStack
+                                                { availableEmittedFunctions = [] }
                                                 (Dict.singleton declarationName functionDeclarationCompilation)
                                                 functionDeclarationCompilation
+                                                |> Result.map Tuple.second
                                         )
                                     |> Result.andThen FirCompiler.evaluateAsIndependentExpression
                             of
@@ -250,12 +252,17 @@ compileInteractiveSubmission environment submission =
                 Ok (ExpressionSubmission elmExpression) ->
                     case
                         ElmCompiler.compileElmSyntaxExpression defaultCompilationStack elmExpression
-                            |> Result.andThen (emitExpressionInDeclarationBlock emitStack Dict.empty)
+                            |> Result.andThen
+                                (emitExpressionInDeclarationBlock
+                                    emitStack
+                                    { availableEmittedFunctions = [] }
+                                    Dict.empty
+                                )
                     of
                         Err error ->
                             Err ("Failed to compile Elm to Pine expression: " ++ error)
 
-                        Ok pineExpression ->
+                        Ok ( _, pineExpression ) ->
                             Ok
                                 (buildExpressionForNewStateAndResponse
                                     { newStateExpression = Pine.EnvironmentExpression

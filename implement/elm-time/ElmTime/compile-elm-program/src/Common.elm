@@ -25,21 +25,20 @@ listFind predicate list =
                 listFind predicate rest
 
 
-listFindIndexedMap : (Int -> a -> Maybe b) -> List a -> Maybe b
-listFindIndexedMap f list =
-    listFindIndexedMapHelper 0 f list
+listFindWithIndex : (a -> Bool) -> List a -> Maybe ( Int, a )
+listFindWithIndex predicate list =
+    listFindWithIndexHelper 0 predicate list
 
 
-listFindIndexedMapHelper : Int -> (Int -> a -> Maybe b) -> List a -> Maybe b
-listFindIndexedMapHelper index f list =
+listFindWithIndexHelper : Int -> (a -> Bool) -> List a -> Maybe ( Int, a )
+listFindWithIndexHelper index predicate list =
     case list of
         [] ->
             Nothing
 
         a :: tail ->
-            case f index a of
-                Just b ->
-                    Just b
+            if predicate a then
+                Just ( index, a )
 
-                Nothing ->
-                    listFindIndexedMapHelper (index + 1) f tail
+            else
+                listFindWithIndexHelper (index + 1) predicate tail

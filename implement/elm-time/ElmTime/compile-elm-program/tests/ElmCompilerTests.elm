@@ -1084,8 +1084,10 @@ emitClosureExpressionTests =
                             emitClosureResult =
                                 FirCompiler.emitExpressionInDeclarationBlock
                                     emptyEmitStack
+                                    { availableEmittedFunctions = [] }
                                     (Dict.fromList environmentFunctions)
                                     rootAsExpression
+                                    |> Result.map Tuple.second
                         in
                         emitClosureResult
                             |> Result.andThen
