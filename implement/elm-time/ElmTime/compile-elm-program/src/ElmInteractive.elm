@@ -7,7 +7,6 @@ import Elm.Syntax.Declaration
 import Elm.Syntax.Expression
 import Elm.Syntax.File
 import Elm.Syntax.ModuleName
-import Elm.Syntax.Node
 import ElmCompiler
     exposing
         ( CompilationStack
@@ -17,7 +16,6 @@ import ElmCompiler
         , elmRecordTypeTagName
         , elmStringTypeTagName
         , expressionForDeconstructions
-        , moduleNameFromSyntaxFile
         , stringStartsWithUpper
         )
 import FirCompiler
@@ -497,7 +495,6 @@ parsedElmFileRecordFromSeparatelyParsedSyntax : ( String, Elm.Syntax.File.File )
 parsedElmFileRecordFromSeparatelyParsedSyntax ( fileText, parsedModule ) =
     { fileText = fileText
     , parsedModule = parsedModule
-    , projectedModuleName = Elm.Syntax.Node.value (moduleNameFromSyntaxFile parsedModule)
     }
 
 

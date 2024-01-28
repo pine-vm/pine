@@ -61,8 +61,7 @@ import Set
 
 
 type alias ProjectParsedElmFile =
-    { projectedModuleName : List String
-    , fileText : String
+    { fileText : String
     , parsedModule : Elm.Syntax.File.File
     }
 
