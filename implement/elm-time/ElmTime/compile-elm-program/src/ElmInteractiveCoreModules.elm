@@ -146,27 +146,27 @@ idiv dividend divisor =
 idivHelper : Int -> Int -> Int -> Int
 idivHelper dividend divisor quotient =
     let
-        quadrupleDivisor =
-            mul divisor 4
+        scaledDivisor =
+            mul divisor 16
     in
-    if ge dividend quadrupleDivisor then
+    if ge dividend scaledDivisor then
         let
-            quarterQuotient =
+            scaledQuotient =
                 idivHelper
                     dividend
-                    quadrupleDivisor
+                    scaledDivisor
                     0
 
-            quarterQuotientSum =
-                mul quarterQuotient 4
+            scaledQuotientSum =
+                mul scaledQuotient 16
 
             remainder =
-                sub dividend (mul quarterQuotient quadrupleDivisor)
+                sub dividend (mul scaledQuotient scaledDivisor)
 
             remainderQuotient =
                 idivHelper remainder divisor 0
         in
-        add quarterQuotientSum remainderQuotient
+        add scaledQuotientSum remainderQuotient
 
     else if ge dividend divisor then
         idivHelper
