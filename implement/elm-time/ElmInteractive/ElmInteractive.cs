@@ -591,12 +591,16 @@ public class ElmInteractive
     }
 
     private static IReadOnlyList<string>? ModulesTextsFromAppCodeTree(TreeNodeWithStringPath? appCodeTree) =>
-        appCodeTree == null ? null
+        appCodeTree == null ?
+        null
         :
-        TreeToFlatDictionaryWithPathComparer(CompileTree(appCodeTree)!)
+        CompileTree(appCodeTree) is { } compiledTree ?
+        TreeToFlatDictionaryWithPathComparer(compiledTree)
         .Select(appCodeFile => appCodeFile.Key.Last().EndsWith(".elm") ? Encoding.UTF8.GetString(appCodeFile.Value.ToArray()) : null)
         .WhereNotNull()
-        .ToImmutableList();
+        .ToImmutableList()
+        :
+        null;
 
     private static TreeNodeWithStringPath? CompileTree(TreeNodeWithStringPath? sourceTree)
     {
