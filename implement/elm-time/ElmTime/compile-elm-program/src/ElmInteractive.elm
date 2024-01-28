@@ -316,6 +316,7 @@ pineValueAsElmValue pineValue =
 elmValueAsElmRecord : ElmValue -> Result String ElmValue
 elmValueAsElmRecord elmValue =
     let
+        tryMapToRecordField : ElmValue -> Result String ( String, ElmValue )
         tryMapToRecordField possiblyRecordField =
             case possiblyRecordField of
                 ElmList fieldListItems ->
@@ -340,6 +341,15 @@ elmValueAsElmRecord elmValue =
 
                                 ElmString fieldName ->
                                     continueWithFieldName fieldName
+
+                                ElmTag tagName arguments ->
+                                    Err
+                                        ("Unexpected type in field name value: Tag "
+                                            ++ tagName
+                                            ++ " with "
+                                            ++ String.fromInt (List.length arguments)
+                                            ++ " arguments."
+                                        )
 
                                 _ ->
                                     Err "Unexpected type in field name value."
