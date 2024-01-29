@@ -9,10 +9,12 @@ import Html.Events
 import Http
 import Json.Decode
 import Markdown.Parser
+import Markdown.Renderer
 import Result.Extra
 import Url
 
 
+main : Program () State Event
 main =
     Browser.application
         { init = init
@@ -215,14 +217,14 @@ viewGuide =
     guideMarkdown
         |> Markdown.Parser.parse
         |> Result.mapError (List.map Markdown.Parser.deadEndToString >> String.join "\n")
-        |> Result.andThen (Markdown.Parser.render Markdown.Parser.defaultHtmlRenderer)
+        |> Result.andThen (Markdown.Renderer.render Markdown.Renderer.defaultHtmlRenderer)
         |> Result.map (Html.div [])
         |> Result.Extra.extract Html.text
 
 
 guideMarkdown : String
 guideMarkdown =
-    Common.describeApp
+    String.trimLeft Common.describeApp
 
 
 viewNavigation : Html.Html Event

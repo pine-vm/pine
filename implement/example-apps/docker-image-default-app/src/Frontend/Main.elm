@@ -9,10 +9,12 @@ import Html.Events
 import Http
 import Json.Decode
 import Markdown.Parser
+import Markdown.Renderer
 import Result.Extra
 import Url
 
 
+main : Program () State Event
 main =
     Browser.application
         { init = init
@@ -215,7 +217,7 @@ viewGuide =
     CompilationInterface.SourceFiles.file____README_md.utf8
         |> Markdown.Parser.parse
         |> Result.mapError (List.map Markdown.Parser.deadEndToString >> String.join "\n")
-        |> Result.andThen (Markdown.Parser.render Markdown.Parser.defaultHtmlRenderer)
+        |> Result.andThen (Markdown.Renderer.render Markdown.Renderer.defaultHtmlRenderer)
         |> Result.map (Html.div [])
         |> Result.Extra.extract Html.text
 

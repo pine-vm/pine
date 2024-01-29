@@ -63,7 +63,7 @@ updateForHttpRequestEvent httpRequestEvent stateBefore =
             else
                 { statusCode = 200
                 , bodyAsBase64 =
-                    [ Common.describeApp
+                    [ String.trimLeft Common.describeApp
                     , "I received "
                         ++ (state.httpRequestsCount |> String.fromInt)
                         ++ " HTTP requests."
