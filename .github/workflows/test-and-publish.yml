@@ -24,8 +24,8 @@ jobs:
     - name: Avoid git mutating files on checkout
       run: |
         git config --global core.autocrlf false
-    - uses: actions/checkout@v3
-    - uses: actions/setup-dotnet@v3
+    - uses: actions/checkout@v4
+    - uses: actions/setup-dotnet@v4
       with:
         dotnet-version: '8.0.100'
 
@@ -46,7 +46,7 @@ jobs:
         dotnet test ./implement/test-elm-time/test-elm-time.csproj --logger "trx"  --diag "./implement/test-elm-time/TestResults/diag-log.txt"  --verbosity  diagnostic
 
     - name: Publish test results
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       if: always()
       with:
         name: test-results-${{ github.sha }}-${{ matrix.environment }}
@@ -73,7 +73,7 @@ jobs:
         Get-ChildItem -Path "./dotnet-build/" -Filter "elm-time*" | ForEach-Object { Copy-Item -Path $_.FullName -Destination "./publish/" }
 
     - name: Publish artifacts
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: elm-time-bin-${{ github.sha }}-${{ matrix.publish-runtime-id }}
         path: ./publish
@@ -82,7 +82,7 @@ jobs:
       run: dotnet publish -c Debug ./implement/elm-time --output ./publish-separate-assemblies
 
     - name: Publish artifacts with separate assemblies
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: elm-time-separate-assemblies-${{ github.sha }}-${{ matrix.publish-runtime-id }}
         path: ./publish-separate-assemblies

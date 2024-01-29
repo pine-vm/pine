@@ -30,8 +30,8 @@ jobs:
     - name: Avoid git mutating files on checkout
       run: |
         git config --global core.autocrlf false
-    - uses: actions/checkout@v3
-    - uses: actions/setup-dotnet@v3
+    - uses: actions/checkout@v4
+    - uses: actions/setup-dotnet@v4
       with:
         dotnet-version: '8.0.100'
 
@@ -51,7 +51,7 @@ jobs:
         Get-ChildItem -Path "./dotnet-build/" -Filter "elm-time*" | ForEach-Object { Copy-Item -Path $_.FullName -Destination "./publish/" }
 
     - name: Publish artifacts
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: elm-time-bin-${{ steps.tagName.outputs.tag }}-${{ matrix.publish-runtime-id }}
         path: ./publish
