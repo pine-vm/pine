@@ -3,13 +3,16 @@ module Frontend.Main exposing (Event(..), State, init, main, update, view)
 import Browser
 import Browser.Navigation as Navigation
 import CompilationInterface.SourceFiles
+import Element
+import Element.Font
+import Element.Region
+import Frontend.Markdown
+import Frontend.Visuals
 import Html
 import Html.Attributes as HA
 import Html.Events
 import Http
 import Json.Decode
-import Markdown.Parser
-import Markdown.Renderer
 import Result.Extra
 import Url
 
@@ -178,10 +181,10 @@ view state =
         pageContentFromPageState pageState =
             case pageState of
                 Failure ->
-                    Html.text "HTTP request failed."
+                    Element.text "HTTP request failed."
 
                 Loading ->
-                    Html.text "Loading..."
+                    Element.text "Loading..."
 
                 Success fullText ->
                     [ [ "I received the following content from the backend:" |> Html.text ]
@@ -189,6 +192,7 @@ view state =
                     , Html.pre [ HA.style "white-space" "pre-wrap" ] [ Html.text fullText ]
                     ]
                         |> Html.div []
+                        |> Element.html
 
         ( pageHeading, selectedPageContent ) =
             case state.selectedPage of
@@ -199,30 +203,48 @@ view state =
                     ( "About", pageContentFromPageState pageState )
 
                 NotFound url ->
-                    ( "Not Found", ("I found nothing at " ++ url) |> Html.text )
+                    ( "Not Found", ("I found nothing at " ++ url) |> Element.text )
 
         body =
-            [ globalStylesHtmlElement
-            , viewNavigation
-            , [ pageHeading |> Html.text ] |> Html.h1 []
-            , viewGuide
-            , selectedPageContent
+            [ Frontend.Visuals.globalCssStyleHtmlElement
+            , [ viewNavigation
+                    |> Element.el [ Element.padding 8 ]
+              , pageHeading
+                    |> Element.text
+                    |> Element.el
+                        [ Element.Region.heading 1
+                        , Element.Font.size 24
+                        ]
+              , viewGuide
+              , selectedPageContent
+              ]
+                |> Element.column
+                    [ Element.width Element.fill
+                    , Element.height Element.fill
+                    , Element.padding 16
+                    , Element.spacing 16
+                    ]
+                |> Element.layout
+                    [ Element.Font.size 16
+                    , Element.Font.family
+                        [ Element.Font.typeface "Helvetica"
+                        , Element.Font.sansSerif
+                        ]
+                    ]
             ]
     in
     { title = pageHeading, body = body }
 
 
-viewGuide : Html.Html event
+viewGuide : Element.Element event
 viewGuide =
     CompilationInterface.SourceFiles.file____README_md.utf8
-        |> Markdown.Parser.parse
-        |> Result.mapError (List.map Markdown.Parser.deadEndToString >> String.join "\n")
-        |> Result.andThen (Markdown.Renderer.render Markdown.Renderer.defaultHtmlRenderer)
-        |> Result.map (Html.div [])
-        |> Result.Extra.extract Html.text
+        |> Frontend.Markdown.viewViaDefaultHtmlRenderer { containerClassName = "markdown-body" }
+        |> Result.map (Element.column [ Element.width Element.fill ])
+        |> Result.Extra.extract Element.text
 
 
-viewNavigation : Html.Html Event
+viewNavigation : Element.Element Event
 viewNavigation =
     [ NavigateToHome, NavigateToAbout ]
         |> List.map
@@ -231,6 +253,7 @@ viewNavigation =
                     |> Html.span [ HA.style "margin" "4pt" ]
             )
         |> Html.div []
+        |> Element.html
 
 
 htmlLinkToPage : OfferedPage -> (List (Html.Html Event) -> Html.Html Event)
@@ -267,16 +290,3 @@ titleAndUrlFromOfferedPage offeredPage =
 
         NavigateToAbout ->
             ( "About", "/about" )
-
-
-globalStylesHtmlElement : Html.Html a
-globalStylesHtmlElement =
-    """
-body {
-font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-margin: 1em;
-}
-"""
-        |> Html.text
-        |> List.singleton
-        |> Html.node "style" []
