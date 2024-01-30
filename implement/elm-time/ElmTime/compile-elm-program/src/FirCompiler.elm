@@ -439,7 +439,7 @@ emitDeclarationBlock stackBefore environmentPrefix blockDeclarations { closureCa
                 (\( captureName, _ ) ->
                     { functionName = captureName
                     , parameterCount = 0
-                    , expectedEnvironmentFunctions = newEnvironmentFunctionsNames
+                    , expectedEnvironmentFunctions = []
                     }
                 )
                 closureCaptures
