@@ -2880,7 +2880,7 @@ shouldInlineDeclaration name expression =
     else
         case expression of
             LiteralExpression value ->
-                estimatePineValueSize value < 30 * 1000
+                estimatePineValueSize value < 50 * 1000
 
             _ ->
                 False
