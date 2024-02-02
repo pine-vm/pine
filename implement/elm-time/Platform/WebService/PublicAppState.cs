@@ -258,15 +258,31 @@ public class PublicAppState
 
             if (httpResponse.bodyAsBase64.WithDefault(null) is { } responseBodyAsBase64)
             {
+                var responseBodyAsBase64Utf8 = System.Text.Encoding.UTF8.GetBytes(responseBodyAsBase64);
+
                 var buffer = new byte[responseBodyAsBase64.Length * 3 / 4];
 
-                if (!Convert.TryFromBase64String(responseBodyAsBase64, buffer, out var bytesWritten))
-                {
-                    throw new FormatException(
-                        "Failed to convert from base64. bytesWritten=" + bytesWritten +
-                        ", input.length=" + responseBodyAsBase64.Length + ", input:\n" +
-                        httpResponse.bodyAsBase64);
-                }
+                contentAsByteArray =
+                    System.Buffers.Text.Base64.DecodeFromUtf8(
+                        responseBodyAsBase64Utf8,
+                        buffer,
+                        out var bytesConsumed,
+                        out var bytesWritten)
+                    switch
+                    {
+                        System.Buffers.OperationStatus.Done =>
+                        buffer.AsMemory(0, bytesWritten),
+
+                        System.Buffers.OperationStatus.InvalidData =>
+                            throw new FormatException(
+                                "Failed to convert from base64. bytesConsumed=" + bytesConsumed +
+                                ", bytesWritten=" + bytesWritten +
+                                ", input.length=" + responseBodyAsBase64.Length + ", input:\n" +
+                                System.Text.Json.JsonSerializer.Serialize(responseBodyAsBase64)),
+
+                        var otherStatus =>
+                        throw new NotImplementedException("Unexpected OperationStatus: " + otherStatus)
+                    };
 
                 contentAsByteArray = buffer.AsMemory(0, bytesWritten);
             }
