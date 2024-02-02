@@ -15,6 +15,7 @@ module ElmCompiler exposing
     , expressionForDeconstructions
     , getDeclarationsFromEnvironment
     , moduleNameFromSyntaxFile
+    , parseModuleValue
     , parseTypeDeclarationFromValueTagged
     , pineFunctionForRecordAccessAsValue
     , pineFunctionForRecordUpdateAsValue
@@ -349,8 +350,10 @@ expandElmInteractiveEnvironmentWithModules environmentBefore newParsedElmModules
                                                     Result.andThen
                                                         (\aggregate ->
                                                             let
+                                                                currentAvailableModules : Dict.Dict Elm.Syntax.ModuleName.ModuleName ElmModuleInCompilation
                                                                 currentAvailableModules =
                                                                     separateEnvironmentDeclarationsBefore.modules
+                                                                        |> Dict.map (\_ ( _, parsedModule ) -> parsedModule)
                                                                         |> Dict.union aggregate
                                                             in
                                                             compileElmModuleIntoNamedExports currentAvailableModules moduleToTranslate
@@ -1235,7 +1238,7 @@ compileElmSyntaxApplication stack appliedFunctionElmSyntax argumentsElmSyntax =
                                         Ok (applicableDeclaration arguments)
 
                                     _ ->
-                                        continueWithDefaultApplication ()
+                                                continueWithDefaultApplication ()
 
                 _ ->
                     continueWithDefaultApplication ()
@@ -2988,7 +2991,7 @@ separateEnvironmentDeclarations :
     ->
         Result
             String
-            { modules : Dict.Dict Elm.Syntax.ModuleName.ModuleName ElmModuleInCompilation
+            { modules : Dict.Dict Elm.Syntax.ModuleName.ModuleName ( Pine.Value, ElmModuleInCompilation )
             , otherDeclarations : Dict.Dict String Pine.Value
             }
 separateEnvironmentDeclarations environmentDeclarations =
@@ -3006,17 +3009,17 @@ separateEnvironmentDeclarations environmentDeclarations =
                                         | modules =
                                             Dict.insert
                                                 (String.split "." declNameFlat)
-                                                moduleDeclarations
+                                                ( declValue, moduleDeclarations )
                                                 aggregate.modules
                                     }
                                 )
 
                     else
-                        { aggregate
-                            | otherDeclarations =
-                                Dict.insert declNameFlat declValue aggregate.otherDeclarations
-                        }
-                            |> Ok
+                        Ok
+                            { aggregate
+                                | otherDeclarations =
+                                    Dict.insert declNameFlat declValue aggregate.otherDeclarations
+                            }
                 )
         )
         (Ok { modules = Dict.empty, otherDeclarations = Dict.empty })

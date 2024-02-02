@@ -167,7 +167,12 @@ compileInteractiveSubmission environment submission =
                         ]
 
                 ( defaultCompilationStack, emitStack ) =
-                    compilationAndEmitStackFromInteractiveEnvironment environmentDeclarations
+                    compilationAndEmitStackFromInteractiveEnvironment
+                        { modules =
+                            environmentDeclarations.modules
+                                |> Dict.map (\_ ( _, parsedModule ) -> parsedModule)
+                        , otherDeclarations = environmentDeclarations.otherDeclarations
+                        }
             in
             case parseInteractiveSubmissionFromString submission of
                 Err error ->

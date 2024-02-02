@@ -23,6 +23,7 @@ module FirCompiler exposing
     , listSkipExpression_Pine
     , listTransitiveDependenciesOfExpression
     , parseFunctionParameters
+    , parseFunctionRecordFromValueTagged
     , partialApplicationExpressionFromListOfArguments
     , pineExpressionIsIndependent
     , pineKernel_ListHead
@@ -960,7 +961,7 @@ avoidInlineNamedFunctionApplication emitStack _ arguments =
                 (\expression ->
                     case expression of
                         ReferenceExpression refName ->
-                            Set.member refName recursiveFunctions
+                                    Set.member refName recursiveFunctions
 
                         _ ->
                             False
@@ -1347,7 +1348,8 @@ parseFunctionRecordFromValueTagged :
     ->
         Result
             String
-            { innerFunction : Pine.Expression
+            { innerFunctionValue : Pine.Value
+            , innerFunction : Pine.Expression
             , functionParameterCount : Int
             , envFunctions : List Pine.Value
             , argumentsAlreadyCollected : List Pine.Value
@@ -1378,7 +1380,8 @@ parseFunctionRecordFromValue :
     ->
         Result
             String
-            { innerFunction : Pine.Expression
+            { innerFunctionValue : Pine.Value
+            , innerFunction : Pine.Expression
             , functionParameterCount : Int
             , envFunctions : List Pine.Value
             , argumentsAlreadyCollected : List Pine.Value
@@ -1403,7 +1406,8 @@ parseFunctionRecordFromValue value =
                                             case argumentsAlreadyCollectedValue of
                                                 Pine.ListValue argumentsAlreadyCollected ->
                                                     Ok
-                                                        { innerFunction = innerFunction
+                                                        { innerFunctionValue = innerFunctionValue
+                                                        , innerFunction = innerFunction
                                                         , functionParameterCount = functionParameterCount
                                                         , envFunctions = envFunctions
                                                         , argumentsAlreadyCollected = argumentsAlreadyCollected

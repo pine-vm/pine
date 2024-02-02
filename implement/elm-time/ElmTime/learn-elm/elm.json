@@ -27,6 +27,7 @@
             "elm-community/string-extra": "4.0.1",
             "folkertdev/elm-sha2": "1.0.0",
             "jinjor/elm-diff": "1.0.6",
+            "lattyware/elm-fontawesome": "6.0.0",
             "mdgriffith/elm-ui": "1.1.8",
             "stil4m/elm-syntax": "7.3.2",
             "z5h/jaro-winkler": "1.0.2"
