@@ -33,7 +33,6 @@ module FirCompiler exposing
 import Common
 import Dict
 import Pine
-import Result.Extra
 import Set
 
 
@@ -113,44 +112,49 @@ emitExpression stack expression =
             Ok (Pine.LiteralExpression literal)
 
         ListExpression list ->
-            list
-                |> List.map (emitExpression stack)
-                |> Result.Extra.combine
-                |> Result.map Pine.ListExpression
-                |> Result.map reduceExpressionToLiteralIfIndependent
+            case Common.resultListMapCombine (\item -> emitExpression stack item) list of
+                Err err ->
+                    Err err
+
+                Ok listEmitted ->
+                    Ok (reduceExpressionToLiteralIfIndependent (Pine.ListExpression listEmitted))
 
         KernelApplicationExpression kernelApplication ->
-            kernelApplication.argument
-                |> emitExpression stack
-                |> Result.map
-                    (\argument ->
-                        Pine.KernelApplicationExpression
+            case emitExpression stack kernelApplication.argument of
+                Err err ->
+                    Err err
+
+                Ok argument ->
+                    Ok
+                        (Pine.KernelApplicationExpression
                             { functionName = kernelApplication.functionName
                             , argument = argument
                             }
-                    )
+                        )
 
         ConditionalExpression conditional ->
-            conditional.condition
-                |> emitExpression stack
-                |> Result.andThen
-                    (\condition ->
-                        conditional.ifTrue
-                            |> emitExpression stack
-                            |> Result.andThen
-                                (\ifTrue ->
-                                    conditional.ifFalse
-                                        |> emitExpression stack
-                                        |> Result.map
-                                            (\ifFalse ->
-                                                Pine.ConditionalExpression
-                                                    { condition = condition
-                                                    , ifTrue = ifTrue
-                                                    , ifFalse = ifFalse
-                                                    }
-                                            )
-                                )
-                    )
+            case emitExpression stack conditional.condition of
+                Err err ->
+                    Err err
+
+                Ok condition ->
+                    case emitExpression stack conditional.ifTrue of
+                        Err err ->
+                            Err err
+
+                        Ok ifTrue ->
+                            case emitExpression stack conditional.ifFalse of
+                                Err err ->
+                                    Err err
+
+                                Ok ifFalse ->
+                                    Ok
+                                        (Pine.ConditionalExpression
+                                            { condition = condition
+                                            , ifTrue = ifTrue
+                                            , ifFalse = ifFalse
+                                            }
+                                        )
 
         ReferenceExpression localReference ->
             emitReferenceExpression localReference stack
@@ -162,41 +166,55 @@ emitExpression stack expression =
             emitFunctionApplication functionExpression arguments stack
 
         DeclarationBlockExpression declarations innerExpression ->
-            emitExpressionInDeclarationBlock
-                stack
-                { availableEmittedFunctions = [] }
-                declarations
-                innerExpression
-                |> Result.map Tuple.second
+            case
+                emitExpressionInDeclarationBlock
+                    stack
+                    { availableEmittedFunctions = [] }
+                    declarations
+                    innerExpression
+            of
+                Err err ->
+                    Err err
+
+                Ok ( _, blockExpression ) ->
+                    Ok blockExpression
 
         StringTagExpression tag tagged ->
-            tagged
-                |> emitExpression stack
-                |> Result.map (Pine.StringTagExpression tag)
+            case emitExpression stack tagged of
+                Err err ->
+                    Err err
+
+                Ok emitted ->
+                    Ok (Pine.StringTagExpression tag emitted)
 
         PineFunctionApplicationExpression pineFunctionExpression argument ->
-            emitExpression stack argument
-                |> Result.map
-                    (\emittedArgument ->
-                        attemptReduceDecodeAndEvaluateExpressionRecursive
-                            { maxDepth = 3 }
-                            { expression =
-                                pineFunctionExpression
-                                    |> Pine.encodeExpressionAsValue
-                                    |> Pine.LiteralExpression
-                            , environment = emittedArgument
-                            }
-                    )
+            Result.map
+                (\emittedArgument ->
+                    attemptReduceDecodeAndEvaluateExpressionRecursive
+                        { maxDepth = 3 }
+                        { expression =
+                            Pine.LiteralExpression
+                                (Pine.encodeExpressionAsValue pineFunctionExpression)
+                        , environment = emittedArgument
+                        }
+                )
+                (emitExpression stack argument)
 
 
 emitFunctionExpression : EmitStack -> List FunctionParam -> Expression -> Result String Pine.Expression
 emitFunctionExpression stack functionParams functionBody =
-    emitExpressionInDeclarationBlock
-        stack
-        { availableEmittedFunctions = [] }
-        Dict.empty
-        (FunctionExpression functionParams functionBody)
-        |> Result.map Tuple.second
+    case
+        emitExpressionInDeclarationBlock
+            stack
+            { availableEmittedFunctions = [] }
+            Dict.empty
+            (FunctionExpression functionParams functionBody)
+    of
+        Err err ->
+            Err err
+
+        Ok ( _, blockExpression ) ->
+            Ok blockExpression
 
 
 type alias DeclarationBlockFunctionEntry =
@@ -278,45 +296,61 @@ emitExpressionInDeclarationBlock stackBeforeAddingDeps environmentPrefix blockDe
 
         closureCaptures : List ( String, EnvironmentDeconstructionEntry )
         closureCaptures =
-            stackBefore.environmentDeconstructions
-                |> Dict.toList
-                |> List.filter
-                    (\( declName, _ ) -> Set.member declName mainExpressionOuterDependencies)
+            Dict.foldl
+                (\declName deconstruction aggregate ->
+                    if Set.member declName mainExpressionOuterDependencies then
+                        ( declName, deconstruction ) :: aggregate
+
+                    else
+                        aggregate
+                )
+                []
+                stackBefore.environmentDeconstructions
     in
     if mainExpressionAsFunction.parameters == [] && Dict.isEmpty usedBlockDeclarations then
-        emitExpression stackBeforeAddingDeps mainExpressionAsFunction.innerExpression
-            |> Result.map (Tuple.pair { availableEmittedFunctions = [] })
+        case emitExpression stackBeforeAddingDeps mainExpressionAsFunction.innerExpression of
+            Err err ->
+                Err err
+
+            Ok emittedMainExpression ->
+                Ok
+                    ( { availableEmittedFunctions = [] }
+                    , emittedMainExpression
+                    )
 
     else
-        emitDeclarationBlock
-            stackBefore
-            environmentPrefix
-            usedBlockDeclarations
-            { closureCaptures = closureCaptures
-            , additionalImports = mainExpressionOuterDependencies
-            }
-            |> Result.andThen
-                (\( _, blockDeclarationsEmitted ) ->
-                    let
-                        ( _, mainExpressionEmitResult ) =
-                            blockDeclarationsEmitted.parseAndEmitFunction mainExpression
-                    in
-                    case mainExpressionEmitResult of
-                        Err err ->
-                            Err ("Failed emitting main expression: " ++ err)
+        case
+            emitDeclarationBlock
+                stackBefore
+                environmentPrefix
+                usedBlockDeclarations
+                { closureCaptures = closureCaptures
+                , additionalImports = mainExpressionOuterDependencies
+                }
+        of
+            Err err ->
+                Err err
 
-                        Ok mainExpressionEmitted ->
-                            Ok
-                                ( { availableEmittedFunctions =
+            Ok ( _, blockDeclarationsEmitted ) ->
+                let
+                    ( _, mainExpressionEmitResult ) =
+                        blockDeclarationsEmitted.parseAndEmitFunction mainExpression
+                in
+                case mainExpressionEmitResult of
+                    Err err ->
+                        Err ("Failed emitting main expression: " ++ err)
+
+                    Ok mainExpressionEmitted ->
+                        Ok
+                            ( { availableEmittedFunctions =
+                                    List.map (Tuple.mapSecond Tuple.second)
                                         blockDeclarationsEmitted.newEnvFunctionsValues
-                                            |> List.map (Tuple.mapSecond Tuple.second)
-                                  }
-                                , emitWrapperForPartialApplication
-                                    blockDeclarationsEmitted.envFunctionsExpression
-                                    (List.length mainExpressionAsFunction.parameters)
-                                    mainExpressionEmitted
-                                )
-                )
+                              }
+                            , emitWrapperForPartialApplication
+                                blockDeclarationsEmitted.envFunctionsExpression
+                                (List.length mainExpressionAsFunction.parameters)
+                                mainExpressionEmitted
+                            )
 
 
 emitDeclarationBlock :
@@ -467,26 +501,23 @@ emitDeclarationBlock stackBefore environmentPrefix blockDeclarations { closureCa
                 functionEmitStack =
                     { commonEmitStack
                         | environmentDeconstructions =
-                            functionEntry.parameters
-                                |> environmentDeconstructionsFromFunctionParams
+                            environmentDeconstructionsFromFunctionParams functionEntry.parameters
                     }
             in
             emitExpression functionEmitStack functionEntry.innerExpression
 
         emitBlockDeclarationsResult : Result String (List ( String, ( DeclarationBlockFunctionEntry, Pine.Expression ) ))
         emitBlockDeclarationsResult =
-            blockDeclarationsAsFunctions
-                |> List.map
-                    (\( functionName, blockDeclAsFunction ) ->
-                        blockDeclAsFunction
-                            |> emitFunction
-                            |> Result.mapError ((++) ("Failed to emit '" ++ functionName ++ "': "))
-                            |> Result.map
-                                (\emittedExpression ->
-                                    ( functionName, ( blockDeclAsFunction, emittedExpression ) )
-                                )
-                    )
-                |> Result.Extra.combine
+            Common.resultListMapCombine
+                (\( functionName, blockDeclAsFunction ) ->
+                    case emitFunction blockDeclAsFunction of
+                        Err err ->
+                            Err ("Failed to emit '" ++ functionName ++ "': " ++ err)
+
+                        Ok emittedExpression ->
+                            Ok ( functionName, ( blockDeclAsFunction, emittedExpression ) )
+                )
+                blockDeclarationsAsFunctions
 
         closureCapturesExpressions =
             List.map
@@ -558,8 +589,9 @@ emitDeclarationBlock stackBefore environmentPrefix blockDeclarations { closureCa
                                                 Pine.ListExpression
                                                     [ Pine.LiteralExpression
                                                         (Pine.valueFromInt (List.length stackBefore.environmentFunctions))
-                                                    , Pine.EnvironmentExpression
-                                                        |> listItemFromIndexExpression_Pine 0
+                                                    , listItemFromIndexExpression_Pine
+                                                        0
+                                                        Pine.EnvironmentExpression
                                                     ]
                                             }
                                         , Pine.ListExpression appendedEnvFunctionsExpressions
@@ -696,10 +728,10 @@ emitReferenceExpression name compilation =
                         )
 
                 Just deconstruction ->
-                    Pine.EnvironmentExpression
-                        |> listItemFromIndexExpression_Pine 1
-                        |> pineExpressionForDeconstructions deconstruction
-                        |> Ok
+                    Ok
+                        (pineExpressionForDeconstructions deconstruction
+                            (listItemFromIndexExpression_Pine 1 Pine.EnvironmentExpression)
+                        )
 
 
 listTransitiveDependenciesOfExpression : EmitStack -> Expression -> Set.Set String
@@ -715,7 +747,10 @@ listDirectDependenciesOfExpression expression =
             Set.empty
 
         ListExpression list ->
-            List.foldl (listDirectDependenciesOfExpression >> Set.union) Set.empty list
+            List.foldl
+                (\item aggregate -> Set.union (listDirectDependenciesOfExpression item) aggregate)
+                Set.empty
+                list
 
         KernelApplicationExpression application ->
             listDirectDependenciesOfExpression application.argument
@@ -747,7 +782,7 @@ listDirectDependenciesOfExpression expression =
 
         FunctionApplicationExpression functionExpression arguments ->
             List.foldl
-                (listDirectDependenciesOfExpression >> Set.union)
+                (\argument aggregate -> Set.union (listDirectDependenciesOfExpression argument) aggregate)
                 (listDirectDependenciesOfExpression functionExpression)
                 arguments
 
@@ -755,7 +790,7 @@ listDirectDependenciesOfExpression expression =
             let
                 innerDependencies =
                     Dict.foldl
-                        (always (listDirectDependenciesOfExpression >> Set.union))
+                        (\_ decl aggregate -> Set.union (listDirectDependenciesOfExpression decl) aggregate)
                         (listDirectDependenciesOfExpression innerExpression)
                         declarations
             in
@@ -832,9 +867,8 @@ pineExpressionForDeconstruction deconstruction =
 
 
 environmentDeconstructionsFromFunctionParams : List FunctionParam -> Dict.Dict String EnvironmentDeconstructionEntry
-environmentDeconstructionsFromFunctionParams =
-    closureParameterFromParameters
-        >> Dict.fromList
+environmentDeconstructionsFromFunctionParams parameters =
+    Dict.fromList (closureParameterFromParameters parameters)
 
 
 closureParameterFromParameters : List FunctionParam -> FunctionParam
@@ -852,19 +886,21 @@ emitFunctionApplication functionExpression arguments compilation =
         emitExpression compilation functionExpression
 
     else
-        arguments
-            |> List.indexedMap
-                (\argumentIndex ->
-                    emitExpression compilation
-                        >> Result.mapError
-                            ((++)
-                                ("Failed emitting argument "
-                                    ++ String.fromInt argumentIndex
-                                    ++ " for function application: "
-                                )
+        Common.resultListIndexedMapCombine
+            (\argumentIndex argumentExpression ->
+                case emitExpression compilation argumentExpression of
+                    Err err ->
+                        Err
+                            ("Failed emitting argument "
+                                ++ String.fromInt argumentIndex
+                                ++ " for function application: "
+                                ++ err
                             )
-                )
-            |> Result.Extra.combine
+
+                    Ok result ->
+                        Ok result
+            )
+            arguments
             |> Result.andThen
                 (\argumentsPine ->
                     let
@@ -923,8 +959,8 @@ avoidInlineNamedFunctionApplication emitStack _ arguments =
             anySubExpression
                 (\expression ->
                     case expression of
-                        ReferenceExpression functionName ->
-                            Set.member functionName recursiveFunctions
+                        ReferenceExpression refName ->
+                            Set.member refName recursiveFunctions
 
                         _ ->
                             False
@@ -1461,22 +1497,17 @@ searchReductionForDecodeAndEvaluateExpression originalExpression =
                                 else
                                     Nothing
 
-                            transformResult =
+                            ( reducedExpr, transformResult ) =
                                 transformPineExpressionWithOptionalReplacement
                                     findReplacementForExpression
                                     decodedExpression
                         in
-                        if (Tuple.second transformResult).referencesOriginalEnvironment then
+                        if transformResult.referencesOriginalEnvironment then
                             Nothing
 
                         else
-                            let
-                                reducedExpression =
-                                    transformResult
-                                        |> Tuple.first
-                                        |> searchForExpressionReductionRecursive { maxDepth = 5 }
-                            in
-                            Just reducedExpression
+                            Just
+                                (searchForExpressionReductionRecursive { maxDepth = 5 } reducedExpr)
 
     else
         Nothing
@@ -1584,30 +1615,40 @@ transformPineExpressionWithOptionalReplacement findReplacement expression =
                 Pine.ListExpression list ->
                     let
                         itemsResults =
-                            list
-                                |> List.map (transformPineExpressionWithOptionalReplacement findReplacement)
+                            List.foldr
+                                (\item aggregate ->
+                                    let
+                                        ( itemExpr, itemInspect ) =
+                                            transformPineExpressionWithOptionalReplacement findReplacement item
+                                    in
+                                    { aggregate
+                                        | refsOrig = aggregate.refsOrig || itemInspect.referencesOriginalEnvironment
+                                        , items = itemExpr :: aggregate.items
+                                    }
+                                )
+                                { refsOrig = False, items = [] }
+                                list
                     in
-                    ( Pine.ListExpression (List.map Tuple.first itemsResults)
-                    , { referencesOriginalEnvironment =
-                            itemsResults |> List.any (Tuple.second >> .referencesOriginalEnvironment)
+                    ( Pine.ListExpression itemsResults.items
+                    , { referencesOriginalEnvironment = itemsResults.refsOrig
                       }
                     )
 
                 Pine.DecodeAndEvaluateExpression decodeAndEvaluate ->
                     let
-                        expressionResult =
+                        ( exprTransform, exprInspect ) =
                             transformPineExpressionWithOptionalReplacement findReplacement decodeAndEvaluate.expression
 
-                        environmentResult =
+                        ( envTransform, envInspect ) =
                             transformPineExpressionWithOptionalReplacement findReplacement decodeAndEvaluate.environment
                     in
                     ( Pine.DecodeAndEvaluateExpression
-                        { expression = Tuple.first expressionResult
-                        , environment = Tuple.first environmentResult
+                        { expression = exprTransform
+                        , environment = envTransform
                         }
                     , { referencesOriginalEnvironment =
-                            (Tuple.second expressionResult).referencesOriginalEnvironment
-                                || (Tuple.second environmentResult).referencesOriginalEnvironment
+                            exprInspect.referencesOriginalEnvironment
+                                || envInspect.referencesOriginalEnvironment
                       }
                     )
 
@@ -1616,29 +1657,30 @@ transformPineExpressionWithOptionalReplacement findReplacement expression =
                         |> transformPineExpressionWithOptionalReplacement findReplacement
                         |> Tuple.mapFirst
                             (\argument ->
-                                Pine.KernelApplicationExpression { argument = argument, functionName = kernelApp.functionName }
+                                Pine.KernelApplicationExpression
+                                    { argument = argument, functionName = kernelApp.functionName }
                             )
 
                 Pine.ConditionalExpression conditional ->
                     let
-                        condition =
+                        ( conditionExpr, conditionInspect ) =
                             transformPineExpressionWithOptionalReplacement findReplacement conditional.condition
 
-                        ifTrue =
+                        ( ifTrueExpr, ifTrueInspect ) =
                             transformPineExpressionWithOptionalReplacement findReplacement conditional.ifTrue
 
-                        ifFalse =
+                        ( ifFalseExpr, ifFalseInspect ) =
                             transformPineExpressionWithOptionalReplacement findReplacement conditional.ifFalse
                     in
                     ( Pine.ConditionalExpression
-                        { condition = Tuple.first condition
-                        , ifTrue = Tuple.first ifTrue
-                        , ifFalse = Tuple.first ifFalse
+                        { condition = conditionExpr
+                        , ifTrue = ifTrueExpr
+                        , ifFalse = ifFalseExpr
                         }
                     , { referencesOriginalEnvironment =
-                            [ condition, ifTrue, ifFalse ]
-                                |> List.map (Tuple.second >> .referencesOriginalEnvironment)
-                                |> List.any identity
+                            conditionInspect.referencesOriginalEnvironment
+                                || ifTrueInspect.referencesOriginalEnvironment
+                                || ifFalseInspect.referencesOriginalEnvironment
                       }
                     )
 

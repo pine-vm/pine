@@ -42,3 +42,65 @@ listFindWithIndexHelper index predicate list =
 
             else
                 listFindWithIndexHelper (index + 1) predicate tail
+
+
+resultListMapCombine :
+    (item -> Result err itemOk)
+    -> List item
+    -> Result err (List itemOk)
+resultListMapCombine mapItem list =
+    resultListMapCombineHelper [] mapItem list
+
+
+resultListMapCombineHelper :
+    List itemOk
+    -> (item -> Result err itemOk)
+    -> List item
+    -> Result err (List itemOk)
+resultListMapCombineHelper completeList mapItem sourceList =
+    case sourceList of
+        [] ->
+            Ok (List.reverse completeList)
+
+        item :: tail ->
+            case mapItem item of
+                Ok itemOk ->
+                    resultListMapCombineHelper
+                        (itemOk :: completeList)
+                        mapItem
+                        tail
+
+                Err err ->
+                    Err err
+
+
+resultListIndexedMapCombine :
+    (Int -> item -> Result err itemOk)
+    -> List item
+    -> Result err (List itemOk)
+resultListIndexedMapCombine mapItem list =
+    resultListIndexedMapCombineHelper 0 [] mapItem list
+
+
+resultListIndexedMapCombineHelper :
+    Int
+    -> List itemOk
+    -> (Int -> item -> Result err itemOk)
+    -> List item
+    -> Result err (List itemOk)
+resultListIndexedMapCombineHelper index completeList mapItem sourceList =
+    case sourceList of
+        [] ->
+            Ok (List.reverse completeList)
+
+        item :: tail ->
+            case mapItem index item of
+                Ok itemOk ->
+                    resultListIndexedMapCombineHelper
+                        (index + 1)
+                        (itemOk :: completeList)
+                        mapItem
+                        tail
+
+                Err err ->
+                    Err err

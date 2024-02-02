@@ -746,40 +746,58 @@ json_encode_pineValue_Internal dictionary value =
             let
                 defaultListEncoding () =
                     Json.Encode.object
-                        [ ( "List", Json.Encode.list (json_encode_pineValue_Internal dictionary) list ) ]
+                        [ ( "List"
+                          , Json.Encode.list (json_encode_pineValue_Internal dictionary) list
+                          )
+                        ]
+
+                continueWithoutReference () =
+                    case Pine.stringFromListValue list of
+                        Err _ ->
+                            defaultListEncoding ()
+
+                        Ok asString ->
+                            Json.Encode.object
+                                [ ( "ListAsString"
+                                  , Json.Encode.string asString
+                                  )
+                                ]
             in
             if list == [] then
                 defaultListEncoding ()
 
             else
-                case
-                    dictionary.listDict
-                        |> Dict.get (pineListValueFastHash list)
-                        |> Maybe.andThen (Common.listFind (Tuple.first >> (==) list))
-                        |> Maybe.map Tuple.second
-                of
-                    Just reference ->
-                        Json.Encode.object
-                            [ ( "Reference", Json.Encode.string reference ) ]
-
+                case Dict.get (pineListValueFastHash list) dictionary.listDict of
                     Nothing ->
-                        case Pine.stringFromListValue list of
-                            Err _ ->
-                                defaultListEncoding ()
+                        continueWithoutReference ()
 
-                            Ok asString ->
+                    Just assocList ->
+                        case Common.listFind (Tuple.first >> (==) list) assocList of
+                            Nothing ->
+                                continueWithoutReference ()
+
+                            Just ( _, reference ) ->
                                 Json.Encode.object
-                                    [ ( "ListAsString", Json.Encode.string asString ) ]
+                                    [ ( "Reference"
+                                      , Json.Encode.string reference
+                                      )
+                                    ]
 
         Pine.BlobValue blob ->
-            case dictionary.blobDict |> Dict.get blob of
+            case Dict.get blob dictionary.blobDict of
                 Just reference ->
                     Json.Encode.object
-                        [ ( "Reference", Json.Encode.string reference ) ]
+                        [ ( "Reference"
+                          , Json.Encode.string reference
+                          )
+                        ]
 
                 Nothing ->
                     Json.Encode.object
-                        [ ( "Blob", Json.Encode.list Json.Encode.int blob ) ]
+                        [ ( "Blob"
+                          , Json.Encode.list Json.Encode.int blob
+                          )
+                        ]
 
 
 json_decode_pineValue : Json.Decode.Decoder ( Pine.Value, Dict.Dict String Pine.Value )

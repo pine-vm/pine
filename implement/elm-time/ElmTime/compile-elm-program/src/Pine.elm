@@ -1,4 +1,41 @@
-module Pine exposing (..)
+module Pine exposing
+    ( ConditionalExpressionStructure
+    , DecodeAndEvaluateExpressionStructure
+    , EvalContext
+    , Expression(..)
+    , KernelApplicationExpressionStructure
+    , KernelFunction
+    , PathDescription(..)
+    , Value(..)
+    , addToEnvironment
+    , bigIntFromBlobValue
+    , bigIntFromUnsignedBlobValue
+    , bigIntFromValue
+    , blobValueFromBigInt
+    , decodeExpressionFromValue
+    , displayStringFromPineError
+    , emptyEvalContext
+    , encodeExpressionAsValue
+    , environmentFromDeclarations
+    , evaluateExpression
+    , falseValue
+    , intFromBigInt
+    , intFromValue
+    , kernelFunction_Negate
+    , mapFromListValueOrBlobValue
+    , stringAsValue_Function
+    , stringAsValue_List
+    , stringAsValue_Literal
+    , stringFromListValue
+    , stringFromValue
+    , trueValue
+    , valueFromBigInt
+    , valueFromBool
+    , valueFromChar
+    , valueFromContextExpansionWithName
+    , valueFromInt
+    , valueFromString
+    )
 
 import BigInt
 import Common
@@ -57,7 +94,8 @@ type PathDescription a
 
 environmentFromDeclarations : List ( String, Value ) -> Value
 environmentFromDeclarations declarations =
-    declarations |> List.map valueFromContextExpansionWithName |> ListValue
+    ListValue
+        (List.map valueFromContextExpansionWithName declarations)
 
 
 addToEnvironment : List Value -> EvalContext -> EvalContext
@@ -86,35 +124,56 @@ evaluateExpression context expression =
             Ok value
 
         ListExpression listElements ->
-            listElements
-                |> List.indexedMap
+            case
+                Common.resultListIndexedMapCombine
                     (\listElementIndex listElement ->
-                        evaluateExpression context listElement
-                            |> Result.mapError
-                                (DescribePathNode
-                                    ("Failed to evaluate list item " ++ String.fromInt listElementIndex ++ ": ")
-                                )
+                        case evaluateExpression context listElement of
+                            Err err ->
+                                Err
+                                    (DescribePathNode
+                                        ("Failed to evaluate list item " ++ String.fromInt listElementIndex ++ ": ")
+                                        err
+                                    )
+
+                            Ok ok ->
+                                Ok ok
                     )
-                |> Result.Extra.combine
-                |> Result.map ListValue
+                    listElements
+            of
+                Err error ->
+                    Err error
+
+                Ok listItemsValues ->
+                    Ok (ListValue listItemsValues)
 
         DecodeAndEvaluateExpression decodeAndEvaluate ->
-            evaluateDecodeAndEvaluate context decodeAndEvaluate
-                |> Result.mapError
-                    (\e ->
-                        e |> DescribePathNode ("Failed decode and evaluate of '" ++ describeExpression 1 decodeAndEvaluate.expression ++ "'")
-                    )
+            case evaluateDecodeAndEvaluate context decodeAndEvaluate of
+                Err error ->
+                    Err
+                        (DescribePathNode
+                            ("Failed decode and evaluate of '" ++ describeExpression 1 decodeAndEvaluate.expression ++ "'")
+                            error
+                        )
+
+                Ok value ->
+                    Ok value
 
         KernelApplicationExpression application ->
-            evaluateExpression context application.argument
-                |> Result.mapError (DescribePathNode ("Failed to evaluate argument for kernel function " ++ application.functionName ++ ": "))
-                |> Result.andThen
-                    (\argument ->
-                        application.functionName
-                            |> decodeKernelFunctionFromName
-                            |> Result.mapError DescribePathEnd
-                            |> Result.map (\kernelFunction -> kernelFunction argument)
-                    )
+            case evaluateExpression context application.argument of
+                Err error ->
+                    Err
+                        (DescribePathNode
+                            ("Failed to evaluate argument for kernel function " ++ application.functionName ++ ": ")
+                            error
+                        )
+
+                Ok argument ->
+                    case decodeKernelFunctionFromName application.functionName of
+                        Err error ->
+                            Err (DescribePathEnd error)
+
+                        Ok kernelFunction ->
+                            Ok (kernelFunction argument)
 
         ConditionalExpression conditional ->
             case evaluateExpression context conditional.condition of
@@ -139,8 +198,12 @@ evaluateExpression context expression =
                     Debug.log "eval expression with tag"
                         tag
             in
-            evaluateExpression context tagged
-                |> Result.mapError (DescribePathNode ("Failed to evaluate tagged expression '" ++ tag ++ "': "))
+            case evaluateExpression context tagged of
+                Err err ->
+                    Err (DescribePathNode ("Failed to evaluate tagged expression '" ++ tag ++ "': ") err)
+
+                Ok ok ->
+                    Ok ok
 
 
 valueFromContextExpansionWithName : ( String, Value ) -> Value
@@ -150,76 +213,84 @@ valueFromContextExpansionWithName ( declName, declValue ) =
 
 kernelFunctions : Dict.Dict String KernelFunction
 kernelFunctions =
-    [ ( "equal"
-      , mapFromListValueOrBlobValue { fromList = list_all_same, fromBlob = list_all_same }
-            >> valueFromBool
-      )
-    , ( "negate"
-      , kernelFunction_Negate
-      )
-    , ( "logical_and", kernelFunctionExpectingListOfTypeBool (List.foldl (&&) True) )
-    , ( "logical_or", kernelFunctionExpectingListOfTypeBool (List.foldl (||) False) )
-    , ( "length"
-      , mapFromListValueOrBlobValue { fromList = List.length, fromBlob = List.length }
-            >> valueFromInt
-      )
-    , ( "skip"
-      , kernelFunctionExpectingExactlyTwoArguments
-            { mapArg0 = intFromValue >> Result.mapError DescribePathEnd
-            , mapArg1 = Ok
-            , apply =
-                \count ->
-                    mapFromListValueOrBlobValue
-                        { fromList = List.drop count >> ListValue
-                        , fromBlob = List.drop count >> BlobValue
-                        }
-                        >> Ok
-            }
-      )
-    , ( "take"
-      , kernelFunctionExpectingExactlyTwoArguments
-            { mapArg0 = intFromValue >> Result.mapError DescribePathEnd
-            , mapArg1 = Ok
-            , apply =
-                \count ->
-                    mapFromListValueOrBlobValue
-                        { fromList = List.take count >> ListValue
-                        , fromBlob = List.take count >> BlobValue
-                        }
-                        >> Ok
-            }
-      )
-    , ( "reverse"
-      , mapFromListValueOrBlobValue
-            { fromList = List.reverse >> ListValue
-            , fromBlob = List.reverse >> BlobValue
-            }
-      )
-    , ( "concat"
-      , kernel_function_concat
-      )
-    , ( "list_head"
-      , kernelFunctionExpectingList
-            (List.head >> Maybe.withDefault (ListValue []))
-      )
-    , ( "add_int"
-      , kernelFunctionExpectingListOfBigIntAndProducingBigInt BigInt.add (BigInt.fromInt 0)
-      )
-    , ( "mul_int"
-      , kernelFunctionExpectingListOfBigIntAndProducingBigInt BigInt.mul (BigInt.fromInt 1)
-      )
-    , ( "is_sorted_ascending_int"
-      , is_sorted_ascending_int >> valueFromBool
-      )
-    ]
-        |> Dict.fromList
+    Dict.fromList
+        [ ( "equal"
+          , \arg ->
+                valueFromBool
+                    (mapFromListValueOrBlobValue { fromList = list_all_same, fromBlob = list_all_same } arg)
+          )
+        , ( "negate"
+          , kernelFunction_Negate
+          )
+        , ( "logical_and", kernelFunctionExpectingListOfTypeBool (List.foldl (&&) True) )
+        , ( "logical_or", kernelFunctionExpectingListOfTypeBool (List.foldl (||) False) )
+        , ( "length"
+          , \arg ->
+                valueFromInt
+                    (mapFromListValueOrBlobValue { fromList = List.length, fromBlob = List.length } arg)
+          )
+        , ( "skip"
+          , kernelFunctionExpectingExactlyTwoArguments
+                { mapArg0 = \countValue -> intFromValue countValue
+                , mapArg1 = Ok
+                , apply =
+                    \count sequence ->
+                        mapFromListValueOrBlobValue
+                            { fromList = \list -> ListValue (List.drop count list)
+                            , fromBlob = \bytes -> BlobValue (List.drop count bytes)
+                            }
+                            sequence
+                }
+          )
+        , ( "take"
+          , kernelFunctionExpectingExactlyTwoArguments
+                { mapArg0 = \countValue -> intFromValue countValue
+                , mapArg1 = Ok
+                , apply =
+                    \count sequence ->
+                        mapFromListValueOrBlobValue
+                            { fromList = \list -> ListValue (List.take count list)
+                            , fromBlob = \bytes -> BlobValue (List.take count bytes)
+                            }
+                            sequence
+                }
+          )
+        , ( "reverse"
+          , mapFromListValueOrBlobValue
+                { fromList = \list -> ListValue (List.reverse list)
+                , fromBlob = \bytes -> BlobValue (List.reverse bytes)
+                }
+          )
+        , ( "concat"
+          , kernel_function_concat
+          )
+        , ( "list_head"
+          , kernelFunctionExpectingList
+                (\list ->
+                    case list of
+                        head :: _ ->
+                            head
+
+                        [] ->
+                            ListValue []
+                )
+          )
+        , ( "add_int"
+          , kernelFunctionExpectingListOfBigIntAndProducingBigInt BigInt.add (BigInt.fromInt 0)
+          )
+        , ( "mul_int"
+          , kernelFunctionExpectingListOfBigIntAndProducingBigInt BigInt.mul (BigInt.fromInt 1)
+          )
+        , ( "is_sorted_ascending_int"
+          , \arg -> valueFromBool (is_sorted_ascending_int arg)
+          )
+        ]
 
 
 kernelFunctionsNames : List ( String, Value )
 kernelFunctionsNames =
-    kernelFunctions
-        |> Dict.keys
-        |> List.map (\name -> ( name, valueFromString name ))
+    List.map (\name -> ( name, valueFromString name ))
+        (Dict.keys kernelFunctions)
 
 
 kernelFunction_Negate : KernelFunction
@@ -302,10 +373,10 @@ sort_int value =
             value
 
         ListValue list ->
-            list
-                |> List.map sort_int
-                |> List.sortWith sort_int_order
-                |> ListValue
+            ListValue
+                (List.sortWith sort_int_order
+                    (List.map sort_int list)
+                )
 
 
 sort_int_order : Value -> Value -> Order
@@ -347,34 +418,34 @@ mapFromListValueOrBlobValue { fromList, fromBlob } value =
 
 evaluateDecodeAndEvaluate : EvalContext -> DecodeAndEvaluateExpressionStructure -> Result (PathDescription String) Value
 evaluateDecodeAndEvaluate context decodeAndEvaluate =
-    evaluateExpression context decodeAndEvaluate.environment
-        |> Result.mapError
-            (\e ->
-                e |> DescribePathNode ("Failed to evaluate environment '" ++ describeExpression 1 decodeAndEvaluate.environment ++ "'")
-            )
-        |> Result.andThen
-            (\environmentValue ->
-                evaluateExpression context decodeAndEvaluate.expression
-                    |> Result.mapError
-                        (\e ->
-                            e |> DescribePathNode ("Failed to evaluate encoded expression '" ++ describeExpression 1 decodeAndEvaluate.expression ++ "'")
+    case evaluateExpression context decodeAndEvaluate.environment of
+        Err error ->
+            Err
+                (DescribePathNode
+                    ("Failed to evaluate environment '" ++ describeExpression 1 decodeAndEvaluate.environment ++ "'")
+                    error
+                )
+
+        Ok environmentValue ->
+            case evaluateExpression context decodeAndEvaluate.expression of
+                Err error ->
+                    Err
+                        (DescribePathNode
+                            ("Failed to evaluate expression '" ++ describeExpression 1 decodeAndEvaluate.expression ++ "'")
+                            error
                         )
-                    |> Result.andThen
-                        (\functionValue ->
-                            functionValue
-                                |> decodeExpressionFromValue
-                                |> Result.mapError
-                                    (\e ->
-                                        e
-                                            |> DescribePathEnd
-                                            |> DescribePathNode ("Failed to decode expression from value '" ++ describeValue 3 functionValue ++ "'")
-                                    )
-                                |> Result.andThen
-                                    (\functionExpression ->
-                                        evaluateExpression { environment = environmentValue } functionExpression
-                                    )
-                        )
-            )
+
+                Ok functionValue ->
+                    case decodeExpressionFromValue functionValue of
+                        Err error ->
+                            Err
+                                (DescribePathNode
+                                    ("Failed to parse expression from value '" ++ describeValue 3 functionValue ++ "'")
+                                    (DescribePathEnd error)
+                                )
+
+                        Ok functionExpression ->
+                            evaluateExpression { environment = environmentValue } functionExpression
 
 
 kernelFunctionExpectingListOfBigIntAndProducingBigInt :
@@ -410,17 +481,19 @@ kernelFunctionExpectingListOfTypeBool apply =
                     ListValue []
 
                 _ ->
-                    List.map boolFromValue list
-                        |> Maybe.Extra.combine
-                        |> Maybe.map (apply >> valueFromBool)
-                        |> Maybe.withDefault (ListValue [])
+                    case Maybe.Extra.combine (List.map boolFromValue list) of
+                        Nothing ->
+                            ListValue []
+
+                        Just bools ->
+                            valueFromBool (apply bools)
         )
 
 
 kernelFunctionExpectingExactlyTwoArguments :
-    { mapArg0 : Value -> Result (PathDescription String) arg0
-    , mapArg1 : Value -> Result (PathDescription String) arg1
-    , apply : arg0 -> arg1 -> Result (PathDescription String) Value
+    { mapArg0 : Value -> Result String arg0
+    , mapArg1 : Value -> Result String arg1
+    , apply : arg0 -> arg1 -> Value
     }
     -> KernelFunction
 kernelFunctionExpectingExactlyTwoArguments configuration =
@@ -438,12 +511,7 @@ kernelFunctionExpectingExactlyTwoArguments configuration =
                                     ListValue []
 
                                 Ok arg1 ->
-                                    case configuration.apply arg0 arg1 of
-                                        Err _ ->
-                                            ListValue []
-
-                                        Ok ok ->
-                                            ok
+                                    configuration.apply arg0 arg1
 
                 _ ->
                     ListValue []
@@ -500,7 +568,7 @@ describeExpression depthLimit expression =
                         "..."
 
                     else
-                        String.join "," (list |> List.map (describeExpression (depthLimit - 1)))
+                        String.join "," (List.map (describeExpression (depthLimit - 1)) list)
                    )
                 ++ "]"
 
@@ -658,7 +726,12 @@ blobValueFromBigInt bigint =
 
         unsignedBytesFromIntValue intValue =
             if BigInt.lt intValue (BigInt.fromInt 0x0100) then
-                String.toInt (BigInt.toString intValue) |> Maybe.map List.singleton
+                case String.toInt (BigInt.toString intValue) of
+                    Nothing ->
+                        Nothing
+
+                    Just byte ->
+                        Just [ byte ]
 
             else
                 case BigInt.divmod intValue (BigInt.fromInt 0x0100) of
@@ -769,7 +842,7 @@ intFromUnsignedBlobValue intValueBytes =
 
 intFromBigInt : BigInt.BigInt -> Result String Int
 intFromBigInt bigInt =
-    case bigInt |> BigInt.toString |> String.toInt of
+    case String.toInt (BigInt.toString bigInt) of
         Nothing ->
             Err "Failed to String.toInt"
 
@@ -803,7 +876,7 @@ bigIntFromBlobValue blobValue =
                     Ok (bigIntFromUnsignedBlobValue intValueBytes)
 
                 2 ->
-                    Ok (BigInt.negate (intValueBytes |> bigIntFromUnsignedBlobValue))
+                    Ok (BigInt.negate (bigIntFromUnsignedBlobValue intValueBytes))
 
                 _ ->
                     Err ("Unexpected value for sign byte: " ++ String.fromInt sign)
@@ -820,9 +893,9 @@ bigIntFromUnsignedBlobValue intValueBytes =
 
 
 hexadecimalRepresentationFromBlobValue : List Int -> String
-hexadecimalRepresentationFromBlobValue =
-    List.map (Hex.toString >> String.padLeft 2 '0')
-        >> String.join ""
+hexadecimalRepresentationFromBlobValue bytes =
+    String.join ""
+        (List.map (\byte -> String.padLeft 2 '0' (Hex.toString byte)) bytes)
 
 
 encodeExpressionAsValue : Expression -> Value
@@ -888,43 +961,71 @@ decodeExpressionFromValue =
 
 decodeExpressionFromValueDict : List ( ( String, Value ), Value -> Result String Expression )
 decodeExpressionFromValueDict =
-    [ ( "Literal"
-      , LiteralExpression >> Ok
-      )
-    , ( "List"
-      , decodeListExpression
-      )
-    , ( "DecodeAndEvaluate"
-      , decodeDecodeAndEvaluateExpression >> Result.map DecodeAndEvaluateExpression
-      )
-    , ( "KernelApplication"
-      , decodeKernelApplicationExpression >> Result.map KernelApplicationExpression
-      )
-    , ( "Conditional"
-      , decodeConditionalExpression >> Result.map ConditionalExpression
-      )
-    , ( "Environment"
-      , always (Ok EnvironmentExpression)
-      )
-    , ( "StringTag"
-      , decodePineListValue
-            >> Result.andThen decodeListWithExactlyTwoElements
-            >> Result.andThen
-                (\( tagValue, taggedValue ) ->
-                    tagValue
-                        |> stringFromValue
-                        |> Result.mapError ((++) "Failed to decode tag: ")
-                        |> Result.andThen
-                            (\tag ->
-                                taggedValue
-                                    |> decodeExpressionFromValue
-                                    |> Result.mapError ((++) "Failed to decoded tagged expression: ")
-                                    |> Result.map (\tagged -> StringTagExpression tag tagged)
-                            )
-                )
-      )
-    ]
-        |> List.map (\( tagName, decode ) -> ( ( tagName, valueFromString tagName ), decode ))
+    List.map
+        (\( tagName, decode ) ->
+            ( ( tagName, valueFromString tagName ), decode )
+        )
+        [ ( "Literal"
+          , \value -> Ok (LiteralExpression value)
+          )
+        , ( "List"
+          , decodeListExpression
+          )
+        , ( "DecodeAndEvaluate"
+          , \value ->
+                case decodeDecodeAndEvaluateExpression value of
+                    Ok decodeAndEvaluate ->
+                        Ok (DecodeAndEvaluateExpression decodeAndEvaluate)
+
+                    Err err ->
+                        Err err
+          )
+        , ( "KernelApplication"
+          , \value ->
+                case decodeKernelApplicationExpression value of
+                    Ok kernelApplication ->
+                        Ok (KernelApplicationExpression kernelApplication)
+
+                    Err err ->
+                        Err err
+          )
+        , ( "Conditional"
+          , \value ->
+                case decodeConditionalExpression value of
+                    Ok conditional ->
+                        Ok (ConditionalExpression conditional)
+
+                    Err err ->
+                        Err err
+          )
+        , ( "Environment"
+          , \_ -> Ok EnvironmentExpression
+          )
+        , ( "StringTag"
+          , \value ->
+                case decodePineListValue value of
+                    Err err ->
+                        Err err
+
+                    Ok list ->
+                        case decodeListWithExactlyTwoElements list of
+                            Err err ->
+                                Err err
+
+                            Ok ( tagValue, taggedValue ) ->
+                                case stringFromValue tagValue of
+                                    Err err ->
+                                        Err err
+
+                                    Ok tag ->
+                                        case decodeExpressionFromValue taggedValue of
+                                            Err err ->
+                                                Err err
+
+                                            Ok tagged ->
+                                                Ok (StringTagExpression tag tagged)
+          )
+        ]
 
 
 decodeListExpression : Value -> Result String Expression
