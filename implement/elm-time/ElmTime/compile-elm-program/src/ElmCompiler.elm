@@ -1579,6 +1579,9 @@ compileElmSyntaxPattern :
             }
 compileElmSyntaxPattern elmPattern =
     let
+        continueWithOnlyEqualsCondition :
+            Expression
+            -> Result error { conditionExpressions : Expression -> List Expression, declarations : List a }
         continueWithOnlyEqualsCondition valueToCompare =
             Ok
                 { conditionExpressions =
@@ -1600,32 +1603,43 @@ compileElmSyntaxPattern elmPattern =
                         }
                     )
 
+        continueWithListOrTupleItems :
+            List (Elm.Syntax.Node.Node Elm.Syntax.Pattern.Pattern)
+            -> Result String { conditionExpressions : Expression -> List Expression, declarations : List ( String, List Deconstruction ) }
         continueWithListOrTupleItems listItems =
-            listItems
-                |> List.map Elm.Syntax.Node.value
-                |> List.indexedMap conditionsAndDeclarationsFromItemPattern
-                |> Result.Extra.combine
-                |> Result.map
-                    (\itemsResults ->
-                        let
-                            matchesLengthCondition : Expression -> Expression
-                            matchesLengthCondition =
-                                \deconstructedExpression ->
-                                    equalCondition
-                                        [ LiteralExpression (Pine.valueFromInt (List.length listItems))
-                                        , countListElementsExpression deconstructedExpression
-                                        ]
+            if listItems == [] then
+                continueWithOnlyEqualsCondition (ListExpression [])
+                {-
+                   TODO: Analogous to the case of an empty list:
+                   Optimize other cases that constrain to a single value by emitting an equality check.
+                -}
 
-                            conditionExpressions : Expression -> List Expression
-                            conditionExpressions =
-                                \deconstructedExpression ->
-                                    matchesLengthCondition deconstructedExpression
-                                        :: List.concatMap (.conditions >> (|>) deconstructedExpression) itemsResults
-                        in
-                        { conditionExpressions = conditionExpressions
-                        , declarations = itemsResults |> List.concatMap .declarations
-                        }
-                    )
+            else
+                listItems
+                    |> List.map Elm.Syntax.Node.value
+                    |> List.indexedMap conditionsAndDeclarationsFromItemPattern
+                    |> Result.Extra.combine
+                    |> Result.map
+                        (\itemsResults ->
+                            let
+                                matchesLengthCondition : Expression -> Expression
+                                matchesLengthCondition =
+                                    \deconstructedExpression ->
+                                        equalCondition
+                                            [ LiteralExpression (Pine.valueFromInt (List.length listItems))
+                                            , countListElementsExpression deconstructedExpression
+                                            ]
+
+                                conditionExpressions : Expression -> List Expression
+                                conditionExpressions =
+                                    \deconstructedExpression ->
+                                        matchesLengthCondition deconstructedExpression
+                                            :: List.concatMap (.conditions >> (|>) deconstructedExpression) itemsResults
+                            in
+                            { conditionExpressions = conditionExpressions
+                            , declarations = itemsResults |> List.concatMap .declarations
+                            }
+                        )
     in
     case elmPattern of
         Elm.Syntax.Pattern.AllPattern ->
