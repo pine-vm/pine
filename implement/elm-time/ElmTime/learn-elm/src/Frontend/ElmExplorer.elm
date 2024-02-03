@@ -13,6 +13,7 @@ import Element.Events
 import Element.Font
 import Element.Region
 import ElmCompiler
+import ElmCompilerConstruction
 import ElmInteractive
 import ElmInteractiveParser
 import FirCompiler
@@ -412,16 +413,30 @@ parseElmExplorerNodeValue nodeCategory nodeValue =
                                         }
 
                 Ok functionRecord ->
+                    let
+                        envFunctionsChildren : Dict.Dict String CompilationExplorerNode
+                        envFunctionsChildren =
+                            functionRecord.envFunctions
+                                |> List.indexedMap
+                                    (\envFunctionIndex envFunctionValue ->
+                                        ( "env-decl-" ++ String.fromInt envFunctionIndex
+                                        , { value = explorerValueCache envFunctionValue
+                                          , category = FunctionExpressionNode
+                                          , parsed = Nothing
+                                          }
+                                        )
+                                    )
+                                |> Dict.fromList
+                    in
                     Ok
                         { children =
-                            Dict.fromList
-                                [ ( "inner-expression"
-                                  , { value = explorerValueCache functionRecord.innerFunctionValue
+                            envFunctionsChildren
+                                |> Dict.insert
+                                    "inner-expression"
+                                    { value = explorerValueCache functionRecord.innerFunctionValue
                                     , category = FunctionExpressionNode
                                     , parsed = Nothing
                                     }
-                                  )
-                                ]
                         , otherProperties =
                             [ ( "parameter count"
                               , String.fromInt functionRecord.functionParameterCount
@@ -436,7 +451,22 @@ parseElmExplorerNodeValue nodeCategory nodeValue =
                         }
 
         FunctionExpressionNode ->
-            Err "Function expression nodes are not supported"
+            case Pine.decodeExpressionFromValue nodeValue of
+                Err err ->
+                    Err ("Failed to decode expression: " ++ err)
+
+                Ok expression ->
+                    Ok
+                        { children = Dict.empty
+                        , otherProperties =
+                            [ ( "expression"
+                              , ElmCompilerConstruction.buildPineExpressionSyntax
+                                    { attemptEncodeExpression = False }
+                                    expression
+                                    |> String.join "\n"
+                              )
+                            ]
+                        }
 
 
 addElmModule : String -> State -> ( Result String { environment : Pine.Value, compiledModuleSize : Int }, ( State, Cmd Event ) )
@@ -841,11 +871,27 @@ viewCompilationExplorerNodeParsed path viewConfig parsed =
             , columns =
                 [ { header = Element.none
                   , width = Element.shrink
-                  , view = Tuple.first >> Element.text >> Element.el [ Element.paddingXY 10 4 ]
+                  , view =
+                        Tuple.first
+                            >> Element.text
+                            >> Element.el [ Element.paddingXY 10 4 ]
                   }
                 , { header = Element.none
-                  , width = Element.shrink
-                  , view = Tuple.second >> Element.text >> Element.el [ Element.paddingXY 10 4 ]
+                  , width = Element.fill
+                  , view =
+                        Tuple.second
+                            >> Html.text
+                            >> List.singleton
+                            >> Html.div
+                                [ HA.style "word-break" "break-all"
+                                , HA.style "white-space" "pre-wrap"
+                                , HA.style "line-height" "normal"
+                                ]
+                            >> Element.html
+                            >> Element.el
+                                [ Element.paddingXY 10 4
+                                , Element.width Element.fill
+                                ]
                   }
                 ]
             }
