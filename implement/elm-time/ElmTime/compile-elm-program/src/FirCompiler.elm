@@ -95,6 +95,13 @@ type alias EmitStack =
     }
 
 
+{-| The recursive function implementing adaptive application of function arguments.
+-}
+environmentFunctionPartialApplicationName : String
+environmentFunctionPartialApplicationName =
+    "<internal-partial-application>"
+
+
 type alias EnvironmentFunctionEntry =
     { functionName : String
     , parameterCount : Int
@@ -304,7 +311,7 @@ emitExpressionInDeclarationBlock stackBeforeAddingDeps environmentPrefix blockDe
                 environmentPrefix
                 usedBlockDeclarations
                 { closureCaptures = closureCaptures
-                , additionalImports = mainExpressionOuterDependencies
+                , additionalDeps = [ mainExpression ]
                 }
         of
             Err err ->
@@ -339,7 +346,7 @@ emitDeclarationBlock :
     -> Dict.Dict String Expression
     ->
         { closureCaptures : List ( String, EnvironmentDeconstructionEntry )
-        , additionalImports : Set.Set String
+        , additionalDeps : List Expression
         }
     -> Result String ( EmitStack, EmitDeclarationBlockResult )
 emitDeclarationBlock stackBefore environmentPrefix blockDeclarations config =
@@ -374,10 +381,19 @@ emitDeclarationBlock stackBefore environmentPrefix blockDeclarations config =
                 (\_ declDirectDeps -> getTransitiveDependencies dependenciesRelations declDirectDeps)
                 blockDeclarationsDirectDependencies
 
+        additionalImports : Set.Set String
+        additionalImports =
+            List.foldl
+                (\depExpr aggregate ->
+                    Set.union aggregate (listTransitiveDependenciesOfExpression stackBefore depExpr)
+                )
+                Set.empty
+                config.additionalDeps
+
         allDependencies : Set.Set String
         allDependencies =
             Set.union
-                config.additionalImports
+                additionalImports
                 (getTransitiveDependencies
                     dependenciesRelations
                     (Dict.foldl (\_ dependencies -> Set.union dependencies)
@@ -439,6 +455,37 @@ emitDeclarationBlock stackBefore environmentPrefix blockDeclarations config =
         prependedEnvFunctionsExpressions =
             List.map Tuple.second usedAvailableEmitted
 
+        forwardedDecls : List String
+        forwardedDecls =
+            List.map .functionName stackBefore.environmentFunctions
+
+        contentsDependOnFunctionApplication : Bool
+        contentsDependOnFunctionApplication =
+            List.any
+                (\( _, declExpression ) -> expressionNeedsAdaptiveApplication declExpression)
+                blockDeclarationsList
+                || List.any
+                    (\depExpr -> expressionNeedsAdaptiveApplication depExpr)
+                    config.additionalDeps
+
+        closureCapturesForInternals : List ( String, Expression )
+        closureCapturesForInternals =
+            if List.member environmentFunctionPartialApplicationName forwardedDecls then
+                []
+
+            else if not contentsDependOnFunctionApplication then
+                []
+
+            else
+                [ ( environmentFunctionPartialApplicationName
+                  , if Set.member environmentFunctionPartialApplicationName stackBeforeAvailableDeclarations then
+                        ReferenceExpression environmentFunctionPartialApplicationName
+
+                    else
+                        LiteralExpression adaptivePartialApplicationRecursiveValue
+                  )
+                ]
+
         closureCapturesForBlockDecls : List ( String, Expression )
         closureCapturesForBlockDecls =
             {-
@@ -483,25 +530,15 @@ emitDeclarationBlock stackBefore environmentPrefix blockDeclarations config =
         closureCaptures =
             List.concat
                 [ List.map (Tuple.mapSecond DeconstructionCapture) config.closureCaptures
-                , List.map (Tuple.mapSecond ExpressionCapture) closureCapturesForBlockDecls
+                , List.map (Tuple.mapSecond ExpressionCapture)
+                    (closureCapturesForInternals ++ closureCapturesForBlockDecls)
                 ]
-
-        newEnvironmentFunctionsFromClosureCaptures : List EnvironmentFunctionEntry
-        newEnvironmentFunctionsFromClosureCaptures =
-            List.map
-                (\( captureName, _ ) ->
-                    { functionName = captureName
-                    , parameterCount = 0
-                    , expectedEnvironmentFunctions = []
-                    }
-                )
-                closureCaptures
 
         newEnvironmentFunctionsNames : List String
         newEnvironmentFunctionsNames =
             composeEnvironmentFunctions
                 { prefix = List.map (Tuple.first >> .functionName) usedAvailableEmitted
-                , forwarded = List.map .functionName stackBefore.environmentFunctions
+                , forwarded = forwardedDecls
                 , appendedFromDecls = List.map Tuple.first blockDeclarationsAsFunctionsLessClosure
                 , appendedFromClosureCaptures = List.map Tuple.first closureCaptures
                 }
@@ -516,6 +553,17 @@ emitDeclarationBlock stackBefore environmentPrefix blockDeclarations config =
                     }
                 )
                 blockDeclarationsAsFunctionsLessClosure
+
+        newEnvironmentFunctionsFromClosureCaptures : List EnvironmentFunctionEntry
+        newEnvironmentFunctionsFromClosureCaptures =
+            List.map
+                (\( captureName, _ ) ->
+                    { functionName = captureName
+                    , parameterCount = 0
+                    , expectedEnvironmentFunctions = []
+                    }
+                )
+                closureCaptures
 
         environmentFunctions : List EnvironmentFunctionEntry
         environmentFunctions =
@@ -667,6 +715,64 @@ emitDeclarationBlock stackBefore environmentPrefix blockDeclarations config =
                             )
                         )
             )
+
+
+{-| Searches the tree of subexpressions for any that might require adaptive application.
+-}
+expressionNeedsAdaptiveApplication : Expression -> Bool
+expressionNeedsAdaptiveApplication expression =
+    {-
+       This function seems brittle because it needs to match the behavior of others, such as emitFunctionApplication.
+       Changing something in the selection for inlining might require changes here as well.
+       Perhaps it is better to somehow reuse the same logic here.
+    -}
+    case expression of
+        LiteralExpression _ ->
+            False
+
+        ListExpression list ->
+            List.any expressionNeedsAdaptiveApplication list
+
+        KernelApplicationExpression application ->
+            expressionNeedsAdaptiveApplication application.argument
+
+        ConditionalExpression conditional ->
+            expressionNeedsAdaptiveApplication conditional.condition
+                || expressionNeedsAdaptiveApplication conditional.ifTrue
+                || expressionNeedsAdaptiveApplication conditional.ifFalse
+
+        FunctionExpression _ functionBody ->
+            expressionNeedsAdaptiveApplication functionBody
+
+        FunctionApplicationExpression funcExpr args ->
+            case funcExpr of
+                LiteralExpression _ ->
+                    {-
+                       Whether that function should be inlined or not, in any case we should not need
+                       to supply the generic function for adaptive application.
+                    -}
+                    List.any expressionNeedsAdaptiveApplication args
+
+                _ ->
+                    expressionNeedsAdaptiveApplication funcExpr || (args /= [])
+
+        DeclarationBlockExpression declarations innerExpression ->
+            Dict.foldl
+                (\_ decl aggregate ->
+                    expressionNeedsAdaptiveApplication decl
+                        || aggregate
+                )
+                (expressionNeedsAdaptiveApplication innerExpression)
+                declarations
+
+        ReferenceExpression _ ->
+            False
+
+        StringTagExpression _ tagged ->
+            expressionNeedsAdaptiveApplication tagged
+
+        PineFunctionApplicationExpression _ argument ->
+            expressionNeedsAdaptiveApplication argument
 
 
 {-| Derive an ordered list of recursion domains from a dictionary of dependencies with their transitive dependencies.
@@ -958,7 +1064,7 @@ emitFunctionApplication functionExpression arguments compilation =
                         genericFunctionApplication () =
                             emitExpression compilation functionExpression
                                 |> Result.mapError ((++) "Failed emitting function expression: ")
-                                |> Result.andThen (emitFunctionApplicationPine argumentsPine)
+                                |> Result.andThen (emitFunctionApplicationPine compilation argumentsPine)
                     in
                     case functionExpression of
                         ReferenceExpression functionName ->
@@ -1021,11 +1127,13 @@ avoidInlineNamedFunctionApplication emitStack _ arguments =
         arguments
 
 
-emitFunctionApplicationPine : List Pine.Expression -> Pine.Expression -> Result String Pine.Expression
-emitFunctionApplicationPine arguments functionExpressionPine =
+emitFunctionApplicationPine : EmitStack -> List Pine.Expression -> Pine.Expression -> Result String Pine.Expression
+emitFunctionApplicationPine emitStack arguments functionExpressionPine =
     let
         genericPartialApplication () =
-            partialApplicationExpressionFromListOfArguments arguments
+            partialApplicationExpressionFromListOfArguments
+                arguments
+                emitStack
                 functionExpressionPine
     in
     if not (pineExpressionIsIndependent functionExpressionPine) then
@@ -1184,25 +1292,26 @@ emitApplyFunctionFromCurrentEnvironment compilation { functionName } arguments =
                                         , argumentsAlreadyCollected = []
                                         }
                                 )
-                                    |> partialApplicationExpressionFromListOfArguments arguments
+                                    |> partialApplicationExpressionFromListOfArguments
+                                        arguments
+                                        compilation
                             )
                         )
 
 
-partialApplicationExpressionFromListOfArguments : List Pine.Expression -> Pine.Expression -> Pine.Expression
-partialApplicationExpressionFromListOfArguments arguments function =
-    case arguments of
-        [] ->
-            function
-
-        nextArgument :: followingArguments ->
-            partialApplicationExpressionFromListOfArguments
-                followingArguments
-                (adaptivePartialApplicationExpression
-                    { function = function
-                    , argument = nextArgument
-                    }
-                )
+partialApplicationExpressionFromListOfArguments :
+    List Pine.Expression
+    -> EmitStack
+    -> Pine.Expression
+    -> Pine.Expression
+partialApplicationExpressionFromListOfArguments arguments emitStack function =
+    adaptivePartialApplicationExpression
+        { function = function
+        , arguments = arguments
+        , applicationFunctionSource =
+            emitReferenceExpression environmentFunctionPartialApplicationName emitStack
+                |> Result.toMaybe
+        }
 
 
 emitWrapperForPartialApplication : Pine.Expression -> Int -> Pine.Expression -> Pine.Expression
@@ -1244,115 +1353,158 @@ emitWrapperForPartialApplicationZero { getFunctionInnerExpression, getEnvFunctio
         }
 
 
-adaptivePartialApplicationExpression : { function : Pine.Expression, argument : Pine.Expression } -> Pine.Expression
-adaptivePartialApplicationExpression { function, argument } =
-    Pine.DecodeAndEvaluateExpression
-        { expression =
-            Pine.LiteralExpression adaptivePartialApplicationExpressionStaticPartAsValue
-        , environment =
-            Pine.ListExpression
-                [ function
-                , argument
-                ]
-        }
+adaptivePartialApplicationExpression :
+    { function : Pine.Expression
+    , arguments : List Pine.Expression
+    , applicationFunctionSource : Maybe Pine.Expression
+    }
+    -> Pine.Expression
+adaptivePartialApplicationExpression { function, arguments, applicationFunctionSource } =
+    if arguments == [] then
+        function
+
+    else
+        let
+            applicationFunctionExpr =
+                Maybe.withDefault
+                    (Pine.LiteralExpression adaptivePartialApplicationRecursiveValue)
+                    applicationFunctionSource
+        in
+        Pine.DecodeAndEvaluateExpression
+            { expression = applicationFunctionExpr
+            , environment =
+                Pine.ListExpression
+                    [ applicationFunctionExpr
+                    , function
+                    , Pine.ListExpression arguments
+                    ]
+            }
 
 
-adaptivePartialApplicationExpressionStaticPartAsValue : Pine.Value
-adaptivePartialApplicationExpressionStaticPartAsValue =
-    Pine.encodeExpressionAsValue adaptivePartialApplicationExpressionStaticPart
+adaptivePartialApplicationRecursiveValue : Pine.Value
+adaptivePartialApplicationRecursiveValue =
+    Pine.encodeExpressionAsValue adaptivePartialApplicationRecursiveExpression
 
 
-adaptivePartialApplicationExpressionStaticPart : Pine.Expression
-adaptivePartialApplicationExpressionStaticPart =
+{-| In adaptive (partial) function application, we check whether the function is a structured function record or not.
+-}
+adaptivePartialApplicationRecursiveExpression : Pine.Expression
+adaptivePartialApplicationRecursiveExpression =
     let
-        functionExpression =
+        selfFunctionLocalExpression =
             listItemFromIndexExpression_Pine 0 Pine.EnvironmentExpression
 
-        newArgumentExpression =
+        functionLocalExpression =
             listItemFromIndexExpression_Pine 1 Pine.EnvironmentExpression
+
+        remainingArgumentsLocalExpression =
+            listItemFromIndexExpression_Pine 2 Pine.EnvironmentExpression
+
+        nextArgumentLocalExpression =
+            listItemFromIndexExpression_Pine 0 remainingArgumentsLocalExpression
+
+        applyNextExpression =
+            Pine.ConditionalExpression
+                { condition =
+                    {-
+                       If the first element in 'function' equals 'Function',
+                    -}
+                    equalCondition_Pine
+                        [ listItemFromIndexExpression_Pine 0 functionLocalExpression
+                        , Pine.LiteralExpression Pine.stringAsValue_Function
+                        ]
+                , ifTrue =
+                    {-
+                       assume the second list item is a list with the following items:
+                       + 0: inner function
+                       + 1: number of parameters expected by the inner function
+                       + 2: captured environment functions
+                       + 3: the arguments collected so far.
+                    -}
+                    let
+                        partiallyAppliedFunctionRecord =
+                            listItemFromIndexExpression_Pine 1 functionLocalExpression
+
+                        innerFunction =
+                            partiallyAppliedFunctionRecord
+                                |> listItemFromIndexExpression_Pine 0
+
+                        numberOfParametersExpectedByInnerFunction =
+                            partiallyAppliedFunctionRecord
+                                |> listItemFromIndexExpression_Pine 1
+
+                        environmentFunctions =
+                            partiallyAppliedFunctionRecord
+                                |> listItemFromIndexExpression_Pine 2
+
+                        previouslyCollectedArguments =
+                            partiallyAppliedFunctionRecord
+                                |> listItemFromIndexExpression_Pine 3
+
+                        collectedArguments =
+                            Pine.KernelApplicationExpression
+                                { functionName = "concat"
+                                , argument =
+                                    Pine.ListExpression
+                                        [ previouslyCollectedArguments
+                                        , Pine.ListExpression [ nextArgumentLocalExpression ]
+                                        ]
+                                }
+
+                        collectedArgumentsLength =
+                            countListElementsExpression_Pine collectedArguments
+
+                        collectedArgumentsAreComplete =
+                            equalCondition_Pine
+                                [ collectedArgumentsLength
+                                , numberOfParametersExpectedByInnerFunction
+                                ]
+                    in
+                    -- First, check if the argument we collect here is the last one.
+                    Pine.ConditionalExpression
+                        { condition = collectedArgumentsAreComplete
+                        , ifTrue =
+                            -- If it is, we can apply the inner function.
+                            Pine.DecodeAndEvaluateExpression
+                                { expression = innerFunction
+                                , environment =
+                                    Pine.ListExpression
+                                        [ environmentFunctions
+                                        , collectedArguments
+                                        ]
+                                }
+                        , ifFalse =
+                            -- If it is not, we need to collect more arguments.
+                            updateRecordOfPartiallyAppliedFunction
+                                { getFunctionInnerExpression = innerFunction
+                                , functionParameterCountExpression = numberOfParametersExpectedByInnerFunction
+                                , getEnvFunctionsExpression = environmentFunctions
+                                , argumentsAlreadyCollectedExpression = collectedArguments
+                                }
+                        }
+                , ifFalse =
+                    attemptReduceDecodeAndEvaluateExpressionRecursiveWithDefaultDepth
+                        { expression = functionLocalExpression
+                        , environment = nextArgumentLocalExpression
+                        }
+                }
     in
     Pine.ConditionalExpression
         { condition =
-            {-
-               If the first element in 'function' equals 'Function',
-            -}
             equalCondition_Pine
-                [ listItemFromIndexExpression_Pine 0 functionExpression
-                , Pine.LiteralExpression Pine.stringAsValue_Function
+                [ Pine.ListExpression []
+                , remainingArgumentsLocalExpression
                 ]
-        , ifTrue =
-            {-
-               assume the second list item is a list with the following items:
-               + 0: inner function
-               + 1: number of parameters expected by the inner function
-               + 2: captured environment functions
-               + 3: the arguments collected so far.
-            -}
-            let
-                partiallyAppliedFunctionRecord =
-                    listItemFromIndexExpression_Pine 1 functionExpression
-
-                innerFunction =
-                    partiallyAppliedFunctionRecord
-                        |> listItemFromIndexExpression_Pine 0
-
-                numberOfParametersExpectedByInnerFunction =
-                    partiallyAppliedFunctionRecord
-                        |> listItemFromIndexExpression_Pine 1
-
-                environmentFunctions =
-                    partiallyAppliedFunctionRecord
-                        |> listItemFromIndexExpression_Pine 2
-
-                previouslyCollectedArguments =
-                    partiallyAppliedFunctionRecord
-                        |> listItemFromIndexExpression_Pine 3
-
-                collectedArguments =
-                    Pine.KernelApplicationExpression
-                        { functionName = "concat"
-                        , argument =
-                            Pine.ListExpression
-                                [ previouslyCollectedArguments
-                                , Pine.ListExpression [ newArgumentExpression ]
-                                ]
-                        }
-
-                collectedArgumentsLength =
-                    countListElementsExpression_Pine collectedArguments
-
-                collectedArgumentsAreComplete =
-                    equalCondition_Pine
-                        [ collectedArgumentsLength
-                        , numberOfParametersExpectedByInnerFunction
-                        ]
-            in
-            -- First, check if the argument we collect here is the last one.
-            Pine.ConditionalExpression
-                { condition = collectedArgumentsAreComplete
-                , ifTrue =
-                    -- If it is, we can apply the inner function.
-                    Pine.DecodeAndEvaluateExpression
-                        { expression = innerFunction
-                        , environment =
-                            Pine.ListExpression
-                                [ environmentFunctions
-                                , collectedArguments
-                                ]
-                        }
-                , ifFalse =
-                    -- If it is not, we need to collect more arguments.
-                    updateRecordOfPartiallyAppliedFunction
-                        { getFunctionInnerExpression = innerFunction
-                        , functionParameterCountExpression = numberOfParametersExpectedByInnerFunction
-                        , getEnvFunctionsExpression = environmentFunctions
-                        , argumentsAlreadyCollectedExpression = collectedArguments
-                        }
-                }
+        , ifTrue = functionLocalExpression
         , ifFalse =
-            attemptReduceDecodeAndEvaluateExpressionRecursiveWithDefaultDepth
-                { expression = functionExpression
-                , environment = newArgumentExpression
+            Pine.DecodeAndEvaluateExpression
+                { expression = selfFunctionLocalExpression
+                , environment =
+                    Pine.ListExpression
+                        [ selfFunctionLocalExpression
+                        , applyNextExpression
+                        , listSkipExpression_Pine 1 remainingArgumentsLocalExpression
+                        ]
                 }
         }
 

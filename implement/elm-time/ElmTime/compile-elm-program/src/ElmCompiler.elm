@@ -1238,7 +1238,7 @@ compileElmSyntaxApplication stack appliedFunctionElmSyntax argumentsElmSyntax =
                                         Ok (applicableDeclaration arguments)
 
                                     _ ->
-                                                continueWithDefaultApplication ()
+                                        continueWithDefaultApplication ()
 
                 _ ->
                     continueWithDefaultApplication ()
@@ -2550,7 +2550,7 @@ emitModuleFunctionDeclarations stackBefore declarations =
                 { availableEmittedFunctions = availableEmittedFunctionsIncludingImports }
                 recursionDomainDeclarationsInBlock
                 { closureCaptures = []
-                , additionalImports = additionalImports
+                , additionalDeps = Dict.values recursionDomainDeclarations
                 }
                 |> Result.andThen
                     (\( blockEmitStack, blockDeclarationsEmitted ) ->

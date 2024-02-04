@@ -1093,6 +1093,7 @@ emitClosureExpressionTests =
                                 ((\partialApplicable ->
                                     FirCompiler.partialApplicationExpressionFromListOfArguments
                                         (testCase.arguments |> List.map Pine.LiteralExpression)
+                                        emptyEmitStack
                                         partialApplicable
                                         |> Pine.evaluateExpression { environment = Pine.ListValue [] }
                                         |> Result.mapError Pine.displayStringFromPineError
