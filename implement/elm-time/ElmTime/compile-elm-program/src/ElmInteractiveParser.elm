@@ -208,7 +208,6 @@ compileInteractiveSubmission environment submission =
                                                 { availableEmittedFunctions = [] }
                                                 (Dict.singleton declarationName functionDeclarationCompilation)
                                                 functionDeclarationCompilation
-                                                |> Result.map Tuple.second
                                         )
                                     |> Result.andThen FirCompiler.evaluateAsIndependentExpression
                             of
@@ -267,7 +266,7 @@ compileInteractiveSubmission environment submission =
                         Err error ->
                             Err ("Failed to compile Elm to Pine expression: " ++ error)
 
-                        Ok ( _, pineExpression ) ->
+                        Ok pineExpression ->
                             Ok
                                 (buildExpressionForNewStateAndResponse
                                     { newStateExpression = Pine.EnvironmentExpression
