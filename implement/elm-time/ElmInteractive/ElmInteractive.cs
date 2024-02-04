@@ -182,11 +182,7 @@ public class ElmInteractive
             new CompileElmInteractiveEnvironmentRequest(
                 modulesTexts: elmModulesTexts,
                 environmentBefore: environmentBefore),
-            options: new System.Text.Json.JsonSerializerOptions
-            {
-                DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
-                MaxDepth = 1000
-            });
+            options: compilerInterfaceJsonSerializerOptions);
 
         var responseJson =
             evalElmPreparedJavaScriptEngine.CallFunction("compileInteractiveEnvironment", argumentsJson).ToString()!;
@@ -194,7 +190,7 @@ public class ElmInteractive
         var responseStructure =
             System.Text.Json.JsonSerializer.Deserialize<Result<string, PineValueJson>>(
                 responseJson,
-                new System.Text.Json.JsonSerializerOptions { MaxDepth = 1000 })!;
+                compilerInterfaceJsonSerializerOptions)!;
 
         return
             responseStructure
@@ -283,11 +279,7 @@ public class ElmInteractive
                     environment: environmentJson.json,
                     submission: submission
                 ),
-                options: new System.Text.Json.JsonSerializerOptions
-                {
-                    DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
-                    MaxDepth = 1000
-                });
+                options: compilerInterfaceJsonSerializerOptions);
 
         logDuration("Serialize to JSON (" + CommandLineInterface.FormatIntegerForDisplay(requestJson.Length) + " chars)");
 
@@ -303,7 +295,7 @@ public class ElmInteractive
         var responseStructure =
             System.Text.Json.JsonSerializer.Deserialize<Result<string, PineValueJson>>(
                 responseJson,
-                options: new System.Text.Json.JsonSerializerOptions { MaxDepth = 1000 })!;
+                options: compilerInterfaceJsonSerializerOptions)!;
 
         var response =
             responseStructure
@@ -341,7 +333,9 @@ public class ElmInteractive
         var responseJson =
             evalElmPreparedJavaScriptEngine.CallFunction(
                 "submissionResponseFromResponsePineValue",
-                System.Text.Json.JsonSerializer.Serialize(FromPineValueWithoutBuildingDictionary(response))).ToString()!;
+                System.Text.Json.JsonSerializer.Serialize(
+                    FromPineValueWithoutBuildingDictionary(response),
+                    options: compilerInterfaceJsonSerializerOptions)).ToString()!;
 
         var responseStructure =
             System.Text.Json.JsonSerializer.Deserialize<Result<string, EvaluatedSctructure>>(responseJson)!;
@@ -730,4 +724,11 @@ public class ElmInteractive
 
     public record EvaluatedSctructure(
         string displayText);
+
+    private static readonly System.Text.Json.JsonSerializerOptions compilerInterfaceJsonSerializerOptions =
+        new()
+        {
+            DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+            MaxDepth = 1000
+        };
 }
