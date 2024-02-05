@@ -394,61 +394,7 @@ parseElmExplorerNodeValue nodeCategory nodeValue =
                     )
 
         ElmFunctionDeclarationNode ->
-            case FirCompiler.parseFunctionRecordFromValueTagged nodeValue of
-                Err err ->
-                    case ElmInteractive.pineValueAsElmValue nodeValue of
-                        Err _ ->
-                            Err ("Failed to parse function: " ++ err)
-
-                        Ok elmValue ->
-                            case ElmInteractive.elmValueAsExpression elmValue of
-                                ( expressionText, _ ) ->
-                                    Ok
-                                        { children = Dict.empty
-                                        , otherProperties =
-                                            [ ( "literal value"
-                                              , expressionText
-                                              )
-                                            ]
-                                        }
-
-                Ok functionRecord ->
-                    let
-                        envFunctionsChildren : Dict.Dict String CompilationExplorerNode
-                        envFunctionsChildren =
-                            functionRecord.envFunctions
-                                |> List.indexedMap
-                                    (\envFunctionIndex envFunctionValue ->
-                                        ( "env-decl-" ++ String.fromInt envFunctionIndex
-                                        , { value = explorerValueCache envFunctionValue
-                                          , category = FunctionExpressionNode
-                                          , parsed = Nothing
-                                          }
-                                        )
-                                    )
-                                |> Dict.fromList
-                    in
-                    Ok
-                        { children =
-                            envFunctionsChildren
-                                |> Dict.insert
-                                    "inner-expression"
-                                    { value = explorerValueCache functionRecord.innerFunctionValue
-                                    , category = FunctionExpressionNode
-                                    , parsed = Nothing
-                                    }
-                        , otherProperties =
-                            [ ( "parameter count"
-                              , String.fromInt functionRecord.functionParameterCount
-                              )
-                            , ( "env functions count"
-                              , String.fromInt (List.length functionRecord.envFunctions)
-                              )
-                            , ( "arguments already collected"
-                              , String.fromInt (List.length functionRecord.argumentsAlreadyCollected)
-                              )
-                            ]
-                        }
+            parseAsFunctionRecord nodeValue
 
         FunctionExpressionNode ->
             case Pine.decodeExpressionFromValue nodeValue of
@@ -456,17 +402,114 @@ parseElmExplorerNodeValue nodeCategory nodeValue =
                     Err ("Failed to decode expression: " ++ err)
 
                 Ok expression ->
+                    let
+                        childrenFunctionRecord : Dict.Dict String CompilationExplorerNode
+                        childrenFunctionRecord =
+                            case expression of
+                                Pine.LiteralExpression literalValue ->
+                                    case parseAsFunctionRecord literalValue of
+                                        Err _ ->
+                                            Dict.empty
+
+                                        Ok functionRecord ->
+                                            Dict.singleton "function-record"
+                                                { value = explorerValueCache literalValue
+                                                , category = FunctionExpressionNode
+                                                , parsed = Just (Parsed (Ok functionRecord))
+                                                }
+
+                                _ ->
+                                    Dict.empty
+
+                        expressionChildrenDict : Dict.Dict String CompilationExplorerNode
+                        expressionChildrenDict =
+                            Dict.singleton "expression"
+                                { value = explorerValueCache nodeValue
+                                , category = FunctionExpressionNode
+                                , parsed =
+                                    Just
+                                        (Parsed
+                                            (Ok
+                                                { children = Dict.empty
+                                                , otherProperties =
+                                                    [ ( "expression"
+                                                      , ElmCompilerConstruction.buildPineExpressionSyntax
+                                                            { attemptEncodeExpression = False }
+                                                            expression
+                                                            |> String.join "\n"
+                                                      )
+                                                    ]
+                                                }
+                                            )
+                                        )
+                                }
+                    in
                     Ok
-                        { children = Dict.empty
-                        , otherProperties =
-                            [ ( "expression"
-                              , ElmCompilerConstruction.buildPineExpressionSyntax
-                                    { attemptEncodeExpression = False }
-                                    expression
-                                    |> String.join "\n"
-                              )
-                            ]
+                        { children =
+                            Dict.union
+                                expressionChildrenDict
+                                childrenFunctionRecord
+                        , otherProperties = []
                         }
+
+
+parseAsFunctionRecord : Pine.Value -> Result String ExplorerNodeParseSuccess
+parseAsFunctionRecord nodeValue =
+    case FirCompiler.parseFunctionRecordFromValueTagged nodeValue of
+        Err err ->
+            case ElmInteractive.pineValueAsElmValue nodeValue of
+                Err _ ->
+                    Err ("Failed to parse function: " ++ err)
+
+                Ok elmValue ->
+                    case ElmInteractive.elmValueAsExpression elmValue of
+                        ( expressionText, _ ) ->
+                            Ok
+                                { children = Dict.empty
+                                , otherProperties =
+                                    [ ( "literal value"
+                                      , expressionText
+                                      )
+                                    ]
+                                }
+
+        Ok functionRecord ->
+            let
+                envFunctionsChildren : Dict.Dict String CompilationExplorerNode
+                envFunctionsChildren =
+                    functionRecord.envFunctions
+                        |> List.indexedMap
+                            (\envFunctionIndex envFunctionValue ->
+                                ( "env-decl-" ++ String.fromInt envFunctionIndex
+                                , { value = explorerValueCache envFunctionValue
+                                  , category = FunctionExpressionNode
+                                  , parsed = Nothing
+                                  }
+                                )
+                            )
+                        |> Dict.fromList
+            in
+            Ok
+                { children =
+                    envFunctionsChildren
+                        |> Dict.insert
+                            "inner-expression"
+                            { value = explorerValueCache functionRecord.innerFunctionValue
+                            , category = FunctionExpressionNode
+                            , parsed = Nothing
+                            }
+                , otherProperties =
+                    [ ( "parameter count"
+                      , String.fromInt functionRecord.functionParameterCount
+                      )
+                    , ( "env functions count"
+                      , String.fromInt (List.length functionRecord.envFunctions)
+                      )
+                    , ( "arguments already collected"
+                      , String.fromInt (List.length functionRecord.argumentsAlreadyCollected)
+                      )
+                    ]
+                }
 
 
 addElmModule : String -> State -> ( Result String { environment : Pine.Value, compiledModuleSize : Int }, ( State, Cmd Event ) )
