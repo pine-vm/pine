@@ -331,20 +331,20 @@ compare a b =
 
 compareList : List comparable -> List comparable -> Order
 compareList listA listB =
-    case (listA, listB) of
-    (headA :: tailA, headB :: tailB) ->
-        let
-            headOrder =
-                compare headA headB
-        in
-            if eq headOrder EQ
-            then
+    case ( listA, listB ) of
+        ( headA :: tailA, headB :: tailB ) ->
+            let
+                headOrder =
+                    compare headA headB
+            in
+            if Pine_kernel.equal [ headOrder, EQ ] then
                 compareList tailA tailB
+
             else
                 headOrder
 
-    _ ->
-        compare (Pine_kernel.length listA) (Pine_kernel.length listB)
+        _ ->
+            compare (Pine_kernel.length listA) (Pine_kernel.length listB)
 
 
 stringCharsToSignedInts : List Char -> List Int
@@ -622,7 +622,16 @@ reverse list =
 
 member : a -> List a -> Bool
 member x xs =
-    any ((==) x) xs
+    case xs of
+        [] ->
+            False
+
+        y :: ys ->
+            if x == y then
+                True
+
+            else
+                member x ys
 
 
 all : (a -> Bool) -> List a -> Bool
