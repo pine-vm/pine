@@ -94,7 +94,7 @@ dictFoldr func acc t =
 
 neq : a -> a -> Bool
 neq a b =
-    Pine_kernel.negate (Pine_kernel.equal [ a, b ])
+    not (eq a b)
 
 
 add : number -> number -> number
