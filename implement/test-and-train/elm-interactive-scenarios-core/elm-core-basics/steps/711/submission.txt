@@ -1,0 +1,1 @@
+Basics.compare "azzurro" "azzurreggiare"
