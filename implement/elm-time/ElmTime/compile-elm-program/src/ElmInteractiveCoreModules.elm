@@ -308,56 +308,84 @@ are also the only values that work as `Dict` keys or `Set` members.
 -}
 compare : comparable -> comparable -> Order
 compare a b =
-    if eq a b
-    then
+    if Pine_kernel.equal [ a, b ] then
         EQ
-    else
-        case (a, b) of
-        (String stringA, String stringB) ->
-            compareList
-                (stringCharsToSignedInts stringA)
-                (stringCharsToSignedInts stringB)
 
-        _ ->
-            if isPineList a
-            then
-                compareList a b
-            else if le a b
-            then
-                LT
-            else
-                GT
+    else
+        case ( a, b ) of
+            ( String stringA, String stringB ) ->
+                compareStrings stringA stringB
+
+            _ ->
+                if isPineList a then
+                    compareList a b
+
+                else if le a b then
+                    LT
+
+                else
+                    GT
 
 
 compareList : List comparable -> List comparable -> Order
 compareList listA listB =
-    case ( listA, listB ) of
-        ( headA :: tailA, headB :: tailB ) ->
-            let
-                headOrder =
-                    compare headA headB
-            in
-            if Pine_kernel.equal [ headOrder, EQ ] then
-                compareList tailA tailB
+    case listA of
+        [] ->
+            case listB of
+                [] ->
+                    EQ
 
-            else
-                headOrder
+                _ ->
+                    LT
 
-        _ ->
-            compare (Pine_kernel.length listA) (Pine_kernel.length listB)
+        headA :: tailA ->
+            case listB of
+                [] ->
+                    GT
+
+                headB :: tailB ->
+                    let
+                        headOrder =
+                            compare headA headB
+                    in
+                    if Pine_kernel.equal [ headOrder, EQ ] then
+                        compareList tailA tailB
+
+                    else
+                        headOrder
 
 
-stringCharsToSignedInts : List Char -> List Int
-stringCharsToSignedInts chars =
-    case chars of
-    head :: tail ->
-        -- Add the sign prefix byte
-        Pine_kernel.concat
-            [ [ Pine_kernel.concat [ Pine_kernel.take [ 1, 0 ], head ] ]
-            , stringCharsToSignedInts tail
-            ]
-    _ ->
-        []
+compareStrings : List Char -> List Char -> Order
+compareStrings stringA stringB =
+    -- Pine_kernel.is_sorted_ascending_int only works with signed integers. Therefore prepend sign to each character.
+    case stringA of
+        [] ->
+            case stringB of
+                [] ->
+                    EQ
+
+                _ ->
+                    LT
+
+        charA :: tailA ->
+            case stringB of
+                [] ->
+                    GT
+
+                charB :: tailB ->
+                    if Pine_kernel.equal [ charA, charB ] then
+                        compareStrings tailA tailB
+
+                    else if
+                        Pine_kernel.is_sorted_ascending_int
+                            [ Pine_kernel.concat [ 0, charA ]
+                            , Pine_kernel.concat [ 0, charB ]
+                            ]
+                    then
+                        LT
+
+                    else
+                        GT
 
 
 modBy : Int -> Int -> Int
