@@ -2451,9 +2451,38 @@ emitModuleFunctionDeclarations stackBefore declarations =
             Dict.toList usedImports
                 |> List.map
                     (\( functionName, functionValue ) ->
+                        let
+                            ( parameterCount, expectedEnv ) =
+                                case FirCompiler.parseFunctionRecordFromValueTagged functionValue of
+                                    Err _ ->
+                                        ( 0
+                                        , FirCompiler.LocalEnvironment { expectedDecls = [] }
+                                        )
+
+                                    Ok functionRecord ->
+                                        ( functionRecord.functionParameterCount
+                                        , FirCompiler.ImportedEnvironment
+                                            -- Describe path to be consistent with structure parsed in parseFunctionRecordFromValueTagged
+                                            {-
+                                               Since we wrap the function once (more) using encodeExpressionAsValue,
+                                               we prepend a skip(1) to the paths here.
+                                            -}
+                                            { pathToEnvFunctionsList =
+                                                [ FirCompiler.ListItemDeconstruction 1
+                                                , FirCompiler.ListItemDeconstruction 1
+                                                , FirCompiler.ListItemDeconstruction 2
+                                                ]
+                                            , pathToFunctionValue =
+                                                [ FirCompiler.ListItemDeconstruction 1
+                                                , FirCompiler.ListItemDeconstruction 1
+                                                , FirCompiler.ListItemDeconstruction 0
+                                                ]
+                                            }
+                                        )
+                        in
                         ( { functionName = functionName
-                          , expectedEnvironmentFunctions = []
-                          , parameterCount = 0
+                          , parameterCount = parameterCount
+                          , expectedEnvironment = expectedEnv
                           }
                         , Pine.encodeExpressionAsValue (Pine.LiteralExpression functionValue)
                         )
@@ -2692,7 +2721,9 @@ emitModuleFunctionDeclarations stackBefore declarations =
                                                     (\( functionName, ( _, ( parameterCount, innerExpression ) ) ) ->
                                                         ( { functionName = functionName
                                                           , parameterCount = parameterCount
-                                                          , expectedEnvironmentFunctions = expectedEnvironmentFunctions
+                                                          , expectedEnvironment =
+                                                                FirCompiler.LocalEnvironment
+                                                                    { expectedDecls = expectedEnvironmentFunctions }
                                                           }
                                                         , innerExpression
                                                         )

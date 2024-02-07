@@ -1,8 +1,10 @@
 module FirCompiler exposing
     ( Deconstruction(..)
     , EmitStack
+    , EnvironmentDeconstructionEntry
     , EnvironmentFunctionEntry
     , Expression(..)
+    , FunctionEnvironment(..)
     , attemptReduceDecodeAndEvaluateExpressionRecursive
     , buildRecordOfPartiallyAppliedFunction
     , countListElementsExpression
@@ -105,8 +107,17 @@ environmentFunctionPartialApplicationName =
 type alias EnvironmentFunctionEntry =
     { functionName : String
     , parameterCount : Int
-    , expectedEnvironmentFunctions : List String
+    , expectedEnvironment : FunctionEnvironment
     }
+
+
+type FunctionEnvironment
+    = LocalEnvironment { expectedDecls : List String }
+    | ImportedEnvironment
+        { -- Paths relative to the record found using the index of the environment function entry.
+          pathToEnvFunctionsList : List Deconstruction
+        , pathToFunctionValue : List Deconstruction
+        }
 
 
 type alias EnvironmentDeconstructionEntry =
@@ -357,7 +368,13 @@ emitDeclarationBlock stackBefore environmentPrefix blockDeclarations config =
                 (\( availableEmitted, _ ) ->
                     Dict.insert
                         availableEmitted.functionName
-                        (Set.fromList availableEmitted.expectedEnvironmentFunctions)
+                        (case availableEmitted.expectedEnvironment of
+                            LocalEnvironment localEnv ->
+                                Set.fromList localEnv.expectedDecls
+
+                            ImportedEnvironment _ ->
+                                Set.empty
+                        )
                 )
                 Dict.empty
                 environmentPrefix.availableEmittedFunctions
@@ -549,7 +566,9 @@ emitDeclarationBlock stackBefore environmentPrefix blockDeclarations config =
                 (\( functionName, functionEntry ) ->
                     { functionName = functionName
                     , parameterCount = List.length functionEntry.parameters
-                    , expectedEnvironmentFunctions = newEnvironmentFunctionsNames
+                    , expectedEnvironment =
+                        LocalEnvironment
+                            { expectedDecls = newEnvironmentFunctionsNames }
                     }
                 )
                 blockDeclarationsAsFunctionsLessClosure
@@ -560,7 +579,7 @@ emitDeclarationBlock stackBefore environmentPrefix blockDeclarations config =
                 (\( captureName, _ ) ->
                     { functionName = captureName
                     , parameterCount = 0
-                    , expectedEnvironmentFunctions = []
+                    , expectedEnvironment = LocalEnvironment { expectedDecls = [] }
                     }
                 )
                 closureCaptures
@@ -646,7 +665,8 @@ emitDeclarationBlock stackBefore environmentPrefix blockDeclarations config =
                                         (\( declName, ( declAsFunction, declExpr ) ) ->
                                             ( { functionName = declName
                                               , parameterCount = List.length declAsFunction.parameters
-                                              , expectedEnvironmentFunctions = newEnvironmentFunctionsNames
+                                              , expectedEnvironment =
+                                                    LocalEnvironment { expectedDecls = newEnvironmentFunctionsNames }
                                               }
                                             , ( declExpr
                                               , Pine.encodeExpressionAsValue declExpr
@@ -1102,7 +1122,16 @@ avoidInlineNamedFunctionApplication emitStack _ arguments =
         recursiveFunctions =
             List.foldl
                 (\envEntry aggregate ->
-                    if Set.member envEntry.functionName (Set.fromList envEntry.expectedEnvironmentFunctions) then
+                    if
+                        Set.member envEntry.functionName
+                            (case envEntry.expectedEnvironment of
+                                LocalEnvironment localEnv ->
+                                    Set.fromList localEnv.expectedDecls
+
+                                ImportedEnvironment _ ->
+                                    Set.empty
+                            )
+                    then
                         Set.insert envEntry.functionName aggregate
 
                     else
@@ -1211,92 +1240,132 @@ emitApplyFunctionFromCurrentEnvironment compilation { functionName } arguments =
                 getFunctionExpression =
                     getEnvFunctionsExpression
                         |> listItemFromIndexExpression_Pine functionIndexInEnv
-
-                currentEnv =
-                    List.map .functionName compilation.environmentFunctions
-
-                currentEnvCoversExpected =
-                    List.take (List.length function.expectedEnvironmentFunctions) currentEnv
-                        == function.expectedEnvironmentFunctions
-
-                buildEnvironmentRecursive :
-                    List Pine.Expression
-                    -> List String
-                    -> Result String Pine.Expression
-                buildEnvironmentRecursive alreadyMapped remainingToBeMapped =
-                    case remainingToBeMapped of
-                        [] ->
-                            Ok (Pine.ListExpression alreadyMapped)
-
-                        nextExpectedFunctionName :: remainingExpectedFunctions ->
-                            case currentEnvironmentFunctionEntryFromName nextExpectedFunctionName of
-                                Nothing ->
-                                    Err
-                                        ("Function '"
-                                            ++ functionName
-                                            ++ "' expects environment function '"
-                                            ++ nextExpectedFunctionName
-                                            ++ "' but it is not in the environment"
-                                        )
-
-                                Just ( indexInEnv, _ ) ->
-                                    buildEnvironmentRecursive
-                                        (alreadyMapped
-                                            ++ [ listItemFromIndexExpression_Pine
-                                                    indexInEnv
-                                                    getEnvFunctionsExpression
-                                               ]
-                                        )
-                                        remainingExpectedFunctions
-
-                buildExpectedEnvironmentResult =
-                    if currentEnvCoversExpected then
-                        Ok getEnvFunctionsExpression
-
-                    else
-                        buildEnvironmentRecursive [] function.expectedEnvironmentFunctions
             in
-            case buildExpectedEnvironmentResult of
-                Err err ->
-                    Just (Err err)
+            case function.expectedEnvironment of
+                ImportedEnvironment importedEnv ->
+                    let
+                        importedGetFunctionExpr =
+                            getFunctionExpression
+                                |> pineExpressionForDeconstructions importedEnv.pathToFunctionValue
 
-                Ok expectedEnvironment ->
+                        importedGetEnvFunctionsExpression =
+                            getFunctionExpression
+                                |> pineExpressionForDeconstructions importedEnv.pathToEnvFunctionsList
+                    in
                     Just
                         (Ok
                             (if function.parameterCount == List.length arguments then
                                 Pine.DecodeAndEvaluateExpression
-                                    { expression = getFunctionExpression
+                                    { expression = importedGetFunctionExpr
                                     , environment =
                                         Pine.ListExpression
-                                            [ expectedEnvironment
+                                            [ importedGetEnvFunctionsExpression
                                             , Pine.ListExpression arguments
                                             ]
                                     }
 
                              else
-                                (if function.parameterCount == 0 then
-                                    Pine.DecodeAndEvaluateExpression
-                                        { expression = getFunctionExpression
-                                        , environment =
-                                            Pine.ListExpression
-                                                [ expectedEnvironment
-                                                , Pine.ListExpression arguments
-                                                ]
-                                        }
-
-                                 else
-                                    buildRecordOfPartiallyAppliedFunction
-                                        { getFunctionInnerExpression = getFunctionExpression
-                                        , getEnvFunctionsExpression = expectedEnvironment
-                                        , functionParameterCount = function.parameterCount
-                                        , argumentsAlreadyCollected = []
-                                        }
-                                )
+                                Pine.DecodeAndEvaluateExpression
+                                    { expression = getFunctionExpression
+                                    , environment =
+                                        Pine.ListExpression
+                                            [ Pine.ListExpression []
+                                            , Pine.ListExpression arguments
+                                            ]
+                                    }
                                     |> partialApplicationExpressionFromListOfArguments
                                         arguments
                                         compilation
                             )
                         )
+
+                LocalEnvironment localEnv ->
+                    let
+                        currentEnv =
+                            List.map .functionName compilation.environmentFunctions
+
+                        currentEnvCoversExpected =
+                            List.take (List.length localEnv.expectedDecls) currentEnv
+                                == localEnv.expectedDecls
+
+                        buildEnvironmentRecursive :
+                            List Pine.Expression
+                            -> List String
+                            -> Result String Pine.Expression
+                        buildEnvironmentRecursive alreadyMapped remainingToBeMapped =
+                            case remainingToBeMapped of
+                                [] ->
+                                    Ok (Pine.ListExpression alreadyMapped)
+
+                                nextExpectedFunctionName :: remainingExpectedFunctions ->
+                                    case currentEnvironmentFunctionEntryFromName nextExpectedFunctionName of
+                                        Nothing ->
+                                            Err
+                                                ("Function '"
+                                                    ++ functionName
+                                                    ++ "' expects environment function '"
+                                                    ++ nextExpectedFunctionName
+                                                    ++ "' but it is not in the environment"
+                                                )
+
+                                        Just ( indexInEnv, _ ) ->
+                                            buildEnvironmentRecursive
+                                                (alreadyMapped
+                                                    ++ [ listItemFromIndexExpression_Pine
+                                                            indexInEnv
+                                                            getEnvFunctionsExpression
+                                                       ]
+                                                )
+                                                remainingExpectedFunctions
+
+                        buildExpectedEnvironmentResult =
+                            if currentEnvCoversExpected then
+                                Ok getEnvFunctionsExpression
+
+                            else
+                                buildEnvironmentRecursive [] localEnv.expectedDecls
+                    in
+                    case buildExpectedEnvironmentResult of
+                        Err err ->
+                            Just (Err err)
+
+                        Ok expectedEnvironment ->
+                            Just
+                                (Ok
+                                    (if function.parameterCount == List.length arguments then
+                                        Pine.DecodeAndEvaluateExpression
+                                            { expression = getFunctionExpression
+                                            , environment =
+                                                Pine.ListExpression
+                                                    [ expectedEnvironment
+                                                    , Pine.ListExpression arguments
+                                                    ]
+                                            }
+
+                                     else
+                                        (if function.parameterCount == 0 then
+                                            Pine.DecodeAndEvaluateExpression
+                                                { expression = getFunctionExpression
+                                                , environment =
+                                                    Pine.ListExpression
+                                                        [ expectedEnvironment
+                                                        , Pine.ListExpression arguments
+                                                        ]
+                                                }
+
+                                         else
+                                            buildRecordOfPartiallyAppliedFunction
+                                                { getFunctionInnerExpression = getFunctionExpression
+                                                , getEnvFunctionsExpression = expectedEnvironment
+                                                , functionParameterCount = function.parameterCount
+                                                , argumentsAlreadyCollected = []
+                                                }
+                                        )
+                                            |> partialApplicationExpressionFromListOfArguments
+                                                arguments
+                                                compilation
+                                    )
+                                )
 
 
 partialApplicationExpressionFromListOfArguments :
