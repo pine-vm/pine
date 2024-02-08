@@ -500,7 +500,7 @@ parseAsFunctionRecord nodeValue =
                             }
                 , otherProperties =
                     [ ( "parameter count"
-                      , String.fromInt functionRecord.functionParameterCount
+                      , String.fromInt functionRecord.parameterCount
                       )
                     , ( "env functions count"
                       , String.fromInt (List.length functionRecord.envFunctions)

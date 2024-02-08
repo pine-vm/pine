@@ -114,9 +114,8 @@ type alias EnvironmentFunctionEntry =
 type FunctionEnvironment
     = LocalEnvironment { expectedDecls : List String }
     | ImportedEnvironment
-        { -- Paths relative to the record found using the index of the environment function entry.
-          pathToEnvFunctionsList : List Deconstruction
-        , pathToFunctionValue : List Deconstruction
+        { -- Path to the tagged function record relative to the entry in the current environment.
+          pathToRecordFromEnvEntry : List Deconstruction
         }
 
 
@@ -1186,7 +1185,7 @@ emitFunctionApplicationPine emitStack arguments functionExpressionPine =
                                     ]
                                         |> List.concat
                             in
-                            if functionRecord.functionParameterCount /= List.length combinedArguments then
+                            if functionRecord.parameterCount /= List.length combinedArguments then
                                 genericPartialApplication ()
 
                             else
@@ -1244,13 +1243,26 @@ emitApplyFunctionFromCurrentEnvironment compilation { functionName } arguments =
             case function.expectedEnvironment of
                 ImportedEnvironment importedEnv ->
                     let
-                        importedGetFunctionExpr =
+                        funcRecordLessTag =
                             getFunctionExpression
-                                |> pineExpressionForDeconstructions importedEnv.pathToFunctionValue
+                                |> pineExpressionForDeconstructions importedEnv.pathToRecordFromEnvEntry
+
+                        {-
+                           The paths here mirror the composition in 'buildRecordOfPartiallyAppliedFunction'
+                        -}
+                        importedGetFunctionExpr =
+                            funcRecordLessTag
+                                |> pineExpressionForDeconstructions
+                                    [ ListItemDeconstruction 1
+                                    , ListItemDeconstruction 0
+                                    ]
 
                         importedGetEnvFunctionsExpression =
-                            getFunctionExpression
-                                |> pineExpressionForDeconstructions importedEnv.pathToEnvFunctionsList
+                            funcRecordLessTag
+                                |> pineExpressionForDeconstructions
+                                    [ ListItemDeconstruction 1
+                                    , ListItemDeconstruction 2
+                                    ]
                     in
                     Just
                         (Ok
@@ -1266,7 +1278,11 @@ emitApplyFunctionFromCurrentEnvironment compilation { functionName } arguments =
 
                              else
                                 Pine.DecodeAndEvaluateExpression
-                                    { expression = getFunctionExpression
+                                    { expression =
+                                        Pine.ListExpression
+                                            [ Pine.LiteralExpression Pine.stringAsValue_Literal
+                                            , funcRecordLessTag
+                                            ]
                                     , environment =
                                         Pine.ListExpression
                                             [ Pine.ListExpression []
@@ -1357,7 +1373,7 @@ emitApplyFunctionFromCurrentEnvironment compilation { functionName } arguments =
                                             buildRecordOfPartiallyAppliedFunction
                                                 { getFunctionInnerExpression = getFunctionExpression
                                                 , getEnvFunctionsExpression = expectedEnvironment
-                                                , functionParameterCount = function.parameterCount
+                                                , parameterCount = function.parameterCount
                                                 , argumentsAlreadyCollected = []
                                                 }
                                         )
@@ -1400,7 +1416,7 @@ emitWrapperForPartialApplication envFunctionsExpression parameterCount innerExpr
                 innerExpression
                     |> Pine.encodeExpressionAsValue
                     |> Pine.LiteralExpression
-            , functionParameterCount = parameterCount
+            , parameterCount = parameterCount
             , getEnvFunctionsExpression = envFunctionsExpression
             , argumentsAlreadyCollected = []
             }
@@ -1546,7 +1562,7 @@ adaptivePartialApplicationRecursiveExpression =
                             -- If it is not, we need to collect more arguments.
                             updateRecordOfPartiallyAppliedFunction
                                 { getFunctionInnerExpression = innerFunction
-                                , functionParameterCountExpression = numberOfParametersExpectedByInnerFunction
+                                , parameterCountExpression = numberOfParametersExpectedByInnerFunction
                                 , getEnvFunctionsExpression = environmentFunctions
                                 , argumentsAlreadyCollectedExpression = collectedArguments
                                 }
@@ -1581,7 +1597,7 @@ adaptivePartialApplicationRecursiveExpression =
 buildRecordOfPartiallyAppliedFunction :
     { getFunctionInnerExpression : Pine.Expression
     , getEnvFunctionsExpression : Pine.Expression
-    , functionParameterCount : Int
+    , parameterCount : Int
     , argumentsAlreadyCollected : List Pine.Expression
     }
     -> Pine.Expression
@@ -1589,8 +1605,8 @@ buildRecordOfPartiallyAppliedFunction config =
     updateRecordOfPartiallyAppliedFunction
         { getFunctionInnerExpression = config.getFunctionInnerExpression
         , getEnvFunctionsExpression = config.getEnvFunctionsExpression
-        , functionParameterCountExpression =
-            Pine.LiteralExpression (Pine.valueFromInt config.functionParameterCount)
+        , parameterCountExpression =
+            Pine.LiteralExpression (Pine.valueFromInt config.parameterCount)
         , argumentsAlreadyCollectedExpression = Pine.ListExpression config.argumentsAlreadyCollected
         }
 
@@ -1598,7 +1614,7 @@ buildRecordOfPartiallyAppliedFunction config =
 updateRecordOfPartiallyAppliedFunction :
     { getFunctionInnerExpression : Pine.Expression
     , getEnvFunctionsExpression : Pine.Expression
-    , functionParameterCountExpression : Pine.Expression
+    , parameterCountExpression : Pine.Expression
     , argumentsAlreadyCollectedExpression : Pine.Expression
     }
     -> Pine.Expression
@@ -1607,7 +1623,7 @@ updateRecordOfPartiallyAppliedFunction config =
         [ Pine.LiteralExpression Pine.stringAsValue_Function
         , Pine.ListExpression
             [ config.getFunctionInnerExpression
-            , config.functionParameterCountExpression
+            , config.parameterCountExpression
             , config.getEnvFunctionsExpression
             , config.argumentsAlreadyCollectedExpression
             ]
@@ -1621,7 +1637,7 @@ parseFunctionRecordFromValueTagged :
             String
             { innerFunctionValue : Pine.Value
             , innerFunction : Pine.Expression
-            , functionParameterCount : Int
+            , parameterCount : Int
             , envFunctions : List Pine.Value
             , argumentsAlreadyCollected : List Pine.Value
             }
@@ -1653,7 +1669,7 @@ parseFunctionRecordFromValue :
             String
             { innerFunctionValue : Pine.Value
             , innerFunction : Pine.Expression
-            , functionParameterCount : Int
+            , parameterCount : Int
             , envFunctions : List Pine.Value
             , argumentsAlreadyCollected : List Pine.Value
             }
@@ -1661,17 +1677,17 @@ parseFunctionRecordFromValue value =
     case value of
         Pine.ListValue listItems ->
             case listItems of
-                [ innerFunctionValue, functionParameterCountValue, envFunctionsValue, argumentsAlreadyCollectedValue ] ->
+                [ innerFunctionValue, parameterCountValue, envFunctionsValue, argumentsAlreadyCollectedValue ] ->
                     case Pine.decodeExpressionFromValue innerFunctionValue of
                         Err err ->
                             Err ("Failed to decode inner function: " ++ err)
 
                         Ok innerFunction ->
-                            case Pine.intFromValue functionParameterCountValue of
+                            case Pine.intFromValue parameterCountValue of
                                 Err err ->
                                     Err ("Failed to decode function parameter count: " ++ err)
 
-                                Ok functionParameterCount ->
+                                Ok parameterCount ->
                                     case envFunctionsValue of
                                         Pine.ListValue envFunctions ->
                                             case argumentsAlreadyCollectedValue of
@@ -1679,7 +1695,7 @@ parseFunctionRecordFromValue value =
                                                     Ok
                                                         { innerFunctionValue = innerFunctionValue
                                                         , innerFunction = innerFunction
-                                                        , functionParameterCount = functionParameterCount
+                                                        , parameterCount = parameterCount
                                                         , envFunctions = envFunctions
                                                         , argumentsAlreadyCollected = argumentsAlreadyCollected
                                                         }
