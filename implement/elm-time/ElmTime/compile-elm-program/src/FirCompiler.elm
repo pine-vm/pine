@@ -1940,51 +1940,6 @@ transformPineExpressionWithOptionalReplacement findReplacement expression =
                             )
 
 
-anySubExpression : (Expression -> Bool) -> Expression -> Bool
-anySubExpression predicate expression =
-    if predicate expression then
-        True
-
-    else
-        case expression of
-            LiteralExpression _ ->
-                False
-
-            ListExpression list ->
-                List.any (anySubExpression predicate) list
-
-            KernelApplicationExpression application ->
-                anySubExpression predicate application.argument
-
-            ConditionalExpression conditional ->
-                anySubExpression predicate conditional.condition
-                    || anySubExpression predicate conditional.ifTrue
-                    || anySubExpression predicate conditional.ifFalse
-
-            ReferenceExpression _ ->
-                False
-
-            FunctionExpression _ functionBody ->
-                anySubExpression predicate functionBody
-
-            FunctionApplicationExpression functionExpression arguments ->
-                anySubExpression predicate functionExpression
-                    || List.any (anySubExpression predicate) arguments
-
-            DeclarationBlockExpression declarations innerExpression ->
-                anySubExpression predicate innerExpression
-                    || Dict.foldl
-                        (\_ declExpression _ -> anySubExpression predicate declExpression)
-                        (anySubExpression predicate innerExpression)
-                        declarations
-
-            StringTagExpression _ tagged ->
-                anySubExpression predicate tagged
-
-            PineFunctionApplicationExpression _ argument ->
-                anySubExpression predicate argument
-
-
 listFunctionAppExpressions : Expression -> List ( Expression, List Expression )
 listFunctionAppExpressions expr =
     case expr of

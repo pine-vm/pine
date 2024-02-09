@@ -1,5 +1,7 @@
 module Common exposing (..)
 
+import Dict
+
 
 listFind : (a -> Bool) -> List a -> Maybe a
 listFind predicate list =
@@ -72,6 +74,29 @@ resultListMapCombineHelper completeList mapItem sourceList =
 
                 Err err ->
                     Err err
+
+
+resultDictMapCombine :
+    (comparable -> value -> Result err valueOk)
+    -> Dict.Dict comparable value
+    -> Result err (Dict.Dict comparable valueOk)
+resultDictMapCombine mapItem dict =
+    Dict.foldl
+        (\key value result ->
+            case result of
+                Ok resultDict ->
+                    case mapItem key value of
+                        Ok valueOk ->
+                            Ok (Dict.insert key valueOk resultDict)
+
+                        Err err ->
+                            Err err
+
+                Err err ->
+                    Err err
+        )
+        (Ok Dict.empty)
+        dict
 
 
 resultListIndexedMapCombine :

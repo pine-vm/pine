@@ -299,46 +299,47 @@ expandElmInteractiveEnvironmentWithModules environmentBefore newParsedElmModules
                     Err ("Failed to separate declarations from environment: " ++ err)
 
                 Ok separateEnvironmentDeclarationsBefore ->
-                    let
-                        modulesNamesWithDependencies =
+                    case
+                        Common.resultListMapCombine
+                            (\file ->
+                                listModuleTransitiveDependencies
+                                    (List.map .parsedModule newParsedElmModules)
+                                    file.parsedModule
+                                    |> Result.mapError (Tuple.pair file)
+                                    |> Result.map (Tuple.pair file)
+                            )
                             newParsedElmModules
-                                |> List.map
-                                    (\file ->
-                                        file.parsedModule
-                                            |> listModuleTransitiveDependencies (List.map .parsedModule newParsedElmModules)
-                                            |> Result.mapError (Tuple.pair file)
-                                            |> Result.map (Tuple.pair file)
-                                    )
-                    in
-                    case modulesNamesWithDependencies |> Result.Extra.combine of
+                    of
                         Err ( file, error ) ->
                             Err
                                 ("Failed to resolve dependencies for module "
                                     ++ String.join "."
-                                        (Elm.Syntax.Module.moduleName (Elm.Syntax.Node.value file.parsedModule.moduleDefinition))
+                                        (Elm.Syntax.Module.moduleName
+                                            (Elm.Syntax.Node.value file.parsedModule.moduleDefinition)
+                                        )
                                     ++ ": "
                                     ++ error
                                 )
 
                         Ok modulesWithDependencies ->
                             let
+                                moduleNamesOrderedByDeps : List Elm.Syntax.ModuleName.ModuleName
                                 moduleNamesOrderedByDeps =
-                                    modulesWithDependencies
-                                        |> List.concatMap Tuple.second
-                                        |> List.Extra.unique
+                                    List.Extra.unique
+                                        (List.concatMap Tuple.second
+                                            modulesWithDependencies
+                                        )
                             in
                             moduleNamesOrderedByDeps
                                 |> List.filterMap
                                     (\moduleName ->
-                                        modulesWithDependencies
-                                            |> Common.listFind
-                                                (Tuple.first
-                                                    >> .parsedModule
-                                                    >> .moduleDefinition
-                                                    >> Elm.Syntax.Node.value
-                                                    >> Elm.Syntax.Module.moduleName
-                                                    >> (==) moduleName
-                                                )
+                                        Common.listFind
+                                            (\( elmModule, _ ) ->
+                                                Elm.Syntax.Module.moduleName
+                                                    (Elm.Syntax.Node.value elmModule.parsedModule.moduleDefinition)
+                                                    == moduleName
+                                            )
+                                            modulesWithDependencies
                                     )
                                 |> List.map Tuple.first
                                 |> Ok
@@ -403,22 +404,26 @@ compileElmModuleIntoNamedExports availableModules moduleToTranslate =
 
         moduleAliases : Dict.Dict (List String) (List String)
         moduleAliases =
-            moduleToTranslate.parsedModule.imports
-                |> List.filterMap
-                    (Elm.Syntax.Node.value
-                        >> (\imp ->
-                                imp.moduleAlias
-                                    |> Maybe.map
-                                        (\moduleAlias ->
-                                            ( Elm.Syntax.Node.value moduleAlias, Elm.Syntax.Node.value imp.moduleName )
-                                        )
-                           )
-                    )
-                |> Dict.fromList
+            List.foldl
+                (\(Elm.Syntax.Node.Node _ importSyntax) dict ->
+                    case importSyntax.moduleAlias of
+                        Nothing ->
+                            dict
 
+                        Just (Elm.Syntax.Node.Node _ moduleAlias) ->
+                            Dict.insert
+                                moduleAlias
+                                (Elm.Syntax.Node.value importSyntax.moduleName)
+                                dict
+                )
+                Dict.empty
+                moduleToTranslate.parsedModule.imports
+
+        parsedImports : List ModuleImportStatement
         parsedImports =
-            moduleToTranslate.parsedModule.imports
-                |> List.map (Elm.Syntax.Node.value >> parseElmSyntaxImport)
+            List.map
+                (\imp -> parseElmSyntaxImport (Elm.Syntax.Node.value imp))
+                moduleToTranslate.parsedModule.imports
 
         localTypeDeclarations : Dict.Dict String ElmModuleTypeDeclaration
         localTypeDeclarations =
@@ -463,18 +468,21 @@ compileElmModuleIntoNamedExports availableModules moduleToTranslate =
                                 case aliasDeclaration.typeAnnotation of
                                     Elm.Syntax.Node.Node _ (Elm.Syntax.TypeAnnotation.Record record) ->
                                         [ ( Elm.Syntax.Node.value aliasDeclaration.name
-                                          , record
-                                                |> List.map (Elm.Syntax.Node.value >> Tuple.first >> Elm.Syntax.Node.value)
-                                                |> ElmModuleRecordTypeDeclaration
+                                          , ElmModuleRecordTypeDeclaration
+                                                (List.map
+                                                    (Elm.Syntax.Node.value >> Tuple.first >> Elm.Syntax.Node.value)
+                                                    record
+                                                )
                                           )
                                         ]
 
-                                    Elm.Syntax.Node.Node _ (Elm.Syntax.TypeAnnotation.GenericRecord _ record) ->
+                                    Elm.Syntax.Node.Node _ (Elm.Syntax.TypeAnnotation.GenericRecord _ (Elm.Syntax.Node.Node _ record)) ->
                                         [ ( Elm.Syntax.Node.value aliasDeclaration.name
-                                          , record
-                                                |> Elm.Syntax.Node.value
-                                                |> List.map (Elm.Syntax.Node.value >> Tuple.first >> Elm.Syntax.Node.value)
-                                                |> ElmModuleRecordTypeDeclaration
+                                          , ElmModuleRecordTypeDeclaration
+                                                (List.map
+                                                    (Elm.Syntax.Node.value >> Tuple.first >> Elm.Syntax.Node.value)
+                                                    record
+                                                )
                                           )
                                         ]
 
@@ -572,22 +580,23 @@ compileElmModuleIntoNamedExports availableModules moduleToTranslate =
 
         localFunctionsResult : Result String (List ( String, Pine.Value ))
         localFunctionsResult =
-            localFunctionDeclarations
-                |> Dict.toList
-                |> List.map
-                    (\( functionName, functionDeclaration ) ->
-                        compileElmSyntaxFunction initialCompilationStack functionDeclaration
-                            |> Result.mapError ((++) ("Failed to compile function '" ++ functionName ++ "': "))
-                    )
-                |> Result.Extra.combine
-                |> Result.map Dict.fromList
+            Common.resultDictMapCombine
+                (\functionName functionDeclaration ->
+                    case compileElmSyntaxFunction initialCompilationStack functionDeclaration of
+                        Err err ->
+                            Err ("Failed to compile function '" ++ functionName ++ "': " ++ err)
+
+                        Ok ( _, compiledFunction ) ->
+                            Ok compiledFunction
+                )
+                localFunctionDeclarations
                 |> Result.andThen
                     (\localFunctionDeclarationsCompiled ->
                         emitModuleFunctionDeclarations
                             initialEmitStack
                             { exposedDeclarations =
-                                localFunctionDeclarationsCompiled
-                                    |> Dict.filter (exposeFunction >> always)
+                                Dict.filter (exposeFunction >> always)
+                                    localFunctionDeclarationsCompiled
                             , supportingDeclarations =
                                 localFunctionDeclarationsCompiled
                             }
@@ -733,7 +742,7 @@ compilationAndEmitStackFromModulesInCompilation availableModules { moduleAliases
                         importedModule.typeDeclarations
                             |> Dict.toList
                             |> List.concatMap
-                                (\( typeName, typeDeclaration ) ->
+                                (\( _, typeDeclaration ) ->
                                     case typeDeclaration of
                                         ElmModuleChoiceTypeDeclaration choiceTypeDeclaration ->
                                             choiceTypeDeclaration.tags
@@ -756,9 +765,13 @@ compilationAndEmitStackFromModulesInCompilation availableModules { moduleAliases
                                                                 else
                                                                     [ qualifiedName ]
                                                         in
-                                                        allNames
-                                                            |> List.map
-                                                                (Tuple.pair >> (|>) { argumentsCount = tag.argumentsCount })
+                                                        List.map
+                                                            (\name ->
+                                                                ( name
+                                                                , { argumentsCount = tag.argumentsCount }
+                                                                )
+                                                            )
+                                                            allNames
                                                     )
 
                                         _ ->
@@ -768,7 +781,7 @@ compilationAndEmitStackFromModulesInCompilation availableModules { moduleAliases
             , moduleImports.importedTypes
                 |> Dict.toList
                 |> List.concatMap
-                    (\( typeName, typeDeclaration ) ->
+                    (\( _, typeDeclaration ) ->
                         case typeDeclaration of
                             ElmModuleChoiceTypeDeclaration choiceTypeDeclaration ->
                                 Dict.toList choiceTypeDeclaration.tags
@@ -818,24 +831,24 @@ compilationAndEmitStackFromModulesInCompilation availableModules { moduleAliases
 
         declarationsFromTypeAliases : Dict.Dict String (List Expression -> Expression)
         declarationsFromTypeAliases =
-            declarationsFromTypeAliasesFieldsNames
-                |> Dict.map (\_ -> compileElmRecordConstructor)
+            Dict.map (\_ -> compileElmRecordConstructor)
+                declarationsFromTypeAliasesFieldsNames
 
         declarationsFromChoiceTypes : Dict.Dict String (List Expression -> Expression)
         declarationsFromChoiceTypes =
-            choiceTypeTagConstructorDeclarations
-                |> Dict.map
-                    (\tagName { argumentsCount } ->
-                        compileElmChoiceTypeTagConstructor
-                            { tagName =
-                                tagName
-                                    |> String.split "."
-                                    |> List.reverse
-                                    |> List.head
-                                    |> Maybe.withDefault tagName
-                            , argumentsCount = argumentsCount
-                            }
-                    )
+            Dict.map
+                (\tagName { argumentsCount } ->
+                    compileElmChoiceTypeTagConstructor
+                        { tagName =
+                            tagName
+                                |> String.split "."
+                                |> List.reverse
+                                |> List.head
+                                |> Maybe.withDefault tagName
+                        , argumentsCount = argumentsCount
+                        }
+                )
+                choiceTypeTagConstructorDeclarations
 
         compilationStack =
             { compilationStackForImport
@@ -860,8 +873,9 @@ compilationAndEmitStackFromModulesInCompilation availableModules { moduleAliases
 
         importedFunctions : Dict.Dict String Pine.Value
         importedFunctions =
-            moduleImports.importedFunctions
-                |> Dict.union importedModulesDeclarationsFlat
+            Dict.union
+                importedModulesDeclarationsFlat
+                moduleImports.importedFunctions
 
         emitStack =
             { importedFunctions = importedFunctions
@@ -881,11 +895,14 @@ moduleImportsFromCompilationStack :
     -> ModuleImports
 moduleImportsFromCompilationStack explicitImports compilation =
     let
+        importedModulesImplicit : Dict.Dict (List String) ElmModuleInCompilation
         importedModulesImplicit =
             compilation.availableModules
                 |> Dict.filter (List.member >> (|>) autoImportedModulesNames >> always)
 
-        functionsFromImportStatement : ModuleImportStatement -> Maybe ( ElmModuleInCompilation, Dict.Dict String Pine.Value )
+        functionsFromImportStatement :
+            ModuleImportStatement
+            -> Maybe ( ElmModuleInCompilation, Dict.Dict String Pine.Value )
         functionsFromImportStatement explicitImport =
             compilation.availableModules
                 |> Dict.get explicitImport.canonicalModuleName
@@ -1126,10 +1143,16 @@ compileElmSyntaxExpression stack elmExpression =
             compileElmSyntaxExpression stack (Elm.Syntax.Node.value parenthesizedExpression)
 
         Elm.Syntax.Expression.ListExpr listExpression ->
-            listExpression
-                |> List.map (Elm.Syntax.Node.value >> compileElmSyntaxExpression stack)
-                |> Result.Extra.combine
-                |> Result.map ListExpression
+            case
+                Common.resultListMapCombine
+                    (Elm.Syntax.Node.value >> compileElmSyntaxExpression stack)
+                    listExpression
+            of
+                Err err ->
+                    Err err
+
+                Ok expressions ->
+                    Ok (ListExpression expressions)
 
         Elm.Syntax.Expression.CaseExpression caseBlock ->
             compileElmSyntaxCaseBlock stack caseBlock
@@ -1138,15 +1161,21 @@ compileElmSyntaxExpression stack elmExpression =
             compileElmSyntaxLambda stack lambdaExpression
 
         Elm.Syntax.Expression.RecordExpr recordExpr ->
-            recordExpr
-                |> List.map Elm.Syntax.Node.value
-                |> compileElmSyntaxRecord stack
+            compileElmSyntaxRecord
+                stack
+                (List.map Elm.Syntax.Node.value recordExpr)
 
         Elm.Syntax.Expression.TupledExpression tupleElements ->
-            tupleElements
-                |> List.map (Elm.Syntax.Node.value >> compileElmSyntaxExpression stack)
-                |> Result.Extra.combine
-                |> Result.map ListExpression
+            case
+                Common.resultListMapCombine
+                    (Elm.Syntax.Node.value >> compileElmSyntaxExpression stack)
+                    tupleElements
+            of
+                Err err ->
+                    Err err
+
+                Ok expressions ->
+                    Ok (ListExpression expressions)
 
         Elm.Syntax.Expression.RecordAccess expressionNode nameNode ->
             compileElmSyntaxRecordAccess
@@ -1190,7 +1219,7 @@ compileElmSyntaxApplication :
     -> List Elm.Syntax.Expression.Expression
     -> Result String Expression
 compileElmSyntaxApplication stack appliedFunctionElmSyntax argumentsElmSyntax =
-    case argumentsElmSyntax |> List.map (compileElmSyntaxExpression stack) |> Result.Extra.combine of
+    case Common.resultListMapCombine (compileElmSyntaxExpression stack) argumentsElmSyntax of
         Err error ->
             Err ("Failed to compile Elm arguments: " ++ error)
 
@@ -1257,49 +1286,64 @@ compileElmSyntaxLetBlock stackBefore letBlock =
                         []
 
                     Elm.Syntax.Expression.LetDestructuring (Elm.Syntax.Node.Node _ pattern) (Elm.Syntax.Node.Node _ destructuredExpressionElm) ->
-                        destructuredExpressionElm
-                            |> compileElmSyntaxExpression stackBefore
-                            |> Result.andThen
-                                (\destructuredExpression ->
-                                    pattern
-                                        |> compileElmSyntaxPattern
-                                        |> Result.map
-                                            (.declarations
-                                                >> List.map
-                                                    (\( declName, deconsExpr ) ->
-                                                        ( declName
-                                                        , destructuredExpression
-                                                            |> expressionForDeconstructions deconsExpr
-                                                            |> applicableDeclarationFromConstructorExpression
-                                                        )
+                        case compileElmSyntaxExpression stackBefore destructuredExpressionElm of
+                            Err err ->
+                                [ Err err ]
+
+                            Ok destructuredExpression ->
+                                case compileElmSyntaxPattern pattern of
+                                    Err err ->
+                                        [ Err err ]
+
+                                    Ok compiledPattern ->
+                                        List.map
+                                            (\( declName, deconsExpr ) ->
+                                                Ok
+                                                    ( declName
+                                                    , applicableDeclarationFromConstructorExpression
+                                                        (expressionForDeconstructions deconsExpr destructuredExpression)
                                                     )
                                             )
-                                )
-                            |> Result.Extra.unpack (Err >> List.singleton) (List.map Ok)
+                                            compiledPattern.declarations
             )
         |> Result.Extra.combine
         |> Result.andThen
             (\newAvailableDeclarations ->
                 let
+                    inlineableDeclarations =
+                        List.foldl
+                            (\( declName, declExpr ) ->
+                                Dict.insert declName declExpr
+                            )
+                            stackBefore.inlineableDeclarations
+                            newAvailableDeclarations
+
                     stack =
                         { stackBefore
-                            | inlineableDeclarations =
-                                stackBefore.inlineableDeclarations
-                                    |> Dict.union (Dict.fromList newAvailableDeclarations)
+                            | inlineableDeclarations = inlineableDeclarations
                         }
-
-                    letEntriesResults =
-                        letBlock.declarations
-                            |> List.map (Elm.Syntax.Node.value >> compileElmSyntaxLetDeclaration stack)
                 in
-                case letEntriesResults |> Result.Extra.combine of
+                case
+                    Common.resultListMapCombine
+                        (\(Elm.Syntax.Node.Node _ letEntry) ->
+                            compileElmSyntaxLetDeclaration stack letEntry
+                        )
+                        letBlock.declarations
+                of
                     Err error ->
                         Err ("Failed to compile declaration in let block: " ++ error)
 
                     Ok letEntries ->
-                        compileElmSyntaxExpression stack (Elm.Syntax.Node.value letBlock.expression)
-                            |> Result.map
-                                (DeclarationBlockExpression (Dict.fromList (List.concat letEntries)))
+                        case compileElmSyntaxExpression stack (Elm.Syntax.Node.value letBlock.expression) of
+                            Err err ->
+                                Err err
+
+                            Ok expression ->
+                                Ok
+                                    (DeclarationBlockExpression
+                                        (Dict.fromList (List.concat letEntries))
+                                        expression
+                                    )
             )
 
 
@@ -1310,18 +1354,33 @@ compileElmSyntaxLetDeclaration :
 compileElmSyntaxLetDeclaration stack declaration =
     case declaration of
         Elm.Syntax.Expression.LetFunction letFunction ->
-            compileElmSyntaxFunction stack letFunction
-                |> Result.map List.singleton
+            case compileElmSyntaxFunction stack letFunction of
+                Err err ->
+                    Err err
 
-        Elm.Syntax.Expression.LetDestructuring patternNode expressionNode ->
-            compileElmSyntaxExpression stack (Elm.Syntax.Node.value expressionNode)
-                |> Result.andThen
-                    (\compiledExpression ->
-                        compileElmSyntaxPattern (Elm.Syntax.Node.value patternNode)
-                            |> Result.map .declarations
-                            |> Result.mapError ((++) "Failed destructuring in let block: ")
-                            |> Result.map (List.map (Tuple.mapSecond (expressionForDeconstructions >> (|>) compiledExpression)))
-                    )
+                Ok compiledFunction ->
+                    Ok [ compiledFunction ]
+
+        Elm.Syntax.Expression.LetDestructuring (Elm.Syntax.Node.Node _ patternSyntax) (Elm.Syntax.Node.Node _ exprSyntax) ->
+            case compileElmSyntaxExpression stack exprSyntax of
+                Err err ->
+                    Err err
+
+                Ok compiledExpression ->
+                    case compileElmSyntaxPattern patternSyntax of
+                        Err err ->
+                            Err ("Failed destructuring in let block: " ++ err)
+
+                        Ok pattern ->
+                            Ok
+                                (List.map
+                                    (\( declName, deconsExpr ) ->
+                                        ( declName
+                                        , expressionForDeconstructions deconsExpr compiledExpression
+                                        )
+                                    )
+                                    pattern.declarations
+                                )
 
 
 compileElmSyntaxFunction :
@@ -1347,17 +1406,27 @@ compileElmSyntaxFunctionWithoutName :
     -> Result String Expression
 compileElmSyntaxFunctionWithoutName stackBefore function =
     case
-        function.arguments
-            |> List.map (compileElmSyntaxPattern >> Result.map .declarations)
-            |> Result.Extra.combine
+        Common.resultListMapCombine
+            (\pattern ->
+                case compileElmSyntaxPattern pattern of
+                    Err err ->
+                        Err err
+
+                    Ok compiledPattern ->
+                        Ok compiledPattern.declarations
+            )
+            function.arguments
     of
         Err error ->
             Err ("Failed to compile function parameter pattern: " ++ error)
 
         Ok argumentsDeconstructDeclarationsBuilders ->
-            function.expression
-                |> compileElmSyntaxExpression stackBefore
-                |> Result.map (FunctionExpression argumentsDeconstructDeclarationsBuilders)
+            case compileElmSyntaxExpression stackBefore function.expression of
+                Err err ->
+                    Err err
+
+                Ok functionBody ->
+                    Ok (FunctionExpression argumentsDeconstructDeclarationsBuilders functionBody)
 
 
 compileElmSyntaxLambda :
@@ -1376,10 +1445,8 @@ compileElmSyntaxRecord :
     -> List Elm.Syntax.Expression.RecordSetter
     -> Result String Expression
 compileElmSyntaxRecord stack recordSetters =
-    recordSetters
-        |> List.map (Tuple.mapFirst Elm.Syntax.Node.value)
-        |> List.sortBy Tuple.first
-        |> List.map
+    case
+        Common.resultListMapCombine
             (\( fieldName, fieldExpressionNode ) ->
                 case compileElmSyntaxExpression stack (Elm.Syntax.Node.value fieldExpressionNode) of
                     Err error ->
@@ -1393,14 +1460,23 @@ compileElmSyntaxRecord stack recordSetters =
                                 ]
                             )
             )
-        |> Result.Extra.combine
-        |> Result.map
-            (\fieldsExpressions ->
-                ListExpression
+            (List.sortBy Tuple.first
+                (List.map
+                    (Tuple.mapFirst Elm.Syntax.Node.value)
+                    recordSetters
+                )
+            )
+    of
+        Err err ->
+            Err err
+
+        Ok fieldsExpressions ->
+            Ok
+                (ListExpression
                     [ LiteralExpression elmRecordTypeTagNameAsValue
                     , ListExpression [ ListExpression fieldsExpressions ]
                     ]
-            )
+                )
 
 
 compileElmSyntaxRecordAccess :
@@ -1409,9 +1485,12 @@ compileElmSyntaxRecordAccess :
     -> Elm.Syntax.Expression.Expression
     -> Result String Expression
 compileElmSyntaxRecordAccess stack fieldName recordElmExpression =
-    compileElmSyntaxExpression stack recordElmExpression
-        |> Result.mapError ((++) "Failed to compile record expression: ")
-        |> Result.map (compileRecordAccessExpression fieldName)
+    case compileElmSyntaxExpression stack recordElmExpression of
+        Err err ->
+            Err ("Failed to compile record expression: " ++ err)
+
+        Ok recordExpression ->
+            Ok (compileRecordAccessExpression fieldName recordExpression)
 
 
 compileRecordAccessExpression : String -> Expression -> Expression
@@ -1428,10 +1507,10 @@ compileRecordAccessExpression fieldName recordExpression =
 compileElmSyntaxRecordAccessFunction : String -> Expression
 compileElmSyntaxRecordAccessFunction fieldName =
     FunctionExpression
-        [ [ ( "record_param", [] ) ] ]
+        [ [ ( "record-param", [] ) ] ]
         (compileRecordAccessExpression
             fieldName
-            (ReferenceExpression "record_param")
+            (ReferenceExpression "record-param")
         )
 
 
@@ -1441,17 +1520,24 @@ compileElmSyntaxRecordUpdate :
     -> String
     -> Result String Expression
 compileElmSyntaxRecordUpdate stack setters recordName =
-    setters
-        |> List.map
+    case
+        Common.resultListMapCombine
             (\( fieldName, fieldExpr ) ->
-                compileElmSyntaxExpression stack fieldExpr
-                    |> Result.mapError ((++) ("Failed to compile record update field '" ++ fieldName ++ "': "))
-                    |> Result.map (Tuple.pair fieldName)
+                case compileElmSyntaxExpression stack fieldExpr of
+                    Err err ->
+                        Err ("Failed to compile record update field '" ++ fieldName ++ "': " ++ err)
+
+                    Ok compiledFieldExpr ->
+                        Ok ( fieldName, compiledFieldExpr )
             )
-        |> Result.Extra.combine
-        |> Result.map
-            (\settersExpressions ->
-                PineFunctionApplicationExpression
+            setters
+    of
+        Err error ->
+            Err error
+
+        Ok settersExpressions ->
+            Ok
+                (PineFunctionApplicationExpression
                     pineFunctionForRecordUpdate
                     (ListExpression
                         [ ReferenceExpression recordName
@@ -1467,7 +1553,7 @@ compileElmSyntaxRecordUpdate stack setters recordName =
                             )
                         ]
                     )
-            )
+                )
 
 
 compileElmSyntaxCaseBlock :
@@ -1585,23 +1671,27 @@ compileElmSyntaxCaseBlockCase stackBefore caseBlockValueExpression ( elmPatternN
         Ok deconstruction ->
             let
                 deconstructionDeclarations =
-                    deconstruction.declarations
-                        |> List.map
-                            (Tuple.mapSecond
-                                (expressionForDeconstructions
-                                    >> (|>) caseBlockValueExpression
-                                )
-                            )
-                        |> Dict.fromList
+                    List.foldl
+                        (\( declName, deconsExpr ) ->
+                            Dict.insert declName
+                                (expressionForDeconstructions deconsExpr caseBlockValueExpression)
+                        )
+                        Dict.empty
+                        deconstruction.declarations
+
+                inlineableDeclarations =
+                    Dict.foldl
+                        (\declName declExpr aggregate ->
+                            Dict.insert declName
+                                (applicableDeclarationFromConstructorExpression declExpr)
+                                aggregate
+                        )
+                        stackBefore.inlineableDeclarations
+                        deconstructionDeclarations
 
                 stack =
                     { stackBefore
-                        | inlineableDeclarations =
-                            stackBefore.inlineableDeclarations
-                                |> Dict.union
-                                    (Dict.map (always applicableDeclarationFromConstructorExpression)
-                                        deconstructionDeclarations
-                                    )
+                        | inlineableDeclarations = inlineableDeclarations
                     }
             in
             elmExpression
@@ -1643,6 +1733,10 @@ compileElmSyntaxPattern elmPattern =
                 , declarations = []
                 }
 
+        conditionsAndDeclarationsFromItemPattern :
+            Int
+            -> Elm.Syntax.Pattern.Pattern
+            -> Result String { conditions : Expression -> List Expression, declarations : List ( String, List Deconstruction ) }
         conditionsAndDeclarationsFromItemPattern itemIndex =
             compileElmSyntaxPattern
                 >> Result.map
@@ -1668,31 +1762,36 @@ compileElmSyntaxPattern elmPattern =
                 -}
 
             else
-                listItems
-                    |> List.map Elm.Syntax.Node.value
-                    |> List.indexedMap conditionsAndDeclarationsFromItemPattern
-                    |> Result.Extra.combine
-                    |> Result.map
-                        (\itemsResults ->
-                            let
-                                matchesLengthCondition : Expression -> Expression
-                                matchesLengthCondition =
-                                    \deconstructedExpression ->
-                                        equalCondition
-                                            [ LiteralExpression (Pine.valueFromInt (List.length listItems))
-                                            , countListElementsExpression deconstructedExpression
-                                            ]
+                case
+                    Common.resultListIndexedMapCombine
+                        (\argIndex (Elm.Syntax.Node.Node _ itemPattern) ->
+                            conditionsAndDeclarationsFromItemPattern argIndex itemPattern
+                        )
+                        listItems
+                of
+                    Err err ->
+                        Err err
 
-                                conditionExpressions : Expression -> List Expression
-                                conditionExpressions =
-                                    \deconstructedExpression ->
-                                        matchesLengthCondition deconstructedExpression
-                                            :: List.concatMap (.conditions >> (|>) deconstructedExpression) itemsResults
-                            in
+                    Ok itemsResults ->
+                        let
+                            matchesLengthCondition : Expression -> Expression
+                            matchesLengthCondition =
+                                \deconstructedExpression ->
+                                    equalCondition
+                                        [ LiteralExpression (Pine.valueFromInt (List.length listItems))
+                                        , countListElementsExpression deconstructedExpression
+                                        ]
+
+                            conditionExpressions : Expression -> List Expression
+                            conditionExpressions =
+                                \deconstructedExpression ->
+                                    matchesLengthCondition deconstructedExpression
+                                        :: List.concatMap (.conditions >> (|>) deconstructedExpression) itemsResults
+                        in
+                        Ok
                             { conditionExpressions = conditionExpressions
                             , declarations = itemsResults |> List.concatMap .declarations
                             }
-                        )
     in
     case elmPattern of
         Elm.Syntax.Pattern.AllPattern ->
@@ -1752,20 +1851,21 @@ compileElmSyntaxPattern elmPattern =
                     )
 
         Elm.Syntax.Pattern.NamedPattern qualifiedName choiceTypeArgumentPatterns ->
-            choiceTypeArgumentPatterns
-                |> List.map Elm.Syntax.Node.value
-                |> List.indexedMap
-                    (\argIndex argPattern ->
-                        conditionsAndDeclarationsFromItemPattern argIndex argPattern
-                            |> Result.mapError
-                                ((++)
-                                    ("Failed for named pattern argument "
-                                        ++ String.fromInt argIndex
-                                        ++ ": "
-                                    )
+            Common.resultListIndexedMapCombine
+                (\argIndex (Elm.Syntax.Node.Node _ argPattern) ->
+                    case conditionsAndDeclarationsFromItemPattern argIndex argPattern of
+                        Err err ->
+                            Err
+                                ("Failed for named pattern argument "
+                                    ++ String.fromInt argIndex
+                                    ++ ": "
+                                    ++ err
                                 )
-                    )
-                |> Result.Extra.combine
+
+                        Ok ok ->
+                            Ok ok
+                )
+                choiceTypeArgumentPatterns
                 |> Result.map
                     (\itemsResults ->
                         let
@@ -2588,12 +2688,6 @@ emitModuleFunctionDeclarations stackBefore declarations =
                 availableEmittedFunctionsIncludingImports =
                     usedImportsAvailableEmittedFunctions ++ availableFunctionsValues
 
-                additionalImports : Set.Set String
-                additionalImports =
-                    FirCompiler.getTransitiveDependencies
-                        declarationsDirectDependencies
-                        currentRecursionDomain
-
                 recursionDomainDeclarationsToIncludeInBlock : Set.Set String
                 recursionDomainDeclarationsToIncludeInBlock =
                     Set.foldl
@@ -2979,9 +3073,12 @@ listModuleTransitiveDependencies :
     -> Elm.Syntax.File.File
     -> Result String (List Elm.Syntax.ModuleName.ModuleName)
 listModuleTransitiveDependencies allFiles file =
-    listModuleTransitiveDependenciesExcludingModules Set.empty allFiles file
-        |> Result.mapError
-            (\( modulePath, error ) -> error ++ ": " ++ String.join " -> " (List.map (String.join ".") modulePath))
+    case listModuleTransitiveDependenciesExcludingModules Set.empty allFiles file of
+        Err ( modulePath, error ) ->
+            Err (error ++ ": " ++ String.join " -> " (List.map (String.join ".") modulePath))
+
+        Ok ok ->
+            Ok ok
 
 
 listModuleTransitiveDependenciesExcludingModules :
@@ -3004,18 +3101,16 @@ listModuleTransitiveDependenciesExcludingModules excluded allFiles file =
         Ok [ currentName ]
 
     else
-        currentDependencies
-            |> Set.toList
-            |> List.map
+        case
+            Common.resultListMapCombine
                 (\currentDependency ->
                     case
-                        allFiles
-                            |> Common.listFind
-                                (.moduleDefinition
-                                    >> Elm.Syntax.Node.value
-                                    >> Elm.Syntax.Module.moduleName
-                                    >> (==) currentDependency
-                                )
+                        Common.listFind
+                            (\candidate ->
+                                Elm.Syntax.Module.moduleName (Elm.Syntax.Node.value candidate.moduleDefinition)
+                                    == currentDependency
+                            )
+                            allFiles
                     of
                         Nothing ->
                             Ok []
@@ -3026,17 +3121,22 @@ listModuleTransitiveDependenciesExcludingModules excluded allFiles file =
                                 allFiles
                                 currentDependencyFile
                 )
-            |> Result.Extra.combine
-            |> Result.mapError (Tuple.mapFirst ((::) currentName))
-            |> Result.map (List.concat >> (++) >> (|>) [ currentName ] >> List.Extra.unique)
+                (Set.toList currentDependencies)
+        of
+            Err ( moduleNames, err ) ->
+                Err ( currentName :: moduleNames, err )
+
+            Ok ok ->
+                Ok (List.Extra.unique (List.concat ok ++ [ currentName ]))
 
 
 getDirectDependenciesFromModule : Elm.Syntax.File.File -> Set.Set Elm.Syntax.ModuleName.ModuleName
 getDirectDependenciesFromModule file =
     let
         explicit =
-            file.imports
-                |> List.map (Elm.Syntax.Node.value >> .moduleName >> Elm.Syntax.Node.value)
+            List.map
+                (Elm.Syntax.Node.value >> .moduleName >> Elm.Syntax.Node.value)
+                file.imports
 
         implicit =
             if List.member (Elm.Syntax.Node.value (moduleNameFromSyntaxFile file)) autoImportedModulesNames then
@@ -3045,9 +3145,8 @@ getDirectDependenciesFromModule file =
             else
                 autoImportedModulesNames
     in
-    explicit
-        ++ implicit
-        |> Set.fromList
+    Set.fromList
+        (explicit ++ implicit)
 
 
 valueFromString : String -> Pine.Value
@@ -3118,8 +3217,8 @@ getDeclarationsFromEnvironment environment =
             Err "Is not a list but a blob"
 
         Pine.ListValue environmentList ->
-            environmentList
-                |> List.map
+            case
+                Common.resultListMapCombine
                     (\environmentEntry ->
                         (case environmentEntry of
                             Pine.BlobValue _ ->
@@ -3138,34 +3237,44 @@ getDeclarationsFromEnvironment environment =
                         )
                             |> Result.mapError ((++) "Failed to decode environment entry: ")
                     )
-                |> Result.Extra.combine
-                |> Result.map (List.reverse >> Dict.fromList)
+                    environmentList
+            of
+                Err err ->
+                    Err err
+
+                Ok declarations ->
+                    Ok
+                        (Dict.fromList
+                            -- Elm Interactive allows shadowing, so ordering matters here.
+                            (List.reverse declarations)
+                        )
 
 
 {-| Reverses the encoding implemented in emitModuleValue, parsing the Elm module from the transportable form.
 -}
 parseModuleValue : Dict.Dict String Pine.Value -> Result String ElmModuleInCompilation
 parseModuleValue moduleValues =
-    moduleValues
-        |> Dict.foldl
-            (\declName declValue ->
-                Result.andThen
-                    (\aggregate ->
-                        if stringStartsWithUpper declName then
-                            declValue
-                                |> parseTypeDeclarationFromValueTagged
-                                |> Result.map
-                                    (\typeDeclaration ->
-                                        { aggregate
-                                            | typeDeclarations =
-                                                Dict.insert
-                                                    declName
-                                                    typeDeclaration
-                                                    aggregate.typeDeclarations
-                                        }
-                                    )
+    Dict.foldl
+        (\declName declValue ->
+            Result.andThen
+                (\aggregate ->
+                    if stringStartsWithUpper declName then
+                        case parseTypeDeclarationFromValueTagged declValue of
+                            Err err ->
+                                Err err
 
-                        else
+                            Ok typeDeclaration ->
+                                Ok
+                                    { aggregate
+                                        | typeDeclarations =
+                                            Dict.insert
+                                                declName
+                                                typeDeclaration
+                                                aggregate.typeDeclarations
+                                    }
+
+                    else
+                        Ok
                             { aggregate
                                 | functionDeclarations =
                                     Dict.insert
@@ -3173,14 +3282,14 @@ parseModuleValue moduleValues =
                                         declValue
                                         aggregate.functionDeclarations
                             }
-                                |> Ok
-                    )
-            )
-            (Ok
-                { functionDeclarations = Dict.empty
-                , typeDeclarations = Dict.empty
-                }
-            )
+                )
+        )
+        (Ok
+            { functionDeclarations = Dict.empty
+            , typeDeclarations = Dict.empty
+            }
+        )
+        moduleValues
 
 
 parseTypeDeclarationFromValueTagged : Pine.Value -> Result String ElmModuleTypeDeclaration
@@ -3222,8 +3331,8 @@ parseChoiceTypeFromValue : Pine.Value -> Result String ElmModuleChoiceType
 parseChoiceTypeFromValue value =
     case value of
         Pine.ListValue listItems ->
-            listItems
-                |> List.map
+            case
+                Common.resultListMapCombine
                     (\tagEntry ->
                         case tagEntry of
                             Pine.BlobValue _ ->
@@ -3251,8 +3360,13 @@ parseChoiceTypeFromValue value =
                                         ++ String.fromInt (List.length list)
                                     )
                     )
-                |> Result.Extra.combine
-                |> Result.map (\tags -> { tags = Dict.fromList tags })
+                    listItems
+            of
+                Err err ->
+                    Err err
+
+                Ok tags ->
+                    Ok { tags = Dict.fromList tags }
 
         Pine.BlobValue _ ->
             Err "Is not a list but a blob"
@@ -3262,9 +3376,9 @@ parseRecordConstructorFromValue : Pine.Value -> Result String (List String)
 parseRecordConstructorFromValue value =
     case value of
         Pine.ListValue listItems ->
-            listItems
-                |> List.map Pine.stringFromValue
-                |> Result.Extra.combine
+            Common.resultListMapCombine
+                Pine.stringFromValue
+                listItems
 
         Pine.BlobValue _ ->
             Err "Is not a list but a blob"
