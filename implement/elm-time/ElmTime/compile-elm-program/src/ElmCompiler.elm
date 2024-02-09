@@ -1477,41 +1477,94 @@ compileElmSyntaxCaseBlock :
 compileElmSyntaxCaseBlock stack caseBlock =
     case compileElmSyntaxExpression stack (Elm.Syntax.Node.value caseBlock.expression) of
         Err error ->
-            Err ("Failed to compile case block expression: " ++ error)
+            Err ("Failed to compile case-of block expression: " ++ error)
 
         Ok expression ->
-            case
-                caseBlock.cases
-                    |> List.map (compileElmSyntaxCaseBlockCase stack expression)
-                    |> Result.Extra.combine
-            of
-                Err error ->
-                    Err ("Failed to compile case in case-of block: " ++ error)
+            case compileCaseBlockInline stack expression caseBlock.cases of
+                Err err ->
+                    Err err
 
-                Ok cases ->
+                Ok inlineVariant ->
                     let
-                        conditionalFromCase deconstructedCase nextBlockExpression =
-                            deconstructedCase.conditionExpressions
-                                |> List.foldl
-                                    (\conditionExpression nextConditionExpression ->
-                                        ConditionalExpression
-                                            { condition = conditionExpression
-                                            , ifTrue = nextConditionExpression
-                                            , ifFalse = nextBlockExpression
-                                            }
-                                    )
-                                    deconstructedCase.thenExpression
+                        pseudoParamName =
+                            "case-expr"
+
+                        innerExpr =
+                            FirCompiler.ReferenceExpression pseudoParamName
                     in
-                    Ok
-                        (List.foldr
-                            conditionalFromCase
-                            (ListExpression
-                                [ LiteralExpression (Pine.valueFromString "Error in case-of block: No matching branch.")
-                                , expression
-                                ]
-                            )
-                            cases
+                    case
+                        compileCaseBlockInline stack innerExpr caseBlock.cases
+                    of
+                        Err err ->
+                            Err err
+
+                        Ok casesFunction ->
+                            let
+                                inlineVariantFuncApps =
+                                    FirCompiler.listFunctionAppExpressions inlineVariant
+
+                                casesFunctionFuncApps =
+                                    FirCompiler.listFunctionAppExpressions casesFunction
+                            in
+                            if List.length casesFunctionFuncApps < List.length inlineVariantFuncApps then
+                                Ok
+                                    (FunctionApplicationExpression
+                                        (FunctionExpression
+                                            [ [ ( pseudoParamName, [] ) ] ]
+                                            casesFunction
+                                        )
+                                        [ expression ]
+                                    )
+
+                            else
+                                Ok inlineVariant
+
+
+compileCaseBlockInline :
+    CompilationStack
+    -> Expression
+    -> List Elm.Syntax.Expression.Case
+    -> Result String Expression
+compileCaseBlockInline stack caseBlockExpr caseBlockCases =
+    case
+        Common.resultListMapCombine
+            (\elmCase ->
+                compileElmSyntaxCaseBlockCase stack caseBlockExpr elmCase
+            )
+            caseBlockCases
+    of
+        Err error ->
+            Err ("Failed to compile case in case-of block: " ++ error)
+
+        Ok cases ->
+            let
+                conditionalFromCase deconstructedCase nextBlockExpression =
+                    List.foldl
+                        (\conditionExpression nextConditionExpression ->
+                            ConditionalExpression
+                                { condition = conditionExpression
+                                , ifTrue = nextConditionExpression
+                                , ifFalse = nextBlockExpression
+                                }
                         )
+                        deconstructedCase.thenExpression
+                        deconstructedCase.conditionExpressions
+            in
+            Ok
+                (List.foldr
+                    conditionalFromCase
+                    (ListExpression
+                        [ LiteralExpression stringAsValue_errorNoMatchingBranch
+                        , caseBlockExpr
+                        ]
+                    )
+                    cases
+                )
+
+
+stringAsValue_errorNoMatchingBranch : Pine.Value
+stringAsValue_errorNoMatchingBranch =
+    Pine.valueFromString "Error in case-of block: No matching branch."
 
 
 compileElmSyntaxCaseBlockCase :

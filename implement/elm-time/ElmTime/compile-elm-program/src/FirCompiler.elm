@@ -19,6 +19,7 @@ module FirCompiler exposing
     , evaluateAsIndependentExpression
     , getTransitiveDependencies
     , listDirectDependenciesOfExpression
+    , listFunctionAppExpressions
     , listItemFromIndexExpression
     , listItemFromIndexExpression_Pine
     , listSkipExpression
@@ -2033,6 +2034,50 @@ anySubExpression predicate expression =
 
             PineFunctionApplicationExpression _ argument ->
                 anySubExpression predicate argument
+
+
+listFunctionAppExpressions : Expression -> List ( Expression, List Expression )
+listFunctionAppExpressions expr =
+    case expr of
+        FunctionApplicationExpression funcExpr args ->
+            List.concat
+                [ ( funcExpr, args ) :: listFunctionAppExpressions funcExpr
+                , List.concatMap listFunctionAppExpressions args
+                ]
+
+        LiteralExpression _ ->
+            []
+
+        ListExpression list ->
+            List.concatMap listFunctionAppExpressions list
+
+        KernelApplicationExpression application ->
+            listFunctionAppExpressions application.argument
+
+        ConditionalExpression conditional ->
+            List.concat
+                [ listFunctionAppExpressions conditional.condition
+                , listFunctionAppExpressions conditional.ifTrue
+                , listFunctionAppExpressions conditional.ifFalse
+                ]
+
+        FunctionExpression _ functionBody ->
+            listFunctionAppExpressions functionBody
+
+        ReferenceExpression _ ->
+            []
+
+        DeclarationBlockExpression declarations innerExpression ->
+            List.concat
+                [ List.concatMap listFunctionAppExpressions (Dict.values declarations)
+                , listFunctionAppExpressions innerExpression
+                ]
+
+        StringTagExpression _ tagged ->
+            listFunctionAppExpressions tagged
+
+        PineFunctionApplicationExpression _ argument ->
+            listFunctionAppExpressions argument
 
 
 evaluateAsIndependentExpression : Pine.Expression -> Result String Pine.Value
