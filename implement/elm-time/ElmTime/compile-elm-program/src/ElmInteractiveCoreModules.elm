@@ -120,18 +120,18 @@ idiv dividend divisor =
     else
         let
             ( dividendNegative, absDividend ) =
-                if le dividend 0 then
-                    ( True, -dividend )
-
-                else
+                if Pine_kernel.is_sorted_ascending_int [ 0, dividend ] then
                     ( False, dividend )
 
+                else
+                    ( True, -dividend )
+
             ( divisorNegative, absDivisor ) =
-                if le divisor 0 then
-                    ( True, -divisor )
+                if Pine_kernel.is_sorted_ascending_int [ 0, divisor ] then
+                    ( False, divisor )
 
                 else
-                    ( False, divisor )
+                    ( True, -divisor )
 
             absQuotient =
                 idivHelper absDividend absDivisor 0
@@ -149,7 +149,7 @@ idivHelper dividend divisor quotient =
         scaledDivisor =
             mul divisor 16
     in
-    if ge dividend scaledDivisor then
+    if Pine_kernel.is_sorted_ascending_int [ scaledDivisor, dividend ] then
         let
             scaledQuotient =
                 idivHelper
@@ -168,7 +168,7 @@ idivHelper dividend divisor quotient =
         in
         add scaledQuotientSum remainderQuotient
 
-    else if ge dividend divisor then
+    else if Pine_kernel.is_sorted_ascending_int [ divisor, dividend ] then
         idivHelper
             (sub dividend divisor)
             divisor
@@ -216,28 +216,44 @@ append a b =
 
 lt : comparable -> comparable -> Bool
 lt a b =
-    Pine_kernel.logical_and
-    [ (le a b)
-    , Pine_kernel.negate (Pine_kernel.equal [a, b])
-    ]
+    if isPineBlob a then
+        Pine_kernel.negate (Pine_kernel.is_sorted_ascending_int [ b, a ])
+
+    else
+        Pine_kernel.equal [ compare a b, LT ]
 
 
 gt : comparable -> comparable -> Bool
 gt a b =
-    Pine_kernel.logical_and
-    [ (ge a b)
-    , Pine_kernel.negate (Pine_kernel.equal [a, b])
-    ]
+    if isPineBlob a then
+        Pine_kernel.negate (Pine_kernel.is_sorted_ascending_int [ a, b ])
+
+    else
+        Pine_kernel.equal [ compare a b, GT ]
 
 
 le : comparable -> comparable -> Bool
 le a b =
-    Pine_kernel.is_sorted_ascending_int [a, b]
+    if Pine_kernel.equal [ a, b ] then
+        True
+
+    else if isPineBlob a then
+        Pine_kernel.is_sorted_ascending_int [ a, b ]
+
+    else
+        Pine_kernel.equal [ compare a b, LT ]
 
 
 ge : comparable -> comparable -> Bool
 ge a b =
-    Pine_kernel.is_sorted_ascending_int [b, a]
+    if Pine_kernel.equal [ a, b ] then
+        True
+
+    else if isPineBlob a then
+        Pine_kernel.is_sorted_ascending_int [ b, a ]
+
+    else
+        Pine_kernel.equal [ compare a b, GT ]
 
 
 {-| Find the smaller of two comparables.
@@ -320,7 +336,7 @@ compare a b =
                 if isPineList a then
                     compareList a b
 
-                else if le a b then
+                else if Pine_kernel.is_sorted_ascending_int [ a, b ] then
                     LT
 
                 else
@@ -393,10 +409,11 @@ modBy divisor dividend =
     let
         remainder = remainderBy divisor dividend
     in
-        if lt remainder 0 then
-            add remainder divisor
-        else
+        if Pine_kernel.is_sorted_ascending_int [ 0, remainder ] then
             remainder
+
+        else
+            add remainder divisor
 
 
 remainderBy : Int -> Int -> Int
@@ -445,8 +462,13 @@ clamp low high number =
   else
     number
 
+
 isPineList a =
     Pine_kernel.equal [ Pine_kernel.take [ 0, a ], [] ]
+
+
+isPineBlob a =
+    Pine_kernel.equal [ Pine_kernel.take [ 0, a ], Pine_kernel.take [ 0, 0 ] ]
 
 """
     , """
@@ -569,7 +591,7 @@ repeat n value =
 
 repeatHelp : List a -> Int -> a -> List a
 repeatHelp result n value =
-    if n <= 0 then
+    if Pine_kernel.is_sorted_ascending_int [ n, 0 ] then
         result
     else
         repeatHelp (cons value result) (n - 1) value
@@ -582,7 +604,7 @@ range lo hi =
 
 rangeHelp : Int -> Int -> List Int -> List Int
 rangeHelp lo hi list =
-    if lo <= hi then
+    if Pine_kernel.is_sorted_ascending_int [ lo, hi ] then
         rangeHelp lo (hi - 1) (cons hi list)
     else
         list
@@ -930,7 +952,7 @@ isDigit char =
         code =
             toCode char
     in
-    (code <= 0x39) && (0x30 <= code)
+    Pine_kernel.is_sorted_ascending_int [ 0x30, code, 0x39 ]
 
 
 {-| Detect octal digits `01234567`
@@ -955,7 +977,7 @@ isOctDigit char =
         code =
             toCode char
     in
-    code <= 0x37 && 0x30 <= code
+    Pine_kernel.is_sorted_ascending_int [ 0x30, code, 0x37 ]
 
 
 {-| Detect hexadecimal digits `0123456789abcdefABCDEF`
@@ -966,9 +988,9 @@ isHexDigit char =
         code =
             toCode char
     in
-    (0x30 <= code && code <= 0x39)
-        || (0x41 <= code && code <= 0x46)
-        || (0x61 <= code && code <= 0x66)
+    (Pine_kernel.is_sorted_ascending_int [ 0x30, code, 0x39 ])
+        || (Pine_kernel.is_sorted_ascending_int [ 0x41, code, 0x46 ])
+        || (Pine_kernel.is_sorted_ascending_int [ 0x61, code, 0x66 ])
 
 
 isUpper : Char -> Bool
@@ -977,7 +999,7 @@ isUpper char =
         code =
             toCode char
     in
-    (0x41 <= code) && (code <= 0x5A)
+    Pine_kernel.is_sorted_ascending_int [ 0x41, code, 0x5A ]
 
 
 isLower : Char -> Bool
@@ -986,7 +1008,7 @@ isLower char =
         code =
             toCode char
     in
-    (0x61 <= code) && (code <= 0x7A)
+    Pine_kernel.is_sorted_ascending_int [ 0x61, code, 0x7A ]
 
 """
     , """
@@ -1125,11 +1147,11 @@ slice : Int -> Int -> String -> String
 slice start end string =
     let
         absoluteIndex relativeIndex =
-            if relativeIndex < 0 then
-                relativeIndex + length string
+            if Pine_kernel.is_sorted_ascending_int [ 0, relativeIndex ] then
+                relativeIndex
 
             else
-                relativeIndex
+                relativeIndex + length string
 
         absoluteStart =
             absoluteIndex start
@@ -1144,7 +1166,7 @@ left n string =
 
 right : Int -> String -> String
 right n string =
-    if n < 1 then
+    if Pine_kernel.is_sorted_ascending_int [ n, 0 ] then
         ""
     else
         slice -n (length string) string
@@ -1157,7 +1179,7 @@ dropLeft n string =
 
 dropRight : Int -> String -> String
 dropRight n string =
-    if n < 1 then
+    if Pine_kernel.is_sorted_ascending_int [ n, 0 ] then
         string
     else
         slice 0 -n string
@@ -1168,10 +1190,10 @@ contains pattern string =
     if startsWith pattern string then
         True
     else
-        if length pattern < length string then
-            contains pattern (dropLeft 1 string)
-        else
+        if Pine_kernel.is_sorted_ascending_int [ length string, length pattern ] then
             False
+        else
+            contains pattern (dropLeft 1 string)
 
 
 startsWith : String -> String -> Bool
@@ -1276,11 +1298,11 @@ toUnsignedIntFromList string =
 
 fromIntAsList : Int -> List Char
 fromIntAsList int =
-    if int < 0 then
-        [ '-' ] ++ fromUnsignedIntAsList -int
+    if Pine_kernel.is_sorted_ascending_int [ 0, int ] then
+        fromUnsignedIntAsList int
 
     else
-        fromUnsignedIntAsList int
+        [ '-' ] ++ fromUnsignedIntAsList -int
 
 
 fromUnsignedIntAsList : Int -> List Char
@@ -1290,7 +1312,7 @@ fromUnsignedIntAsList int =
 
 fromUnsignedIntAsListHelper : Int -> List Char -> List Char
 fromUnsignedIntAsListHelper int lowerDigits =
-    if int < 1 then
+    if Pine_kernel.is_sorted_ascending_int [ int, 0 ] then
         if lowerDigits == [] then
             [ '0' ]
 
@@ -1347,7 +1369,9 @@ unsafeDigitCharacterFromValue digitValue =
 
 trim : String -> String
 trim str =
-    fromList (dropWhileList isCharRemovedOnTrim (List.reverse (dropWhileList isCharRemovedOnTrim (List.reverse (toList str)))))
+    fromList
+        (dropWhileList isCharRemovedOnTrim
+            (List.reverse (dropWhileList isCharRemovedOnTrim (List.reverse (toList str)))))
 
 
 trimLeft : String -> String
@@ -1362,7 +1386,7 @@ trimRight str =
 
 isCharRemovedOnTrim : Char -> Bool
 isCharRemovedOnTrim char =
-    Char.toCode char <= 32
+    Pine_kernel.is_sorted_ascending_int [ Char.toCode char, 32 ]
 
 
 dropWhileList : (Char -> Bool) -> List Char -> List Char
@@ -1429,20 +1453,26 @@ repeat n value =
 
 get : Int -> Array a -> Maybe a
 get index array =
-    if index < 0
+    if Pine_kernel.is_sorted_ascending_int [ 0, index ]
     then
-        Nothing
-    else
         List.head (List.drop index array)
+
+    else
+        Nothing
 
 
 set : Int -> a -> Array a -> Array a
 set index value array =
-    if (index < 0) || (index >= (Pine_kernel.length array))
+    if Pine_kernel.negate (Pine_kernel.is_sorted_ascending_int [ 0, index ]) ||
+        (Pine_kernel.is_sorted_ascending_int [ Pine_kernel.length array, index ])
     then
         array
     else
-        Pine_kernel.concat [ Pine_kernel.take [ index, array ], [ value ], Pine_kernel.skip [ index + 1, array ] ]
+        Pine_kernel.concat
+            [ Pine_kernel.take [ index, array ]
+            , [ value ]
+            , Pine_kernel.skip [ index + 1, array ]
+            ]
 
 
 push : a -> Array a -> Array a
