@@ -1088,72 +1088,21 @@ emitFunctionApplication functionExpression arguments compilation =
                     in
                     case functionExpression of
                         ReferenceExpression functionName ->
-                            {-
-                               TODO: Test optimize: Inline if number of references to recursive functions does not increase.
-                            -}
-                            if avoidInlineNamedFunctionApplication compilation functionName arguments then
-                                genericFunctionApplication ()
+                            case
+                                emitApplyFunctionFromCurrentEnvironment
+                                    compilation
+                                    { functionName = functionName }
+                                    argumentsPine
+                            of
+                                Just functionApplicationResult ->
+                                    functionApplicationResult
 
-                            else
-                                case
-                                    emitApplyFunctionFromCurrentEnvironment
-                                        compilation
-                                        { functionName = functionName }
-                                        argumentsPine
-                                of
-                                    Just functionApplicationResult ->
-                                        functionApplicationResult
-
-                                    Nothing ->
-                                        genericFunctionApplication ()
+                                Nothing ->
+                                    genericFunctionApplication ()
 
                         _ ->
                             genericFunctionApplication ()
                 )
-
-
-avoidInlineNamedFunctionApplication : EmitStack -> String -> List Expression -> Bool
-avoidInlineNamedFunctionApplication emitStack _ arguments =
-    {- Do not inline when any of the arguments might contain a recursive call.
-       Since inlining could multiply usage of an argument, this could lead to exponential growth in case of recursion.
-    -}
-    let
-        recursiveFunctions : Set.Set String
-        recursiveFunctions =
-            List.foldl
-                (\envEntry aggregate ->
-                    if
-                        Set.member envEntry.functionName
-                            (case envEntry.expectedEnvironment of
-                                LocalEnvironment localEnv ->
-                                    Set.fromList localEnv.expectedDecls
-
-                                ImportedEnvironment _ ->
-                                    Set.empty
-                            )
-                    then
-                        Set.insert envEntry.functionName aggregate
-
-                    else
-                        aggregate
-                )
-                Set.empty
-                emitStack.environmentFunctions
-    in
-    List.any
-        (\applicationArgument ->
-            anySubExpression
-                (\expression ->
-                    case expression of
-                        ReferenceExpression refName ->
-                            Set.member refName recursiveFunctions
-
-                        _ ->
-                            False
-                )
-                applicationArgument
-        )
-        arguments
 
 
 emitFunctionApplicationPine : EmitStack -> List Pine.Expression -> Pine.Expression -> Result String Pine.Expression
