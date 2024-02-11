@@ -421,8 +421,13 @@ emitDeclarationBlock stackBefore environmentPrefix blockDeclarations config =
 
         stackBeforeAvailableDeclarations : Set.Set String
         stackBeforeAvailableDeclarations =
-            List.foldl (.functionName >> Set.insert)
-                (Dict.foldl (\declName _ -> Set.insert declName) Set.empty stackBefore.environmentDeconstructions)
+            List.foldl
+                (\envFunc aggregate -> Set.insert envFunc.functionName aggregate)
+                (Dict.foldl
+                    (\declName _ aggregate -> Set.insert declName aggregate)
+                    Set.empty
+                    stackBefore.environmentDeconstructions
+                )
                 stackBefore.environmentFunctions
 
         usedAvailableEmitted : List ( EnvironmentFunctionEntry, Pine.Expression )
@@ -539,7 +544,7 @@ emitDeclarationBlock stackBefore environmentPrefix blockDeclarations config =
         blockDeclarationsAsFunctionsLessClosure =
             List.filter
                 (\( declName, _ ) ->
-                    not (List.any (Tuple.first >> (==) declName) closureCapturesForBlockDecls)
+                    not (List.any (\( name, _ ) -> name == declName) closureCapturesForBlockDecls)
                 )
                 allBlockDeclarationsAsFunctions
 
@@ -554,7 +559,10 @@ emitDeclarationBlock stackBefore environmentPrefix blockDeclarations config =
         newEnvironmentFunctionsNames : List String
         newEnvironmentFunctionsNames =
             composeEnvironmentFunctions
-                { prefix = List.map (Tuple.first >> .functionName) usedAvailableEmitted
+                { prefix =
+                    List.map
+                        (\( functionEntry, _ ) -> functionEntry.functionName)
+                        usedAvailableEmitted
                 , forwarded = forwardedDecls
                 , appendedFromDecls = List.map Tuple.first blockDeclarationsAsFunctionsLessClosure
                 , appendedFromClosureCaptures = List.map Tuple.first closureCaptures
@@ -677,7 +685,8 @@ emitDeclarationBlock stackBefore environmentPrefix blockDeclarations config =
 
                                 newEnvFunctionsExpressionsFromDecls : List Pine.Expression
                                 newEnvFunctionsExpressionsFromDecls =
-                                    List.map (Tuple.second >> Tuple.second >> Pine.LiteralExpression)
+                                    List.map
+                                        (\( _, ( _, newFuncValue ) ) -> Pine.LiteralExpression newFuncValue)
                                         newEnvFunctionsValues
 
                                 appendedEnvFunctionsExpressions : List Pine.Expression
@@ -1049,12 +1058,14 @@ environmentDeconstructionsFromFunctionParams parameters =
 
 
 closureParameterFromParameters : List FunctionParam -> FunctionParam
-closureParameterFromParameters =
-    List.indexedMap
-        (\paramIndex ->
-            List.map (Tuple.mapSecond ((::) (ListItemDeconstruction paramIndex)))
+closureParameterFromParameters parameters =
+    List.concat
+        (List.indexedMap
+            (\paramIndex ->
+                List.map (Tuple.mapSecond ((::) (ListItemDeconstruction paramIndex)))
+            )
+            parameters
         )
-        >> List.concat
 
 
 emitFunctionApplication : Expression -> List Expression -> EmitStack -> Result String Pine.Expression
@@ -1223,8 +1234,7 @@ emitFunctionApplicationPine emitStack arguments functionExpressionPine =
                 functionExpressionPine
     in
     if not (pineExpressionIsIndependent functionExpressionPine) then
-        genericPartialApplication ()
-            |> Ok
+        Ok (genericPartialApplication ())
 
     else
         evaluateAsIndependentExpression functionExpressionPine
@@ -2098,13 +2108,15 @@ evaluateAsIndependentExpression expression =
         Err "Expression is not independent"
 
     else
-        Pine.evaluateExpression
-            Pine.emptyEvalContext
-            expression
-            |> Result.mapError
-                (Pine.displayStringFromPineError
-                    >> (++) "Expression seems independent but failed to evaluate: "
-                )
+        case Pine.evaluateExpression Pine.emptyEvalContext expression of
+            Err err ->
+                Err
+                    ("Expression seems independent but failed to evaluate: "
+                        ++ Pine.displayStringFromPineError err
+                    )
+
+            Ok value ->
+                Ok value
 
 
 pineExpressionIsIndependent : Pine.Expression -> Bool
@@ -2117,15 +2129,16 @@ pineExpressionIsIndependent expression =
             List.all pineExpressionIsIndependent list
 
         Pine.DecodeAndEvaluateExpression decodeAndEval ->
-            [ decodeAndEval.environment, decodeAndEval.expression ]
-                |> List.all pineExpressionIsIndependent
+            pineExpressionIsIndependent decodeAndEval.environment
+                && pineExpressionIsIndependent decodeAndEval.expression
 
         Pine.KernelApplicationExpression kernelApp ->
             pineExpressionIsIndependent kernelApp.argument
 
         Pine.ConditionalExpression conditional ->
-            [ conditional.condition, conditional.ifTrue, conditional.ifFalse ]
-                |> List.all pineExpressionIsIndependent
+            pineExpressionIsIndependent conditional.condition
+                && pineExpressionIsIndependent conditional.ifTrue
+                && pineExpressionIsIndependent conditional.ifFalse
 
         Pine.EnvironmentExpression ->
             False
