@@ -187,7 +187,7 @@ public class DynamicPGOShare : IDisposable
             decodeExpressionOverridesDict switch
             {
                 null =>
-                new PineVM.OverrideDecodeExprDelegate(originalHandler => originalHandler),
+                new PineVM.OverrideParseExprDelegate(originalHandler => originalHandler),
 
                 not null =>
                 originalHandler => value =>

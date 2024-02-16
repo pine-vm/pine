@@ -78,7 +78,7 @@ public partial class CompileToCSharp
             (ExpressionSyntax)SyntaxFactory.InvocationExpression(
                 SyntaxFactory.QualifiedName(
                     PineVmClassQualifiedNameSyntax,
-                    SyntaxFactory.IdentifierName(nameof(PineVM.PineVM.DecodeKernelApplicationExpressionThrowOnUnknownName))))
+                    SyntaxFactory.IdentifierName(nameof(PineVM.PineVM.ParseKernelApplicationExpressionThrowOnUnknownName))))
             .WithArgumentList(
                 SyntaxFactory.ArgumentList(
                     SyntaxFactory.SeparatedList(
@@ -90,7 +90,7 @@ public partial class CompileToCSharp
                         SyntaxFactory.Argument(encodedArgument)
                     ])))),
 
-            Expression.DecodeAndEvaluateExpression decodeAndEvaluate =>
+            Expression.ParseAndEvalExpression decodeAndEvaluate =>
             continueEncode(decodeAndEvaluate.expression)
             .MapError(err => "Failed to encode expression of decode and evaluate: " + err)
             .AndThen(encodedExpression =>
@@ -98,7 +98,7 @@ public partial class CompileToCSharp
             .MapError(err => "Failed to encode environment of decode and evaluate: " + err)
             .Map(encodedEnvironment =>
             NewConstructorOfExpressionVariant(
-                nameof(Expression.DecodeAndEvaluateExpression),
+                nameof(Expression.ParseAndEvalExpression),
                 encodedExpression,
                 encodedEnvironment))),
 

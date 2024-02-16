@@ -1,10 +1,10 @@
 module Pine exposing
     ( ConditionalExpressionStructure
-    , DecodeAndEvaluateExpressionStructure
     , EvalContext
     , Expression(..)
     , KernelApplicationExpressionStructure
     , KernelFunction
+    , ParseAndEvalExpressionStructure
     , PathDescription(..)
     , Value(..)
     , addToEnvironment
@@ -12,7 +12,6 @@ module Pine exposing
     , bigIntFromUnsignedBlobValue
     , bigIntFromValue
     , blobValueFromBigInt
-    , decodeExpressionFromValue
     , displayStringFromPineError
     , emptyEvalContext
     , encodeExpressionAsValue
@@ -23,6 +22,7 @@ module Pine exposing
     , intFromValue
     , kernelFunction_Negate
     , mapFromListValueOrBlobValue
+    , parseExpressionFromValue
     , stringAsValue_Function
     , stringAsValue_List
     , stringAsValue_Literal
@@ -48,14 +48,14 @@ import Result.Extra
 type Expression
     = LiteralExpression Value
     | ListExpression (List Expression)
-    | DecodeAndEvaluateExpression DecodeAndEvaluateExpressionStructure
+    | ParseAndEvalExpression ParseAndEvalExpressionStructure
     | KernelApplicationExpression KernelApplicationExpressionStructure
     | ConditionalExpression ConditionalExpressionStructure
     | EnvironmentExpression
     | StringTagExpression String Expression
 
 
-type alias DecodeAndEvaluateExpressionStructure =
+type alias ParseAndEvalExpressionStructure =
     { expression : Expression
     , environment : Expression
     }
@@ -146,12 +146,12 @@ evaluateExpression context expression =
                 Ok listItemsValues ->
                     Ok (ListValue listItemsValues)
 
-        DecodeAndEvaluateExpression decodeAndEvaluate ->
-            case evaluateDecodeAndEvaluate context decodeAndEvaluate of
+        ParseAndEvalExpression parseAndEval ->
+            case evaluateParseAndEval context parseAndEval of
                 Err error ->
                     Err
                         (DescribePathNode
-                            ("Failed decode and evaluate of '" ++ describeExpression 1 decodeAndEvaluate.expression ++ "'")
+                            ("Failed parse and evaluate of '" ++ describeExpression 1 parseAndEval.expression ++ "'")
                             error
                         )
 
@@ -168,7 +168,7 @@ evaluateExpression context expression =
                         )
 
                 Ok argument ->
-                    case decodeKernelFunctionFromName application.functionName of
+                    case parseKernelFunctionFromName application.functionName of
                         Err error ->
                             Err (DescribePathEnd error)
 
@@ -416,27 +416,27 @@ mapFromListValueOrBlobValue { fromList, fromBlob } value =
             fromBlob blob
 
 
-evaluateDecodeAndEvaluate : EvalContext -> DecodeAndEvaluateExpressionStructure -> Result (PathDescription String) Value
-evaluateDecodeAndEvaluate context decodeAndEvaluate =
-    case evaluateExpression context decodeAndEvaluate.environment of
+evaluateParseAndEval : EvalContext -> ParseAndEvalExpressionStructure -> Result (PathDescription String) Value
+evaluateParseAndEval context parseAndEval =
+    case evaluateExpression context parseAndEval.environment of
         Err error ->
             Err
                 (DescribePathNode
-                    ("Failed to evaluate environment '" ++ describeExpression 1 decodeAndEvaluate.environment ++ "'")
+                    ("Failed to evaluate environment '" ++ describeExpression 1 parseAndEval.environment ++ "'")
                     error
                 )
 
         Ok environmentValue ->
-            case evaluateExpression context decodeAndEvaluate.expression of
+            case evaluateExpression context parseAndEval.expression of
                 Err error ->
                     Err
                         (DescribePathNode
-                            ("Failed to evaluate expression '" ++ describeExpression 1 decodeAndEvaluate.expression ++ "'")
+                            ("Failed to evaluate expression '" ++ describeExpression 1 parseAndEval.expression ++ "'")
                             error
                         )
 
                 Ok functionValue ->
-                    case decodeExpressionFromValue functionValue of
+                    case parseExpressionFromValue functionValue of
                         Err error ->
                             Err
                                 (DescribePathNode
@@ -575,13 +575,13 @@ describeExpression depthLimit expression =
         LiteralExpression literal ->
             "literal(" ++ describeValue (depthLimit - 1) literal ++ ")"
 
-        DecodeAndEvaluateExpression decodeAndEvaluate ->
-            "decode-and-evaluate("
+        ParseAndEvalExpression parseAndEval ->
+            "parse-and-eval("
                 ++ (if depthLimit < 1 then
                         "..."
 
                     else
-                        describeExpression (depthLimit - 1) decodeAndEvaluate.expression
+                        describeExpression (depthLimit - 1) parseAndEval.expression
                    )
                 ++ ")"
 
@@ -911,12 +911,12 @@ encodeExpressionAsValue expression =
                 stringAsValue_List
                 (ListValue (List.map encodeExpressionAsValue listExpr))
 
-        DecodeAndEvaluateExpression decodeAndEvaluate ->
+        ParseAndEvalExpression parseAndEval ->
             encodeUnionToPineValue
-                stringAsValue_DecodeAndEvaluate
+                stringAsValue_ParseAndEval
                 (ListValue
-                    [ ListValue [ stringAsValue_environment, encodeExpressionAsValue decodeAndEvaluate.environment ]
-                    , ListValue [ stringAsValue_expression, encodeExpressionAsValue decodeAndEvaluate.expression ]
+                    [ ListValue [ stringAsValue_environment, encodeExpressionAsValue parseAndEval.environment ]
+                    , ListValue [ stringAsValue_expression, encodeExpressionAsValue parseAndEval.expression ]
                     ]
                 )
 
@@ -954,35 +954,35 @@ encodeExpressionAsValue expression =
                 )
 
 
-decodeExpressionFromValue : Value -> Result String Expression
-decodeExpressionFromValue =
-    decodeUnionFromPineValue decodeExpressionFromValueDict
+parseExpressionFromValue : Value -> Result String Expression
+parseExpressionFromValue =
+    parseUnionFromPineValue parseExpressionFromValueDict
 
 
-decodeExpressionFromValueDict : List ( ( String, Value ), Value -> Result String Expression )
-decodeExpressionFromValueDict =
+parseExpressionFromValueDict : List ( ( String, Value ), Value -> Result String Expression )
+parseExpressionFromValueDict =
     List.map
-        (\( tagName, decode ) ->
-            ( ( tagName, valueFromString tagName ), decode )
+        (\( tagName, parse ) ->
+            ( ( tagName, valueFromString tagName ), parse )
         )
         [ ( "Literal"
           , \value -> Ok (LiteralExpression value)
           )
         , ( "List"
-          , decodeListExpression
+          , parseListExpression
           )
-        , ( "DecodeAndEvaluate"
+        , ( "ParseAndEval"
           , \value ->
-                case decodeDecodeAndEvaluateExpression value of
-                    Ok decodeAndEvaluate ->
-                        Ok (DecodeAndEvaluateExpression decodeAndEvaluate)
+                case parseParseAndEvalExpression value of
+                    Ok parseAndEval ->
+                        Ok (ParseAndEvalExpression parseAndEval)
 
                     Err err ->
                         Err err
           )
         , ( "KernelApplication"
           , \value ->
-                case decodeKernelApplicationExpression value of
+                case parseKernelApplicationExpression value of
                     Ok kernelApplication ->
                         Ok (KernelApplicationExpression kernelApplication)
 
@@ -991,7 +991,7 @@ decodeExpressionFromValueDict =
           )
         , ( "Conditional"
           , \value ->
-                case decodeConditionalExpression value of
+                case parseConditionalExpression value of
                     Ok conditional ->
                         Ok (ConditionalExpression conditional)
 
@@ -1003,12 +1003,12 @@ decodeExpressionFromValueDict =
           )
         , ( "StringTag"
           , \value ->
-                case decodePineListValue value of
+                case parsePineListValue value of
                     Err err ->
                         Err err
 
                     Ok list ->
-                        case decodeListWithExactlyTwoElements list of
+                        case parseListWithExactlyTwoElements list of
                             Err err ->
                                 Err err
 
@@ -1018,7 +1018,7 @@ decodeExpressionFromValueDict =
                                         Err err
 
                                     Ok tag ->
-                                        case decodeExpressionFromValue taggedValue of
+                                        case parseExpressionFromValue taggedValue of
                                             Err err ->
                                                 Err err
 
@@ -1028,46 +1028,46 @@ decodeExpressionFromValueDict =
         ]
 
 
-decodeListExpression : Value -> Result String Expression
-decodeListExpression value =
+parseListExpression : Value -> Result String Expression
+parseListExpression value =
     let
-        decodeListRecursively : List Expression -> List Value -> Result String Expression
-        decodeListRecursively aggregate remaining =
+        parseListRecursively : List Expression -> List Value -> Result String Expression
+        parseListRecursively aggregate remaining =
             case remaining of
                 [] ->
                     Ok (ListExpression (List.reverse aggregate))
 
                 itemValue :: rest ->
-                    case decodeExpressionFromValue itemValue of
+                    case parseExpressionFromValue itemValue of
                         Err itemErr ->
                             Err
-                                ("Failed to decode list item at index "
+                                ("Failed to parse list item at index "
                                     ++ String.fromInt (List.length aggregate)
                                     ++ ": "
                                     ++ itemErr
                                 )
 
                         Ok item ->
-                            decodeListRecursively (item :: aggregate) rest
+                            parseListRecursively (item :: aggregate) rest
     in
     case value of
         BlobValue _ ->
             Err "Is not list but blob"
 
         ListValue list ->
-            decodeListRecursively [] list
+            parseListRecursively [] list
 
 
-decodeDecodeAndEvaluateExpression : Value -> Result String DecodeAndEvaluateExpressionStructure
-decodeDecodeAndEvaluateExpression value =
+parseParseAndEvalExpression : Value -> Result String ParseAndEvalExpressionStructure
+parseParseAndEvalExpression value =
     case value of
         BlobValue _ ->
             Err "Is not list but blob"
 
         ListValue list ->
-            case decodeListWithPairs list of
+            case parseListOfPairs list of
                 Err err ->
-                    Err ("Failed to decode kernel application expression: " ++ err)
+                    Err ("Failed to parse kernel application expression: " ++ err)
 
                 Ok pairs ->
                     case
@@ -1081,9 +1081,9 @@ decodeDecodeAndEvaluateExpression value =
                             Err "Did not find field 'expression'"
 
                         Just ( _, expressionValue ) ->
-                            case decodeExpressionFromValue expressionValue of
+                            case parseExpressionFromValue expressionValue of
                                 Err error ->
-                                    Err ("Failed to decode field 'expression': " ++ error)
+                                    Err ("Failed to parse field 'expression': " ++ error)
 
                                 Ok expression ->
                                     case
@@ -1097,9 +1097,9 @@ decodeDecodeAndEvaluateExpression value =
                                             Err "Did not find field 'environment'"
 
                                         Just ( _, environmentValue ) ->
-                                            case decodeExpressionFromValue environmentValue of
+                                            case parseExpressionFromValue environmentValue of
                                                 Err error ->
-                                                    Err ("Failed to decode field 'environment': " ++ error)
+                                                    Err ("Failed to parse field 'environment': " ++ error)
 
                                                 Ok environment ->
                                                     Ok
@@ -1108,16 +1108,16 @@ decodeDecodeAndEvaluateExpression value =
                                                         }
 
 
-decodeKernelApplicationExpression : Value -> Result String KernelApplicationExpressionStructure
-decodeKernelApplicationExpression expressionValue =
+parseKernelApplicationExpression : Value -> Result String KernelApplicationExpressionStructure
+parseKernelApplicationExpression expressionValue =
     case expressionValue of
         BlobValue _ ->
             Err "Is not list but blob"
 
         ListValue list ->
-            case decodeListWithPairs list of
+            case parseListOfPairs list of
                 Err err ->
-                    Err ("Failed to decode kernel application expression: " ++ err)
+                    Err ("Failed to parse kernel application expression: " ++ err)
 
                 Ok pairs ->
                     case
@@ -1154,9 +1154,9 @@ decodeKernelApplicationExpression expressionValue =
                                             Err "Did not find field 'argument'"
 
                                         Just ( _, argumentValue ) ->
-                                            case decodeExpressionFromValue argumentValue of
+                                            case parseExpressionFromValue argumentValue of
                                                 Err error ->
-                                                    Err ("Failed to decode field 'argument': " ++ error)
+                                                    Err ("Failed to parse field 'argument': " ++ error)
 
                                                 Ok argument ->
                                                     Ok
@@ -1165,8 +1165,8 @@ decodeKernelApplicationExpression expressionValue =
                                                         }
 
 
-decodeKernelFunctionFromName : String -> Result String KernelFunction
-decodeKernelFunctionFromName functionName =
+parseKernelFunctionFromName : String -> Result String KernelFunction
+parseKernelFunctionFromName functionName =
     case Dict.get functionName kernelFunctions of
         Nothing ->
             Err
@@ -1182,16 +1182,16 @@ decodeKernelFunctionFromName functionName =
             Ok kernelFunction
 
 
-decodeConditionalExpression : Value -> Result String ConditionalExpressionStructure
-decodeConditionalExpression expressionValue =
+parseConditionalExpression : Value -> Result String ConditionalExpressionStructure
+parseConditionalExpression expressionValue =
     case expressionValue of
         BlobValue _ ->
             Err "Is not list but blob"
 
         ListValue list ->
-            case decodeListWithPairs list of
+            case parseListOfPairs list of
                 Err err ->
-                    Err ("Failed to decode kernel application expression: " ++ err)
+                    Err ("Failed to parse kernel application expression: " ++ err)
 
                 Ok pairs ->
                     case
@@ -1205,9 +1205,9 @@ decodeConditionalExpression expressionValue =
                             Err "Did not find field 'condition'"
 
                         Just ( _, conditionValue ) ->
-                            case decodeExpressionFromValue conditionValue of
+                            case parseExpressionFromValue conditionValue of
                                 Err error ->
-                                    Err ("Failed to decode field 'condition': " ++ error)
+                                    Err ("Failed to parse field 'condition': " ++ error)
 
                                 Ok condition ->
                                     case
@@ -1221,9 +1221,9 @@ decodeConditionalExpression expressionValue =
                                             Err "Did not find field 'ifTrue'"
 
                                         Just ( _, ifTrueValue ) ->
-                                            case decodeExpressionFromValue ifTrueValue of
+                                            case parseExpressionFromValue ifTrueValue of
                                                 Err error ->
-                                                    Err ("Failed to decode field 'ifTrue': " ++ error)
+                                                    Err ("Failed to parse field 'ifTrue': " ++ error)
 
                                                 Ok ifTrue ->
                                                     case
@@ -1237,9 +1237,9 @@ decodeConditionalExpression expressionValue =
                                                             Err "Did not find field 'ifFalse'"
 
                                                         Just ( _, ifFalseValue ) ->
-                                                            case decodeExpressionFromValue ifFalseValue of
+                                                            case parseExpressionFromValue ifFalseValue of
                                                                 Err error ->
-                                                                    Err ("Failed to decode field 'ifFalse': " ++ error)
+                                                                    Err ("Failed to parse field 'ifFalse': " ++ error)
 
                                                                 Ok ifFalse ->
                                                                     Ok
@@ -1254,11 +1254,11 @@ encodeUnionToPineValue tagNameValue unionTagValue =
     ListValue [ tagNameValue, unionTagValue ]
 
 
-decodeUnionFromPineValue : List ( ( String, Value ), Value -> Result String a ) -> Value -> Result String a
-decodeUnionFromPineValue tags value =
-    case Result.andThen decodeListWithExactlyTwoElements (decodePineListValue value) of
+parseUnionFromPineValue : List ( ( String, Value ), Value -> Result String a ) -> Value -> Result String a
+parseUnionFromPineValue tags value =
+    case Result.andThen parseListWithExactlyTwoElements (parsePineListValue value) of
         Err err ->
-            Err ("Failed to decode union: " ++ err)
+            Err ("Failed to parse union: " ++ err)
 
         Ok ( tagNameValue, unionTagValue ) ->
             case
@@ -1275,14 +1275,14 @@ decodeUnionFromPineValue tags value =
                 Just ( ( tagName, _ ), tagDecode ) ->
                     case tagDecode unionTagValue of
                         Err err ->
-                            Err (("Failed to decode value for tag " ++ tagName ++ ": ") ++ err)
+                            Err (("Failed to parse value for tag " ++ tagName ++ ": ") ++ err)
 
                         Ok ok ->
                             Ok ok
 
 
-decodeListWithPairs : List Value -> Result String (List ( Value, Value ))
-decodeListWithPairs list =
+parseListOfPairs : List Value -> Result String (List ( Value, Value ))
+parseListOfPairs list =
     let
         continueRecursive : List Value -> List ( Value, Value ) -> Result String (List ( Value, Value ))
         continueRecursive remaining aggregate =
@@ -1307,8 +1307,8 @@ decodeListWithPairs list =
     continueRecursive list []
 
 
-decodeListWithExactlyTwoElements : List a -> Result String ( a, a )
-decodeListWithExactlyTwoElements list =
+parseListWithExactlyTwoElements : List a -> Result String ( a, a )
+parseListWithExactlyTwoElements list =
     case list of
         [ a, b ] ->
             Ok ( a, b )
@@ -1317,8 +1317,8 @@ decodeListWithExactlyTwoElements list =
             Err ("Unexpected number of elements in list: Not 2 but " ++ String.fromInt (List.length list))
 
 
-decodePineListValue : Value -> Result String (List Value)
-decodePineListValue value =
+parsePineListValue : Value -> Result String (List Value)
+parsePineListValue value =
     case value of
         ListValue list ->
             Ok list
@@ -1337,9 +1337,9 @@ stringAsValue_List =
     valueFromString "List"
 
 
-stringAsValue_DecodeAndEvaluate : Value
-stringAsValue_DecodeAndEvaluate =
-    valueFromString "DecodeAndEvaluate"
+stringAsValue_ParseAndEval : Value
+stringAsValue_ParseAndEval =
+    valueFromString "ParseAndEval"
 
 
 stringAsValue_KernelApplication : Value

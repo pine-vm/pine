@@ -560,7 +560,7 @@ public partial class CompileToCSharp
     public static bool IncludeForCommonSubexpressionElimination(Expression expression) =>
         expression switch
         {
-            Expression.DecodeAndEvaluateExpression => true,
+            Expression.ParseAndEvalExpression => true,
             Expression.KernelApplicationExpression => true,
             Expression.ConditionalExpression => true,
             Expression.StringTagExpression => true,
@@ -591,8 +591,8 @@ public partial class CompileToCSharp
                 Expression.KernelApplicationExpression kernelApp =>
                 CompileToCSharpExpression(kernelApp, environment),
 
-                Expression.DecodeAndEvaluateExpression decodeAndEval =>
-                CompileToCSharpExpression(decodeAndEval, environment),
+                Expression.ParseAndEvalExpression parseAndEval =>
+                CompileToCSharpExpression(parseAndEval, environment),
 
                 Expression.StringTagExpression stringTagExpr =>
                 CompileToCSharpExpression(stringTagExpr, environment),
@@ -839,35 +839,35 @@ public partial class CompileToCSharp
     }
 
     public static Result<string, CompiledExpression> CompileToCSharpExpression(
-        Expression.DecodeAndEvaluateExpression decodeAndEvaluateExpression,
+        Expression.ParseAndEvalExpression parseAndEvalExpr,
         ExpressionCompilationEnvironment environment)
     {
-        var decodeAndEvaluateExpressionValue =
-            PineVM.PineVM.EncodeExpressionAsValue(decodeAndEvaluateExpression)
+        var parseAndEvalExprValue =
+            PineVM.PineVM.EncodeExpressionAsValue(parseAndEvalExpr)
             .Extract(err => throw new Exception(err));
 
-        var decodeAndEvaluateExpressionHash =
-            CommonConversion.StringBase16(compilerCache.ComputeHash(decodeAndEvaluateExpressionValue));
+        var parseAndEvalExprHash =
+            CommonConversion.StringBase16(compilerCache.ComputeHash(parseAndEvalExprValue));
 
         CompiledExpression continueWithGenericCase()
         {
-            var decodeAndEvaluateExpressionExpressionId =
-                CompiledExpressionId(decodeAndEvaluateExpression.expression)
+            var parseAndEvalExprExpressionId =
+                CompiledExpressionId(parseAndEvalExpr.expression)
                 .Extract(err => throw new Exception(err));
 
-            var decodeAndEvaluateExpressionEnvironmentId =
-                CompiledExpressionId(decodeAndEvaluateExpression.environment)
+            var parseAndEvalExprEnvironmentId =
+                CompiledExpressionId(parseAndEvalExpr.environment)
                 .Extract(err => throw new Exception(err));
 
             var envResultExpr =
                 InvocationExpressionForCurrentEnvironment(
                     environment.FunctionEnvironment,
-                    decodeAndEvaluateExpressionEnvironmentId);
+                    parseAndEvalExprEnvironmentId);
 
             var exprResultExpr =
                 InvocationExpressionForCurrentEnvironment(
                     environment.FunctionEnvironment,
-                    decodeAndEvaluateExpressionExpressionId);
+                    parseAndEvalExprExpressionId);
 
             return
                 envResultExpr
@@ -879,9 +879,9 @@ public partial class CompileToCSharp
                         environment,
                         exprResultExprCs =>
                         {
-                            var decodeAndEvalLiteralExpr =
+                            var parseAndEvalLiteralExpr =
                             NewConstructorOfExpressionVariant(
-                                nameof(Expression.DecodeAndEvaluateExpression),
+                                nameof(Expression.ParseAndEvalExpression),
                                 NewConstructorOfExpressionVariant(
                                     nameof(Expression.LiteralExpression),
                                     exprResultExprCs),
@@ -897,7 +897,7 @@ public partial class CompileToCSharp
                                     SyntaxFactory.SeparatedList<ArgumentSyntax>(
                                         new SyntaxNodeOrToken[]
                                         {
-                                            SyntaxFactory.Argument(decodeAndEvalLiteralExpr),
+                                            SyntaxFactory.Argument(parseAndEvalLiteralExpr),
                                             SyntaxFactory.Token(SyntaxKind.CommaToken),
                                             SyntaxFactory.Argument(PineCSharpSyntaxFactory.PineValueEmptyListSyntax)
                                         })));
@@ -912,27 +912,27 @@ public partial class CompileToCSharp
                                     {
                                         ExpressionFunctions =
                                             ImmutableDictionary<Expression, CompiledExpressionId>.Empty
-                                            .SetItem(decodeAndEvaluateExpression.expression, decodeAndEvaluateExpressionExpressionId)
-                                            .SetItem(decodeAndEvaluateExpression.environment, decodeAndEvaluateExpressionEnvironmentId)
+                                            .SetItem(parseAndEvalExpr.expression, parseAndEvalExprExpressionId)
+                                            .SetItem(parseAndEvalExpr.environment, parseAndEvalExprEnvironmentId)
                                     }));
                         }));
         }
 
-        if (Expression.IsIndependent(decodeAndEvaluateExpression.expression))
+        if (Expression.IsIndependent(parseAndEvalExpr.expression))
         {
             return
-                TryEvaluateExpressionIndependent(decodeAndEvaluateExpression.expression)
+                TryEvaluateExpressionIndependent(parseAndEvalExpr.expression)
                 .MapError(err => "Failed evaluate inner as independent expression: " + err)
                 .AndThen(innerExpressionValue =>
-                compilerCache.DecodeExpressionFromValue(innerExpressionValue)
-                .MapError(err => "Failed to decode inner expression: " + err)
+                compilerCache.ParseExpressionFromValue(innerExpressionValue)
+                .MapError(err => "Failed to parse inner expression: " + err)
                 .AndThen(innerExpression =>
                 {
                     var innerExpressionId = CompiledExpressionId(innerExpressionValue);
 
                     return
                     CompileToCSharpExpression(
-                        decodeAndEvaluateExpression.environment,
+                        parseAndEvalExpr.environment,
                         environment,
                         createLetBindingsForCse: false)
                     .Map(compiledArgumentExpression =>
@@ -1092,11 +1092,11 @@ public partial class CompileToCSharp
             .MapError(err => "Failed to evaluate kernel application argument independent: " + err)
             .Map(kernelApplication.function),
 
-            Expression.DecodeAndEvaluateExpression decodeAndEvaluateExpression =>
-            TryEvaluateExpressionIndependent(decodeAndEvaluateExpression)
+            Expression.ParseAndEvalExpression parseAndEvalExpr =>
+            TryEvaluateExpressionIndependent(parseAndEvalExpr)
             .Map(ok =>
             {
-                Console.WriteLine("Successfully evaluated DecodeAndEvaluateExpression independent 🙃");
+                Console.WriteLine("Successfully evaluated ParseAndEvalExpression independent 🙃");
 
                 return ok;
             }),
@@ -1109,19 +1109,19 @@ public partial class CompileToCSharp
         };
 
     public static Result<string, PineValue> TryEvaluateExpressionIndependent(
-        Expression.DecodeAndEvaluateExpression decodeAndEvaluateExpression)
+        Expression.ParseAndEvalExpression parseAndEvalExpr)
     {
-        if (TryEvaluateExpressionIndependent(decodeAndEvaluateExpression.environment) is Result<string, PineValue>.Ok envOk)
+        if (TryEvaluateExpressionIndependent(parseAndEvalExpr.environment) is Result<string, PineValue>.Ok envOk)
         {
             return
-                new PineVM.PineVM().EvaluateExpression(decodeAndEvaluateExpression, PineValue.EmptyList)
+                new PineVM.PineVM().EvaluateExpression(parseAndEvalExpr, PineValue.EmptyList)
                 .MapError(err => "Got independent environment, but failed to evaluated: " + err);
         }
 
         return
-            TryEvaluateExpressionIndependent(decodeAndEvaluateExpression.expression)
+            TryEvaluateExpressionIndependent(parseAndEvalExpr.expression)
             .MapError(err => "Expression is not independent: " + err)
-            .AndThen(compilerCache.DecodeExpressionFromValue)
+            .AndThen(compilerCache.ParseExpressionFromValue)
             .AndThen(innerExpr => TryEvaluateExpressionIndependent(innerExpr)
             .MapError(err => "Inner expression is not independent: " + err));
     }
@@ -1291,10 +1291,10 @@ public partial class CompileToCSharp
             ,
                 .. EnumerateAllLiterals(conditionalExpression.ifFalse)],
 
-            Expression.DecodeAndEvaluateExpression decodeAndEvaluateExpression =>
-            [.. EnumerateAllLiterals(decodeAndEvaluateExpression.expression)
+            Expression.ParseAndEvalExpression parseAndEvalExpr =>
+            [.. EnumerateAllLiterals(parseAndEvalExpr.expression)
             ,
-                .. EnumerateAllLiterals(decodeAndEvaluateExpression.environment)],
+                .. EnumerateAllLiterals(parseAndEvalExpr.environment)],
 
             Expression.StringTagExpression stringTagExpression =>
             EnumerateAllLiterals(stringTagExpression.tagged),
@@ -1349,9 +1349,9 @@ public partial class CompileToCSharp
                     foreach (var subExpr in listExpr.List)
                         Traverse(subExpr, isConditional);
                     break;
-                case Expression.DecodeAndEvaluateExpression decodeEvalExpr:
-                    Traverse(decodeEvalExpr.expression, isConditional);
-                    Traverse(decodeEvalExpr.environment, isConditional);
+                case Expression.ParseAndEvalExpression parseAndEvalExpr:
+                    Traverse(parseAndEvalExpr.expression, isConditional);
+                    Traverse(parseAndEvalExpr.environment, isConditional);
                     break;
                 case Expression.KernelApplicationExpression kernelAppExpr:
                     Traverse(kernelAppExpr.argument, isConditional);

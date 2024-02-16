@@ -9,8 +9,8 @@ import Result.Extra
 import Test
 
 
-type alias ReduceDecodeAndEvalTestCase =
-    { original : Pine.DecodeAndEvaluateExpressionStructure
+type alias ReduceParseAndEvalTestCase =
+    { original : Pine.ParseAndEvalExpressionStructure
     , expected : Pine.Expression
     , additionalTestEnvironments : List Pine.Value
     }
@@ -38,7 +38,7 @@ standardTestEnvironments =
     ]
 
 
-compiler_reduces_decode_and_eval_test_cases : List ( String, ReduceDecodeAndEvalTestCase )
+compiler_reduces_decode_and_eval_test_cases : List ( String, ReduceParseAndEvalTestCase )
 compiler_reduces_decode_and_eval_test_cases =
     [ ( "simple reducible - literal"
       , { original =
@@ -140,7 +140,7 @@ compiler_reduces_decode_and_eval_test_cases =
             { expression = Pine.EnvironmentExpression
             , environment = Pine.EnvironmentExpression
             }
-                |> Pine.DecodeAndEvaluateExpression
+                |> Pine.ParseAndEvalExpression
         , additionalTestEnvironments = []
         }
       )
@@ -162,7 +162,7 @@ test_compiler_reduces_decode_and_eval_test_cases =
                             Test.test ("Environment " ++ String.fromInt envIndex) <|
                                 \_ ->
                                     testCase.original
-                                        |> Pine.DecodeAndEvaluateExpression
+                                        |> Pine.ParseAndEvalExpression
                                         |> Pine.evaluateExpression { environment = enviroment }
                                         |> Expect.equal
                                             (Pine.evaluateExpression
@@ -175,15 +175,15 @@ test_compiler_reduces_decode_and_eval_test_cases =
         |> Test.describe "Test cases - Compiler reduces decode and eval expression"
 
 
-compilerReducesDecodeAndEvaluateExpression : Test.Test
-compilerReducesDecodeAndEvaluateExpression =
+compilerReducesParseAndEvalExpression : Test.Test
+compilerReducesParseAndEvalExpression =
     compiler_reduces_decode_and_eval_test_cases
         |> List.indexedMap
             (\testCaseIndex ( testCaseName, testCase ) ->
                 Test.test ("Expression " ++ String.fromInt testCaseIndex ++ " - " ++ testCaseName) <|
                     \_ ->
                         testCase.original
-                            |> FirCompiler.attemptReduceDecodeAndEvaluateExpressionRecursive { maxDepth = 4 }
+                            |> FirCompiler.attemptReduceParseAndEvalExpressionRecursive { maxDepth = 4 }
                             |> Expect.equal testCase.expected
             )
         |> Test.describe "Compiler reduces decode and eval expression"

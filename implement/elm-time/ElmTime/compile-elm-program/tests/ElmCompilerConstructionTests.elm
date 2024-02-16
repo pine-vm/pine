@@ -24,8 +24,8 @@ generateTemplateEvaluatingToExpressionTests =
     , ( "Int literal"
       , Pine.LiteralExpression (Pine.valueFromInt 3)
       )
-    , ( "DecodeAndEvaluateExpression"
-      , Pine.DecodeAndEvaluateExpression
+    , ( "ParseAndEvalExpression"
+      , Pine.ParseAndEvalExpression
             { expression = Pine.LiteralExpression (Pine.valueFromString "expression-placeholder")
             , environment = Pine.LiteralExpression (Pine.valueFromString "environment-placeholder")
             }
@@ -67,7 +67,7 @@ generateTemplateEvaluatingToExpressionTests =
                             |> Result.andThen
                                 (\value ->
                                     value
-                                        |> Pine.decodeExpressionFromValue
+                                        |> Pine.parseExpressionFromValue
                                         |> Result.mapError ((++) "Failed decode expression from value: ")
                                 )
                             |> Result.Extra.unpack

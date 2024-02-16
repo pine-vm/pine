@@ -4,12 +4,12 @@ using System.Collections.Immutable;
 namespace Pine.PineVM;
 
 /// <summary>
-/// A cache for function application results and other expressions of type <see cref="Expression.DecodeAndEvaluateExpression"/>
+/// A cache for function application results and other expressions of type <see cref="Expression.ParseAndEvalExpression"/>
 /// It uses the environment time source to decide which evaluation results are worth caching and therefore is not deterministic.
 /// </summary>
 public class PineVMCache
 {
-    public record FunctionApplicationCacheEntryKey(Expression.DecodeAndEvaluateExpression Expression, PineValue Environment);
+    public record FunctionApplicationCacheEntryKey(Expression.ParseAndEvalExpression Expression, PineValue Environment);
 
     private readonly ConcurrentDictionary<FunctionApplicationCacheEntryKey, PineValue> functionApplicationCache = new();
 
@@ -26,7 +26,7 @@ public class PineVMCache
         {
             Result<string, PineValue> evalWithoutCache() => evalExprDelegate(expression, environment);
 
-            if (expression is Expression.DecodeAndEvaluateExpression decodeAndEvalExpr)
+            if (expression is Expression.ParseAndEvalExpression decodeAndEvalExpr)
             {
                 ++FunctionApplicationCacheLookupCount;
 

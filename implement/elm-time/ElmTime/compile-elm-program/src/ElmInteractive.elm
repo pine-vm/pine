@@ -241,7 +241,7 @@ pineValueAsElmValue pineValue =
                                 |> Result.map ElmInteger
 
                         else if 10 < List.length blobValue then
-                            case Pine.decodeExpressionFromValue pineValue of
+                            case Pine.parseExpressionFromValue pineValue of
                                 Ok _ ->
                                     Ok (ElmInternal "expression")
 

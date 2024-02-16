@@ -397,9 +397,9 @@ parseElmExplorerNodeValue nodeCategory nodeValue =
             parseAsFunctionRecord nodeValue
 
         FunctionExpressionNode ->
-            case Pine.decodeExpressionFromValue nodeValue of
+            case Pine.parseExpressionFromValue nodeValue of
                 Err err ->
-                    Err ("Failed to decode expression: " ++ err)
+                    Err ("Failed to parse expression: " ++ err)
 
                 Ok expression ->
                     let

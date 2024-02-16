@@ -131,7 +131,7 @@ public abstract record ElmValue
             blobValue.Bytes.Length > 10
             ?
             Result<string, ElmValue>.ok(
-                PineVM.DecodeExpressionFromValueDefault(pineValue)
+                PineVM.ParseExpressionFromValueDefault(pineValue)
                 .Map(_ => (ElmValue)new ElmInternal("expression"))
                 .WithDefault(new ElmInternal("___error_skipped_large_blob___")))
             :

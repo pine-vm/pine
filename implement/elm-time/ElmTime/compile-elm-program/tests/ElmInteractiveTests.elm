@@ -379,7 +379,7 @@ evolutionStagesToMakeElmFunction =
                 , Pine.LiteralExpression (Pine.valueFromString "just a literal")
                 ]
                 |> Pine.evaluateExpression Pine.emptyEvalContext
-                |> Result.andThen (Pine.decodeExpressionFromValue >> Result.mapError Pine.DescribePathEnd)
+                |> Result.andThen (Pine.parseExpressionFromValue >> Result.mapError Pine.DescribePathEnd)
                 |> Expect.equal
                     (Ok (Pine.LiteralExpression (Pine.valueFromString "just a literal")))
     , Test.test "List with one element" <|
@@ -394,7 +394,7 @@ evolutionStagesToMakeElmFunction =
                     ]
                 ]
                 |> Pine.evaluateExpression Pine.emptyEvalContext
-                |> Result.andThen (Pine.decodeExpressionFromValue >> Result.mapError Pine.DescribePathEnd)
+                |> Result.andThen (Pine.parseExpressionFromValue >> Result.mapError Pine.DescribePathEnd)
                 |> Expect.equal
                     (Ok
                         (Pine.ListExpression
@@ -420,7 +420,7 @@ evolutionStagesToMakeElmFunction =
                     ]
                 ]
                 |> Pine.evaluateExpression Pine.emptyEvalContext
-                |> Result.andThen (Pine.decodeExpressionFromValue >> Result.mapError Pine.DescribePathEnd)
+                |> Result.andThen (Pine.parseExpressionFromValue >> Result.mapError Pine.DescribePathEnd)
                 |> Expect.equal
                     (Ok
                         (Pine.KernelApplicationExpression
@@ -454,7 +454,7 @@ evolutionStagesToMakeElmFunction =
                                 ( "alfa", Pine.valueFromInt 123 )
                             ]
                     )
-                |> Result.andThen (Pine.decodeExpressionFromValue >> Result.mapError Pine.DescribePathEnd)
+                |> Result.andThen (Pine.parseExpressionFromValue >> Result.mapError Pine.DescribePathEnd)
                 |> Expect.equal
                     (Ok
                         (Pine.KernelApplicationExpression
@@ -503,7 +503,7 @@ evolutionStagesToMakeElmFunction =
                                 ( "beta", Pine.valueFromInt 345 )
                             ]
                     )
-                |> Result.andThen (Pine.decodeExpressionFromValue >> Result.mapError Pine.DescribePathEnd)
+                |> Result.andThen (Pine.parseExpressionFromValue >> Result.mapError Pine.DescribePathEnd)
                 |> Expect.equal
                     (Ok
                         (Pine.KernelApplicationExpression
@@ -571,7 +571,7 @@ testCompileRecordAccessPineExpression =
                             ]
                         ]
             in
-            Pine.DecodeAndEvaluateExpression
+            Pine.ParseAndEvalExpression
                 { expression = Pine.LiteralExpression ElmCompiler.pineFunctionForRecordAccessAsValue
                 , environment =
                     Pine.ListExpression
@@ -604,7 +604,7 @@ testCompileRecordUpdatePineExpression =
                                 ]
                             ]
                 in
-                Pine.DecodeAndEvaluateExpression
+                Pine.ParseAndEvalExpression
                     { expression = Pine.LiteralExpression ElmCompiler.pineFunctionForRecordUpdateAsValue
                     , environment =
                         Pine.ListExpression
@@ -647,7 +647,7 @@ testCompileRecordUpdatePineExpression =
                                 ]
                             ]
                 in
-                Pine.DecodeAndEvaluateExpression
+                Pine.ParseAndEvalExpression
                     { expression = Pine.LiteralExpression ElmCompiler.pineFunctionForRecordUpdateAsValue
                     , environment =
                         Pine.ListExpression
@@ -691,7 +691,7 @@ testCompileRecordUpdatePineExpression =
                                 ]
                             ]
                 in
-                Pine.DecodeAndEvaluateExpression
+                Pine.ParseAndEvalExpression
                     { expression = Pine.LiteralExpression ElmCompiler.pineFunctionForRecordUpdateAsValue
                     , environment =
                         Pine.ListExpression

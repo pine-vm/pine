@@ -28,7 +28,7 @@ public class PineVMEncodeExpressionTests
                 ifTrue: new Expression.LiteralExpression(PineValueAsString.ValueFromString("if true")),
                 ifFalse: new Expression.LiteralExpression(PineValueAsString.ValueFromString("if false"))),
 
-            new Expression.DecodeAndEvaluateExpression(
+            new Expression.ParseAndEvalExpression(
                 expression: new Expression.LiteralExpression(PineValueAsString.ValueFromString("expression")),
                 environment: new Expression.LiteralExpression(PineValueAsString.ValueFromString("environment"))),
 
@@ -49,7 +49,7 @@ public class PineVMEncodeExpressionTests
                 .Extract(err => throw new System.Exception("Failed to encode expression: " + err));
 
             var decoded =
-                PineVM.DecodeExpressionFromValueDefault(encoded)
+                PineVM.ParseExpressionFromValueDefault(encoded)
                 .Extract(err => throw new System.Exception("Failed to decode expression: " + err));
 
             Assert.AreEqual(testCase, decoded);

@@ -182,7 +182,7 @@ public class InteractiveSessionPine : IInteractiveSession
                         lastCompilationCache = compileSubmissionOk.cache;
 
                         return
-                        PineVM.DecodeExpressionFromValueDefault(compileSubmissionOk.compiledValue)
+                        PineVM.ParseExpressionFromValueDefault(compileSubmissionOk.compiledValue)
                         .MapError(error => "Failed to decode expression: " + error)
                         .AndThen(decodeExpressionOk =>
                         {

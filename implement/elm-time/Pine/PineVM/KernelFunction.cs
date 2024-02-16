@@ -254,7 +254,7 @@ public static class KernelFunction
         PineValue value) =>
         KernelFunctionExpectingList(
             value,
-            list => PineVM.ResultListMapCombine(list, PineVM.DecodeBoolFromValue)
+            list => PineVM.ResultListMapCombine(list, PineVM.ParseBoolFromValue)
             .Map(compose)
             .Map(PineVM.ValueFromBool)
             .WithDefault(PineValue.EmptyList));

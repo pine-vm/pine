@@ -5,7 +5,7 @@ import FirCompiler
 import Pine
 
 
-{-| This function returns an expression that evaluates to the encoding of the input expression. In other words, it is an inversion of `Pine.evaluateExpression emptyEnv >> Pine.decodeExpressionFromValue`
+{-| This function returns an expression that evaluates to the encoding of the input expression. In other words, it is an inversion of `Pine.evaluateExpression emptyEnv >> Pine.parseExpressionFromValue`
 Most expressions have multiple valid encoded representations, and the one produced here supports building templates to bind the parent environment.
 One typical use case for these templates is wrapping a function to support the partial application of the wrapped function.
 -}
@@ -40,12 +40,12 @@ generateTemplateEvaluatingToExpression expression =
                 "Literal"
                 (Pine.LiteralExpression literal)
 
-        Pine.DecodeAndEvaluateExpression decodeAndEval ->
+        Pine.ParseAndEvalExpression parseAndEval ->
             buildFromTagAndArgument
-                "DecodeAndEvaluate"
+                "ParseAndEval"
                 (buildRecordExpression
-                    [ ( "environment", generateTemplateEvaluatingToExpression decodeAndEval.environment )
-                    , ( "expression", generateTemplateEvaluatingToExpression decodeAndEval.expression )
+                    [ ( "environment", generateTemplateEvaluatingToExpression parseAndEval.environment )
+                    , ( "expression", generateTemplateEvaluatingToExpression parseAndEval.expression )
                     ]
                 )
 
@@ -102,7 +102,7 @@ buildPineExpressionSyntax config expression =
                         Nothing
 
                     Ok expressionValue ->
-                        case Pine.decodeExpressionFromValue expressionValue of
+                        case Pine.parseExpressionFromValue expressionValue of
                             Err _ ->
                                 Nothing
 
@@ -232,16 +232,16 @@ buildPineExpressionSyntax config expression =
                         "Pine.ListExpression"
                         [ String.join "\n" listSyntax ]
 
-                Pine.DecodeAndEvaluateExpression decodeAndEvaluate ->
+                Pine.ParseAndEvalExpression parseAndEval ->
                     buildFromTagNameAndArguments
-                        "Pine.DecodeAndEvaluateExpression"
+                        "Pine.ParseAndEvalExpression"
                         [ buildRecordSyntax
                             [ ( "environment"
-                              , buildPineExpressionSyntax config decodeAndEvaluate.environment
+                              , buildPineExpressionSyntax config parseAndEval.environment
                                     |> String.join "\n"
                               )
                             , ( "expression"
-                              , buildPineExpressionSyntax config decodeAndEvaluate.expression
+                              , buildPineExpressionSyntax config parseAndEval.expression
                                     |> String.join "\n"
                               )
                             ]

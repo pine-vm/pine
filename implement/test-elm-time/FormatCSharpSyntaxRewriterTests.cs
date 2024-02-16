@@ -35,12 +35,12 @@ public class FormatCSharpSyntaxRewriterTests
     {
         var inputSyntaxText =
             """
-            new Expression.DecodeAndEvaluateExpression(arg_a, arg_b);
+            new Expression.ParseAndEvalExpression(arg_a, arg_b);
             """.Trim();
 
         var expectedFormattedText =
             """
-            new Expression.DecodeAndEvaluateExpression(
+            new Expression.ParseAndEvalExpression(
                 arg_a,
                 arg_b);
             """.Trim();

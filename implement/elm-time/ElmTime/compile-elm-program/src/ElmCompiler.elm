@@ -2014,7 +2014,7 @@ compileElmSyntaxPattern elmPattern =
                         |> List.map
                             (\fieldName ->
                                 ( fieldName
-                                , [ Pine.DecodeAndEvaluateExpression
+                                , [ Pine.ParseAndEvalExpression
                                         { expression = Pine.LiteralExpression pineFunctionForRecordAccessAsValue
                                         , environment =
                                             Pine.ListExpression
@@ -2206,7 +2206,7 @@ pineFunctionForRecordUpdate =
             Pine.ListExpression
                 [ Pine.LiteralExpression elmRecordTypeTagNameAsValue
                 , Pine.ListExpression
-                    [ Pine.DecodeAndEvaluateExpression
+                    [ Pine.ParseAndEvalExpression
                         { expression = Pine.LiteralExpression recursiveFunction
                         , environment =
                             Pine.ListExpression
@@ -2279,7 +2279,7 @@ recursiveFunctionToUpdateFieldsInRecord =
                         , firstFieldNameLocalExpression
                         ]
                 , ifTrue =
-                    Pine.DecodeAndEvaluateExpression
+                    Pine.ParseAndEvalExpression
                         { expression = functionReferenceLocalExpression
                         , environment =
                             Pine.ListExpression
@@ -2298,7 +2298,7 @@ recursiveFunctionToUpdateFieldsInRecord =
                                 ]
                         }
                 , ifFalse =
-                    Pine.DecodeAndEvaluateExpression
+                    Pine.ParseAndEvalExpression
                         { expression = functionReferenceLocalExpression
                         , environment =
                             Pine.ListExpression
@@ -2344,7 +2344,7 @@ pineFunctionForRecordAccess =
                 , pineKernel_ListHead_Pine recordExpression
                 ]
         , ifTrue =
-            Pine.DecodeAndEvaluateExpression
+            Pine.ParseAndEvalExpression
                 { expression = Pine.LiteralExpression recursiveFunctionToLookupFieldInRecordAsValue
                 , environment =
                     Pine.ListExpression
@@ -2375,7 +2375,7 @@ recursiveFunctionToLookupFieldInRecord =
             listItemFromIndexExpression_Pine 2 Pine.EnvironmentExpression
 
         continueWithRemainingExpression =
-            Pine.DecodeAndEvaluateExpression
+            Pine.ParseAndEvalExpression
                 { expression = selfFunctionLocalExpression
                 , environment =
                     Pine.ListExpression
@@ -2813,7 +2813,7 @@ emitModuleFunctionDeclarations stackBefore declarations =
                                             in
                                             Pine.LiteralExpression
                                                 (Pine.encodeExpressionAsValue
-                                                    (Pine.DecodeAndEvaluateExpression
+                                                    (Pine.ParseAndEvalExpression
                                                         { expression =
                                                             FirCompiler.listItemFromIndexExpression_Pine
                                                                 declarationIndex
@@ -3308,7 +3308,7 @@ getDeclarationsFromEnvironment environment =
 
                             Pine.ListValue [ nameValue, namedValue ] ->
                                 Pine.stringFromValue nameValue
-                                    |> Result.mapError ((++) "Failed to decode string: ")
+                                    |> Result.mapError ((++) "Failed to parse string: ")
                                     |> Result.map (\name -> ( name, namedValue ))
 
                             Pine.ListValue list ->
@@ -3317,7 +3317,7 @@ getDeclarationsFromEnvironment environment =
                                         ++ String.fromInt (List.length list)
                                     )
                         )
-                            |> Result.mapError ((++) "Failed to decode environment entry: ")
+                            |> Result.mapError ((++) "Failed to parse environment entry: ")
                     )
                     environmentList
             of
@@ -3385,7 +3385,7 @@ parseTypeDeclarationFromValueTagged value =
                 [ typeTagValue, functionRecord ] ->
                     case Pine.stringFromValue typeTagValue of
                         Err err ->
-                            Err ("Failed to decode string: " ++ err)
+                            Err ("Failed to parse string: " ++ err)
 
                         Ok tagName ->
                             case tagName of
@@ -3422,12 +3422,12 @@ parseChoiceTypeFromValue value =
 
                             Pine.ListValue [ tagNameValue, argumentCountValue ] ->
                                 Pine.stringFromValue tagNameValue
-                                    |> Result.mapError ((++) "Failed to decode string: ")
+                                    |> Result.mapError ((++) "Failed to parse string: ")
                                     |> Result.andThen
                                         (\tagName ->
                                             case Pine.intFromValue argumentCountValue of
                                                 Err err ->
-                                                    Err ("Failed to decode int: " ++ err)
+                                                    Err ("Failed to parse int: " ++ err)
 
                                                 Ok argumentsCount ->
                                                     Ok

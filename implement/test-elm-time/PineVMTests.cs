@@ -26,7 +26,7 @@ public class PineVMTests
             },
             new
             {
-                expression = (Expression)PineVM.DecodeKernelApplicationExpression
+                expression = (Expression)PineVM.ParseKernelApplicationExpression
                 (
                     functionName: "concat",
                     argument: new Expression.ListExpression([])

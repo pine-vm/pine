@@ -43,7 +43,7 @@ public abstract record Expression
         }
     }
 
-    public record DecodeAndEvaluateExpression(
+    public record ParseAndEvalExpression(
         Expression expression,
         Expression environment)
         : Expression;
@@ -108,7 +108,7 @@ public abstract record Expression
             ListExpression list =>
             list.List.All(IsIndependent),
 
-            DecodeAndEvaluateExpression decodeAndEvaluate =>
+            ParseAndEvalExpression decodeAndEvaluate =>
             IsIndependent(decodeAndEvaluate.expression) && IsIndependent(decodeAndEvaluate.environment),
 
             KernelApplicationExpression kernelApplication =>
@@ -148,7 +148,7 @@ public abstract record Expression
                 }
                 break;
 
-            case DecodeAndEvaluateExpression decodeAndEvaluate:
+            case ParseAndEvalExpression decodeAndEvaluate:
                 foreach (var descendant in EnumerateSelfAndDescendants(decodeAndEvaluate.expression))
                 {
                     yield return descendant;

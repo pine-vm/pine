@@ -12,14 +12,14 @@ public record ProfilingPineVM(
     IReadOnlyCollection<Expression> ExpressionEvaluations)
 {
     public static ProfilingPineVM BuildProfilingVM(
-        PineVM.OverrideDecodeExprDelegate? overrideDecodeExpression = null,
+        PineVM.OverrideParseExprDelegate? overrideDecodeExpression = null,
         PineVM.OverrideEvalExprDelegate? overrideEvaluateExpression = null)
     {
         var expressionEvaluations = new ConcurrentQueue<Expression>();
 
         var profilingPineVM =
             new PineVM(
-                overrideDecodeExpression:
+                overrideParseExpression:
                 defaultHandler => value =>
                 {
                     return

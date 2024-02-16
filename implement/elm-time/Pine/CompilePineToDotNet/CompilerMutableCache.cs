@@ -8,7 +8,7 @@ using CompileExpressionFunctionBlockResult =
 
 public class CompilerMutableCache
 {
-    readonly ConcurrentDictionary<PineValue, Result<string, PineVM.Expression>> decodeExpressionFromValueCache = new();
+    readonly ConcurrentDictionary<PineValue, Result<string, PineVM.Expression>> parseExpressionFromValueCache = new();
 
     readonly ConcurrentDictionary<PineValue, ReadOnlyMemory<byte>> valueHashCache = new();
 
@@ -35,10 +35,10 @@ public class CompilerMutableCache
                 parameters.Expression,
                 parameters.Environment));
 
-    public Result<string, PineVM.Expression> DecodeExpressionFromValue(PineValue pineValue) =>
-        decodeExpressionFromValueCache.GetOrAdd(
+    public Result<string, PineVM.Expression> ParseExpressionFromValue(PineValue pineValue) =>
+        parseExpressionFromValueCache.GetOrAdd(
             pineValue,
-            valueFactory: PineVM.PineVM.DecodeExpressionFromValueDefault);
+            valueFactory: PineVM.PineVM.ParseExpressionFromValueDefault);
 
     public ReadOnlyMemory<byte> ComputeHash(PineValue pineValue) =>
         valueHashCache
