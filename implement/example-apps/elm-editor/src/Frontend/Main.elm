@@ -35,7 +35,7 @@ import File.Download
 import File.Select
 import FileTree
 import FileTreeInWorkspace
-import FontAwesome.Icon
+import FontAwesome
 import FontAwesome.Solid
 import FontAwesome.Styles
 import Frontend.BrowserApplicationInitWithTime as BrowserApplicationInitWithTime
@@ -1914,7 +1914,18 @@ view state =
                                                     , Element.alignLeft
                                                     , Element.htmlAttribute (HA.style "user-select" "none")
                                                     ]
-                                            , [ buttonElement { label = "📄 Format", onPress = Just UserInputFormat }
+                                            , [ buttonElement
+                                                    { label =
+                                                        Element.row
+                                                            [ Element.spacing defaultFontSize ]
+                                                            [ FontAwesome.Solid.indent
+                                                                |> FontAwesome.view
+                                                                |> Element.html
+                                                                |> Element.el []
+                                                            , Element.text "Format"
+                                                            ]
+                                                    , onPress = Just UserInputFormat
+                                                    }
                                               , buttonCompile
                                               ]
                                                 |> Element.row
@@ -1937,7 +1948,7 @@ view state =
                                                     let
                                                         buttonCancelFormat =
                                                             buttonElement
-                                                                { label = "Cancel formatting"
+                                                                { label = Element.text "Cancel formatting"
                                                                 , onPress = Just UserInputCancelFormatting
                                                                 }
 
@@ -2330,7 +2341,7 @@ toggleEnlargedPaneButton state pane =
 
 type alias PopupWindowAttributes event =
     { title : String
-    , titleIcon : Maybe FontAwesome.Icon.Icon
+    , titleIcon : Maybe (FontAwesome.Icon FontAwesome.WithoutId)
     , guideParagraphItems : List (Element.Element event)
     , contentElement : Element.Element event
     }
@@ -2479,7 +2490,7 @@ viewLoadFromGitDialog dialogState =
 
         sendRequestButton =
             buttonElement
-                { label = "Begin Loading"
+                { label = Element.text "Begin Loading"
                 , onPress = Just userInputBeginLoadingEvent
                 }
 
@@ -2557,7 +2568,7 @@ viewExportToZipArchiveDialog projectState =
     let
         buttonDownloadArchive =
             buttonElement
-                { label = "Download Archive"
+                { label = Element.text "Download Archive"
                 , onPress = Just (UserInputExportProjectToZipArchive { sendDownloadCmd = True })
                 }
     in
@@ -2581,7 +2592,7 @@ viewImportFromZipArchiveDialog dialogState =
     let
         selectFileButton =
             buttonElement
-                { label = "Select zip archive file"
+                { label = Element.text "Select zip archive file"
                 , onPress = Just (UserInputImportProjectFromZipArchive ImportFromZipArchiveSelectFile)
                 }
                 |> Element.el [ Element.centerX ]
@@ -2692,7 +2703,7 @@ viewLoadOrImportDialogResultElement elementToDisplayFromError commitEvent loadCo
                     , Element.Border.color (Element.rgba 1 1 1 0.5)
                     ]
             , buttonElement
-                { label = "Set these files as project state"
+                { label = Element.text "Set these files as project state"
                 , onPress = Just (commitEvent loadOk)
                 }
                 |> Element.el [ Element.centerX ]
@@ -2766,7 +2777,7 @@ activityBar =
 popupWindowElementAttributesFromAttributes : PopupWindowAttributes Event -> List (Element.Attribute Event)
 popupWindowElementAttributesFromAttributes { title, titleIcon, guideParagraphItems, contentElement } =
     [ [ [ titleIcon
-            |> Maybe.map (FontAwesome.Icon.present >> FontAwesome.Icon.view >> Element.html >> Element.el [])
+            |> Maybe.map (FontAwesome.view >> Element.html >> Element.el [])
             |> Maybe.withDefault Element.none
         , title |> Element.text
         ]
@@ -2981,12 +2992,16 @@ viewOutputPaneContentFromCompilationComplete workspace compilation loweringCompl
                         Ok elmMakeOk ->
                             elmMakeOk.compiledHtmlDocument /= Nothing
 
-        ( toggleInspectionLabel, toggleInspectionEvent ) =
+        ( ( toggleInspectionLabelIcon, toggleInspectionLabelText ), toggleInspectionEvent ) =
             if elmMakeRequest.makeOptionDebug then
-                ( "Disable Inspection", UserInputSetInspectionOnCompile False )
+                ( ( Nothing, "Disable Inspection" )
+                , UserInputSetInspectionOnCompile False
+                )
 
             else
-                ( "🔍 Enable Inspection", UserInputSetInspectionOnCompile True )
+                ( ( Just FontAwesome.Solid.magnifyingGlass, "Enable Inspection" )
+                , UserInputSetInspectionOnCompile True
+                )
 
         warnAboutOutdatedOrOfferModifyCompilationElement =
             case warnAboutOutdatedCompilationText of
@@ -3003,7 +3018,21 @@ viewOutputPaneContentFromCompilationComplete workspace compilation loweringCompl
 
                 Nothing ->
                     if offerToggleInspection then
-                        buttonElement { label = toggleInspectionLabel, onPress = Just toggleInspectionEvent }
+                        buttonElement
+                            { label =
+                                Element.row
+                                    [ Element.spacing defaultFontSize ]
+                                    [ toggleInspectionLabelIcon
+                                        |> Maybe.map
+                                            (FontAwesome.view
+                                                >> Element.html
+                                                >> Element.el []
+                                            )
+                                        |> Maybe.withDefault Element.none
+                                    , Element.text toggleInspectionLabelText
+                                    ]
+                            , onPress = Just toggleInspectionEvent
+                            }
 
                     else
                         Element.none
@@ -3498,17 +3527,28 @@ styledTextFromElmMakeReportMessageListItem elmMakeReportMessageListItem =
 
 buttonCompile : Element.Element WorkspaceEventStructure
 buttonCompile =
-    buttonElement { label = "▶️ Compile", onPress = Just UserInputCompile }
+    buttonElement
+        { label =
+            Element.row
+                [ Element.spacing defaultFontSize ]
+                [ FontAwesome.Solid.playCircle
+                    |> FontAwesome.view
+                    |> Element.html
+                    |> Element.el []
+                , Element.text "Compile"
+                ]
+        , onPress = Just UserInputCompile
+        }
 
 
-buttonElement : { label : String, onPress : Maybe event } -> Element.Element event
+buttonElement : { label : Element.Element event, onPress : Maybe event } -> Element.Element event
 buttonElement buttonConfig =
     Element.Input.button
         [ Element.Background.color buttonBackgroundColor.default
         , Element.mouseOver [ Element.Background.color buttonBackgroundColor.mouseOver ]
         , Element.paddingXY defaultFontSize (defaultFontSize // 2)
         ]
-        { label = Element.text buttonConfig.label
+        { label = buttonConfig.label
         , onPress = buttonConfig.onPress
         }
 
@@ -3608,7 +3648,7 @@ titlebarMenuEntryDropdownContent state menuEntry =
             ]
 
 
-titlebarMenuEntry : Event -> Maybe FontAwesome.Icon.Icon -> String -> Bool -> Element.Element Event
+titlebarMenuEntry : Event -> Maybe (FontAwesome.Icon FontAwesome.WithoutId) -> String -> Bool -> Element.Element Event
 titlebarMenuEntry onPressEventIfEnabled maybeIcon label isEnabled =
     let
         mouseOverAttributes =
@@ -3625,8 +3665,7 @@ titlebarMenuEntry onPressEventIfEnabled maybeIcon label isEnabled =
         { label =
             [ maybeIcon
                 |> Maybe.map
-                    (FontAwesome.Icon.present
-                        >> FontAwesome.Icon.view
+                    (FontAwesome.view
                         >> Element.html
                         >> Element.el [ Element.centerX ]
                     )

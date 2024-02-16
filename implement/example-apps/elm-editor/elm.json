@@ -32,9 +32,9 @@
             "folkertdev/elm-sha2": "1.0.0",
             "jinjor/elm-diff": "1.0.6",
             "jzxhuang/http-extras": "2.1.0",
-            "lattyware/elm-fontawesome": "5.0.0",
+            "lattyware/elm-fontawesome": "7.0.0",
             "mdgriffith/elm-ui": "1.1.8",
-            "stil4m/elm-syntax": "7.2.9",
+            "stil4m/elm-syntax": "7.3.2",
             "z5h/jaro-winkler": "1.0.2"
         },
         "indirect": {
@@ -42,7 +42,7 @@
             "elm/virtual-dom": "1.0.3",
             "justinmimbs/date": "4.0.1",
             "justinmimbs/time-extra": "1.1.1",
-            "miniBill/elm-unicode": "1.0.3",
+            "miniBill/elm-unicode": "1.1.0",
             "rtfeldman/elm-hex": "1.0.0",
             "rtfeldman/elm-iso8601-date-strings": "1.1.4",
             "stil4m/structured-writer": "1.0.3"
@@ -50,7 +50,7 @@
     },
     "test-dependencies": {
         "direct": {
-            "elm-explorations/test": "2.1.1"
+            "elm-explorations/test": "2.2.0"
         },
         "indirect": {
             "elm/random": "1.0.0"
