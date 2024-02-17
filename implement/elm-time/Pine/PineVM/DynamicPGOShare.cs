@@ -261,9 +261,7 @@ public class DynamicPGOShare : IDisposable
             ProfilingPineVM.AggregateExpressionUsageProfiles(inputProfiles);
 
         var expressionsToCompile =
-            aggregateExpressionsProfiles
-            .Where(expressionProfile => 4 < expressionProfile.Value.UsageCount)
-            .OrderByDescending(expressionAndProfile => expressionAndProfile.Value.UsageCount)
+            FilterAndRankExpressionProfilesForCompilation(aggregateExpressionsProfiles)
             .Take(limitNumber)
             .Select(expressionAndProfile => expressionAndProfile.Key)
             .ToImmutableHashSet();
@@ -306,6 +304,26 @@ public class DynamicPGOShare : IDisposable
                 SelectExpressionsDuration: selectExpressionsDuration,
                 CompileDuration: compileStopwatch.Elapsed);
     }
+
+    public static IEnumerable<KeyValuePair<Expression, ExpressionUsageProfile>> FilterAndRankExpressionProfilesForCompilation(
+        IReadOnlyDictionary<Expression, ExpressionUsageProfile> aggregateExpressionsProfiles) =>
+        aggregateExpressionsProfiles
+        .Where(expressionProfile => 4 < expressionProfile.Value.UsageCount && ShouldIncludeExpressionInCompilation(expressionProfile.Key))
+        .OrderByDescending(expressionAndProfile => expressionAndProfile.Value.UsageCount);
+
+    public static bool ShouldIncludeExpressionInCompilation(Expression expression) =>
+        expression switch
+        {
+            Expression.LiteralExpression =>
+            false,
+
+            Expression.DelegatingExpression =>
+            false,
+
+            _ =>
+            true
+        };
+
 
     public void Dispose()
     {

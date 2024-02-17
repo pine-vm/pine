@@ -27,7 +27,7 @@ public record ProfilingPineVM(
                     .Invoke(value)
                     .Map(decodedExpr =>
                     {
-                        if (decodedExpr is not Expression.DelegatingExpression)
+                        if (DynamicPGOShare.ShouldIncludeExpressionInCompilation(decodedExpr))
                         {
                             expressionEvaluations.Enqueue(decodedExpr);
                         }

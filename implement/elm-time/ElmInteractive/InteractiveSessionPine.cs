@@ -268,9 +268,7 @@ public class InteractiveSessionPine : IInteractiveSession
             aggregateExpressionsProfiles.Sum(ep => ep.Value.UsageCount);
 
         var expressionsToCompile =
-            aggregateExpressionsProfiles
-            .Where(expressionProfile => 4 < expressionProfile.Value.UsageCount)
-            .OrderByDescending(expressionAndProfile => expressionAndProfile.Value.UsageCount)
+            DynamicPGOShare.FilterAndRankExpressionProfilesForCompilation(aggregateExpressionsProfiles)
             .Take(limitNumber)
             .Select(expressionAndProfile => expressionAndProfile.Key)
             .ToImmutableList();
