@@ -22,7 +22,7 @@ public partial class CompileToCSharp
             Result<string, ExpressionSyntax>.ok(
                 NewConstructorOfExpressionVariant(
                     nameof(Expression.LiteralExpression),
-                    CompileToCSharpLiteralExpression(literal.Value, overrideDefaultExpressionForValue))),
+                    CompileToCSharpLiteralExpression(literal.Value, overrideDefaultExpressionForValue).exprSyntax)),
 
             Expression.EnvironmentExpression =>
             Result<string, ExpressionSyntax>.ok(
