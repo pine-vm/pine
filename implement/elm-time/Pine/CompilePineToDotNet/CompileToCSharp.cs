@@ -849,6 +849,11 @@ public partial class CompileToCSharp
         var parseAndEvalExprHash =
             CommonConversion.StringBase16(compilerCache.ComputeHash(parseAndEvalExprValue));
 
+        /*
+         * 
+         * 2024-02-17: Switch to older implementation of generic case from 2023,
+         * to fix bug that caused generation of invalid C# code.
+         * 
         CompiledExpression continueWithGenericCase()
         {
             var parseAndEvalExprExpressionId =
@@ -916,6 +921,35 @@ public partial class CompileToCSharp
                                             .SetItem(parseAndEvalExpr.environment, parseAndEvalExprEnvironmentId)
                                     }));
                         }));
+        }
+        */
+
+        CompiledExpression continueWithGenericCase()
+        {
+            var invocationExpression =
+                SyntaxFactory.InvocationExpression(
+                    SyntaxFactory.IdentifierName(environment.FunctionEnvironment.ArgumentEvalGenericName))
+                .WithArgumentList(
+                    SyntaxFactory.ArgumentList(
+                        SyntaxFactory.SeparatedList<ArgumentSyntax>(
+                            new SyntaxNodeOrToken[]
+                            {
+                                SyntaxFactory.Argument(
+                                    SyntaxFactory.IdentifierName(
+                                        MemberNameForExpression(parseAndEvalExprHash))),
+                                SyntaxFactory.Token(SyntaxKind.CommaToken),
+                                SyntaxFactory.Argument(
+                                    SyntaxFactory.IdentifierName(environment.FunctionEnvironment.ArgumentEnvironmentName))
+                            })));
+
+            return
+                CompiledExpression.WithTypeResult(invocationExpression)
+                .MergeDependencies(
+                    CompiledExpressionDependencies.Empty
+                    with
+                    {
+                        Expressions = ImmutableHashSet.Create((parseAndEvalExprHash, (Expression)parseAndEvalExpr)),
+                    });
         }
 
         if (Expression.IsIndependent(parseAndEvalExpr.expression))
