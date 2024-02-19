@@ -257,9 +257,10 @@ public partial class CompileToCSharp
 
                 var expressionStaticMembers =
                     aggregateDependencies.Expressions
-                        .Select(memberDeclarationForExpression)
-                        .DistinctBy(member => member.memberName)
-                        .ToImmutableList();
+                    .Select(memberDeclarationForExpression)
+                    .DistinctBy(member => member.memberName)
+                    .OrderBy(member => member.memberName)
+                    .ToImmutableList();
 
                 var dictionaryKeyTypeSyntax =
                 CompileTypeSyntax.TypeSyntaxFromType(
