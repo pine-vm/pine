@@ -60,10 +60,10 @@ public class FormatCSharpSyntaxRewriter(
     {
         var node = (ObjectCreationExpressionSyntax)base.VisitObjectCreationExpression(nodeBeforeRewriteInner)!;
 
-        if (nodeBeforeRewriteInner.ArgumentList is not { } argumentListBefore || argumentListBefore.Arguments.Count < 1)
+        if (node.ArgumentList is not { } argumentListBefore || argumentListBefore.Arguments.Count < 1)
             return node;
 
-        var indentationTrivia = ComputeIndentationTriviaForNode(argumentListBefore);
+        var indentationTrivia = ComputeIndentationTriviaForNode(nodeBeforeRewriteInner.ArgumentList);
 
         var newArguments =
             SyntaxFactory.SeparatedList(

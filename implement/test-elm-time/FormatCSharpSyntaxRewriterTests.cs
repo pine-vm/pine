@@ -1,4 +1,4 @@
-﻿using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Pine.CompilePineToDotNet;
@@ -31,7 +31,7 @@ public class FormatCSharpSyntaxRewriterTests
     }
 
     [TestMethod]
-    public void Formats_argument_list_in_constructor_invocation()
+    public void Formats_argument_list_in_obj_creation_expression()
     {
         var inputSyntaxText =
             """
@@ -42,6 +42,65 @@ public class FormatCSharpSyntaxRewriterTests
             """
             new Expression.ParseAndEvalExpression(
                 arg_a,
+                arg_b);
+            """.Trim();
+
+        var formattedSyntaxText = FormatCSharpScript(inputSyntaxText);
+
+        StringAssert.Contains(formattedSyntaxText, expectedFormattedText);
+    }
+
+    [TestMethod]
+    public void Does_not_line_break_empty_argument_list_in_obj_creation_expression()
+    {
+        var inputSyntaxText =
+            """
+            new Expression.EnvironmentExpression();
+            """.Trim();
+
+        var formattedSyntaxText = FormatCSharpScript(inputSyntaxText);
+
+        StringAssert.Contains(formattedSyntaxText, inputSyntaxText);
+    }
+
+    [TestMethod]
+    public void Formats_nested_argument_list_in_obj_creation_expression()
+    {
+        var inputSyntaxText =
+            """
+            new Expression.ParseAndEvalExpression(new Expression.ParseAndEvalExpression(arg_a_a, arg_a_b), arg_b);
+            """.Trim();
+
+        var expectedFormattedText =
+            """
+            new Expression.ParseAndEvalExpression(
+                new Expression.ParseAndEvalExpression(
+                    arg_a_a,
+                    arg_a_b),
+                arg_b);
+            """.Trim();
+
+        var formattedSyntaxText = FormatCSharpScript(inputSyntaxText);
+
+        StringAssert.Contains(formattedSyntaxText, expectedFormattedText);
+    }
+
+    [TestMethod]
+    public void Formats_nested_argument_list_in_obj_creation_expression_containing_invocation()
+    {
+        var inputSyntaxText =
+            """
+            new Expression.ParseAndEvalExpression(new Expression.ParseAndEvalExpression(PineVM.ParseKernelApplicationExpressionThrowOnUnknownName("list_head",arg_a_a), arg_a_b), arg_b);
+            """.Trim();
+
+        var expectedFormattedText =
+            """
+            new Expression.ParseAndEvalExpression(
+                new Expression.ParseAndEvalExpression(
+                    PineVM.ParseKernelApplicationExpressionThrowOnUnknownName(
+                        "list_head",
+                        arg_a_a),
+                    arg_a_b),
                 arg_b);
             """.Trim();
 
