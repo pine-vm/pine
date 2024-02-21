@@ -36,24 +36,10 @@ public partial class CompileToCSharp
             .Map(elementsSyntaxes =>
             NewConstructorOfExpressionVariant(
                 nameof(Expression.ListExpression),
-                SyntaxFactory.InvocationExpression(
-                        SyntaxFactory.MemberAccessExpression(
-                            SyntaxKind.SimpleMemberAccessExpression,
-                            SyntaxFactory.IdentifierName("ImmutableArray"),
-                            SyntaxFactory.GenericName(
-                                    SyntaxFactory.Identifier("Create"))
-                                .WithTypeArgumentList(
-                                    SyntaxFactory.TypeArgumentList(
-                                        SyntaxFactory.SingletonSeparatedList<TypeSyntax>(
-                                            SyntaxFactory.QualifiedName(
-                                                SyntaxFactory.QualifiedName(
-                                                    SyntaxFactory.IdentifierName("Pine"),
-                                                    SyntaxFactory.IdentifierName("PineVM")),
-                                                SyntaxFactory.IdentifierName("Expression")))))))
-                .WithArgumentList(
-                    SyntaxFactory.ArgumentList(
-                        SyntaxFactory.SeparatedList(
-                            elementsSyntaxes.Select(SyntaxFactory.Argument)))))),
+                SyntaxFactory.CollectionExpression(
+                    SyntaxFactory.SeparatedList<CollectionElementSyntax>(
+                        elementsSyntaxes
+                        .Select(SyntaxFactory.ExpressionElement))))),
 
             Expression.ConditionalExpression conditionalExpression =>
                 continueEncode(conditionalExpression.condition)
