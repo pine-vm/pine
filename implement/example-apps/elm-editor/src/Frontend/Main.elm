@@ -1945,6 +1945,7 @@ view state =
                                                 , Element.padding 4
                                                 , Element.scale 0.8
                                                 , Element.centerY
+                                                , Element.htmlAttribute (HA.title "Close editor")
                                                 ]
                                                 { label = headerIconElementFromTypeAndColor (Just ( Visuals.CloseEditorIcon, "white" ))
                                                 , onPress = Just UserInputCloseEditor
@@ -1962,7 +1963,9 @@ view state =
                                             , [ buttonElement
                                                     { label =
                                                         Element.row
-                                                            [ Element.spacing defaultFontSize ]
+                                                            [ Element.spacing defaultFontSize
+                                                            , Element.htmlAttribute (HA.title "Format")
+                                                            ]
                                                             [ FontAwesome.Solid.indent
                                                                 |> FontAwesome.view
                                                                 |> Element.html
@@ -2776,24 +2779,32 @@ activityBar =
             8
 
         bottomActionItems =
-            [ { icon = Visuals.ChatActionIcon, linkUrl = Just "https://github.com/elm-time/elm-time/discussions" }
-            , { icon = Visuals.GitHubActionIcon, linkUrl = Just "https://github.com/elm-time/elm-time/tree/main/implement/example-apps/elm-editor" }
+            [ { icon = Visuals.ChatActionIcon
+              , linkUrl = Just "https://github.com/elm-time/elm-time/discussions"
+              , title = "Elm Editor Discussions"
+              }
+            , { icon = Visuals.GitHubActionIcon
+              , linkUrl = Just "https://github.com/elm-time/elm-time/tree/main/implement/example-apps/elm-editor"
+              , title = "Elm Editor source code on GitHub"
+              }
             ]
 
-        actionItemWrapper { icon, linkUrl } =
+        actionItemWrapper itemConfig =
             let
                 linkWrapper =
-                    case linkUrl of
+                    case itemConfig.linkUrl of
                         Nothing ->
                             identity
 
                         Just justLinkUrl ->
                             \linkLabel ->
                                 Element.link
-                                    [ Element.width Element.fill ]
+                                    [ Element.width Element.fill
+                                    , Element.htmlAttribute (HA.title itemConfig.title)
+                                    ]
                                     { url = justLinkUrl, label = linkLabel }
             in
-            Visuals.iconSvgElementFromIcon { color = "white" } icon
+            Visuals.iconSvgElementFromIcon { color = "white" } itemConfig.icon
                 |> Element.el
                     [ Element.padding actionItemIconPadding
                     , Element.centerX
@@ -3609,7 +3620,9 @@ buttonCompile =
     buttonElement
         { label =
             Element.row
-                [ Element.spacing defaultFontSize ]
+                [ Element.spacing defaultFontSize
+                , Element.htmlAttribute (HA.title "Compile")
+                ]
                 [ FontAwesome.Solid.playCircle
                     |> FontAwesome.view
                     |> Element.html
