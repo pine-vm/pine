@@ -3,6 +3,7 @@ module CompilationInterface.GenerateJsonConverters exposing (..)
 {-| For documentation of the compilation interface, see <https://github.com/elm-time/elm-time/blob/main/guide/how-to-configure-and-deploy-an-elm-backend-app.md#compilationinterfacegeneratejsonconverters-elm-module>
 -}
 
+import Frontend.ContainerHtml
 import Frontend.MonacoEditor
 import FrontendBackendInterface
 import Json.Decode
@@ -32,6 +33,11 @@ jsonEncodeMessageToMonacoEditor =
 
 jsonDecodeMessageFromMonacoEditor : Json.Decode.Decoder Frontend.MonacoEditor.MessageFromEditor
 jsonDecodeMessageFromMonacoEditor =
+    Json.Decode.fail "The compiler replaces this declaration."
+
+
+jsonDecodeMessageFromContainerHtml : Json.Decode.Decoder Frontend.ContainerHtml.Message
+jsonDecodeMessageFromContainerHtml =
     Json.Decode.fail "The compiler replaces this declaration."
 
 

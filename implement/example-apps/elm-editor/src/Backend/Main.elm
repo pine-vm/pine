@@ -488,6 +488,17 @@ function messageFromMonacoFrame(message) {
     app.ports.receiveMessageFromMonacoFrame?.send(message);
 }
 
+window.addEventListener('message', function(e) {
+
+    if (e.data.type === 'clicked-link-in-iframe') {
+
+        app.ports.receiveMessageFromContainerHtml?.send({
+            "ClickedLinkInPreview":
+                [{"href":e.data.href}]});
+    }
+}, false);
+
+
 </script>
 
 </html>

@@ -39,6 +39,7 @@ import FontAwesome
 import FontAwesome.Solid
 import FontAwesome.Styles
 import Frontend.BrowserApplicationInitWithTime as BrowserApplicationInitWithTime
+import Frontend.ContainerHtml
 import Frontend.MonacoEditor
 import Frontend.ProjectStateInUrl
 import Frontend.Visuals as Visuals
@@ -71,6 +72,9 @@ port sendMessageToMonacoFrame : Json.Encode.Value -> Cmd msg
 
 
 port receiveMessageFromMonacoFrame : (Json.Encode.Value -> msg) -> Sub msg
+
+
+port receiveMessageFromContainerHtml : (Json.Encode.Value -> msg) -> Sub msg
 
 
 type alias ElmMakeRequestStructure =
@@ -204,6 +208,7 @@ type Event
     | UserInputMouseOverTitleBarMenu (Maybe TitlebarMenuEntry)
     | UserInputKeyDownEvent Keyboard.Event.KeyboardEvent
     | UserInputFocusOutsideTitlebarMenu
+    | ReceiveMessageFromContainerHtmlEvent Json.Encode.Value
     | DiscardEvent
 
 
@@ -302,6 +307,7 @@ main =
 subscriptions : State -> Sub Event
 subscriptions _ =
     [ receiveMessageFromMonacoFrame (MonacoEditorEvent >> WorkspaceEvent)
+    , receiveMessageFromContainerHtml ReceiveMessageFromContainerHtmlEvent
     , Time.every 500 TimeHasArrived
     , Browser.Events.onKeyDown (Keyboard.Event.decodeKeyboardEvent |> Json.Decode.map UserInputKeyDownEvent)
     , Browser.Events.onMouseDown
@@ -646,8 +652,47 @@ update event stateBefore =
         UserInputFocusOutsideTitlebarMenu ->
             ( userInputFocusOutsideTitlebarMenu stateBefore, Cmd.none )
 
+        ReceiveMessageFromContainerHtmlEvent messageJson ->
+            case
+                Json.Decode.decodeValue
+                    CompilationInterface.GenerateJsonConverters.jsonDecodeMessageFromContainerHtml
+                    messageJson
+            of
+                Err _ ->
+                    ( stateBefore, Cmd.none )
+
+                Ok message ->
+                    case message of
+                        Frontend.ContainerHtml.ClickedLinkInPreview clickedLink ->
+                            updateUserClickedLinkInPreview clickedLink stateBefore
+
         DiscardEvent ->
             ( stateBefore, Cmd.none )
+
+
+updateUserClickedLinkInPreview : { href : String } -> State -> ( State, Cmd Event )
+updateUserClickedLinkInPreview { href } stateBefore =
+    case Url.fromString href of
+        Nothing ->
+            ( stateBefore, Cmd.none )
+
+        Just url ->
+            if
+                (url.host /= stateBefore.url.host)
+                    && (String.toLower url.host /= "elm-editor.com")
+            then
+                ( stateBefore, Cmd.none )
+
+            else
+                case Frontend.ProjectStateInUrl.projectStateDescriptionFromUrl url of
+                    Nothing ->
+                        ( stateBefore, Cmd.none )
+
+                    Just (Err _) ->
+                        ( stateBefore, Cmd.none )
+
+                    Just (Ok _) ->
+                        processEventUrlChanged url stateBefore
 
 
 userInputFocusOutsideTitlebarMenu : State -> State
@@ -3129,14 +3174,19 @@ viewOutputPaneContentFromCompilationComplete workspace compilation loweringCompl
                         Nothing ->
                             continueWithProcessOutput ()
 
-                        Just compiledHtmlDocument ->
+                        Just htmlDocumentFromElmMake ->
+                            let
+                                htmlDocumentForEmbedding =
+                                    compileHtmlDocumentForEmbedding
+                                        { htmlFromElmMake = htmlDocumentFromElmMake }
+                            in
                             case loweringComplete.loweringResult of
                                 Err _ ->
                                     continueWithProcessOutput ()
 
                                 Ok _ ->
                                     Html.iframe
-                                        [ HA.srcdoc compiledHtmlDocument
+                                        [ HA.srcdoc htmlDocumentForEmbedding
                                         , HA.style "height" "98%"
                                         ]
                                         []
@@ -3207,6 +3257,35 @@ viewOutputPaneContentFromCompilationComplete workspace compilation loweringCompl
     { mainContent = compileResultElement
     , header = warnAboutOutdatedOrOfferModifyCompilationElement
     }
+
+
+compileHtmlDocumentForEmbedding : { htmlFromElmMake : String } -> String
+compileHtmlDocumentForEmbedding { htmlFromElmMake } =
+    let
+        script =
+            """
+            <script>
+            document.addEventListener('DOMContentLoaded', function() {
+                document.body.addEventListener('click', function(e) {
+                    if (e.target.tagName === 'A') {
+                        e.preventDefault();
+                        window.parent.postMessage({
+                            type: 'clicked-link-in-iframe',
+                            href: e.target.getAttribute('href')
+                        }, '*'); // Be mindful of the security implications of '*'
+                    }
+                }, false);
+            });
+            </script>
+            """
+
+        closingBodyTag =
+            "</body>"
+
+        newBodyTag =
+            String.join "\n" [ script, closingBodyTag ]
+    in
+    String.replace closingBodyTag newBodyTag htmlFromElmMake
 
 
 viewLoweringCompileError : CompileElmApp.LocatedCompilationError -> Element.Element WorkspaceEventStructure
