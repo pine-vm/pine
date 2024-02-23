@@ -2592,7 +2592,7 @@ viewLoadFromGitDialog dialogState =
                 |> Maybe.withDefault Element.none
 
         exampleUrl =
-            "https://github.com/onlinegamemaker/making-online-games/tree/04f68edb04d9bc366f17f6123b189a6f577abb67/games-program-codes/simple-snake"
+            "https://github.com/onlinegamemaker/making-online-games/tree/35a1b706a6359c1a16157883356d6df75155f6ac/games-program-codes/simple-snake"
     in
     { title = "Load Project from Git Repository"
     , titleIcon = Just FontAwesome.Solid.cloudDownloadAlt
@@ -3843,7 +3843,7 @@ monacoEditorElement _ =
 
 defaultProjectLink : String
 defaultProjectLink =
-    "https://github.com/onlinegamemaker/making-online-games/tree/04f68edb04d9bc366f17f6123b189a6f577abb67/games-program-codes/simple-snake"
+    "https://github.com/onlinegamemaker/making-online-games/tree/35a1b706a6359c1a16157883356d6df75155f6ac/implement/landing-app"
 
 
 initWorkspaceFromFileTreeAndFileSelection :

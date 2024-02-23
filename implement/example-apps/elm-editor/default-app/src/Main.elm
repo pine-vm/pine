@@ -1,18 +1,15 @@
 module Main exposing (..)
 
--- This app implements an interactive counter. It contains two buttons to increment and decrement the number shown between the buttons.
---
--- For a list of other example projects, see https://github.com/onlinegamemaker/making-online-games
+{-
+   This app shows two buttons to increment and decrement an integer in the app state.
+
+   For more examples, including complete games, see <https://github.com/onlinegamemaker/making-online-games>
+-}
 
 import Browser
 import Html
 import Html.Attributes
 import Html.Events
-
-
-main : Program () State Event
-main =
-    Browser.sandbox { init = init, update = update, view = view }
 
 
 type alias State =
@@ -22,6 +19,11 @@ type alias State =
 type Event
     = Increment
     | Decrement
+
+
+main : Program () State Event
+main =
+    Browser.sandbox { init = init, update = update, view = view }
 
 
 init : State
@@ -42,10 +44,18 @@ update event state =
 view : State -> Html.Html Event
 view state =
     Html.div
-        [ Html.Attributes.style "background" "#222"
+        [ Html.Attributes.style "background" "#111"
         , Html.Attributes.style "color" "whitesmoke"
         ]
-        [ Html.button [ Html.Events.onClick Decrement ] [ Html.text "-" ]
-        , Html.div [] [ Html.text (String.fromInt state) ]
-        , Html.button [ Html.Events.onClick Increment ] [ Html.text "+" ]
+        [ Html.button
+            [ Html.Events.onClick Decrement ]
+            [ Html.text "-" ]
+        , Html.div
+            [ Html.Attributes.style "display" "inline-block"
+            , Html.Attributes.style "padding" "0 1em"
+            ]
+            [ Html.text (String.fromInt state) ]
+        , Html.button
+            [ Html.Events.onClick Increment ]
+            [ Html.text "+" ]
         ]
