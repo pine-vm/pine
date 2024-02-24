@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
@@ -87,9 +87,20 @@ public static class KernelFunction
     public static PineValue skip(BigInteger count, PineValue value) =>
         value switch
         {
-            PineValue.BlobValue blobValue => PineValue.Blob(blobValue.Bytes[(int)count..]),
-            PineValue.ListValue listValue => PineValue.List([.. listValue.Elements.Skip((int)count)]),
-            _ => throw new NotImplementedException()
+            PineValue.BlobValue blobValue =>
+            blobValue.Bytes.Length <= count ?
+            PineValue.EmptyBlob
+            :
+            PineValue.Blob(blobValue.Bytes[(int)count..]),
+
+            PineValue.ListValue listValue =>
+            listValue.Elements.Count <= count ?
+            PineValue.EmptyList
+            :
+            PineValue.List([.. listValue.Elements.Skip((int)count)]),
+
+            _ =>
+            throw new NotImplementedException()
         };
 
     public static PineValue take(PineValue value) =>
@@ -102,9 +113,20 @@ public static class KernelFunction
     public static PineValue take(BigInteger count, PineValue value) =>
         value switch
         {
-            PineValue.BlobValue blobValue => PineValue.Blob(blobValue.Bytes[..(int)count]),
-            PineValue.ListValue listValue => PineValue.List([.. listValue.Elements.Take((int)count)]),
-            _ => throw new NotImplementedException()
+            PineValue.BlobValue blobValue =>
+            blobValue.Bytes.Length <= count ?
+            value
+            :
+            PineValue.Blob(blobValue.Bytes[..(int)count]),
+
+            PineValue.ListValue listValue =>
+            listValue.Elements.Count <= count ?
+            value
+            :
+            PineValue.List([.. listValue.Elements.Take((int)count)]),
+
+            _ =>
+            throw new NotImplementedException()
         };
 
     public static PineValue reverse(PineValue value) =>

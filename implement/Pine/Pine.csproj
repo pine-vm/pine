@@ -3,8 +3,8 @@
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
     <Nullable>enable</Nullable>
-    <AssemblyVersion>2023.1124.0.0</AssemblyVersion>
-    <FileVersion>2023.1124.0.0</FileVersion>
+    <AssemblyVersion>2024.0224.0.0</AssemblyVersion>
+    <FileVersion>2024.0224.0.0</FileVersion>
   </PropertyGroup>
 
 </Project>

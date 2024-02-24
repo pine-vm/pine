@@ -24,12 +24,22 @@ public abstract record PineValue : IEquatable<PineValue>
         Blob((ReadOnlyMemory<byte>)bytes);
 
     public static PineValue Blob(ReadOnlyMemory<byte> bytes) =>
+        bytes.Length == 0
+        ?
+        EmptyBlob
+        :
         new BlobValue(bytes);
 
     public static PineValue List(IReadOnlyList<PineValue> elements) =>
+        elements.Count == 0
+        ?
+        EmptyList
+        :
         new ListValue(elements);
 
-    public static readonly PineValue EmptyList = List([]);
+    public static readonly PineValue EmptyList = new ListValue([]);
+
+    public static readonly PineValue EmptyBlob = new BlobValue(ReadOnlyMemory<byte>.Empty);
 
     /// <summary>
     /// A <see cref="PineValue"/> that is a list of <see cref="PineValue"/>s.
