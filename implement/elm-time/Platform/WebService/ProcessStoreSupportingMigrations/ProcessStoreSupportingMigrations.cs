@@ -96,7 +96,7 @@ public interface IProcessStoreReader
         (
             LoadComponentDelegate: _ => null,
             LoadProvisionalReductionDelegate: _ => null,
-            EnumerateSerializedCompositionLogRecordsReverseDelegate: () => ImmutableList<byte[]>.Empty
+            EnumerateSerializedCompositionLogRecordsReverseDelegate: () => []
         );
     }
 }

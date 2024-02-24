@@ -224,7 +224,7 @@ public class PublicAppState
                         "The app did not return an HTTP response within " +
                         (int)waitForHttpResponseClock.Elapsed.TotalSeconds +
                         " seconds."))),
-                    headersToAdd: Array.Empty<InterfaceToHost.HttpHeader>());
+                    headersToAdd: []);
 
             return null;
         }

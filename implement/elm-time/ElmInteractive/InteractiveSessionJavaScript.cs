@@ -34,7 +34,7 @@ public class InteractiveSessionJavaScript(
                 evalElmPreparedJavaScriptEngine.Value,
                 appCodeTree: appCodeTree,
                 submission: submission,
-                previousLocalSubmissions: previousSubmissions.ToImmutableList());
+                previousLocalSubmissions: [.. previousSubmissions]);
 
         previousSubmissions.Add(submission);
 

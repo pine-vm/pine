@@ -39,7 +39,7 @@ public class DynamicPGOShare : IDisposable
     public int CompilationsCount => completedCompilations.Count;
 
     public IReadOnlyList<Compilation> Compilations =>
-        completedCompilations.ToImmutableList();
+        [.. completedCompilations];
 
     public DynamicPGOShare()
         :
@@ -244,7 +244,7 @@ public class DynamicPGOShare : IDisposable
             GetOrCreateCompilationForProfiles(
                 inputProfiles,
                 limitNumber: CompiledExpressionsCountLimit,
-                previousCompilations: completedCompilations.ToImmutableArray());
+                previousCompilations: [.. completedCompilations]);
 
         if (!completedCompilations.Contains(compilation))
             completedCompilations.Enqueue(compilation);

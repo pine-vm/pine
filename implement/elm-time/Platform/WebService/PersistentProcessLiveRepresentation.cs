@@ -68,7 +68,7 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
 
         var compilationResult = ElmAppCompilation.AsCompletelyLoweredElmApp(
             sourceFiles: deploymentFiles,
-            workingDirectoryRelative: ImmutableList<string>.Empty,
+            workingDirectoryRelative: [],
             ElmAppInterfaceConfig.Default)
             .Extract(error => throw new Exception(ElmAppCompilation.CompileCompilationErrorsDisplayText(error)));
 
@@ -545,7 +545,7 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
                     functionName: "init",
                     arguments: new StateShim.InterfaceToHost.ApplyFunctionArguments<Maybe<StateShim.InterfaceToHost.StateSource>>(
                         stateArgument: Maybe<StateShim.InterfaceToHost.StateSource>.nothing(),
-                        serializedArgumentsJson: ImmutableList<JsonElement>.Empty),
+                        serializedArgumentsJson: []),
                     stateDestinationBranches: stateDestinationBranches)));
 
     private record UpdateElmAppStateForEvent(

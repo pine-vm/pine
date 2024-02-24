@@ -100,7 +100,7 @@ public class TestSetup
         var compilationResult =
             ElmAppCompilation.AsCompletelyLoweredElmApp(
                 sourceFiles: originalAppFiles,
-                workingDirectoryRelative: ImmutableList<string>.Empty,
+                workingDirectoryRelative: [],
                 ElmAppInterfaceConfig.Default with { compilationRootFilePath = compilationRootFilePath })
             .Extract(error => throw new Exception(ElmAppCompilation.CompileCompilationErrorsDisplayText(error)));
 

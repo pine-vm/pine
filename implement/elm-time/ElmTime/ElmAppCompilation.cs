@@ -73,7 +73,7 @@ namespace ElmTime
                     sourceFiles,
                     workingDirectoryRelative: workingDirectoryRelative,
                     compilationRootFilePath: interfaceConfig.compilationRootFilePath,
-                    interfaceToHostRootModuleName: InterfaceToHostRootModuleName.Split('.').ToImmutableList());
+                    interfaceToHostRootModuleName: [.. InterfaceToHostRootModuleName.Split('.')]);
 
             (CompilationResult compilationResult, TimeSpan lastUseTime) BuildNextCacheEntry(
                 CompilationResult? previousEntryCompilationResult)
@@ -237,7 +237,7 @@ namespace ElmTime
                                             var elmMakeRequestFiles =
                                                 elmMakeRequest.files
                                                 .ToImmutableDictionary(
-                                                    entry => entry.path.ToImmutableList(),
+                                                    entry => [.. entry.path],
                                                     entry => (ReadOnlyMemory<byte>)Convert.FromBase64String(entry.content.AsBase64),
                                                     keyComparer: EnumerableExtension.EqualityComparer<IReadOnlyList<string>>());
 

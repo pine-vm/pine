@@ -446,7 +446,7 @@ public class StartupAdminInterface
                                     methods: apiRoute.methods.Keys.ToImmutableList())).ToImmutableList(),
                                 databaseFunctions:
                                 listDatabaseFunctions()
-                                .Extract(_ => ImmutableList<StateShim.InterfaceToHost.NamedExposedFunction>.Empty))
+                                .Extract(_ => []))
                             )
                         ),
 

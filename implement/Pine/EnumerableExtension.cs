@@ -33,9 +33,10 @@ public static class EnumerableExtension
     }
 
     public static IEnumerable<T> EmptyIfNull<T>(this IEnumerable<T>? orig) =>
-        orig ?? Array.Empty<T>();
+        orig ?? [];
 
-    public static IEqualityComparer<T> EqualityComparer<T>() where T : IEnumerable<IComparable> => new IEnumerableEqualityComparer<T>();
+    public static IEqualityComparer<T> EqualityComparer<T>() where T : IEnumerable<IComparable> =>
+        new IEnumerableEqualityComparer<T>();
 
     public static IComparer<T> Comparer<T>() where T : IEnumerable<IComparable> => new IEnumerableComparer<T>();
 

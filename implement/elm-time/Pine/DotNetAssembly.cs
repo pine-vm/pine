@@ -36,7 +36,7 @@ public class DotNetAssembly
                                 "Failed to get content for resource: " + resourceName);
 
                         return Result<string, IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>>>.ok(
-                            dict.SetItem(filePath.ToImmutableList(), fileContent.Value));
+                            dict.SetItem([.. filePath], fileContent.Value));
                     }));
     }
 

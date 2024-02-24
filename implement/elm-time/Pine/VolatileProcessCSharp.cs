@@ -205,7 +205,7 @@ public class VolatileProcessCSharp : VolatileProcess
         {
             public ImmutableArray<PortableExecutableReference> References =>
                 HashResolution
-                ?.Extract(_ => ImmutableArray<PortableExecutableReference>.Empty) ??
+                ?.Extract(_ => []) ??
                 [];
         }
 

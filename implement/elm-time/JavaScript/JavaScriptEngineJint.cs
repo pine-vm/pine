@@ -23,7 +23,7 @@ public class JavaScriptEngineJint : IJavaScriptEngine
 
     public JavaScriptEngineJint(IReadOnlyList<FunctionDelegateIntoHost>? functionDelegatesIntoHost)
     {
-        this.functionDelegatesIntoHost = functionDelegatesIntoHost ?? Array.Empty<FunctionDelegateIntoHost>();
+        this.functionDelegatesIntoHost = functionDelegatesIntoHost ?? [];
 
         foreach (var functionDelegate in this.functionDelegatesIntoHost)
         {

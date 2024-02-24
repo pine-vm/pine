@@ -165,7 +165,7 @@ public abstract record TreeNodeWithStringPath : IEquatable<TreeNodeWithStringPat
             (this switch
             {
                 TreeNode tree => tree.Elements,
-                _ => ImmutableList<(string name, TreeNodeWithStringPath component)>.Empty
+                _ => []
             })
             .Where(treeNode => treeNode.name != pathFirstElement)
             .Concat([(pathFirstElement, childNode)])
