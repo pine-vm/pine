@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
 
 namespace Pine.CompilePineToDotNet;
 
@@ -17,14 +18,21 @@ public class CompilerMutableCache
 
     public record CompileExpressionFunctionParameters(
         PineVM.Expression Expression,
-        FunctionCompilationEnvironment Environment);
+        PineVM.EnvConstraintId? ConstrainedEnvId,
+        IReadOnlyList<PineVM.EnvConstraintId> BranchesConstrainedEnvIds,
+        FunctionCompilationEnvironment CompilationEnv);
 
     public CompileExpressionFunctionBlockResult
         CompileToCSharpFunctionBlockSyntax(
-        PineVM.Expression expression,
-        FunctionCompilationEnvironment environment) =>
+        PineVM.ExpressionUsage expressionUsage,
+        IReadOnlyList<PineVM.EnvConstraintId> branchesConstrainedEnvIds,
+        FunctionCompilationEnvironment compilationEnv) =>
         CompileToCSharpFunctionBlockSyntax(
-            new CompileExpressionFunctionParameters(expression, environment));
+            new CompileExpressionFunctionParameters(
+                expressionUsage.Expression,
+                ConstrainedEnvId: expressionUsage.EnvId,
+                BranchesConstrainedEnvIds: branchesConstrainedEnvIds,
+                CompilationEnv: compilationEnv));
 
     public CompileExpressionFunctionBlockResult
         CompileToCSharpFunctionBlockSyntax(
@@ -33,7 +41,9 @@ public class CompilerMutableCache
             parameters,
             valueFactory: _ => CompileToCSharp.CompileToCSharpFunctionBlockSyntax(
                 parameters.Expression,
-                parameters.Environment));
+                constrainedEnvId: parameters.ConstrainedEnvId,
+                branchesEnvIds: parameters.BranchesConstrainedEnvIds,
+                compilationEnv: parameters.CompilationEnv));
 
     public Result<string, PineVM.Expression> ParseExpressionFromValue(PineValue pineValue) =>
         parseExpressionFromValueCache.GetOrAdd(

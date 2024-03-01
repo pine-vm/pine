@@ -20,7 +20,7 @@ public class DynamicPGOShare : IDisposable
     public int CompiledExpressionsCountLimit { init; get; }
 
     private record SubmissionProfileMutableContainer(
-        ConcurrentQueue<IReadOnlyDictionary<Expression, ExpressionUsageProfile>> Iterations);
+        ConcurrentQueue<IReadOnlyDictionary<ExpressionUsage, ExpressionUsageProfile>> Iterations);
 
     private readonly ConcurrentQueue<SubmissionProfileMutableContainer> submissionsProfileContainers = new();
 
@@ -30,7 +30,7 @@ public class DynamicPGOShare : IDisposable
 
     private readonly CancellationTokenSource disposedCancellationTokenSource = new();
 
-    IEnumerable<IReadOnlyDictionary<Expression, ExpressionUsageProfile>> SubmissionsProfiles =>
+    IEnumerable<IReadOnlyDictionary<ExpressionUsage, ExpressionUsageProfile>> SubmissionsProfiles =>
         submissionsProfileContainers
         .SelectMany(container => container.Iterations);
 
@@ -91,7 +91,7 @@ public class DynamicPGOShare : IDisposable
     {
         var profileContainer =
             new SubmissionProfileMutableContainer(
-                Iterations: new ConcurrentQueue<IReadOnlyDictionary<Expression, ExpressionUsageProfile>>());
+                Iterations: new ConcurrentQueue<IReadOnlyDictionary<ExpressionUsage, ExpressionUsageProfile>>());
 
         submissionsProfileContainers.Enqueue(profileContainer);
 
@@ -221,7 +221,7 @@ public class DynamicPGOShare : IDisposable
         }
 
         var profilingVM = ProfilingPineVM.BuildProfilingVM(
-            overrideDecodeExpression: overrideDecodeExpression,
+            overrideParseExpression: overrideDecodeExpression,
             overrideEvaluateExpression: OverrideEvalExprDelegate);
 
         var evalTask =
@@ -251,7 +251,7 @@ public class DynamicPGOShare : IDisposable
     }
 
     private static Compilation GetOrCreateCompilationForProfiles(
-        IReadOnlyList<IReadOnlyDictionary<Expression, ExpressionUsageProfile>> inputProfiles,
+        IReadOnlyList<IReadOnlyDictionary<ExpressionUsage, ExpressionUsageProfile>> inputProfiles,
         int limitNumber,
         IReadOnlyList<Compilation> previousCompilations)
     {
@@ -305,10 +305,11 @@ public class DynamicPGOShare : IDisposable
                 CompileDuration: compileStopwatch.Elapsed);
     }
 
-    public static IEnumerable<KeyValuePair<Expression, ExpressionUsageProfile>> FilterAndRankExpressionProfilesForCompilation(
-        IReadOnlyDictionary<Expression, ExpressionUsageProfile> aggregateExpressionsProfiles) =>
+    public static IEnumerable<KeyValuePair<ExpressionUsage, ExpressionUsageProfile>> FilterAndRankExpressionProfilesForCompilation(
+        IReadOnlyDictionary<ExpressionUsage, ExpressionUsageProfile> aggregateExpressionsProfiles) =>
         aggregateExpressionsProfiles
-        .Where(expressionProfile => 4 < expressionProfile.Value.UsageCount && ShouldIncludeExpressionInCompilation(expressionProfile.Key))
+        .Where(expressionProfile =>
+        4 < expressionProfile.Value.UsageCount && ShouldIncludeExpressionInCompilation(expressionProfile.Key.Expression))
         .OrderByDescending(expressionAndProfile => expressionAndProfile.Value.UsageCount);
 
     public static bool ShouldIncludeExpressionInCompilation(Expression expression) =>
@@ -338,8 +339,8 @@ public class DynamicPGOShare : IDisposable
     }
 
     public record Compilation(
-        IReadOnlyList<IReadOnlyDictionary<Expression, ExpressionUsageProfile>> InputProfiles,
-        ImmutableHashSet<Expression> CompiledExpressions,
+        IReadOnlyList<IReadOnlyDictionary<ExpressionUsage, ExpressionUsageProfile>> InputProfiles,
+        ImmutableHashSet<ExpressionUsage> CompiledExpressions,
         Result<string, CompilePineToDotNet.CompileToAssemblyResult> CompileToAssemblyResult,
         Result<string, IReadOnlyDictionary<PineValue, Func<PineVM.EvalExprDelegate, PineValue, Result<string, PineValue>>>>
         DictionaryResult,

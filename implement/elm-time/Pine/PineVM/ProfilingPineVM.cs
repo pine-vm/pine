@@ -5,45 +5,114 @@ using System.Linq;
 
 namespace Pine.PineVM;
 
-public record ExpressionUsageProfile(int UsageCount);
+
+public record ExpressionUsage(
+    Expression Expression,
+    EnvConstraintId? EnvId)
+{
+    public override int GetHashCode()
+    {
+        return Expression.GetHashCode();
+    }
+
+    public virtual bool Equals(ExpressionUsage? other)
+    {
+        if (ReferenceEquals(this, other))
+            return true;
+
+        if (other is null)
+            return false;
+
+        if (!Expression.Equals(other.Expression))
+        {
+            return false;
+        }
+
+        return EnvConstraintId.Equal(EnvId, other.EnvId);
+    }
+}
+
+public record ExpressionUsageProfile(
+    int UsageCount);
 
 public record ProfilingPineVM(
     PineVM PineVM,
-    IReadOnlyCollection<Expression> ExpressionEvaluations)
+    IReadOnlyCollection<ExpressionUsage> ExpressionEvaluations)
 {
     public static ProfilingPineVM BuildProfilingVM(
-        PineVM.OverrideParseExprDelegate? overrideDecodeExpression = null,
+        PineVM.OverrideParseExprDelegate? overrideParseExpression = null,
         PineVM.OverrideEvalExprDelegate? overrideEvaluateExpression = null)
     {
-        var expressionEvaluations = new ConcurrentQueue<Expression>();
+        var expressionEvaluations = new ConcurrentQueue<ExpressionUsage>();
+
+        ConcurrentDictionary<PineValue, Result<string, Expression>> parseExpressionFromValueCache = new();
+
+        ConcurrentDictionary<Expression, CodeAnalysis.ExprAnalysis> exprAnalysisMutatedCache = new();
+
+        Result<string, Expression> ParseExpressionFromValue(PineValue value) =>
+            parseExpressionFromValueCache.GetOrAdd(
+                value,
+                valueFactory: PineVM.ParseExpressionFromValueDefault);
 
         var profilingPineVM =
             new PineVM(
-                overrideParseExpression:
-                defaultHandler => value =>
+                overrideParseExpression: overrideParseExpression,
+                overrideEvaluateExpression:
+                defaultHandler => new PineVM.EvalExprDelegate((expression, environment) =>
                 {
-                    return
-                    (overrideDecodeExpression?.Invoke(defaultHandler) ?? defaultHandler)
-                    .Invoke(value)
-                    .Map(decodedExpr =>
-                    {
-                        if (DynamicPGOShare.ShouldIncludeExpressionInCompilation(decodedExpr))
-                        {
-                            expressionEvaluations.Enqueue(decodedExpr);
-                        }
+                    var evalResult =
+                        (overrideEvaluateExpression?.Invoke(defaultHandler) ?? defaultHandler)
+                        .Invoke(expression, environment);
 
-                        return decodedExpr;
-                    });
-                },
-                overrideEvaluateExpression: overrideEvaluateExpression);
+                    // if (DynamicPGOShare.ShouldIncludeExpressionInCompilation(expression))
+                    if (expression is Expression.ParseAndEvalExpression parseAndEval)
+                    {
+                        defaultHandler(parseAndEval.expression, environment)
+                        .AndThen(innerExprValue => ParseExpressionFromValue(innerExprValue))
+                        .AndThen(parsedInnerExpr => defaultHandler(parseAndEval.environment, environment)
+                        .Map(innerEnvValue =>
+                        {
+                            expressionEvaluations.Enqueue(
+                                ComputeExpressionUsageRecord(
+                                    parsedInnerExpr,
+                                    innerEnvValue,
+                                    exprAnalysisMutatedCache));
+
+                            return 0;
+                        }));
+                    }
+
+                    return evalResult;
+                }));
 
         return new ProfilingPineVM(profilingPineVM, expressionEvaluations);
     }
 
-    public static IReadOnlyDictionary<Expression, ExpressionUsageProfile> UsageProfileDictionaryFromListOfUsages(
-        IReadOnlyCollection<Expression> usages)
+    public static ExpressionUsage ComputeExpressionUsageRecord(
+        Expression expression,
+        PineValue environment,
+        ConcurrentDictionary<Expression, CodeAnalysis.ExprAnalysis> exprAnalysisMutatedCache)
     {
-        var counts = new Dictionary<Expression, int>();
+        var envClass =
+            CodeAnalysis.ComputeExpressionUsageRecordRecursive(
+                [],
+                expression,
+                environment,
+                mutatedCache: exprAnalysisMutatedCache);
+
+        return new ExpressionUsage(
+            expression,
+            envClass is ExpressionEnvClass.ConstrainedEnv constrained && constrained.ParsedEnvItems.Count > 0
+            ?
+            EnvConstraintId.Create(constrained, environment)
+            :
+            null);
+    }
+
+    public static IReadOnlyDictionary<ExpressionUsage, ExpressionUsageProfile> UsageProfileDictionaryFromListOfUsages(
+        IReadOnlyCollection<ExpressionUsage> usages)
+    {
+        var counts = new Dictionary<ExpressionUsage, int>();
 
         foreach (var usage in usages)
             counts[usage] = counts.GetValueOrDefault(usage, 0) + 1;

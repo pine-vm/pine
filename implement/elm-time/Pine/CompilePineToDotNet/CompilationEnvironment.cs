@@ -12,7 +12,8 @@ public record FunctionCompilationEnvironment(
 public record ExpressionCompilationEnvironment(
     FunctionCompilationEnvironment FunctionEnvironment,
     IReadOnlyDictionary<Expression, LetBinding> LetBindings,
-    ExpressionCompilationEnvironment? ParentEnvironment)
+    ExpressionCompilationEnvironment? ParentEnvironment,
+    EnvConstraintId? EnvConstraint)
 {
     public IEnumerable<ExpressionCompilationEnvironment> EnumerateAncestors()
     {

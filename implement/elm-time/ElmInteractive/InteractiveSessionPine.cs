@@ -264,9 +264,6 @@ public class InteractiveSessionPine : IInteractiveSession
         var aggregateExpressionsProfiles =
             ProfilingPineVM.AggregateExpressionUsageProfiles(expressionsProfiles);
 
-        var totalTrackedExpressionUsageCount =
-            aggregateExpressionsProfiles.Sum(ep => ep.Value.UsageCount);
-
         var expressionsToCompile =
             DynamicPGOShare.FilterAndRankExpressionProfilesForCompilation(aggregateExpressionsProfiles)
             .Take(limitNumber)
@@ -279,7 +276,7 @@ public class InteractiveSessionPine : IInteractiveSession
                 syntaxContainerConfig);
     }
 
-    public static IReadOnlyDictionary<Expression, ExpressionUsageProfile> CollectExpressionsToOptimizeFromScenario(
+    public static IReadOnlyDictionary<ExpressionUsage, ExpressionUsageProfile> CollectExpressionsToOptimizeFromScenario(
         TreeNodeWithStringPath compileElmProgramCodeFiles,
         TestElmInteractive.Scenario scenario)
     {

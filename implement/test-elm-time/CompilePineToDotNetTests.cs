@@ -143,7 +143,8 @@ public class CompilePineToDotNetTests
                 new Pine.CompilePineToDotNet.ExpressionCompilationEnvironment(
                     environment,
                     LetBindings: Pine.CompilePineToDotNet.CompiledExpression.NoLetBindings,
-                    ParentEnvironment: null),
+                    ParentEnvironment: null,
+                    EnvConstraint: null),
                 createLetBindingsForCse: false)
             .Extract(err => throw new System.Exception(err));
 
@@ -155,5 +156,88 @@ public class CompilePineToDotNetTests
                 Pine.CompilePineToDotNet.FormatCSharpSyntaxRewriter.FormatSyntaxTree(compiledExpression.Syntax)
                 .NormalizeWhitespace()
             };
+    }
+
+    [TestMethod]
+    public void Test_TryParseExpressionAsIndexPathFromEnv()
+    {
+        var testCases = new[]
+        {
+            ((Pine.PineVM.Expression)new Pine.PineVM.Expression.EnvironmentExpression(),
+            (IReadOnlyList<int>?)[]),
+
+            (new Pine.PineVM.Expression.ListExpression([]),
+            null),
+
+            (new Pine.PineVM.Expression.KernelApplicationExpression(
+                functionName: "list_head",
+                argument: new Pine.PineVM.Expression.EnvironmentExpression(),
+                function: _=> throw new System.NotImplementedException()),
+                [0]),
+
+            (new Pine.PineVM.Expression.KernelApplicationExpression(
+                functionName: "list_head",
+                argument: new Pine.PineVM.Expression.KernelApplicationExpression(
+                    functionName: "list_head",
+                    argument: new Pine.PineVM.Expression.EnvironmentExpression(),
+                    function: _=> throw new System.NotImplementedException()),
+                function: _=> throw new System.NotImplementedException()),
+                [0, 0]),
+
+            (new Pine.PineVM.Expression.KernelApplicationExpression(
+                functionName: "list_head",
+                argument: new Pine.PineVM.Expression.KernelApplicationExpression(
+                    functionName: "skip",
+                    argument: new Pine.PineVM.Expression.ListExpression(
+                        [ new Pine.PineVM.Expression.LiteralExpression(PineValueAsInteger.ValueFromSignedInteger(13)),
+                        new Pine.PineVM.Expression.EnvironmentExpression()
+                        ]),
+                    function: _=> throw new System.NotImplementedException()),
+                function: _=> throw new System.NotImplementedException()),
+                [13]),
+
+            (new Pine.PineVM.Expression.KernelApplicationExpression(
+                functionName: "list_head",
+                argument: new Pine.PineVM.Expression.KernelApplicationExpression(
+                    functionName: "skip",
+                    argument: new Pine.PineVM.Expression.ListExpression(
+                        [ new Pine.PineVM.Expression.LiteralExpression(PineValueAsInteger.ValueFromSignedInteger(21)),
+                        new Pine.PineVM.Expression.KernelApplicationExpression(
+                            functionName: "list_head",
+                            argument: new Pine.PineVM.Expression.KernelApplicationExpression(
+                                functionName: "skip",
+                                argument: new Pine.PineVM.Expression.ListExpression(
+                                    [ new Pine.PineVM.Expression.LiteralExpression(PineValueAsInteger.ValueFromSignedInteger(17)),
+                                    new Pine.PineVM.Expression.EnvironmentExpression()
+                                    ]),
+                                function: _=> throw new System.NotImplementedException()),
+                            function: _=> throw new System.NotImplementedException())
+                        ]),
+                    function: _=> throw new System.NotImplementedException()),
+                function: _=> throw new System.NotImplementedException()),
+                [17,21]),
+
+            (new Pine.PineVM.Expression.KernelApplicationExpression(
+                functionName: "list_head",
+                argument: new Pine.PineVM.Expression.KernelApplicationExpression(
+                    functionName: "skip",
+                    argument: new Pine.PineVM.Expression.ListExpression(
+                        [ new Pine.PineVM.Expression.LiteralExpression(PineValueAsInteger.ValueFromSignedInteger(23)),
+                        new Pine.PineVM.Expression.KernelApplicationExpression(
+                            functionName: "list_head",
+                            argument: new Pine.PineVM.Expression.EnvironmentExpression(),
+                            function: _=> throw new System.NotImplementedException())
+                        ]),
+                    function: _=> throw new System.NotImplementedException()),
+                function: _=> throw new System.NotImplementedException()),
+                [0,23]),
+        };
+
+        foreach (var (expression, expected) in testCases)
+        {
+            var result = Pine.PineVM.CodeAnalysis.TryParseExpressionAsIndexPathFromEnv(expression);
+
+            CollectionAssert.AreEqual(expected?.ToArray(), result?.ToArray());
+        }
     }
 }

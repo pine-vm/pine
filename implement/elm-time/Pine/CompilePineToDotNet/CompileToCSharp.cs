@@ -57,7 +57,7 @@ public partial class CompileToCSharp
         CompiledExpressionDependencies Dependencies);
 
     public static Result<string, CompileCSharpClassResult> CompileExpressionsToCSharpClass(
-        IReadOnlyCollection<Expression> expressions,
+        IReadOnlyCollection<ExpressionUsage> expressions,
         SyntaxContainerConfig containerConfig)
     {
         const string argumentEnvironmentName = "pine_environment";
@@ -90,7 +90,7 @@ public partial class CompileToCSharp
             .Select(ns => SyntaxFactory.UsingDirective(SyntaxFactory.IdentifierName(ns)))
             .ToImmutableList();
 
-        MemberDeclarationSyntax memberDeclarationSyntaxForExpression(
+        MethodDeclarationSyntax memberDeclarationSyntaxForExpression(
             string declarationName,
             BlockSyntax blockSyntax)
         {
@@ -119,10 +119,16 @@ public partial class CompileToCSharp
                     .WithBody(blockSyntax);
         }
 
-        static Result<string, IReadOnlyDictionary<Expression, CompiledExpressionFunction>> CompileExpressionFunctions(
-            IReadOnlyCollection<Expression> expressions)
+        static Result<string, IReadOnlyDictionary<ExpressionUsage, CompiledExpressionFunction>> CompileExpressionFunctions(
+            IReadOnlyCollection<ExpressionUsage> expressionsUsages)
         {
-            var dictionary = new Dictionary<Expression, CompiledExpressionFunction>();
+            var dictionary = new Dictionary<ExpressionUsage, CompiledExpressionFunction>();
+
+            var expressions =
+                expressionsUsages
+                .Select(eu => eu.Expression)
+                .Distinct()
+                .ToImmutableArray();
 
             var queue = new Queue<Expression>(expressions);
 
@@ -130,52 +136,77 @@ public partial class CompileToCSharp
             {
                 var expression = queue.Dequeue();
 
-                if (dictionary.ContainsKey(expression))
-                    continue;
+                var onlyExprDerivedId =
+                    CompiledExpressionId(expression)
+                    .Extract(err => throw new Exception(err));
 
-                var derivedId =
-                CompiledExpressionId(expression)
-                .Extract(err => throw new Exception(err));
+                var expressionUsages =
+                    expressionsUsages
+                    .Where(eu => eu.Expression == expression)
+                    // Ensure we also have an entry for the general case, not just the constrained environments.
+                    .Append(new ExpressionUsage(expression, null))
+                    .Distinct()
+                    .ToImmutableArray();
 
-                var result =
-                    compilerCache.CompileToCSharpFunctionBlockSyntax(
-                        expression,
-                        new FunctionCompilationEnvironment(
-                            ArgumentEnvironmentName: argumentEnvironmentName,
-                            ArgumentEvalGenericName: argumentEvalGenericName))
-                        .MapError(err => "Failed to compile expression " + derivedId.ExpressionHashBase16[..10] + ": " + err)
-                        .Map(ok =>
-                            new CompiledExpressionFunction(
-                                derivedId,
-                                ok.blockSyntax,
-                                ok.dependencies));
+                var supportedConstrainedEnvironments =
+                    expressionsUsages
+                    .Where(eu => eu.Expression == expression)
+                    .Select(eu => eu.EnvId)
+                    .WhereNotNull()
+                    .ToImmutableArray();
 
-                if (result is Result<string, CompiledExpressionFunction>.Ok ok)
+                foreach (var expressionUsage in expressionUsages)
                 {
-                    dictionary.Add(expression, ok.Value);
+                    if (dictionary.ContainsKey(expressionUsage))
+                        continue;
 
-                    foreach (var item in ok.Value.Dependencies.ExpressionFunctions)
-                        queue.Enqueue(item.Key);
-                }
-                else
-                {
-                    return
-                        result
-                        .MapError(err => "Failed to compile expression " + expression + ": " + err)
-                        .Map(_ => (IReadOnlyDictionary<Expression, CompiledExpressionFunction>)
-                        ImmutableDictionary<Expression, CompiledExpressionFunction>.Empty);
+                    var withEnvDerivedId =
+                    CompiledExpressionId(expressionUsage.Expression)
+                    .Extract(err => throw new Exception(err));
+
+                    var result =
+                        compilerCache.CompileToCSharpFunctionBlockSyntax(
+                            expressionUsage,
+                            branchesConstrainedEnvIds: supportedConstrainedEnvironments,
+                            new FunctionCompilationEnvironment(
+                                ArgumentEnvironmentName: argumentEnvironmentName,
+                                ArgumentEvalGenericName: argumentEvalGenericName))
+                            .MapError(err => "Failed to compile expression " + withEnvDerivedId.ExpressionHashBase16[..10] + ": " + err)
+                            .Map(ok =>
+                                new CompiledExpressionFunction(
+                                    withEnvDerivedId,
+                                    ok.blockSyntax,
+                                    ok.dependencies));
+
+                    if (result is Result<string, CompiledExpressionFunction>.Ok ok)
+                    {
+                        dictionary.Add(expressionUsage, ok.Value);
+
+                        foreach (var item in ok.Value.Dependencies.ExpressionFunctions)
+                            queue.Enqueue(item.Key);
+                    }
+                    else
+                    {
+                        return
+                            result
+                            .MapError(err => "Failed to compile expression " + withEnvDerivedId + ": " + err)
+                            .Map(_ => (IReadOnlyDictionary<ExpressionUsage, CompiledExpressionFunction>)
+                            ImmutableDictionary<ExpressionUsage, CompiledExpressionFunction>.Empty);
+                    }
                 }
             }
 
             return
-                Result<string, IReadOnlyDictionary<Expression, CompiledExpressionFunction>>.ok(dictionary);
+                Result<string, IReadOnlyDictionary<ExpressionUsage, CompiledExpressionFunction>>.ok(dictionary);
         }
 
         return
             CompileExpressionFunctions(expressions)
-            .Map(compiledExpressions => compiledExpressions.OrderBy(ce => ce.Value.Identifier.ExpressionHashBase16))
-            .AndThen(compiledExpressions =>
+            .AndThen(compiledExpressionsBeforeOrdering =>
             {
+                var compiledExpressions =
+                compiledExpressionsBeforeOrdering.OrderBy(ce => ce.Value.Identifier.ExpressionHashBase16).ToImmutableArray();
+
                 var aggregateDependencies =
                     CompiledExpressionDependencies.Union(compiledExpressions.Select(er => er.Value.Dependencies));
 
@@ -233,7 +264,7 @@ public partial class CompileToCSharp
                 {
                     var expressionExpression =
                         EncodePineExpressionAsCSharpExpression(hashAndExpr.expression, specialSyntaxForPineValue)
-                            .Extract(err => throw new Exception("Failed to encode expression: " + err));
+                        .Extract(err => throw new Exception("Failed to encode expression: " + err));
 
                     var memberName = MemberNameForExpression(hashAndExpr.hash[..10]);
 
@@ -279,9 +310,16 @@ public partial class CompileToCSharp
 
                 var dictionaryEntries =
                     compiledExpressions
+                    /*
+                     * Dictionary entries only for the general case, not for the constrained environments.
+                     * */
+                    .DistinctBy(ce => ce.Key.Expression)
                     .Select(compiledExpression =>
                     {
-                        var declarationName = MemberNameForCompiledExpressionFunction(compiledExpression.Value.Identifier);
+                        var declarationName =
+                        MemberNameForCompiledExpressionFunction(
+                            compiledExpression.Value.Identifier,
+                            constrainedEnv: null);
 
                         return
                             (SyntaxFactory.IdentifierName(DeclarationNameForValue(compiledExpression.Value.Identifier.ExpressionValue)),
@@ -362,8 +400,11 @@ public partial class CompileToCSharp
                 compiledExpressions
                 .Select(compiledExpression =>
                 memberDeclarationSyntaxForExpression(
-                    declarationName: MemberNameForCompiledExpressionFunction(compiledExpression.Value.Identifier),
+                    declarationName: MemberNameForCompiledExpressionFunction(
+                        compiledExpression.Value.Identifier,
+                        compiledExpression.Key.EnvId),
                     blockSyntax: compiledExpression.Value.BlockSyntax))
+                .OrderBy(member => member.Identifier.ValueText)
                 .ToImmutableList();
 
                 return Result<string, CompileCSharpClassResult>.ok(
@@ -375,7 +416,9 @@ public partial class CompileToCSharp
                                 SyntaxFactory.List(
                                     [dictionaryMemberDeclaration
                                     ,
-                                        .. compiledExpressionsMemberDeclarations
+                                        .. compiledExpressionsMemberDeclarations.Cast<MemberDeclarationSyntax>()
+                                        , PineCSharpSyntaxFactory.ValueMatchesPathsPatternDeclaration
+                                        , PineCSharpSyntaxFactory.ValueFromPathInValueDeclaration
                                     ,
                                         .. staticFieldsDeclarations])),
                         UsingDirectives: usingDirectives));
@@ -397,13 +440,43 @@ public partial class CompileToCSharp
     public static Result<string, (BlockSyntax blockSyntax, CompiledExpressionDependencies dependencies)>
         CompileToCSharpFunctionBlockSyntax(
             Expression expression,
-            FunctionCompilationEnvironment environment) =>
+            EnvConstraintId? constrainedEnvId,
+            IReadOnlyList<EnvConstraintId> branchesEnvIds,
+            FunctionCompilationEnvironment compilationEnv)
+    {
+        if (constrainedEnvId is { } envId)
+        {
+            return
+                CompileToCSharpGeneralFunctionBlockSyntax(
+                    expression,
+                    branchesEnvIds: [],
+                    compilationEnv,
+                    envConstraint: constrainedEnvId);
+        }
+
+
+        return
+            CompileToCSharpGeneralFunctionBlockSyntax(
+                expression,
+                branchesEnvIds: branchesEnvIds,
+                compilationEnv,
+                envConstraint: constrainedEnvId);
+    }
+
+
+    public static Result<string, (BlockSyntax blockSyntax, CompiledExpressionDependencies dependencies)>
+        CompileToCSharpGeneralFunctionBlockSyntax(
+            Expression expression,
+            IReadOnlyList<EnvConstraintId> branchesEnvIds,
+            FunctionCompilationEnvironment compilationEnv,
+            EnvConstraintId? envConstraint) =>
         CompileToCSharpExpression(
             expression,
             new ExpressionCompilationEnvironment(
-                FunctionEnvironment: environment,
+                FunctionEnvironment: compilationEnv,
                 LetBindings: ImmutableDictionary<Expression, LetBinding>.Empty,
-                ParentEnvironment: null),
+                ParentEnvironment: null,
+                EnvConstraint: envConstraint),
             createLetBindingsForCse: true)
             .Map(exprWithDependencies =>
             {
@@ -418,16 +491,40 @@ public partial class CompileToCSharp
                     usagesSyntaxes: [returnExpression],
                     excludeBinding: null);
 
+                var generalExprFuncName =
+                CompiledExpressionId(expression)
+                .Extract(err => throw new Exception(err));
+
+                var branchesForSpecializedRepr =
+                branchesEnvIds
+                .Select(envId =>
+                        PineCSharpSyntaxFactory.BranchForEnvId(
+                        new ExpressionUsage(expression, envId),
+                        compilationEnv: compilationEnv,
+                        prependStatments: []))
+                    .ToImmutableList();
+
+                var valueDepsForBranchStatements =
+                CompiledExpressionDependencies.Empty
+                with
+                {
+                    Values =
+                    branchesEnvIds.SelectMany(envId => envId.ParsedEnvItems.Select(item => item.Value))
+                    .ToImmutableHashSet()
+                };
+
                 var combinedDependencies =
                     CompiledExpressionDependencies.Union(
-                        variableDeclarations
-                        .Select(b => b.letBinding.Expression.DependenciesIncludingLetBindings())
-                        .Prepend(exprWithDependencies.DependenciesIncludingLetBindings()));
+                        [..variableDeclarations
+                        .Select(b => b.letBinding.Expression.DependenciesIncludingLetBindings()),
+                        exprWithDependencies.DependenciesIncludingLetBindings(),
+                        valueDepsForBranchStatements]);
 
                 return
                 (SyntaxFactory.Block(
                     (StatementSyntax[])
-                    ([.. variableDeclarations.Select(b => b.declarationSyntax),
+                    ([..branchesForSpecializedRepr
+                    , ..variableDeclarations.Select(b => b.declarationSyntax),
                         SyntaxFactory.ReturnStatement(returnExpression)])),
                         combinedDependencies);
             });
@@ -492,7 +589,18 @@ public partial class CompileToCSharp
             :
             [];
 
-        var newLetBindingsExpressions = newLetBindingsExpressionsForCse;
+        var newLetBindingsExpressions =
+            newLetBindingsExpressionsForCse
+            .Where(subexpr =>
+            /*
+             * 2024-03-01: Disable CSE for expressions that contain further calls.
+             * The observation was that CSE for these sometimes caused infinite recursion and stack overflow.
+             * The reason for the infinite recursion is that with the current implementation, the bindings
+             * can end up too in too outer scope, when they should be contained in a branch that is not taken
+             * when the recursion reaches the base case.
+             * */
+            !Expression.EnumerateSelfAndDescendants(subexpr).Any(sec => sec is Expression.ParseAndEvalExpression))
+            .ToImmutableArray();
 
         var newLetBindings =
             CSharpDeclarationOrder.OrderExpressionsByContainment(newLetBindingsExpressions)
@@ -957,12 +1065,9 @@ public partial class CompileToCSharp
                     });
         }
 
-        if (Expression.IsIndependent(parseAndEvalExpr.expression))
+        Result<string, CompiledExpression> continueForKnownExprValue(PineValue innerExpressionValue)
         {
             return
-                TryEvaluateExpressionIndependent(parseAndEvalExpr.expression)
-                .MapError(err => "Failed evaluate inner as independent expression: " + err)
-                .AndThen(innerExpressionValue =>
                 compilerCache.ParseExpressionFromValue(innerExpressionValue)
                 .MapError(err => "Failed to parse inner expression: " + err)
                 .AndThen(innerExpression =>
@@ -997,7 +1102,31 @@ public partial class CompileToCSharp
                                     }));
                         });
                     });
-                }));
+                });
+        }
+
+        if (Expression.IsIndependent(parseAndEvalExpr.expression))
+        {
+            return
+                TryEvaluateExpressionIndependent(parseAndEvalExpr.expression)
+                .MapError(err => "Failed evaluate inner as independent expression: " + err)
+                .AndThen(continueForKnownExprValue);
+        }
+
+        var expressionPath = CodeAnalysis.TryParseExpressionAsIndexPathFromEnv(parseAndEvalExpr.expression);
+
+        if (expressionPath is not null)
+        {
+            var exprValueFromEnvConstraint =
+                environment.EnvConstraint?.TryGetValue(expressionPath);
+
+            if (exprValueFromEnvConstraint is not null)
+            {
+                var exprValueFromEnvConstraintId = CompiledExpressionId(exprValueFromEnvConstraint);
+
+                return
+                    continueForKnownExprValue(exprValueFromEnvConstraint);
+            }
         }
 
         return
@@ -1019,7 +1148,9 @@ public partial class CompileToCSharp
         CompiledExpression.WithTypeResult(
             SyntaxFactory.InvocationExpression(
                 SyntaxFactory.IdentifierName(
-                    MemberNameForCompiledExpressionFunction(invokedFunction)))
+                    MemberNameForCompiledExpressionFunction(
+                        invokedFunction,
+                        constrainedEnv: null)))
             .WithArgumentList(
                 SyntaxFactory.ArgumentList(
                     SyntaxFactory.SeparatedList<ArgumentSyntax>(
@@ -1048,8 +1179,14 @@ public partial class CompileToCSharp
     static string MemberNameForExpression(string expressionValueHash) =>
         "expression_" + expressionValueHash[..10];
 
-    static string MemberNameForCompiledExpressionFunction(CompiledExpressionId derivedId) =>
-        "expr_function_" + derivedId.ExpressionHashBase16[..10];
+    public static string MemberNameForCompiledExpressionFunction(
+        CompiledExpressionId derivedId,
+        EnvConstraintId? constrainedEnv) =>
+        "expr_function_" + derivedId.ExpressionHashBase16[..10] +
+        (constrainedEnv is null ? null : "_env_" + MemberNameForConstrainedEnv(constrainedEnv));
+
+    static string MemberNameForConstrainedEnv(EnvConstraintId constrainedEnv) =>
+        constrainedEnv.HashBase16[..8];
 
     public static Result<string, Expression> TransformPineExpressionWithOptionalReplacement(
         Func<Expression, Result<string, Maybe<Expression>>> findReplacement,
