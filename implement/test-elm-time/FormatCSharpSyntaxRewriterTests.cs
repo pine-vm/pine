@@ -160,6 +160,40 @@ public class FormatCSharpSyntaxRewriterTests
     }
 
     [TestMethod]
+    public void Indents_statements_in_if_statement_block()
+    {
+        var inputSyntaxText =
+            """
+            if (condition)
+            {
+                    Console.WriteLine(
+                        "Entering expr_function_240b663fa0_env_6acb138b");
+
+            return expr_function_240b663fa0_env_6acb138b(
+                    eval_generic,
+                    pine_environment);
+            }
+            """.Trim();
+
+        var expectedFormattedText =
+            """
+            if (condition)
+            {
+                Console.WriteLine(
+                    "Entering expr_function_240b663fa0_env_6acb138b");
+            
+                return expr_function_240b663fa0_env_6acb138b(
+                        eval_generic,
+                        pine_environment);
+            }
+            """.Trim();
+
+        var formattedSyntaxText = FormatCSharpScript(inputSyntaxText);
+
+        StringAssert.Contains(formattedSyntaxText, expectedFormattedText);
+    }
+
+    [TestMethod]
     public void Adds_newlines_in_conditional_expression()
     {
         var inputSyntaxText =

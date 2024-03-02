@@ -43,12 +43,11 @@ public class FormatCSharpSyntaxRewriter(
             SyntaxFactory.SeparatedList(
                 node.ArgumentList.Arguments
                 .Select(argumentSyntax =>
-                argumentSyntax.WithLeadingTrivia(
-                    new SyntaxTriviaList(SyntaxFactory.LineFeed, indentationTrivia)
-                    .AddRange(argumentSyntax.GetLeadingTrivia()))));
+                argumentSyntax.WithLeadingTrivia(SyntaxFactory.LineFeed, indentationTrivia)));
 
         var newArgumentList =
             node.ArgumentList
+            .WithOpenParenToken(node.ArgumentList.OpenParenToken.WithTrailingTrivia())
             .WithArguments(newArguments);
 
         var newInvocationExpression = node.WithArgumentList(newArgumentList);
@@ -282,7 +281,7 @@ public class FormatCSharpSyntaxRewriter(
             ArrowExpressionClauseSyntax => true,
             SwitchStatementSyntax => true,
             SwitchSectionSyntax => true,
-            IfStatementSyntax => true,
+            IfStatementSyntax => false,
             ElseClauseSyntax => true,
             WhileStatementSyntax => true,
             ForStatementSyntax => true,
