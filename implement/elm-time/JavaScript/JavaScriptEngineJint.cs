@@ -15,7 +15,7 @@ public class JavaScriptEngineJint : IJavaScriptEngine
         Func<Engine, JsValue, JsValue[], JsValue> hostFunc,
         int parameterCount);
 
-    private readonly Engine engine = new(new Options { Json = new JsonOptions { MaxParseDepth = 1_000 } });
+    private readonly Engine engine = new(new Options { Json = new Options.JsonOptions { MaxParseDepth = 1_000 } });
 
     private readonly IReadOnlyList<FunctionDelegateIntoHost> functionDelegatesIntoHost;
 
@@ -127,10 +127,10 @@ public class JavaScriptEngineJint : IJavaScriptEngine
         }
     }
 
-    public static Jint.Native.Function.FunctionInstance BuildDelegatingFunctionInstance(
+    public static Jint.Native.Function.Function BuildDelegatingFunctionInstance(
         Engine engine,
         string name,
         Func<JsValue, JsValue[], JsValue> func,
         int parameterCount) =>
-        new Jint.Runtime.Interop.ClrFunctionInstance(engine, name, func, length: parameterCount);
+        new Jint.Runtime.Interop.ClrFunction(engine, name, func, length: parameterCount);
 }
