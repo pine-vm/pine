@@ -152,11 +152,14 @@ public static class EnumerableExtension
         }
     }
 
-    public static IEnumerable<T> DequeueEnumerable<T>(this ConcurrentQueue<T> queue)
+    public static IEnumerable<T> DequeueAllEnumerable<T>(this ConcurrentQueue<T> queue)
     {
-        if (!queue.TryDequeue(out var item))
-            yield break;
+        while (true)
+        {
+            if (!queue.TryDequeue(out var item))
+                yield break;
 
-        yield return item;
+            yield return item;
+        }
     }
 }

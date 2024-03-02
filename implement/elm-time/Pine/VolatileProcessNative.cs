@@ -92,8 +92,8 @@ public class VolatileProcessNative : VolatileProcess, IDisposable
 
     public ReadAllFromNativeProcess ReadAll()
     {
-        var stdOut = CommonConversion.Concat(stdOutQueue.DequeueEnumerable().ToList());
-        var stdErr = CommonConversion.Concat(stdErrQueue.DequeueEnumerable().ToList());
+        var stdOut = CommonConversion.Concat(stdOutQueue.DequeueAllEnumerable().ToList());
+        var stdErr = CommonConversion.Concat(stdErrQueue.DequeueAllEnumerable().ToList());
 
         var exitCode =
             process.HasExited ? (int?)process.ExitCode : null;
