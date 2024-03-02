@@ -20,7 +20,7 @@ public class DynamicPGOShare : IDisposable
     public int CompiledExpressionsCountLimit { init; get; }
 
     private record SubmissionProfileMutableContainer(
-        ConcurrentQueue<IReadOnlyDictionary<ExpressionUsage, ExpressionUsageProfile>> Iterations);
+        ConcurrentQueue<IReadOnlyDictionary<ExpressionUsageAnalysis, ExpressionUsageProfile>> Iterations);
 
     private readonly ConcurrentQueue<SubmissionProfileMutableContainer> submissionsProfileContainers = new();
 
@@ -30,7 +30,7 @@ public class DynamicPGOShare : IDisposable
 
     private readonly CancellationTokenSource disposedCancellationTokenSource = new();
 
-    IEnumerable<IReadOnlyDictionary<ExpressionUsage, ExpressionUsageProfile>> SubmissionsProfiles =>
+    IEnumerable<IReadOnlyDictionary<ExpressionUsageAnalysis, ExpressionUsageProfile>> SubmissionsProfiles =>
         submissionsProfileContainers
         .SelectMany(container => container.Iterations);
 
@@ -91,7 +91,7 @@ public class DynamicPGOShare : IDisposable
     {
         var profileContainer =
             new SubmissionProfileMutableContainer(
-                Iterations: new ConcurrentQueue<IReadOnlyDictionary<ExpressionUsage, ExpressionUsageProfile>>());
+                Iterations: new ConcurrentQueue<IReadOnlyDictionary<ExpressionUsageAnalysis, ExpressionUsageProfile>>());
 
         submissionsProfileContainers.Enqueue(profileContainer);
 
@@ -110,8 +110,15 @@ public class DynamicPGOShare : IDisposable
 
             Task.Run(() =>
             {
-                var usageProfiles = ProfilingPineVM.UsageProfileDictionaryFromListOfUsages(
-                    profilingEvalTask.ProfilingPineVM.ExpressionEvaluations);
+                var exprUsageSamples = profilingEvalTask.ProfilingPineVM.DequeueAllSamples();
+
+                var expressionUsages =
+                exprUsageSamples
+                .Select(sample => sample.Analysis.Value.ToMaybe())
+                .WhereNotNothing()
+                .ToImmutableList();
+
+                var usageProfiles = ProfilingPineVM.UsageProfileDictionaryFromListOfUsages(expressionUsages);
 
                 profileContainer.Iterations.Enqueue(usageProfiles);
             });
@@ -220,7 +227,7 @@ public class DynamicPGOShare : IDisposable
             };
         }
 
-        var profilingVM = ProfilingPineVM.BuildProfilingVM(
+        var profilingVM = new ProfilingPineVM(
             overrideParseExpression: overrideDecodeExpression,
             overrideEvaluateExpression: OverrideEvalExprDelegate);
 
@@ -251,7 +258,7 @@ public class DynamicPGOShare : IDisposable
     }
 
     private static Compilation GetOrCreateCompilationForProfiles(
-        IReadOnlyList<IReadOnlyDictionary<ExpressionUsage, ExpressionUsageProfile>> inputProfiles,
+        IReadOnlyList<IReadOnlyDictionary<ExpressionUsageAnalysis, ExpressionUsageProfile>> inputProfiles,
         int limitNumber,
         IReadOnlyList<Compilation> previousCompilations)
     {
@@ -305,8 +312,8 @@ public class DynamicPGOShare : IDisposable
                 CompileDuration: compileStopwatch.Elapsed);
     }
 
-    public static IEnumerable<KeyValuePair<ExpressionUsage, ExpressionUsageProfile>> FilterAndRankExpressionProfilesForCompilation(
-        IReadOnlyDictionary<ExpressionUsage, ExpressionUsageProfile> aggregateExpressionsProfiles) =>
+    public static IEnumerable<KeyValuePair<ExpressionUsageAnalysis, ExpressionUsageProfile>> FilterAndRankExpressionProfilesForCompilation(
+        IReadOnlyDictionary<ExpressionUsageAnalysis, ExpressionUsageProfile> aggregateExpressionsProfiles) =>
         aggregateExpressionsProfiles
         .Where(expressionProfile =>
         4 < expressionProfile.Value.UsageCount && ShouldIncludeExpressionInCompilation(expressionProfile.Key.Expression))
@@ -339,8 +346,8 @@ public class DynamicPGOShare : IDisposable
     }
 
     public record Compilation(
-        IReadOnlyList<IReadOnlyDictionary<ExpressionUsage, ExpressionUsageProfile>> InputProfiles,
-        ImmutableHashSet<ExpressionUsage> CompiledExpressions,
+        IReadOnlyList<IReadOnlyDictionary<ExpressionUsageAnalysis, ExpressionUsageProfile>> InputProfiles,
+        ImmutableHashSet<ExpressionUsageAnalysis> CompiledExpressions,
         Result<string, CompilePineToDotNet.CompileToAssemblyResult> CompileToAssemblyResult,
         Result<string, IReadOnlyDictionary<PineValue, Func<PineVM.EvalExprDelegate, PineValue, Result<string, PineValue>>>>
         DictionaryResult,

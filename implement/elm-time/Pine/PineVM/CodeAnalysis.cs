@@ -274,10 +274,6 @@ public class CodeAnalysis
         PineValue environment,
         ConcurrentDictionary<Expression, ExprAnalysis> mutatedCache)
     {
-        var expressionId =
-            CompilePineToDotNet.CompileToCSharp.CompiledExpressionId(expression)
-            .Extract(err => throw new Exception(err));
-
         var parseSubexpressions =
             Expression.EnumerateSelfAndDescendants(expression)
             .OfType<Expression.ParseAndEvalExpression>()

@@ -24,7 +24,7 @@ public class CompilerMutableCache
 
     public CompileExpressionFunctionBlockResult
         CompileToCSharpFunctionBlockSyntax(
-        PineVM.ExpressionUsage expressionUsage,
+        PineVM.ExpressionUsageAnalysis expressionUsage,
         IReadOnlyList<PineVM.EnvConstraintId> branchesConstrainedEnvIds,
         FunctionCompilationEnvironment compilationEnv) =>
         CompileToCSharpFunctionBlockSyntax(

@@ -276,11 +276,14 @@ public class InteractiveSessionPine : IInteractiveSession
                 syntaxContainerConfig);
     }
 
-    public static IReadOnlyDictionary<ExpressionUsage, ExpressionUsageProfile> CollectExpressionsToOptimizeFromScenario(
+    public static IReadOnlyDictionary<ExpressionUsageAnalysis, ExpressionUsageProfile> CollectExpressionsToOptimizeFromScenario(
         TreeNodeWithStringPath compileElmProgramCodeFiles,
         TestElmInteractive.Scenario scenario)
     {
-        var profilingVM = ProfilingPineVM.BuildProfilingVM();
+        var cache = new PineVMCache();
+
+        var profilingVM =
+            new ProfilingPineVM(overrideEvaluateExpression: cache.BuildEvalExprDelegate);
 
         var profilingSession = new InteractiveSessionPine(
             compileElmProgramCodeFiles: compileElmProgramCodeFiles,
@@ -290,8 +293,16 @@ public class InteractiveSessionPine : IInteractiveSession
         foreach (var step in scenario.Steps)
             profilingSession.Submit(step.step.Submission);
 
+        var exprUsageSamples = profilingVM.DequeueAllSamples();
+
+        var expressionUsages =
+            exprUsageSamples
+            .Select(sample => sample.Analysis.Value.ToMaybe())
+            .WhereNotNothing()
+            .ToImmutableList();
+
         var pineExpressionsToOptimize =
-            ProfilingPineVM.UsageProfileDictionaryFromListOfUsages(profilingVM.ExpressionEvaluations);
+            ProfilingPineVM.UsageProfileDictionaryFromListOfUsages(expressionUsages);
 
         return pineExpressionsToOptimize;
     }

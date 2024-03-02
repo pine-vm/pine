@@ -136,6 +136,15 @@ public static class EnumerableExtension
         }
     }
 
+    public static IEnumerable<JustT> WhereNotNothing<JustT>(this IEnumerable<Maybe<JustT>> source)
+    {
+        foreach (var item in source)
+        {
+            if (item is Maybe<JustT>.Just just)
+                yield return just.Value;
+        }
+    }
+
     public static IEnumerable<T> Intersperse<T>(this IEnumerable<T> source, T separator)
     {
         using var enumerator = source.GetEnumerator();

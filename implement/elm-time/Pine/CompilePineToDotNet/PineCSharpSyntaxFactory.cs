@@ -27,7 +27,7 @@ public static class PineCSharpSyntaxFactory
     };
 
     public static StatementSyntax BranchForEnvId(
-        PineVM.ExpressionUsage exprUsage,
+        PineVM.ExpressionUsageAnalysis exprUsage,
         FunctionCompilationEnvironment compilationEnv,
         StatementSyntax[]? prependStatments)
     {

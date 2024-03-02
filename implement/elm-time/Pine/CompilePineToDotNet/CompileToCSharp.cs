@@ -57,7 +57,7 @@ public partial class CompileToCSharp
         CompiledExpressionDependencies Dependencies);
 
     public static Result<string, CompileCSharpClassResult> CompileExpressionsToCSharpClass(
-        IReadOnlyCollection<ExpressionUsage> expressions,
+        IReadOnlyCollection<ExpressionUsageAnalysis> expressions,
         SyntaxContainerConfig containerConfig)
     {
         const string argumentEnvironmentName = "pine_environment";
@@ -119,10 +119,10 @@ public partial class CompileToCSharp
                     .WithBody(blockSyntax);
         }
 
-        static Result<string, IReadOnlyDictionary<ExpressionUsage, CompiledExpressionFunction>> CompileExpressionFunctions(
-            IReadOnlyCollection<ExpressionUsage> expressionsUsages)
+        static Result<string, IReadOnlyDictionary<ExpressionUsageAnalysis, CompiledExpressionFunction>> CompileExpressionFunctions(
+            IReadOnlyCollection<ExpressionUsageAnalysis> expressionsUsages)
         {
-            var dictionary = new Dictionary<ExpressionUsage, CompiledExpressionFunction>();
+            var dictionary = new Dictionary<ExpressionUsageAnalysis, CompiledExpressionFunction>();
 
             var expressions =
                 expressionsUsages
@@ -144,7 +144,7 @@ public partial class CompileToCSharp
                     expressionsUsages
                     .Where(eu => eu.Expression == expression)
                     // Ensure we also have an entry for the general case, not just the constrained environments.
-                    .Append(new ExpressionUsage(expression, null))
+                    .Append(new ExpressionUsageAnalysis(expression, null))
                     .Distinct()
                     .ToImmutableArray();
 
@@ -190,14 +190,14 @@ public partial class CompileToCSharp
                         return
                             result
                             .MapError(err => "Failed to compile expression " + withEnvDerivedId + ": " + err)
-                            .Map(_ => (IReadOnlyDictionary<ExpressionUsage, CompiledExpressionFunction>)
-                            ImmutableDictionary<ExpressionUsage, CompiledExpressionFunction>.Empty);
+                            .Map(_ => (IReadOnlyDictionary<ExpressionUsageAnalysis, CompiledExpressionFunction>)
+                            ImmutableDictionary<ExpressionUsageAnalysis, CompiledExpressionFunction>.Empty);
                     }
                 }
             }
 
             return
-                Result<string, IReadOnlyDictionary<ExpressionUsage, CompiledExpressionFunction>>.ok(dictionary);
+                Result<string, IReadOnlyDictionary<ExpressionUsageAnalysis, CompiledExpressionFunction>>.ok(dictionary);
         }
 
         return
@@ -499,7 +499,7 @@ public partial class CompileToCSharp
                 branchesEnvIds
                 .Select(envId =>
                         PineCSharpSyntaxFactory.BranchForEnvId(
-                        new ExpressionUsage(expression, envId),
+                        new ExpressionUsageAnalysis(expression, envId),
                         compilationEnv: compilationEnv,
                         prependStatments: []))
                     .ToImmutableList();
