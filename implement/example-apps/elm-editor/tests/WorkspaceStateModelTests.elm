@@ -1,4 +1,4 @@
-module ProjectStateModelTests exposing (..)
+module WorkspaceStateModelTests exposing (..)
 
 import Base64
 import Bytes
@@ -6,13 +6,13 @@ import Bytes.Encode
 import Expect
 import FileTree
 import FileTreeInWorkspace
-import ProjectState_2021_01
 import SHA256
 import Test
+import WorkspaceState_2021_01
 
 
-demoProject : String -> FileTreeInWorkspace.FileTreeNode
-demoProject elmModuleText =
+demoWorkspace : String -> FileTreeInWorkspace.FileTreeNode
+demoWorkspace elmModuleText =
     FileTreeInWorkspace.sortedFileTreeFromListOfBlobsAsBytes
         [ ( [ "src", "TestModule.elm" ]
           , elmModuleText |> Bytes.Encode.string |> Bytes.Encode.encode
@@ -20,13 +20,13 @@ demoProject elmModuleText =
         ]
 
 
-project_state_find_diff_encoding_2021_01 : Test.Test
-project_state_find_diff_encoding_2021_01 =
+workspace_state_find_diff_encoding_2021_01 : Test.Test
+workspace_state_find_diff_encoding_2021_01 =
     let
         testName =
-            "Project state find diff encoding"
+            "Workspace state find diff encoding"
 
-        baseProjectModuleText =
+        baseWorkspaceModuleText =
             """
 module Main exposing (main)
 
@@ -244,67 +244,67 @@ renderToHtml gameState =
         [ snakeView, appleView ]
 """
 
-        baseProject =
-            demoProject baseProjectModuleText
+        baseWorkspace =
+            demoWorkspace baseWorkspaceModuleText
 
-        editedProject =
-            demoProject
+        editedWorkspace =
+            demoWorkspace
                 (String.replace
                     """svgRectAtCellLocation "red" gameState.appleLocation"""
                     """svgRectAtCellLocation "blue" gameState.appleLocation"""
-                    baseProjectModuleText
+                    baseWorkspaceModuleText
                 )
     in
-    case FileTreeInWorkspace.searchProjectStateDifference_2021_01 editedProject { baseComposition = baseProject } of
+    case FileTreeInWorkspace.searchWorkspaceStateDifference_2021_01 editedWorkspace { baseComposition = baseWorkspace } of
         Err error ->
             Test.test testName <|
                 \_ ->
                     Expect.fail ("Failed to find diff model: " ++ error)
 
-        Ok projectStateDiffModel ->
+        Ok workspaceStateDiffModel ->
             case
-                baseProject
+                baseWorkspace
                     |> FileTreeInWorkspace.mapBlobsToBytes
-                    |> FileTreeInWorkspace.applyProjectStateDifference_2021_01 projectStateDiffModel
+                    |> FileTreeInWorkspace.applyWorkspaceStateDifference_2021_01 workspaceStateDiffModel
             of
                 Err applyDiffError ->
-                    Test.test "Try apply diff to restore project state" <|
+                    Test.test "Try apply diff to restore workspace state" <|
                         \_ ->
-                            Expect.fail ("Failed to apply project state diff: " ++ applyDiffError)
+                            Expect.fail ("Failed to apply workspace state diff: " ++ applyDiffError)
 
-                Ok restoredProjectState ->
+                Ok restoredWorkspaceState ->
                     let
-                        restoredProjectStateAsBase64 =
-                            restoredProjectState
+                        restoredWorkspaceStateAsBase64 =
+                            restoredWorkspaceState
                                 |> FileTree.mapBlobs (Base64.fromBytes >> Maybe.withDefault "Failed to encode in base64")
                     in
                     Test.describe testName
-                        [ Test.test "Projects modeled in the test code are not equal" <|
+                        [ Test.test "Workspaces modeled in the test code are not equal" <|
                             \_ ->
                                 {- Avoid bug in Elm core library as reported at https://github.com/elm/bytes/issues/15 :
                                    Convert to other representation before comparing.
                                 -}
-                                Expect.notEqual (compositionHashFromProject editedProject) (compositionHashFromProject baseProject)
-                        , Test.test "Project state restored from diff equals input project state" <|
+                                Expect.notEqual (compositionHashFromWorkspace editedWorkspace) (compositionHashFromWorkspace baseWorkspace)
+                        , Test.test "Workspace state restored from diff equals input workspace state" <|
                             \_ ->
-                                Expect.equal (FileTree.mapBlobs .asBase64 editedProject) restoredProjectStateAsBase64
-                        , Test.test "projectStateDiffModel.setNodes contains 1 element" <|
+                                Expect.equal (FileTree.mapBlobs .asBase64 editedWorkspace) restoredWorkspaceStateAsBase64
+                        , Test.test "workspaceStateDiffModel.setNodes contains 1 element" <|
                             \_ ->
-                                Expect.equal 1 (projectStateDiffModel.changeBlobs |> List.length)
+                                Expect.equal 1 (workspaceStateDiffModel.changeBlobs |> List.length)
                         , Test.test "Difference model is small enough" <|
                             \_ ->
-                                Expect.atMost (String.length baseProjectModuleText // 2)
-                                    (approximateSizeOfProjectStateDifferenceModel_2021_01 projectStateDiffModel)
+                                Expect.atMost (String.length baseWorkspaceModuleText // 2)
+                                    (approximateSizeOfWorkspaceStateDifferenceModel_2021_01 workspaceStateDiffModel)
                         ]
 
 
-compositionHashFromProject : FileTreeInWorkspace.FileTreeNode -> String
-compositionHashFromProject =
+compositionHashFromWorkspace : FileTreeInWorkspace.FileTreeNode -> String
+compositionHashFromWorkspace =
     FileTreeInWorkspace.compositionHashFromFileTreeNode >> SHA256.toHex
 
 
-approximateSizeOfProjectStateDifferenceModel_2021_01 : ProjectState_2021_01.ProjectStateDifference -> Int
-approximateSizeOfProjectStateDifferenceModel_2021_01 diff =
+approximateSizeOfWorkspaceStateDifferenceModel_2021_01 : WorkspaceState_2021_01.WorkspaceStateDifference -> Int
+approximateSizeOfWorkspaceStateDifferenceModel_2021_01 diff =
     [ diff.removeNodes
         |> List.concatMap (\removeNode -> [ removeNode |> List.map String.length |> List.sum, 20 ])
     , diff.changeBlobs
@@ -316,13 +316,13 @@ approximateSizeOfProjectStateDifferenceModel_2021_01 diff =
                     |> List.concatMap
                         (\changeElement ->
                             case changeElement of
-                                ProjectState_2021_01.RemoveBytes _ ->
+                                WorkspaceState_2021_01.RemoveBytes _ ->
                                     [ 30 ]
 
-                                ProjectState_2021_01.ReuseBytes _ ->
+                                WorkspaceState_2021_01.ReuseBytes _ ->
                                     [ 30 ]
 
-                                ProjectState_2021_01.AddBytes addBytes ->
+                                WorkspaceState_2021_01.AddBytes addBytes ->
                                     [ 30, Bytes.width addBytes ]
                         )
                 ]

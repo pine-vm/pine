@@ -41,8 +41,8 @@ import FontAwesome.Styles
 import Frontend.BrowserApplicationInitWithTime as BrowserApplicationInitWithTime
 import Frontend.ContainerHtml
 import Frontend.MonacoEditor
-import Frontend.ProjectStateInUrl
 import Frontend.Visuals as Visuals
+import Frontend.WorkspaceStateInUrl
 import FrontendBackendInterface
 import Html
 import Html.Attributes as HA
@@ -56,7 +56,6 @@ import Keyboard.Key
 import LanguageService
 import List.Extra
 import Parser
-import ProjectState_2021_01
 import Result.Extra
 import SHA256
 import String.Extra
@@ -64,6 +63,7 @@ import Task
 import Time
 import Url
 import Url.Builder
+import WorkspaceState_2021_01
 import Zip
 import Zip.Entry
 
@@ -96,16 +96,16 @@ type alias State =
 
 
 type WorkspaceStateStructure
-    = WorkspaceOk WorkingProjectStateStructure
+    = WorkspaceOk WorkspaceOkStruct
     | WorkspaceLoadingFromLink
-        { projectStateDescription : ProjectState_2021_01.ProjectState
+        { workspaceStateDescription : WorkspaceState_2021_01.WorkspaceState
         , filePathToOpen : Maybe (List String)
         , expectedCompositionHash : Maybe String
         }
     | WorkspaceErr String
 
 
-type alias WorkingProjectStateStructure =
+type alias WorkspaceOkStruct =
     { fileTree : FileTreeInWorkspace.FileTreeNode
     , editing : { filePathOpenedInEditor : Maybe (List String) }
     , decodeMessageFromMonacoEditorError : Maybe Json.Decode.Error
@@ -193,17 +193,17 @@ type Event
     = TimeHasArrived Time.Posix
     | UserInputLoadFromGitOpenDialog
     | UserInputLoadFromGit UserInputLoadFromGitEventStructure
-    | UserInputLoadOrImportTakeProjectStateEvent LoadOrImportProjectStateOrigin
+    | UserInputLoadOrImportTakeWorkspaceStateEvent LoadOrImportWorkspaceStateOrigin
     | UserInputClosePopup
     | BackendLoadFromGitResultEvent String (Result (Http.Detailed.Error String) (Result String FrontendBackendInterface.LoadCompositionResponseStructure))
     | UrlRequest Browser.UrlRequest
     | UrlChange Url.Url
     | WorkspaceEvent WorkspaceEventStructure
-    | UserInputGetLinkToProject { createDiffIfBaseAvailable : Bool }
+    | UserInputGetLinkToWorkspace { createDiffIfBaseAvailable : Bool }
     | UserInputLoadedZipArchiveFile File.File
     | UserInputLoadedZipArchiveBytes Bytes.Bytes
-    | UserInputImportProjectFromZipArchive UserInputImportFromZipArchiveEventStructure
-    | UserInputExportProjectToZipArchive { sendDownloadCmd : Bool }
+    | UserInputImportWorkspaceFromZipArchive UserInputImportFromZipArchiveEventStructure
+    | UserInputExportWorkspaceToZipArchive { sendDownloadCmd : Bool }
     | UserInputToggleTitleBarMenu TitlebarMenuEntry
     | UserInputMouseOverTitleBarMenu (Maybe TitlebarMenuEntry)
     | UserInputKeyDownEvent Keyboard.Event.KeyboardEvent
@@ -244,18 +244,18 @@ type PopupState
 
 
 type DialogState
-    = GetLinkToProjectDialog GetLinkToProjectDialogState
+    = GetLinkToWorkspaceDialog GetLinkToWorkspaceDialogState
     | LoadFromGitDialog LoadFromGitDialogState
     | ExportToZipArchiveDialog
     | ImportFromZipArchiveDialog ImportFromZipArchiveDialogState
 
 
 type TitlebarMenuEntry
-    = ProjectMenuEntry
+    = WorkspaceMenuEntry
 
 
-type alias GetLinkToProjectDialogState =
-    { urlToProject : String }
+type alias GetLinkToWorkspaceDialogState =
+    { urlToWorkspace : String }
 
 
 type alias LoadFromGitDialogState =
@@ -270,9 +270,9 @@ type alias ImportFromZipArchiveDialogState =
     }
 
 
-type LoadOrImportProjectStateOrigin
-    = FromZipArchiveProjectState ImportFromZipArchiveOk
-    | FromGitProjectState BackendLoadFromGitOkWithCache
+type LoadOrImportWorkspaceStateOrigin
+    = FromZipArchiveWorkspaceState ImportFromZipArchiveOk
+    | FromGitWorkspaceState BackendLoadFromGitOkWithCache
 
 
 type alias ImportFromZipArchiveOk =
@@ -327,21 +327,21 @@ init _ url navigationKey time =
     }
         |> foldUpdates
             [ update (UrlChange url)
-            , updateBeginLoadDefaultProjectIfWorkspaceErr
+            , updateBeginLoadDefaultIfWorkspaceErr
             ]
 
 
-updateBeginLoadDefaultProjectIfWorkspaceErr : State -> ( State, Cmd Event )
-updateBeginLoadDefaultProjectIfWorkspaceErr stateBefore =
+updateBeginLoadDefaultIfWorkspaceErr : State -> ( State, Cmd Event )
+updateBeginLoadDefaultIfWorkspaceErr stateBefore =
     case stateBefore.workspace of
         WorkspaceErr _ ->
-            updateToBeginLoadProjectState
-                { projectStateExpectedCompositionHash = Nothing
+            updateToBeginLoadWorkspaceState
+                { workspaceStateExpectedCompositionHash = Nothing
                 , filePathToOpen = Just [ "src", "Main.elm" ]
                 }
                 stateBefore
-                { base = defaultProjectLink
-                , differenceFromBase = ProjectState_2021_01.noDifference
+                { base = defaultWorkspaceLink
+                , differenceFromBase = WorkspaceState_2021_01.noDifference
                 }
 
         _ ->
@@ -421,24 +421,24 @@ update event stateBefore =
                 _ ->
                     ( stateBefore, Cmd.none )
 
-        UserInputGetLinkToProject generateLink ->
+        UserInputGetLinkToWorkspace generateLink ->
             case stateBefore.workspace of
                 WorkspaceOk workingState ->
                     let
-                        urlToProject =
-                            setProjectStateInUrlForBookmark
+                        urlToWorkspace =
+                            setWorkspaceStateInUrlForBookmark
                                 { createDiffIfBaseAvailable = generateLink.createDiffIfBaseAvailable }
                                 workingState
                                 stateBefore
                                 |> Url.toString
 
                         dialog =
-                            { urlToProject = urlToProject }
+                            { urlToWorkspace = urlToWorkspace }
 
                         cmd =
-                            Navigation.pushUrl stateBefore.navigationKey urlToProject
+                            Navigation.pushUrl stateBefore.navigationKey urlToWorkspace
                     in
-                    ( { stateBefore | popup = Just (ModalDialog (GetLinkToProjectDialog dialog)) }, cmd )
+                    ( { stateBefore | popup = Just (ModalDialog (GetLinkToWorkspaceDialog dialog)) }, cmd )
 
                 _ ->
                     ( stateBefore, Cmd.none )
@@ -473,21 +473,21 @@ update event stateBefore =
                 _ ->
                     ( stateBefore, Cmd.none )
 
-        UserInputLoadOrImportTakeProjectStateEvent origin ->
+        UserInputLoadOrImportTakeWorkspaceStateEvent origin ->
             let
                 ( fileTree, urlToPush ) =
                     case origin of
-                        FromZipArchiveProjectState fromZip ->
+                        FromZipArchiveWorkspaceState fromZip ->
                             ( fromZip.fileTree
                             , Url.Builder.absolute
                                 (List.filter (String.isEmpty >> not) (String.split "/" stateBefore.url.path))
                                 []
                             )
 
-                        FromGitProjectState fromGit ->
+                        FromGitWorkspaceState fromGit ->
                             ( fromGit.fileTree
                             , stateBefore.url
-                                |> Frontend.ProjectStateInUrl.setProjectStateInUrl
+                                |> Frontend.WorkspaceStateInUrl.setWorkspaceStateInUrl
                                     fromGit.fileTree
                                     (Just fromGit)
                                     { filePathToOpen = Nothing }
@@ -506,21 +506,21 @@ update event stateBefore =
             , urlToPush |> Navigation.pushUrl stateBefore.navigationKey
             )
 
-        UserInputExportProjectToZipArchive { sendDownloadCmd } ->
+        UserInputExportWorkspaceToZipArchive { sendDownloadCmd } ->
             case stateBefore.workspace of
                 WorkspaceOk workingState ->
                     let
                         cmd =
                             if sendDownloadCmd then
                                 let
-                                    projectStateHash =
+                                    workspaceStateHash =
                                         FileTreeInWorkspace.compositionHashFromFileTreeNode workingState.fileTree
                                 in
                                 workingState.fileTree
                                     |> buildZipArchiveFromFileTree
                                     |> Zip.toBytes
                                     |> File.Download.bytes
-                                        ("elm-app-" ++ SHA256.toHex projectStateHash ++ ".zip")
+                                        ("elm-app-" ++ SHA256.toHex workspaceStateHash ++ ".zip")
                                         "application/zip"
 
                             else
@@ -531,14 +531,14 @@ update event stateBefore =
                 _ ->
                     ( stateBefore, Cmd.none )
 
-        UserInputImportProjectFromZipArchive ImportFromZipArchiveOpenDialog ->
+        UserInputImportWorkspaceFromZipArchive ImportFromZipArchiveOpenDialog ->
             ( { stateBefore
                 | popup = Just (ModalDialog (ImportFromZipArchiveDialog { loadCompositionResult = Nothing }))
               }
             , Cmd.none
             )
 
-        UserInputImportProjectFromZipArchive ImportFromZipArchiveSelectFile ->
+        UserInputImportWorkspaceFromZipArchive ImportFromZipArchiveSelectFile ->
             ( stateBefore
             , File.Select.file [ "application/zip" ] UserInputLoadedZipArchiveFile
             )
@@ -560,7 +560,7 @@ update event stateBefore =
                                 |> Result.map
                                     (\fileTree ->
                                         { fileTree = fileTree
-                                        , compositionIdCache = Frontend.ProjectStateInUrl.projectStateCompositionHash (FileTreeInWorkspace.mapBlobsToBytes fileTree)
+                                        , compositionIdCache = Frontend.WorkspaceStateInUrl.workspaceStateCompositionHash (FileTreeInWorkspace.mapBlobsToBytes fileTree)
                                         }
                                     )
                     in
@@ -616,9 +616,9 @@ update event stateBefore =
                                 _ ->
                                     False
 
-                        setProjectStateInUrlCmd =
+                        setWorkspaceStateInUrlCmd =
                             if shouldUpdateUrl then
-                                setProjectStateInUrlForBookmark
+                                setWorkspaceStateInUrlForBookmark
                                     { createDiffIfBaseAvailable = True }
                                     workspaceBefore
                                     stateBefore
@@ -631,7 +631,7 @@ update event stateBefore =
                     ( { stateBefore | workspace = WorkspaceOk workspace }
                         |> mapForFocusOutsideTitlebarMenu
                     , [ Cmd.map WorkspaceEvent workspaceCmd
-                      , setProjectStateInUrlCmd
+                      , setWorkspaceStateInUrlCmd
                       ]
                         |> Cmd.batch
                     )
@@ -684,7 +684,7 @@ updateUserClickedLinkInPreview { href } stateBefore =
                 ( stateBefore, Cmd.none )
 
             else
-                case Frontend.ProjectStateInUrl.projectStateDescriptionFromUrl url of
+                case Frontend.WorkspaceStateInUrl.workspaceStateDescriptionFromUrl url of
                     Nothing ->
                         ( stateBefore, Cmd.none )
 
@@ -713,8 +713,8 @@ userInputFocusOutsideTitlebarMenu stateBefore =
         stateBefore
 
 
-setProjectStateInUrlForBookmark : { createDiffIfBaseAvailable : Bool } -> WorkingProjectStateStructure -> State -> Url.Url
-setProjectStateInUrlForBookmark { createDiffIfBaseAvailable } workingState state =
+setWorkspaceStateInUrlForBookmark : { createDiffIfBaseAvailable : Bool } -> WorkspaceOkStruct -> State -> Url.Url
+setWorkspaceStateInUrlForBookmark { createDiffIfBaseAvailable } workingState state =
     let
         baseToUse =
             if not createDiffIfBaseAvailable then
@@ -726,7 +726,7 @@ setProjectStateInUrlForBookmark { createDiffIfBaseAvailable } workingState state
                     |> Maybe.andThen Result.toMaybe
     in
     state.url
-        |> Frontend.ProjectStateInUrl.setProjectStateInUrl
+        |> Frontend.WorkspaceStateInUrl.setWorkspaceStateInUrl
             workingState.fileTree
             baseToUse
             { filePathToOpen = workingState.editing.filePathOpenedInEditor }
@@ -775,8 +775,8 @@ updateForUserInputLoadFromGit { time } event dialogStateBefore =
 updateWorkspace :
     { time : Time.Posix }
     -> WorkspaceEventStructure
-    -> WorkingProjectStateStructure
-    -> ( WorkingProjectStateStructure, Cmd WorkspaceEventStructure )
+    -> WorkspaceOkStruct
+    -> ( WorkspaceOkStruct, Cmd WorkspaceEventStructure )
 updateWorkspace updateConfig event stateBeforeApplyingEvent =
     let
         ( stateBeforeConsiderCompile, cmd ) =
@@ -876,12 +876,12 @@ updateWorkspace updateConfig event stateBeforeApplyingEvent =
     )
 
 
-filePathOpenedInEditorFromWorkspace : WorkingProjectStateStructure -> Maybe (List String)
+filePathOpenedInEditorFromWorkspace : WorkspaceOkStruct -> Maybe (List String)
 filePathOpenedInEditorFromWorkspace =
     fileOpenedInEditorFromWorkspace >> Maybe.map Tuple.first
 
 
-fileOpenedInEditorFromWorkspace : WorkingProjectStateStructure -> Maybe ( List String, FileTreeInWorkspace.BlobNodeWithCache )
+fileOpenedInEditorFromWorkspace : WorkspaceOkStruct -> Maybe ( List String, FileTreeInWorkspace.BlobNodeWithCache )
 fileOpenedInEditorFromWorkspace workingState =
     case workingState.editing.filePathOpenedInEditor of
         Nothing ->
@@ -899,8 +899,8 @@ fileOpenedInEditorFromWorkspace workingState =
 updateWorkspaceWithoutCmdToUpdateEditor :
     { time : Time.Posix }
     -> WorkspaceEventStructure
-    -> WorkingProjectStateStructure
-    -> ( WorkingProjectStateStructure, Cmd WorkspaceEventStructure )
+    -> WorkspaceOkStruct
+    -> ( WorkspaceOkStruct, Cmd WorkspaceEventStructure )
 updateWorkspaceWithoutCmdToUpdateEditor updateConfig event stateBefore =
     case event of
         UserInputOpenFileInEditor filePath ->
@@ -1192,8 +1192,8 @@ parseElmFormatResponse response =
 
 provideCompletionItems :
     Frontend.MonacoEditor.RequestCompletionItemsStruct
-    -> WorkingProjectStateStructure
-    -> ( WorkingProjectStateStructure, List Frontend.MonacoEditor.MonacoCompletionItem )
+    -> WorkspaceOkStruct
+    -> ( WorkspaceOkStruct, List Frontend.MonacoEditor.MonacoCompletionItem )
 provideCompletionItems request stateBefore =
     case stateBefore.editing.filePathOpenedInEditor of
         Nothing ->
@@ -1212,8 +1212,8 @@ provideCompletionItems request stateBefore =
 
 provideHover :
     Frontend.MonacoEditor.RequestHoverStruct
-    -> WorkingProjectStateStructure
-    -> ( WorkingProjectStateStructure, List String )
+    -> WorkspaceOkStruct
+    -> ( WorkspaceOkStruct, List String )
 provideHover request stateBefore =
     case stateBefore.editing.filePathOpenedInEditor of
         Nothing ->
@@ -1233,8 +1233,8 @@ provideHover request stateBefore =
 
 updateAndGetFromLanguageService :
     (LanguageService.LanguageServiceState -> a)
-    -> WorkingProjectStateStructure
-    -> ( WorkingProjectStateStructure, a )
+    -> WorkspaceOkStruct
+    -> ( WorkspaceOkStruct, a )
 updateAndGetFromLanguageService getFromLangService stateBefore =
     let
         languageServiceState =
@@ -1248,80 +1248,80 @@ updateAndGetFromLanguageService getFromLangService stateBefore =
 processEventUrlChanged : Url.Url -> State -> ( State, Cmd Event )
 processEventUrlChanged url stateBefore =
     let
-        projectStateExpectedCompositionHash =
-            Frontend.ProjectStateInUrl.projectStateHashFromUrl url
+        workspaceStateExpectedCompositionHash =
+            Frontend.WorkspaceStateInUrl.workspaceStateHashFromUrl url
 
         filePathToOpen =
-            Frontend.ProjectStateInUrl.filePathToOpenFromUrl url
+            Frontend.WorkspaceStateInUrl.filePathToOpenFromUrl url
                 |> Maybe.map (String.split "/" >> List.concatMap (String.split "\\"))
 
-        projectWithMatchingStateHashAlreadyLoaded =
+        workspaceWithMatchingStateHashAlreadyLoaded =
             case stateBefore.workspace of
                 WorkspaceOk workingState ->
-                    Just (Frontend.ProjectStateInUrl.projectStateCompositionHash (FileTreeInWorkspace.mapBlobsToBytes workingState.fileTree))
-                        == projectStateExpectedCompositionHash
+                    Just (Frontend.WorkspaceStateInUrl.workspaceStateCompositionHash (FileTreeInWorkspace.mapBlobsToBytes workingState.fileTree))
+                        == workspaceStateExpectedCompositionHash
 
                 _ ->
                     False
 
-        continueWithDiffProjectState =
-            updateToBeginLoadProjectState
-                { projectStateExpectedCompositionHash = projectStateExpectedCompositionHash
+        continueWithDiffWorkspaceState =
+            updateToBeginLoadWorkspaceState
+                { workspaceStateExpectedCompositionHash = workspaceStateExpectedCompositionHash
                 , filePathToOpen = filePathToOpen
                 }
                 stateBefore
     in
-    case Frontend.ProjectStateInUrl.projectStateDescriptionFromUrl url of
+    case Frontend.WorkspaceStateInUrl.workspaceStateDescriptionFromUrl url of
         Nothing ->
             ( stateBefore, Cmd.none )
 
         Just (Err fromUrlError) ->
             ( { stateBefore
-                | workspace = WorkspaceErr ("Failed to decode project state from URL: " ++ fromUrlError)
+                | workspace = WorkspaceErr ("Failed to decode workspace state from URL: " ++ fromUrlError)
               }
             , Cmd.none
             )
 
-        Just (Ok projectStateDescription) ->
-            if projectWithMatchingStateHashAlreadyLoaded then
+        Just (Ok workspaceDescription) ->
+            if workspaceWithMatchingStateHashAlreadyLoaded then
                 ( stateBefore, Cmd.none )
 
             else
-                case projectStateDescription of
-                    Frontend.ProjectStateInUrl.LiteralProjectState fileTreeFromUrl ->
-                        updateForLoadedProjectState
-                            { expectedCompositionHash = projectStateExpectedCompositionHash
+                case workspaceDescription of
+                    Frontend.WorkspaceStateInUrl.LiteralWorkspaceState fileTreeFromUrl ->
+                        updateForLoadedWorkspaceState
+                            { expectedCompositionHash = workspaceStateExpectedCompositionHash
                             , filePathToOpen = filePathToOpen
                             }
                             (FileTreeInWorkspace.mapBlobsFromBytes fileTreeFromUrl)
-                            ProjectState_2021_01.noDifference
+                            WorkspaceState_2021_01.noDifference
                             stateBefore
 
-                    Frontend.ProjectStateInUrl.LinkProjectState linkToProjectState ->
-                        continueWithDiffProjectState
-                            { base = linkToProjectState
-                            , differenceFromBase = ProjectState_2021_01.noDifference
+                    Frontend.WorkspaceStateInUrl.LinkWorkspaceState linkToWorkspaceState ->
+                        continueWithDiffWorkspaceState
+                            { base = linkToWorkspaceState
+                            , differenceFromBase = WorkspaceState_2021_01.noDifference
                             }
 
-                    Frontend.ProjectStateInUrl.DiffProjectState_Version_2021_01 diffProjectState ->
-                        continueWithDiffProjectState diffProjectState
+                    Frontend.WorkspaceStateInUrl.DiffWorkspaceState_Version_2021_01 diffWorkspaceState ->
+                        continueWithDiffWorkspaceState diffWorkspaceState
 
 
-updateToBeginLoadProjectState :
-    { projectStateExpectedCompositionHash : Maybe String, filePathToOpen : Maybe (List String) }
+updateToBeginLoadWorkspaceState :
+    { workspaceStateExpectedCompositionHash : Maybe String, filePathToOpen : Maybe (List String) }
     -> State
-    -> ProjectState_2021_01.ProjectState
+    -> WorkspaceState_2021_01.WorkspaceState
     -> ( State, Cmd Event )
-updateToBeginLoadProjectState { projectStateExpectedCompositionHash, filePathToOpen } stateBefore projectStateDescription =
+updateToBeginLoadWorkspaceState { workspaceStateExpectedCompositionHash, filePathToOpen } stateBefore workspaceStateDescription =
     ( { stateBefore
         | workspace =
             WorkspaceLoadingFromLink
-                { projectStateDescription = projectStateDescription
+                { workspaceStateDescription = workspaceStateDescription
                 , filePathToOpen = filePathToOpen
-                , expectedCompositionHash = projectStateExpectedCompositionHash
+                , expectedCompositionHash = workspaceStateExpectedCompositionHash
                 }
       }
-    , loadFromGitCmd projectStateDescription.base
+    , loadFromGitCmd workspaceStateDescription.base
     )
 
 
@@ -1355,16 +1355,16 @@ processEventBackendLoadFromGitResult urlIntoGitRepository result stateBeforeReme
 
         _ ->
             case stateBefore.workspace of
-                WorkspaceLoadingFromLink projectStateLoadingFromLink ->
-                    if urlIntoGitRepository == projectStateLoadingFromLink.projectStateDescription.base then
+                WorkspaceLoadingFromLink workspaceLoadingFromLink ->
+                    if urlIntoGitRepository == workspaceLoadingFromLink.workspaceStateDescription.base then
                         case resultWithFileTreeAndCache |> Result.Extra.unpack (describeHttpError >> Err) identity of
                             Ok loadOk ->
-                                updateForLoadedProjectState
-                                    { expectedCompositionHash = projectStateLoadingFromLink.expectedCompositionHash
-                                    , filePathToOpen = projectStateLoadingFromLink.filePathToOpen
+                                updateForLoadedWorkspaceState
+                                    { expectedCompositionHash = workspaceLoadingFromLink.expectedCompositionHash
+                                    , filePathToOpen = workspaceLoadingFromLink.filePathToOpen
                                     }
                                     loadOk.fileTree
-                                    projectStateLoadingFromLink.projectStateDescription.differenceFromBase
+                                    workspaceLoadingFromLink.workspaceStateDescription.differenceFromBase
                                     stateBefore
 
                             Err loadingError ->
@@ -1379,30 +1379,30 @@ processEventBackendLoadFromGitResult urlIntoGitRepository result stateBeforeReme
                     ( stateBefore, Cmd.none )
 
 
-updateForLoadedProjectState :
+updateForLoadedWorkspaceState :
     { expectedCompositionHash : Maybe String, filePathToOpen : Maybe (List String) }
     -> FileTreeInWorkspace.FileTreeNode
-    -> ProjectState_2021_01.ProjectStateDifference
+    -> WorkspaceState_2021_01.WorkspaceStateDifference
     -> State
     -> ( State, Cmd Event )
-updateForLoadedProjectState config loadedBaseProjectState projectStateDiff stateBefore =
+updateForLoadedWorkspaceState config loadedBaseWorkspaceState workspaceStateDiff stateBefore =
     ( (case
-        FileTreeInWorkspace.applyProjectStateDifference_2021_01
-            projectStateDiff
-            (FileTreeInWorkspace.mapBlobsToBytes loadedBaseProjectState)
+        FileTreeInWorkspace.applyWorkspaceStateDifference_2021_01
+            workspaceStateDiff
+            (FileTreeInWorkspace.mapBlobsToBytes loadedBaseWorkspaceState)
        of
         Err error ->
-            Err ("Failed to apply difference model to compute project state: " ++ error)
+            Err ("Failed to apply difference model to compute workspace state: " ++ error)
 
-        Ok composedProjectState ->
+        Ok composedWorkspaceState ->
             let
-                composedProjectStateHashBase16 =
-                    Frontend.ProjectStateInUrl.projectStateCompositionHash composedProjectState
+                composedWorkspaceStateHashBase16 =
+                    Frontend.WorkspaceStateInUrl.workspaceStateCompositionHash composedWorkspaceState
 
                 continueIfHashOk =
                     { stateBefore
                         | workspace =
-                            { fileTree = FileTreeInWorkspace.mapBlobsFromBytes composedProjectState
+                            { fileTree = FileTreeInWorkspace.mapBlobsFromBytes composedWorkspaceState
                             , filePathOpenedInEditor = config.filePathToOpen
                             }
                                 |> initWorkspaceFromFileTreeAndFileSelection
@@ -1415,13 +1415,13 @@ updateForLoadedProjectState config loadedBaseProjectState projectStateDiff state
                     continueIfHashOk
 
                 Just expectedCompositionHash ->
-                    if composedProjectStateHashBase16 == expectedCompositionHash then
+                    if composedWorkspaceStateHashBase16 == expectedCompositionHash then
                         continueIfHashOk
 
                     else
                         Err
-                            ("Composed project state has hash "
-                                ++ composedProjectStateHashBase16
+                            ("Composed workspace state has hash "
+                                ++ composedWorkspaceStateHashBase16
                                 ++ " instead of the expected hash "
                                 ++ expectedCompositionHash
                             )
@@ -1445,7 +1445,7 @@ fileTreeNodeFromListFileWithPath =
         >> FileTreeInWorkspace.sortedFileTreeFromListOfBlobsAsBytes
 
 
-elmFormatCmdFromState : WorkingProjectStateStructure -> Maybe ( String, Cmd WorkspaceEventStructure )
+elmFormatCmdFromState : WorkspaceOkStruct -> Maybe ( String, Cmd WorkspaceEventStructure )
 elmFormatCmdFromState state =
     case fileOpenedInEditorFromWorkspace state of
         Nothing ->
@@ -1497,7 +1497,7 @@ loadFromGitCmd urlIntoGitRepository =
         (Result.map Tuple.second >> BackendLoadFromGitResultEvent urlIntoGitRepository)
 
 
-compileFileOpenedInEditor : WorkingProjectStateStructure -> ( WorkingProjectStateStructure, Cmd WorkspaceEventStructure )
+compileFileOpenedInEditor : WorkspaceOkStruct -> ( WorkspaceOkStruct, Cmd WorkspaceEventStructure )
 compileFileOpenedInEditor stateBefore =
     case prepareCompileForFileOpenedInEditor stateBefore of
         Nothing ->
@@ -1519,7 +1519,7 @@ compileFileOpenedInEditor stateBefore =
             )
 
 
-syntaxInspectFileOpenedInEditor : WorkingProjectStateStructure -> ( WorkingProjectStateStructure, Cmd WorkspaceEventStructure )
+syntaxInspectFileOpenedInEditor : WorkspaceOkStruct -> ( WorkspaceOkStruct, Cmd WorkspaceEventStructure )
 syntaxInspectFileOpenedInEditor stateBefore =
     case fileOpenedInEditorFromWorkspace stateBefore of
         Nothing ->
@@ -1571,7 +1571,7 @@ requestToBackendCmdFromCompilationInProgress compilation =
 
 
 prepareCompileForFileOpenedInEditor :
-    WorkingProjectStateStructure
+    WorkspaceOkStruct
     -> Maybe { requestFromUserIdentity : ElmMakeRequestStructure, compile : () -> CompilationState }
 prepareCompileForFileOpenedInEditor workspace =
     case workspace.editing.filePathOpenedInEditor of
@@ -1770,7 +1770,7 @@ view : State -> Browser.Document Event
 view state =
     let
         mainContentFromLoadingFromLink { linkUrl, progressOrResultElement, expectedCompositionHash } =
-            [ Element.text "Loading project from "
+            [ Element.text "Loading workspace from "
             , linkElementFromUrlAndTextLabel
                 { url = linkUrl
                 , labelText = linkUrl
@@ -1785,18 +1785,18 @@ view state =
                     ]
 
         titlebarEntries =
-            [ ProjectMenuEntry ]
+            [ WorkspaceMenuEntry ]
                 |> List.map (titlebarMenuEntryButton state)
 
         mainContent =
             case state.workspace of
-                WorkspaceLoadingFromLink loadingProjectStateFromLink ->
+                WorkspaceLoadingFromLink loadingWorkspaceStateFromLink ->
                     let
                         loadResult =
                             state.lastBackendLoadFromGitResult
                                 |> Maybe.andThen
                                     (\( requestUrl, result ) ->
-                                        if requestUrl == loadingProjectStateFromLink.projectStateDescription.base then
+                                        if requestUrl == loadingWorkspaceStateFromLink.workspaceStateDescription.base then
                                             Just result
 
                                         else
@@ -1815,14 +1815,14 @@ view state =
                                     Element.text "Completed"
 
                         expectedCompositionHash =
-                            if loadingProjectStateFromLink.projectStateDescription.differenceFromBase == ProjectState_2021_01.noDifference then
-                                loadingProjectStateFromLink.expectedCompositionHash
+                            if loadingWorkspaceStateFromLink.workspaceStateDescription.differenceFromBase == WorkspaceState_2021_01.noDifference then
+                                loadingWorkspaceStateFromLink.expectedCompositionHash
 
                             else
                                 Nothing
                     in
                     mainContentFromLoadingFromLink
-                        { linkUrl = loadingProjectStateFromLink.projectStateDescription.base
+                        { linkUrl = loadingWorkspaceStateFromLink.workspaceStateDescription.base
                         , progressOrResultElement = progressOrResultElement
                         , expectedCompositionHash = expectedCompositionHash
                         }
@@ -2123,8 +2123,8 @@ view state =
                     ]
                         |> Element.column [ Element.width Element.fill, Element.height Element.fill ]
 
-                WorkspaceErr projectStateError ->
-                    [ ("Failed to load project state: " ++ String.left 1000 projectStateError)
+                WorkspaceErr workspaceStateError ->
+                    [ ("Failed to load workspace state: " ++ String.left 1000 workspaceStateError)
                         |> dialogErrorElementFromDescription
                         |> Element.el
                             [ Element.padding defaultFontSize
@@ -2170,10 +2170,10 @@ view state =
                 Just (TitlebarMenu _ _) ->
                     []
 
-                Just (ModalDialog (GetLinkToProjectDialog dialog)) ->
+                Just (ModalDialog (GetLinkToWorkspaceDialog dialog)) ->
                     case state.workspace of
                         WorkspaceOk workingState ->
-                            viewGetLinkToProjectDialog dialog workingState.fileTree
+                            viewGetLinkToWorkspaceDialog dialog workingState.fileTree
                                 |> popupWindowElementAttributesFromAttributes
 
                         _ ->
@@ -2358,7 +2358,7 @@ viewFileTreeList =
         >> Element.column [ Element.width Element.fill ]
 
 
-toggleEnlargedPaneButton : WorkingProjectStateStructure -> WorkspacePane -> Element.Element WorkspaceEventStructure
+toggleEnlargedPaneButton : WorkspaceOkStruct -> WorkspacePane -> Element.Element WorkspaceEventStructure
 toggleEnlargedPaneButton state pane =
     let
         ( icon, onPress ) =
@@ -2395,16 +2395,16 @@ type alias PopupWindowAttributes event =
     }
 
 
-viewGetLinkToProjectDialog : GetLinkToProjectDialogState -> FileTreeInWorkspace.FileTreeNode -> PopupWindowAttributes Event
-viewGetLinkToProjectDialog dialogState projectState =
+viewGetLinkToWorkspaceDialog : GetLinkToWorkspaceDialogState -> FileTreeInWorkspace.FileTreeNode -> PopupWindowAttributes Event
+viewGetLinkToWorkspaceDialog dialogState workspaceState =
     let
-        linkElementFromUrl urlToProject =
+        linkElementFromUrl urlToWorkspace =
             let
                 maybeDependencyUrl =
                     case
-                        urlToProject
+                        urlToWorkspace
                             |> Url.fromString
-                            |> Maybe.andThen Frontend.ProjectStateInUrl.projectStateDescriptionFromUrl
+                            |> Maybe.andThen Frontend.WorkspaceStateInUrl.workspaceStateDescriptionFromUrl
                     of
                         Nothing ->
                             Nothing
@@ -2412,22 +2412,22 @@ viewGetLinkToProjectDialog dialogState projectState =
                         Just (Err _) ->
                             Nothing
 
-                        Just (Ok projectDescription) ->
-                            case projectDescription of
-                                Frontend.ProjectStateInUrl.LiteralProjectState _ ->
+                        Just (Ok workspaceDescription) ->
+                            case workspaceDescription of
+                                Frontend.WorkspaceStateInUrl.LiteralWorkspaceState _ ->
                                     Nothing
 
-                                Frontend.ProjectStateInUrl.LinkProjectState link ->
+                                Frontend.WorkspaceStateInUrl.LinkWorkspaceState link ->
                                     Just link
 
-                                Frontend.ProjectStateInUrl.DiffProjectState_Version_2021_01 diffProjectState ->
-                                    Just diffProjectState.base
+                                Frontend.WorkspaceStateInUrl.DiffWorkspaceState_Version_2021_01 diffWorkspaceState ->
+                                    Just diffWorkspaceState.base
 
                 dependenciesDescriptionLines =
                     maybeDependencyUrl
                         |> Maybe.map
                             (\dependencyUrl ->
-                                [ [ Element.text "The project state in this link depends on loading related data from the following URL: "
+                                [ [ Element.text "The workspace state in this link depends on loading related data from the following URL: "
                                   , linkElementFromUrlAndTextLabel { url = dependencyUrl, labelText = dependencyUrl }
                                   ]
                                     |> Element.paragraph []
@@ -2436,11 +2436,11 @@ viewGetLinkToProjectDialog dialogState projectState =
                         |> Maybe.withDefault []
 
                 linkDescriptionLines =
-                    Element.paragraph [] [ Element.text ("Length of this link: " ++ String.fromInt (String.length urlToProject)) ]
+                    Element.paragraph [] [ Element.text ("Length of this link: " ++ String.fromInt (String.length urlToWorkspace)) ]
                         :: dependenciesDescriptionLines
             in
             [ linkElementWithWrappedLabel
-                { url = urlToProject, labelText = urlToProject }
+                { url = urlToWorkspace, labelText = urlToWorkspace }
                 |> Element.el
                     [ Element.height (Element.px 100)
                     , Element.scrollbarY
@@ -2455,20 +2455,20 @@ viewGetLinkToProjectDialog dialogState projectState =
                     ]
 
         buttonGenerateLinkOrResultElement =
-            [ [ "Use the link below to load the project's current state again later. This link is a fast way to share your project state with other people."
+            [ [ "Use the link below to load your workspace's current state again later. This link is a fast way to share your workspace with other people."
                     |> Element.text
               ]
                 |> Element.paragraph []
-            , linkElementFromUrl dialogState.urlToProject
+            , linkElementFromUrl dialogState.urlToWorkspace
             ]
                 |> Element.column [ Element.spacing defaultFontSize ]
     in
-    { title = "Get Link to Project for Bookmarking or Sharing"
+    { title = "Get Link to Workspace for Bookmarking or Sharing"
     , titleIcon = Just FontAwesome.Solid.bookmark
     , guideParagraphItems =
-        [ Element.text "Get a link to save or share your project's current state." ]
+        [ Element.text "Get a link to save or share your workspace's current state." ]
     , contentElement =
-        [ projectSummaryElementForDialog projectState
+        [ workspaceSummaryElementForDialog workspaceState
         , buttonGenerateLinkOrResultElement |> Element.el [ Element.width Element.fill ]
         ]
             |> Element.column
@@ -2584,20 +2584,20 @@ viewLoadFromGitDialog dialogState =
                 |> Maybe.map
                     (Result.Extra.unpack (describeHttpError >> Err) identity
                         >> Result.mapError (String.left 500)
-                        >> Result.map FromGitProjectState
+                        >> Result.map FromGitWorkspaceState
                         >> viewLoadOrImportDialogResultElement
                             dialogErrorElementFromDescription
-                            UserInputLoadOrImportTakeProjectStateEvent
+                            UserInputLoadOrImportTakeWorkspaceStateEvent
                     )
                 |> Maybe.withDefault Element.none
 
         exampleUrl =
             "https://github.com/onlinegamemaker/making-online-games/tree/6838f7100dd86c8c8afcfe3efd553f8fa39c77ae/games-program-codes/simple-snake"
     in
-    { title = "Load Project from Git Repository"
+    { title = "Load Workspace from Git Repository"
     , titleIcon = Just FontAwesome.Solid.cloudDownloadAlt
     , guideParagraphItems =
-        [ Element.text "Load project files from a URL to a tree in a git repository. Here is an example of such a URL: "
+        [ Element.text "Load workspace files from a public git repository URL. Here is an example of such a URL: "
         , linkElementFromUrlAndTextLabel { url = exampleUrl, labelText = exampleUrl }
         ]
     , contentElement =
@@ -2612,20 +2612,20 @@ viewLoadFromGitDialog dialogState =
 
 
 viewExportToZipArchiveDialog : FileTreeInWorkspace.FileTreeNode -> PopupWindowAttributes Event
-viewExportToZipArchiveDialog projectState =
+viewExportToZipArchiveDialog workspaceState =
     let
         buttonDownloadArchive =
             buttonElement
                 { label = Element.text "Download Archive"
-                , onPress = Just (UserInputExportProjectToZipArchive { sendDownloadCmd = True })
+                , onPress = Just (UserInputExportWorkspaceToZipArchive { sendDownloadCmd = True })
                 }
     in
-    { title = "Export Project to Zip Archive"
+    { title = "Export Workspace to Zip Archive"
     , titleIcon = Just FontAwesome.Solid.fileExport
     , guideParagraphItems =
-        [ Element.text "Download a zip archive containing all files in your project. You can also use this archive with the 'Import from Zip Archive' function to load the project's state into the editor again." ]
+        [ Element.text "Download a zip archive containing all files in your workspace. You can also use this archive with the 'Import from Zip Archive' function to load your workspace into the editor again later." ]
     , contentElement =
-        [ projectSummaryElementForDialog projectState
+        [ workspaceSummaryElementForDialog workspaceState
         , buttonDownloadArchive |> Element.el [ Element.centerX ]
         ]
             |> Element.column
@@ -2641,24 +2641,24 @@ viewImportFromZipArchiveDialog dialogState =
         selectFileButton =
             buttonElement
                 { label = Element.text "Select zip archive file"
-                , onPress = Just (UserInputImportProjectFromZipArchive ImportFromZipArchiveSelectFile)
+                , onPress = Just (UserInputImportWorkspaceFromZipArchive ImportFromZipArchiveSelectFile)
                 }
                 |> Element.el [ Element.centerX ]
 
         resultElement =
             dialogState.loadCompositionResult
                 |> Maybe.map
-                    (Result.map FromZipArchiveProjectState
+                    (Result.map FromZipArchiveWorkspaceState
                         >> viewLoadOrImportDialogResultElement
                             dialogErrorElementFromDescription
-                            UserInputLoadOrImportTakeProjectStateEvent
+                            UserInputLoadOrImportTakeWorkspaceStateEvent
                     )
                 |> Maybe.withDefault Element.none
     in
-    { title = "Import Project from Zip Archive"
+    { title = "Import Workspace from Zip Archive"
     , titleIcon = Just FontAwesome.Solid.fileImport
     , guideParagraphItems =
-        [ Element.text "Load project files from a zip archive. Here you can select a zip archive file from your system to load as the project state." ]
+        [ Element.text "Load workspace files from a zip archive. Here you can select a zip archive file from your system to load as the workspace state." ]
     , contentElement =
         [ selectFileButton
         , resultElement
@@ -2686,22 +2686,22 @@ dialogErrorElementFromDescription =
         >> Element.paragraph [ Element.Font.color errorTextColor ]
 
 
-projectSummaryElementForDialog : FileTreeInWorkspace.FileTreeNode -> Element.Element e
-projectSummaryElementForDialog projectState =
+workspaceSummaryElementForDialog : FileTreeInWorkspace.FileTreeNode -> Element.Element e
+workspaceSummaryElementForDialog workspaceState =
     let
-        projectFiles =
-            FileTree.flatListOfBlobsFromFileTreeNode projectState
+        workspaceFiles =
+            FileTree.flatListOfBlobsFromFileTreeNode workspaceState
 
-        projectStateHashBase16 =
-            projectState
+        workspaceStateHashBase16 =
+            workspaceState
                 |> FileTreeInWorkspace.mapBlobsToBytes
-                |> Frontend.ProjectStateInUrl.projectStateCompositionHash
+                |> Frontend.WorkspaceStateInUrl.workspaceStateCompositionHash
     in
-    [ "The current project state has the hash code " ++ projectStateHashBase16
+    [ "The current workspace state has the hash code " ++ workspaceStateHashBase16
     , "It contains "
-        ++ (projectFiles |> List.length |> String.fromInt)
+        ++ (workspaceFiles |> List.length |> String.fromInt)
         ++ " files with an aggregate size of "
-        ++ (projectFiles |> List.map (Tuple.second >> .asBytes >> Bytes.width) |> List.sum |> String.fromInt)
+        ++ (workspaceFiles |> List.map (Tuple.second >> .asBytes >> Bytes.width) |> List.sum |> String.fromInt)
         ++ " bytes."
     ]
         |> List.map (Element.text >> List.singleton >> Element.paragraph [])
@@ -2710,8 +2710,8 @@ projectSummaryElementForDialog projectState =
 
 viewLoadOrImportDialogResultElement :
     (err -> Element.Element e)
-    -> (LoadOrImportProjectStateOrigin -> e)
-    -> Result err LoadOrImportProjectStateOrigin
+    -> (LoadOrImportWorkspaceStateOrigin -> e)
+    -> Result err LoadOrImportWorkspaceStateOrigin
     -> Element.Element e
 viewLoadOrImportDialogResultElement elementToDisplayFromError commitEvent loadCompositionResult =
     case loadCompositionResult of
@@ -2722,10 +2722,10 @@ viewLoadOrImportDialogResultElement elementToDisplayFromError commitEvent loadCo
             let
                 ( fileTree, compositionIdCache ) =
                     case loadOk of
-                        FromZipArchiveProjectState fromZip ->
+                        FromZipArchiveWorkspaceState fromZip ->
                             ( fromZip.fileTree, fromZip.compositionIdCache )
 
-                        FromGitProjectState fromGit ->
+                        FromGitWorkspaceState fromGit ->
                             ( fromGit.fileTree, fromGit.compositionIdCache )
             in
             [ [ ("Loaded composition "
@@ -2751,7 +2751,7 @@ viewLoadOrImportDialogResultElement elementToDisplayFromError commitEvent loadCo
                     , Element.Border.color (Element.rgba 1 1 1 0.5)
                     ]
             , buttonElement
-                { label = Element.text "Set these files as project state"
+                { label = Element.text "Set these files as workspace state"
                 , onPress = Just (commitEvent loadOk)
                 }
                 |> Element.el [ Element.centerX ]
@@ -2875,7 +2875,7 @@ popupWindowElementAttributesFromAttributes { title, titleIcon, guideParagraphIte
 
 
 viewOutputPaneContent :
-    WorkingProjectStateStructure
+    WorkspaceOkStruct
     -> { mainContent : Element.Element WorkspaceEventStructure, header : Element.Element WorkspaceEventStructure }
 viewOutputPaneContent state =
     case state.syntaxInspection of
@@ -2997,7 +2997,7 @@ viewOutputPaneContent state =
 
 
 viewOutputPaneContentFromCompilationComplete :
-    WorkingProjectStateStructure
+    WorkspaceOkStruct
     -> CompilationState
     -> LoweringCompleteStruct
     -> Result (Http.Detailed.Error String) ElmMakeResultStructure
@@ -3695,7 +3695,7 @@ titlebarMenuEntryButton state menuEntry =
 titlebarMenuEntryDropdownContent : State -> TitlebarMenuEntry -> Element.Element Event
 titlebarMenuEntryDropdownContent state menuEntry =
     let
-        canSaveProject =
+        canSaveWorkspace =
             case state.workspace of
                 WorkspaceOk _ ->
                     True
@@ -3705,27 +3705,27 @@ titlebarMenuEntryDropdownContent state menuEntry =
 
         menuEntries =
             case menuEntry of
-                ProjectMenuEntry ->
+                WorkspaceMenuEntry ->
                     [ titlebarMenuEntry
                         UserInputLoadFromGitOpenDialog
                         (Just FontAwesome.Solid.cloudDownloadAlt)
                         "Load From Git Repository"
                         True
                     , titlebarMenuEntry
-                        (UserInputImportProjectFromZipArchive ImportFromZipArchiveOpenDialog)
+                        (UserInputImportWorkspaceFromZipArchive ImportFromZipArchiveOpenDialog)
                         (Just FontAwesome.Solid.fileImport)
                         "Import From Zip Archive"
                         True
                     , titlebarMenuEntry
-                        (UserInputGetLinkToProject { createDiffIfBaseAvailable = True })
+                        (UserInputGetLinkToWorkspace { createDiffIfBaseAvailable = True })
                         (Just FontAwesome.Solid.bookmark)
                         "Get Link for Bookmarking or Sharing"
-                        canSaveProject
+                        canSaveWorkspace
                     , titlebarMenuEntry
-                        (UserInputExportProjectToZipArchive { sendDownloadCmd = False })
+                        (UserInputExportWorkspaceToZipArchive { sendDownloadCmd = False })
                         (Just FontAwesome.Solid.fileExport)
                         "Export To Zip Archive"
-                        canSaveProject
+                        canSaveWorkspace
                     ]
     in
     menuEntries
@@ -3789,8 +3789,8 @@ titlebarMenuEntry onPressEventIfEnabled maybeIcon label isEnabled =
 titlebarMenuEntryLabel : TitlebarMenuEntry -> String
 titlebarMenuEntryLabel menuEntry =
     case menuEntry of
-        ProjectMenuEntry ->
-            "Project"
+        WorkspaceMenuEntry ->
+            "Workspace"
 
 
 setTextInMonacoEditorCmd : String -> Cmd WorkspaceEventStructure
@@ -3841,14 +3841,14 @@ monacoEditorElement _ =
         |> Element.html
 
 
-defaultProjectLink : String
-defaultProjectLink =
+defaultWorkspaceLink : String
+defaultWorkspaceLink =
     "https://github.com/onlinegamemaker/making-online-games/tree/6838f7100dd86c8c8afcfe3efd553f8fa39c77ae/implement/landing-app"
 
 
 initWorkspaceFromFileTreeAndFileSelection :
     { fileTree : FileTreeInWorkspace.FileTreeNode, filePathOpenedInEditor : Maybe (List String) }
-    -> WorkingProjectStateStructure
+    -> WorkspaceOkStruct
 initWorkspaceFromFileTreeAndFileSelection { fileTree, filePathOpenedInEditor } =
     { fileTree = fileTree
     , editing = { filePathOpenedInEditor = filePathOpenedInEditor }

@@ -1,4 +1,4 @@
-module ProjectState_2021_01 exposing (..)
+module WorkspaceState_2021_01 exposing (..)
 
 import Bytes
 import Bytes.Extra
@@ -6,13 +6,13 @@ import Diff
 import List.Extra
 
 
-type alias ProjectState =
+type alias WorkspaceState =
     { base : String
-    , differenceFromBase : ProjectStateDifference
+    , differenceFromBase : WorkspaceStateDifference
     }
 
 
-type alias ProjectStateDifference =
+type alias WorkspaceStateDifference =
     { removeNodes : List (List String)
     , changeBlobs : List ( List String, List BlobChangeSequenceElement )
     }
@@ -24,7 +24,7 @@ type BlobChangeSequenceElement
     | AddBytes Bytes.Bytes
 
 
-noDifference : ProjectStateDifference
+noDifference : WorkspaceStateDifference
 noDifference =
     { removeNodes = []
     , changeBlobs = []

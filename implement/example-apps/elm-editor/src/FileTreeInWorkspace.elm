@@ -10,10 +10,10 @@ import Dict
 import FileTree exposing (FileTreeNode(..))
 import List
 import Pine
-import ProjectState_2021_01
 import SHA256
 import Set
 import Tuple
+import WorkspaceState_2021_01
 
 
 type alias FileTreeNode =
@@ -103,8 +103,8 @@ setBlobAtPathInSortedFileTreeFromBytes ( path, blobContent ) =
     FileTree.setNodeAtPathInSortedFileTree ( path, blobNodeFromBytes blobContent )
 
 
-applyProjectStateDifference_2021_01 : ProjectState_2021_01.ProjectStateDifference -> FileTree.FileTreeNode Bytes.Bytes -> Result String (FileTree.FileTreeNode Bytes.Bytes)
-applyProjectStateDifference_2021_01 differenceFromBase baseComposition =
+applyWorkspaceStateDifference_2021_01 : WorkspaceState_2021_01.WorkspaceStateDifference -> FileTree.FileTreeNode Bytes.Bytes -> Result String (FileTree.FileTreeNode Bytes.Bytes)
+applyWorkspaceStateDifference_2021_01 differenceFromBase baseComposition =
     let
         compositionAfterRemovals =
             differenceFromBase.removeNodes
@@ -112,7 +112,7 @@ applyProjectStateDifference_2021_01 differenceFromBase baseComposition =
                     (\removeNode -> FileTree.removeNodeAtPath removeNode >> Maybe.withDefault (TreeNode []))
                     baseComposition
 
-        projectStateAfterChangeBlobs =
+        workspaceStateAfterChangeBlobs =
             differenceFromBase.changeBlobs
                 |> List.foldl
                     (\( blobPath, changesFromBaseBlob ) ->
@@ -123,17 +123,17 @@ applyProjectStateDifference_2021_01 differenceFromBase baseComposition =
                                     |> Maybe.withDefault Bytes.Extra.empty
 
                             changedBlobValue =
-                                ProjectState_2021_01.applyBlobChanges changesFromBaseBlob blobValueBefore
+                                WorkspaceState_2021_01.applyBlobChanges changesFromBaseBlob blobValueBefore
                         in
                         FileTree.setNodeAtPathInSortedFileTree ( blobPath, BlobNode changedBlobValue )
                     )
                     compositionAfterRemovals
     in
-    Ok projectStateAfterChangeBlobs
+    Ok workspaceStateAfterChangeBlobs
 
 
-searchProjectStateDifference_2021_01 : FileTreeNode -> { baseComposition : FileTreeNode } -> Result String ProjectState_2021_01.ProjectStateDifference
-searchProjectStateDifference_2021_01 projectState { baseComposition } =
+searchWorkspaceStateDifference_2021_01 : FileTreeNode -> { baseComposition : FileTreeNode } -> Result String WorkspaceState_2021_01.WorkspaceStateDifference
+searchWorkspaceStateDifference_2021_01 workspaceState { baseComposition } =
     let
         baseCompositionBlobs =
             baseComposition |> FileTree.flatListOfBlobsFromFileTreeNode
@@ -146,20 +146,20 @@ searchProjectStateDifference_2021_01 projectState { baseComposition } =
                 |> List.map Tuple.first
                 |> Set.fromList
 
-        projectStateBlobs =
-            projectState |> FileTree.flatListOfBlobsFromFileTreeNode
+        workspaceStateBlobs =
+            workspaceState |> FileTree.flatListOfBlobsFromFileTreeNode
 
-        projectStateBlobsPaths =
-            projectStateBlobs
+        workspaceStateBlobsPaths =
+            workspaceStateBlobs
                 |> List.map Tuple.first
                 |> Set.fromList
 
         removeNodes =
-            Set.diff baseCompositionBlobsPaths projectStateBlobsPaths
+            Set.diff baseCompositionBlobsPaths workspaceStateBlobsPaths
                 |> Set.toList
 
         addedOrChangedBlobs =
-            projectStateBlobs
+            workspaceStateBlobs
                 |> List.filter
                     (\( blobPath, newBlobContent ) ->
                         baseCompositionBlobsDict
@@ -181,7 +181,7 @@ searchProjectStateDifference_2021_01 projectState { baseComposition } =
                                     |> Maybe.withDefault Bytes.Extra.empty
 
                             changesFromBaseBlob =
-                                ProjectState_2021_01.findBlobChanges baseCompositionBlobValue blobValue.asBytes
+                                WorkspaceState_2021_01.findBlobChanges baseCompositionBlobValue blobValue.asBytes
                         in
                         { blobPath = blobPath
                         , blobValue = blobValue

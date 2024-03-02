@@ -8,7 +8,7 @@ import Frontend.MonacoEditor
 import FrontendBackendInterface
 import Json.Decode
 import Json.Encode
-import ProjectState_2021_01
+import WorkspaceState_2021_01
 
 
 jsonEncodeRequestStructure : FrontendBackendInterface.RequestStructure -> Json.Encode.Value
@@ -51,21 +51,21 @@ jsonDecodeFileTreeNode =
     Json.Decode.fail "The compiler replaces this declaration."
 
 
-jsonEncodeProjectState_2021_01 : ProjectState_2021_01.ProjectState -> Json.Encode.Value
-jsonEncodeProjectState_2021_01 =
+jsonEncodeWorkspaceState_2021_01 : WorkspaceState_2021_01.WorkspaceState -> Json.Encode.Value
+jsonEncodeWorkspaceState_2021_01 =
     always (Json.Encode.string "The compiler replaces this declaration.")
 
 
-jsonDecodeProjectState_2021_01 : Json.Decode.Decoder ProjectState_2021_01.ProjectState
-jsonDecodeProjectState_2021_01 =
+jsonDecodeWorkspaceState_2021_01 : Json.Decode.Decoder WorkspaceState_2021_01.WorkspaceState
+jsonDecodeWorkspaceState_2021_01 =
     Json.Decode.fail "The compiler replaces this declaration."
 
 
-jsonEncodeProjectStateDiff_2021_01 : ProjectState_2021_01.ProjectStateDifference -> Json.Encode.Value
-jsonEncodeProjectStateDiff_2021_01 =
+jsonEncodeWorkspaceStateDiff_2021_01 : WorkspaceState_2021_01.WorkspaceStateDifference -> Json.Encode.Value
+jsonEncodeWorkspaceStateDiff_2021_01 =
     always (Json.Encode.string "The compiler replaces this declaration.")
 
 
-jsonDecodeProjectStateDiff_2021_01 : Json.Decode.Decoder ProjectState_2021_01.ProjectStateDifference
-jsonDecodeProjectStateDiff_2021_01 =
+jsonDecodeWorkspaceStateDiff_2021_01 : Json.Decode.Decoder WorkspaceState_2021_01.WorkspaceStateDifference
+jsonDecodeWorkspaceStateDiff_2021_01 =
     Json.Decode.fail "The compiler replaces this declaration."
