@@ -2,6 +2,7 @@ using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis;
 using System.Linq;
+using System.Collections.Immutable;
 
 namespace Pine.CompilePineToDotNet;
 
@@ -249,14 +250,46 @@ public class FormatCSharpSyntaxRewriter(
                 .WithLeadingTrivia(braceIndentTrivia));
     }
 
-    public SyntaxTrivia ComputeIndentationTriviaForNode(SyntaxNode? node) =>
-        ComputeIndentationTriviaForNode(node, indentChar, indentCharsPerLevel);
+    public override SyntaxNode? VisitParameterList(ParameterListSyntax originalNode)
+    {
+        var node = (ParameterListSyntax)base.VisitParameterList(originalNode)!;
 
-    public static SyntaxTrivia ComputeIndentationTriviaForNode(SyntaxNode? node, char indentChar, int indentCharsPerLevel)
+        var indentationTrivia = ComputeIndentationTriviaForNode(originalNode, addIndentLevels: 1);
+
+        var addLineBreaks = node.Parameters.Count > 1;
+
+        var paramLeadingTrivia =
+            addLineBreaks
+            ?
+            new SyntaxTriviaList(SyntaxFactory.LineFeed, indentationTrivia)
+            :
+            new SyntaxTriviaList();
+
+        var parameters =
+            node.Parameters
+            .Select(parameter =>
+                parameter
+                .WithLeadingTrivia(paramLeadingTrivia)
+                .WithTrailingTrivia())
+            .ToImmutableArray();
+
+        return
+            node.WithParameters(SyntaxFactory.SeparatedList(parameters));
+    }
+
+    public SyntaxTrivia ComputeIndentationTriviaForNode(SyntaxNode? node, int addIndentLevels = 0) =>
+        ComputeIndentationTriviaForNode(
+            node,
+            indentChar,
+            indentCharsPerLevel,
+            addIndentLevels: addIndentLevels);
+
+    public static SyntaxTrivia ComputeIndentationTriviaForNode(
+        SyntaxNode? node, char indentChar, int indentCharsPerLevel, int addIndentLevels)
     {
         var indentationLevel = ComputeIndentationLevel(node);
 
-        var indentationText = new string(indentChar, indentationLevel * indentCharsPerLevel);
+        var indentationText = new string(indentChar, (indentationLevel + addIndentLevels) * indentCharsPerLevel);
 
         return SyntaxFactory.Whitespace(indentationText);
     }

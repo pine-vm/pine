@@ -392,6 +392,31 @@ public class FormatCSharpSyntaxRewriterTests
         StringAssert.Contains(formattedSyntaxText, expectedFormattedText);
     }
 
+    [TestMethod]
+    public void Formats_parameter_list_in_method_declaration()
+    {
+        var inputSyntaxText =
+            """
+            void method_name(int arg_a, int arg_b)
+            {
+            }
+            """.Trim();
+
+        var expectedFormattedText =
+            """
+            void method_name(
+                int arg_a,
+                int arg_b)
+            {
+            }
+            """.Trim();
+
+        var formattedSyntaxText = FormatCSharpScript(inputSyntaxText);
+
+        StringAssert.Contains(formattedSyntaxText, expectedFormattedText);
+    }
+
+
     static string FormatCSharpScript(string inputSyntaxText) =>
         FormatCSharpSyntaxRewriter.FormatSyntaxTree(ParseAsCSharpScript(inputSyntaxText))
         .GetRoot().ToFullString();
