@@ -130,6 +130,20 @@ public partial class CompileToCSharp
                 .Distinct()
                 .ToImmutableArray();
 
+            var compulationUnitAvailableSpecialized =
+                expressions
+                .Select(expr =>
+                new KeyValuePair<Expression, ImmutableHashSet<EnvConstraintId>>(
+                    expr,
+                    expressionsUsages.SelectMany(exprUsage =>
+                    exprUsage.Expression == expr && exprUsage.EnvId is { } envId ? (IReadOnlyList<EnvConstraintId>)[envId] : [])
+                    .ToImmutableHashSet()))
+                .Where(kv => 0 < kv.Value.Count)
+                .ToImmutableDictionary();
+
+            var compilationUnitEnv = new CompilationUnitEnv(
+                AvailableSpecialized: compulationUnitAvailableSpecialized);
+
             var queue = new Queue<Expression>(expressions);
 
             while (queue.Any())
@@ -170,7 +184,8 @@ public partial class CompileToCSharp
                             branchesConstrainedEnvIds: supportedConstrainedEnvironments,
                             new FunctionCompilationEnvironment(
                                 ArgumentEnvironmentName: argumentEnvironmentName,
-                                ArgumentEvalGenericName: argumentEvalGenericName))
+                                ArgumentEvalGenericName: argumentEvalGenericName,
+                                CompilationUnit: compilationUnitEnv))
                             .MapError(err => "Failed to compile expression " + withEnvDerivedId.ExpressionHashBase16[..10] + ": " + err)
                             .Map(ok =>
                                 new CompiledExpressionFunction(
@@ -319,7 +334,7 @@ public partial class CompileToCSharp
                         var declarationName =
                         MemberNameForCompiledExpressionFunction(
                             compiledExpression.Value.Identifier,
-                            constrainedEnv: null);
+                            envConstraint: null);
 
                         return
                             (SyntaxFactory.IdentifierName(DeclarationNameForValue(compiledExpression.Value.Identifier.ExpressionValue)),
@@ -1065,6 +1080,17 @@ public partial class CompileToCSharp
                     });
         }
 
+        Result<string, CompiledExpression> continueCompilingEnv(
+            Func<CompiledExpression, CompiledExpression> cont)
+        {
+            return
+            CompileToCSharpExpression(
+                parseAndEvalExpr.environment,
+                environment,
+                createLetBindingsForCse: false)
+            .Map(cont);
+        }
+
         Result<string, CompiledExpression> continueForKnownExprValue(PineValue innerExpressionValue)
         {
             return
@@ -1075,33 +1101,31 @@ public partial class CompileToCSharp
                     var innerExpressionId = CompiledExpressionId(innerExpressionValue);
 
                     return
-                    CompileToCSharpExpression(
-                        parseAndEvalExpr.environment,
-                        environment,
-                        createLetBindingsForCse: false)
-                    .Map(compiledArgumentExpression =>
-                    {
-                        return
-                        compiledArgumentExpression.MapOrAndThen(
-                            environment,
-                            argumentExprPlainValue =>
+                    continueCompilingEnv(
+                        compiledArgumentExpression =>
                         {
                             return
-                            InvocationExpressionForCompiledExpressionFunction(
-                                environment.FunctionEnvironment,
-                                innerExpressionId,
-                                argumentExprPlainValue)
-                            .MergeDependencies(
-                                compiledArgumentExpression.Dependencies.Union(
-                                    CompiledExpressionDependencies.Empty
-                                    with
-                                    {
-                                        ExpressionFunctions =
-                                        ImmutableDictionary<Expression, CompiledExpressionId>.Empty
-                                        .SetItem(innerExpression, innerExpressionId),
-                                    }));
+                            compiledArgumentExpression.MapOrAndThen(
+                                environment,
+                                argumentExprPlainValue =>
+                            {
+                                return
+                                InvocationExpressionForCompiledExpressionFunction(
+                                    environment.FunctionEnvironment,
+                                    innerExpressionId,
+                                    envConstraint: null,
+                                    argumentExprPlainValue)
+                                .MergeDependencies(
+                                    compiledArgumentExpression.Dependencies.Union(
+                                        CompiledExpressionDependencies.Empty
+                                        with
+                                        {
+                                            ExpressionFunctions =
+                                            ImmutableDictionary<Expression, CompiledExpressionId>.Empty
+                                            .SetItem(innerExpression, innerExpressionId),
+                                        }));
+                            });
                         });
-                    });
                 });
         }
 
@@ -1115,17 +1139,53 @@ public partial class CompileToCSharp
 
         var expressionPath = CodeAnalysis.TryParseExpressionAsIndexPathFromEnv(parseAndEvalExpr.expression);
 
-        if (expressionPath is not null)
+        if (expressionPath is not null && environment.EnvConstraint is { } envConstraint)
         {
-            var exprValueFromEnvConstraint =
-                environment.EnvConstraint?.TryGetValue(expressionPath);
+            var childPathEnvMap = CodeAnalysis.BuildPathMapFromChildToParentEnv(parseAndEvalExpr.environment);
+
+            bool ChildEnvContstraintItemSatisfied(KeyValuePair<IReadOnlyList<int>, PineValue> envItem)
+            {
+                if (childPathEnvMap(expressionPath) is not { } pathInCurrentEnv)
+                    return false;
+
+                return envConstraint.TryGetValue(pathInCurrentEnv) == envItem.Value;
+            }
+
+            var exprValueFromEnvConstraint = envConstraint.TryGetValue(expressionPath);
 
             if (exprValueFromEnvConstraint is not null)
             {
                 var exprValueFromEnvConstraintId = CompiledExpressionId(exprValueFromEnvConstraint);
 
                 return
-                    continueForKnownExprValue(exprValueFromEnvConstraint);
+                    PineVM.PineVM.ParseExpressionFromValueDefault(exprValueFromEnvConstraint)
+                    .AndThen(exprFromEnvConstraint =>
+                    {
+                        if (environment.FunctionEnvironment.CompilationUnit.AvailableSpecialized.TryGetValue(
+                            exprFromEnvConstraint,
+                            out var availableSpecialized))
+                        {
+                            foreach (var specializedEnvConstraint in availableSpecialized)
+                            {
+                                if (specializedEnvConstraint.ParsedEnvItems.All(ChildEnvContstraintItemSatisfied))
+                                {
+                                    return
+                                    continueCompilingEnv(
+                                        compiledEnv =>
+                                        compiledEnv.MapOrAndThen(
+                                            environment,
+                                            compiledEnvCs =>
+                                            InvocationExpressionForCompiledExpressionFunction(
+                                                environment: environment.FunctionEnvironment,
+                                                invokedFunction: exprValueFromEnvConstraintId,
+                                                envConstraint: specializedEnvConstraint,
+                                                environmentExpressionSyntax: compiledEnvCs)));
+                                }
+                            }
+                        }
+
+                        return continueForKnownExprValue(exprValueFromEnvConstraint);
+                    });
             }
         }
 
@@ -1139,18 +1199,20 @@ public partial class CompileToCSharp
         InvocationExpressionForCompiledExpressionFunction(
             environment,
             invokedFunction,
+            envConstraint: null,
             SyntaxFactory.IdentifierName(environment.ArgumentEnvironmentName));
 
     public static CompiledExpression InvocationExpressionForCompiledExpressionFunction(
         FunctionCompilationEnvironment environment,
         CompiledExpressionId invokedFunction,
+        EnvConstraintId? envConstraint,
         ExpressionSyntax environmentExpressionSyntax) =>
         CompiledExpression.WithTypeResult(
             SyntaxFactory.InvocationExpression(
                 SyntaxFactory.IdentifierName(
                     MemberNameForCompiledExpressionFunction(
                         invokedFunction,
-                        constrainedEnv: null)))
+                        envConstraint: envConstraint)))
             .WithArgumentList(
                 SyntaxFactory.ArgumentList(
                     SyntaxFactory.SeparatedList<ArgumentSyntax>(
@@ -1181,9 +1243,9 @@ public partial class CompileToCSharp
 
     public static string MemberNameForCompiledExpressionFunction(
         CompiledExpressionId derivedId,
-        EnvConstraintId? constrainedEnv) =>
+        EnvConstraintId? envConstraint) =>
         "expr_function_" + derivedId.ExpressionHashBase16[..10] +
-        (constrainedEnv is null ? null : "_env_" + MemberNameForConstrainedEnv(constrainedEnv));
+        (envConstraint is null ? null : "_env_" + MemberNameForConstrainedEnv(envConstraint));
 
     static string MemberNameForConstrainedEnv(EnvConstraintId constrainedEnv) =>
         constrainedEnv.HashBase16[..8];

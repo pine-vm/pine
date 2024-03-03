@@ -60,15 +60,6 @@ public static class PineCSharpSyntaxFactory
             })
             .ToImmutableArray();
 
-        var generalExprFuncName =
-            CompileToCSharp.CompiledExpressionId(exprUsage.Expression)
-            .Extract(err => throw new Exception(err));
-
-        var specializedDeclName =
-            CompileToCSharp.MemberNameForCompiledExpressionFunction(
-                generalExprFuncName,
-                exprUsage.EnvId);
-
         return
             SyntaxFactory.IfStatement(
                 SyntaxFactory.InvocationExpression(
@@ -91,18 +82,39 @@ public static class PineCSharpSyntaxFactory
 
                         [..prependStatments,
                         SyntaxFactory.ReturnStatement(
-                            SyntaxFactory.InvocationExpression(
-                                SyntaxFactory.IdentifierName(specializedDeclName))
-                            .WithArgumentList(
-                                SyntaxFactory.ArgumentList(
-                                    SyntaxFactory.SeparatedList<ArgumentSyntax>(
-                                        new SyntaxNodeOrToken[]{
-                                            SyntaxFactory.Argument(
-                                                SyntaxFactory.IdentifierName(compilationEnv.ArgumentEvalGenericName)),
-                                            SyntaxFactory.Token(SyntaxKind.CommaToken),
-                                            SyntaxFactory.Argument(
-                                                SyntaxFactory.IdentifierName(compilationEnv.ArgumentEnvironmentName))}))))
+                            InvocationForCompiledExprFunction(
+                                exprUsage: exprUsage,
+                                compilationEnv:compilationEnv,
+                                envArgSyntax: env => env))
                         ])));
+    }
+
+    public static ExpressionSyntax InvocationForCompiledExprFunction(
+        PineVM.ExpressionUsageAnalysis exprUsage,
+        FunctionCompilationEnvironment compilationEnv,
+        Func<ExpressionSyntax, ExpressionSyntax> envArgSyntax)
+    {
+        var generalExprFuncName =
+            CompileToCSharp.CompiledExpressionId(exprUsage.Expression)
+            .Extract(err => throw new Exception(err));
+
+        var specializedDeclName =
+            CompileToCSharp.MemberNameForCompiledExpressionFunction(
+                generalExprFuncName,
+                exprUsage.EnvId);
+
+        return
+            SyntaxFactory.InvocationExpression(
+                SyntaxFactory.IdentifierName(specializedDeclName))
+            .WithArgumentList(
+                SyntaxFactory.ArgumentList(
+                    SyntaxFactory.SeparatedList<ArgumentSyntax>(
+                        new SyntaxNodeOrToken[]{
+                            SyntaxFactory.Argument(
+                                SyntaxFactory.IdentifierName(compilationEnv.ArgumentEvalGenericName)),
+                            SyntaxFactory.Token(SyntaxKind.CommaToken),
+                            SyntaxFactory.Argument(
+                                envArgSyntax(SyntaxFactory.IdentifierName(compilationEnv.ArgumentEnvironmentName)))})));
     }
 
     public static readonly ExpressionSyntax PineValueEmptyListSyntax =

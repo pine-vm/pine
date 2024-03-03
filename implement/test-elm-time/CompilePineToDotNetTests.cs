@@ -103,7 +103,8 @@ public class CompilePineToDotNetTests
                 pineExpression,
                 new Pine.CompilePineToDotNet.FunctionCompilationEnvironment(
                     ArgumentEnvironmentName: "environment",
-                    ArgumentEvalGenericName: "eval"));
+                    ArgumentEvalGenericName: "eval",
+                    CompilationUnit: Pine.CompilePineToDotNet.CompilationUnitEnv.Empty));
 
         var expectedSyntaxText = """
             environment switch

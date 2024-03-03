@@ -407,29 +407,11 @@ public class CodeAnalysis
                     return new ExpressionEnvClass.UnconstrainedEnv();
                 }
 
-                var envMappings = EnvItemsMappingsFromChildToParent(parseSubExpr.ParseAndEvalExpr.environment);
-
-                IReadOnlyList<int>? TryMapPathToParentEnvironment(IReadOnlyList<int> path)
-                {
-                    var matchingEnvMappings =
-                    envMappings
-                    .Where(envMapping => envMapping.Key.SequenceEqual(path.Take(envMapping.Key.Count)))
-                    .ToImmutableArray();
-
-                    if (matchingEnvMappings.Length is 0)
-                        return null;
-
-                    var firstMatchingEnvMapping = matchingEnvMappings[0];
-
-                    var pathRemainder = path.Skip(firstMatchingEnvMapping.Key.Count).ToImmutableArray();
-
-                    return
-                    [.. firstMatchingEnvMapping.Value, .. pathRemainder];
-                }
+                var childPathEnvMap = BuildPathMapFromChildToParentEnv(parseSubExpr.ParseAndEvalExpr.environment);
 
                 var parsedEnvItemsMapped =
                     constrainedEnv.ParsedEnvItems
-                    .Select(path => TryMapPathToParentEnvironment(path))
+                    .Select(path => childPathEnvMap(path))
                     .ToImmutableArray();
 
                 if (parsedEnvItemsMapped.Contains(null))
@@ -451,6 +433,31 @@ public class CodeAnalysis
                 ExpressionEnvClass.Merge);
 
         return insertInCache(mergedEnvClass);
+    }
+
+    public static Func<IReadOnlyList<int>, IReadOnlyList<int>?> BuildPathMapFromChildToParentEnv(Expression environment)
+    {
+        var envMappings = EnvItemsMappingsFromChildToParent(environment);
+
+        IReadOnlyList<int>? TryMapPathToParentEnvironment(IReadOnlyList<int> path)
+        {
+            var matchingEnvMappings =
+            envMappings
+            .Where(envMapping => envMapping.Key.SequenceEqual(path.Take(envMapping.Key.Count)))
+            .ToImmutableArray();
+
+            if (matchingEnvMappings.Length is 0)
+                return null;
+
+            var firstMatchingEnvMapping = matchingEnvMappings[0];
+
+            var pathRemainder = path.Skip(firstMatchingEnvMapping.Key.Count).ToImmutableArray();
+
+            return
+            [.. firstMatchingEnvMapping.Value, .. pathRemainder];
+        }
+
+        return TryMapPathToParentEnvironment;
     }
 
     public static IReadOnlyList<KeyValuePair<IReadOnlyList<int>, IReadOnlyList<int>>>
