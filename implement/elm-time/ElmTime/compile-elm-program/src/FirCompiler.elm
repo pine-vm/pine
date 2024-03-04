@@ -700,29 +700,43 @@ emitDeclarationBlock stackBefore environmentPrefix blockDeclarations config =
                                             (prependedEnvFunctionsExpressions ++ appendedEnvFunctionsExpressions)
 
                                     else
+                                        let
+                                            keepConcatArgument : Pine.Expression -> Bool
+                                            keepConcatArgument expr =
+                                                case expr of
+                                                    Pine.ListExpression [] ->
+                                                        False
+
+                                                    _ ->
+                                                        True
+
+                                            concatenatedItems : List Pine.Expression
+                                            concatenatedItems =
+                                                [ Pine.ListExpression prependedEnvFunctionsExpressions
+                                                , {-
+                                                     Here we depend on the returned list having the same layout as stackBefore.environmentFunctions.
+                                                     2023-12-31: Observed some tests failing, and fixed this by wrapping into the application of 'take'.
+                                                     This observation indicates that some part of the compiler emitted a longer list than is described in stackBefore.environmentFunctions.
+                                                  -}
+                                                  Pine.KernelApplicationExpression
+                                                    { functionName = "take"
+                                                    , argument =
+                                                        Pine.ListExpression
+                                                            [ Pine.LiteralExpression
+                                                                (Pine.valueFromInt (List.length stackBefore.environmentFunctions))
+                                                            , listItemFromIndexExpression_Pine
+                                                                0
+                                                                Pine.EnvironmentExpression
+                                                            ]
+                                                    }
+                                                , Pine.ListExpression appendedEnvFunctionsExpressions
+                                                ]
+                                                    |> List.filter keepConcatArgument
+                                        in
                                         Pine.KernelApplicationExpression
                                             { functionName = "concat"
                                             , argument =
-                                                Pine.ListExpression
-                                                    [ Pine.ListExpression prependedEnvFunctionsExpressions
-                                                    , {-
-                                                         Here we depend on the returned list having the same layout as stackBefore.environmentFunctions.
-                                                         2023-12-31: Observed some tests failing, and fixed this by wrapping into the application of 'take'.
-                                                         This observation indicates that some part of the compiler emitted a longer list than is described in stackBefore.environmentFunctions.
-                                                      -}
-                                                      Pine.KernelApplicationExpression
-                                                        { functionName = "take"
-                                                        , argument =
-                                                            Pine.ListExpression
-                                                                [ Pine.LiteralExpression
-                                                                    (Pine.valueFromInt (List.length stackBefore.environmentFunctions))
-                                                                , listItemFromIndexExpression_Pine
-                                                                    0
-                                                                    Pine.EnvironmentExpression
-                                                                ]
-                                                        }
-                                                    , Pine.ListExpression appendedEnvFunctionsExpressions
-                                                    ]
+                                                Pine.ListExpression concatenatedItems
                                             }
 
                                 parseAndEmitFunction : Expression -> ( DeclarationBlockFunctionEntry, Result String Pine.Expression )
