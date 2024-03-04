@@ -1418,7 +1418,11 @@ emitApplyFunctionFromCurrentEnvironment compilation { functionName } arguments =
 
                         buildExpectedEnvironmentResult =
                             if currentEnvCoversExpected then
-                                Ok getEnvFunctionsExpression
+                                if localEnv.expectedDecls == [] then
+                                    Ok (Pine.ListExpression [])
+
+                                else
+                                    Ok getEnvFunctionsExpression
 
                             else
                                 buildEnvironmentRecursive [] localEnv.expectedDecls
@@ -1447,7 +1451,7 @@ emitApplyFunctionFromCurrentEnvironment compilation { functionName } arguments =
                                                 , environment =
                                                     Pine.ListExpression
                                                         [ expectedEnvironment
-                                                        , Pine.ListExpression arguments
+                                                        , Pine.ListExpression []
                                                         ]
                                                 }
 
