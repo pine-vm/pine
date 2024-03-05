@@ -118,6 +118,7 @@ type FunctionEnvironment
         { -- Path to the tagged function record relative to the entry in the current environment.
           pathToRecordFromEnvEntry : List Deconstruction
         }
+    | IndependentEnvironment
 
 
 type alias EnvironmentDeconstructionEntry =
@@ -374,6 +375,9 @@ emitDeclarationBlock stackBefore environmentPrefix blockDeclarations config =
 
                             ImportedEnvironment _ ->
                                 Set.empty
+
+                            IndependentEnvironment ->
+                                Set.empty
                         )
                 )
                 Dict.empty
@@ -587,7 +591,7 @@ emitDeclarationBlock stackBefore environmentPrefix blockDeclarations config =
                 (\( captureName, _ ) ->
                     { functionName = captureName
                     , parameterCount = 0
-                    , expectedEnvironment = LocalEnvironment { expectedDecls = [] }
+                    , expectedEnvironment = IndependentEnvironment
                     }
                 )
                 closureCaptures
@@ -657,16 +661,6 @@ emitDeclarationBlock stackBefore environmentPrefix blockDeclarations config =
                     |> Result.map
                         (\blockDeclarationsEmitted ->
                             let
-                                closureCapturesExpressionsWrapped =
-                                    List.map
-                                        (\captureExpression ->
-                                            Pine.ListExpression
-                                                [ Pine.LiteralExpression Pine.stringAsValue_Literal
-                                                , captureExpression
-                                                ]
-                                        )
-                                        closureCapturesExpressions
-
                                 newEnvFunctionsValues : List ( EnvironmentFunctionEntry, ( Pine.Expression, Pine.Value ) )
                                 newEnvFunctionsValues =
                                     List.map
@@ -692,7 +686,7 @@ emitDeclarationBlock stackBefore environmentPrefix blockDeclarations config =
                                 appendedEnvFunctionsExpressions : List Pine.Expression
                                 appendedEnvFunctionsExpressions =
                                     newEnvFunctionsExpressionsFromDecls
-                                        ++ closureCapturesExpressionsWrapped
+                                        ++ closureCapturesExpressions
 
                                 envFunctionsExpression =
                                     if stackBefore.environmentFunctions == [] then
@@ -1141,7 +1135,7 @@ emitFunctionApplication functionExpression arguments compilation =
                                             (\( captureName, _ ) ->
                                                 { functionName = captureName
                                                 , parameterCount = 0
-                                                , expectedEnvironment = LocalEnvironment { expectedDecls = [] }
+                                                , expectedEnvironment = IndependentEnvironment
                                                 }
                                             )
                                             closureCaptures
@@ -1150,12 +1144,9 @@ emitFunctionApplication functionExpression arguments compilation =
                                     appendedEnvFunctionsExpressions =
                                         List.map
                                             (\( _, deconstruction ) ->
-                                                Pine.ListExpression
-                                                    [ Pine.LiteralExpression Pine.stringAsValue_Literal
-                                                    , pineExpressionForDeconstructions
-                                                        deconstruction
-                                                        (listItemFromIndexExpression_Pine 1 Pine.EnvironmentExpression)
-                                                    ]
+                                                pineExpressionForDeconstructions
+                                                    deconstruction
+                                                    (listItemFromIndexExpression_Pine 1 Pine.EnvironmentExpression)
                                             )
                                             closureCaptures
 
@@ -1469,6 +1460,16 @@ emitApplyFunctionFromCurrentEnvironment compilation { functionName } arguments =
                                     )
                                 )
 
+                IndependentEnvironment ->
+                    Just
+                        (Ok
+                            (partialApplicationExpressionFromListOfArguments
+                                arguments
+                                compilation
+                                getFunctionExpression
+                            )
+                        )
+
 
 partialApplicationExpressionFromListOfArguments :
     List Pine.Expression
@@ -1476,13 +1477,17 @@ partialApplicationExpressionFromListOfArguments :
     -> Pine.Expression
     -> Pine.Expression
 partialApplicationExpressionFromListOfArguments arguments emitStack function =
-    adaptivePartialApplicationExpression
-        { function = function
-        , arguments = arguments
-        , applicationFunctionSource =
-            emitReferenceExpression environmentFunctionPartialApplicationName emitStack
-                |> Result.toMaybe
-        }
+    if arguments == [] then
+        function
+
+    else
+        adaptivePartialApplicationExpression
+            { function = function
+            , arguments = arguments
+            , applicationFunctionSource =
+                emitReferenceExpression environmentFunctionPartialApplicationName emitStack
+                    |> Result.toMaybe
+            }
 
 
 emitWrapperForPartialApplication : Pine.Expression -> Int -> Pine.Expression -> Pine.Expression
