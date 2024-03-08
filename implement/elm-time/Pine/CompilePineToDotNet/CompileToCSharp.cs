@@ -150,10 +150,6 @@ public partial class CompileToCSharp
             {
                 var expression = queue.Dequeue();
 
-                var onlyExprDerivedId =
-                    CompiledExpressionId(expression)
-                    .Extract(err => throw new Exception(err));
-
                 var expressionUsages =
                     expressionsUsages
                     .Where(eu => eu.Expression == expression)
@@ -977,6 +973,8 @@ public partial class CompileToCSharp
         var parseAndEvalExprHash =
             CommonConversion.StringBase16(compilerCache.ComputeHash(parseAndEvalExprValue));
 
+        var childPathEnvMap = CodeAnalysis.BuildPathMapFromChildToParentEnv(parseAndEvalExpr.environment);
+
         /*
          * 
          * 2024-02-17: Switch to older implementation of generic case from 2023,
@@ -1100,6 +1098,40 @@ public partial class CompileToCSharp
                 {
                     var innerExpressionId = CompiledExpressionId(innerExpressionValue);
 
+                    if (environment.EnvConstraint is { } envConstraint)
+                    {
+                        bool ChildEnvContstraintItemSatisfied(KeyValuePair<IReadOnlyList<int>, PineValue> envItem)
+                        {
+                            if (childPathEnvMap(envItem.Key) is not { } pathInCurrentEnv)
+                                return false;
+
+                            return envConstraint.TryGetValue(pathInCurrentEnv) == envItem.Value;
+                        }
+
+                        if (environment.FunctionEnvironment.CompilationUnit.AvailableSpecialized.TryGetValue(
+                            innerExpression,
+                            out var availableSpecialized))
+                        {
+                            foreach (var specializedEnvConstraint in availableSpecialized)
+                            {
+                                if (specializedEnvConstraint.ParsedEnvItems.All(ChildEnvContstraintItemSatisfied))
+                                {
+                                    return
+                                    continueCompilingEnv(
+                                        compiledEnv =>
+                                        compiledEnv.MapOrAndThen(
+                                            environment,
+                                            compiledEnvCs =>
+                                            InvocationExpressionForCompiledExpressionFunction(
+                                                environment: environment.FunctionEnvironment,
+                                                invokedFunction: innerExpressionId,
+                                                envConstraint: specializedEnvConstraint,
+                                                environmentExpressionSyntax: compiledEnvCs)));
+                                }
+                            }
+                        }
+                    }
+
                     return
                     continueCompilingEnv(
                         compiledArgumentExpression =>
@@ -1141,51 +1173,9 @@ public partial class CompileToCSharp
 
         if (expressionPath is not null && environment.EnvConstraint is { } envConstraint)
         {
-            var childPathEnvMap = CodeAnalysis.BuildPathMapFromChildToParentEnv(parseAndEvalExpr.environment);
-
-            bool ChildEnvContstraintItemSatisfied(KeyValuePair<IReadOnlyList<int>, PineValue> envItem)
+            if (envConstraint.TryGetValue(expressionPath) is { } exprValueFromEnvConstraint)
             {
-                if (childPathEnvMap(expressionPath) is not { } pathInCurrentEnv)
-                    return false;
-
-                return envConstraint.TryGetValue(pathInCurrentEnv) == envItem.Value;
-            }
-
-            var exprValueFromEnvConstraint = envConstraint.TryGetValue(expressionPath);
-
-            if (exprValueFromEnvConstraint is not null)
-            {
-                var exprValueFromEnvConstraintId = CompiledExpressionId(exprValueFromEnvConstraint);
-
-                return
-                    PineVM.PineVM.ParseExpressionFromValueDefault(exprValueFromEnvConstraint)
-                    .AndThen(exprFromEnvConstraint =>
-                    {
-                        if (environment.FunctionEnvironment.CompilationUnit.AvailableSpecialized.TryGetValue(
-                            exprFromEnvConstraint,
-                            out var availableSpecialized))
-                        {
-                            foreach (var specializedEnvConstraint in availableSpecialized)
-                            {
-                                if (specializedEnvConstraint.ParsedEnvItems.All(ChildEnvContstraintItemSatisfied))
-                                {
-                                    return
-                                    continueCompilingEnv(
-                                        compiledEnv =>
-                                        compiledEnv.MapOrAndThen(
-                                            environment,
-                                            compiledEnvCs =>
-                                            InvocationExpressionForCompiledExpressionFunction(
-                                                environment: environment.FunctionEnvironment,
-                                                invokedFunction: exprValueFromEnvConstraintId,
-                                                envConstraint: specializedEnvConstraint,
-                                                environmentExpressionSyntax: compiledEnvCs)));
-                                }
-                            }
-                        }
-
-                        return continueForKnownExprValue(exprValueFromEnvConstraint);
-                    });
+                return continueForKnownExprValue(exprValueFromEnvConstraint);
             }
         }
 

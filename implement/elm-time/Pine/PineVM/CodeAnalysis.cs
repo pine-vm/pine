@@ -86,7 +86,7 @@ public record EnvConstraintId
         Equal(this, other);
 }
 
-public class IntPathEqualityComparer : IEqualityComparer<IReadOnlyList<int>>
+public class IntPathEqualityComparer : IEqualityComparer<IReadOnlyList<int>?>
 {
     public static readonly IntPathEqualityComparer Instance = new();
 
@@ -279,13 +279,31 @@ public class CodeAnalysis
             .OfType<Expression.ParseAndEvalExpression>()
             .Select(parseAndEvalExpr =>
             {
-                var expressionPath =
-                TryParseExpressionAsIndexPathFromEnv(parseAndEvalExpr.expression);
+                var expressionPath = TryParseExpressionAsIndexPathFromEnv(parseAndEvalExpr.expression);
 
                 var expressionValue =
                 expressionPath is null ?
                 null :
                 ValueFromPathInValue(environment, expressionPath);
+
+                {
+                    if (expressionValue is null)
+                    {
+                        if (parseAndEvalExpr.expression is Expression.LiteralExpression fromLiteral)
+                        {
+                            expressionValue = fromLiteral.Value;
+                        }
+
+                        /*
+                        if (Expression.IsIndependent(parseAndEvalExpr.expression))
+                        {
+                            expressionValue =
+                            new PineVM().EvaluateExpressionDefault(parseAndEvalExpr.environment, environment)
+                            .WithDefault(null);
+                        }
+                        */
+                    }
+                }
 
                 return
                     new ParseSubExpression(
@@ -295,24 +313,20 @@ public class CodeAnalysis
             })
             .ToImmutableArray();
 
-        var currentParsedEnvItems =
-            parseSubexpressions
-            .Select(p =>
-            {
-                if (p.ExpressionPath is not { } expressionPath)
-                    return null;
-
-                if (p.ExpressionValue is not { } parsedExprValue)
-                    return null;
-
-                return expressionPath;
-            })
-            .ToImmutableArray();
-
-        if (currentParsedEnvItems.Contains(null))
+        if (parseSubexpressions.Any(parseSubExpr => parseSubExpr.ExpressionValue is null))
         {
             return new ExpressionEnvClass.UnconstrainedEnv();
         }
+
+        var currentParsedEnvItems =
+            parseSubexpressions
+            .Select(parseSubExpr => parseSubExpr.ExpressionPath)
+            /*
+             * ExpressionPath can be null if the expression is a literal.
+             * */
+            .WhereNotNull()
+            .Distinct(IntPathEqualityComparer.Instance)
+            .ToImmutableArray();
 
         var currentStackFrameEnv =
             new ExpressionEnvClass.ConstrainedEnv(currentParsedEnvItems);
@@ -349,79 +363,106 @@ public class CodeAnalysis
 
         var nextStack = stack.Append(currentStackFrame).ToImmutableArray();
 
+        ExpressionEnvClass computeChildClass(ParseSubExpression parseSubExpr)
+        {
+            if (parseSubExpr.ExpressionValue is not { } parsedExprValue)
+            {
+                throw new Exception("Unexpected null value");
+            }
+
+            Expression? parsedInnerExpr = null;
+
+            try
+            {
+                parsedInnerExpr =
+                    PineVM.ParseExpressionFromValueDefault(parsedExprValue)
+                    .WithDefault(null);
+            }
+            catch { }
+
+            if (parsedInnerExpr is null)
+            {
+                return new ExpressionEnvClass.UnconstrainedEnv();
+            }
+
+            PineValue? envValue = null;
+
+            try
+            {
+                int parseCount = 0;
+
+                envValue =
+                new PineVM(overrideEvaluateExpression: defaultHandler =>
+                new PineVM.EvalExprDelegate((expr, env) =>
+                {
+                    if (expr is Expression.ParseAndEvalExpression)
+                    {
+                        ++parseCount;
+                    }
+
+                    if (100 < parseCount)
+                    {
+                        throw new Exception("Too many parsing steps: " + parseCount);
+                    }
+
+                    return defaultHandler.Invoke(expr, env);
+                }))
+                /*
+                 * Evaluation of the environment expression can fail here, since we are looking into all branches,
+                 * including ones that are not reachable in the actual execution.
+                 * In this case, classify the environment as unconstrained.
+                 * */
+                .EvaluateExpressionDefault(parseSubExpr.ParseAndEvalExpr.environment, environment)
+                .WithDefault(null);
+            }
+            catch
+            {
+                return new ExpressionEnvClass.UnconstrainedEnv();
+            }
+
+            if (envValue is null)
+            {
+                return new ExpressionEnvClass.UnconstrainedEnv();
+            }
+
+            var childEnvBeforeMapping =
+            ComputeExpressionUsageRecordRecursive(
+                nextStack,
+                parsedInnerExpr,
+                envValue,
+                mutatedCache: mutatedCache);
+
+            if (childEnvBeforeMapping is not ExpressionEnvClass.ConstrainedEnv constrainedEnv)
+            {
+                return new ExpressionEnvClass.UnconstrainedEnv();
+            }
+
+            var childPathEnvMap = BuildPathMapFromChildToParentEnv(parseSubExpr.ParseAndEvalExpr.environment);
+
+            var parsedEnvItemsMapped =
+                constrainedEnv.ParsedEnvItems
+                .Select(path => childPathEnvMap(path))
+                .ToImmutableArray();
+
+            if (parsedEnvItemsMapped.Contains(null))
+            {
+                return new ExpressionEnvClass.UnconstrainedEnv();
+            }
+
+            return new ExpressionEnvClass.ConstrainedEnv(parsedEnvItemsMapped);
+        }
+
         var descendantsEnvUsages =
             parseSubexpressions
-            .Select(parseSubExpr =>
-            {
-                if (parseSubExpr.ExpressionValue is not { } parsedExprValue)
-                {
-                    throw new Exception("Unexpected null value");
-                }
-
-                Expression? parsedInnerExpr = null;
-
-                try
-                {
-                    parsedInnerExpr =
-                        PineVM.ParseExpressionFromValueDefault(parsedExprValue)
-                        .WithDefault(null);
-                }
-                catch { }
-
-                if (parsedInnerExpr is null)
-                {
-                    return new ExpressionEnvClass.UnconstrainedEnv();
-                }
-
-                PineValue? envValue = null;
-
-                try
-                {
-                    envValue =
-                    new PineVM()
-                    /*
-                     * Evaluation of the environment expression can fail here, since we are looking into all branches,
-                     * including ones that are not reachable in the actual execution.
-                     * In this case, classify the environment as unconstrained.
-                     * */
-                    .EvaluateExpressionDefault(parseSubExpr.ParseAndEvalExpr.environment, environment)
-                    .WithDefault(null);
-                }
-                catch
-                { }
-
-                if (envValue is null)
-                {
-                    return new ExpressionEnvClass.UnconstrainedEnv();
-                }
-
-                var childEnvBeforeMapping =
-                ComputeExpressionUsageRecordRecursive(
-                    nextStack,
-                    parsedInnerExpr,
-                    envValue,
-                    mutatedCache: mutatedCache);
-
-                if (childEnvBeforeMapping is not ExpressionEnvClass.ConstrainedEnv constrainedEnv)
-                {
-                    return new ExpressionEnvClass.UnconstrainedEnv();
-                }
-
-                var childPathEnvMap = BuildPathMapFromChildToParentEnv(parseSubExpr.ParseAndEvalExpr.environment);
-
-                var parsedEnvItemsMapped =
-                    constrainedEnv.ParsedEnvItems
-                    .Select(path => childPathEnvMap(path))
-                    .ToImmutableArray();
-
-                if (parsedEnvItemsMapped.Contains(null))
-                    return new ExpressionEnvClass.UnconstrainedEnv();
-
-                return (ExpressionEnvClass)new ExpressionEnvClass.ConstrainedEnv(parsedEnvItemsMapped);
-            })
+            .Select(parseSubExpr => (parseSubExpr, childClass: computeChildClass(parseSubExpr)))
             .ToImmutableArray();
 
-        if (descendantsEnvUsages.Any(u => u is ExpressionEnvClass.UnconstrainedEnv))
+        var unconstrainedDescendants =
+            descendantsEnvUsages
+            .Where(u => u.childClass is ExpressionEnvClass.UnconstrainedEnv)
+            .ToImmutableArray();
+
+        if (0 < unconstrainedDescendants.Length)
         {
             return new ExpressionEnvClass.UnconstrainedEnv();
         }
@@ -430,7 +471,7 @@ public class CodeAnalysis
             descendantsEnvUsages
             .Aggregate(
                 seed: (ExpressionEnvClass)currentStackFrameEnv,
-                ExpressionEnvClass.Merge);
+                (aggr, next) => ExpressionEnvClass.Merge(aggr, next.childClass));
 
         return insertInCache(mergedEnvClass);
     }
@@ -490,6 +531,20 @@ public class CodeAnalysis
         /*
          * TODO: Add a more general mapping from the child environment to the parent environment.
          * The special case we check here works for the typical form found in recursive calls.
+         * 
+         * 2024-03-07: One limitation of the current model becoming apparent now:
+         * The Elm compiler uses kernel functions "take" and "concat" to forward items from the parent environment to the child environment.
+         * Since this part of code analysis does not handle these cases, mapping fails for these kinds of invocations.
+         * Finding an application of "take" here means we can only predict positions of following items (within the "concat")
+         * if our environment model constrains the number of items in that list to at least the count given to "take".
+         * The current model of individual items in 'EnvConstraintId.ParsedEnvItems' already enables derivation
+         * of lower bounds, however, it turned out that the items we already collect (because they are parsed
+         * at the current level) do not always cover the whole count given to "take".
+         * One way to constrain the number of items we will get from the "take" invocation to an exact number
+         * would be to expand the 'EnvConstraintId' adding lower bounds for subpaths of the environment.
+         * 
+         * 2024-03-08 The solution was to change the Elm compiler to not use "take" and "concat" for composing the child environment,
+         * but instead refer to each forwarded item of the environment individually.
          * */
 
         return [];
@@ -521,6 +576,9 @@ public class CodeAnalysis
     {
         if (expression is Expression.EnvironmentExpression)
             return [];
+
+        if (expression is Expression.StringTagExpression stringTagExpr)
+            return TryParseExpressionAsIndexPathFromEnv(stringTagExpr.tagged);
 
         if (expression is not Expression.KernelApplicationExpression kernelApplication)
             return null;
