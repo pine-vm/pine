@@ -165,7 +165,7 @@ public class CompilePineToDotNetTests
         var testCases = new[]
         {
             ((Pine.PineVM.Expression)new Pine.PineVM.Expression.EnvironmentExpression(),
-            (IReadOnlyList<int>?)[]),
+            (Pine.PineVM.ExprMappedToParentEnv?)new Pine.PineVM.ExprMappedToParentEnv.PathInParentEnv([])),
 
             (new Pine.PineVM.Expression.ListExpression([]),
             null),
@@ -174,7 +174,7 @@ public class CompilePineToDotNetTests
                 functionName: "list_head",
                 argument: new Pine.PineVM.Expression.EnvironmentExpression(),
                 function: _=> throw new System.NotImplementedException()),
-                [0]),
+                new Pine.PineVM.ExprMappedToParentEnv.PathInParentEnv([0])),
 
             (new Pine.PineVM.Expression.KernelApplicationExpression(
                 functionName: "list_head",
@@ -183,7 +183,7 @@ public class CompilePineToDotNetTests
                     argument: new Pine.PineVM.Expression.EnvironmentExpression(),
                     function: _=> throw new System.NotImplementedException()),
                 function: _=> throw new System.NotImplementedException()),
-                [0, 0]),
+                new Pine.PineVM.ExprMappedToParentEnv.PathInParentEnv([0, 0])),
 
             (new Pine.PineVM.Expression.KernelApplicationExpression(
                 functionName: "list_head",
@@ -195,7 +195,7 @@ public class CompilePineToDotNetTests
                         ]),
                     function: _=> throw new System.NotImplementedException()),
                 function: _=> throw new System.NotImplementedException()),
-                [13]),
+                new Pine.PineVM.ExprMappedToParentEnv.PathInParentEnv([13])),
 
             (new Pine.PineVM.Expression.KernelApplicationExpression(
                 functionName: "list_head",
@@ -216,7 +216,7 @@ public class CompilePineToDotNetTests
                         ]),
                     function: _=> throw new System.NotImplementedException()),
                 function: _=> throw new System.NotImplementedException()),
-                [17,21]),
+                new Pine.PineVM.ExprMappedToParentEnv.PathInParentEnv([17,21])),
 
             (new Pine.PineVM.Expression.KernelApplicationExpression(
                 functionName: "list_head",
@@ -231,14 +231,30 @@ public class CompilePineToDotNetTests
                         ]),
                     function: _=> throw new System.NotImplementedException()),
                 function: _=> throw new System.NotImplementedException()),
-                [0,23]),
+                new Pine.PineVM.ExprMappedToParentEnv.PathInParentEnv([0,23])),
         };
 
         foreach (var (expression, expected) in testCases)
         {
             var result = Pine.PineVM.CodeAnalysis.TryParseExpressionAsIndexPathFromEnv(expression);
 
-            CollectionAssert.AreEqual(expected?.ToArray(), result?.ToArray());
+            Assert.AreEqual(expected, result);
         }
+    }
+
+    [TestMethod]
+    public void Test_ExprMappedToParentEnv_PathInParentEnv_equality()
+    {
+        Assert.AreEqual(
+            new Pine.PineVM.ExprMappedToParentEnv.PathInParentEnv([]),
+            new Pine.PineVM.ExprMappedToParentEnv.PathInParentEnv([]));
+
+        var inspect =
+            new Pine.PineVM.ExprMappedToParentEnv.PathInParentEnv([1, 3])
+            .Equals(new Pine.PineVM.ExprMappedToParentEnv.PathInParentEnv([1, 3]));
+
+        Assert.AreEqual(
+            new Pine.PineVM.ExprMappedToParentEnv.PathInParentEnv([1, 3]),
+            new Pine.PineVM.ExprMappedToParentEnv.PathInParentEnv([1, 3]));
     }
 }

@@ -1093,72 +1093,96 @@ public partial class CompileToCSharp
         {
             return
                 compilerCache.ParseExpressionFromValue(innerExpressionValue)
+                /*
                 .MapError(err => "Failed to parse inner expression: " + err)
-                .AndThen(innerExpression =>
-                {
-                    var innerExpressionId = CompiledExpressionId(innerExpressionValue);
-
-                    if (environment.EnvConstraint is { } envConstraint)
+                */
+                .Unpack(
+                    fromErr: err =>
                     {
-                        bool ChildEnvContstraintItemSatisfied(KeyValuePair<IReadOnlyList<int>, PineValue> envItem)
-                        {
-                            if (childPathEnvMap(envItem.Key) is not { } pathInCurrentEnv)
-                                return false;
+                        return
+                            Result<string, CompiledExpression>.ok(continueWithGenericCase());
+                    },
+                    fromOk:
+                    innerExpression =>
+                    {
+                        var innerExpressionId = CompiledExpressionId(innerExpressionValue);
 
-                            return envConstraint.TryGetValue(pathInCurrentEnv) == envItem.Value;
-                        }
-
-                        if (environment.FunctionEnvironment.CompilationUnit.AvailableSpecialized.TryGetValue(
-                            innerExpression,
-                            out var availableSpecialized))
+                        if (environment.EnvConstraint is { } envConstraint)
                         {
-                            foreach (var specializedEnvConstraint in availableSpecialized)
+                            bool ChildEnvContstraintItemSatisfied(KeyValuePair<IReadOnlyList<int>, PineValue> envItem)
                             {
-                                if (specializedEnvConstraint.ParsedEnvItems.All(ChildEnvContstraintItemSatisfied))
+                                var mappedChildPath = childPathEnvMap(envItem.Key);
+
+                                var mappedChildValue =
+                                    mappedChildPath switch
+                                    {
+                                        ExprMappedToParentEnv.PathInParentEnv mappedToParentPath =>
+                                        envConstraint.TryGetValue(mappedToParentPath.Path),
+
+                                        ExprMappedToParentEnv.LiteralInParentEnv mappedLiteralInParentEnv =>
+                                        mappedLiteralInParentEnv.Value,
+
+                                        null =>
+                                        null,
+
+                                        _ =>
+                                        throw new Exception("Unexpected path map result: " + mappedChildPath)
+                                    };
+
+                                return mappedChildValue == envItem.Value;
+                            }
+
+                            if (environment.FunctionEnvironment.CompilationUnit.AvailableSpecialized.TryGetValue(
+                                innerExpression,
+                                out var availableSpecialized))
+                            {
+                                foreach (var specializedEnvConstraint in availableSpecialized)
                                 {
-                                    return
-                                    continueCompilingEnv(
-                                        compiledEnv =>
-                                        compiledEnv.MapOrAndThen(
-                                            environment,
-                                            compiledEnvCs =>
-                                            InvocationExpressionForCompiledExpressionFunction(
-                                                environment: environment.FunctionEnvironment,
-                                                invokedFunction: innerExpressionId,
-                                                envConstraint: specializedEnvConstraint,
-                                                environmentExpressionSyntax: compiledEnvCs)));
+                                    if (specializedEnvConstraint.ParsedEnvItems.All(ChildEnvContstraintItemSatisfied))
+                                    {
+                                        return
+                                        continueCompilingEnv(
+                                            compiledEnv =>
+                                            compiledEnv.MapOrAndThen(
+                                                environment,
+                                                compiledEnvCs =>
+                                                InvocationExpressionForCompiledExpressionFunction(
+                                                    environment: environment.FunctionEnvironment,
+                                                    invokedFunction: innerExpressionId,
+                                                    envConstraint: specializedEnvConstraint,
+                                                    environmentExpressionSyntax: compiledEnvCs)));
+                                    }
                                 }
                             }
                         }
-                    }
 
-                    return
-                    continueCompilingEnv(
-                        compiledArgumentExpression =>
-                        {
-                            return
-                            compiledArgumentExpression.MapOrAndThen(
-                                environment,
-                                argumentExprPlainValue =>
+                        return
+                        continueCompilingEnv(
+                            compiledArgumentExpression =>
                             {
                                 return
-                                InvocationExpressionForCompiledExpressionFunction(
-                                    environment.FunctionEnvironment,
-                                    innerExpressionId,
-                                    envConstraint: null,
-                                    argumentExprPlainValue)
-                                .MergeDependencies(
-                                    compiledArgumentExpression.Dependencies.Union(
-                                        CompiledExpressionDependencies.Empty
-                                        with
-                                        {
-                                            ExpressionFunctions =
-                                            ImmutableDictionary<Expression, CompiledExpressionId>.Empty
-                                            .SetItem(innerExpression, innerExpressionId),
-                                        }));
+                                compiledArgumentExpression.MapOrAndThen(
+                                    environment,
+                                    argumentExprPlainValue =>
+                                {
+                                    return
+                                    InvocationExpressionForCompiledExpressionFunction(
+                                        environment.FunctionEnvironment,
+                                        innerExpressionId,
+                                        envConstraint: null,
+                                        argumentExprPlainValue)
+                                    .MergeDependencies(
+                                        compiledArgumentExpression.Dependencies.Union(
+                                            CompiledExpressionDependencies.Empty
+                                            with
+                                            {
+                                                ExpressionFunctions =
+                                                ImmutableDictionary<Expression, CompiledExpressionId>.Empty
+                                                .SetItem(innerExpression, innerExpressionId),
+                                            }));
+                                });
                             });
-                        });
-                });
+                    });
         }
 
         if (Expression.IsIndependent(parseAndEvalExpr.expression))
@@ -1169,13 +1193,21 @@ public partial class CompileToCSharp
                 .AndThen(continueForKnownExprValue);
         }
 
-        var expressionPath = CodeAnalysis.TryParseExpressionAsIndexPathFromEnv(parseAndEvalExpr.expression);
+        var exprMappedToParent = CodeAnalysis.TryParseExpressionAsIndexPathFromEnv(parseAndEvalExpr.expression);
 
-        if (expressionPath is not null && environment.EnvConstraint is { } envConstraint)
         {
-            if (envConstraint.TryGetValue(expressionPath) is { } exprValueFromEnvConstraint)
+            if (exprMappedToParent is ExprMappedToParentEnv.LiteralInParentEnv literal)
             {
-                return continueForKnownExprValue(exprValueFromEnvConstraint);
+                return continueForKnownExprValue(literal.Value);
+            }
+
+            if (exprMappedToParent is ExprMappedToParentEnv.PathInParentEnv exprMappedToParentPath &&
+                environment.EnvConstraint is { } envConstraint)
+            {
+                if (envConstraint.TryGetValue(exprMappedToParentPath.Path) is { } exprValueFromEnvConstraint)
+                {
+                    return continueForKnownExprValue(exprValueFromEnvConstraint);
+                }
             }
         }
 

@@ -86,6 +86,32 @@ public record EnvConstraintId
         Equal(this, other);
 }
 
+public abstract record ExprMappedToParentEnv
+{
+    public record PathInParentEnv(IReadOnlyList<int> Path)
+        : ExprMappedToParentEnv
+    {
+        public virtual bool Equals(PathInParentEnv? other)
+        {
+            if (ReferenceEquals(this, other))
+                return true;
+
+            if (other is null)
+                return false;
+
+            return Path.SequenceEqual(other.Path);
+        }
+
+        public override int GetHashCode()
+        {
+            return base.GetHashCode();
+        }
+    }
+
+    public record LiteralInParentEnv(PineValue Value)
+        : ExprMappedToParentEnv;
+}
+
 public class IntPathEqualityComparer : IEqualityComparer<IReadOnlyList<int>?>
 {
     public static readonly IntPathEqualityComparer Instance = new();
@@ -169,18 +195,16 @@ public abstract record ExpressionEnvClass
         throw new NotImplementedException();
     }
 
-    public static ExpressionEnvClass Merge(
-        ExpressionEnvClass env1,
-        ExpressionEnvClass env2)
+    public ExpressionEnvClass AddConstraints(ExpressionEnvClass otherEnv)
     {
-        if (env1 is UnconstrainedEnv || env2 is UnconstrainedEnv)
-            return new UnconstrainedEnv();
+        if (this is UnconstrainedEnv || otherEnv is UnconstrainedEnv)
+            return this;
 
-        if (env1 is ConstrainedEnv constrainedEnv1 && env2 is ConstrainedEnv constrainedEnv2)
+        if (this is ConstrainedEnv selfConstrained && otherEnv is ConstrainedEnv otherConstrained)
         {
             var mergedParsedEnvItems =
-                constrainedEnv1.ParsedEnvItems
-                .Concat(constrainedEnv2.ParsedEnvItems)
+                selfConstrained.ParsedEnvItems
+                .Concat(otherConstrained.ParsedEnvItems)
                 .ToImmutableHashSet();
 
             return new ConstrainedEnv(mergedParsedEnvItems);
@@ -200,7 +224,21 @@ public abstract record ExpressionEnvClass
         {
             var newParsedEnvItems =
                 constrainedEnv.ParsedEnvItems
-                .Select(path => TryMapPathToParentEnvironment(envExpression, path))
+                .SelectMany(path =>
+                TryMapPathToParentEnvironment(envExpression, path) switch
+                {
+                    ExprMappedToParentEnv.LiteralInParentEnv _ =>
+                    (IReadOnlyList<IReadOnlyList<int>>)[],
+
+                    ExprMappedToParentEnv.PathInParentEnv pathInParentEnv =>
+                    [pathInParentEnv.Path],
+
+                    null =>
+                    throw new NullReferenceException(),
+
+                    { } other =>
+                    throw new NotImplementedException(other.ToString())
+                })
                 .ToImmutableArray();
 
             return new ConstrainedEnv(newParsedEnvItems);
@@ -209,7 +247,7 @@ public abstract record ExpressionEnvClass
         throw new NotImplementedException();
     }
 
-    public static IReadOnlyList<int>? TryMapPathToParentEnvironment(
+    public static ExprMappedToParentEnv? TryMapPathToParentEnvironment(
         Expression envExpr,
         IReadOnlyList<int> path)
     {
@@ -279,36 +317,40 @@ public class CodeAnalysis
             .OfType<Expression.ParseAndEvalExpression>()
             .Select(parseAndEvalExpr =>
             {
-                var expressionPath = TryParseExpressionAsIndexPathFromEnv(parseAndEvalExpr.expression);
+                var expressionMapped = TryParseExpressionAsIndexPathFromEnv(parseAndEvalExpr.expression);
 
                 var expressionValue =
-                expressionPath is null ?
-                null :
-                ValueFromPathInValue(environment, expressionPath);
-
+                expressionMapped switch
                 {
-                    if (expressionValue is null)
-                    {
-                        if (parseAndEvalExpr.expression is Expression.LiteralExpression fromLiteral)
-                        {
-                            expressionValue = fromLiteral.Value;
-                        }
+                    ExprMappedToParentEnv.LiteralInParentEnv literalInParentEnv =>
+                    literalInParentEnv.Value,
 
-                        /*
-                        if (Expression.IsIndependent(parseAndEvalExpr.expression))
-                        {
-                            expressionValue =
-                            new PineVM().EvaluateExpressionDefault(parseAndEvalExpr.environment, environment)
-                            .WithDefault(null);
-                        }
-                        */
+                    ExprMappedToParentEnv.PathInParentEnv pathInParentEnv =>
+                    ValueFromPathInValue(environment, pathInParentEnv.Path),
+
+                    null =>
+                    null,
+
+                    _ =>
+                    throw new NotImplementedException(expressionMapped.ToString())
+                };
+
+                if (expressionValue is null)
+                {
+                    /*
+                    if (Expression.IsIndependent(parseAndEvalExpr.expression))
+                    {
+                        expressionValue =
+                        new PineVM().EvaluateExpressionDefault(parseAndEvalExpr.environment, environment)
+                        .WithDefault(null);
                     }
+                    */
                 }
 
                 return
                     new ParseSubExpression(
                         parseAndEvalExpr,
-                        expressionPath,
+                        ExpressionPath: (expressionMapped as ExprMappedToParentEnv.PathInParentEnv)?.Path,
                         expressionValue);
             })
             .ToImmutableArray();
@@ -358,7 +400,7 @@ public class CodeAnalysis
 
         if (stack.Any(prevStackItem => ExpressionUsageStackEntry.Equal(prevStackItem, currentStackFrame)))
         {
-            return insertInCache(currentStackFrameEnv);
+            return currentStackFrameEnv;
         }
 
         var nextStack = stack.Append(currentStackFrame).ToImmutableArray();
@@ -432,7 +474,7 @@ public class CodeAnalysis
                 envValue,
                 mutatedCache: mutatedCache);
 
-            if (childEnvBeforeMapping is not ExpressionEnvClass.ConstrainedEnv constrainedEnv)
+            if (childEnvBeforeMapping is not ExpressionEnvClass.ConstrainedEnv childConstrainedEnv)
             {
                 return new ExpressionEnvClass.UnconstrainedEnv();
             }
@@ -440,7 +482,7 @@ public class CodeAnalysis
             var childPathEnvMap = BuildPathMapFromChildToParentEnv(parseSubExpr.ParseAndEvalExpr.environment);
 
             var parsedEnvItemsMapped =
-                constrainedEnv.ParsedEnvItems
+                childConstrainedEnv.ParsedEnvItems
                 .Select(path => childPathEnvMap(path))
                 .ToImmutableArray();
 
@@ -449,7 +491,26 @@ public class CodeAnalysis
                 return new ExpressionEnvClass.UnconstrainedEnv();
             }
 
-            return new ExpressionEnvClass.ConstrainedEnv(parsedEnvItemsMapped);
+            var parsedEnvItemsMappedPaths =
+                parsedEnvItemsMapped
+                .SelectMany(parsedEnvItemMapped =>
+                parsedEnvItemMapped switch
+                {
+                    ExprMappedToParentEnv.LiteralInParentEnv _ =>
+                    (IReadOnlyList<IReadOnlyList<int>>)[],
+
+                    ExprMappedToParentEnv.PathInParentEnv pathInParentEnv =>
+                    [pathInParentEnv.Path],
+
+                    null =>
+                    throw new NullReferenceException(),
+
+                    _ =>
+                    throw new NotImplementedException(parsedEnvItemMapped.ToString())
+                })
+                .ToImmutableArray();
+
+            return new ExpressionEnvClass.ConstrainedEnv(parsedEnvItemsMappedPaths);
         }
 
         var descendantsEnvUsages =
@@ -464,23 +525,44 @@ public class CodeAnalysis
 
         if (0 < unconstrainedDescendants.Length)
         {
-            return new ExpressionEnvClass.UnconstrainedEnv();
+            /*
+             * 2024-03-08: Observed later compilation stage failing when returning the currentStackFrameEnv here.
+
+            return insertInCache(currentStackFrameEnv);
+            */
+
+            /*
+             * Even better than returning the currentStackFrameEnv seems to be merging the ones we get in any case.
+             * However, also with that variant, the later compilation stage failed with errors like these:
+             * 
+             * Compilation failed with 8 errors:
+             * (413,21): error CS0103: The name 'bind_11465cd7d6' does not exist in the current context
+             * (423,27): error CS0103: The name 'bind_3c95507845' does not exist in the current context
+             * [...]
+             * 
+             * Looks like propagation of let-bindings dependencies failed.
+             * 
+             * So returning UnconstrainedEnv here seems more like a temporary workaround.
+             * */
+
+            return insertInCache(new ExpressionEnvClass.UnconstrainedEnv());
         }
 
         var mergedEnvClass =
             descendantsEnvUsages
             .Aggregate(
                 seed: (ExpressionEnvClass)currentStackFrameEnv,
-                (aggr, next) => ExpressionEnvClass.Merge(aggr, next.childClass));
+                (aggr, next) => aggr.AddConstraints(next.childClass));
 
         return insertInCache(mergedEnvClass);
     }
 
-    public static Func<IReadOnlyList<int>, IReadOnlyList<int>?> BuildPathMapFromChildToParentEnv(Expression environment)
+    public static Func<IReadOnlyList<int>, ExprMappedToParentEnv?> BuildPathMapFromChildToParentEnv(
+        Expression environment)
     {
         var envMappings = EnvItemsMappingsFromChildToParent(environment);
 
-        IReadOnlyList<int>? TryMapPathToParentEnvironment(IReadOnlyList<int> path)
+        ExprMappedToParentEnv? TryMapPathToParentEnvironment(IReadOnlyList<int> path)
         {
             var matchingEnvMappings =
             envMappings
@@ -492,16 +574,27 @@ public class CodeAnalysis
 
             var firstMatchingEnvMapping = matchingEnvMappings[0];
 
-            var pathRemainder = path.Skip(firstMatchingEnvMapping.Key.Count).ToImmutableArray();
+            if (firstMatchingEnvMapping.Value is ExprMappedToParentEnv.PathInParentEnv pathInParentEnv)
+            {
+                var pathRemainder = path.Skip(firstMatchingEnvMapping.Key.Count).ToImmutableArray();
 
-            return
-            [.. firstMatchingEnvMapping.Value, .. pathRemainder];
+                return
+                    new ExprMappedToParentEnv.PathInParentEnv(
+                        Path: [.. pathInParentEnv.Path, .. pathRemainder]);
+            }
+
+            if (firstMatchingEnvMapping.Value is ExprMappedToParentEnv.LiteralInParentEnv literalInParentEnv)
+            {
+                return literalInParentEnv;
+            }
+
+            throw new NotImplementedException(firstMatchingEnvMapping.Value.ToString());
         }
 
         return TryMapPathToParentEnvironment;
     }
 
-    public static IReadOnlyList<KeyValuePair<IReadOnlyList<int>, IReadOnlyList<int>>>
+    public static IReadOnlyList<KeyValuePair<IReadOnlyList<int>, ExprMappedToParentEnv>>
         EnvItemsMappingsFromChildToParent(Expression envExpression)
     {
         /*
@@ -512,7 +605,7 @@ public class CodeAnalysis
 
         if (TryParseExpressionAsIndexPathFromEnv(envExpression) is { } path)
         {
-            return [new KeyValuePair<IReadOnlyList<int>, IReadOnlyList<int>>([], path)];
+            return [new KeyValuePair<IReadOnlyList<int>, ExprMappedToParentEnv>([], path)];
         }
 
         if (envExpression is Expression.ListExpression envListExpr)
@@ -522,7 +615,7 @@ public class CodeAnalysis
                 ..envListExpr.List
                 .SelectMany((childExpr, childIndex) =>
                 EnvItemsMappingsFromChildToParent(childExpr)
-                .Select(childMapping => new KeyValuePair<IReadOnlyList<int>, IReadOnlyList<int>>(
+                .Select(childMapping => new KeyValuePair<IReadOnlyList<int>, ExprMappedToParentEnv>(
                     [childIndex, .. childMapping.Key],
                     childMapping.Value)))
                 ];
@@ -572,10 +665,13 @@ public class CodeAnalysis
     /// <summary>
     /// Returns the path of list items starting from the environment to the expression given as the argument.
     /// </summary>
-    public static IReadOnlyList<int>? TryParseExpressionAsIndexPathFromEnv(Expression expression)
+    public static ExprMappedToParentEnv? TryParseExpressionAsIndexPathFromEnv(Expression expression)
     {
         if (expression is Expression.EnvironmentExpression)
-            return [];
+            return new ExprMappedToParentEnv.PathInParentEnv([]);
+
+        if (expression is Expression.LiteralExpression literal)
+            return new ExprMappedToParentEnv.LiteralInParentEnv(literal.Value);
 
         if (expression is Expression.StringTagExpression stringTagExpr)
             return TryParseExpressionAsIndexPathFromEnv(stringTagExpr.tagged);
@@ -598,21 +694,21 @@ public class CodeAnalysis
             if (skipArgumentList.List[0] is not Expression.LiteralExpression skipCountLiteral)
                 return null;
 
-            if (TryParseExpressionAsIndexPathFromEnv(skipArgumentList.List[1]) is not { } pathPrefix)
+            if (TryParseExpressionAsIndexPathFromEnv(skipArgumentList.List[1]) is not ExprMappedToParentEnv.PathInParentEnv pathPrefix)
                 return null;
 
             return
                 PineValueAsInteger.SignedIntegerFromValue(skipCountLiteral.Value)
-                .Unpack<IReadOnlyList<int>?>(
-                    fromErr: _ => null,
-                    fromOk: skipValue => [.. pathPrefix, (int)skipValue]);
+                    .Unpack<ExprMappedToParentEnv?>(
+                        fromErr: _ => null,
+                        fromOk: skipValue => new ExprMappedToParentEnv.PathInParentEnv([.. pathPrefix.Path, (int)skipValue]));
         }
 
         {
-            if (TryParseExpressionAsIndexPathFromEnv(kernelApplication.argument) is not { } pathPrefix)
+            if (TryParseExpressionAsIndexPathFromEnv(kernelApplication.argument) is not ExprMappedToParentEnv.PathInParentEnv pathPrefix)
                 return null;
 
-            return [.. pathPrefix, 0];
+            return new ExprMappedToParentEnv.PathInParentEnv([.. pathPrefix.Path, 0]);
         }
     }
 }
