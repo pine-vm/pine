@@ -178,7 +178,7 @@ view state =
     let
         title =
             if state.selectedPage == HomePage then
-                "Elm-Time"
+                "Elm-Time, the Elm runtime environment"
 
             else
                 String.join " — " [ titleFromPage state.selectedPage, "Elm-Time" ]
@@ -203,7 +203,7 @@ view state =
             , viewPageMainContent state.selectedPage device
             ]
                 |> Element.column
-                    [ Element.paddingXY (Visuals.defaultFontSize * 2) 0
+                    [ Element.paddingXY Visuals.defaultFontSize 0
                     , Element.spacing (Visuals.defaultFontSize * 2)
                     , Element.width Element.fill
                     , Element.height Element.fill
@@ -331,7 +331,7 @@ header =
         |> Element.column
             [ Element.width Element.fill
             , Element.Background.color Visuals.headerBackgroundColor
-            , Element.paddingXY (Visuals.defaultFontSize * 3) 0
+            , Element.paddingXY (Visuals.defaultFontSize * 2) 0
             ]
 
 

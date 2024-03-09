@@ -8,9 +8,9 @@ import Frontend.Visuals as Visuals
 
 view : Element.Element e
 view =
-    [ "Elm-Time is an open-source, cross-platform runtime environment for the Elm programming language."
+    [ "Cross-platform runtime environment for the Elm programming language"
         |> headingElementFromLevel 2
-    , "Elm-Time integrates a web server and a database management system, automating the persistence and maintenance of application state and database migrations."
+    , "Elm-Time integrates web server and database management system, automating the persistence and maintenance of application state and database migrations."
         |> View.paragraphFromText
     , "The Elm-Time compiler offers various interfaces supporting the automatic generation of Elm code at build time. This automation frees applications from boilerplate and glue code and allows us to focus on business logic."
         |> View.paragraphFromText
