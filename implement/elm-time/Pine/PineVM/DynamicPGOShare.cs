@@ -168,24 +168,26 @@ public class DynamicPGOShare : IDisposable
         IReadOnlyDictionary<PineValue, Func<PineVM.EvalExprDelegate, PineValue, Result<string, PineValue>>>? decodeExpressionOverrides = null,
         PineVM.OverrideEvalExprDelegate? overrideEvaluateExpression = null)
     {
-        var compiledDecodeExpressionOverrides =
+        var compiledParseExpressionOverrides =
             completedCompilations
             .Reverse()
             .SelectWhereNotNull(compilation => compilation.DictionaryResult.WithDefault(null))
             .FirstOrDefault();
 
-        var combinedDecodeExpressionOverrides =
+        var combinedParseExpressionOverrides =
             (decodeExpressionOverrides ?? ImmutableDictionary<PineValue, Func<PineVM.EvalExprDelegate, PineValue, Result<string, PineValue>>>.Empty)
             .Aggregate(
-                seed: compiledDecodeExpressionOverrides?.ToImmutableDictionary() ?? ImmutableDictionary<PineValue, Func<PineVM.EvalExprDelegate, PineValue, Result<string, PineValue>>>.Empty,
+                seed:
+                compiledParseExpressionOverrides?.ToImmutableDictionary() ??
+                ImmutableDictionary<PineValue, Func<PineVM.EvalExprDelegate, PineValue, Result<string, PineValue>>>.Empty,
                 func: (dict, entry) => dict.SetItem(entry.Key, entry.Value));
 
         var decodeExpressionOverridesDict =
-            combinedDecodeExpressionOverrides.Count < 1
+            combinedParseExpressionOverrides.Count < 1
             ?
             null
             :
-            combinedDecodeExpressionOverrides
+            combinedParseExpressionOverrides
             .ToImmutableDictionary(
                 keySelector: encodedExprAndDelegate => encodedExprAndDelegate.Key,
                 elementSelector: encodedExprAndDelegate => new Expression.DelegatingExpression(encodedExprAndDelegate.Value));

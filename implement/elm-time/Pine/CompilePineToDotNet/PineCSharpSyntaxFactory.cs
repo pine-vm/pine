@@ -362,4 +362,46 @@ public static class PineCSharpSyntaxFactory
                             SyntaxFactory.LiteralExpression(
                                 SyntaxKind.StringLiteralExpression,
                                 SyntaxFactory.Literal(logEntry)))))));
+
+    public static ExpressionSyntax GenericInvocationThrowingRuntimeExceptionOnError(
+        FunctionCompilationEnvironment compilationEnv,
+        ExpressionSyntax exprExpr,
+        ExpressionSyntax environmentExpr)
+    {
+        var evalInvocationExpression =
+            SyntaxFactory.InvocationExpression(
+                SyntaxFactory.IdentifierName(compilationEnv.ArgumentEvalGenericName))
+            .WithArgumentList(
+                SyntaxFactory.ArgumentList(
+                    SyntaxFactory.SeparatedList<ArgumentSyntax>(
+                        new SyntaxNodeOrToken[]
+                        {
+                            SyntaxFactory.Argument(exprExpr),
+                            SyntaxFactory.Token(SyntaxKind.CommaToken),
+                            SyntaxFactory.Argument(environmentExpr)
+                        })));
+
+        return
+            SyntaxFactory.InvocationExpression(
+                SyntaxFactory.MemberAccessExpression(
+                    SyntaxKind.SimpleMemberAccessExpression,
+                    evalInvocationExpression,
+                    SyntaxFactory.IdentifierName("Extract")))
+                        .WithArgumentList(
+                            SyntaxFactory.ArgumentList(
+                                SyntaxFactory.SingletonSeparatedList(
+                                    SyntaxFactory.Argument(
+                                        SyntaxFactory.SimpleLambdaExpression(
+                                            SyntaxFactory.Parameter(
+                                                SyntaxFactory.Identifier("err")))
+                                        .WithExpressionBody(
+                                            SyntaxFactory.ThrowExpression(
+                                                SyntaxFactory.ObjectCreationExpression(
+                                                    SyntaxFactory.IdentifierName(nameof(PineVM.GenericEvalException)))
+                                                .WithArgumentList(
+                                                    SyntaxFactory.ArgumentList(
+                                                        SyntaxFactory.SingletonSeparatedList(
+                                                            SyntaxFactory.Argument(
+                                                                SyntaxFactory.IdentifierName("err")))))))))));
+    }
 }

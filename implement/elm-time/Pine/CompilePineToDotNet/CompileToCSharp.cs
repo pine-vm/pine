@@ -79,7 +79,8 @@ public partial class CompileToCSharp
             typeof(ImmutableArray),
             typeof(IReadOnlyDictionary<,>),
             typeof(Func<,>),
-            typeof(Enumerable)
+            typeof(Enumerable),
+            typeof(GenericEvalException),
         };
 
         var usingDirectives =
@@ -96,27 +97,16 @@ public partial class CompileToCSharp
         {
             return
                 SyntaxFactory.MethodDeclaration(
-                        returnType:
-                        SyntaxFactory.GenericName(
-                                SyntaxFactory.Identifier("Result"))
-                            .WithTypeArgumentList(
-                                SyntaxFactory.TypeArgumentList(
-                                    SyntaxFactory.SeparatedList<TypeSyntax>(
-                                        new SyntaxNodeOrToken[]
-                                        {
-                                            SyntaxFactory.PredefinedType(SyntaxFactory.Token(SyntaxKind.StringKeyword)),
-                                            SyntaxFactory.Token(SyntaxKind.CommaToken),
-                                            SyntaxFactory.IdentifierName("PineValue")
-                                        }))),
-                        SyntaxFactory.Identifier(declarationName))
-                    .WithModifiers(
-                        SyntaxFactory.TokenList(
-                            SyntaxFactory.Token(SyntaxKind.StaticKeyword),
-                            SyntaxFactory.Token(SyntaxKind.PublicKeyword)))
-                    .WithParameterList(
-                        SyntaxFactory.ParameterList(
-                            SyntaxFactory.SeparatedList(parametersSyntaxes)))
-                    .WithBody(blockSyntax);
+                    returnType: SyntaxFactory.IdentifierName("PineValue"),
+                    SyntaxFactory.Identifier(declarationName))
+                .WithModifiers(
+                    SyntaxFactory.TokenList(
+                        SyntaxFactory.Token(SyntaxKind.StaticKeyword),
+                        SyntaxFactory.Token(SyntaxKind.PublicKeyword)))
+                .WithParameterList(
+                    SyntaxFactory.ParameterList(
+                        SyntaxFactory.SeparatedList(parametersSyntaxes)))
+                .WithBody(blockSyntax);
         }
 
         static Result<string, IReadOnlyDictionary<ExpressionUsageAnalysis, CompiledExpressionFunction>> CompileExpressionFunctions(
@@ -311,12 +301,12 @@ public partial class CompileToCSharp
 
                 var dictionaryValueTypeSyntax =
                 CompileTypeSyntax.TypeSyntaxFromType(
-                    typeof(Func<PineVM.PineVM.EvalExprDelegate, PineValue, Result<string, PineValue>>),
+                    typeof(Func<PineVM.PineVM.EvalExprDelegate, PineValue, PineValue>),
                     usingDirectives);
 
                 var dictionaryMemberType =
                 CompileTypeSyntax.TypeSyntaxFromType(
-                    typeof(IReadOnlyDictionary<PineValue, Func<PineVM.PineVM.EvalExprDelegate, PineValue, Result<string, PineValue>>>),
+                    typeof(IReadOnlyDictionary<PineValue, Func<PineVM.PineVM.EvalExprDelegate, PineValue, PineValue>>),
                     usingDirectives);
 
                 var dictionaryEntries =
@@ -494,7 +484,7 @@ public partial class CompileToCSharp
                 var availableLetBindings =
                 exprWithDependencies.EnumerateLetBindingsTransitive();
 
-                var returnExpression = exprWithDependencies.AsCsWithTypeResult();
+                var returnExpression = exprWithDependencies.AsCsWithTypeGenericValue();
 
                 var variableDeclarations =
                 CompiledExpression.VariableDeclarationsForLetBindings(
@@ -574,7 +564,6 @@ public partial class CompileToCSharp
                 Result<string, CompiledExpression>.ok(
                     new CompiledExpression(
                         Syntax: SyntaxFactory.IdentifierName(letBinding.DeclarationName),
-                        IsTypeResult: letBinding.Expression.IsTypeResult,
                         LetBindings: CompiledExpression.NoLetBindings,
                         Dependencies: letBinding.Expression.Dependencies));
         }
@@ -700,7 +689,7 @@ public partial class CompileToCSharp
             {
                 Expression.EnvironmentExpression =>
                 Result<string, CompiledExpression>.ok(
-                    CompiledExpression.WithTypePlainValue(
+                    CompiledExpression.WithTypeGenericValue(
                         SyntaxFactory.IdentifierName(environment.FunctionEnvironment.ArgumentEnvironmentName))),
 
                 Expression.ListExpression listExpr =>
@@ -733,7 +722,7 @@ public partial class CompileToCSharp
     {
         if (!listExpression.List.Any())
             return Result<string, CompiledExpression>.ok(
-                CompiledExpression.WithTypePlainValue(PineCSharpSyntaxFactory.PineValueEmptyListSyntax));
+                CompiledExpression.WithTypeGenericValue(PineCSharpSyntaxFactory.PineValueEmptyListSyntax));
 
         return
             listExpression.List.Select((itemExpression, itemIndex) =>
@@ -746,11 +735,11 @@ public partial class CompileToCSharp
             .Map(compiledItems =>
             {
                 var aggregateSyntax =
-                CompiledExpression.ListMapOrAndThen(
+                CompiledExpression.ListMap(
                     environment,
                     combine:
                     csharpItems =>
-                    CompiledExpression.WithTypePlainValue(
+                    CompiledExpression.WithTypeGenericValue(
                         SyntaxFactory.InvocationExpression(
                             SyntaxFactory.MemberAccessExpression(
                                 SyntaxKind.SimpleMemberAccessExpression,
@@ -855,14 +844,14 @@ public partial class CompileToCSharp
                             CompiledExpression.Union(specializedOk.Value.Select(c => c.LetBindings));
 
                         var expressionReturningPineValue =
-                            CompiledExpression.ListMapOrAndThen(
+                            CompiledExpression.ListMap(
                                 environment,
                                 argumentsCs =>
                                 {
                                     var plainInvocationSyntax = specializedImpl.CompileInvocation(argumentsCs);
 
                                     return
-                                    CompiledExpression.WithTypePlainValue(
+                                    CompiledExpression.WithTypeGenericValue(
                                         specializedImpl.ReturnType.IsInstanceOfResult ?
                                         wrapInvocationInWithDefault(plainInvocationSyntax)
                                         :
@@ -915,21 +904,11 @@ public partial class CompileToCSharp
             {
                 CompiledExpression continueWithConditionCs(ExpressionSyntax conditionCs)
                 {
-                    if (!(compiledIfTrue.IsTypeResult || compiledIfFalse.IsTypeResult))
-                    {
-                        return
-                        CompiledExpression.WithTypePlainValue(SyntaxFactory.ConditionalExpression(
-                            conditionCs,
-                            compiledIfTrue.Syntax,
-                            compiledIfFalse.Syntax));
-                    }
-
                     return
-                    CompiledExpression.WithTypeResult(
-                        SyntaxFactory.ConditionalExpression(
-                            conditionCs,
-                            compiledIfTrue.AsCsWithTypeResult(),
-                            compiledIfFalse.AsCsWithTypeResult()));
+                    CompiledExpression.WithTypeGenericValue(SyntaxFactory.ConditionalExpression(
+                        conditionCs,
+                        compiledIfTrue.Syntax,
+                        compiledIfFalse.Syntax));
                 }
 
                 var aggregateLetBindings =
@@ -1053,23 +1032,13 @@ public partial class CompileToCSharp
         CompiledExpression continueWithGenericCase()
         {
             var invocationExpression =
-                SyntaxFactory.InvocationExpression(
-                    SyntaxFactory.IdentifierName(environment.FunctionEnvironment.ArgumentEvalGenericName))
-                .WithArgumentList(
-                    SyntaxFactory.ArgumentList(
-                        SyntaxFactory.SeparatedList<ArgumentSyntax>(
-                            new SyntaxNodeOrToken[]
-                            {
-                                SyntaxFactory.Argument(
-                                    SyntaxFactory.IdentifierName(
-                                        MemberNameForExpression(parseAndEvalExprHash))),
-                                SyntaxFactory.Token(SyntaxKind.CommaToken),
-                                SyntaxFactory.Argument(
-                                    SyntaxFactory.IdentifierName(environment.FunctionEnvironment.ArgumentEnvironmentName))
-                            })));
+                PineCSharpSyntaxFactory.GenericInvocationThrowingRuntimeExceptionOnError(
+                    environment.FunctionEnvironment,
+                    SyntaxFactory.IdentifierName(MemberNameForExpression(parseAndEvalExprHash)),
+                    SyntaxFactory.IdentifierName(environment.FunctionEnvironment.ArgumentEnvironmentName));
 
             return
-                CompiledExpression.WithTypeResult(invocationExpression)
+                CompiledExpression.WithTypeGenericValue(invocationExpression)
                 .MergeDependencies(
                     CompiledExpressionDependencies.Empty
                     with
@@ -1229,7 +1198,7 @@ public partial class CompileToCSharp
         CompiledExpressionId invokedFunction,
         EnvConstraintId? envConstraint,
         ExpressionSyntax environmentExpressionSyntax) =>
-        CompiledExpression.WithTypeResult(
+        CompiledExpression.WithTypeGenericValue(
             SyntaxFactory.InvocationExpression(
                 SyntaxFactory.IdentifierName(
                     MemberNameForCompiledExpressionFunction(
@@ -1391,7 +1360,7 @@ public partial class CompileToCSharp
     {
         return
             Result<string, CompiledExpression>.ok(
-                CompiledExpression.WithTypePlainValue(SyntaxFactory.IdentifierName(DeclarationNameForValue(literalExpression.Value)))
+                CompiledExpression.WithTypeGenericValue(SyntaxFactory.IdentifierName(DeclarationNameForValue(literalExpression.Value)))
                 .MergeDependencies(
                     CompiledExpressionDependencies.Empty with { Values = [literalExpression.Value] }));
     }

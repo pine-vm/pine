@@ -96,10 +96,20 @@ public class CompileToAssembly
                 return Result<string, CompileDictionaryResult>.err(
                     "Did not find method " + csharpFile.SyntaxContainerConfig.dictionaryMemberName + " in type " + compiledType.FullName);
 
+            var originalDictionary =
+                (IReadOnlyDictionary<PineValue, Func<PineVM.PineVM.EvalExprDelegate, PineValue, PineValue>>)
+                dictionaryMember.Invoke(null, null)!;
+
+            var dictionaryWithEvalReturnTypeResult =
+                originalDictionary
+                .ToImmutableDictionary(
+                    keySelector: kv => kv.Key,
+                    elementSelector: kv => new Func<PineVM.PineVM.EvalExprDelegate, PineValue, Result<string, PineValue>>(
+                        (evalDelegate, envValue) => Result<string, PineValue>.ok(kv.Value(evalDelegate, envValue))));
+
             return
                 Result<string, CompileDictionaryResult>.ok(
-                    (CompileDictionaryResult)
-                    dictionaryMember.Invoke(null, null));
+                    dictionaryWithEvalReturnTypeResult);
         }
 
         return Result<string, CompileToAssemblyResult>.ok(

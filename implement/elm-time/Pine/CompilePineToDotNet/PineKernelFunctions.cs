@@ -82,7 +82,7 @@ public partial class CompileToCSharp
                     asLiteralInt64 = (long)okInteger.Value;
 
                 dictionary[KernelFunctionParameterType.Integer] =
-                    CompiledExpression.WithTypePlainValue(
+                    CompiledExpression.WithTypeGenericValue(
                         PineCSharpSyntaxFactory.ExpressionSyntaxForIntegerLiteral((long)okInteger.Value));
             }
         }

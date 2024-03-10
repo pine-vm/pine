@@ -10,13 +10,6 @@ namespace Pine.CompilePineToDotNet;
 
 public record CompiledExpression(
     ExpressionSyntax Syntax,
-
-    /*
-     * true if the type of the expression is Result<string, PineValue>
-     * false if the type of the expression is PineValue
-     * */
-    bool IsTypeResult,
-
     ImmutableDictionary<PineVM.Expression, LetBinding> LetBindings,
     CompiledExpressionDependencies Dependencies)
 {
@@ -28,29 +21,15 @@ public record CompiledExpression(
     public ImmutableDictionary<PineVM.Expression, LetBinding> EnumerateLetBindingsTransitive() =>
         Union([LetBindings, .. LetBindings.Values.Select(binding => binding.Expression.EnumerateLetBindingsTransitive())]);
 
-    public static CompiledExpression WithTypePlainValue(ExpressionSyntax syntax) =>
-        WithTypePlainValue(syntax, NoLetBindings, CompiledExpressionDependencies.Empty);
+    public static CompiledExpression WithTypeGenericValue(ExpressionSyntax syntax) =>
+        WithTypeGenericValue(syntax, NoLetBindings, CompiledExpressionDependencies.Empty);
 
-    public static CompiledExpression WithTypePlainValue(
+    public static CompiledExpression WithTypeGenericValue(
         ExpressionSyntax syntax,
         ImmutableDictionary<PineVM.Expression, LetBinding> letBindings,
         CompiledExpressionDependencies dependencies) =>
         new(
             syntax,
-            IsTypeResult: false,
-            LetBindings: letBindings,
-            Dependencies: dependencies);
-
-    public static CompiledExpression WithTypeResult(ExpressionSyntax syntax) =>
-        WithTypeResult(syntax, NoLetBindings, CompiledExpressionDependencies.Empty);
-
-    public static CompiledExpression WithTypeResult(
-        ExpressionSyntax syntax,
-        ImmutableDictionary<PineVM.Expression, LetBinding> letBindings,
-        CompiledExpressionDependencies dependencies) =>
-        new(
-            syntax,
-            IsTypeResult: true,
             LetBindings: letBindings,
             Dependencies: dependencies);
 
@@ -82,58 +61,9 @@ public record CompiledExpression(
         ExpressionCompilationEnvironment environment,
         Func<ExpressionSyntax, CompiledExpression> continueWithPlainValue)
     {
-        if (!IsTypeResult)
-        {
-            return
-                continueWithPlainValue(Syntax)
-                .MergeBindings(LetBindings)
-                .MergeDependencies(Dependencies);
-        }
-
-        var syntaxName = GetNameForExpression(Syntax);
-
-        var okIdentifier = SyntaxFactory.Identifier("ok_of_" + syntaxName);
-
-        var combinedExpression =
-            continueWithPlainValue(SyntaxFactory.IdentifierName(okIdentifier))
-            .MergeBindings(LetBindings);
-
-        var (combinedExpressionSyntax, combinedExpressionDependencies) =
-            ExpressionBodyOrBlock(environment, combinedExpression);
-
-        /*
-         * 2023-10-15
-         * 
-        var mapErrorExpression =
-            BuildMapErrorExpression(
-                Syntax,
-                map: errExpr =>
-                SyntaxFactory.BinaryExpression(
-                    SyntaxKind.AddExpression,
-                    SyntaxFactory.LiteralExpression(
-                        SyntaxKind.StringLiteralExpression,
-                        SyntaxFactory.Literal("Failed to evaluate expression " + syntaxName + ":")),
-                    errExpr));
-        */
-
         return
-            WithTypeResult(
-                SyntaxFactory.InvocationExpression(
-                    SyntaxFactory.MemberAccessExpression(
-                        SyntaxKind.SimpleMemberAccessExpression,
-                        /*
-                         * 2023-10-15
-                        mapErrorExpression,
-                        */
-                        Syntax,
-                        SyntaxFactory.IdentifierName(combinedExpression.IsTypeResult ? "AndThen" : "Map")))
-                .WithArgumentList(
-                    SyntaxFactory.ArgumentList(
-                        SyntaxFactory.SingletonSeparatedList(
-                            SyntaxFactory.Argument(
-                                SyntaxFactory.SimpleLambdaExpression(SyntaxFactory.Parameter(okIdentifier))
-                                .WithBody(combinedExpressionSyntax))))))
-            .MergeDependencies(combinedExpressionDependencies)
+            continueWithPlainValue(Syntax)
+            .MergeBindings(LetBindings)
             .MergeDependencies(Dependencies);
     }
 
@@ -268,20 +198,21 @@ public record CompiledExpression(
             environment,
             inner => new CompiledExpression(
             map(inner),
-            IsTypeResult: false,
             LetBindings: NoLetBindings,
             CompiledExpressionDependencies.Empty));
     }
 
-    public ExpressionSyntax AsCsWithTypeResult()
+    public ExpressionSyntax AsCsWithTypeGenericValue()
     {
-        if (IsTypeResult)
-            return Syntax;
+        /*
+         * Specialized types are not implemented yet.
+         * We will add more types to enable skipping superfluous conversions in the generated C# code.
+         * */
 
-        return WrapExpressionInPineValueResultOk(Syntax);
+        return Syntax;
     }
 
-    public static CompiledExpression ListMapOrAndThen(
+    public static CompiledExpression ListMap(
         ExpressionCompilationEnvironment environment,
         Func<IReadOnlyList<ExpressionSyntax>, CompiledExpression> combine,
         IReadOnlyList<CompiledExpression> compiledList)
