@@ -5,6 +5,8 @@ using System.Numerics;
 
 namespace Pine.PineVM;
 
+#pragma warning disable IDE1006
+
 public static class KernelFunction
 {
     public static PineValue equal(PineValue value) =>

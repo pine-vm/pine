@@ -454,8 +454,8 @@ public class StartupAdminInterface
                     throw new Exception("Unknown message from GUI: " + System.Text.Json.JsonSerializer.Serialize(messageFromGui))
                 };
 
-            apiRoutes = new[]
-            {
+            apiRoutes =
+            [
                     new ApiRoute
                     (
                         path : PathApiGetDeployedAppConfig,
@@ -680,7 +680,7 @@ public class StartupAdminInterface
                             await context.Response.WriteAsync("Successfully replaced the process history.");
                         })
                     ),
-                };
+                ];
 
             foreach (var apiRoute in apiRoutes)
             {

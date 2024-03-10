@@ -28,8 +28,7 @@ public class ElmWebServiceAppTests
     {
         var eventsAndExpectedResponses =
             TestSetup.CounterProcessTestEventsAndExpectedResponses(
-                new (int addition, int expectedResponse)[]
-                {
+                [
                     (0, 0),
                     (1, 1),
                     (3, 4),
@@ -37,7 +36,7 @@ public class ElmWebServiceAppTests
                     (7, 16),
                     (11, 27),
                     (-13, 14),
-                }).ToList();
+                ]).ToList();
 
         var eventsAndExpectedResponsesBatches = eventsAndExpectedResponses.Batch(3).ToList();
 

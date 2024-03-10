@@ -179,7 +179,7 @@ public class Program
 
                 helpCmd.Command(cmdPrimaryName, helpForAppCmd =>
                 {
-                    foreach (var additionalName in topLevelCmd.Names.Except(new[] { cmdPrimaryName }))
+                    foreach (var additionalName in topLevelCmd.Names.Except([cmdPrimaryName]))
                         helpForAppCmd.AddName(additionalName);
 
                     CommandExtension.ConfigureHelpCommandForCommand(helpForAppCmd, topLevelCmd);
@@ -354,10 +354,7 @@ public class Program
                 WriteReportToFileInReportDirectory(
                     reportContent: System.Text.Json.JsonSerializer.Serialize(
                         deployReport,
-                        new System.Text.Json.JsonSerializerOptions
-                        {
-                            WriteIndented = true
-                        }),
+                        reportJsonSerializerOptions),
                     reportKind: "deploy.json");
             });
         });
@@ -397,10 +394,7 @@ public class Program
                 WriteReportToFileInReportDirectory(
                     reportContent: System.Text.Json.JsonSerializer.Serialize(
                         report,
-                        new System.Text.Json.JsonSerializerOptions
-                        {
-                            WriteIndented = true
-                        }),
+                        reportJsonSerializerOptions),
                     reportKind: "copy-app-state.json");
             });
         });
@@ -551,10 +545,7 @@ public class Program
                 WriteReportToFileInReportDirectory(
                     reportContent: System.Text.Json.JsonSerializer.Serialize(
                         applyFunctionReport,
-                        new System.Text.Json.JsonSerializerOptions
-                        {
-                            WriteIndented = true
-                        }),
+                        reportJsonSerializerOptions),
                     reportKind: "apply-function.json");
             });
         });
@@ -595,10 +586,7 @@ public class Program
                 WriteReportToFileInReportDirectory(
                     reportContent: System.Text.Json.JsonSerializer.Serialize(
                         report,
-                        new System.Text.Json.JsonSerializerOptions
-                        {
-                            WriteIndented = true
-                        }),
+                        reportJsonSerializerOptions),
                     reportKind: "truncate-process-history.json");
             });
         });
@@ -618,10 +606,7 @@ public class Program
                 WriteReportToFileInReportDirectory(
                     reportContent: System.Text.Json.JsonSerializer.Serialize(
                         compileReport,
-                        new System.Text.Json.JsonSerializerOptions
-                        {
-                            WriteIndented = true
-                        }),
+                        reportJsonSerializerOptions),
                     reportKind: "compile.json");
             });
         });
@@ -2761,6 +2746,11 @@ public class Program
     }
 
     private static string ReportFilePath => Path.Combine(Environment.CurrentDirectory, "elm-time-tool", "report");
+
+    static readonly System.Text.Json.JsonSerializerOptions reportJsonSerializerOptions = new()
+    {
+        WriteIndented = true
+    };
 
     private static void WriteReportToFileInReportDirectory(string reportContent, string reportKind)
     {

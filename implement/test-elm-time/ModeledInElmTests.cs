@@ -43,8 +43,7 @@ public class ModeledInElmTests
         var javaScriptPreparedToRun =
             ProcessFromElm019Code.PublishFunctionsFromJavascriptFromElmMake(
                 ProcessFromElm019Code.JavascriptMinusCrashes(javaScriptFromElmMake),
-                new[]
-                {(functionNameInElm: "Main.tests", publicName: "published_tests", arity: 0)});
+                [(functionNameInElm: "Main.tests", publicName: "published_tests", arity: 0)]);
 
         var javaScriptEngine = JavaScriptEngineFromJavaScriptEngineSwitcher.ConstructClearScriptJavaScriptEngine();
 

@@ -445,7 +445,7 @@ public partial class CompileToCSharp
             IReadOnlyList<EnvConstraintId> branchesEnvIds,
             FunctionCompilationEnvironment compilationEnv)
     {
-        if (constrainedEnvId is { } envId)
+        if (constrainedEnvId is { })
         {
             return
                 CompileToCSharpGeneralFunctionBlockSyntax(

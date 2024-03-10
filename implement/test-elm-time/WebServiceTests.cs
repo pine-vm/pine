@@ -13,7 +13,6 @@ using System.Linq;
 using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
-using System.Threading.Tasks;
 using static MoreLinq.Extensions.BatchExtension;
 
 namespace TestElmTime;
@@ -31,8 +30,7 @@ public class WebServiceTests
 
         var allEventsAndExpectedResponses =
             TestSetup.CounterProcessTestEventsAndExpectedResponses(
-                new (int addition, int expectedResponse)[]
-                {
+                [
                     (0, 0),
                     (1, 1),
                     (3, 4),
@@ -40,7 +38,7 @@ public class WebServiceTests
                     (7, 16),
                     (11, 27),
                     (-13, 14),
-                }).ToList();
+                ]).ToList();
 
         var eventsAndExpectedResponsesBatches = allEventsAndExpectedResponses.Batch(3).ToList();
 
@@ -350,7 +348,7 @@ public class WebServiceTests
     {
         const string adminPassword = "Password_1234567";
 
-        static Task<HttpResponseMessage> HttpSetElmAppState(
+        static System.Threading.Tasks.Task<HttpResponseMessage> HttpSetElmAppState(
             HttpClient client, string state) =>
             client.PostAsync(
                 StartupAdminInterface.PathApiElmAppState,
@@ -574,7 +572,7 @@ public class WebServiceTests
     {
         using var testSetup = WebHostAdminInterfaceTestSetup.Setup(deployAppAndInitElmState: ElmWebServiceAppTests.CounterWebApp);
 
-        async Task<HttpResponseMessage> postStringContentToPublicApp(string postContent)
+        async System.Threading.Tasks.Task<HttpResponseMessage> postStringContentToPublicApp(string postContent)
         {
             using var publicAppClient = testSetup.BuildPublicAppHttpClient();
 
@@ -635,16 +633,15 @@ public class WebServiceTests
     {
         var allEventsAndExpectedResponses =
             TestSetup.CounterProcessTestEventsAndExpectedResponses(
-                new (int addition, int expectedResponse)[]
-                {
-                        (0, 0),
-                        (1, 1),
-                        (3, 4),
-                        (5, 9),
-                        (7, 16),
-                        (11, 27),
-                        (-13, 14),
-                }).ToList();
+                [
+                    (0, 0),
+                    (1, 1),
+                    (3, 4),
+                    (5, 9),
+                    (7, 16),
+                    (11, 27),
+                    (-13, 14),
+                ]).ToList();
 
         var eventsAndExpectedResponsesBatches = allEventsAndExpectedResponses.Batch(3).ToList();
 
@@ -849,12 +846,11 @@ public class WebServiceTests
 
         var counterEventsAndExpectedResponses =
             TestSetup.CounterProcessTestEventsAndExpectedResponses(
-                new (int addition, int expectedResponse)[]
-                {
+                [
                     (0, 0),
                     (1, 1),
                     (13, 14),
-                }).ToList();
+                ]).ToList();
 
         foreach (var (serializedEvent, expectedResponse) in counterEventsAndExpectedResponses)
         {
@@ -902,8 +898,7 @@ public class WebServiceTests
     {
         var allEventsAndExpectedResponses =
             TestSetup.CounterProcessTestEventsAndExpectedResponses(
-                new (int addition, int expectedResponse)[]
-                {
+                [
                         (0, 0),
                         (1, 1),
                         (3, 4),
@@ -911,7 +906,7 @@ public class WebServiceTests
                         (7, 16),
                         (11, 27),
                         (-13, 14),
-                }).ToList();
+                ]).ToList();
 
         var eventsAndExpectedResponsesBatches = allEventsAndExpectedResponses.Batch(3).ToList();
 
@@ -982,8 +977,7 @@ public class WebServiceTests
 
         var allEventsAndExpectedResponses =
             TestSetup.CounterProcessTestEventsAndExpectedResponses(
-                new (int addition, int expectedResponse)[]
-                {
+                [
                     (0, 0),
                     (1, 1),
                     (3, 4),
@@ -991,7 +985,7 @@ public class WebServiceTests
                     (7, 16),
                     (11, 27),
                     (-13, 14),
-                }).ToList();
+                ]).ToList();
 
         var eventsAndExpectedResponsesBatches = allEventsAndExpectedResponses.Batch(3).ToList();
 
@@ -1085,8 +1079,7 @@ public class WebServiceTests
 
         var allEventsAndExpectedResponses =
             TestSetup.CounterProcessTestEventsAndExpectedResponses(
-                new (int addition, int expectedResponse)[]
-                {
+                [
                         (0, 0),
                         (1, 1),
                         (3, 4),
@@ -1094,7 +1087,7 @@ public class WebServiceTests
                         (7, 16),
                         (11, 27),
                         (-13, 14),
-                }).ToList();
+                ]).ToList();
 
         var eventsAndExpectedResponsesBatches = allEventsAndExpectedResponses.Batch(3).ToList();
 
@@ -1174,8 +1167,7 @@ public class WebServiceTests
 
         var allEventsAndExpectedResponses =
             TestSetup.CounterProcessTestEventsAndExpectedResponses(
-                new (int addition, int expectedResponse)[]
-                {
+                [
                         (0, 0),
                         (1, 1),
                         (3, 4),
@@ -1183,7 +1175,7 @@ public class WebServiceTests
                         (7, 16),
                         (11, 27),
                         (-13, 14),
-                }).ToList();
+                ]).ToList();
 
         var eventsAndExpectedResponsesBatches = allEventsAndExpectedResponses.Batch(3).ToList();
 
@@ -1251,13 +1243,12 @@ public class WebServiceTests
 
         var allEventsAndExpectedResponses =
             TestSetup.CounterProcessTestEventsAndExpectedResponses(
-                new (int addition, int expectedResponse)[]
-                {
+                [
                         (0, 0),
                         (1, 1),
                         (3, 4),
                         (5, 9),
-                }).ToList();
+                ]).ToList();
 
         var fileStoreWriter = new RecordingFileStoreWriter();
 
@@ -1423,7 +1414,7 @@ public class WebServiceTests
     }
 
     [TestMethod]
-    public async Task Elm_webservice_json_decoder_accepts_pascal_case_record_fields()
+    public async System.Threading.Tasks.Task Elm_webservice_json_decoder_accepts_pascal_case_record_fields()
     {
         var adminPassword = "test";
 
