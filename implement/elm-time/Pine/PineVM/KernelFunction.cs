@@ -62,14 +62,6 @@ public static class KernelFunction
             PineValue.EmptyList
         };
 
-    public static PineValue logical_and(PineValue value) =>
-        KernelFunctionExpectingListOfTypeBool(
-            bools => bools.Aggregate(seed: true, func: (a, b) => a && b),
-            value);
-
-    public static PineValue logical_or(PineValue value) =>
-        KernelFunctionExpectingListOfTypeBool(bools => bools.Aggregate(seed: false, func: (a, b) => a || b), value);
-
     public static PineValue length(PineValue value) =>
         PineValueAsInteger.ValueFromSignedInteger(
             value switch

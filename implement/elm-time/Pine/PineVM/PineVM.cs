@@ -163,8 +163,6 @@ public class PineVM : IPineVM
         ImmutableDictionary<string, Func<PineValue, PineValue>>.Empty
         .SetItem(nameof(KernelFunction.equal), KernelFunction.equal)
         .SetItem(nameof(KernelFunction.negate), KernelFunction.negate)
-        .SetItem(nameof(KernelFunction.logical_and), KernelFunction.logical_and)
-        .SetItem(nameof(KernelFunction.logical_or), KernelFunction.logical_or)
         .SetItem(nameof(KernelFunction.length), KernelFunction.length)
         .SetItem(nameof(KernelFunction.skip), KernelFunction.skip)
         .SetItem(nameof(KernelFunction.take), KernelFunction.take)

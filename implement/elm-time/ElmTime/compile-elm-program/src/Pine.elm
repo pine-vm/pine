@@ -222,8 +222,6 @@ kernelFunctions =
         , ( "negate"
           , kernelFunction_Negate
           )
-        , ( "logical_and", kernelFunctionExpectingListOfTypeBool (List.foldl (&&) True) )
-        , ( "logical_or", kernelFunctionExpectingListOfTypeBool (List.foldl (||) False) )
         , ( "length"
           , \arg ->
                 valueFromInt

@@ -198,12 +198,18 @@ powHelper base exponent accumulator =
 
 and : Bool -> Bool -> Bool
 and a b =
-    Pine_kernel.logical_and [ a, b ]
+    if a then
+        b
+    else
+        False
 
 
 or : Bool -> Bool -> Bool
 or a b =
-    Pine_kernel.logical_or [ a, b ]
+    if a then
+        True
+    else
+        b
 
 
 append : appendable -> appendable -> appendable
