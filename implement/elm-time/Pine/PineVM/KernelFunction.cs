@@ -16,14 +16,14 @@ public static class KernelFunction
                 PineValue.ListValue list =>
                 list.Elements switch
                 {
-                    [] => true,
+                [] => true,
 
-                    [var first, ..] =>
-                    /*
-                        * :: rest pattern seems not implemented yet:
-                        * https://github.com/dotnet/csharplang/issues/6574
-                        * */
-                    list.Elements.All(e => e.Equals(first)),
+                [var first, ..] =>
+                /*
+                    * :: rest pattern seems not implemented yet:
+                    * https://github.com/dotnet/csharplang/issues/6574
+                    * */
+                list.Elements.All(e => e.Equals(first)),
                 },
 
                 PineValue.BlobValue blob =>
@@ -137,10 +137,10 @@ public static class KernelFunction
             list =>
             list switch
             {
-                [] =>
-                PineValue.EmptyList,
+            [] =>
+            PineValue.EmptyList,
 
-                [var head, ..] =>
+            [var head, ..] =>
                 head switch
                 {
                     PineValue.BlobValue =>
@@ -160,8 +160,8 @@ public static class KernelFunction
             PineValue.ListValue listValue =>
             listValue.Elements switch
             {
-                [] => PineValue.EmptyList,
-                [var head, ..] => head,
+            [] => PineValue.EmptyList,
+            [var head, ..] => head,
             },
 
             _ =>
@@ -174,11 +174,39 @@ public static class KernelFunction
             integers.Aggregate(seed: BigInteger.Zero, func: (aggregate, next) => aggregate + next),
             value);
 
+    public static PineValue add_int(PineValue summandA, PineValue summandB)
+    {
+        if (PineValueAsInteger.SignedIntegerFromValue(summandA) is not Result<string, BigInteger>.Ok intA)
+            return PineValue.EmptyList;
+
+        if (PineValueAsInteger.SignedIntegerFromValue(summandB) is not Result<string, BigInteger>.Ok intB)
+            return PineValue.EmptyList;
+
+        return add_int(intA.Value, intB.Value);
+    }
+
+    public static PineValue add_int(BigInteger summandA, BigInteger summandB) =>
+        PineValueAsInteger.ValueFromSignedInteger(summandA + summandB);
+
     public static PineValue mul_int(PineValue value) =>
         KernelFunctionExpectingListOfBigIntAndProducingBigInt(
             integers =>
             integers.Aggregate(seed: BigInteger.One, func: (aggregate, next) => aggregate * next),
             value);
+
+    public static PineValue mul_int(PineValue factorA, PineValue factorB)
+    {
+        if (PineValueAsInteger.SignedIntegerFromValue(factorA) is not Result<string, BigInteger>.Ok intA)
+            return PineValue.EmptyList;
+
+        if (PineValueAsInteger.SignedIntegerFromValue(factorB) is not Result<string, BigInteger>.Ok intB)
+            return PineValue.EmptyList;
+
+        return mul_int(intA.Value, intB.Value);
+    }
+
+    public static PineValue mul_int(BigInteger factorA, BigInteger factorB) =>
+        PineValueAsInteger.ValueFromSignedInteger(factorA * factorB);
 
     public static PineValue is_sorted_ascending_int(PineValue value) =>
         PineVM.ValueFromBool(sort_int(value) == value);
@@ -254,12 +282,12 @@ public static class KernelFunction
             list =>
             list switch
             {
-                [var first, var second] =>
-                decodeArgA(first)
-                .AndThen(argA =>
-                decodeArgB(second)
-                .Map(argB => compose(argA, argB)))
-                .WithDefault(PineValue.EmptyList),
+            [var first, var second] =>
+            decodeArgA(first)
+            .AndThen(argA =>
+            decodeArgB(second)
+            .Map(argB => compose(argA, argB)))
+            .WithDefault(PineValue.EmptyList),
 
                 _ =>
                 PineValue.EmptyList
