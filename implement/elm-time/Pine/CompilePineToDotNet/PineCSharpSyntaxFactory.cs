@@ -5,6 +5,7 @@ using System.Globalization;
 using System;
 using System.Linq;
 using System.Collections.Immutable;
+using System.Collections.Generic;
 
 namespace Pine.CompilePineToDotNet;
 
@@ -27,12 +28,13 @@ public static class PineCSharpSyntaxFactory
     };
 
     public static StatementSyntax BranchForEnvId(
-        PineVM.ExpressionUsageAnalysis exprUsage,
-        FunctionCompilationEnvironment compilationEnv,
+        PineVM.Expression expr,
+        PineVM.EnvConstraintId envConstraint,
+        FunctionCompilationEnv compilationEnv,
         StatementSyntax[]? prependStatments)
     {
         var envListItems =
-            exprUsage.EnvId.ParsedEnvItems
+            envConstraint.ParsedEnvItems
             .Select(envListItem =>
             {
                 var pathItems =
@@ -60,6 +62,18 @@ public static class PineCSharpSyntaxFactory
             })
             .ToImmutableArray();
 
+        var branchInvocation =
+            CompileToCSharp.InvocationExpressionForCompiledExpressionFunction(
+                currentEnv: new ExpressionCompilationEnvironment(
+                    FunctionEnvironment: compilationEnv,
+                    LetBindings: ImmutableDictionary<PineVM.Expression, LetBinding>.Empty,
+                    ParentEnvironment: null,
+                    EnvConstraint: envConstraint),
+                invokedExpr: expr,
+                envConstraint: envConstraint,
+                parseAndEvalEnvExpr: new PineVM.Expression.EnvironmentExpression())
+            .Extract(err => throw new Exception(err));
+
         return
             SyntaxFactory.IfStatement(
                 SyntaxFactory.InvocationExpression(
@@ -76,45 +90,19 @@ public static class PineCSharpSyntaxFactory
                                             .Intersperse(SyntaxFactory.Token(SyntaxKind.CommaToken))))),
                                 SyntaxFactory.Token(SyntaxKind.CommaToken),
                                 SyntaxFactory.Argument(
-                                    SyntaxFactory.IdentifierName(compilationEnv.ArgumentEnvironmentName))}))),
+                                    SyntaxFactory.IdentifierName(
+                                        /*
+                                         * 2024-03-12:
+                                         * Here we have an indication that we need the general env param
+                                         * in the non-specialized expr function, because we use it here to check if the
+                                         * environment matches one of the types we branch for.
+                                         * */
+                                        compilationEnv.SelfInterface.GetParamNameForEnvItemPath([]) ?? throw new ArgumentNullException()))}))),
                 SyntaxFactory.Block(
                     SyntaxFactory.SeparatedList(
-
                         [..prependStatments,
-                        SyntaxFactory.ReturnStatement(
-                            InvocationForCompiledExprFunction(
-                                exprUsage: exprUsage,
-                                compilationEnv:compilationEnv,
-                                envArgSyntax: env => env))
+                        SyntaxFactory.ReturnStatement(branchInvocation.Syntax)
                         ])));
-    }
-
-    public static ExpressionSyntax InvocationForCompiledExprFunction(
-        PineVM.ExpressionUsageAnalysis exprUsage,
-        FunctionCompilationEnvironment compilationEnv,
-        Func<ExpressionSyntax, ExpressionSyntax> envArgSyntax)
-    {
-        var generalExprFuncName =
-            CompileToCSharp.CompiledExpressionId(exprUsage.Expression)
-            .Extract(err => throw new Exception(err));
-
-        var specializedDeclName =
-            CompileToCSharp.MemberNameForCompiledExpressionFunction(
-                generalExprFuncName,
-                exprUsage.EnvId);
-
-        return
-            SyntaxFactory.InvocationExpression(
-                SyntaxFactory.IdentifierName(specializedDeclName))
-            .WithArgumentList(
-                SyntaxFactory.ArgumentList(
-                    SyntaxFactory.SeparatedList<ArgumentSyntax>(
-                        new SyntaxNodeOrToken[]{
-                            SyntaxFactory.Argument(
-                                SyntaxFactory.IdentifierName(compilationEnv.ArgumentEvalGenericName)),
-                            SyntaxFactory.Token(SyntaxKind.CommaToken),
-                            SyntaxFactory.Argument(
-                                envArgSyntax(SyntaxFactory.IdentifierName(compilationEnv.ArgumentEnvironmentName)))})));
     }
 
     public static readonly ExpressionSyntax PineValueEmptyListSyntax =
@@ -364,13 +352,13 @@ public static class PineCSharpSyntaxFactory
                                 SyntaxFactory.Literal(logEntry)))))));
 
     public static ExpressionSyntax GenericInvocationThrowingRuntimeExceptionOnError(
-        FunctionCompilationEnvironment compilationEnv,
+        FunctionCompilationEnv compilationEnv,
         ExpressionSyntax exprExpr,
         ExpressionSyntax environmentExpr)
     {
         var evalInvocationExpression =
             SyntaxFactory.InvocationExpression(
-                SyntaxFactory.IdentifierName(compilationEnv.ArgumentEvalGenericName))
+                SyntaxFactory.IdentifierName(compilationEnv.SelfInterface.ArgumentEvalGenericName))
             .WithArgumentList(
                 SyntaxFactory.ArgumentList(
                     SyntaxFactory.SeparatedList<ArgumentSyntax>(
@@ -404,4 +392,54 @@ public static class PineCSharpSyntaxFactory
                                                             SyntaxFactory.Argument(
                                                                 SyntaxFactory.IdentifierName("err")))))))))));
     }
+
+    public static PineVM.Expression BuildPineExpressionToAccessItemFromPath(
+        PineVM.Expression compositionExpr,
+        IReadOnlyList<int> path)
+    {
+        if (path.Count is 0)
+        {
+            return compositionExpr;
+        }
+
+        var currentOffset = path[0];
+
+        var skippedExpr =
+            currentOffset < 1
+            ?
+            compositionExpr
+            :
+            new PineVM.Expression.KernelApplicationExpression(
+                functionName: "skip",
+                argument:
+                new PineVM.Expression.ListExpression(
+                    [
+                    new PineVM.Expression.LiteralExpression(PineValueAsInteger.ValueFromSignedInteger(currentOffset)),
+                        compositionExpr
+                    ]),
+                function: _ => throw new NotImplementedException());
+
+        var currentExpr =
+            new PineVM.Expression.KernelApplicationExpression(
+                functionName: "list_head",
+                argument: skippedExpr,
+                function: _ => throw new NotImplementedException());
+
+        return
+            BuildPineExpressionToAccessItemFromPath(
+                compositionExpr: currentExpr,
+                path: [.. path.Skip(1)]);
+    }
+
+    public static QualifiedNameSyntax EvalExprDelegateTypeSyntax =>
+        SyntaxFactory.QualifiedName(
+            PineVmClassQualifiedNameSyntax,
+            SyntaxFactory.IdentifierName(nameof(PineVM.PineVM.EvalExprDelegate)));
+
+    public static QualifiedNameSyntax PineVmClassQualifiedNameSyntax =>
+        SyntaxFactory.QualifiedName(
+            SyntaxFactory.QualifiedName(
+                SyntaxFactory.IdentifierName("Pine"),
+                SyntaxFactory.IdentifierName("PineVM")),
+            SyntaxFactory.IdentifierName("PineVM"));
 }

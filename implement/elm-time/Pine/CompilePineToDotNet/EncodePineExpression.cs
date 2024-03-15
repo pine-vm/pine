@@ -63,7 +63,7 @@ public partial class CompileToCSharp
             .Map(encodedArgument =>
             (ExpressionSyntax)SyntaxFactory.InvocationExpression(
                 SyntaxFactory.QualifiedName(
-                    PineVmClassQualifiedNameSyntax,
+                    PineCSharpSyntaxFactory.PineVmClassQualifiedNameSyntax,
                     SyntaxFactory.IdentifierName(nameof(PineVM.PineVM.ParseKernelApplicationExpressionThrowOnUnknownName))))
             .WithArgumentList(
                 SyntaxFactory.ArgumentList(

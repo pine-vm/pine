@@ -127,9 +127,18 @@ public abstract record Expression
             throw new NotImplementedException(),
         };
 
-    public static IEnumerable<Expression> EnumerateSelfAndDescendants(Expression expression)
+    public static IEnumerable<Expression> EnumerateSelfAndDescendants(
+        Expression expression) =>
+        EnumerateSelfAndDescendants(expression, skipDescendants: null);
+
+    public static IEnumerable<Expression> EnumerateSelfAndDescendants(
+        Expression expression,
+        Func<Expression, bool>? skipDescendants)
     {
         yield return expression;
+
+        if (skipDescendants?.Invoke(expression) == true)
+            yield break;
 
         switch (expression)
         {
@@ -141,7 +150,7 @@ public abstract record Expression
             case ListExpression list:
                 foreach (var item in list.List)
                 {
-                    foreach (var descendant in EnumerateSelfAndDescendants(item))
+                    foreach (var descendant in EnumerateSelfAndDescendants(item, skipDescendants))
                     {
                         yield return descendant;
                     }
@@ -149,40 +158,40 @@ public abstract record Expression
                 break;
 
             case ParseAndEvalExpression decodeAndEvaluate:
-                foreach (var descendant in EnumerateSelfAndDescendants(decodeAndEvaluate.expression))
+                foreach (var descendant in EnumerateSelfAndDescendants(decodeAndEvaluate.expression, skipDescendants))
                 {
                     yield return descendant;
                 }
-                foreach (var descendant in EnumerateSelfAndDescendants(decodeAndEvaluate.environment))
+                foreach (var descendant in EnumerateSelfAndDescendants(decodeAndEvaluate.environment, skipDescendants))
                 {
                     yield return descendant;
                 }
                 break;
 
             case KernelApplicationExpression kernelApplication:
-                foreach (var descendant in EnumerateSelfAndDescendants(kernelApplication.argument))
+                foreach (var descendant in EnumerateSelfAndDescendants(kernelApplication.argument, skipDescendants))
                 {
                     yield return descendant;
                 }
                 break;
 
             case ConditionalExpression conditional:
-                foreach (var descendant in EnumerateSelfAndDescendants(conditional.condition))
+                foreach (var descendant in EnumerateSelfAndDescendants(conditional.condition, skipDescendants))
                 {
                     yield return descendant;
                 }
-                foreach (var descendant in EnumerateSelfAndDescendants(conditional.ifTrue))
+                foreach (var descendant in EnumerateSelfAndDescendants(conditional.ifTrue, skipDescendants))
                 {
                     yield return descendant;
                 }
-                foreach (var descendant in EnumerateSelfAndDescendants(conditional.ifFalse))
+                foreach (var descendant in EnumerateSelfAndDescendants(conditional.ifFalse, skipDescendants))
                 {
                     yield return descendant;
                 }
                 break;
 
             case StringTagExpression stringTag:
-                foreach (var descendant in EnumerateSelfAndDescendants(stringTag.tagged))
+                foreach (var descendant in EnumerateSelfAndDescendants(stringTag.tagged, skipDescendants))
                 {
                     yield return descendant;
                 }

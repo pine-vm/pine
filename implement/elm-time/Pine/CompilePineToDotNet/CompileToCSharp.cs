@@ -54,7 +54,8 @@ public partial class CompileToCSharp
     record CompiledExpressionFunction(
         CompiledExpressionId Identifier,
         BlockSyntax BlockSyntax,
-        CompiledExpressionDependencies Dependencies);
+        CompiledExpressionDependencies Dependencies,
+        FunctionCompilationEnv FunctionCompilationEnv);
 
     public static Result<string, CompileCSharpClassResult> CompileExpressionsToCSharpClass(
         IReadOnlyCollection<ExpressionUsageAnalysis> expressions,
@@ -63,15 +64,6 @@ public partial class CompileToCSharp
         const string argumentEnvironmentName = "pine_environment";
 
         const string argumentEvalGenericName = "eval_generic";
-
-        var parametersSyntaxes = new[]
-        {
-            SyntaxFactory.Parameter(SyntaxFactory.Identifier(argumentEvalGenericName))
-                .WithType(EvalExprDelegateTypeSyntax),
-
-            SyntaxFactory.Parameter(SyntaxFactory.Identifier(argumentEnvironmentName))
-                .WithType(SyntaxFactory.IdentifierName("PineValue")),
-        };
 
         var usingDirectivesTypes = new[]
         {
@@ -93,7 +85,8 @@ public partial class CompileToCSharp
 
         MethodDeclarationSyntax memberDeclarationSyntaxForExpression(
             string declarationName,
-            BlockSyntax blockSyntax)
+            BlockSyntax blockSyntax,
+            ExprFunctionCompilationInterface functionInterface)
         {
             return
                 SyntaxFactory.MethodDeclaration(
@@ -105,7 +98,7 @@ public partial class CompileToCSharp
                         SyntaxFactory.Token(SyntaxKind.PublicKeyword)))
                 .WithParameterList(
                     SyntaxFactory.ParameterList(
-                        SyntaxFactory.SeparatedList(parametersSyntaxes)))
+                        SyntaxFactory.SeparatedList(ComposeParameterList(functionInterface))))
                 .WithBody(blockSyntax);
         }
 
@@ -120,25 +113,72 @@ public partial class CompileToCSharp
                 .Distinct()
                 .ToImmutableArray();
 
-            var compulationUnitAvailableSpecialized =
+            var functionInterfaceBase =
+                new ExprFunctionCompilationInterface(
+                    EnvItemsParamNames: [([], argumentEnvironmentName)],
+                    ArgumentEvalGenericName: argumentEvalGenericName);
+
+            var compilationUnitAvailableExpr =
                 expressions
                 .Select(expr =>
-                new KeyValuePair<Expression, ImmutableHashSet<EnvConstraintId>>(
-                    expr,
-                    expressionsUsages.SelectMany(exprUsage =>
+                {
+                    var availableSpecialized =
+                    expressionsUsages
+                    .SelectMany(exprUsage =>
                     exprUsage.Expression == expr && exprUsage.EnvId is { } envId ? (IReadOnlyList<EnvConstraintId>)[envId] : [])
-                    .ToImmutableHashSet()))
-                .Where(kv => 0 < kv.Value.Count)
+                    .Distinct()
+                    .Select(envConstraint =>
+                    {
+                        var envConstraintFunctionInterface =
+                        BuildFunctionSpecializedCompilationInterface(functionInterfaceBase, expr, envConstraint);
+
+                        return new KeyValuePair<EnvConstraintId, ExprFunctionCompilationInterface>(
+                            envConstraint,
+                            envConstraintFunctionInterface);
+                    })
+                    .ToImmutableDictionary();
+
+                    var genericReprInterface =
+                    availableSpecialized.Count is 0
+                    ?
+                    /*
+                     * Since we currently use the generic function representations for entries in the global dictionary,
+                     * we need to keep their interfaces (types) the same.
+                     * */
+                    // BuildFunctionSpecializedCompilationInterface(functionInterfaceBase, expr, envConstraint: null)
+                    functionInterfaceBase
+                    :
+                    /*
+                     * If we will emit any specialized representations for this expression, this implies we will branch
+                     * statements to transition from the general case to the specialized cases.
+                     * The current implementation to build these branch statements depends on the complete environment
+                     * being available as function parameter, therefore do not use a specialized parameter list in this case.
+                     * */
+                    functionInterfaceBase;
+
+                    return
+                    new KeyValuePair<Expression, CompilationUnitEnvExprEntry>(
+                        expr,
+                        new CompilationUnitEnvExprEntry(
+                            GenericReprInterface: genericReprInterface,
+                            AvailableSpecialized: availableSpecialized));
+                })
                 .ToImmutableDictionary();
 
-            var compilationUnitEnv = new CompilationUnitEnv(
-                AvailableSpecialized: compulationUnitAvailableSpecialized);
+            var compilationUnitEnv =
+                new CompilationUnitEnv(
+                    AvailableExpr: compilationUnitAvailableExpr,
+                    DefaultInterface: functionInterfaceBase);
 
             var queue = new Queue<Expression>(expressions);
 
             while (queue.Any())
             {
                 var expression = queue.Dequeue();
+
+                var onlyExprDerivedId =
+                    CompiledExpressionId(expression)
+                    .Extract(err => throw new Exception(err));
 
                 var expressionUsages =
                     expressionsUsages
@@ -164,20 +204,29 @@ public partial class CompileToCSharp
                     CompiledExpressionId(expressionUsage.Expression)
                     .Extract(err => throw new Exception(err));
 
+                    var functionInterface =
+                        compilationUnitEnv.GetInterfaceForExprUsage(
+                            expression,
+                            envConstraint: expressionUsage.EnvId)
+                        ?? throw new Exception("Missing function interface for " + onlyExprDerivedId.ExpressionHashBase16[..10]);
+
+                    var functionEnv =
+                        new FunctionCompilationEnv(
+                            SelfInterface: functionInterface,
+                            CompilationUnit: compilationUnitEnv);
+
                     var result =
                         compilerCache.CompileToCSharpFunctionBlockSyntax(
                             expressionUsage,
                             branchesConstrainedEnvIds: supportedConstrainedEnvironments,
-                            new FunctionCompilationEnvironment(
-                                ArgumentEnvironmentName: argumentEnvironmentName,
-                                ArgumentEvalGenericName: argumentEvalGenericName,
-                                CompilationUnit: compilationUnitEnv))
+                            functionEnv)
                             .MapError(err => "Failed to compile expression " + withEnvDerivedId.ExpressionHashBase16[..10] + ": " + err)
                             .Map(ok =>
                                 new CompiledExpressionFunction(
                                     withEnvDerivedId,
                                     ok.blockSyntax,
-                                    ok.dependencies));
+                                    ok.dependencies,
+                                    functionEnv));
 
                     if (result is Result<string, CompiledExpressionFunction>.Ok ok)
                     {
@@ -404,7 +453,8 @@ public partial class CompileToCSharp
                     declarationName: MemberNameForCompiledExpressionFunction(
                         compiledExpression.Value.Identifier,
                         compiledExpression.Key.EnvId),
-                    blockSyntax: compiledExpression.Value.BlockSyntax))
+                    blockSyntax: compiledExpression.Value.BlockSyntax,
+                    functionInterface: compiledExpression.Value.FunctionCompilationEnv.SelfInterface))
                 .OrderBy(member => member.Identifier.ValueText)
                 .ToImmutableList();
 
@@ -426,24 +476,12 @@ public partial class CompileToCSharp
             });
     }
 
-    private static QualifiedNameSyntax EvalExprDelegateTypeSyntax =>
-        SyntaxFactory.QualifiedName(
-            PineVmClassQualifiedNameSyntax,
-            SyntaxFactory.IdentifierName(nameof(PineVM.PineVM.EvalExprDelegate)));
-
-    private static QualifiedNameSyntax PineVmClassQualifiedNameSyntax =>
-        SyntaxFactory.QualifiedName(
-            SyntaxFactory.QualifiedName(
-                SyntaxFactory.IdentifierName("Pine"),
-                SyntaxFactory.IdentifierName("PineVM")),
-            SyntaxFactory.IdentifierName("PineVM"));
-
     public static Result<string, (BlockSyntax blockSyntax, CompiledExpressionDependencies dependencies)>
         CompileToCSharpFunctionBlockSyntax(
             Expression expression,
             EnvConstraintId? constrainedEnvId,
             IReadOnlyList<EnvConstraintId> branchesEnvIds,
-            FunctionCompilationEnvironment compilationEnv)
+            FunctionCompilationEnv compilationEnv)
     {
         if (constrainedEnvId is { })
         {
@@ -469,7 +507,7 @@ public partial class CompileToCSharp
         CompileToCSharpGeneralFunctionBlockSyntax(
             Expression expression,
             IReadOnlyList<EnvConstraintId> branchesEnvIds,
-            FunctionCompilationEnvironment compilationEnv,
+            FunctionCompilationEnv compilationEnv,
             EnvConstraintId? envConstraint) =>
         CompileToCSharpExpression(
             expression,
@@ -499,10 +537,14 @@ public partial class CompileToCSharp
                 var branchesForSpecializedRepr =
                 branchesEnvIds
                 .Select(envId =>
+                {
+                    return
                         PineCSharpSyntaxFactory.BranchForEnvId(
-                        new ExpressionUsageAnalysis(expression, envId),
+                        expression,
+                        envId,
                         compilationEnv: compilationEnv,
-                        prependStatments: []))
+                        prependStatments: []);
+                })
                     .ToImmutableList();
 
                 var valueDepsForBranchStatements =
@@ -580,12 +622,25 @@ public partial class CompileToCSharp
                 ParentEnvironment = parentEnvironment
             };
 
+        bool skipSubexpression(Expression subexpression)
+        {
+            if (letBindingsAvailableFromParentKeys.Contains(subexpression))
+                return true;
+
+            return
+                ExprFunctionCompilationInterface.TryResolveExpressionInFunction(
+                    parentEnvironment.FunctionEnvironment.SelfInterface,
+                    subexpression,
+                    envConstraint: parentEnvironment.EnvConstraint)
+                is not null;
+        }
+
         var newLetBindingsExpressionsForCse =
             createLetBindingsForCse
             ?
             CollectForCommonSubexpressionElimination(
                 expression,
-                skipSubexpression: letBindingsAvailableFromParentKeys.Contains)
+                skipSubexpression: skipSubexpression)
             :
             [];
 
@@ -684,19 +739,42 @@ public partial class CompileToCSharp
         Expression expression,
         ExpressionCompilationEnvironment environment)
     {
+        if (expression is Expression.LiteralExpression literalExpr)
+        {
+            return CompileToCSharpExpression(literalExpr);
+        }
+
+        if (ExprFunctionCompilationInterface.TryResolveExpressionInFunction(
+            environment.FunctionEnvironment.SelfInterface,
+            expression,
+            envConstraint: environment.EnvConstraint)
+            is { } specialResolution)
+        {
+            return
+                specialResolution switch
+                {
+                    ExprResolvedInFunction.ExprResolvedToLiteral resolvedAsLiteral =>
+                    CompileToCSharpExpression(new Expression.LiteralExpression(resolvedAsLiteral.Value)),
+
+                    ExprResolvedInFunction.ExprResolvedToFunctionParam resolvedToParam =>
+                    Result<string, CompiledExpression>.ok(
+                        CompiledExpression.WithTypeGenericValue(
+                            SyntaxFactory.IdentifierName(resolvedToParam.ParameterName))),
+
+                    _ =>
+                    Result<string, CompiledExpression>.err(
+                        "Unsupported special resolution: " + specialResolution.GetType().FullName)
+                };
+        }
+
         return
             expression switch
             {
                 Expression.EnvironmentExpression =>
-                Result<string, CompiledExpression>.ok(
-                    CompiledExpression.WithTypeGenericValue(
-                        SyntaxFactory.IdentifierName(environment.FunctionEnvironment.ArgumentEnvironmentName))),
+                Result<string, CompiledExpression>.err("Did not find parameter matching environment reference"),
 
                 Expression.ListExpression listExpr =>
                 CompileToCSharpExpression(listExpr, environment),
-
-                Expression.LiteralExpression literalExpr =>
-                CompileToCSharpExpression(literalExpr),
 
                 Expression.ConditionalExpression conditional =>
                 CompileToCSharpExpression(conditional, environment),
@@ -1035,7 +1113,8 @@ public partial class CompileToCSharp
                 PineCSharpSyntaxFactory.GenericInvocationThrowingRuntimeExceptionOnError(
                     environment.FunctionEnvironment,
                     SyntaxFactory.IdentifierName(MemberNameForExpression(parseAndEvalExprHash)),
-                    SyntaxFactory.IdentifierName(environment.FunctionEnvironment.ArgumentEnvironmentName));
+                    SyntaxFactory.IdentifierName(
+                        environment.FunctionEnvironment.SelfInterface.GetParamNameForEnvItemPath([]) ?? throw new ArgumentNullException()));
 
             return
                 CompiledExpression.WithTypeGenericValue(invocationExpression)
@@ -1045,17 +1124,6 @@ public partial class CompileToCSharp
                     {
                         Expressions = ImmutableHashSet.Create((parseAndEvalExprHash, (Expression)parseAndEvalExpr)),
                     });
-        }
-
-        Result<string, CompiledExpression> continueCompilingEnv(
-            Func<CompiledExpression, CompiledExpression> cont)
-        {
-            return
-            CompileToCSharpExpression(
-                parseAndEvalExpr.environment,
-                environment,
-                createLetBindingsForCse: false)
-            .Map(cont);
         }
 
         Result<string, CompiledExpression> continueForKnownExprValue(PineValue innerExpressionValue)
@@ -1101,119 +1169,180 @@ public partial class CompileToCSharp
                                 return mappedChildValue == envItem.Value;
                             }
 
-                            if (environment.FunctionEnvironment.CompilationUnit.AvailableSpecialized.TryGetValue(
+                            if (environment.FunctionEnvironment.CompilationUnit.AvailableExpr.TryGetValue(
                                 innerExpression,
-                                out var availableSpecialized))
+                                out var exprEntry))
                             {
-                                foreach (var specializedEnvConstraint in availableSpecialized)
+                                foreach (var specializedEnvConstraint in exprEntry.AvailableSpecialized)
                                 {
-                                    if (specializedEnvConstraint.ParsedEnvItems.All(ChildEnvContstraintItemSatisfied))
+                                    if (Enumerable.All(specializedEnvConstraint.Key.ParsedEnvItems, ChildEnvContstraintItemSatisfied))
                                     {
                                         return
-                                        continueCompilingEnv(
-                                            compiledEnv =>
-                                            compiledEnv.MapOrAndThen(
-                                                environment,
-                                                compiledEnvCs =>
-                                                InvocationExpressionForCompiledExpressionFunction(
-                                                    environment: environment.FunctionEnvironment,
-                                                    invokedFunction: innerExpressionId,
-                                                    envConstraint: specializedEnvConstraint,
-                                                    environmentExpressionSyntax: compiledEnvCs)));
+                                        InvocationExpressionForCompiledExpressionFunction(
+                                            environment,
+                                            invokedExpr: innerExpression,
+                                            envConstraint: specializedEnvConstraint.Key,
+                                            parseAndEvalEnvExpr: parseAndEvalExpr.environment);
                                     }
                                 }
                             }
                         }
 
                         return
-                        continueCompilingEnv(
-                            compiledArgumentExpression =>
-                            {
-                                return
-                                compiledArgumentExpression.MapOrAndThen(
-                                    environment,
-                                    argumentExprPlainValue =>
+                            InvocationExpressionForCompiledExpressionFunction(
+                                environment,
+                                invokedExpr: innerExpression,
+                                envConstraint: null,
+                                parseAndEvalExpr.environment)
+                            .Map(compiledInvocation =>
+                            compiledInvocation
+                            .MergeDependencies(
+                                CompiledExpressionDependencies.Empty
+                                with
                                 {
-                                    return
-                                    InvocationExpressionForCompiledExpressionFunction(
-                                        environment.FunctionEnvironment,
-                                        innerExpressionId,
-                                        envConstraint: null,
-                                        argumentExprPlainValue)
-                                    .MergeDependencies(
-                                        compiledArgumentExpression.Dependencies.Union(
-                                            CompiledExpressionDependencies.Empty
-                                            with
-                                            {
-                                                ExpressionFunctions =
-                                                ImmutableDictionary<Expression, CompiledExpressionId>.Empty
-                                                .SetItem(innerExpression, innerExpressionId),
-                                            }));
-                                });
-                            });
+                                    ExpressionFunctions =
+                                    ImmutableDictionary<Expression, CompiledExpressionId>.Empty
+                                    .SetItem(innerExpression, innerExpressionId),
+                                }));
                     });
         }
 
         if (Expression.IsIndependent(parseAndEvalExpr.expression))
         {
             return
-                TryEvaluateExpressionIndependent(parseAndEvalExpr.expression)
+                ReducePineExpression.TryEvaluateExpressionIndependent(parseAndEvalExpr.expression)
                 .MapError(err => "Failed evaluate inner as independent expression: " + err)
                 .AndThen(continueForKnownExprValue);
         }
 
-        var exprMappedToParent = CodeAnalysis.TryParseExpressionAsIndexPathFromEnv(parseAndEvalExpr.expression);
+        var exprMappedToParent =
+            ExprFunctionCompilationInterface.TryResolveExpressionInFunction(
+                environment.FunctionEnvironment.SelfInterface,
+                parseAndEvalExpr.expression,
+                environment.EnvConstraint);
 
+        if (exprMappedToParent is ExprResolvedInFunction.ExprResolvedToLiteral literal)
         {
-            if (exprMappedToParent is ExprMappedToParentEnv.LiteralInParentEnv literal)
-            {
-                return continueForKnownExprValue(literal.Value);
-            }
-
-            if (exprMappedToParent is ExprMappedToParentEnv.PathInParentEnv exprMappedToParentPath &&
-                environment.EnvConstraint is { } envConstraint)
-            {
-                if (envConstraint.TryGetValue(exprMappedToParentPath.Path) is { } exprValueFromEnvConstraint)
-                {
-                    return continueForKnownExprValue(exprValueFromEnvConstraint);
-                }
-            }
+            return continueForKnownExprValue(literal.Value);
         }
 
         return
             Result<string, CompiledExpression>.ok(continueWithGenericCase());
     }
 
-    public static CompiledExpression InvocationExpressionForCurrentEnvironment(
-        FunctionCompilationEnvironment environment,
-        CompiledExpressionId invokedFunction) =>
-        InvocationExpressionForCompiledExpressionFunction(
-            environment,
-            invokedFunction,
-            envConstraint: null,
-            SyntaxFactory.IdentifierName(environment.ArgumentEnvironmentName));
-
-    public static CompiledExpression InvocationExpressionForCompiledExpressionFunction(
-        FunctionCompilationEnvironment environment,
-        CompiledExpressionId invokedFunction,
+    public static Result<string, CompiledExpression> InvocationExpressionForCompiledExpressionFunction(
+        ExpressionCompilationEnvironment currentEnv,
+        Expression invokedExpr,
         EnvConstraintId? envConstraint,
-        ExpressionSyntax environmentExpressionSyntax) =>
-        CompiledExpression.WithTypeGenericValue(
-            SyntaxFactory.InvocationExpression(
-                SyntaxFactory.IdentifierName(
-                    MemberNameForCompiledExpressionFunction(
-                        invokedFunction,
-                        envConstraint: envConstraint)))
-            .WithArgumentList(
-                SyntaxFactory.ArgumentList(
-                    SyntaxFactory.SeparatedList<ArgumentSyntax>(
-                        new SyntaxNodeOrToken[]
-                        {
-                            SyntaxFactory.Argument(
-                                SyntaxFactory.IdentifierName(environment.ArgumentEvalGenericName)),
-                            SyntaxFactory.Token(SyntaxKind.CommaToken),
-                            SyntaxFactory.Argument(environmentExpressionSyntax)
-                        }))));
+        Expression parseAndEvalEnvExpr)
+    {
+        var invokedExprFunctionId =
+            CompiledExpressionId(invokedExpr)
+            .Extract(err => throw new Exception(err));
+
+        var invokedExprFunctionInterface =
+            currentEnv.FunctionEnvironment.CompilationUnit.GetInterfaceForExprUsage(
+                invokedExpr,
+                envConstraint: envConstraint)
+            ?? throw new Exception("Missing function interface for " + invokedExprFunctionId.ExpressionHashBase16[..10]);
+
+        return
+        ComposeArgumentList(
+            parentEnv: currentEnv,
+            invocationEnvExpr: parseAndEvalEnvExpr,
+            invokedExprInterface: invokedExprFunctionInterface)
+        .Map(argListAndDeps =>
+            CompiledExpression.WithTypeGenericValue(
+                SyntaxFactory.InvocationExpression(
+                    SyntaxFactory.IdentifierName(
+                        MemberNameForCompiledExpressionFunction(
+                            invokedExprFunctionId,
+                            envConstraint: envConstraint)))
+                .WithArgumentList(
+                    SyntaxFactory.ArgumentList(
+                        SyntaxFactory.SeparatedList(argListAndDeps.argumentList))))
+            .MergeDependencies(argListAndDeps.argumentListDeps));
+    }
+
+    public static IReadOnlyList<ParameterSyntax> ComposeParameterList(
+        ExprFunctionCompilationInterface functionInterface)
+    {
+        var evalGenericDelegateParam =
+            SyntaxFactory.Parameter(SyntaxFactory.Identifier(functionInterface.ArgumentEvalGenericName))
+            .WithType(PineCSharpSyntaxFactory.EvalExprDelegateTypeSyntax);
+
+        var envItemsParameters =
+            functionInterface.EnvItemsParamNames
+            .Select(pathAndParamName =>
+            SyntaxFactory.Parameter(SyntaxFactory.Identifier(pathAndParamName.paramName))
+            .WithType(SyntaxFactory.IdentifierName("PineValue")));
+
+        return
+        [
+            evalGenericDelegateParam,
+            ..envItemsParameters
+        ];
+    }
+
+    public static Result<string, (IReadOnlyList<ArgumentSyntax> argumentList, CompiledExpressionDependencies argumentListDeps)>
+        ComposeArgumentList(
+        ExpressionCompilationEnvironment parentEnv,
+        Expression invocationEnvExpr,
+        ExprFunctionCompilationInterface invokedExprInterface)
+    {
+        var envItemsArgExprs =
+            invokedExprInterface.ComposeArgumentsExpressionsForInvocation(invocationEnvExpr);
+
+        var compiledItemsArgs =
+            envItemsArgExprs
+            .Select(envItemArgExpr =>
+            CompileToCSharpExpression(
+                envItemArgExpr,
+                parentEnv,
+                createLetBindingsForCse: false)
+                .MapError(err => "Failed to compile argument: " + err))
+            .ListCombine();
+
+        return
+            compiledItemsArgs
+            .Map(compiledArgumentsExpressions =>
+            {
+                var dependencies =
+                CompiledExpressionDependencies.Union(compiledArgumentsExpressions.Select(c => c.Dependencies));
+
+                return
+                    ((IReadOnlyList<ArgumentSyntax>)
+                    [
+                        SyntaxFactory.Argument(SyntaxFactory.IdentifierName(
+                            parentEnv.FunctionEnvironment.SelfInterface.ArgumentEvalGenericName)),
+                        ..
+                        compiledArgumentsExpressions.Select(compiledArgumentExpression =>
+                        SyntaxFactory.Argument(compiledArgumentExpression.Syntax))
+                    ],
+                    dependencies);
+            });
+    }
+
+    public static ExprFunctionCompilationInterface BuildFunctionSpecializedCompilationInterface(
+        ExprFunctionCompilationInterface baseEnv,
+        Expression compiledExpr,
+        EnvConstraintId? envConstraint)
+    {
+        var invokedExprEnvItemsPaths =
+            ExprFunctionCompilationInterface.CompileEnvItemsPathsForExprFunction(compiledExpr, envConstraint);
+
+        var envParams =
+            ExprFunctionCompilationInterface.EnvItemsParamNamesFromPaths(
+                invokedExprEnvItemsPaths,
+                commonPrefix: "func_env");
+
+        return
+            baseEnv
+            with
+            {
+                EnvItemsParamNames = envParams
+            };
+    }
 
     public static Result<string, CompiledExpressionId> CompiledExpressionId(Expression expression) =>
         PineVM.PineVM.EncodeExpressionAsValue(expression)
@@ -1302,62 +1431,13 @@ public partial class CompileToCSharp
             }));
     }
 
-    public static Result<string, PineValue> TryEvaluateExpressionIndependent(Expression expression) =>
-        expression switch
-        {
-            Expression.EnvironmentExpression =>
-            Result<string, PineValue>.err("Expression depends on environment"),
-
-            Expression.LiteralExpression literal =>
-            Result<string, PineValue>.ok(literal.Value),
-
-            Expression.ListExpression list =>
-            list.List.Select(TryEvaluateExpressionIndependent)
-            .ListCombine()
-            .Map(PineValue.List),
-
-            Expression.KernelApplicationExpression kernelApplication =>
-            TryEvaluateExpressionIndependent(kernelApplication.argument)
-            .MapError(err => "Failed to evaluate kernel application argument independent: " + err)
-            .Map(kernelApplication.function),
-
-            Expression.ParseAndEvalExpression parseAndEvalExpr =>
-            TryEvaluateExpressionIndependent(parseAndEvalExpr)
-            .Map(ok =>
-            {
-                Console.WriteLine("Successfully evaluated ParseAndEvalExpression independent 🙃");
-
-                return ok;
-            }),
-
-            Expression.StringTagExpression stringTag =>
-            TryEvaluateExpressionIndependent(stringTag.tagged),
-
-            _ =>
-            Result<string, PineValue>.err("Unsupported expression type: " + expression.GetType().FullName)
-        };
-
-    public static Result<string, PineValue> TryEvaluateExpressionIndependent(
-        Expression.ParseAndEvalExpression parseAndEvalExpr)
-    {
-        if (TryEvaluateExpressionIndependent(parseAndEvalExpr.environment) is Result<string, PineValue>.Ok envOk)
-        {
-            return
-                new PineVM.PineVM().EvaluateExpression(parseAndEvalExpr, PineValue.EmptyList)
-                .MapError(err => "Got independent environment, but failed to evaluated: " + err);
-        }
-
-        return
-            TryEvaluateExpressionIndependent(parseAndEvalExpr.expression)
-            .MapError(err => "Expression is not independent: " + err)
-            .AndThen(compilerCache.ParseExpressionFromValue)
-            .AndThen(innerExpr => TryEvaluateExpressionIndependent(innerExpr)
-            .MapError(err => "Inner expression is not independent: " + err));
-    }
-
     public static Result<string, CompiledExpression> CompileToCSharpExpression(
         Expression.LiteralExpression literalExpression)
     {
+        if (literalExpression.Value == PineValue.EmptyList)
+            return Result<string, CompiledExpression>.ok(
+                CompiledExpression.WithTypeGenericValue(PineCSharpSyntaxFactory.PineValueEmptyListSyntax));
+
         return
             Result<string, CompiledExpression>.ok(
                 CompiledExpression.WithTypeGenericValue(SyntaxFactory.IdentifierName(DeclarationNameForValue(literalExpression.Value)))

@@ -101,10 +101,13 @@ public class CompilePineToDotNetTests
         var compiledFormattedExpression =
             CompiledFormattedCSharp(
                 pineExpression,
-                new Pine.CompilePineToDotNet.FunctionCompilationEnvironment(
-                    ArgumentEnvironmentName: "environment",
-                    ArgumentEvalGenericName: "eval",
-                    CompilationUnit: Pine.CompilePineToDotNet.CompilationUnitEnv.Empty));
+                new Pine.CompilePineToDotNet.FunctionCompilationEnv(
+                    new Pine.CompilePineToDotNet.ExprFunctionCompilationInterface(
+                        EnvItemsParamNames: [([], "environment")],
+                        ArgumentEvalGenericName: "eval"),
+                    CompilationUnit: new Pine.CompilePineToDotNet.CompilationUnitEnv(
+                        AvailableExpr: ImmutableDictionary<Pine.PineVM.Expression, Pine.CompilePineToDotNet.CompilationUnitEnvExprEntry>.Empty,
+                        DefaultInterface: new Pine.CompilePineToDotNet.ExprFunctionCompilationInterface(EnvItemsParamNames: [], ArgumentEvalGenericName: "eval"))));
 
         var expectedSyntaxText = """
             environment switch
@@ -136,7 +139,7 @@ public class CompilePineToDotNetTests
 
     static Pine.CompilePineToDotNet.CompiledExpression CompiledFormattedCSharp(
         Pine.PineVM.Expression expression,
-        Pine.CompilePineToDotNet.FunctionCompilationEnvironment environment)
+        Pine.CompilePineToDotNet.FunctionCompilationEnv environment)
     {
         var compiledExpression =
             Pine.CompilePineToDotNet.CompileToCSharp.CompileToCSharpExpression(
@@ -249,12 +252,87 @@ public class CompilePineToDotNetTests
             new Pine.PineVM.ExprMappedToParentEnv.PathInParentEnv([]),
             new Pine.PineVM.ExprMappedToParentEnv.PathInParentEnv([]));
 
-        var inspect =
-            new Pine.PineVM.ExprMappedToParentEnv.PathInParentEnv([1, 3])
-            .Equals(new Pine.PineVM.ExprMappedToParentEnv.PathInParentEnv([1, 3]));
-
         Assert.AreEqual(
             new Pine.PineVM.ExprMappedToParentEnv.PathInParentEnv([1, 3]),
             new Pine.PineVM.ExprMappedToParentEnv.PathInParentEnv([1, 3]));
+    }
+
+    [TestMethod]
+    public void Test_CompileEnvItemsPathsForExprFunction()
+    {
+        var testCases = new[]
+        {
+            new
+            {
+                expr =
+                (Pine.PineVM.Expression)
+                new Pine.PineVM.Expression.EnvironmentExpression(),
+
+                envConstraint =
+                Pine.PineVM.EnvConstraintId.Create(
+                    envClass: new Pine.PineVM.ExpressionEnvClass.ConstrainedEnv([]),
+                    PineValue.EmptyList),
+
+                expectedPaths = (IReadOnlyList<IReadOnlyList<int>>)[[]]
+            },
+            new
+            {
+                expr =
+                (Pine.PineVM.Expression)
+                new Pine.PineVM.Expression.KernelApplicationExpression(
+                    functionName:"list_head",
+                    argument: new Pine.PineVM.Expression.EnvironmentExpression(),
+                    function:
+                    _=> throw new System.NotImplementedException()),
+
+                envConstraint =
+                Pine.PineVM.EnvConstraintId.Create(
+                    envClass: new Pine.PineVM.ExpressionEnvClass.ConstrainedEnv([]),
+                    PineValue.EmptyList),
+
+                expectedPaths = (IReadOnlyList<IReadOnlyList<int>>)[[0]]
+            },
+            new
+            {
+                expr =
+                (Pine.PineVM.Expression)
+                new Pine.PineVM.Expression.KernelApplicationExpression(
+                    functionName:"list_head",
+                    argument:
+                    new Pine.PineVM.Expression.KernelApplicationExpression(
+                        functionName:"skip",
+                        argument: new Pine.PineVM.Expression.ListExpression(
+                            [
+                            new Pine.PineVM.Expression.LiteralExpression(PineValueAsInteger.ValueFromSignedInteger(13)),
+                            new Pine.PineVM.Expression.EnvironmentExpression()
+                            ]),
+                    function:
+                    _=> throw new System.NotImplementedException()),
+                    function:
+                    _=> throw new System.NotImplementedException()),
+
+                envConstraint =
+                Pine.PineVM.EnvConstraintId.Create(
+                    envClass: new Pine.PineVM.ExpressionEnvClass.ConstrainedEnv([]),
+                    PineValue.EmptyList),
+
+                expectedPaths = (IReadOnlyList<IReadOnlyList<int>>)[[13]]
+            },
+        };
+
+        foreach (var testCase in testCases)
+        {
+            var paths =
+                Pine.CompilePineToDotNet.FunctionCompilationEnv.CompileEnvItemsPathsForExprFunction(
+                    testCase.expr,
+                    testCase.envConstraint);
+
+            Assert.AreEqual(testCase.expectedPaths.Count, paths.Count, "Paths count");
+
+            for (var i = 0; i < testCase.expectedPaths.Count; i++)
+            {
+                Assert.IsTrue(paths[i].SequenceEqual(testCase.expectedPaths[i]), "Path " + i);
+            }
+        }
     }
 }
