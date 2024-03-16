@@ -2159,7 +2159,9 @@ view state =
                 |> Element.row
                     [ Element.spacing defaultFontSize
                     , Element.width Element.fill
-                    , Element.Background.color (Element.rgb 0.24 0.24 0.24)
+                    , Element.height (Element.px 34)
+                    , Element.Background.color (Element.rgb 0.09 0.09 0.09)
+                    , Element.Font.color (Element.rgb 0.84 0.84 0.84)
                     ]
 
         popupWindowAttributes =
@@ -2199,7 +2201,21 @@ view state =
         body =
             [ Element.html FontAwesome.Styles.css
             , titlebar
-            , [ activityBar, mainContent ]
+            , Element.none
+                |> Element.el
+                    [ Element.width Element.fill
+                    , Element.height (Element.px 1)
+                    , Element.Background.color (Element.rgb 0.17 0.17 0.17)
+                    ]
+            , [ activityBar
+              , Element.none
+                    |> Element.el
+                        [ Element.width (Element.px 1)
+                        , Element.height Element.fill
+                        , Element.Background.color (Element.rgb 0.17 0.17 0.17)
+                        ]
+              , mainContent
+              ]
                 |> Element.row
                     [ Element.width Element.fill
                     , Element.height Element.fill
@@ -2766,7 +2782,7 @@ describeErrorLoadingContentsFromGit loadError =
 
 activityBarWidth : Int
 activityBarWidth =
-    50
+    48
 
 
 activityBar : Element.Element event
@@ -2826,7 +2842,7 @@ activityBar =
         |> Element.column
             [ Element.width (Element.px activityBarWidth)
             , Element.height Element.fill
-            , Element.Background.color (Element.rgb 0.2 0.2 0.2)
+            , Element.Background.color (Element.rgb 0.09 0.09 0.09)
             ]
 
 
@@ -3664,17 +3680,20 @@ titlebarMenuEntryButton state menuEntry =
         greyFromLightness l =
             Element.rgb l l l
 
+        highlightColor =
+            greyFromLightness 0.18
+
         entryBackgroundColor =
             if isHighlighted then
-                greyFromLightness 0.3
+                highlightColor
 
             else
-                greyFromLightness 0.2
+                Element.rgba 0 0 0 0
 
         dropdownAttributes =
             if isOpen then
-                [ titlebarMenuEntryDropdownContent state menuEntry
-                    |> Element.below
+                [ Element.below
+                    (titlebarMenuEntryDropdownContent state menuEntry)
                 ]
 
             else
@@ -3682,9 +3701,12 @@ titlebarMenuEntryButton state menuEntry =
     in
     Element.Input.button
         [ Element.Background.color entryBackgroundColor
-        , Element.paddingXY defaultFontSize (defaultFontSize // 2)
+        , Element.paddingXY (defaultFontSize // 2) 5
         , Element.Events.onMouseEnter (UserInputMouseOverTitleBarMenu (Just menuEntry))
         , Element.Events.onMouseLeave (UserInputMouseOverTitleBarMenu Nothing)
+        , Element.Border.rounded 4
+        , Element.centerY
+        , Element.mouseOver [ Element.Background.color highlightColor ]
         ]
         { label = Element.text (titlebarMenuEntryLabel menuEntry)
         , onPress = Just (UserInputToggleTitleBarMenu menuEntry)
@@ -3735,8 +3757,11 @@ titlebarMenuEntryDropdownContent state menuEntry =
             , Element.width Element.shrink
             ]
         |> Element.el
-            [ Element.Background.color (Element.rgb 0.145 0.145 0.145)
-            , Element.Border.glow (Element.rgb 0 0 0) 2
+            [ Element.Background.color (Element.rgb 0.13 0.13 0.13)
+            , Element.Border.color (Element.rgb 0.27 0.27 0.27)
+            , Element.Border.solid
+            , Element.Border.width 1
+            , Element.Border.rounded 6
             ]
 
 
@@ -3745,14 +3770,29 @@ titlebarMenuEntry onPressEventIfEnabled maybeIcon label isEnabled =
     let
         mouseOverAttributes =
             if isEnabled then
-                [ Element.mouseOver [ Element.Background.color (Element.rgb255 9 71 113) ] ]
+                [ Element.mouseOver [ Element.Background.color (Element.rgb255 4 57 94) ] ]
 
             else
                 []
+
+        opacity =
+            if isEnabled then
+                1
+
+            else
+                0.5
+
+        cursor =
+            if isEnabled then
+                "pointer"
+
+            else
+                "default"
     in
     Element.Input.button
         [ Element.width Element.fill
         , Element.paddingXY defaultFontSize 4
+        , Element.htmlAttribute (HA.style "cursor" cursor)
         ]
         { label =
             [ maybeIcon
@@ -3764,17 +3804,11 @@ titlebarMenuEntry onPressEventIfEnabled maybeIcon label isEnabled =
                 |> Maybe.withDefault Element.none
                 |> Element.el [ Element.width (Element.px (defaultFontSize * 6 // 5)) ]
             , Element.text label
-                |> Element.el
-                    [ Element.alpha
-                        (if isEnabled then
-                            1
-
-                         else
-                            0.5
-                        )
-                    ]
             ]
-                |> Element.row [ Element.spacing (defaultFontSize // 2) ]
+                |> Element.row
+                    [ Element.spacing (defaultFontSize // 2)
+                    , Element.alpha opacity
+                    ]
         , onPress =
             if isEnabled then
                 Just onPressEventIfEnabled
@@ -3783,7 +3817,10 @@ titlebarMenuEntry onPressEventIfEnabled maybeIcon label isEnabled =
                 Nothing
         }
         |> Element.el
-            ([ Element.width Element.fill ] ++ mouseOverAttributes)
+            (Element.width Element.fill
+                :: Element.Border.rounded 4
+                :: mouseOverAttributes
+            )
 
 
 titlebarMenuEntryLabel : TitlebarMenuEntry -> String
@@ -3946,7 +3983,7 @@ defaultFontSize =
 
 backgroundColor : Element.Color
 backgroundColor =
-    Element.rgb 0.13 0.13 0.13
+    Element.rgb 0.12 0.12 0.12
 
 
 rootFontFamily : List String
