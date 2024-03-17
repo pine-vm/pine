@@ -1,0 +1,2 @@
+("test", (Set.insert 0 (Set.insert 1 (Set.insert 2 (Set.insert 3 Set.empty))))) ==
+("test", (Set.insert 3 (Set.insert 2 (Set.insert 1 (Set.insert 0 Set.empty)))))

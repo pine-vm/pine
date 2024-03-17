@@ -1,1 +1,2 @@
-Dict.map (\key value -> [ 13, value ]) (Dict.insert 31 71 (Dict.insert 37 79 Dict.empty))
+("test", (Dict.insert 0 () (Dict.insert 1 () (Dict.insert 2 () (Dict.insert 3 () Dict.empty))))) ==
+("test", (Dict.insert 3 () (Dict.insert 2 () (Dict.insert 1 () (Dict.insert 0 () Dict.empty)))))

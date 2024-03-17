@@ -56,15 +56,40 @@ type Order = LT | EQ | GT
 
 eq : a -> a -> Bool
 eq a b =
-    case a of
-        RBNode_elm_builtin _ _ _ _ _ ->
-            Pine_kernel.equal [ dictToList a, dictToList b ]
+    if isPineBlob a then
+        Pine_kernel.equal [ a, b ]
 
-        Set_elm_builtin _ ->
-            Pine_kernel.equal [ setToList a, setToList b ]
+    else
+        if Pine_kernel.equal [ Pine_kernel.length a, Pine_kernel.length b ] then
+            case a of
+                String _ ->
+                    Pine_kernel.equal [ a, b ]
 
-        _ ->
-            Pine_kernel.equal [ a, b ]
+                RBNode_elm_builtin _ _ _ _ _ ->
+                    Pine_kernel.equal [ dictToList a, dictToList b ]
+
+                Set_elm_builtin _ ->
+                    Pine_kernel.equal [ setToList a, setToList b ]
+
+                _ ->
+                    let
+                        itemsEqualRecursive listA listB =
+                            if Pine_kernel.equal [ Pine_kernel.length listA, 0 ] then
+                                True
+
+                            else
+                                if eq (Pine_kernel.list_head listA) (Pine_kernel.list_head listB) then
+                                    itemsEqualRecursive
+                                        (Pine_kernel.skip [ 1, listA ])
+                                        (Pine_kernel.skip [ 1, listB ])
+
+                                else
+                                    False
+                    in
+                    itemsEqualRecursive a b
+
+        else
+            False
 
 
 setToList : Set a -> List a
