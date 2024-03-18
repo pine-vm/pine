@@ -33,35 +33,6 @@ public static class PineCSharpSyntaxFactory
         FunctionCompilationEnv compilationEnv,
         StatementSyntax[]? prependStatments)
     {
-        var envListItems =
-            envConstraint.ParsedEnvItems
-            .Select(envListItem =>
-            {
-                var pathItems =
-                envListItem.Key.Select(index =>
-                SyntaxFactory.LiteralExpression(
-                    SyntaxKind.NumericLiteralExpression,
-                    SyntaxFactory.Literal(index)))
-                .ToImmutableArray();
-
-                var valueDeclName = CompileToCSharp.DeclarationNameForValue(envListItem.Value);
-
-                return
-                SyntaxFactory.TupleExpression(
-                    SyntaxFactory.SeparatedList<ArgumentSyntax>(
-                        new SyntaxNodeOrToken[]{
-                            SyntaxFactory.Argument(
-                                SyntaxFactory.CollectionExpression(
-                                    SyntaxFactory.SeparatedList<CollectionElementSyntax>(
-                                        pathItems
-                                        .Select(li => (SyntaxNodeOrToken)SyntaxFactory.ExpressionElement(li))
-                                        .Intersperse(SyntaxFactory.Token(SyntaxKind.CommaToken))))),
-                            SyntaxFactory.Token(SyntaxKind.CommaToken),
-                            SyntaxFactory.Argument(
-                                SyntaxFactory.IdentifierName(valueDeclName))}));
-            })
-            .ToImmutableArray();
-
         var branchInvocation =
             CompileToCSharp.InvocationExpressionForCompiledExpressionFunction(
                 currentEnv: new ExpressionCompilationEnvironment(
@@ -74,35 +45,60 @@ public static class PineCSharpSyntaxFactory
                 parseAndEvalEnvExpr: new PineVM.Expression.EnvironmentExpression())
             .Extract(err => throw new Exception(err));
 
+        var branchInvocationBlock =
+            SyntaxFactory.Block(
+                SyntaxFactory.SeparatedList(
+                    [..prependStatments,
+                    SyntaxFactory.ReturnStatement(branchInvocation.Syntax)
+                    ]));
+
+        if (envConstraint.ParsedEnvItems.Count is 0)
+        {
+            return branchInvocationBlock;
+        }
+
+        var envListItemsConditionsExprs =
+            envConstraint.ParsedEnvItems
+            .Select(envListItem =>
+            {
+                var valueDeclName = CompileToCSharp.DeclarationNameForValue(envListItem.Value);
+
+                var currentEnvParam =
+                compilationEnv.SelfInterface.GetParamForEnvItemPath(envListItem.Key) ?? throw new ArgumentNullException();
+
+                return
+                SyntaxFactory.BinaryExpression(
+                    SyntaxKind.EqualsExpression,
+                    BuildCSharpExpressionToGetItemFromPath(
+                        SyntaxFactory.IdentifierName(currentEnvParam.paramName),
+                        path: currentEnvParam.pathFromParam),
+                    SyntaxFactory.IdentifierName(valueDeclName));
+            })
+            .ToImmutableArray();
+
+        static ExpressionSyntax aggregateRecursive(
+            ExpressionSyntax combined,
+            IReadOnlyList<ExpressionSyntax> remaining) =>
+            remaining switch
+            {
+            [var next, ..] =>
+            aggregateRecursive(
+                SyntaxFactory.BinaryExpression(
+                    SyntaxKind.LogicalAndExpression,
+                    combined,
+                    next),
+                [.. remaining.Skip(1)]),
+
+                _ => combined
+            };
+
+        var aggregateConditionExpr =
+            aggregateRecursive(
+                envListItemsConditionsExprs[0],
+                [.. envListItemsConditionsExprs.Skip(1)]);
+
         return
-            SyntaxFactory.IfStatement(
-                SyntaxFactory.InvocationExpression(
-                    SyntaxFactory.IdentifierName("ValueMatchesPathsPattern"))
-                .WithArgumentList(
-                    SyntaxFactory.ArgumentList(
-                        SyntaxFactory.SeparatedList<ArgumentSyntax>(
-                            new SyntaxNodeOrToken[]{
-                                SyntaxFactory.Argument(
-                                    SyntaxFactory.CollectionExpression(
-                                        SyntaxFactory.SeparatedList<CollectionElementSyntax>(
-                                            envListItems
-                                            .Select(li => (SyntaxNodeOrToken)SyntaxFactory.ExpressionElement(li))
-                                            .Intersperse(SyntaxFactory.Token(SyntaxKind.CommaToken))))),
-                                SyntaxFactory.Token(SyntaxKind.CommaToken),
-                                SyntaxFactory.Argument(
-                                    SyntaxFactory.IdentifierName(
-                                        /*
-                                         * 2024-03-12:
-                                         * Here we have an indication that we need the general env param
-                                         * in the non-specialized expr function, because we use it here to check if the
-                                         * environment matches one of the types we branch for.
-                                         * */
-                                        compilationEnv.SelfInterface.GetParamNameForEnvItemPath([]) ?? throw new ArgumentNullException()))}))),
-                SyntaxFactory.Block(
-                    SyntaxFactory.SeparatedList(
-                        [..prependStatments,
-                        SyntaxFactory.ReturnStatement(branchInvocation.Syntax)
-                        ])));
+            SyntaxFactory.IfStatement(aggregateConditionExpr, branchInvocationBlock);
     }
 
     public static readonly ExpressionSyntax PineValueEmptyListSyntax =
@@ -111,96 +107,13 @@ public static class PineCSharpSyntaxFactory
             SyntaxFactory.IdentifierName(nameof(PineValue)),
             SyntaxFactory.IdentifierName(nameof(PineValue.EmptyList)));
 
-
-    public static readonly MethodDeclarationSyntax ValueMatchesPathsPatternDeclaration =
-        SyntaxFactory.MethodDeclaration(
-            SyntaxFactory.PredefinedType(
-                SyntaxFactory.Token(SyntaxKind.BoolKeyword)),
-            SyntaxFactory.Identifier("ValueMatchesPathsPattern"))
-                .WithModifiers(
-                    SyntaxFactory.TokenList(
-                        [
-                            SyntaxFactory.Token(SyntaxKind.PublicKeyword),
-                            SyntaxFactory.Token(SyntaxKind.StaticKeyword)]))
-                .WithParameterList(
-                    SyntaxFactory.ParameterList(
-                        SyntaxFactory.SeparatedList<ParameterSyntax>(
-                            new SyntaxNodeOrToken[]{
-                                SyntaxFactory.Parameter(
-                                    SyntaxFactory.Identifier("pathsValues"))
-                                .WithType(
-                                    SyntaxFactory.GenericName(
-                                        SyntaxFactory.Identifier("IReadOnlyList"))
-                                    .WithTypeArgumentList(
-                                        SyntaxFactory.TypeArgumentList(
-                                            SyntaxFactory.SingletonSeparatedList<TypeSyntax>(
-                                                SyntaxFactory.TupleType(
-                                                    SyntaxFactory.SeparatedList<TupleElementSyntax>(
-                                                        new SyntaxNodeOrToken[]{
-                                                            SyntaxFactory.TupleElement(
-                                                                SyntaxFactory.GenericName(
-                                                                    SyntaxFactory.Identifier("IReadOnlyList"))
-                                                                .WithTypeArgumentList(
-                                                                    SyntaxFactory.TypeArgumentList(
-                                                                        SyntaxFactory.SingletonSeparatedList<TypeSyntax>(
-                                                                            SyntaxFactory.PredefinedType(
-                                                                                SyntaxFactory.Token(SyntaxKind.IntKeyword))))))
-                                                            .WithIdentifier(
-                                                                SyntaxFactory.Identifier("path")),
-                                                            SyntaxFactory.Token(SyntaxKind.CommaToken),
-                                                            SyntaxFactory.TupleElement(
-                                                                SyntaxFactory.IdentifierName("PineValue"))
-                                                            .WithIdentifier(
-                                                                SyntaxFactory.Identifier("itemValue"))})))))),
-                                SyntaxFactory.Token(SyntaxKind.CommaToken),
-                                SyntaxFactory.Parameter(
-                                    SyntaxFactory.Identifier("pineValue"))
-                                .WithType(
-                                    SyntaxFactory.IdentifierName("PineValue"))})))
-                .WithExpressionBody(
-                    SyntaxFactory.ArrowExpressionClause(
-                        SyntaxFactory.InvocationExpression(
-                            SyntaxFactory.MemberAccessExpression(
-                                SyntaxKind.SimpleMemberAccessExpression,
-                                SyntaxFactory.IdentifierName("pathsValues"),
-                                SyntaxFactory.IdentifierName("All")))
-                        .WithArgumentList(
-                            SyntaxFactory.ArgumentList(
-                                SyntaxFactory.SingletonSeparatedList(
-                                    SyntaxFactory.Argument(
-                                        SyntaxFactory.SimpleLambdaExpression(
-                                            SyntaxFactory.Parameter(
-                                                SyntaxFactory.Identifier("pv")))
-                                        .WithExpressionBody(
-                                            SyntaxFactory.BinaryExpression(
-                                                SyntaxKind.EqualsExpression,
-                                                SyntaxFactory.InvocationExpression(
-                                                    SyntaxFactory.IdentifierName("ValueFromPathInValue"))
-                                                .WithArgumentList(
-                                                    SyntaxFactory.ArgumentList(
-                                                        SyntaxFactory.SeparatedList<ArgumentSyntax>(
-                                                            new SyntaxNodeOrToken[]{
-                                                                SyntaxFactory.Argument(
-                                                                    SyntaxFactory.IdentifierName("pineValue")),
-                                                                SyntaxFactory.Token(SyntaxKind.CommaToken),
-                                                                SyntaxFactory.Argument(
-                                                                    SyntaxFactory.MemberAccessExpression(
-                                                                        SyntaxKind.SimpleMemberAccessExpression,
-                                                                        SyntaxFactory.IdentifierName("pv"),
-                                                                        SyntaxFactory.IdentifierName("path")))}))),
-                                                SyntaxFactory.MemberAccessExpression(
-                                                    SyntaxKind.SimpleMemberAccessExpression,
-                                                    SyntaxFactory.IdentifierName("pv"),
-                                                    SyntaxFactory.IdentifierName("itemValue"))))))))))
-                .WithSemicolonToken(
-                    SyntaxFactory.Token(SyntaxKind.SemicolonToken));
-
+    public const string ValueFromPathInValueDeclarationName = "ValueFromPathInValue";
 
     public static readonly MethodDeclarationSyntax ValueFromPathInValueDeclaration =
         SyntaxFactory.MethodDeclaration(
             SyntaxFactory.NullableType(
                 SyntaxFactory.IdentifierName("PineValue")),
-            SyntaxFactory.Identifier("ValueFromPathInValue"))
+            SyntaxFactory.Identifier(ValueFromPathInValueDeclarationName))
                 .WithModifiers(
                     SyntaxFactory.TokenList(
                         [
@@ -294,7 +207,7 @@ public static class PineCSharpSyntaxFactory
                                     SyntaxKind.NullLiteralExpression))),
                         SyntaxFactory.ReturnStatement(
                             SyntaxFactory.InvocationExpression(
-                                SyntaxFactory.IdentifierName("ValueFromPathInValue"))
+                                SyntaxFactory.IdentifierName(ValueFromPathInValueDeclarationName))
                             .WithArgumentList(
                                 SyntaxFactory.ArgumentList(
                                     SyntaxFactory.SeparatedList<ArgumentSyntax>(
@@ -393,7 +306,7 @@ public static class PineCSharpSyntaxFactory
                                                                 SyntaxFactory.IdentifierName("err")))))))))));
     }
 
-    public static PineVM.Expression BuildPineExpressionToAccessItemFromPath(
+    public static PineVM.Expression BuildPineExpressionToGetItemFromPath(
         PineVM.Expression compositionExpr,
         IReadOnlyList<int> path)
     {
@@ -426,9 +339,39 @@ public static class PineCSharpSyntaxFactory
                 function: _ => throw new NotImplementedException());
 
         return
-            BuildPineExpressionToAccessItemFromPath(
+            BuildPineExpressionToGetItemFromPath(
                 compositionExpr: currentExpr,
                 path: [.. path.Skip(1)]);
+    }
+
+    public static ExpressionSyntax BuildCSharpExpressionToGetItemFromPath(
+        ExpressionSyntax compositionExpr,
+        IReadOnlyList<int> path)
+    {
+        if (path.Count is 0)
+        {
+            return compositionExpr;
+        }
+
+        return
+            SyntaxFactory.InvocationExpression(
+                SyntaxFactory.IdentifierName(ValueFromPathInValueDeclarationName))
+            .WithArgumentList(
+                SyntaxFactory.ArgumentList(
+                    SyntaxFactory.SeparatedList<ArgumentSyntax>(
+                        new SyntaxNodeOrToken[]
+                        {
+                            SyntaxFactory.Argument(compositionExpr),
+                            SyntaxFactory.Token(SyntaxKind.CommaToken),
+                            SyntaxFactory.Argument(
+                                SyntaxFactory.CollectionExpression(
+                                    SyntaxFactory.SeparatedList<CollectionElementSyntax>(
+                                        path
+                                        .Select(pathItem =>
+                                        (SyntaxNodeOrToken)SyntaxFactory.ExpressionElement(SyntaxFactory.LiteralExpression(
+                                            SyntaxKind.NumericLiteralExpression,
+                                            SyntaxFactory.Literal(pathItem))))
+                                        .Intersperse(SyntaxFactory.Token(SyntaxKind.CommaToken)))))})));
     }
 
     public static QualifiedNameSyntax EvalExprDelegateTypeSyntax =>

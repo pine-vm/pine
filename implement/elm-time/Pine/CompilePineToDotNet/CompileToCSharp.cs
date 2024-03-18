@@ -468,7 +468,6 @@ public partial class CompileToCSharp
                                     [dictionaryMemberDeclaration
                                     ,
                                         .. compiledExpressionsMemberDeclarations.Cast<MemberDeclarationSyntax>()
-                                        , PineCSharpSyntaxFactory.ValueMatchesPathsPatternDeclaration
                                         , PineCSharpSyntaxFactory.ValueFromPathInValueDeclaration
                                     ,
                                         .. staticFieldsDeclarations])),
@@ -759,7 +758,9 @@ public partial class CompileToCSharp
                     ExprResolvedInFunction.ExprResolvedToFunctionParam resolvedToParam =>
                     Result<string, CompiledExpression>.ok(
                         CompiledExpression.WithTypeGenericValue(
-                            SyntaxFactory.IdentifierName(resolvedToParam.ParameterName))),
+                            PineCSharpSyntaxFactory.BuildCSharpExpressionToGetItemFromPath(
+                                compositionExpr: SyntaxFactory.IdentifierName(resolvedToParam.ParameterName),
+                                path: resolvedToParam.PathFromParam))),
 
                     _ =>
                     Result<string, CompiledExpression>.err(
@@ -1109,12 +1110,16 @@ public partial class CompileToCSharp
 
         CompiledExpression continueWithGenericCase()
         {
+            var currentEnvParam =
+                environment.FunctionEnvironment.SelfInterface.GetParamForEnvItemPath([]) ?? throw new ArgumentNullException();
+
             var invocationExpression =
                 PineCSharpSyntaxFactory.GenericInvocationThrowingRuntimeExceptionOnError(
                     environment.FunctionEnvironment,
                     SyntaxFactory.IdentifierName(MemberNameForExpression(parseAndEvalExprHash)),
-                    SyntaxFactory.IdentifierName(
-                        environment.FunctionEnvironment.SelfInterface.GetParamNameForEnvItemPath([]) ?? throw new ArgumentNullException()));
+                    PineCSharpSyntaxFactory.BuildCSharpExpressionToGetItemFromPath(
+                        SyntaxFactory.IdentifierName(currentEnvParam.paramName),
+                        path: currentEnvParam.pathFromParam));
 
             return
                 CompiledExpression.WithTypeGenericValue(invocationExpression)

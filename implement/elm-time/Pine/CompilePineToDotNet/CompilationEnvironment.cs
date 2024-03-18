@@ -85,7 +85,9 @@ public record FunctionCompilationEnv(
 
 public abstract record ExprResolvedInFunction
 {
-    public record ExprResolvedToFunctionParam(string ParameterName)
+    public record ExprResolvedToFunctionParam(
+        string ParameterName,
+        IReadOnlyList<int> PathFromParam)
         : ExprResolvedInFunction;
 
     public record ExprResolvedToLiteral(PineValue Value)
@@ -96,9 +98,18 @@ public record ExprFunctionCompilationInterface(
     IReadOnlyList<(IReadOnlyList<int> path, string paramName)> EnvItemsParamNames,
     string ArgumentEvalGenericName)
 {
-    public string? GetParamNameForEnvItemPath(IReadOnlyList<int> path) =>
-        EnvItemsParamNames
-        .FirstOrDefault(item => item.path.SequenceEqual(path)).paramName;
+    public (string paramName, IReadOnlyList<int> pathFromParam)? GetParamForEnvItemPath(IReadOnlyList<int> path)
+    {
+        foreach (var (paramPath, paramName) in EnvItemsParamNames.OrderByDescending(param => param.path.Count))
+        {
+            if (paramPath.SequenceEqual(path.Take(paramPath.Count)))
+            {
+                return (paramName, [.. path.Skip(paramPath.Count)]);
+            }
+        }
+
+        return null;
+    }
 
     public virtual bool Equals(ExprFunctionCompilationInterface? other)
     {
@@ -204,7 +215,7 @@ public record ExprFunctionCompilationInterface(
              * */
             ReducePineExpression.SearchForExpressionReductionRecursive(
                 maxDepth: 5,
-                PineCSharpSyntaxFactory.BuildPineExpressionToAccessItemFromPath(
+                PineCSharpSyntaxFactory.BuildPineExpressionToGetItemFromPath(
                     compositionExpr: parentEnvExpr,
                     path: pathAndParamName.path)))
             ];
@@ -229,12 +240,22 @@ public record ExprFunctionCompilationInterface(
                 return new ExprResolvedInFunction.ExprResolvedToLiteral(fromEnvConstraint);
             }
 
+            /*
             var paramName =
                 functionInterface.EnvItemsParamNames
                 .FirstOrDefault(item => item.path.SequenceEqual(pathInParentEnv.Path)).paramName;
 
             if (paramName is not null)
                 return new ExprResolvedInFunction.ExprResolvedToFunctionParam(paramName);
+            */
+
+            if (functionInterface.GetParamForEnvItemPath(pathInParentEnv.Path) is not { } match)
+                return null;
+
+            return
+                new ExprResolvedInFunction.ExprResolvedToFunctionParam(
+                    ParameterName: match.paramName,
+                    PathFromParam: match.pathFromParam);
         }
 
         return null;
