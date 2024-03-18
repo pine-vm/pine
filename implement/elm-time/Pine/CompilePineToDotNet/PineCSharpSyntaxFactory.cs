@@ -118,7 +118,8 @@ public static class PineCSharpSyntaxFactory
                     SyntaxFactory.TokenList(
                         [
                             SyntaxFactory.Token(SyntaxKind.PublicKeyword),
-                            SyntaxFactory.Token(SyntaxKind.StaticKeyword)]))
+                    SyntaxFactory.Token(SyntaxKind.StaticKeyword)
+                ]))
                 .WithParameterList(
                     SyntaxFactory.ParameterList(
                         SyntaxFactory.SeparatedList<ParameterSyntax>(
@@ -132,7 +133,7 @@ public static class PineCSharpSyntaxFactory
                                     SyntaxFactory.Identifier("path"))
                                 .WithType(
                                     SyntaxFactory.GenericName(
-                                        SyntaxFactory.Identifier("IReadOnlyList"))
+                                SyntaxFactory.Identifier("ReadOnlySpan"))
                                     .WithTypeArgumentList(
                                         SyntaxFactory.TypeArgumentList(
                                             SyntaxFactory.SingletonSeparatedList<TypeSyntax>(
@@ -141,15 +142,15 @@ public static class PineCSharpSyntaxFactory
                 .WithBody(
                     SyntaxFactory.Block(
                         SyntaxFactory.IfStatement(
-                            SyntaxFactory.BinaryExpression(
-                                SyntaxKind.EqualsExpression,
+                    SyntaxFactory.IsPatternExpression(
                                 SyntaxFactory.MemberAccessExpression(
                                     SyntaxKind.SimpleMemberAccessExpression,
                                     SyntaxFactory.IdentifierName("path"),
-                                    SyntaxFactory.IdentifierName("Count")),
+                            SyntaxFactory.IdentifierName("Length")),
+                        SyntaxFactory.ConstantPattern(
                                 SyntaxFactory.LiteralExpression(
                                     SyntaxKind.NumericLiteralExpression,
-                                    SyntaxFactory.Literal(0))),
+                                SyntaxFactory.Literal(0)))),
                             SyntaxFactory.ReturnStatement(
                                 SyntaxFactory.IdentifierName("environment"))),
                         SyntaxFactory.IfStatement(
@@ -233,21 +234,17 @@ public static class PineCSharpSyntaxFactory
                                                                                     SyntaxFactory.Literal(0))))))))))),
                                             SyntaxFactory.Token(SyntaxKind.CommaToken),
                                             SyntaxFactory.Argument(
-                                                SyntaxFactory.CollectionExpression(
-                                                    SyntaxFactory.SingletonSeparatedList<CollectionElementSyntax>(
-                                                        SyntaxFactory.SpreadElement(
-                                                            SyntaxFactory.InvocationExpression(
-                                                                SyntaxFactory.MemberAccessExpression(
-                                                                    SyntaxKind.SimpleMemberAccessExpression,
-                                                                    SyntaxFactory.IdentifierName("path"),
-                                                                    SyntaxFactory.IdentifierName("Skip")))
+                                        SyntaxFactory.ElementAccessExpression(
+                                            SyntaxFactory.IdentifierName("path"))
                                                             .WithArgumentList(
-                                                                SyntaxFactory.ArgumentList(
+                                            SyntaxFactory.BracketedArgumentList(
                                                                     SyntaxFactory.SingletonSeparatedList(
                                                                         SyntaxFactory.Argument(
+                                                        SyntaxFactory.RangeExpression()
+                                                        .WithLeftOperand(
                                                                             SyntaxFactory.LiteralExpression(
                                                                                 SyntaxKind.NumericLiteralExpression,
-                                                                                SyntaxFactory.Literal(1))))))))))}))))));
+                                                                SyntaxFactory.Literal(1))))))))}))))));
 
     public static StatementSyntax ConsoleWriteLineForLiteralString(string logEntry) =>
         SyntaxFactory.ExpressionStatement(

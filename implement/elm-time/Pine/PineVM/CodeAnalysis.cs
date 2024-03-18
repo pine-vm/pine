@@ -61,7 +61,7 @@ public record EnvConstraintId
             envClass.ParsedEnvItems
             .Select(path => new KeyValuePair<IReadOnlyList<int>, PineValue>(
                 path,
-                CodeAnalysis.ValueFromPathInValue(envValue, path) ?? throw new NullReferenceException()))
+                CodeAnalysis.ValueFromPathInValue(envValue, [.. path]) ?? throw new NullReferenceException()))
             .OrderBy(kv => kv.Key, IntPathComparer.Instance)
             .ToImmutableArray();
 
@@ -326,7 +326,7 @@ public class CodeAnalysis
                     literalInParentEnv.Value,
 
                     ExprMappedToParentEnv.PathInParentEnv pathInParentEnv =>
-                    ValueFromPathInValue(environment, pathInParentEnv.Path),
+                    ValueFromPathInValue(environment, [.. pathInParentEnv.Path]),
 
                     null =>
                     null,
@@ -645,9 +645,9 @@ public class CodeAnalysis
 
     public static PineValue? ValueFromPathInValue(
         PineValue environment,
-        IReadOnlyList<int> path)
+        ReadOnlySpan<int> path)
     {
-        if (path.Count is 0)
+        if (path.Length is 0)
             return environment;
 
         if (environment is not PineValue.ListValue listValue)
@@ -659,7 +659,7 @@ public class CodeAnalysis
         if (path[0] >= listValue.Elements.Count)
             return null;
 
-        return ValueFromPathInValue(listValue.Elements[path[0]], [.. path.Skip(1)]);
+        return ValueFromPathInValue(listValue.Elements[path[0]], path[1..]);
     }
 
     /// <summary>
