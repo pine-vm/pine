@@ -23,7 +23,7 @@ public class ModeledInElmTests
         IImmutableList<string> directoryPath) =>
         TestSetup.AsLoweredElmApp(
             TestSetup.GetElmAppFromDirectoryPath(directoryPath),
-            compilationRootFilePath: ImmutableList.Create("src", "Main.elm"));
+            compilationRootFilePath: ["src", "Main.elm"]);
 
     /*
     Get the value from `tests` in the Elm module `Main`.
@@ -34,7 +34,7 @@ public class ModeledInElmTests
         var elmMakeResult = Elm019Binaries.ElmMakeToJavascript(
             elmAppFiles,
             workingDirectoryRelative: null,
-            ImmutableList.Create("src", "Main.elm"));
+            ["src", "Main.elm"]);
 
         var javaScriptFromElmMake =
             Encoding.UTF8.GetString(

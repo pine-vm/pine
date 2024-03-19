@@ -3,7 +3,6 @@ using Pine;
 using Pine.Json;
 using System;
 using System.Collections.Generic;
-using System.Collections.Immutable;
 using System.Linq;
 using System.Net.Http.Json;
 using System.Text.Json;
@@ -52,7 +51,7 @@ public class ApplyFunctionOnDatabaseTests
                         ElmTime.Platform.WebService.StartupAdminInterface.PathApiApplyDatabaseFunction,
                         new ElmTime.AdminInterface.ApplyDatabaseFunctionRequest(
                             functionName: "Backend.ExposeFunctionsToAdmin.addToCounter",
-                            serializedArgumentsJson: ImmutableList.Create(17.ToString()),
+                            serializedArgumentsJson: [17.ToString()],
                             commitResultingState: false));
 
                 Assert.AreEqual(200, (int)applyFunctionResponse.StatusCode, message: "applyFunctionResponse.StatusCode");
@@ -74,7 +73,7 @@ public class ApplyFunctionOnDatabaseTests
                         ElmTime.Platform.WebService.StartupAdminInterface.PathApiApplyDatabaseFunction,
                         new ElmTime.AdminInterface.ApplyDatabaseFunctionRequest(
                             functionName: "Backend.ExposeFunctionsToAdmin.addToCounter",
-                            serializedArgumentsJson: ImmutableList.Create(additionViaAdminInterface.ToString()),
+                            serializedArgumentsJson: [additionViaAdminInterface.ToString()],
                             commitResultingState: true));
 
                 expectedCounter += additionViaAdminInterface;
@@ -151,7 +150,7 @@ public class ApplyFunctionOnDatabaseTests
                     ElmTime.Platform.WebService.StartupAdminInterface.PathApiApplyDatabaseFunction,
                     new ElmTime.AdminInterface.ApplyDatabaseFunctionRequest(
                         functionName: "Backend.ExposeFunctionsToAdmin.customUsageReport",
-                        serializedArgumentsJson: ImmutableList.Create(JsonSerializer.Serialize("Hello world")),
+                        serializedArgumentsJson: [JsonSerializer.Serialize("Hello world")],
                         commitResultingState: false));
 
             var applyFunctionResponseContent = await applyFunctionResponse.Content.ReadAsStringAsync();

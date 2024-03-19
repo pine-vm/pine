@@ -171,8 +171,8 @@ public class LoadFromGitHubTests
             var serverUrl = "http://localhost:16789";
 
             var server = Pine.GitPartialForCommitServer.Run(
-                urls: ImmutableList.Create(serverUrl),
-                gitCloneUrlPrefixes: ImmutableList.Create("https://github.com/elm-time/"),
+                urls: [serverUrl],
+                gitCloneUrlPrefixes: ["https://github.com/elm-time/"],
                 fileCacheDirectory: System.IO.Path.Combine(tempWorkingDirectory, "server-cache"));
 
             IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> consultServer(

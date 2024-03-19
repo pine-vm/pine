@@ -79,7 +79,7 @@ public class ProgramCommandMakeTests
 
         var outputBlob = GetOutputFileContentForCommandMake(
             projectFiles: projectFiles.Select(file => ((IReadOnlyList<string>)file.path, (ReadOnlyMemory<byte>)Encoding.UTF8.GetBytes(file.content))).ToImmutableList(),
-            entryPointFilePath: ImmutableList.Create("src", "Build.elm"));
+            entryPointFilePath: ["src", "Build.elm"]);
 
         CollectionAssert.AreEqual(new byte[] { 0, 1, 3, 4 }, outputBlob.Span.ToArray());
     }

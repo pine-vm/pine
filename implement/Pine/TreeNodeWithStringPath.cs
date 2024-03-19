@@ -88,8 +88,7 @@ public abstract record TreeNodeWithStringPath : IEquatable<TreeNodeWithStringPat
     public IEnumerable<(IImmutableList<string> path, ReadOnlyMemory<byte> blobContent)> EnumerateBlobsTransitive() =>
         this switch
         {
-            BlobNode blob => ImmutableList.Create<(IImmutableList<string> path, ReadOnlyMemory<byte> blobContent)>(
-                (ImmutableList<string>.Empty, blob.Bytes)),
+            BlobNode blob => [(ImmutableList<string>.Empty, blob.Bytes)],
 
             TreeNode tree => tree.Elements.SelectMany(treeEntry =>
             treeEntry.component.EnumerateBlobsTransitive()

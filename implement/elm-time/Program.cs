@@ -1469,7 +1469,7 @@ public class Program
                             Console.WriteLine("Discarded " + discardedFiles.Length + " files from the input directory.");
                         }
 
-                        if (filteredSourceTree.GetNodeAtPath(ImmutableList.Create("elm.json")) is not
+                        if (filteredSourceTree.GetNodeAtPath(["elm.json"]) is not
                             TreeNodeWithStringPath.BlobNode elmJsonFile)
                             return Result<string, LoadForMakeResult>.err(
                                 "Did not find elm.json file in that directory.");

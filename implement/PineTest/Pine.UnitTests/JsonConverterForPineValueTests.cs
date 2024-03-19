@@ -1,7 +1,6 @@
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Pine;
 using Pine.Json;
-using System.Collections.Immutable;
 using System.Text.Json;
 
 namespace TestElmTime;
@@ -25,9 +24,7 @@ public class JsonConverterForPineValueTests
             PineValue.EmptyList,
 
             PineValue.List(
-                ImmutableArray.Create(
-                    PineValueAsInteger.ValueFromSignedInteger(56),
-                    PineValueAsInteger.ValueFromSignedInteger(57))),
+                [PineValueAsInteger.ValueFromSignedInteger(56), PineValueAsInteger.ValueFromSignedInteger(57)]),
 
             PineValue.Blob([]),
             PineValue.Blob([10,11,13]),

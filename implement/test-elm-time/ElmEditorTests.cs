@@ -2,7 +2,6 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Pine;
 using System;
 using System.Collections.Generic;
-using System.Collections.Immutable;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
@@ -56,7 +55,7 @@ a =
             var formatRequest =
                 new ElmEditorApi.ElmEditorApiRequestStructure
                 (
-                    FormatElmModuleTextRequest: ImmutableList.Create(elmModuleTextBeforeFormatting)
+                    FormatElmModuleTextRequest: [elmModuleTextBeforeFormatting]
                 );
 
             var httpResponse =

@@ -40,8 +40,7 @@ public class StateShimTests
                     processStore,
                     new ElmTime.AdminInterface.ApplyDatabaseFunctionRequest(
                         functionName: "Backend.ExposeFunctionsToAdmin.applyCalculatorOperation",
-                        serializedArgumentsJson: ImmutableList.Create(
-                            JsonSerializer.Serialize<CalculatorOperation>(new CalculatorOperation.AddOperation(12345678))),
+                        serializedArgumentsJson: [JsonSerializer.Serialize<CalculatorOperation>(new CalculatorOperation.AddOperation(12345678))],
                         commitResultingState: true));
 
             applyOperationResult.Extract(err => throw new Exception(err));
@@ -118,20 +117,19 @@ public class StateShimTests
                     calculatorProcess,
                     new ElmTime.AdminInterface.ApplyDatabaseFunctionRequest(
                         functionName: "Backend.ExposeFunctionsToAdmin.applyCalculatorOperation",
-                        serializedArgumentsJson: ImmutableList.Create(
-                            JsonSerializer.Serialize(calculatorOperation)),
+                        serializedArgumentsJson: [JsonSerializer.Serialize(calculatorOperation)],
                         commitResultingState: true),
                     stateSource: Maybe.NothingFromNull<StateSource>(new StateSource.BranchStateSource(branchName)),
-                    stateDestinationBranches: ImmutableList.Create(branchName));
+                    stateDestinationBranches: [branchName]);
         }
 
         ElmTime.Platform.WebService.PersistentProcessLiveRepresentation.InitBranchesInElmInJsProcess(
             calculatorProcess,
-            ImmutableList.Create("alfa", "beta"))
+            ["alfa", "beta"])
             .Extract(err => throw new Exception(err));
 
         Assert.IsTrue(
-            ElmTime.StateShim.StateShim.TestAreBranchesEqual(calculatorProcess, ImmutableList.Create("alfa", "beta"))
+            ElmTime.StateShim.StateShim.TestAreBranchesEqual(calculatorProcess, ["alfa", "beta"])
             .Extract(err => throw new Exception(err)));
 
         {
@@ -153,7 +151,7 @@ public class StateShimTests
         }
 
         Assert.IsFalse(
-            ElmTime.StateShim.StateShim.TestAreBranchesEqual(calculatorProcess, ImmutableList.Create("alfa", "beta"))
+            ElmTime.StateShim.StateShim.TestAreBranchesEqual(calculatorProcess, ["alfa", "beta"])
             .Extract(err => throw new Exception(err)));
 
 
@@ -176,7 +174,7 @@ public class StateShimTests
         }
 
         Assert.IsTrue(
-            ElmTime.StateShim.StateShim.TestAreBranchesEqual(calculatorProcess, ImmutableList.Create("alfa", "beta"))
+            ElmTime.StateShim.StateShim.TestAreBranchesEqual(calculatorProcess, ["alfa", "beta"])
             .Extract(err => throw new Exception(err)));
     }
 
@@ -213,16 +211,15 @@ public class StateShimTests
                     elmProcess,
                     new ElmTime.AdminInterface.ApplyDatabaseFunctionRequest(
                         functionName: "Backend.ExposeFunctionsToAdmin.setStoreEntryBase64",
-                        serializedArgumentsJson: ImmutableList.Create(
-                            JsonSerializer.Serialize(new { entryId, entryBase64 })),
+                        serializedArgumentsJson: [JsonSerializer.Serialize(new { entryId, entryBase64 })],
                         commitResultingState: true),
                     stateSource: Maybe.NothingFromNull<StateSource>(new StateSource.BranchStateSource(branchName)),
-                    stateDestinationBranches: ImmutableList.Create(branchName));
+                    stateDestinationBranches: [branchName]);
         }
 
         ElmTime.Platform.WebService.PersistentProcessLiveRepresentation.InitBranchesInElmInJsProcess(
             elmProcess,
-            ImmutableList.Create("main"))
+            ["main"])
             .Extract(err => throw new Exception(err));
 
         var stateSizeInitial =
