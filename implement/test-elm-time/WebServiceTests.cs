@@ -149,13 +149,23 @@ public class WebServiceTests
         }
 
         {
-            var httpResponse = publicAppClient.GetAsync("utf8").Result;
+            var httpResponse = publicAppClient.GetAsync("readme-md").Result;
 
             Assert.AreEqual(HttpStatusCode.OK, httpResponse.StatusCode);
 
             var responseContent = httpResponse.Content.ReadAsStringAsync().Result;
 
             Assert.AreEqual("A text file we will integrate using UTF8 encoding ⚓\nNewline and special chars:\"'", responseContent);
+        }
+
+        {
+            var httpResponse = publicAppClient.GetAsync("alpha-file-via-other-interface-module").Result;
+
+            Assert.AreEqual(HttpStatusCode.OK, httpResponse.StatusCode);
+
+            var responseContent = httpResponse.Content.ReadAsStringAsync().Result;
+
+            Assert.AreEqual("Text file content", responseContent);
         }
     }
 

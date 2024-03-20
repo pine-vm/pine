@@ -5,6 +5,7 @@ module Backend.Main exposing
 
 import Base64
 import Bytes.Encode
+import CompilationInterface.CustomName.SourceFiles
 import CompilationInterface.SourceFiles
 import FileTree
 import Platform.WebService
@@ -53,10 +54,22 @@ updateForHttpRequestEvent httpRequestEvent stateBefore =
 
                     Just url ->
                         case httpRequestEvent.request.uri |> String.split "/" |> List.reverse |> List.head of
-                            Just "utf8" ->
+                            Just "readme-md" ->
                                 { statusCode = 200
                                 , bodyAsBase64 =
                                     CompilationInterface.SourceFiles.file____README_md.utf8
+                                        |> Bytes.Encode.string
+                                        |> Bytes.Encode.encode
+                                        |> Base64.fromBytes
+                                , headersToAdd =
+                                    [ { name = "Cache-Control", values = [ "public, max-age=3600" ] }
+                                    ]
+                                }
+
+                            Just "alpha-file-via-other-interface-module" ->
+                                { statusCode = 200
+                                , bodyAsBase64 =
+                                    CompilationInterface.CustomName.SourceFiles.file____static_content_alpha_file_in_directory_txt.utf8
                                         |> Bytes.Encode.string
                                         |> Bytes.Encode.encode
                                         |> Base64.fromBytes

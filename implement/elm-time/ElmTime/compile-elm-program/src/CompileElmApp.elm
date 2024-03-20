@@ -352,7 +352,6 @@ asCompletelyLoweredElmApp entryPointClasses arguments =
                 compilationInterfaceModuleDependencies =
                     [ ( "SourceFiles", modulesToAddForBytesCoding )
                     , ( "ElmMake", modulesToAddForBytesCoding )
-                    , ( "GenerateJsonCoders", modulesToAddForBase64Coding )
                     , ( "GenerateJsonConverters", modulesToAddForBase64Coding )
                     ]
                         |> Dict.fromList
@@ -360,26 +359,35 @@ asCompletelyLoweredElmApp entryPointClasses arguments =
                 usedCompilationInterfaceModules : Set.Set String
                 usedCompilationInterfaceModules =
                     sourceModules
-                        |> Dict.values
-                        |> List.map .moduleName
-                        |> List.concatMap
-                            (\moduleName ->
-                                arguments.compilationInterfaceElmModuleNamePrefixes
-                                    |> List.concatMap
-                                        (\compilationInterfacePrefix ->
-                                            case moduleName of
-                                                [] ->
-                                                    []
-
-                                                firstDirectory :: others ->
-                                                    if firstDirectory == compilationInterfacePrefix then
-                                                        [ String.join "." others ]
-
-                                                    else
+                        |> Dict.foldl
+                            (\_ sourceModule ->
+                                Set.union
+                                    (Set.fromList
+                                        (List.concatMap
+                                            (\compilationInterfacePrefix ->
+                                                case sourceModule.moduleName of
+                                                    [] ->
                                                         []
+
+                                                    firstDirectory :: afterCommonPrefix ->
+                                                        if firstDirectory /= compilationInterfacePrefix then
+                                                            []
+
+                                                        else
+                                                            case List.reverse afterCommonPrefix of
+                                                                lastPathComponent :: _ ->
+                                                                    [ lastPathComponent
+                                                                    , String.join "." afterCommonPrefix
+                                                                    ]
+
+                                                                [] ->
+                                                                    []
+                                            )
+                                            arguments.compilationInterfaceElmModuleNamePrefixes
                                         )
+                                    )
                             )
-                        |> Set.fromList
+                            Set.empty
 
                 modulesToAdd =
                     usedCompilationInterfaceModules
@@ -387,12 +395,38 @@ asCompletelyLoweredElmApp entryPointClasses arguments =
                         |> List.filterMap (\moduleName -> Dict.get moduleName compilationInterfaceModuleDependencies)
                         |> List.concat
             in
+            {-
+               TODO: Reorder lowering so that one lowering stage can reuse results from another one.
+               This will require building a dependency graph of lowering stages.
+            -}
             arguments.sourceFiles
                 |> addModulesFromTextToAppFiles sourceDirs modulesToAdd
-                |> loweredForSourceFiles sourceDirs arguments.compilationInterfaceElmModuleNamePrefixes
-                |> Result.andThen (loweredForJsonConverters { originalSourceModules = sourceModules, sourceDirs = sourceDirs } arguments.compilationInterfaceElmModuleNamePrefixes)
+                |> applyLoweringUnderPrefixes
+                    (mapSourceFilesModuleText sourceDirs)
+                    { prefixes = List.map (String.split ".") arguments.compilationInterfaceElmModuleNamePrefixes
+                    , moduleNameEnd = [ "SourceFiles" ]
+                    }
+                    locatedInSourceFilesFromJustFilePath
+                    sourceDirs
+                |> Result.andThen
+                    (applyLoweringUnderPrefixes
+                        (mapJsonConvertersModuleText { originalSourceModules = sourceModules, sourceDirs = sourceDirs })
+                        { prefixes = List.map (String.split ".") arguments.compilationInterfaceElmModuleNamePrefixes
+                        , moduleNameEnd = [ "GenerateJsonConverters" ]
+                        }
+                        locatedInSourceFilesFromJustFilePath
+                        sourceDirs
+                    )
                 |> Result.mapError (mapLocatedInSourceFiles OtherCompilationError >> List.singleton)
-                |> Result.andThen (loweredForElmMake sourceDirs arguments.compilationInterfaceElmModuleNamePrefixes arguments.dependencies)
+                |> Result.andThen
+                    (applyLoweringUnderPrefixes
+                        (mapElmMakeModuleText sourceDirs arguments.dependencies)
+                        { prefixes = List.map (String.split ".") arguments.compilationInterfaceElmModuleNamePrefixes
+                        , moduleNameEnd = [ "ElmMake" ]
+                        }
+                        (\context -> OtherCompilationError >> locatedInSourceFilesFromJustFilePath context >> List.singleton)
+                        sourceDirs
+                    )
                 |> Result.andThen
                     (loweredForCompilationRoot
                         entryPointClasses
@@ -416,7 +450,8 @@ findSourceDirectories arguments =
                         Err "Did not find elm.json"
 
                     else
-                        searchRecursive (currentDirectory |> List.reverse |> List.drop 1 |> List.reverse)
+                        searchRecursive
+                            (List.take (List.length currentDirectory - 1) currentDirectory)
 
                 Just elmJsonFile ->
                     case stringFromFileContent elmJsonFile of
@@ -429,10 +464,26 @@ findSourceDirectories arguments =
                                     Err ("Failed to decode elm.json: " ++ Json.Decode.errorToString err)
 
                                 Ok elmJson ->
+                                    let
+                                        parsedSourceDirs =
+                                            List.map parseElmJsonSourceDirectoryPath elmJson.sourceDirectories
+
+                                        compilationRootFilePathFromElmJson =
+                                            List.take
+                                                (List.length arguments.compilationRootFilePath - List.length currentDirectory)
+                                                arguments.compilationRootFilePath
+                                    in
                                     case
-                                        elmJson.sourceDirectories
+                                        parsedSourceDirs
+                                            |> List.filter
+                                                (\c ->
+                                                    {- TODO:
+                                                       Technically, the one containing compilationRootFilePath could also be one with parentLevel > 0.
+                                                    -}
+                                                    (c.parentLevel == 0)
+                                                        && List.Extra.isPrefixOf c.subdirectories compilationRootFilePathFromElmJson
+                                                )
                                             |> List.head
-                                            |> Maybe.map (String.split "/")
                                     of
                                         Nothing ->
                                             Err "Did not find a matching directory in source-directories"
@@ -440,11 +491,52 @@ findSourceDirectories arguments =
                                         Just matchingSourceDirectory ->
                                             Ok
                                                 { mainSourceDirectoryPath =
-                                                    currentDirectory ++ matchingSourceDirectory
+                                                    currentDirectory ++ matchingSourceDirectory.subdirectories
                                                 , elmJsonDirectoryPath = currentDirectory
                                                 }
     in
     searchRecursive arguments.compilationRootFilePath
+
+
+parseElmJsonSourceDirectoryPath : String -> { parentLevel : Int, subdirectories : List String }
+parseElmJsonSourceDirectoryPath pathInJson =
+    if String.startsWith "./" pathInJson then
+        parseElmJsonSourceDirectoryPath (String.dropLeft 2 pathInJson)
+
+    else if String.startsWith "." pathInJson then
+        parseElmJsonSourceDirectoryPath (String.dropLeft 1 pathInJson)
+
+    else
+        let
+            pathItems =
+                List.concatMap
+                    (String.split "\\")
+                    (String.split "/" pathInJson)
+        in
+        List.foldl
+            (\nextSegment { parentLevel, subdirectories } ->
+                case nextSegment of
+                    ".." ->
+                        if 0 < List.length subdirectories then
+                            { parentLevel = parentLevel
+                            , subdirectories = List.take (List.length subdirectories - 1) subdirectories
+                            }
+
+                        else
+                            { parentLevel = parentLevel + 1
+                            , subdirectories = subdirectories
+                            }
+
+                    "." ->
+                        { parentLevel = parentLevel, subdirectories = subdirectories }
+
+                    _ ->
+                        { parentLevel = parentLevel
+                        , subdirectories = subdirectories ++ [ nextSegment ]
+                        }
+            )
+            { parentLevel = 0, subdirectories = [] }
+            pathItems
 
 
 decodeElmJson : Json.Decode.Decoder ElmJson
@@ -453,67 +545,74 @@ decodeElmJson =
         (Json.Decode.field "source-directories" (Json.Decode.list Json.Decode.string))
 
 
-loweredForSourceFiles : SourceDirectories -> List String -> AppFiles -> Result (LocatedInSourceFiles String) AppFiles
-loweredForSourceFiles sourceDirs compilationInterfaceElmModuleNamePrefixes sourceFiles =
-    compilationInterfaceElmModuleNamePrefixes
-        |> listFoldlToAggregateResult
-            (\compilationInterfaceElmModuleNamePrefix files ->
-                mapElmModuleWithNameIfExists
-                    sourceDirs
-                    locatedInSourceFilesFromJustFilePath
-                    (compilationInterfaceElmModuleNamePrefix ++ ".SourceFiles")
-                    (mapSourceFilesModuleText sourceDirs)
-                    files
-            )
-            (Ok sourceFiles)
-
-
-loweredForJsonConverters :
-    { originalSourceModules : Dict.Dict (List String) SourceParsedElmModule
-    , sourceDirs : SourceDirectories
-    }
-    -> List String
+applyLoweringUnderPrefixes :
+    (( AppFiles, List String, String ) -> Result err ( AppFiles, String ))
+    -> { prefixes : List (List String), moduleNameEnd : List String }
+    -> ({ filePath : List String } -> String -> err)
+    -> SourceDirectories
     -> AppFiles
-    -> Result (LocatedInSourceFiles String) AppFiles
-loweredForJsonConverters context compilationInterfaceElmModuleNamePrefixes sourceFiles =
-    compilationInterfaceElmModuleNamePrefixes
-        |> listFoldlToAggregateResult
-            (\compilationInterfaceElmModuleNamePrefix files ->
-                mapElmModuleWithNameIfExists
-                    context.sourceDirs
-                    locatedInSourceFilesFromJustFilePath
-                    (compilationInterfaceElmModuleNamePrefix ++ ".GenerateJsonCoders")
-                    (mapJsonConvertersModuleText context)
-                    files
-                    |> Result.andThen
-                        (mapElmModuleWithNameIfExists
-                            context.sourceDirs
-                            locatedInSourceFilesFromJustFilePath
-                            (compilationInterfaceElmModuleNamePrefix ++ ".GenerateJsonConverters")
-                            (mapJsonConvertersModuleText context)
-                        )
-            )
-            (Ok sourceFiles)
+    -> Result err AppFiles
+applyLoweringUnderPrefixes lowerModule { prefixes, moduleNameEnd } errFromString sourceDirs sourceFiles =
+    listFoldlToAggregateResult
+        (\prefix ->
+            applyLoweringUnderPrefix
+                lowerModule
+                { prefix = prefix, moduleNameEnd = moduleNameEnd }
+                errFromString
+                sourceDirs
+        )
+        (Ok sourceFiles)
+        prefixes
 
 
-loweredForElmMake :
-    SourceDirectories
-    -> List String
-    -> List ( DependencyKey, Bytes.Bytes )
+{-| Consider restricting the interface of `applyLoweringUnderPrefix` to not support arbitrary changes to app code but only addition of expose syntax and new modules.
+-}
+applyLoweringUnderPrefix :
+    (( AppFiles, List String, String ) -> Result err ( AppFiles, String ))
+    -> { prefix : List String, moduleNameEnd : List String }
+    -> ({ filePath : List String } -> String -> err)
+    -> SourceDirectories
     -> AppFiles
-    -> Result (List (LocatedInSourceFiles CompilationError)) AppFiles
-loweredForElmMake sourceDirs compilationInterfaceElmModuleNamePrefixes dependencies sourceFiles =
-    compilationInterfaceElmModuleNamePrefixes
-        |> listFoldlToAggregateResult
-            (\compilationInterfaceElmModuleNamePrefix files ->
-                mapElmModuleWithNameIfExists
-                    sourceDirs
-                    (\context -> OtherCompilationError >> locatedInSourceFilesFromJustFilePath context >> List.singleton)
-                    (compilationInterfaceElmModuleNamePrefix ++ ".ElmMake")
-                    (mapElmMakeModuleText sourceDirs dependencies)
-                    files
-            )
-            (Ok sourceFiles)
+    -> Result err AppFiles
+applyLoweringUnderPrefix lowerModule { prefix, moduleNameEnd } errFromString sourceDirs sourceFiles =
+    listFoldlToAggregateResult
+        (\filePath intermediateFiles ->
+            case elmModuleNameFromFilePath sourceDirs filePath of
+                Nothing ->
+                    Ok intermediateFiles
+
+                Just moduleName ->
+                    if not (List.Extra.isPrefixOf prefix moduleName) then
+                        Ok intermediateFiles
+
+                    else if not (List.Extra.isSuffixOf moduleNameEnd moduleName) then
+                        Ok intermediateFiles
+
+                    else
+                        case Dict.get filePath intermediateFiles of
+                            Nothing ->
+                                Ok intermediateFiles
+
+                            Just elmModuleFile ->
+                                case stringFromFileContent elmModuleFile of
+                                    Nothing ->
+                                        Err (errFromString { filePath = filePath } "Failed to decode file content as string")
+
+                                    Just moduleText ->
+                                        case lowerModule ( intermediateFiles, filePath, moduleText ) of
+                                            Err err ->
+                                                Err err
+
+                                            Ok ( newAppCode, newModuleText ) ->
+                                                Ok
+                                                    (Dict.insert
+                                                        filePath
+                                                        (Bytes.Encode.encode (Bytes.Encode.string newModuleText))
+                                                        newAppCode
+                                                    )
+        )
+        (Ok sourceFiles)
+        (Dict.keys sourceFiles)
 
 
 loweredForCompilationRoot :
@@ -4075,7 +4174,7 @@ parseAndMapElmModuleText mapDependingOnParsing moduleText =
             mapDependingOnParsing parsedModule
 
 
-{-| Consider restricting the interface of `mapElmModuleWithNameIfExists` to not support arbitrary changes to app code but only addition of expose syntax.
+{-| Consider restricting the interface of `mapElmModuleWithNameIfExists` to not support arbitrary changes to app code but only addition of expose syntax and new modules.
 -}
 mapElmModuleWithNameIfExists :
     SourceDirectories
@@ -4669,6 +4768,31 @@ addModulesFromTextToAppFiles sourceDirs modulesToAdd sourceFiles =
                     |> Result.withDefault prevFiles
             )
             sourceFiles
+
+
+elmModuleNameFromFilePath : SourceDirectories -> List String -> Maybe (List String)
+elmModuleNameFromFilePath sourceDirs filePath =
+    case List.reverse filePath of
+        [] ->
+            Nothing
+
+        fileName :: directoryNameReversed ->
+            if not (String.endsWith ".elm" (String.toLower fileName)) then
+                Nothing
+
+            else
+                let
+                    moduleNameLastItem =
+                        String.dropRight 4 fileName
+
+                    directoryName =
+                        List.reverse directoryNameReversed
+                in
+                if List.Extra.isPrefixOf sourceDirs.mainSourceDirectoryPath directoryName then
+                    Just (List.drop (List.length sourceDirs.mainSourceDirectoryPath) directoryName ++ [ moduleNameLastItem ])
+
+                else
+                    Nothing
 
 
 filePathFromElmModuleName : SourceDirectories -> List String -> List String
