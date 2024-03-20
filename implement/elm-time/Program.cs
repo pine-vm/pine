@@ -18,7 +18,7 @@ namespace ElmTime;
 
 public class Program
 {
-    public static string AppVersionId => "2024-03-19";
+    public static string AppVersionId => "2024-03-20";
 
     private static int AdminInterfaceDefaultPort => 4000;
 
@@ -1509,8 +1509,13 @@ public class Program
                         {
                             var path = inputDirectory;
 
+                            if (!Path.IsPathFullyQualified(path))
+                            {
+                                path = Path.GetFullPath(path);
+                            }
+
                             for (var i = 0; i < relDir.ParentLevel; ++i)
-                                path = Path.GetDirectoryName(path);
+                                path = Path.GetDirectoryName(path.TrimEnd('/', '\\'));
 
                             return
                                 Path.Combine(path, string.Join('/', relDir.Subdirectories));
@@ -1533,15 +1538,15 @@ public class Program
                         IReadOnlyList<string> pathRelativeToCommonParentFromAbsolute(string absolutePath) =>
                             absolutePath[commonParentDirectory.Length..].Replace('\\', '/').Trim('/').Split('/');
 
-                        var workingDirectoryRelative =
-                            pathRelativeToCommonParentFromAbsolute(inputDirectory);
+                        var inputDirectoryAbsolute = Path.GetFullPath(inputDirectory);
 
-                        var pathToElmFileAbsolute =
-                            Path.GetFullPath(pathToElmFile);
+                        var workingDirectoryRelative =
+                            pathRelativeToCommonParentFromAbsolute(inputDirectoryAbsolute);
+
+                        var pathToElmFileAbsolute = Path.GetFullPath(pathToElmFile);
 
                         var pathToFileWithElmEntryPoint =
-                            pathRelativeToCommonParentFromAbsolute(pathToElmFileAbsolute)
-                                .ToImmutableList();
+                            pathRelativeToCommonParentFromAbsolute(pathToElmFileAbsolute);
 
                         return
                             outerSourceDirectoriesAbsolute
