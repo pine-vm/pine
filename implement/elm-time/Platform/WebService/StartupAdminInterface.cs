@@ -294,7 +294,22 @@ public class StartupAdminInterface
             }
         }
 
-        startPublicApp();
+        try
+        {
+            /*
+             * Attempt to start the public app immediately, but don't crash the admin interface if it fails.
+             * The 'startPublicApp' can fail for example if the Elm app fails to compile.
+             * The Elm app failing to compile can happen when a package author renamed their GitHub account.
+             * A recent example of such a rename that caused an outage was discussed at <https://discourse.elm-lang.org/t/ryannhg-packages-renamed-to-ryan-haskell/9705>
+             * 
+             * By keeping the admin interface running despite such failures, we can deploy an adapted version of the Elm app to fix the issue.
+             * */
+            startPublicApp();
+        }
+        catch (Exception e)
+        {
+            logger.LogError(e, "Failed to start the public app.");
+        }
 
         app.Run(
             AdminInterfaceRun(
