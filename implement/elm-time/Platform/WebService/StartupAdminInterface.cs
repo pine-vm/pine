@@ -115,6 +115,10 @@ public class StartupAdminInterface
 
         var adminPassword = configuration?.GetValue<string>(Configuration.AdminPasswordSettingKey);
 
+        var disableLetsEncrypt =
+            configuration?.GetValue<string>(Configuration.DisableLetsEncryptSettingKey)
+            ?.Equals("true", StringComparison.InvariantCultureIgnoreCase);
+
         object avoidConcurrencyLock = new();
 
         var processStoreFileStore = processStoreForFileStore.fileStore;
@@ -252,8 +256,9 @@ public class StartupAdminInterface
                                         }
                                     },
                                     SourceComposition: processAppConfig.appConfigComponent,
-                                    InitOrMigrateCmds: restoreProcessOk.initOrMigrateCmds
-                                );
+                                    InitOrMigrateCmds: restoreProcessOk.initOrMigrateCmds,
+                                    DisableLetsEncrypt: disableLetsEncrypt
+                                    );
 
                             var publicAppState = new PublicAppState(
                                 serverAndElmAppConfig: serverAndElmAppConfig,
@@ -265,7 +270,8 @@ public class StartupAdminInterface
                                 publicAppState.Build(
                                     appBuilder,
                                     env,
-                                    publicWebHostUrls: publicWebHostUrls);
+                                    publicWebHostUrls: publicWebHostUrls,
+                                    disableLetsEncrypt: disableLetsEncrypt);
 
                             publicAppState.ProcessEventTimeHasArrived();
 
@@ -314,13 +320,13 @@ public class StartupAdminInterface
         app.Run(
             AdminInterfaceRun(
                 logger: logger,
-                processStoreFileStore: processStoreFileStore,
-                processStoreWriter: processStoreWriter,
-                adminPassword: adminPassword,
-                getPublicAppHost: () => publicAppHost,
-                avoidConcurrencyLock: avoidConcurrencyLock,
-                startPublicApp: startPublicApp,
-                stopPublicApp: stopPublicApp));
+                                processStoreFileStore: processStoreFileStore,
+                                processStoreWriter: processStoreWriter,
+                                adminPassword: adminPassword,
+                                getPublicAppHost: () => publicAppHost,
+                                avoidConcurrencyLock: avoidConcurrencyLock,
+                                startPublicApp: startPublicApp,
+                                stopPublicApp: stopPublicApp));
     }
 
     private static RequestDelegate AdminInterfaceRun(

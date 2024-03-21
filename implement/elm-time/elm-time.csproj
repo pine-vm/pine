@@ -38,7 +38,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="FluffySpoon.AspNet.LetsEncrypt" Version="1.116.0" />
+    <PackageReference Include="FluffySpoon.AspNet.EncryptWeMust" Version="1.171.0" />
     <PackageReference Include="JavaScriptEngineSwitcher.V8" Version="3.21.5" />
     <PackageReference Include="Jint" Version="3.0.1" />
     <PackageReference Include="LibGit2Sharp" Version="0.28.0" />

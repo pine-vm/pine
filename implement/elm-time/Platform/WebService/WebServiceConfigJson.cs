@@ -6,7 +6,7 @@ namespace ElmTime.Platform.WebService;
 public record WebServiceConfigJson(
     RateLimitWindow? singleRateLimitWindowPerClientIPv4Address = null,
     int? httpRequestEventSizeLimit = null,
-    FluffySpoon.AspNet.LetsEncrypt.LetsEncryptOptions? letsEncryptOptions = null);
+    FluffySpoon.AspNet.EncryptWeMust.Certes.LetsEncryptOptions? letsEncryptOptions = null);
 
 public record RateLimitWindow(
     int windowSizeInMs,

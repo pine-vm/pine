@@ -1,4 +1,4 @@
-using FluffySpoon.AspNet.LetsEncrypt;
+using FluffySpoon.AspNet.EncryptWeMust;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
@@ -88,7 +88,8 @@ public class PublicAppState
     public WebApplication Build(
         WebApplicationBuilder appBuilder,
         IHostEnvironment env,
-        IReadOnlyList<string> publicWebHostUrls)
+        IReadOnlyList<string> publicWebHostUrls,
+        bool? disableLetsEncrypt)
     {
         appBuilder.Services.AddLogging(logging =>
         {
@@ -115,7 +116,6 @@ public class PublicAppState
             {
                 kestrelOptions.ConfigureHttpsDefaults(httpsOptions =>
                 {
-                    httpsOptions.ServerCertificateSelector = (_, _) => LetsEncryptRenewalService.Certificate;
                 });
             })
             .UseUrls([.. publicWebHostUrls])
@@ -129,8 +129,8 @@ public class PublicAppState
             app.UseDeveloperExceptionPage();
         }
 
-        if (serverAndElmAppConfig.ServerConfig?.letsEncryptOptions != null)
-            app.UseFluffySpoonLetsEncryptChallengeApprovalMiddleware();
+        if (serverAndElmAppConfig.ServerConfig?.letsEncryptOptions is not null && !(disableLetsEncrypt ?? false))
+            app.UseFluffySpoonLetsEncrypt();
 
         app.Lifetime.ApplicationStopping.Register(() =>
         {
@@ -169,16 +169,24 @@ public class PublicAppState
     {
         var letsEncryptOptions = serverAndElmAppConfig.ServerConfig?.letsEncryptOptions;
 
-        if (letsEncryptOptions == null)
+        if (letsEncryptOptions is null)
         {
             logger.LogInformation("I did not find 'letsEncryptOptions' in the configuration. I continue without Let's Encrypt.");
         }
         else
         {
-            logger.LogInformation("I found 'letsEncryptOptions' in the configuration.");
-            services.AddFluffySpoonLetsEncryptRenewalService(letsEncryptOptions);
-            services.AddFluffySpoonLetsEncryptFileCertificatePersistence();
-            services.AddFluffySpoonLetsEncryptMemoryChallengePersistence();
+            if (serverAndElmAppConfig.DisableLetsEncrypt ?? false)
+            {
+                logger.LogInformation(
+                    "I found 'letsEncryptOptions' in the configuration, but 'disableLetsEncrypt' is set to true. I continue without Let's Encrypt.");
+            }
+            else
+            {
+                logger.LogInformation("I found 'letsEncryptOptions' in the configuration.");
+                services.AddFluffySpoonLetsEncrypt(letsEncryptOptions);
+                services.AddFluffySpoonLetsEncryptFileCertificatePersistence();
+                services.AddFluffySpoonLetsEncryptMemoryChallengePersistence();
+            }
         }
 
         Asp.ConfigureServices(services);
@@ -707,4 +715,5 @@ public record ServerAndElmAppConfig(
     WebServiceConfigJson? ServerConfig,
     Func<string, Result<string, StateShim.InterfaceToHost.FunctionApplicationResult>> ProcessEventInElmApp,
     PineValue SourceComposition,
-    InterfaceToHost.BackendEventResponseStruct? InitOrMigrateCmds);
+    InterfaceToHost.BackendEventResponseStruct? InitOrMigrateCmds,
+    bool? DisableLetsEncrypt);
