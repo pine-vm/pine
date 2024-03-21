@@ -9,6 +9,7 @@ using Pine;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Collections.Immutable;
 using System.Linq;
 
 namespace ElmTime.Platform.WebService;
@@ -91,6 +92,18 @@ public class PublicAppState
         IReadOnlyList<string> publicWebHostUrls,
         bool? disableLetsEncrypt)
     {
+        var canUseHttps =
+            serverAndElmAppConfig.ServerConfig?.letsEncryptOptions is not null && !(disableLetsEncrypt ?? false);
+
+        var publicWebHostUrlsFilteredForHttps =
+            canUseHttps
+            ?
+            publicWebHostUrls
+            :
+            publicWebHostUrls
+            .Where(url => !url.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+            .ToImmutableArray();
+
         appBuilder.Services.AddLogging(logging =>
         {
             logging.AddConsole();
@@ -118,7 +131,7 @@ public class PublicAppState
                 {
                 });
             })
-            .UseUrls([.. publicWebHostUrls])
+            .UseUrls([.. publicWebHostUrlsFilteredForHttps])
             .WithSettingDateTimeOffsetDelegate(getDateTimeOffset)
             .ConfigureServices(services => ConfigureServices(services, logger));
 
@@ -129,8 +142,10 @@ public class PublicAppState
             app.UseDeveloperExceptionPage();
         }
 
-        if (serverAndElmAppConfig.ServerConfig?.letsEncryptOptions is not null && !(disableLetsEncrypt ?? false))
+        if (canUseHttps)
+        {
             app.UseFluffySpoonLetsEncrypt();
+        }
 
         app.Lifetime.ApplicationStopping.Register(() =>
         {

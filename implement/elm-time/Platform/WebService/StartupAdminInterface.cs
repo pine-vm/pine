@@ -214,7 +214,7 @@ public class StartupAdminInterface
                             }
                         }
 
-                        IHost buildWebHost(
+                        WebApplication buildWebApplication(
                             ProcessAppConfig processAppConfig,
                             IReadOnlyList<string> publicWebHostUrls)
                         {
@@ -282,13 +282,14 @@ public class StartupAdminInterface
                         {
                             var publicWebHostUrls = configuration.GetSettingPublicWebHostUrls();
 
-                            var webHost = buildWebHost(
+                            var webHost = buildWebApplication(
                                 processLiveRepresentation.lastAppConfig,
                                 publicWebHostUrls: publicWebHostUrls);
 
                             webHost.StartAsync(appLifetime.ApplicationStopping).Wait();
 
-                            logger.LogInformation("Started the public app at '" + string.Join(",", publicWebHostUrls) + "'.");
+                            logger.LogInformation(
+                                "Started the public app at '" + string.Join(",", webHost.Urls) + "'.");
 
                             publicAppHost = new PublicHostConfiguration(
                                 processLiveRepresentation: processLiveRepresentation,
