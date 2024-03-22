@@ -18,7 +18,7 @@ namespace ElmTime;
 
 public class Program
 {
-    public static string AppVersionId => "2024-03-20";
+    public static string AppVersionId => "2024-03-21";
 
     private static int AdminInterfaceDefaultPort => 4000;
 
@@ -377,7 +377,7 @@ public class Program
                 var sourcePassword = passwordFromSource(source);
 
                 var destination = destinationArgument.Value;
-                var destinationPassword = passwordFromSource(destination);
+                var destinationPassword = passwordFromDestination(destination);
 
                 var totalStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
