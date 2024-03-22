@@ -90,7 +90,8 @@ public class PublicAppState
         WebApplicationBuilder appBuilder,
         IHostEnvironment env,
         IReadOnlyList<string> publicWebHostUrls,
-        bool? disableLetsEncrypt)
+        bool? disableLetsEncrypt,
+        bool disableHttps)
     {
         appBuilder.Services.AddLogging(logging =>
         {
@@ -110,7 +111,7 @@ public class PublicAppState
             serverAndElmAppConfig.ServerConfig?.letsEncryptOptions is not null && !(disableLetsEncrypt ?? false);
 
         var publicWebHostUrlsFilteredForHttps =
-            canUseHttps
+            canUseHttps && !disableHttps
             ?
             publicWebHostUrls
             :
@@ -118,8 +119,9 @@ public class PublicAppState
             .Where(url => !url.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
             .ToImmutableArray();
 
-        logger.LogInformation("disableLetsEncrypt: {disableLetsEncrypt}", (disableLetsEncrypt?.ToString() ?? "null"));
+        logger.LogInformation("disableLetsEncrypt: {disableLetsEncrypt}", disableLetsEncrypt?.ToString() ?? "null");
         logger.LogInformation("canUseHttps: {canUseHttps}", canUseHttps);
+        logger.LogInformation("disableHttps: {disableHttps}", disableHttps);
 
         var webHostBuilder =
             appBuilder.WebHost
@@ -200,7 +202,9 @@ public class PublicAppState
             }
             else
             {
-                logger.LogInformation("I found 'letsEncryptOptions' in the configuration.");
+                logger.LogInformation(
+                    "I found 'letsEncryptOptions' in the configuration: {letsEncryptOptions}",
+                    System.Text.Json.JsonSerializer.Serialize(letsEncryptOptions));
                 services.AddFluffySpoonLetsEncrypt(letsEncryptOptions);
                 services.AddFluffySpoonLetsEncryptFileCertificatePersistence();
                 services.AddFluffySpoonLetsEncryptMemoryChallengePersistence();
@@ -734,4 +738,5 @@ public record ServerAndElmAppConfig(
     Func<string, Result<string, StateShim.InterfaceToHost.FunctionApplicationResult>> ProcessEventInElmApp,
     PineValue SourceComposition,
     InterfaceToHost.BackendEventResponseStruct? InitOrMigrateCmds,
-    bool? DisableLetsEncrypt);
+    bool? DisableLetsEncrypt,
+    bool DisableHttps);

@@ -119,6 +119,11 @@ public class StartupAdminInterface
             configuration?.GetValue<string>(Configuration.DisableLetsEncryptSettingKey)
             ?.Equals("true", StringComparison.InvariantCultureIgnoreCase);
 
+        var disableHttps =
+            configuration?.GetValue<string>(Configuration.DisableHttpsSettingKey)
+            ?.Equals("true", StringComparison.InvariantCultureIgnoreCase)
+            ?? false;
+
         object avoidConcurrencyLock = new();
 
         var processStoreFileStore = processStoreForFileStore.fileStore;
@@ -257,7 +262,8 @@ public class StartupAdminInterface
                                     },
                                     SourceComposition: processAppConfig.appConfigComponent,
                                     InitOrMigrateCmds: restoreProcessOk.initOrMigrateCmds,
-                                    DisableLetsEncrypt: disableLetsEncrypt
+                                    DisableLetsEncrypt: disableLetsEncrypt,
+                                    DisableHttps: disableHttps
                                     );
 
                             var publicAppState = new PublicAppState(
@@ -271,7 +277,8 @@ public class StartupAdminInterface
                                     appBuilder,
                                     env,
                                     publicWebHostUrls: publicWebHostUrls,
-                                    disableLetsEncrypt: disableLetsEncrypt);
+                                    disableLetsEncrypt: disableLetsEncrypt,
+                                    disableHttps: disableHttps);
 
                             publicAppState.ProcessEventTimeHasArrived();
 
