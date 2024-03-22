@@ -125,9 +125,6 @@ public class PublicAppState
             appBuilder.WebHost
             .ConfigureKestrel(kestrelOptions =>
             {
-                kestrelOptions.ConfigureHttpsDefaults(httpsOptions =>
-                {
-                });
             })
             .ConfigureServices(services =>
             {
