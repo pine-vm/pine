@@ -361,6 +361,21 @@ public class StartupAdminInterface
                 }
             }
 
+            {
+                /*
+                 * Increase the request body size limit, which defaults to 30 megabytes in ASP.NET Core 8.
+                 * https://learn.microsoft.com/en-us/dotnet/api/microsoft.aspnetcore.server.kestrel.core.kestrelserverlimits.maxrequestbodysize?view=aspnetcore-8.0#microsoft-aspnetcore-server-kestrel-core-kestrelserverlimits-maxrequestbodysize
+                 * */
+
+                var bodySizeFeature =
+                    context.Features.Get<Microsoft.AspNetCore.Http.Features.IHttpMaxRequestBodySizeFeature>();
+
+                if (bodySizeFeature is not null)
+                {
+                    bodySizeFeature.MaxRequestBodySize = 400_000_000;
+                }
+            }
+
             async System.Threading.Tasks.Task deployElmApp(bool initElmAppState)
             {
                 var deploymentZipArchive = await Asp.CopyRequestBody(context.Request);
