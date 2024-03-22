@@ -92,18 +92,6 @@ public class PublicAppState
         IReadOnlyList<string> publicWebHostUrls,
         bool? disableLetsEncrypt)
     {
-        var canUseHttps =
-            serverAndElmAppConfig.ServerConfig?.letsEncryptOptions is not null && !(disableLetsEncrypt ?? false);
-
-        var publicWebHostUrlsFilteredForHttps =
-            canUseHttps
-            ?
-            publicWebHostUrls
-            :
-            publicWebHostUrls
-            .Where(url => !url.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
-            .ToImmutableArray();
-
         appBuilder.Services.AddLogging(logging =>
         {
             logging.AddConsole();
@@ -118,10 +106,20 @@ public class PublicAppState
 
         var logger = loggerFactory.CreateLogger<PublicAppState>();
 
-        appBuilder.Services.AddResponseCompression(options =>
-        {
-            options.EnableForHttps = true;
-        });
+        var canUseHttps =
+            serverAndElmAppConfig.ServerConfig?.letsEncryptOptions is not null && !(disableLetsEncrypt ?? false);
+
+        var publicWebHostUrlsFilteredForHttps =
+            canUseHttps
+            ?
+            publicWebHostUrls
+            :
+            publicWebHostUrls
+            .Where(url => !url.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+            .ToImmutableArray();
+
+        logger.LogInformation("disableLetsEncrypt: {disableLetsEncrypt}", (disableLetsEncrypt?.ToString() ?? "null"));
+        logger.LogInformation("canUseHttps: {canUseHttps}", canUseHttps);
 
         var webHostBuilder =
             appBuilder.WebHost
@@ -131,9 +129,12 @@ public class PublicAppState
                 {
                 });
             })
+            .ConfigureServices(services =>
+            {
+                ConfigureServices(services, logger);
+            })
             .UseUrls([.. publicWebHostUrlsFilteredForHttps])
-            .WithSettingDateTimeOffsetDelegate(getDateTimeOffset)
-            .ConfigureServices(services => ConfigureServices(services, logger));
+            .WithSettingDateTimeOffsetDelegate(getDateTimeOffset);
 
         var app = appBuilder.Build();
 
@@ -147,14 +148,14 @@ public class PublicAppState
             app.UseFluffySpoonLetsEncrypt();
         }
 
+        app.UseResponseCompression();
+
         app.Lifetime.ApplicationStopping.Register(() =>
         {
             applicationStoppingCancellationTokenSource.Cancel();
             app.Logger?.LogInformation("Public app noticed ApplicationStopping.");
             DisposeAsync().Wait();
         });
-
-        app.UseResponseCompression();
 
         app.Run(async context =>
         {
@@ -182,6 +183,11 @@ public class PublicAppState
         IServiceCollection services,
         ILogger logger)
     {
+        services.AddResponseCompression(options =>
+        {
+            options.EnableForHttps = true;
+        });
+
         var letsEncryptOptions = serverAndElmAppConfig.ServerConfig?.letsEncryptOptions;
 
         if (letsEncryptOptions is null)

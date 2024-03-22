@@ -289,7 +289,7 @@ public class StartupAdminInterface
                             webHost.StartAsync(appLifetime.ApplicationStopping).Wait();
 
                             logger.LogInformation(
-                                "Started the public app at '" + string.Join(",", webHost.Urls) + "'.");
+                                "Started the public app at '{urls}'.", string.Join(",", webHost.Urls));
 
                             publicAppHost = new PublicHostConfiguration(
                                 processLiveRepresentation: processLiveRepresentation,
@@ -321,13 +321,13 @@ public class StartupAdminInterface
         app.Run(
             AdminInterfaceRun(
                 logger: logger,
-                                processStoreFileStore: processStoreFileStore,
-                                processStoreWriter: processStoreWriter,
-                                adminPassword: adminPassword,
-                                getPublicAppHost: () => publicAppHost,
-                                avoidConcurrencyLock: avoidConcurrencyLock,
-                                startPublicApp: startPublicApp,
-                                stopPublicApp: stopPublicApp));
+                processStoreFileStore: processStoreFileStore,
+                processStoreWriter: processStoreWriter,
+                adminPassword: adminPassword,
+                getPublicAppHost: () => publicAppHost,
+                avoidConcurrencyLock: avoidConcurrencyLock,
+                startPublicApp: startPublicApp,
+                stopPublicApp: stopPublicApp));
     }
 
     private static RequestDelegate AdminInterfaceRun(
