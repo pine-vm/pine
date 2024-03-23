@@ -19,7 +19,7 @@ using System.Text;
 using ApiRouteMethodConfig =
     System.Func<
         Microsoft.AspNetCore.Http.HttpContext,
-        ElmTime.Platform.WebService.StartupAdminInterface.PublicHostConfiguration?,
+        ElmTime.Platform.WebService.StartupAdminInterface.PublicHostProcess?,
         System.Threading.Tasks.Task>;
 
 namespace ElmTime.Platform.WebService;
@@ -93,9 +93,13 @@ public class StartupAdminInterface
         services.AddSingleton(getDateTimeOffset);
     }
 
-    public record PublicHostConfiguration(
-        PersistentProcessLiveRepresentation processLiveRepresentation,
-        IHost webHost);
+    public record PublicHostProcess(
+        PersistentProcessLiveRepresentation ProcessLiveRepresentation,
+        AspHostConfig AspHostConfig,
+        IHost WebHost);
+
+    public record AspHostConfig(
+        bool DisableHttps);
 
     public void Configure(
         IApplicationBuilder app,
@@ -128,7 +132,7 @@ public class StartupAdminInterface
 
         var processStoreFileStore = processStoreForFileStore.fileStore;
 
-        PublicHostConfiguration? publicAppHost = null;
+        PublicHostProcess? publicAppHost = null;
 
         void stopPublicApp()
         {
@@ -139,9 +143,9 @@ public class StartupAdminInterface
 
                 logger.LogInformation("Begin to stop the public app.");
 
-                publicAppHost?.webHost?.StopAsync(TimeSpan.FromSeconds(10)).Wait();
-                publicAppHost?.webHost?.Dispose();
-                publicAppHost?.processLiveRepresentation?.Dispose();
+                publicAppHost?.WebHost?.StopAsync(TimeSpan.FromSeconds(10)).Wait();
+                publicAppHost?.WebHost?.Dispose();
+                publicAppHost?.ProcessLiveRepresentation?.Dispose();
                 publicAppHost = null;
             }
         }
@@ -155,6 +159,85 @@ public class StartupAdminInterface
                 processStoreFileStore);
 
         void startPublicApp()
+        {
+            var aspHostConfig = BuildCurrentAspHostConfig(logger);
+
+            startPublicAppLessRestartForHttps(aspHostConfig);
+
+            if (aspHostConfig.DisableHttps)
+            {
+                /*
+                 * Workaround for the issue of ASP.NET crashing discovered during the incident in March.
+                 * TODO: Review: Consider moving the certificate out of the versioned web service config.
+                 * */
+
+                System.Threading.Tasks.Task.Run(() =>
+                {
+                    System.Threading.Thread.Sleep(TimeSpan.FromSeconds(100));
+
+                    logger.LogInformation(
+                        "Last start of public interface had HTTPS disabled. Checking if we can enable HTTPS now...");
+
+                    var newConfig = BuildCurrentAspHostConfig(logger);
+
+                    if (!newConfig.DisableHttps)
+                    {
+                        logger.LogInformation(
+                            "Looks like we can enable HTTPS now, restarting the public interface...");
+
+                        startPublicAppLessRestartForHttps(
+                            aspHostConfig
+                            with
+                            {
+                                DisableHttps = false
+                            });
+                    }
+                });
+            }
+        }
+
+        AspHostConfig BuildCurrentAspHostConfig(ILogger? logger)
+        {
+            var letsEncryptRenewalServiceCertificateCompleted =
+                FluffySpoon.AspNet.EncryptWeMust.Certes.LetsEncryptRenewalService.Certificate is { };
+
+            logger?.LogInformation(
+                "letsEncryptRenewalServiceCertificateCompleted: {completed}",
+                letsEncryptRenewalServiceCertificateCompleted);
+
+            var aspWouldCrashOnConfiguringHttpsEndpoint =
+                /*
+                 * Adapt to crashes observed 2024-03-23:
+                 * 
+                warn: Microsoft.AspNetCore.Hosting.Diagnostics[15]
+                        Overriding HTTP_PORTS '8080' and HTTPS_PORTS ''. Binding to values defined by URLS instead 'http://*;https://*'.
+                fail: Microsoft.Extensions.Hosting.Internal.Host[11]
+                        Hosting failed to start
+                        System.InvalidOperationException: Unable to configure HTTPS endpoint. No server certificate was specified, and the default developer certificate could not be found or is out of date.
+                        To generate a developer certificate run 'dotnet dev-certs https'. To trust the certificate (Windows and macOS only) run 'dotnet dev-certs https --trust'.
+                        For more information on configuring HTTPS see https://go.microsoft.com/fwlink/?linkid=848054.
+                            at Microsoft.AspNetCore.Hosting.ListenOptionsHttpsExtensions.UseHttps(ListenOptions listenOptions, Action`1 configureOptions)
+                            at Microsoft.AspNetCore.Server.Kestrel.Core.Internal.AddressBinder.AddressesStrategy.BindAsync(AddressBindContext context, CancellationToken cancellationToken)
+                            at Microsoft.AspNetCore.Server.Kestrel.Core.Internal.AddressBinder.BindAsync(ListenOptions[] listenOptions, AddressBindContext context, Func`2 useHttps, CancellationToken cancellationToken)
+                            at Microsoft.AspNetCore.Server.Kestrel.Core.KestrelServerImpl.BindAsync(CancellationToken cancellationToken)
+                            at Microsoft.AspNetCore.Server.Kestrel.Core.KestrelServerImpl.StartAsync[TContext](IHttpApplication`1 application, CancellationToken cancellationToken)
+                            at Microsoft.AspNetCore.Hosting.GenericWebHostService.StartAsync(CancellationToken cancellationToken)
+                            at Microsoft.Extensions.Hosting.Internal.Host.<StartAsync>b__15_1(IHostedService service, CancellationToken token)
+                            at Microsoft.Extensions.Hosting.Internal.Host.ForeachService[T](IEnumerable`1 services, CancellationToken token, Boolean concurrent, Boolean abortOnFirstException, List`1 exceptions, Func`3 operation)
+
+                For discussion of crashes following race condition like this, see:
+                https://github.com/natemcmaster/LettuceEncrypt/issues/293
+
+                 * */
+                !letsEncryptRenewalServiceCertificateCompleted;
+
+            var aspHostConfig = new AspHostConfig(
+                DisableHttps: disableHttps || aspWouldCrashOnConfiguringHttpsEndpoint);
+
+            return aspHostConfig;
+        }
+
+        void startPublicAppLessRestartForHttps(AspHostConfig aspHostConfig)
         {
             lock (avoidConcurrencyLock)
             {
@@ -221,6 +304,7 @@ public class StartupAdminInterface
 
                         WebApplication buildWebApplication(
                             ProcessAppConfig processAppConfig,
+                            AspHostConfig aspHostConfig,
                             IReadOnlyList<string> publicWebHostUrls)
                         {
                             var appConfigTree =
@@ -272,35 +356,46 @@ public class StartupAdminInterface
 
                             var appBuilder = WebApplication.CreateBuilder();
 
+                            using var loggerFactory = LoggerFactory.Create(logging =>
+                            {
+                                logging.AddConsole();
+                                logging.AddDebug();
+                            });
+
+                            var logger = loggerFactory.CreateLogger<PublicAppState>();
+
                             var app =
                                 publicAppState.Build(
                                     appBuilder,
+                                    logger,
                                     env,
                                     publicWebHostUrls: publicWebHostUrls,
                                     disableLetsEncrypt: disableLetsEncrypt,
-                                    disableHttps: disableHttps);
+                                    disableHttps: aspHostConfig.DisableHttps);
 
                             publicAppState.ProcessEventTimeHasArrived();
 
                             return app;
                         }
 
-                        if (processLiveRepresentation?.lastAppConfig != null)
+                        if (processLiveRepresentation?.lastAppConfig is { } lastAppConfig)
                         {
                             var publicWebHostUrls = configuration.GetSettingPublicWebHostUrls();
 
                             var webHost = buildWebApplication(
-                                processLiveRepresentation.lastAppConfig,
+                                lastAppConfig,
+                                aspHostConfig,
                                 publicWebHostUrls: publicWebHostUrls);
 
                             webHost.StartAsync(appLifetime.ApplicationStopping).Wait();
 
                             logger.LogInformation(
-                                "Started the public app at '{urls}'.", string.Join(",", webHost.Urls));
+                                "Started the public app at '{urls}'.", string.Join(", ", webHost.Urls));
 
-                            publicAppHost = new PublicHostConfiguration(
-                                processLiveRepresentation: processLiveRepresentation,
-                                webHost: webHost);
+                            publicAppHost = new PublicHostProcess(
+                                ProcessLiveRepresentation: processLiveRepresentation,
+                                AspHostConfig: aspHostConfig,
+                                WebHost: webHost);
                         }
 
                         return 0;
@@ -342,7 +437,7 @@ public class StartupAdminInterface
         IFileStore processStoreFileStore,
         IProcessStoreWriter processStoreWriter,
         string? adminPassword,
-        Func<PublicHostConfiguration?> getPublicAppHost,
+        Func<PublicHostProcess?> getPublicAppHost,
         object avoidConcurrencyLock,
         Action startPublicApp,
         Action stopPublicApp)
@@ -457,7 +552,7 @@ public class StartupAdminInterface
                     return Result<string, IReadOnlyList<StateShim.InterfaceToHost.NamedExposedFunction>>.err(
                         "No application deployed.");
 
-                return publicAppHost.processLiveRepresentation.ListDatabaseFunctions();
+                return publicAppHost.ProcessLiveRepresentation.ListDatabaseFunctions();
             }
 
             Result<string, AdminInterface.ApplyDatabaseFunctionSuccess> applyDatabaseFunction(
@@ -469,7 +564,7 @@ public class StartupAdminInterface
                         return Result<string, AdminInterface.ApplyDatabaseFunctionSuccess>.err(
                             "No application deployed.");
 
-                    return publicAppHost.processLiveRepresentation.ApplyFunctionOnMainBranch(storeWriter: processStoreWriter, request);
+                    return publicAppHost.ProcessLiveRepresentation.ApplyFunctionOnMainBranch(storeWriter: processStoreWriter, request);
                 }
             }
 
@@ -506,7 +601,7 @@ public class StartupAdminInterface
                         methods : ImmutableDictionary<string, ApiRouteMethodConfig>.Empty
                         .Add("get", async (context, publicAppHost) =>
                         {
-                            var appConfig = publicAppHost?.processLiveRepresentation?.lastAppConfig.appConfigComponent;
+                            var appConfig = publicAppHost?.ProcessLiveRepresentation?.lastAppConfig.appConfigComponent;
 
                             if (appConfig == null)
                             {
@@ -548,7 +643,7 @@ public class StartupAdminInterface
                                 return;
                             }
 
-                            var processLiveRepresentation = publicAppHost?.processLiveRepresentation;
+                            var processLiveRepresentation = publicAppHost?.ProcessLiveRepresentation;
 
                             var components = new List<PineValue>();
 
@@ -592,10 +687,10 @@ public class StartupAdminInterface
                             var elmAppStateToSet = await System.Text.Json.JsonSerializer.DeserializeAsync<System.Text.Json.JsonElement>(context.Request.Body);
 
                             var setAppStateResult =
-                            Result<string, PublicHostConfiguration?>.ok(publicAppHost)
+                            Result<string, PublicHostProcess?>.ok(publicAppHost)
                             .AndThen(maybeNull => Maybe.NothingFromNull(maybeNull).ToResult("Not possible because there is no app (state)."))
                             .AndThen(publicAppHost =>
-                            publicAppHost.processLiveRepresentation.SetStateOnMainBranch(
+                            publicAppHost.ProcessLiveRepresentation.SetStateOnMainBranch(
                                 storeWriter: processStoreWriter,
                                 elmAppStateToSet))
                             .Map(compositionLogEventAndResponse =>
@@ -818,7 +913,7 @@ public class StartupAdminInterface
 
                     var storeReductionReport =
                         getPublicAppHost()
-                        ?.processLiveRepresentation?.StoreReductionRecordForCurrentState(processStoreWriter).report;
+                        ?.ProcessLiveRepresentation?.StoreReductionRecordForCurrentState(processStoreWriter).report;
 
                     storeReductionStopwatch.Stop();
 
@@ -960,7 +1055,7 @@ public class StartupAdminInterface
 
                     var storeReductionReport =
                         getPublicAppHost()
-                        ?.processLiveRepresentation?.StoreReductionRecordForCurrentState(processStoreWriter).report;
+                        ?.ProcessLiveRepresentation?.StoreReductionRecordForCurrentState(processStoreWriter).report;
 
                     storeReductionStopwatch.Stop();
 

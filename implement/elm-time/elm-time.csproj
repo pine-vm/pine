@@ -5,8 +5,8 @@
     <TargetFramework>net8.0</TargetFramework>
     <RootNamespace>ElmTime</RootNamespace>
     <AssemblyName>elm-time</AssemblyName>
-    <AssemblyVersion>2024.0322.0.0</AssemblyVersion>
-    <FileVersion>2024.0322.0.0</FileVersion>
+    <AssemblyVersion>2024.0323.0.0</AssemblyVersion>
+    <FileVersion>2024.0323.0.0</FileVersion>
     <Nullable>enable</Nullable>
     <GenerateEmbeddedFilesManifest>true</GenerateEmbeddedFilesManifest>
   </PropertyGroup>
@@ -38,7 +38,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="FluffySpoon.AspNet.EncryptWeMust" Version="1.171.0" />
+    <PackageReference Include="certes" Version="3.0.4" />
     <PackageReference Include="JavaScriptEngineSwitcher.V8" Version="3.21.5" />
     <PackageReference Include="Jint" Version="3.0.1" />
     <PackageReference Include="LibGit2Sharp" Version="0.28.0" />
@@ -57,6 +57,12 @@
 
   <ItemGroup>
     <EmbeddedResource Include="Gui\elm\**" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Reference Include="FluffySpoon.AspNet.EncryptWeMust">
+      <HintPath>./../lib/FluffySpoon.AspNet.EncryptWeMust.dll</HintPath>
+    </Reference>
   </ItemGroup>
 
 </Project>

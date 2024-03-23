@@ -88,6 +88,7 @@ public class PublicAppState
 
     public WebApplication Build(
         WebApplicationBuilder appBuilder,
+        ILogger logger,
         IHostEnvironment env,
         IReadOnlyList<string> publicWebHostUrls,
         bool? disableLetsEncrypt,
@@ -99,16 +100,11 @@ public class PublicAppState
             logging.AddDebug();
         });
 
-        using var loggerFactory = LoggerFactory.Create(logging =>
-        {
-            logging.AddConsole();
-            logging.AddDebug();
-        });
-
-        var logger = loggerFactory.CreateLogger<PublicAppState>();
+        var enableUseFluffySpoonLetsEncrypt =
+            serverAndElmAppConfig.ServerConfig?.letsEncryptOptions is not null && !(disableLetsEncrypt ?? false);
 
         var canUseHttps =
-            serverAndElmAppConfig.ServerConfig?.letsEncryptOptions is not null && !(disableLetsEncrypt ?? false);
+            enableUseFluffySpoonLetsEncrypt;
 
         var publicWebHostUrlsFilteredForHttps =
             canUseHttps && !disableHttps
@@ -119,9 +115,17 @@ public class PublicAppState
             .Where(url => !url.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
             .ToImmutableArray();
 
-        logger.LogInformation("disableLetsEncrypt: {disableLetsEncrypt}", disableLetsEncrypt?.ToString() ?? "null");
-        logger.LogInformation("canUseHttps: {canUseHttps}", canUseHttps);
-        logger.LogInformation("disableHttps: {disableHttps}", disableHttps);
+        logger.LogInformation(
+            "disableLetsEncrypt: {disableLetsEncrypt}", disableLetsEncrypt?.ToString() ?? "null");
+
+        logger.LogInformation(
+            "enableUseFluffySpoonLetsEncrypt: {enableUseFluffySpoonLetsEncrypt}", enableUseFluffySpoonLetsEncrypt);
+
+        logger.LogInformation(
+            "canUseHttps: {canUseHttps}", canUseHttps);
+
+        logger.LogInformation(
+            "disableHttps: {disableHttps}", disableHttps);
 
         var webHostBuilder =
             appBuilder.WebHost
@@ -142,7 +146,7 @@ public class PublicAppState
             app.UseDeveloperExceptionPage();
         }
 
-        if (canUseHttps)
+        if (enableUseFluffySpoonLetsEncrypt)
         {
             app.UseFluffySpoonLetsEncrypt();
         }

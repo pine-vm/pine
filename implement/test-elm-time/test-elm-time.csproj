@@ -29,4 +29,10 @@
     <ProjectReference Include="..\elm-time\elm-time.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Reference Include="FluffySpoon.AspNet.EncryptWeMust">
+      <HintPath>./../lib/FluffySpoon.AspNet.EncryptWeMust.dll</HintPath>
+    </Reference>
+  </ItemGroup>
+
 </Project>
