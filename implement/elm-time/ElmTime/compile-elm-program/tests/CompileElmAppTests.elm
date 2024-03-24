@@ -1,4 +1,4 @@
-module Tests exposing (..)
+module CompileElmAppTests exposing (..)
 
 import Bytes.Encode
 import CompileBackendApp
