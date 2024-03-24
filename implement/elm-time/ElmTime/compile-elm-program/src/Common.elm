@@ -129,3 +129,22 @@ resultListIndexedMapCombineHelper index completeList mapItem sourceList =
 
                 Err err ->
                     Err err
+
+
+commonPrefixLength : List a -> List a -> Int
+commonPrefixLength listA listB =
+    case listA of
+        [] ->
+            0
+
+        a :: restA ->
+            case listB of
+                [] ->
+                    0
+
+                b :: restB ->
+                    if a == b then
+                        1 + commonPrefixLength restA restB
+
+                    else
+                        0

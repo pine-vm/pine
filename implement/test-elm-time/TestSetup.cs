@@ -42,22 +42,22 @@ public class TestSetup
         return CounterProcessTestEventsAndExpectedResponses(enumerateWithExplicitExpectedResult());
     }
 
-    public static IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> CounterElmWebApp =
+    public static IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> CounterElmWebApp =>
         GetElmAppFromExampleName("counter-webapp");
 
-    public static IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> CalculatorWebApp =
+    public static IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> CalculatorWebApp =>
         GetElmAppFromExampleName("calculator-webapp");
 
-    public static IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> ReadSourceFileWebApp =
+    public static IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> ReadSourceFileWebApp =>
         GetElmAppFromExampleName("read-source-file-webapp");
 
-    public static IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> StringBuilderElmWebApp =
+    public static IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> StringBuilderElmWebApp =>
         GetElmAppFromExampleName("string-builder-webapp");
 
-    public static IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> CrossPropagateHttpHeadersToAndFromBodyElmWebApp =
+    public static IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> CrossPropagateHttpHeadersToAndFromBodyElmWebApp =>
        GetElmAppFromExampleName("cross-propagate-http-headers-to-and-from-body");
 
-    public static IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> HttpProxyWebApp =
+    public static IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> HttpProxyWebApp =>
        GetElmAppFromExampleName("http-proxy");
 
     public static IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> VolatileProcessNativeWebApp =>

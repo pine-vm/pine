@@ -4,6 +4,7 @@ import Base64
 import Bytes
 import Bytes.Decode
 import Bytes.Encode
+import Common
 import Dict
 import Elm.Parser
 import Elm.Processing
@@ -45,6 +46,7 @@ type alias CompilationArguments =
 type alias SourceDirectories =
     { mainSourceDirectoryPath : List String
     , elmJsonDirectoryPath : List String
+    , secondarySourceDirectories : List (List String)
     }
 
 
@@ -469,8 +471,8 @@ findSourceDirectories arguments =
                                             List.map parseElmJsonSourceDirectoryPath elmJson.sourceDirectories
 
                                         compilationRootFilePathFromElmJson =
-                                            List.take
-                                                (List.length arguments.compilationRootFilePath - List.length currentDirectory)
+                                            List.drop
+                                                (List.length currentDirectory)
                                                 arguments.compilationRootFilePath
                                     in
                                     case
@@ -486,13 +488,29 @@ findSourceDirectories arguments =
                                             |> List.head
                                     of
                                         Nothing ->
-                                            Err "Did not find a matching directory in source-directories"
+                                            Err
+                                                (String.join " "
+                                                    [ "Did not find a matching directory in source-directories"
+                                                    , "(currentDirectory: " ++ String.join "/" currentDirectory ++ ")"
+                                                    ]
+                                                )
 
                                         Just matchingSourceDirectory ->
+                                            let
+                                                secondarySourceDirectories =
+                                                    parsedSourceDirs
+                                                        |> List.Extra.remove matchingSourceDirectory
+                                                        |> List.map
+                                                            (\parsedDir ->
+                                                                List.take (List.length currentDirectory - parsedDir.parentLevel) currentDirectory
+                                                                    ++ parsedDir.subdirectories
+                                                            )
+                                            in
                                             Ok
                                                 { mainSourceDirectoryPath =
                                                     currentDirectory ++ matchingSourceDirectory.subdirectories
                                                 , elmJsonDirectoryPath = currentDirectory
+                                                , secondarySourceDirectories = secondarySourceDirectories
                                                 }
     in
     searchRecursive arguments.compilationRootFilePath
@@ -500,18 +518,13 @@ findSourceDirectories arguments =
 
 parseElmJsonSourceDirectoryPath : String -> { parentLevel : Int, subdirectories : List String }
 parseElmJsonSourceDirectoryPath pathInJson =
-    if String.startsWith "./" pathInJson then
-        parseElmJsonSourceDirectoryPath (String.dropLeft 2 pathInJson)
-
-    else if String.startsWith "." pathInJson then
-        parseElmJsonSourceDirectoryPath (String.dropLeft 1 pathInJson)
+    if String.contains "\\" pathInJson then
+        parseElmJsonSourceDirectoryPath (String.replace "\\" "/" pathInJson)
 
     else
         let
             pathItems =
-                List.concatMap
-                    (String.split "\\")
-                    (String.split "/" pathInJson)
+                String.split "/" pathInJson
         in
         List.foldl
             (\nextSegment { parentLevel, subdirectories } ->
@@ -3413,7 +3426,7 @@ prepareReplaceFunctionInSourceFilesModuleText sourceDirs sourceFiles currentModu
                 Err error ->
                     Err ("Failed to identify file for '" ++ filePathRepresentation ++ "': " ++ error)
 
-                Ok ( matchingPath, fileTreeContent ) ->
+                Ok ( pathMatchInfo, fileTreeContent ) ->
                     prepareRecordTreeEmitForTreeOrBlobUnderPath [] config.encoding
                         |> Result.andThen
                             (\prepareOk ->
@@ -3461,7 +3474,11 @@ prepareReplaceFunctionInSourceFilesModuleText sourceDirs sourceFiles currentModu
                                             SourceFile ->
                                                 case fileTreeContent of
                                                     FileTree.TreeNode _ ->
-                                                        Err ("This pattern matches path '" ++ String.join "/" matchingPath ++ "' but the node here is a tree, not a file")
+                                                        Err
+                                                            ("This pattern matches path '"
+                                                                ++ String.join "/" pathMatchInfo.absolutePath
+                                                                ++ "' but the node here is a tree, not a file"
+                                                            )
 
                                                     FileTree.BlobNode fileContent ->
                                                         expressionFromFileContent fileContent
@@ -3689,11 +3706,21 @@ prepareElmMakeFunctionForEmit sourceDirs sourceFiles dependencies { filePathRepr
         Err error ->
             Err (OtherCompilationError ("Failed to identify file for '" ++ filePathRepresentation ++ "': " ++ error))
 
-        Ok ( entryPointFilePath, _ ) ->
+        Ok ( entryPointFileMatch, _ ) ->
             let
+                sharedLevels =
+                    Common.commonPrefixLength
+                        entryPointFileMatch.absolutePath
+                        sourceDirs.elmJsonDirectoryPath
+
+                entryPointFilePath =
+                    List.repeat (List.length sourceDirs.elmJsonDirectoryPath - sharedLevels) ".."
+                        ++ List.drop sharedLevels entryPointFileMatch.absolutePath
+
                 sourceFilesForElmMake =
-                    sourceFiles
-                        |> Dict.filter (\filePath _ -> includeFilePathInElmMakeRequest filePath)
+                    Dict.filter
+                        (\filePath _ -> includeFilePathInElmMakeRequest filePath)
+                        sourceFiles
 
                 elmMakeRequest =
                     { files = sourceFilesForElmMake
@@ -3955,11 +3982,17 @@ indentElmCodeLines level =
         >> String.join "\n"
 
 
+type alias DeclarationFileMatch =
+    { relativePath : List String
+    , absolutePath : List String
+    }
+
+
 findFileWithPathMatchingRepresentationInFunctionName :
     SourceDirectories
     -> AppFiles
     -> String
-    -> Result String ( List String, Bytes.Bytes )
+    -> Result String ( DeclarationFileMatch, Bytes.Bytes )
 findFileWithPathMatchingRepresentationInFunctionName sourceDirs sourceFiles pathPattern =
     findFileTreeNodeWithPathMatchingRepresentationInFunctionName sourceDirs sourceFiles pathPattern
         |> Result.andThen
@@ -3977,23 +4010,45 @@ findFileTreeNodeWithPathMatchingRepresentationInFunctionName :
     SourceDirectories
     -> AppFiles
     -> String
-    -> Result String ( List String, FileTree.FileTreeNode Bytes.Bytes )
+    -> Result String ( DeclarationFileMatch, FileTree.FileTreeNode Bytes.Bytes )
 findFileTreeNodeWithPathMatchingRepresentationInFunctionName sourceDirs sourceFiles pathPattern =
     let
+        fileTree : FileTree.FileTreeNode Bytes.Bytes
         fileTree =
-            sourceFiles
-                |> Dict.toList
-                |> List.map (Tuple.mapSecond FileTree.BlobNode)
-                |> List.foldl FileTree.setNodeAtPathInSortedFileTree (FileTree.TreeNode [])
+            Dict.foldl
+                (\filePath fileContent ->
+                    FileTree.setNodeAtPathInSortedFileTree
+                        ( filePath, FileTree.BlobNode fileContent )
+                )
+                (FileTree.TreeNode [])
+                sourceFiles
 
+        sourceDirectoryPaths : List (List String)
+        sourceDirectoryPaths =
+            sourceDirs.elmJsonDirectoryPath
+                :: (sourceDirs.mainSourceDirectoryPath :: sourceDirs.secondarySourceDirectories)
+
+        nodesWithRepresentations : List ( String, ( DeclarationFileMatch, FileTree.FileTreeNode Bytes.Bytes ) )
         nodesWithRepresentations =
-            fileTree
-                |> FileTree.getNodeAtPathFromFileTree sourceDirs.elmJsonDirectoryPath
-                |> Maybe.withDefault (FileTree.TreeNode [])
-                |> FileTree.listNodesWithPath
-                |> List.map (\( nodePath, node ) -> ( filePathRepresentationInFunctionName nodePath, ( nodePath, node ) ))
+            sourceDirectoryPaths
+                |> List.concatMap
+                    (\elmJsonDirectoryPath ->
+                        FileTree.getNodeAtPathFromFileTree elmJsonDirectoryPath fileTree
+                            |> Maybe.withDefault (FileTree.TreeNode [])
+                            |> FileTree.listNodesWithPath
+                            |> List.map
+                                (\( nodePathRelative, node ) ->
+                                    ( filePathRepresentationInFunctionName nodePathRelative
+                                    , ( { relativePath = nodePathRelative
+                                        , absolutePath = elmJsonDirectoryPath ++ nodePathRelative
+                                        }
+                                      , node
+                                      )
+                                    )
+                                )
+                    )
 
-        nodesGroupedByRepresentation : Dict.Dict String (List ( List String, FileTree.FileTreeNode Bytes.Bytes ))
+        nodesGroupedByRepresentation : Dict.Dict String (List ( DeclarationFileMatch, FileTree.FileTreeNode Bytes.Bytes ))
         nodesGroupedByRepresentation =
             nodesWithRepresentations
                 |> List.map Tuple.first
@@ -4002,7 +4057,10 @@ findFileTreeNodeWithPathMatchingRepresentationInFunctionName sourceDirs sourceFi
                 |> List.map
                     (\representation ->
                         ( representation
-                        , nodesWithRepresentations |> List.filter (Tuple.first >> (==) representation) |> List.map Tuple.second
+                        , nodesWithRepresentations
+                            |> List.filter (Tuple.first >> (==) representation)
+                            |> List.map Tuple.second
+                            |> List.Extra.uniqueBy (Tuple.first >> .absolutePath)
                         )
                     )
                 |> Dict.fromList
@@ -4046,15 +4104,18 @@ findFileTreeNodeWithPathMatchingRepresentationInFunctionName sourceDirs sourceFi
                             else
                                 [ "..." ]
                            )
+
+                sourceFilesPaths =
+                    Dict.keys sourceFiles
             in
-            [ [ "Did not find any source file node with a path matching the representation '"
+            [ [ "Did not find any file or directory with a path matching the representation '"
                     ++ pathPattern
                     ++ "'."
               ]
             , pointOutSimilarNamesLines
             , [ "There are "
                     ++ String.fromInt (Dict.size sourceFiles)
-                    ++ " files available in this compilation: "
+                    ++ " files and directories available in this compilation: "
                     ++ (examplesListItemsDisplayItems |> String.join ", ")
               ]
             ]
@@ -4069,7 +4130,7 @@ findFileTreeNodeWithPathMatchingRepresentationInFunctionName sourceDirs sourceFi
                     ++ "' is not unique because it matches "
                     ++ String.fromInt (List.length matchingFiles)
                     ++ " of the source files nodes: "
-                    ++ String.join ", " (List.map (Tuple.first >> String.join "/") matchingFiles)
+                    ++ String.join ", " (List.map (Tuple.first >> .absolutePath >> String.join "/") matchingFiles)
                 )
 
 
@@ -4630,7 +4691,11 @@ emitRecordExpressionFromRecordTree expressionFromLeafValue tree =
             "{ " ++ String.join "\n, " fieldsExpressions ++ "\n}"
 
 
-attemptMapRecordTreeLeaves : List String -> (List String -> a -> Result e b) -> CompilationInterfaceRecordTreeNode a -> Result (List ( List String, e )) (CompilationInterfaceRecordTreeNode b)
+attemptMapRecordTreeLeaves :
+    List String
+    -> (List String -> a -> Result e b)
+    -> CompilationInterfaceRecordTreeNode a
+    -> Result (List ( List String, e )) (CompilationInterfaceRecordTreeNode b)
 attemptMapRecordTreeLeaves pathPrefix attemptMapLeaf tree =
     case tree of
         RecordTreeLeaf leaf ->
@@ -4674,7 +4739,12 @@ mapRecordTreeLeaves mapLeaf tree =
                 |> RecordTreeBranch
 
 
-parseInterfaceRecordTree : (String -> e) -> (String -> leaf -> Result e leaf) -> ElmTypeAnnotation -> leaf -> Result ( List String, e ) (CompilationInterfaceRecordTreeNode leaf)
+parseInterfaceRecordTree :
+    (String -> e)
+    -> (String -> leaf -> Result e leaf)
+    -> ElmTypeAnnotation
+    -> leaf
+    -> Result ( List String, e ) (CompilationInterfaceRecordTreeNode leaf)
 parseInterfaceRecordTree errorFromString integrateFieldName typeAnnotation seed =
     let
         errorUnsupportedType typeText =
@@ -4787,12 +4857,20 @@ elmModuleNameFromFilePath sourceDirs filePath =
 
                     directoryName =
                         List.reverse directoryNameReversed
-                in
-                if List.Extra.isPrefixOf sourceDirs.mainSourceDirectoryPath directoryName then
-                    Just (List.drop (List.length sourceDirs.mainSourceDirectoryPath) directoryName ++ [ moduleNameLastItem ])
 
-                else
-                    Nothing
+                    sourceDirectoryPaths =
+                        sourceDirs.mainSourceDirectoryPath
+                            :: sourceDirs.secondarySourceDirectories
+                in
+                List.Extra.findMap
+                    (\sourceDir ->
+                        if List.Extra.isPrefixOf sourceDir directoryName then
+                            Just (List.drop (List.length sourceDir) directoryName ++ [ moduleNameLastItem ])
+
+                        else
+                            Nothing
+                    )
+                    sourceDirectoryPaths
 
 
 filePathFromElmModuleName : SourceDirectories -> List String -> List String

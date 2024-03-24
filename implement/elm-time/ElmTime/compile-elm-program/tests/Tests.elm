@@ -18,6 +18,7 @@ defaultSourceDirs : CompileElmApp.SourceDirectories
 defaultSourceDirs =
     { mainSourceDirectoryPath = [ "src" ]
     , elmJsonDirectoryPath = []
+    , secondarySourceDirectories = []
     }
 
 
@@ -1037,3 +1038,201 @@ jsonDecode_ListDict_Dict jsonDecode_type_parameter_key jsonDecode_type_parameter
                             |> Expect.equal expectedResult
             )
         |> Test.describe "emit json coding expressions from choice type"
+
+
+find_source_directories : Test.Test
+find_source_directories =
+    Test.describe "find source directories for compilation root"
+        ([ { testName = "simple case - elm init"
+           , compilationRootFilePath = [ "src", "Main.elm" ]
+           , sourceFiles =
+                Dict.fromList
+                    [ ( [ "elm.json" ]
+                      , """
+{
+    "type": "application",
+    "source-directories": [
+        "src"
+    ],
+    "elm-version": "0.19.1",
+    "dependencies": {
+        "direct": {
+            "elm/browser": "1.0.2",
+            "elm/core": "1.0.5",
+            "elm/html": "1.0.0"
+        },
+        "indirect": {
+            "elm/json": "1.1.3",
+            "elm/time": "1.0.0",
+            "elm/url": "1.0.0",
+            "elm/virtual-dom": "1.0.3"
+        }
+    },
+    "test-dependencies": {
+        "direct": {},
+        "indirect": {}
+    }
+}
+
+      """
+                      )
+                    ]
+           , expectedSourceDirectories =
+                { mainSourceDirectoryPath = [ "src" ]
+                , elmJsonDirectoryPath = []
+                , secondarySourceDirectories = []
+                }
+           , moduleNameFromFileNameTests =
+                [ { fileName = [ "src", "Main.elm" ]
+                  , expectedModuleName = Just [ "Main" ]
+                  }
+                ]
+           }
+         , { testName = "elm.json not at root"
+           , compilationRootFilePath = [ "appname", "src", "Main.elm" ]
+           , sourceFiles =
+                Dict.fromList
+                    [ ( [ "appname", "elm.json" ]
+                      , """
+{
+    "type": "application",
+    "source-directories": [
+        "src"
+    ],
+    "elm-version": "0.19.1",
+    "dependencies": {
+        "direct": {
+            "elm/browser": "1.0.2",
+            "elm/core": "1.0.5",
+            "elm/html": "1.0.0"
+        },
+        "indirect": {
+            "elm/json": "1.1.3",
+            "elm/time": "1.0.0",
+            "elm/url": "1.0.0",
+            "elm/virtual-dom": "1.0.3"
+        }
+    },
+    "test-dependencies": {
+        "direct": {},
+        "indirect": {}
+    }
+}
+
+      """
+                      )
+                    ]
+           , expectedSourceDirectories =
+                { mainSourceDirectoryPath = [ "appname", "src" ]
+                , elmJsonDirectoryPath = [ "appname" ]
+                , secondarySourceDirectories = []
+                }
+           , moduleNameFromFileNameTests =
+                [ { fileName = [ "appname", "src", "Main.elm" ]
+                  , expectedModuleName = Just [ "Main" ]
+                  }
+                ]
+           }
+         , { testName = "two apps and source directories"
+           , compilationRootFilePath = [ "experiment", "src", "Main.elm" ]
+           , sourceFiles =
+                Dict.fromList
+                    [ ( [ "experiment", "elm.json" ]
+                      , """
+{
+    "type": "application",
+    "source-directories": [
+        "src",
+        "./../core-app/src"
+    ],
+    "elm-version": "0.19.1",
+    "dependencies": {
+        "direct": {
+            "elm/browser": "1.0.2",
+            "elm/core": "1.0.5",
+            "elm/html": "1.0.0"
+        },
+        "indirect": {
+            "elm/json": "1.1.3",
+            "elm/time": "1.0.0",
+            "elm/url": "1.0.0",
+            "elm/virtual-dom": "1.0.3"
+        }
+    },
+    "test-dependencies": {
+        "direct": {},
+        "indirect": {}
+    }
+}
+
+      """
+                      )
+                    ]
+           , expectedSourceDirectories =
+                { mainSourceDirectoryPath = [ "experiment", "src" ]
+                , elmJsonDirectoryPath = [ "experiment" ]
+                , secondarySourceDirectories = [ [ "core-app", "src" ] ]
+                }
+           , moduleNameFromFileNameTests =
+                [ { fileName = [ "experiment", "src", "ExperimentMain.elm" ]
+                  , expectedModuleName = Just [ "ExperimentMain" ]
+                  }
+                , { fileName = [ "core-app", "src", "Main.elm" ]
+                  , expectedModuleName = Just [ "Main" ]
+                  }
+                ]
+           }
+         ]
+            |> List.map
+                (\testCase ->
+                    let
+                        findSourceDirectoriesResult =
+                            CompileElmApp.findSourceDirectories
+                                { compilationRootFilePath = testCase.compilationRootFilePath
+                                , sourceFiles = buildAppFilesFromStringContents testCase.sourceFiles
+                                }
+
+                        findSourceDirectoriesTest =
+                            Test.test
+                                "find source directories result"
+                            <|
+                                \() ->
+                                    findSourceDirectoriesResult
+                                        |> Expect.equal (Ok testCase.expectedSourceDirectories)
+                    in
+                    Test.describe testCase.testName
+                        (case findSourceDirectoriesResult of
+                            Err _ ->
+                                [ findSourceDirectoriesTest ]
+
+                            Ok findSourceDirectoriesOk ->
+                                let
+                                    moduleNameFromFileNameTests =
+                                        testCase.moduleNameFromFileNameTests
+                                            |> List.indexedMap
+                                                (\index moduleNameTestCase ->
+                                                    Test.test
+                                                        ("Module name from file name "
+                                                            ++ String.fromInt index
+                                                            ++ " ("
+                                                            ++ String.join "/" moduleNameTestCase.fileName
+                                                            ++ ")"
+                                                        )
+                                                    <|
+                                                        \() ->
+                                                            moduleNameTestCase.fileName
+                                                                |> CompileElmApp.elmModuleNameFromFilePath findSourceDirectoriesOk
+                                                                |> Expect.equal moduleNameTestCase.expectedModuleName
+                                                )
+                                in
+                                findSourceDirectoriesTest
+                                    :: moduleNameFromFileNameTests
+                        )
+                )
+        )
+
+
+buildAppFilesFromStringContents : Dict.Dict (List String) String -> CompileElmApp.AppFiles
+buildAppFilesFromStringContents =
+    Dict.map
+        (\_ text -> Bytes.Encode.encode (Bytes.Encode.string text))
