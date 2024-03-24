@@ -11,7 +11,7 @@ namespace TestElmTime;
 
 public class TestSetup
 {
-    public static string PathToExampleElmApps => "./../../../example-elm-apps";
+    public static string PathToTestElmApps => "./../../../test-elm-apps";
 
     public static PineValue AppConfigComponentFromFiles(
         IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> appFiles) =>
@@ -43,25 +43,25 @@ public class TestSetup
     }
 
     public static IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> CounterElmWebApp =>
-        GetElmAppFromExampleName("counter-webapp");
+        GetElmAppFromSubdirectoryName("counter-webapp");
 
     public static IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> CalculatorWebApp =>
-        GetElmAppFromExampleName("calculator-webapp");
+        GetElmAppFromSubdirectoryName("calculator-webapp");
 
     public static IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> ReadSourceFileWebApp =>
-        GetElmAppFromExampleName("read-source-file-webapp");
+        GetElmAppFromSubdirectoryName("read-source-file-webapp");
 
     public static IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> StringBuilderElmWebApp =>
-        GetElmAppFromExampleName("string-builder-webapp");
+        GetElmAppFromSubdirectoryName("string-builder-webapp");
 
     public static IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> CrossPropagateHttpHeadersToAndFromBodyElmWebApp =>
-       GetElmAppFromExampleName("cross-propagate-http-headers-to-and-from-body");
+       GetElmAppFromSubdirectoryName("cross-propagate-http-headers-to-and-from-body");
 
     public static IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> HttpProxyWebApp =>
-       GetElmAppFromExampleName("http-proxy");
+       GetElmAppFromSubdirectoryName("http-proxy");
 
     public static IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> VolatileProcessNativeWebApp =>
-       GetElmAppFromExampleName("volatile-process-native");
+       GetElmAppFromSubdirectoryName("volatile-process-native");
 
     public static IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> WithWebServiceConfigJson(
         IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> originalDeploymentFiles,
@@ -77,8 +77,8 @@ public class TestSetup
                 System.Text.Encoding.UTF8.GetBytes(System.Text.Json.JsonSerializer.Serialize(jsonStructure)));
     }
 
-    public static IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> GetElmAppFromExampleName(
-        string exampleName) => GetElmAppFromDirectoryPath(Path.Combine(PathToExampleElmApps, exampleName));
+    public static IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> GetElmAppFromSubdirectoryName(
+        string directoryName) => GetElmAppFromDirectoryPath(Path.Combine(PathToTestElmApps, directoryName));
 
     private static string FilePathStringFromPath(IReadOnlyList<string> path) =>
         Path.Combine([.. path]);

@@ -13,7 +13,7 @@ public class ElmAppCompilationInterfaceTests
     [TestMethod]
     public void Compilation_interface_with_file_paths_from_multiple_source_directories()
     {
-        var defaultAppSourceFiles = TestSetup.GetElmAppFromExampleName("compilation-interface-multiple-source-dir");
+        var defaultAppSourceFiles = TestSetup.GetElmAppFromSubdirectoryName("compilation-interface-multiple-source-dir");
 
         var demoFiles = new[]
         {

@@ -744,7 +744,7 @@ public class WebServiceTests
     [TestMethod]
     public void Web_host_prevents_damaging_backend_state_with_invalid_migration()
     {
-        var deploymentFiles = TestSetup.GetElmAppFromExampleName("test-prevent-damage-by-migrate-webapp");
+        var deploymentFiles = TestSetup.GetElmAppFromSubdirectoryName("test-prevent-damage-by-migrate-webapp");
 
         var deploymentZipArchive = ZipArchive.ZipArchiveFromEntries(deploymentFiles);
 
@@ -845,7 +845,7 @@ public class WebServiceTests
         var initialDeployment = ElmWebServiceAppTests.CounterWebApp;
 
         var migrateAndSecondDeployment =
-            TestSetup.GetElmAppFromExampleName("migrate-from-int-to-string-builder-web-app");
+            TestSetup.GetElmAppFromSubdirectoryName("migrate-from-int-to-string-builder-web-app");
 
         var migrateAndSecondDeploymentZipArchive =
             ZipArchive.ZipArchiveFromEntries(migrateAndSecondDeployment);
@@ -1369,7 +1369,7 @@ public class WebServiceTests
     [TestMethod]
     public void Web_host_supports_long_polling()
     {
-        var appSourceFiles = TestSetup.GetElmAppFromExampleName("http-long-polling");
+        var appSourceFiles = TestSetup.GetElmAppFromSubdirectoryName("http-long-polling");
 
         using var testSetup = WebHostAdminInterfaceTestSetup.Setup(deployAppAndInitElmState: TestSetup.AppConfigComponentFromFiles(appSourceFiles));
 
@@ -1409,7 +1409,7 @@ public class WebServiceTests
     [TestMethod]
     public void Volatile_process_from_local_blob()
     {
-        var appSourceFiles = TestSetup.GetElmAppFromExampleName("volatile-process-from-local-blob");
+        var appSourceFiles = TestSetup.GetElmAppFromSubdirectoryName("volatile-process-from-local-blob");
 
         using var testSetup = WebHostAdminInterfaceTestSetup.Setup(deployAppAndInitElmState: TestSetup.AppConfigComponentFromFiles(appSourceFiles));
         using var server = testSetup.StartWebHost();
