@@ -45,10 +45,10 @@ The workspace link URL we get from the UI contains three components:
 
 The model describing the files in a workspace is optimized for typical training scenarios. Users often enter a workspace with a state as already modeled in a git repository in a subdirectory. Using an URL to a git tree in hosting services like GitHub or GitLab is sufficient to describe the workspace state. The editor then contacts the corresponding git hosting service to load the git repository contents. While loading is in progress, the app displays a message informing about the loading operation.
 
-An example of such an URL to a git tree is <https://github.com/onlinegamemaker/making-online-games/tree/6838f7100dd86c8c8afcfe3efd553f8fa39c77ae/games-program-codes/simple-snake>
+An example of such an URL to a git tree is <https://github.com/onlinegamemaker/making-online-games/tree/50a1e1a8c5f6edebfd834016fb609b7baa19954b/games-program-codes/simple-snake>
 
 The corresponding URL into the editor looks like this:
-<https://elm-editor.com/?workspace-state=https%3A%2F%2Fgithub.com%2Fonlinegamemaker%2Fmaking-online-games%2Ftree%2F6838f7100dd86c8c8afcfe3efd553f8fa39c77ae%2Fgames-program-codes%2Fsimple-snake>
+<https://elm-editor.com/?workspace-state=https%3A%2F%2Fgithub.com%2Fonlinegamemaker%2Fmaking-online-games%2Ftree%2F50a1e1a8c5f6edebfd834016fb609b7baa19954b%2Fgames-program-codes%2Fsimple-snake>
 
 When a user started with a state from a git tree and made some changes, generating a link will encode the workspace state as the difference relative to that git tree. This encoding leads to much smaller URLs. Like in the case of a pure git URL, the editor loads the base from the third-party service. When the loading from git is complete, Elm Editor applies the changes encoded with the URL on top to compute the final file tree.
 

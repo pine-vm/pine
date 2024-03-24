@@ -89,14 +89,14 @@ type alias State =
     { navigationKey : Navigation.Key
     , url : Url.Url
     , time : Time.Posix
-    , workspace : WorkspaceStateStructure
+    , workspace : WorkspaceStateStruct
     , popup : Maybe PopupState
     , lastBackendLoadFromGitResult : Maybe ( String, Result (Http.Detailed.Error String) (Result String BackendLoadFromGitOkWithCache) )
     }
 
 
-type WorkspaceStateStructure
-    = WorkspaceOk WorkspaceOkStruct
+type WorkspaceStateStruct
+    = WorkspaceActive WorkspaceActiveStruct
     | WorkspaceLoadingFromLink
         { workspaceStateDescription : WorkspaceState_2021_01.WorkspaceState
         , filePathToOpen : Maybe (List String)
@@ -105,7 +105,7 @@ type WorkspaceStateStructure
     | WorkspaceErr String
 
 
-type alias WorkspaceOkStruct =
+type alias WorkspaceActiveStruct =
     { fileTree : FileTreeInWorkspace.FileTreeNode
     , editing : { filePathOpenedInEditor : Maybe (List String) }
     , decodeMessageFromMonacoEditorError : Maybe Json.Decode.Error
@@ -396,7 +396,7 @@ update event stateBefore =
 
         UserInputMouseOverTitleBarMenu maybeMenuEntry ->
             case stateBefore.workspace of
-                WorkspaceOk _ ->
+                WorkspaceActive _ ->
                     let
                         fromOpened opened =
                             maybeMenuEntry |> Maybe.map (\menuEntry -> TitlebarMenu menuEntry opened)
@@ -423,12 +423,12 @@ update event stateBefore =
 
         UserInputGetLinkToWorkspace generateLink ->
             case stateBefore.workspace of
-                WorkspaceOk workingState ->
+                WorkspaceActive workspaceActive ->
                     let
                         urlToWorkspace =
                             setWorkspaceStateInUrlForBookmark
                                 { createDiffIfBaseAvailable = generateLink.createDiffIfBaseAvailable }
-                                workingState
+                                workspaceActive
                                 stateBefore
                                 |> Url.toString
 
@@ -501,22 +501,22 @@ update event stateBefore =
                     , filePathOpenedInEditor = Nothing
                     }
                         |> initWorkspaceFromFileTreeAndFileSelection
-                        |> WorkspaceOk
+                        |> WorkspaceActive
               }
             , urlToPush |> Navigation.pushUrl stateBefore.navigationKey
             )
 
         UserInputExportWorkspaceToZipArchive { sendDownloadCmd } ->
             case stateBefore.workspace of
-                WorkspaceOk workingState ->
+                WorkspaceActive workspaceActive ->
                     let
                         cmd =
                             if sendDownloadCmd then
                                 let
                                     workspaceStateHash =
-                                        FileTreeInWorkspace.compositionHashFromFileTreeNode workingState.fileTree
+                                        FileTreeInWorkspace.compositionHashFromFileTreeNode workspaceActive.fileTree
                                 in
-                                workingState.fileTree
+                                workspaceActive.fileTree
                                     |> buildZipArchiveFromFileTree
                                     |> Zip.toBytes
                                     |> File.Download.bytes
@@ -585,7 +585,7 @@ update event stateBefore =
 
         WorkspaceEvent workspaceEvent ->
             case stateBefore.workspace of
-                WorkspaceOk workspaceBefore ->
+                WorkspaceActive workspaceBefore ->
                     let
                         workspaceEventIsEditorGotFocus =
                             case workspaceEvent of
@@ -628,7 +628,7 @@ update event stateBefore =
                             else
                                 Cmd.none
                     in
-                    ( { stateBefore | workspace = WorkspaceOk workspace }
+                    ( { stateBefore | workspace = WorkspaceActive workspace }
                         |> mapForFocusOutsideTitlebarMenu
                     , [ Cmd.map WorkspaceEvent workspaceCmd
                       , setWorkspaceStateInUrlCmd
@@ -713,8 +713,8 @@ userInputFocusOutsideTitlebarMenu stateBefore =
         stateBefore
 
 
-setWorkspaceStateInUrlForBookmark : { createDiffIfBaseAvailable : Bool } -> WorkspaceOkStruct -> State -> Url.Url
-setWorkspaceStateInUrlForBookmark { createDiffIfBaseAvailable } workingState state =
+setWorkspaceStateInUrlForBookmark : { createDiffIfBaseAvailable : Bool } -> WorkspaceActiveStruct -> State -> Url.Url
+setWorkspaceStateInUrlForBookmark { createDiffIfBaseAvailable } workspaceActive state =
     let
         baseToUse =
             if not createDiffIfBaseAvailable then
@@ -727,9 +727,9 @@ setWorkspaceStateInUrlForBookmark { createDiffIfBaseAvailable } workingState sta
     in
     state.url
         |> Frontend.WorkspaceStateInUrl.setWorkspaceStateInUrl
-            workingState.fileTree
+            workspaceActive.fileTree
             baseToUse
-            { filePathToOpen = workingState.editing.filePathOpenedInEditor }
+            { filePathToOpen = workspaceActive.editing.filePathOpenedInEditor }
 
 
 updateForUserInputLoadFromGit : { time : Time.Posix } -> UserInputLoadFromGitEventStructure -> LoadFromGitDialogState -> ( LoadFromGitDialogState, Cmd Event )
@@ -775,8 +775,8 @@ updateForUserInputLoadFromGit { time } event dialogStateBefore =
 updateWorkspace :
     { time : Time.Posix }
     -> WorkspaceEventStructure
-    -> WorkspaceOkStruct
-    -> ( WorkspaceOkStruct, Cmd WorkspaceEventStructure )
+    -> WorkspaceActiveStruct
+    -> ( WorkspaceActiveStruct, Cmd WorkspaceEventStructure )
 updateWorkspace updateConfig event stateBeforeApplyingEvent =
     let
         ( stateBeforeConsiderCompile, cmd ) =
@@ -876,19 +876,19 @@ updateWorkspace updateConfig event stateBeforeApplyingEvent =
     )
 
 
-filePathOpenedInEditorFromWorkspace : WorkspaceOkStruct -> Maybe (List String)
+filePathOpenedInEditorFromWorkspace : WorkspaceActiveStruct -> Maybe (List String)
 filePathOpenedInEditorFromWorkspace =
     fileOpenedInEditorFromWorkspace >> Maybe.map Tuple.first
 
 
-fileOpenedInEditorFromWorkspace : WorkspaceOkStruct -> Maybe ( List String, FileTreeInWorkspace.BlobNodeWithCache )
-fileOpenedInEditorFromWorkspace workingState =
-    case workingState.editing.filePathOpenedInEditor of
+fileOpenedInEditorFromWorkspace : WorkspaceActiveStruct -> Maybe ( List String, FileTreeInWorkspace.BlobNodeWithCache )
+fileOpenedInEditorFromWorkspace workspaceActive =
+    case workspaceActive.editing.filePathOpenedInEditor of
         Nothing ->
             Nothing
 
         Just filePathOpenedInEditor ->
-            case workingState.fileTree |> FileTree.getBlobAtPathFromFileTree filePathOpenedInEditor of
+            case workspaceActive.fileTree |> FileTree.getBlobAtPathFromFileTree filePathOpenedInEditor of
                 Nothing ->
                     Nothing
 
@@ -899,8 +899,8 @@ fileOpenedInEditorFromWorkspace workingState =
 updateWorkspaceWithoutCmdToUpdateEditor :
     { time : Time.Posix }
     -> WorkspaceEventStructure
-    -> WorkspaceOkStruct
-    -> ( WorkspaceOkStruct, Cmd WorkspaceEventStructure )
+    -> WorkspaceActiveStruct
+    -> ( WorkspaceActiveStruct, Cmd WorkspaceEventStructure )
 updateWorkspaceWithoutCmdToUpdateEditor updateConfig event stateBefore =
     case event of
         UserInputOpenFileInEditor filePath ->
@@ -1192,8 +1192,8 @@ parseElmFormatResponse response =
 
 provideCompletionItems :
     Frontend.MonacoEditor.RequestCompletionItemsStruct
-    -> WorkspaceOkStruct
-    -> ( WorkspaceOkStruct, List Frontend.MonacoEditor.MonacoCompletionItem )
+    -> WorkspaceActiveStruct
+    -> ( WorkspaceActiveStruct, List Frontend.MonacoEditor.MonacoCompletionItem )
 provideCompletionItems request stateBefore =
     case stateBefore.editing.filePathOpenedInEditor of
         Nothing ->
@@ -1212,8 +1212,8 @@ provideCompletionItems request stateBefore =
 
 provideHover :
     Frontend.MonacoEditor.RequestHoverStruct
-    -> WorkspaceOkStruct
-    -> ( WorkspaceOkStruct, List String )
+    -> WorkspaceActiveStruct
+    -> ( WorkspaceActiveStruct, List String )
 provideHover request stateBefore =
     case stateBefore.editing.filePathOpenedInEditor of
         Nothing ->
@@ -1233,8 +1233,8 @@ provideHover request stateBefore =
 
 updateAndGetFromLanguageService :
     (LanguageService.LanguageServiceState -> a)
-    -> WorkspaceOkStruct
-    -> ( WorkspaceOkStruct, a )
+    -> WorkspaceActiveStruct
+    -> ( WorkspaceActiveStruct, a )
 updateAndGetFromLanguageService getFromLangService stateBefore =
     let
         languageServiceState =
@@ -1257,8 +1257,11 @@ processEventUrlChanged url stateBefore =
 
         workspaceWithMatchingStateHashAlreadyLoaded =
             case stateBefore.workspace of
-                WorkspaceOk workingState ->
-                    Just (Frontend.WorkspaceStateInUrl.workspaceStateCompositionHash (FileTreeInWorkspace.mapBlobsToBytes workingState.fileTree))
+                WorkspaceActive workspaceActive ->
+                    Just
+                        (Frontend.WorkspaceStateInUrl.workspaceStateCompositionHash
+                            (FileTreeInWorkspace.mapBlobsToBytes workspaceActive.fileTree)
+                        )
                         == workspaceStateExpectedCompositionHash
 
                 _ ->
@@ -1406,7 +1409,7 @@ updateForLoadedWorkspaceState config loadedBaseWorkspaceState workspaceStateDiff
                             , filePathOpenedInEditor = config.filePathToOpen
                             }
                                 |> initWorkspaceFromFileTreeAndFileSelection
-                                |> WorkspaceOk
+                                |> WorkspaceActive
                     }
                         |> Ok
             in
@@ -1445,7 +1448,7 @@ fileTreeNodeFromListFileWithPath =
         >> FileTreeInWorkspace.sortedFileTreeFromListOfBlobsAsBytes
 
 
-elmFormatCmdFromState : WorkspaceOkStruct -> Maybe ( String, Cmd WorkspaceEventStructure )
+elmFormatCmdFromState : WorkspaceActiveStruct -> Maybe ( String, Cmd WorkspaceEventStructure )
 elmFormatCmdFromState state =
     case fileOpenedInEditorFromWorkspace state of
         Nothing ->
@@ -1497,7 +1500,7 @@ loadFromGitCmd urlIntoGitRepository =
         (Result.map Tuple.second >> BackendLoadFromGitResultEvent urlIntoGitRepository)
 
 
-compileFileOpenedInEditor : WorkspaceOkStruct -> ( WorkspaceOkStruct, Cmd WorkspaceEventStructure )
+compileFileOpenedInEditor : WorkspaceActiveStruct -> ( WorkspaceActiveStruct, Cmd WorkspaceEventStructure )
 compileFileOpenedInEditor stateBefore =
     case prepareCompileForFileOpenedInEditor stateBefore of
         Nothing ->
@@ -1519,7 +1522,7 @@ compileFileOpenedInEditor stateBefore =
             )
 
 
-syntaxInspectFileOpenedInEditor : WorkspaceOkStruct -> ( WorkspaceOkStruct, Cmd WorkspaceEventStructure )
+syntaxInspectFileOpenedInEditor : WorkspaceActiveStruct -> ( WorkspaceActiveStruct, Cmd WorkspaceEventStructure )
 syntaxInspectFileOpenedInEditor stateBefore =
     case fileOpenedInEditorFromWorkspace stateBefore of
         Nothing ->
@@ -1571,7 +1574,7 @@ requestToBackendCmdFromCompilationInProgress compilation =
 
 
 prepareCompileForFileOpenedInEditor :
-    WorkspaceOkStruct
+    WorkspaceActiveStruct
     -> Maybe { requestFromUserIdentity : ElmMakeRequestStructure, compile : () -> CompilationState }
 prepareCompileForFileOpenedInEditor workspace =
     case workspace.editing.filePathOpenedInEditor of
@@ -1827,12 +1830,12 @@ view state =
                         , expectedCompositionHash = expectedCompositionHash
                         }
 
-                WorkspaceOk workingState ->
+                WorkspaceActive workspaceActive ->
                     let
                         workspacePaneLayout paneProperties =
                             let
                                 widthFillPortion =
-                                    if workingState.viewEnlargedPane == Just paneProperties.pane then
+                                    if workspaceActive.viewEnlargedPane == Just paneProperties.pane then
                                         40
 
                                     else
@@ -1847,7 +1850,7 @@ view state =
                                         , Element.clip
                                         , Element.htmlAttribute (HA.style "flex-shrink" "1")
                                         ]
-                              , toggleEnlargedPaneButton workingState paneProperties.pane
+                              , toggleEnlargedPaneButton workspaceActive paneProperties.pane
                                     |> Element.el [ Element.alignTop, Element.alignRight ]
                               ]
                                 |> Element.row
@@ -1863,7 +1866,7 @@ view state =
                                     ]
 
                         workspaceView =
-                            case workingState.editing.filePathOpenedInEditor of
+                            case workspaceActive.editing.filePathOpenedInEditor of
                                 Nothing ->
                                     { editorPaneHeader =
                                         [ Element.text "Choose a file to open in the editor" ]
@@ -1882,7 +1885,7 @@ view state =
                                             { selectEventFromNode = selectEventFromFileTreeNode
                                             , iconFromFileName = Visuals.iconFromFileName
                                             }
-                                            (sortFileTreeForExplorerView workingState.fileTree)
+                                            (sortFileTreeForExplorerView workspaceActive.fileTree)
                                             |> Element.el
                                                 [ Element.scrollbars
                                                 , Element.width Element.fill
@@ -1988,7 +1991,7 @@ view state =
                                                     ]
 
                                         editorModalOverlay =
-                                            case workingState.elmFormat of
+                                            case workspaceActive.elmFormat of
                                                 Nothing ->
                                                     Nothing
 
@@ -2096,7 +2099,7 @@ view state =
                                     }
 
                         outputPaneElements =
-                            viewOutputPaneContent workingState
+                            viewOutputPaneContent workspaceActive
                     in
                     [ [ workspacePaneLayout
                             { pane = EditorPane
@@ -2174,8 +2177,8 @@ view state =
 
                 Just (ModalDialog (GetLinkToWorkspaceDialog dialog)) ->
                     case state.workspace of
-                        WorkspaceOk workingState ->
-                            viewGetLinkToWorkspaceDialog dialog workingState.fileTree
+                        WorkspaceActive workspaceActive ->
+                            viewGetLinkToWorkspaceDialog dialog workspaceActive.fileTree
                                 |> popupWindowElementAttributesFromAttributes
 
                         _ ->
@@ -2187,8 +2190,8 @@ view state =
 
                 Just (ModalDialog ExportToZipArchiveDialog) ->
                     case state.workspace of
-                        WorkspaceOk workingState ->
-                            viewExportToZipArchiveDialog workingState.fileTree
+                        WorkspaceActive workspaceActive ->
+                            viewExportToZipArchiveDialog workspaceActive.fileTree
                                 |> popupWindowElementAttributesFromAttributes
 
                         _ ->
@@ -2374,7 +2377,7 @@ viewFileTreeList =
         >> Element.column [ Element.width Element.fill ]
 
 
-toggleEnlargedPaneButton : WorkspaceOkStruct -> WorkspacePane -> Element.Element WorkspaceEventStructure
+toggleEnlargedPaneButton : WorkspaceActiveStruct -> WorkspacePane -> Element.Element WorkspaceEventStructure
 toggleEnlargedPaneButton state pane =
     let
         ( icon, onPress ) =
@@ -2891,7 +2894,7 @@ popupWindowElementAttributesFromAttributes { title, titleIcon, guideParagraphIte
 
 
 viewOutputPaneContent :
-    WorkspaceOkStruct
+    WorkspaceActiveStruct
     -> { mainContent : Element.Element WorkspaceEventStructure, header : Element.Element WorkspaceEventStructure }
 viewOutputPaneContent state =
     case state.syntaxInspection of
@@ -3013,7 +3016,7 @@ viewOutputPaneContent state =
 
 
 viewOutputPaneContentFromCompilationComplete :
-    WorkspaceOkStruct
+    WorkspaceActiveStruct
     -> CompilationState
     -> LoweringCompleteStruct
     -> Result (Http.Detailed.Error String) ElmMakeResultStructure
@@ -3719,7 +3722,7 @@ titlebarMenuEntryDropdownContent state menuEntry =
     let
         canSaveWorkspace =
             case state.workspace of
-                WorkspaceOk _ ->
+                WorkspaceActive _ ->
                     True
 
                 _ ->
@@ -3885,7 +3888,7 @@ defaultWorkspaceLink =
 
 initWorkspaceFromFileTreeAndFileSelection :
     { fileTree : FileTreeInWorkspace.FileTreeNode, filePathOpenedInEditor : Maybe (List String) }
-    -> WorkspaceOkStruct
+    -> WorkspaceActiveStruct
 initWorkspaceFromFileTreeAndFileSelection { fileTree, filePathOpenedInEditor } =
     { fileTree = fileTree
     , editing = { filePathOpenedInEditor = filePathOpenedInEditor }
