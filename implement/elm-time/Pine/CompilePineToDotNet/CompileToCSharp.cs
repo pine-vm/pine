@@ -758,7 +758,7 @@ public partial class CompileToCSharp
                     ExprResolvedInFunction.ExprResolvedToFunctionParam resolvedToParam =>
                     Result<string, CompiledExpression>.ok(
                         CompiledExpression.WithTypeGenericValue(
-                            PineCSharpSyntaxFactory.BuildCSharpExpressionToGetItemFromPath(
+                            PineCSharpSyntaxFactory.BuildCSharpExpressionToGetItemFromPathOrEmptyList(
                                 compositionExpr: SyntaxFactory.IdentifierName(resolvedToParam.ParameterName),
                                 path: resolvedToParam.PathFromParam))),
 
@@ -1118,7 +1118,7 @@ public partial class CompileToCSharp
                 PineCSharpSyntaxFactory.GenericInvocationThrowingRuntimeExceptionOnError(
                     environment.FunctionEnvironment,
                     SyntaxFactory.IdentifierName(MemberNameForExpression(parseAndEvalExprHash)),
-                    PineCSharpSyntaxFactory.BuildCSharpExpressionToGetItemFromPath(
+                    PineCSharpSyntaxFactory.BuildCSharpExpressionToGetItemFromPathOrNull(
                         SyntaxFactory.IdentifierName(currentEnvParam.paramName),
                         path: currentEnvParam.pathFromParam));
 

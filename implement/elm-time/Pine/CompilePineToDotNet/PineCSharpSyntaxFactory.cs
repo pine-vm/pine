@@ -70,7 +70,7 @@ public static class PineCSharpSyntaxFactory
                 return
                 SyntaxFactory.BinaryExpression(
                     SyntaxKind.EqualsExpression,
-                    BuildCSharpExpressionToGetItemFromPath(
+                    BuildCSharpExpressionToGetItemFromPathOrNull(
                         SyntaxFactory.IdentifierName(currentEnvParam.paramName),
                         path: currentEnvParam.pathFromParam),
                     SyntaxFactory.IdentifierName(valueDeclName));
@@ -342,7 +342,22 @@ public static class PineCSharpSyntaxFactory
                 path: [.. path.Skip(1)]);
     }
 
-    public static ExpressionSyntax BuildCSharpExpressionToGetItemFromPath(
+    public static ExpressionSyntax BuildCSharpExpressionToGetItemFromPathOrEmptyList(
+        ExpressionSyntax compositionExpr,
+        IReadOnlyList<int> path)
+    {
+        if (path.Count is 0)
+            return compositionExpr;
+
+        return
+            SyntaxFactory.ParenthesizedExpression(
+                SyntaxFactory.BinaryExpression(
+                    SyntaxKind.CoalesceExpression,
+                    BuildCSharpExpressionToGetItemFromPathOrNull(compositionExpr, path),
+                    PineValueEmptyListSyntax));
+    }
+
+    public static ExpressionSyntax BuildCSharpExpressionToGetItemFromPathOrNull(
         ExpressionSyntax compositionExpr,
         IReadOnlyList<int> path)
     {
