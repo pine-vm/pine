@@ -1775,7 +1775,8 @@ compileElmSyntaxCaseBlockCase stackBefore caseBlockValueExpression ( elmPatternN
                 |> compileElmSyntaxExpression stack
                 |> Result.map
                     (\expression ->
-                        { conditionExpressions = deconstruction.conditionExpressions caseBlockValueExpression
+                        { conditionExpressions =
+                            deconstruction.conditionExpressions caseBlockValueExpression
                         , thenExpression =
                             if deconstruction.declarations == [] then
                                 expression
@@ -1854,13 +1855,31 @@ compileElmSyntaxPattern elmPattern =
 
                     Ok itemsResults ->
                         let
+                            expectedLength =
+                                List.length listItems
+
                             matchesLengthCondition : Expression -> Expression
                             matchesLengthCondition =
                                 \deconstructedExpression ->
-                                    equalCondition
-                                        [ LiteralExpression (Pine.valueFromInt (List.length listItems))
-                                        , countListElementsExpression deconstructedExpression
-                                        ]
+                                    let
+                                        genericLengthCheckExpr () =
+                                            equalCondition
+                                                [ LiteralExpression (Pine.valueFromInt expectedLength)
+                                                , countListElementsExpression deconstructedExpression
+                                                ]
+                                    in
+                                    case deconstructedExpression of
+                                        ListExpression deconstructedList ->
+                                            LiteralExpression
+                                                (if List.length deconstructedList == expectedLength then
+                                                    Pine.trueValue
+
+                                                 else
+                                                    Pine.falseValue
+                                                )
+
+                                        _ ->
+                                            genericLengthCheckExpr ()
 
                             conditionExpressions : Expression -> List Expression
                             conditionExpressions =

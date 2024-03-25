@@ -1937,6 +1937,22 @@ searchForExpressionReduction expression =
                 _ ->
                     attemptReduceViaEval ()
 
+        Pine.ConditionalExpression conditional ->
+            if pineExpressionIsIndependent conditional.condition then
+                case Pine.evaluateExpression Pine.emptyEvalContext conditional.condition of
+                    Err _ ->
+                        Nothing
+
+                    Ok conditionValue ->
+                        if conditionValue == Pine.trueValue then
+                            Just conditional.ifTrue
+
+                        else
+                            Just conditional.ifFalse
+
+            else
+                attemptReduceViaEval ()
+
         _ ->
             attemptReduceViaEval ()
 
