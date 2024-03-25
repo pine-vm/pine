@@ -198,16 +198,16 @@ public abstract record ExpressionEnvClass
     {
         public ImmutableHashSet<IReadOnlyList<int>> ParsedEnvItems { get; }
 
-        public ImmutableHashSet<(EnvConstraintId constraint, Expression expr)> OtherExpr { get; }
+        public ImmutableHashSet<(EnvConstraintId constraint, Expression expr)> ExprOnRecursionPath { get; }
 
         public ConstrainedEnv(
             IEnumerable<IReadOnlyList<int>> parsedEnvItems,
-            IEnumerable<(EnvConstraintId, Expression)> otherExpr)
+            IEnumerable<(EnvConstraintId, Expression)> exprOnRecursionPath)
         {
             ParsedEnvItems =
                 parsedEnvItems.ToImmutableHashSet(equalityComparer: IntPathEqualityComparer.Instance);
 
-            OtherExpr = otherExpr.ToImmutableHashSet();
+            ExprOnRecursionPath = exprOnRecursionPath.ToImmutableHashSet();
         }
 
         public override int GetHashCode() =>
@@ -249,8 +249,8 @@ public abstract record ExpressionEnvClass
 
             return new ConstrainedEnv(
                 mergedParsedEnvItems,
-                otherExpr:
-                [.. selfConstrained.OtherExpr, .. otherConstrained.OtherExpr]);
+                exprOnRecursionPath:
+                [.. selfConstrained.ExprOnRecursionPath, .. otherConstrained.ExprOnRecursionPath]);
         }
 
         throw new NotImplementedException();
@@ -379,7 +379,7 @@ public class CodeAnalysis
         var currentStackFrameEnv =
             new ExpressionEnvClass.ConstrainedEnv(
                 currentParsedEnvItems,
-                otherExpr: []);
+                exprOnRecursionPath: []);
 
         var currentEnvConstraintId = EnvConstraintId.Create(currentStackFrameEnv, environment);
 
@@ -415,7 +415,10 @@ public class CodeAnalysis
         prevStackItem.EnvConstraintId == currentStackFrame.EnvConstraintId
         ))
         {
-            return currentStackFrameEnv;
+            return new ExpressionEnvClass.ConstrainedEnv(
+                currentStackFrameEnv.ParsedEnvItems,
+                exprOnRecursionPath: stack.Skip(1).Select(stackItem => (stackItem.EnvConstraintId, stackItem.Expression)).ToImmutableHashSet()
+            );
         }
 
         var nextStack = stack.Append(currentStackFrame).ToImmutableArray();
@@ -529,8 +532,7 @@ public class CodeAnalysis
 
             return new ExpressionEnvClass.ConstrainedEnv(
                 parsedEnvItemsMappedPaths,
-                otherExpr:
-                [.. childConstrainedEnv.OtherExpr, (childConstraintId, parsedChildExpr)]);
+                exprOnRecursionPath: childConstrainedEnv.ExprOnRecursionPath);
         }
 
         var descendantsEnvUsages =

@@ -141,7 +141,7 @@ public class ProfilingPineVM
         var constraintId = EnvConstraintId.Create(constrained, environment);
 
         var otherExprFittingConstraint =
-            constrained.OtherExpr
+            constrained.ExprOnRecursionPath
             .Where(exprInRecursion => constraintId.ConstraintSatisfiesConstraint(exprInRecursion.constraint))
             .Select(exprInRecursion => exprInRecursion.expr)
             .ToImmutableList();
