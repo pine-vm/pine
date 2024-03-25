@@ -280,4 +280,21 @@ public record CompiledExpressionDependencies(
 
 public record CompiledExpressionId(
     PineValue ExpressionValue,
-    string ExpressionHashBase16);
+    string ExpressionHashBase16)
+{
+    public virtual bool Equals(CompiledExpressionId? other)
+    {
+        if (ReferenceEquals(this, other))
+            return true;
+
+        if (other is null)
+            return false;
+
+        return ExpressionHashBase16 == other.ExpressionHashBase16;
+    }
+
+    public override int GetHashCode()
+    {
+        return ExpressionHashBase16.GetHashCode();
+    }
+}

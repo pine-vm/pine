@@ -1111,7 +1111,8 @@ public partial class CompileToCSharp
         CompiledExpression continueWithGenericCase()
         {
             var currentEnvParam =
-                environment.FunctionEnvironment.SelfInterface.GetParamForEnvItemPath([]) ?? throw new ArgumentNullException();
+                environment.FunctionEnvironment.SelfInterface.GetParamForEnvItemPath([])
+                ?? throw new Exception("Failed to get param for complete environment");
 
             var invocationExpression =
                 PineCSharpSyntaxFactory.GenericInvocationThrowingRuntimeExceptionOnError(
@@ -1178,7 +1179,11 @@ public partial class CompileToCSharp
                                 innerExpression,
                                 out var exprEntry))
                             {
-                                foreach (var specializedEnvConstraint in exprEntry.AvailableSpecialized)
+                                var specializedMostConstrainedFirst =
+                                    exprEntry.AvailableSpecialized
+                                    .OrderByDescending(kv => kv.Key.ParsedEnvItems.Count);
+
+                                foreach (var specializedEnvConstraint in specializedMostConstrainedFirst)
                                 {
                                     if (Enumerable.All(specializedEnvConstraint.Key.ParsedEnvItems, ChildEnvContstraintItemSatisfied))
                                     {

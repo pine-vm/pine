@@ -299,6 +299,7 @@ public class InteractiveSessionPine : IInteractiveSession
             exprUsageSamples
             .Select(sample => sample.Analysis.Value.ToMaybe())
             .WhereNotNothing()
+            .SelectMany(usage => usage)
             .ToImmutableList();
 
         var pineExpressionsToOptimize =

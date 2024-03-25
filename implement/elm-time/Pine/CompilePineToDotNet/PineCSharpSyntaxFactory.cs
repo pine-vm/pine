@@ -59,6 +59,7 @@ public static class PineCSharpSyntaxFactory
 
         var envListItemsConditionsExprs =
             envConstraint.ParsedEnvItems
+            .OrderBy(envListItem => envListItem.Key, PineVM.IntPathComparer.Instance)
             .Select(envListItem =>
             {
                 var valueDeclName = CompileToCSharp.DeclarationNameForValue(envListItem.Value);

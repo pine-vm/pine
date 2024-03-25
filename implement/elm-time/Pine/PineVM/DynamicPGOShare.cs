@@ -116,6 +116,7 @@ public class DynamicPGOShare : IDisposable
                 exprUsageSamples
                 .Select(sample => sample.Analysis.Value.ToMaybe())
                 .WhereNotNothing()
+                .SelectMany(usage => usage)
                 .ToImmutableList();
 
                 var usageProfiles = ProfilingPineVM.UsageProfileDictionaryFromListOfUsages(expressionUsages);

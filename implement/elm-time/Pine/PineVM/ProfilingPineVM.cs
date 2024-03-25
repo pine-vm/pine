@@ -36,7 +36,7 @@ public record ExpressionUsageSample(
     Expression.ParseAndEvalExpression ParseAndEvalExpr,
     PineValue Environment,
     System.TimeSpan OrigEvalDuration,
-    System.Lazy<Result<string, ExpressionUsageAnalysis>> Analysis);
+    System.Lazy<Result<string, IReadOnlyList<ExpressionUsageAnalysis>>> Analysis);
 
 public record ExpressionUsageProfile(int UsageCount);
 
@@ -83,7 +83,7 @@ public class ProfilingPineVM
                     // if (DynamicPGOShare.ShouldIncludeExpressionInCompilation(expression))
                     if (expression is Expression.ParseAndEvalExpression parseAndEval)
                     {
-                        Result<string, ExpressionUsageAnalysis> runAnalysis()
+                        Result<string, IReadOnlyList<ExpressionUsageAnalysis>> runAnalysis()
                         {
                             return
                             defaultHandler(parseAndEval.expression, environment)
@@ -95,10 +95,8 @@ public class ProfilingPineVM
 
                                 try
                                 {
-
-
                                     return
-                                        ComputeExpressionUsageRecord(
+                                        AnalyzeExpressionUsage(
                                             parsedInnerExpr,
                                             innerEnvValue,
                                             exprAnalysisMutatedCache);
@@ -117,32 +115,45 @@ public class ProfilingPineVM
                                 ParseAndEvalExpr: parseAndEval,
                                 Environment: environment,
                                 OrigEvalDuration: origEvalDuration.Elapsed,
-                                Analysis: new System.Lazy<Result<string, ExpressionUsageAnalysis>>(valueFactory: runAnalysis)));
+                                Analysis: new System.Lazy<Result<string, IReadOnlyList<ExpressionUsageAnalysis>>>(
+                                    valueFactory: runAnalysis)));
                     }
 
                     return evalResult;
                 }));
     }
 
-    public static ExpressionUsageAnalysis ComputeExpressionUsageRecord(
+    public static IReadOnlyList<ExpressionUsageAnalysis> AnalyzeExpressionUsage(
         Expression expression,
         PineValue environment,
         ConcurrentDictionary<Expression, CodeAnalysis.ExprAnalysis> exprAnalysisMutatedCache)
     {
         var envClass =
-            CodeAnalysis.ComputeExpressionUsageRecordRecursive(
+            CodeAnalysis.AnalyzeExpressionUsageRecursive(
                 [],
                 expression,
                 environment,
                 mutatedCache: exprAnalysisMutatedCache);
 
-        return new ExpressionUsageAnalysis(
-            expression,
-            envClass is ExpressionEnvClass.ConstrainedEnv constrained && constrained.ParsedEnvItems.Count > 0
-            ?
-            EnvConstraintId.Create(constrained, environment)
-            :
-            null);
+        if (envClass is not ExpressionEnvClass.ConstrainedEnv constrained)
+            return [new ExpressionUsageAnalysis(expression, null)];
+
+        var constraintId = EnvConstraintId.Create(constrained, environment);
+
+        var otherExprFittingConstraint =
+            constrained.OtherExpr
+            .Where(exprInRecursion => constraintId.ConstraintSatisfiesConstraint(exprInRecursion.constraint))
+            .Select(exprInRecursion => exprInRecursion.expr)
+            .ToImmutableList();
+
+        var allExprReported =
+            otherExprFittingConstraint
+            .Prepend(expression)
+            .Distinct()
+            .Select(exprInRecursion => new ExpressionUsageAnalysis(exprInRecursion, constraintId))
+            .ToImmutableList();
+
+        return allExprReported;
     }
 
     public static IReadOnlyDictionary<ExpressionUsageAnalysis, ExpressionUsageProfile> UsageProfileDictionaryFromListOfUsages(
