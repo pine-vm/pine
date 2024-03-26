@@ -509,7 +509,9 @@ public partial class CompileToCSharp
             FunctionCompilationEnv compilationEnv,
             EnvConstraintId? envConstraint) =>
         CompileToCSharpExpression(
-            expression,
+            ReducePineExpression.SearchForExpressionReductionRecursive(
+                maxDepth: 5,
+                expression),
             new ExpressionCompilationEnvironment(
                 FunctionEnvironment: compilationEnv,
                 LetBindings: ImmutableDictionary<Expression, LetBinding>.Empty,

@@ -119,6 +119,27 @@ public class ReducePineExpression
                         return AttemptReduceViaEval();
                 }
 
+            case Expression.ConditionalExpression conditional:
+                {
+                    if (Expression.IsIndependent(conditional.condition))
+                    {
+                        return
+                            TryEvaluateExpressionIndependent(conditional.condition)
+                            .Unpack(
+                                fromErr: _ =>
+                                AttemptReduceViaEval(),
+
+                                fromOk: conditionValue =>
+                                conditionValue == PineVM.PineVM.TrueValue
+                                ?
+                                conditional.ifTrue
+                                :
+                                conditional.ifFalse);
+                    }
+
+                    return AttemptReduceViaEval();
+                }
+
             default:
                 return AttemptReduceViaEval();
         }
