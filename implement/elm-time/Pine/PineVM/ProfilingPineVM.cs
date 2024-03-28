@@ -138,20 +138,19 @@ public class ProfilingPineVM
         if (envClass is not ExpressionEnvClass.ConstrainedEnv constrained)
             return [new ExpressionUsageAnalysis(expression, null)];
 
-        var constraintId = EnvConstraintId.Create(constrained, environment);
+        var rootConstraintId = EnvConstraintId.Create(constrained, environment);
 
-        var otherExprFittingConstraint =
+        var otherExprAnalysis =
             constrained.ExprOnRecursionPath
-            .Where(exprInRecursion => constraintId.ConstraintSatisfiesConstraint(exprInRecursion.constraint))
-            .Select(exprInRecursion => exprInRecursion.expr)
+            .Where(exprInRecursion =>
+            exprInRecursion.RootConstraint.ConstraintSatisfiesConstraint(exprInRecursion.Constraint))
+            .Select(exprInRecursion => new ExpressionUsageAnalysis(exprInRecursion.Expr, exprInRecursion.RootConstraint))
             .ToImmutableList();
 
         var allExprReported =
-            otherExprFittingConstraint
-            .Prepend(expression)
-            .Distinct()
-            .Select(exprInRecursion => new ExpressionUsageAnalysis(exprInRecursion, constraintId))
-            .ToImmutableList();
+            (IReadOnlyList<ExpressionUsageAnalysis>)
+            [new ExpressionUsageAnalysis(expression, rootConstraintId),
+            ..otherExprAnalysis];
 
         return allExprReported;
     }

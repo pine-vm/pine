@@ -198,11 +198,11 @@ public abstract record ExpressionEnvClass
     {
         public ImmutableHashSet<IReadOnlyList<int>> ParsedEnvItems { get; }
 
-        public ImmutableHashSet<(EnvConstraintId constraint, Expression expr)> ExprOnRecursionPath { get; }
+        public ImmutableHashSet<ExprOnRecursionPathEntry> ExprOnRecursionPath { get; }
 
         public ConstrainedEnv(
             IEnumerable<IReadOnlyList<int>> parsedEnvItems,
-            IEnumerable<(EnvConstraintId, Expression)> exprOnRecursionPath)
+            IEnumerable<ExprOnRecursionPathEntry> exprOnRecursionPath)
         {
             ParsedEnvItems =
                 parsedEnvItems.ToImmutableHashSet(equalityComparer: IntPathEqualityComparer.Instance);
@@ -217,6 +217,12 @@ public abstract record ExpressionEnvClass
             other is not null &&
             other.ParsedEnvItems.SetEquals(ParsedEnvItems);
     }
+
+    public record ExprOnRecursionPathEntry(
+        EnvConstraintId RootConstraint,
+        Expression RootExpr,
+        EnvConstraintId Constraint,
+        Expression Expr);
 
     public static bool Equal(ExpressionEnvClass? env1, ExpressionEnvClass? env2)
     {
@@ -410,15 +416,24 @@ public class CodeAnalysis
                 currentEnvConstraintId,
                 environment);
 
-        if (stack.Any(prevStackItem =>
-        prevStackItem.ExpressionId == currentStackFrame.ExpressionId &&
-        prevStackItem.EnvConstraintId == currentStackFrame.EnvConstraintId
-        ))
+        if (stack.FirstOrDefault(
+            prevStackItem =>
+            prevStackItem.ExpressionId == currentStackFrame.ExpressionId &&
+            prevStackItem.EnvConstraintId == currentStackFrame.EnvConstraintId) is { } recursionRoot)
         {
+            var exprOnRecursionPath =
+                stack
+                .SkipWhile(stackItem => stackItem != recursionRoot)
+                .Select(stackItem => new ExpressionEnvClass.ExprOnRecursionPathEntry(
+                    RootConstraint: recursionRoot.EnvConstraintId,
+                    RootExpr: recursionRoot.Expression,
+                    Constraint: stackItem.EnvConstraintId,
+                    Expr: stackItem.Expression))
+                .ToImmutableHashSet();
+
             return new ExpressionEnvClass.ConstrainedEnv(
                 currentStackFrameEnv.ParsedEnvItems,
-                exprOnRecursionPath: stack.Skip(1).Select(stackItem => (stackItem.EnvConstraintId, stackItem.Expression)).ToImmutableHashSet()
-            );
+                exprOnRecursionPath: exprOnRecursionPath);
         }
 
         var nextStack = stack.Append(currentStackFrame).ToImmutableArray();

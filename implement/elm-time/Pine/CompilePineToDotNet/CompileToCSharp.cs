@@ -1187,7 +1187,7 @@ public partial class CompileToCSharp
 
                                 foreach (var specializedEnvConstraint in specializedMostConstrainedFirst)
                                 {
-                                    if (Enumerable.All(specializedEnvConstraint.Key.ParsedEnvItems, ChildEnvContstraintItemSatisfied))
+                                    if (specializedEnvConstraint.Key.ParsedEnvItems.All(ChildEnvContstraintItemSatisfied))
                                     {
                                         return
                                         InvocationExpressionForCompiledExpressionFunction(
