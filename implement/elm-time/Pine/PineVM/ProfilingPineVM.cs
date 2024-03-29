@@ -128,27 +128,26 @@ public class ProfilingPineVM
         PineValue environment,
         ConcurrentDictionary<Expression, CodeAnalysis.ExprAnalysis> exprAnalysisMutatedCache)
     {
-        var envClass =
+        var analysisResult =
             CodeAnalysis.AnalyzeExpressionUsageRecursive(
                 [],
                 expression,
                 environment,
                 mutatedCache: exprAnalysisMutatedCache);
 
-        if (envClass is not ExpressionEnvClass.ConstrainedEnv constrained)
-            return [new ExpressionUsageAnalysis(expression, null)];
-
         var rootConstraintId =
+            analysisResult.RootEnvClass is not ExpressionEnvClass.ConstrainedEnv constrained
+            ?
+            null
+            :
             EnvConstraintId.Create(
                 constrained,
                 environment,
                 skipUnavailableItems: true);
 
         var otherExprAnalysis =
-            constrained.ExprOnRecursionPath
-            .Where(exprInRecursion =>
-            exprInRecursion.RootConstraint.ConstraintSatisfiesConstraint(exprInRecursion.Constraint))
-            .Select(exprInRecursion => new ExpressionUsageAnalysis(exprInRecursion.Expr, exprInRecursion.RootConstraint))
+            analysisResult.UsagesCompleteForRecursion
+            .Select(exprInRecursion => new ExpressionUsageAnalysis(exprInRecursion.expr, exprInRecursion.expandedConstraint))
             .ToImmutableList();
 
         var allExprReported =

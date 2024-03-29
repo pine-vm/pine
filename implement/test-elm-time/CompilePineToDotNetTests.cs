@@ -270,7 +270,7 @@ public class CompilePineToDotNetTests
 
                 envConstraint =
                 Pine.PineVM.EnvConstraintId.Create(
-                    envClass: new Pine.PineVM.ExpressionEnvClass.ConstrainedEnv([], []),
+                    envClass: new Pine.PineVM.ExpressionEnvClass.ConstrainedEnv([]),
                     PineValue.EmptyList,
                     skipUnavailableItems: false),
 
@@ -288,7 +288,7 @@ public class CompilePineToDotNetTests
 
                 envConstraint =
                 Pine.PineVM.EnvConstraintId.Create(
-                    envClass: new Pine.PineVM.ExpressionEnvClass.ConstrainedEnv([], []),
+                    envClass: new Pine.PineVM.ExpressionEnvClass.ConstrainedEnv([]),
                     PineValue.EmptyList,
                     skipUnavailableItems: false),
 
@@ -315,7 +315,7 @@ public class CompilePineToDotNetTests
 
                 envConstraint =
                 Pine.PineVM.EnvConstraintId.Create(
-                    envClass: new Pine.PineVM.ExpressionEnvClass.ConstrainedEnv([], []),
+                    envClass: new Pine.PineVM.ExpressionEnvClass.ConstrainedEnv([]),
                     PineValue.EmptyList,
                     skipUnavailableItems: false),
 

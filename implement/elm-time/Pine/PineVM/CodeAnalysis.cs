@@ -200,6 +200,17 @@ public class IntPathComparer : IComparer<IReadOnlyList<int>>
     }
 }
 
+public record RecursiveAnalysisResult(
+    ExpressionEnvClass RootEnvClass,
+    ImmutableHashSet<ExprOnRecursionPathEntry> ExprOnRecursionPath,
+    ImmutableHashSet<(Expression expr, EnvConstraintId expandedConstraint)> UsagesCompleteForRecursion);
+
+public record ExprOnRecursionPathEntry(
+    EnvConstraintId RootConstraint,
+    Expression RootExpr,
+    EnvConstraintId Constraint,
+    Expression Expr);
+
 public abstract record ExpressionEnvClass
 {
     public record UnconstrainedEnv
@@ -210,16 +221,11 @@ public abstract record ExpressionEnvClass
     {
         public ImmutableHashSet<IReadOnlyList<int>> ParsedEnvItems { get; }
 
-        public ImmutableHashSet<ExprOnRecursionPathEntry> ExprOnRecursionPath { get; }
-
         public ConstrainedEnv(
-            IEnumerable<IReadOnlyList<int>> parsedEnvItems,
-            IEnumerable<ExprOnRecursionPathEntry> exprOnRecursionPath)
+            IEnumerable<IReadOnlyList<int>> parsedEnvItems)
         {
             ParsedEnvItems =
                 parsedEnvItems.ToImmutableHashSet(equalityComparer: IntPathEqualityComparer.Instance);
-
-            ExprOnRecursionPath = exprOnRecursionPath.ToImmutableHashSet();
         }
 
         public override int GetHashCode() =>
@@ -229,12 +235,6 @@ public abstract record ExpressionEnvClass
             other is not null &&
             other.ParsedEnvItems.SetEquals(ParsedEnvItems);
     }
-
-    public record ExprOnRecursionPathEntry(
-        EnvConstraintId RootConstraint,
-        Expression RootExpr,
-        EnvConstraintId Constraint,
-        Expression Expr);
 
     public static bool Equal(ExpressionEnvClass? env1, ExpressionEnvClass? env2)
     {
@@ -249,27 +249,6 @@ public abstract record ExpressionEnvClass
 
         if (env1 is ConstrainedEnv constrainedEnv1 && env2 is ConstrainedEnv constrainedEnv2)
             return constrainedEnv1.Equals(constrainedEnv2);
-
-        throw new NotImplementedException();
-    }
-
-    public ExpressionEnvClass AddConstraints(ExpressionEnvClass otherEnv)
-    {
-        if (this is UnconstrainedEnv || otherEnv is UnconstrainedEnv)
-            return this;
-
-        if (this is ConstrainedEnv selfConstrained && otherEnv is ConstrainedEnv otherConstrained)
-        {
-            var mergedParsedEnvItems =
-                selfConstrained.ParsedEnvItems
-                .Concat(otherConstrained.ParsedEnvItems)
-                .ToImmutableHashSet();
-
-            return new ConstrainedEnv(
-                mergedParsedEnvItems,
-                exprOnRecursionPath:
-                [.. selfConstrained.ExprOnRecursionPath, .. otherConstrained.ExprOnRecursionPath]);
-        }
 
         throw new NotImplementedException();
     }
@@ -313,7 +292,7 @@ public class DelegatingEqualityComparer<T>(
 public class CodeAnalysis
 {
     public record ExprAnalysis(
-        IImmutableDictionary<EnvConstraintId, ExpressionEnvClass> EnvDict);
+        IImmutableDictionary<PineValue, RecursiveAnalysisResult> EnvDict);
 
     public record ExprUsageAnalysisStackEntry(
         Expression Expression,
@@ -327,7 +306,7 @@ public class CodeAnalysis
         PineValue? ExpressionValue,
         Expression? ParsedExpr);
 
-    public static ExpressionEnvClass AnalyzeExpressionUsageRecursive(
+    public static RecursiveAnalysisResult AnalyzeExpressionUsageRecursive(
         IReadOnlyList<ExprUsageAnalysisStackEntry> stack,
         Expression expression,
         PineValue environment,
@@ -402,7 +381,7 @@ public class CodeAnalysis
             .Where(parseSubExpr => parseSubExpr.ParsedExpr is not null)
             .ToImmutableArray();
 
-        var currentParsedEnvItems =
+        var selfParsedEnvItems =
             parseSubexpressionsToIntegrate
             .Select(parseSubExpr => parseSubExpr.ExpressionPath)
             /*
@@ -412,42 +391,40 @@ public class CodeAnalysis
             .Distinct(IntPathEqualityComparer.Instance)
             .ToImmutableArray();
 
-        var currentStackFrameEnv =
-            new ExpressionEnvClass.ConstrainedEnv(
-                currentParsedEnvItems,
-                exprOnRecursionPath: []);
+        var selfStackFrameEnv =
+            new ExpressionEnvClass.ConstrainedEnv(selfParsedEnvItems);
 
-        var currentEnvConstraintId =
+        var selfEnvConstraintId =
             EnvConstraintId.Create(
-                currentStackFrameEnv,
+                selfStackFrameEnv,
                 environment,
                 skipUnavailableItems: true);
 
         if (mutatedCache.TryGetValue(expression, out var cachedAnalysis))
         {
-            if (cachedAnalysis.EnvDict.TryGetValue(currentEnvConstraintId, out var cachedEnvClass) && cachedEnvClass is not null)
+            if (cachedAnalysis.EnvDict.TryGetValue(environment, out var cachedEnvClass) && cachedEnvClass is not null)
             {
                 return cachedEnvClass;
             }
         }
 
-        ExpressionEnvClass insertInCache(ExpressionEnvClass envClass)
+        RecursiveAnalysisResult insertInCache(RecursiveAnalysisResult recursiveAnalysisResult)
         {
             mutatedCache.AddOrUpdate(
                 expression,
                 new ExprAnalysis(
                     EnvDict: ImmutableDictionary.CreateRange(
-                        [new KeyValuePair<EnvConstraintId, ExpressionEnvClass>(currentEnvConstraintId, envClass)])),
-                (expr, oldAnalysis) => new ExprAnalysis(oldAnalysis.EnvDict.SetItem(currentEnvConstraintId, envClass)));
+                        [new KeyValuePair<PineValue, RecursiveAnalysisResult>(environment, recursiveAnalysisResult)])),
+                (expr, oldAnalysis) => new ExprAnalysis(oldAnalysis.EnvDict.SetItem(environment, recursiveAnalysisResult)));
 
-            return envClass;
+            return recursiveAnalysisResult;
         }
 
         var currentStackFrame =
             new ExprUsageAnalysisStackEntry(
                 expression,
                 ExpressionId: expressionId,
-                currentEnvConstraintId,
+                selfEnvConstraintId,
                 environment);
 
         if (stack.FirstOrDefault(
@@ -458,21 +435,23 @@ public class CodeAnalysis
             var exprOnRecursionPath =
                 stack
                 .SkipWhile(stackItem => stackItem != recursionRoot)
-                .Select(stackItem => new ExpressionEnvClass.ExprOnRecursionPathEntry(
+                .Select(stackItem => new ExprOnRecursionPathEntry(
                     RootConstraint: recursionRoot.EnvConstraintId,
                     RootExpr: recursionRoot.Expression,
                     Constraint: stackItem.EnvConstraintId,
                     Expr: stackItem.Expression))
                 .ToImmutableHashSet();
 
-            return new ExpressionEnvClass.ConstrainedEnv(
-                currentStackFrameEnv.ParsedEnvItems,
-                exprOnRecursionPath: exprOnRecursionPath);
+            return
+                new RecursiveAnalysisResult(
+                    new ExpressionEnvClass.ConstrainedEnv(selfStackFrameEnv.ParsedEnvItems),
+                    ExprOnRecursionPath: exprOnRecursionPath,
+                    UsagesCompleteForRecursion: []);
         }
 
         var nextStack = stack.Append(currentStackFrame).ToImmutableArray();
 
-        ExpressionEnvClass computeChildClass(ParseSubExpression parseSubExpr)
+        RecursiveAnalysisResult computeChildClass(ParseSubExpression parseSubExpr)
         {
             if (parseSubExpr.ExpressionValue is not { } parsedExprValue)
             {
@@ -481,7 +460,11 @@ public class CodeAnalysis
 
             if (parseSubExpr.ParsedExpr is not { } parsedChildExpr)
             {
-                return new ExpressionEnvClass.UnconstrainedEnv();
+                return
+                    new RecursiveAnalysisResult(
+                        new ExpressionEnvClass.UnconstrainedEnv(),
+                        ExprOnRecursionPath: [],
+                        UsagesCompleteForRecursion: []);
             }
 
             PineValue? childEnvValue = null;
@@ -516,12 +499,20 @@ public class CodeAnalysis
             }
             catch
             {
-                return new ExpressionEnvClass.UnconstrainedEnv();
+                return
+                    new RecursiveAnalysisResult(
+                        new ExpressionEnvClass.UnconstrainedEnv(),
+                        ExprOnRecursionPath: [],
+                        UsagesCompleteForRecursion: []);
             }
 
             if (childEnvValue is null)
             {
-                return new ExpressionEnvClass.UnconstrainedEnv();
+                return
+                    new RecursiveAnalysisResult(
+                        new ExpressionEnvClass.UnconstrainedEnv(),
+                        ExprOnRecursionPath: [],
+                        UsagesCompleteForRecursion: []);
             }
 
             var childEnvBeforeMapping =
@@ -531,9 +522,9 @@ public class CodeAnalysis
                     childEnvValue,
                     mutatedCache: mutatedCache);
 
-            if (childEnvBeforeMapping is not ExpressionEnvClass.ConstrainedEnv childConstrainedEnv)
+            if (childEnvBeforeMapping.RootEnvClass is not ExpressionEnvClass.ConstrainedEnv childConstrainedEnv)
             {
-                return new ExpressionEnvClass.UnconstrainedEnv();
+                return childEnvBeforeMapping;
             }
 
             var childPathEnvMap = BuildPathMapFromChildToParentEnv(parseSubExpr.ParseAndEvalExpr.environment);
@@ -545,7 +536,12 @@ public class CodeAnalysis
 
             if (parsedEnvItemsMapped.Contains(null))
             {
-                return new ExpressionEnvClass.UnconstrainedEnv();
+                return
+                    childEnvBeforeMapping
+                    with
+                    {
+                        RootEnvClass = new ExpressionEnvClass.UnconstrainedEnv()
+                    };
             }
 
             var parsedEnvItemsMappedPaths =
@@ -573,29 +569,66 @@ public class CodeAnalysis
                     childEnvValue,
                     skipUnavailableItems: true);
 
-            return new ExpressionEnvClass.ConstrainedEnv(
-                parsedEnvItemsMappedPaths,
-                exprOnRecursionPath: childConstrainedEnv.ExprOnRecursionPath);
+            return
+                childEnvBeforeMapping
+                with
+                {
+                    RootEnvClass = new ExpressionEnvClass.ConstrainedEnv(parsedEnvItemsMappedPaths)
+                };
         }
 
         var descendantsEnvUsages =
             parseSubexpressionsToIntegrate
-            .Select(parseSubExpr => (parseSubExpr, childClass: computeChildClass(parseSubExpr)))
+            .Select(parseSubExpr => (parseSubExpr, childAnalysis: computeChildClass(parseSubExpr)))
             .ToImmutableArray();
 
-        var unconstrainedDescendants =
+        var descendantsConstrainedEnv =
             descendantsEnvUsages
-            .Where(u => u.childClass is ExpressionEnvClass.UnconstrainedEnv)
+            .Select(descendantEnvUsage => descendantEnvUsage.childAnalysis.RootEnvClass as ExpressionEnvClass.ConstrainedEnv)
+            .WhereNotNull()
             .ToImmutableArray();
+
+        var mergedParsedEnvItems =
+            selfParsedEnvItems.Concat(
+                descendantsConstrainedEnv
+                .SelectMany(env => env.ParsedEnvItems))
+            .ToImmutableHashSet();
+
+        var mergedConstraintId =
+            EnvConstraintId.Create(
+                new ExpressionEnvClass.ConstrainedEnv(mergedParsedEnvItems),
+                environment,
+                skipUnavailableItems: true);
+
+        var mergedExprOnRecursionPath =
+            descendantsEnvUsages
+            .SelectMany(entry => entry.childAnalysis.ExprOnRecursionPath)
+            .ToImmutableHashSet();
+
+        var usagesCompleteForRecursion =
+            mergedExprOnRecursionPath
+            .SelectMany(entry =>
+            {
+                if (entry.RootExpr == expression &&
+                    mergedConstraintId.ConstraintSatisfiesConstraint(entry.RootConstraint) &&
+                    mergedConstraintId.ConstraintSatisfiesConstraint(entry.Constraint))
+                {
+                    return (IEnumerable<(Expression, EnvConstraintId)>)[(entry.Expr, mergedConstraintId)];
+                }
+
+                return [];
+            })
+            .ToImmutableHashSet();
 
         var mergedEnvClass =
-            descendantsEnvUsages
-            .Where(descendantEnvUsage => descendantEnvUsage.childClass is ExpressionEnvClass.ConstrainedEnv)
-            .Aggregate(
-                seed: (ExpressionEnvClass)currentStackFrameEnv,
-                (aggr, next) => aggr.AddConstraints(next.childClass));
+            new ExpressionEnvClass.ConstrainedEnv(mergedParsedEnvItems);
 
-        return insertInCache(mergedEnvClass);
+        return
+            insertInCache(
+                new RecursiveAnalysisResult(
+                    mergedEnvClass,
+                    ExprOnRecursionPath: mergedExprOnRecursionPath,
+                    usagesCompleteForRecursion));
     }
 
     public static Func<IReadOnlyList<int>, ExprMappedToParentEnv?> BuildPathMapFromChildToParentEnv(
