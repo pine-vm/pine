@@ -138,7 +138,11 @@ public class ProfilingPineVM
         if (envClass is not ExpressionEnvClass.ConstrainedEnv constrained)
             return [new ExpressionUsageAnalysis(expression, null)];
 
-        var rootConstraintId = EnvConstraintId.Create(constrained, environment);
+        var rootConstraintId =
+            EnvConstraintId.Create(
+                constrained,
+                environment,
+                skipUnavailableItems: true);
 
         var otherExprAnalysis =
             constrained.ExprOnRecursionPath

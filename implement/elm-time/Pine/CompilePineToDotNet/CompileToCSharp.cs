@@ -1110,28 +1110,38 @@ public partial class CompileToCSharp
         }
         */
 
-        CompiledExpression continueWithGenericCase()
+        Result<string, CompiledExpression> continueWithGenericCase()
         {
-            var currentEnvParam =
-                environment.FunctionEnvironment.SelfInterface.GetParamForEnvItemPath([])
-                ?? throw new Exception("Failed to get param for complete environment");
-
-            var invocationExpression =
-                PineCSharpSyntaxFactory.GenericInvocationThrowingRuntimeExceptionOnError(
-                    environment.FunctionEnvironment,
-                    SyntaxFactory.IdentifierName(MemberNameForExpression(parseAndEvalExprHash)),
-                    PineCSharpSyntaxFactory.BuildCSharpExpressionToGetItemFromPathOrNull(
-                        SyntaxFactory.IdentifierName(currentEnvParam.paramName),
-                        path: currentEnvParam.pathFromParam));
-
             return
-                CompiledExpression.WithTypeGenericValue(invocationExpression)
-                .MergeDependencies(
-                    CompiledExpressionDependencies.Empty
-                    with
-                    {
-                        Expressions = ImmutableHashSet.Create((parseAndEvalExprHash, (Expression)parseAndEvalExpr)),
-                    });
+                CompileToCSharpExpression(
+                    parseAndEvalExpr.environment,
+                    environment,
+                    createLetBindingsForCse: false)
+                .AndThen(envCompiledExpr =>
+                CompileToCSharpExpression(
+                    parseAndEvalExpr.expression,
+                    environment,
+                    createLetBindingsForCse: false)
+                .Map(exprCompiledExpr =>
+                {
+                    var invocationExpression =
+                        PineCSharpSyntaxFactory.GenericInvocationThrowingRuntimeExceptionOnError(
+                            environment.FunctionEnvironment,
+                            NewConstructorOfExpressionVariant(
+                                nameof(Expression.ParseAndEvalExpression),
+                                NewConstructorOfExpressionVariant(
+                                    nameof(Expression.LiteralExpression),
+                                    exprCompiledExpr.Syntax),
+                                NewConstructorOfExpressionVariant(nameof(Expression.EnvironmentExpression))),
+                            environmentExpr: envCompiledExpr.Syntax);
+
+                    return
+                        CompiledExpression.WithTypeGenericValue(invocationExpression)
+                        .MergeDependencies(envCompiledExpr.Dependencies)
+                        .MergeBindings(envCompiledExpr.LetBindings)
+                        .MergeDependencies(exprCompiledExpr.Dependencies)
+                        .MergeBindings(exprCompiledExpr.LetBindings);
+                }));
         }
 
         Result<string, CompiledExpression> continueForKnownExprValue(PineValue innerExpressionValue)
@@ -1144,8 +1154,7 @@ public partial class CompileToCSharp
                 .Unpack(
                     fromErr: err =>
                     {
-                        return
-                            Result<string, CompiledExpression>.ok(continueWithGenericCase());
+                        return continueWithGenericCase();
                     },
                     fromOk:
                     innerExpression =>
@@ -1238,8 +1247,7 @@ public partial class CompileToCSharp
             return continueForKnownExprValue(literal.Value);
         }
 
-        return
-            Result<string, CompiledExpression>.ok(continueWithGenericCase());
+        return continueWithGenericCase();
     }
 
     public static Result<string, CompiledExpression> InvocationExpressionForCompiledExpressionFunction(
@@ -1273,7 +1281,8 @@ public partial class CompileToCSharp
                 .WithArgumentList(
                     SyntaxFactory.ArgumentList(
                         SyntaxFactory.SeparatedList(argListAndDeps.argumentList))))
-            .MergeDependencies(argListAndDeps.argumentListDeps));
+            .MergeDependencies(argListAndDeps.argumentsDeps)
+            .MergeBindings(argListAndDeps.argumentsBindings));
     }
 
     public static IReadOnlyList<ParameterSyntax> ComposeParameterList(
@@ -1296,7 +1305,7 @@ public partial class CompileToCSharp
         ];
     }
 
-    public static Result<string, (IReadOnlyList<ArgumentSyntax> argumentList, CompiledExpressionDependencies argumentListDeps)>
+    public static Result<string, (IReadOnlyList<ArgumentSyntax> argumentList, CompiledExpressionDependencies argumentsDeps, ImmutableDictionary<PineVM.Expression, LetBinding> argumentsBindings)>
         ComposeArgumentList(
         ExpressionCompilationEnvironment parentEnv,
         Expression invocationEnvExpr,
@@ -1322,6 +1331,11 @@ public partial class CompileToCSharp
                 var dependencies =
                 CompiledExpressionDependencies.Union(compiledArgumentsExpressions.Select(c => c.Dependencies));
 
+                var bindings =
+                compiledArgumentsExpressions
+                .SelectMany(c => c.LetBindings)
+                .ToImmutableArray();
+
                 return
                     ((IReadOnlyList<ArgumentSyntax>)
                     [
@@ -1331,7 +1345,8 @@ public partial class CompileToCSharp
                         compiledArgumentsExpressions.Select(compiledArgumentExpression =>
                         SyntaxFactory.Argument(compiledArgumentExpression.Syntax))
                     ],
-                    dependencies);
+                    dependencies,
+                    bindings.ToImmutableDictionary());
             });
     }
 

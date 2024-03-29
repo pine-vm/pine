@@ -55,13 +55,25 @@ public record EnvConstraintId
 
     public static EnvConstraintId Create(
         ExpressionEnvClass.ConstrainedEnv envClass,
-        PineValue envValue)
+        PineValue envValue,
+        bool skipUnavailableItems)
     {
         var parsedEnvItems =
             envClass.ParsedEnvItems
-            .Select(path => new KeyValuePair<IReadOnlyList<int>, PineValue>(
-                path,
-                CodeAnalysis.ValueFromPathInValue(envValue, [.. path]) ?? throw new NullReferenceException()))
+            .SelectMany(path =>
+            {
+                var itemValue = CodeAnalysis.ValueFromPathInValue(envValue, [.. path]);
+
+                if (itemValue is null)
+                {
+                    if (skipUnavailableItems)
+                        return Enumerable.Empty<KeyValuePair<IReadOnlyList<int>, PineValue>>();
+
+                    throw new Exception("Item value null for path " + string.Join(", ", path));
+                }
+
+                return [new KeyValuePair<IReadOnlyList<int>, PineValue>(path, itemValue)];
+            })
             .OrderBy(kv => kv.Key, IntPathComparer.Instance)
             .ToImmutableArray();
 
@@ -312,7 +324,8 @@ public class CodeAnalysis
     public record ParseSubExpression(
         Expression.ParseAndEvalExpression ParseAndEvalExpr,
         IReadOnlyList<int>? ExpressionPath,
-        PineValue? ExpressionValue);
+        PineValue? ExpressionValue,
+        Expression? ParsedExpr);
 
     public static ExpressionEnvClass AnalyzeExpressionUsageRecursive(
         IReadOnlyList<ExprUsageAnalysisStackEntry> stack,
@@ -359,21 +372,38 @@ public class CodeAnalysis
                     */
                 }
 
+                var parsedExpr =
+                    expressionValue is null
+                    ?
+                    null
+                    :
+                    PineVM.ParseExpressionFromValueDefault(expressionValue)
+                    .WithDefault(null);
+
                 return
                     new ParseSubExpression(
                         parseAndEvalExpr,
                         ExpressionPath: (expressionMapped as ExprMappedToParentEnv.PathInParentEnv)?.Path,
-                        expressionValue);
+                        expressionValue,
+                        ParsedExpr: parsedExpr);
             })
             .ToImmutableArray();
 
-        if (parseSubexpressions.Any(parseSubExpr => parseSubExpr.ExpressionValue is null))
-        {
-            return new ExpressionEnvClass.UnconstrainedEnv();
-        }
+        var parseSubexpressionsToIntegrate =
+            parseSubexpressions
+            /*
+             * Functions making use of the metaprogramming functionality in Pine can contain parse expressions which
+             * do not in all cases contain a valid expression.
+             * (These will be behind a branch not taken at runtime in that case.)
+             * An example is the generic function implementing partial application for Elm functions (8cde1f66c7 in 2024-03-28).
+             * Instead of defaulting to the unconstrained environment case, we filter out these cases here, to allow optimizing
+             * the non-dynamic parts of the function.
+             * */
+            .Where(parseSubExpr => parseSubExpr.ParsedExpr is not null)
+            .ToImmutableArray();
 
         var currentParsedEnvItems =
-            parseSubexpressions
+            parseSubexpressionsToIntegrate
             .Select(parseSubExpr => parseSubExpr.ExpressionPath)
             /*
              * ExpressionPath can be null if the expression is a literal.
@@ -387,7 +417,11 @@ public class CodeAnalysis
                 currentParsedEnvItems,
                 exprOnRecursionPath: []);
 
-        var currentEnvConstraintId = EnvConstraintId.Create(currentStackFrameEnv, environment);
+        var currentEnvConstraintId =
+            EnvConstraintId.Create(
+                currentStackFrameEnv,
+                environment,
+                skipUnavailableItems: true);
 
         if (mutatedCache.TryGetValue(expression, out var cachedAnalysis))
         {
@@ -445,17 +479,7 @@ public class CodeAnalysis
                 throw new Exception("Unexpected null value");
             }
 
-            Expression? parsedChildExpr = null;
-
-            try
-            {
-                parsedChildExpr =
-                    PineVM.ParseExpressionFromValueDefault(parsedExprValue)
-                    .WithDefault(null);
-            }
-            catch { }
-
-            if (parsedChildExpr is null)
+            if (parseSubExpr.ParsedExpr is not { } parsedChildExpr)
             {
                 return new ExpressionEnvClass.UnconstrainedEnv();
             }
@@ -543,7 +567,11 @@ public class CodeAnalysis
                 })
                 .ToImmutableArray();
 
-            var childConstraintId = EnvConstraintId.Create(childConstrainedEnv, childEnvValue);
+            var childConstraintId =
+                EnvConstraintId.Create(
+                    childConstrainedEnv,
+                    childEnvValue,
+                    skipUnavailableItems: true);
 
             return new ExpressionEnvClass.ConstrainedEnv(
                 parsedEnvItemsMappedPaths,
@@ -551,7 +579,7 @@ public class CodeAnalysis
         }
 
         var descendantsEnvUsages =
-            parseSubexpressions
+            parseSubexpressionsToIntegrate
             .Select(parseSubExpr => (parseSubExpr, childClass: computeChildClass(parseSubExpr)))
             .ToImmutableArray();
 
@@ -560,33 +588,9 @@ public class CodeAnalysis
             .Where(u => u.childClass is ExpressionEnvClass.UnconstrainedEnv)
             .ToImmutableArray();
 
-        if (0 < unconstrainedDescendants.Length)
-        {
-            /*
-             * 2024-03-08: Observed later compilation stage failing when returning the currentStackFrameEnv here.
-
-            return insertInCache(currentStackFrameEnv);
-            */
-
-            /*
-             * Even better than returning the currentStackFrameEnv seems to be merging the ones we get in any case.
-             * However, also with that variant, the later compilation stage failed with errors like these:
-             * 
-             * Compilation failed with 8 errors:
-             * (413,21): error CS0103: The name 'bind_11465cd7d6' does not exist in the current context
-             * (423,27): error CS0103: The name 'bind_3c95507845' does not exist in the current context
-             * [...]
-             * 
-             * Looks like propagation of let-bindings dependencies failed.
-             * 
-             * So returning UnconstrainedEnv here seems more like a temporary workaround.
-             * */
-
-            return insertInCache(new ExpressionEnvClass.UnconstrainedEnv());
-        }
-
         var mergedEnvClass =
             descendantsEnvUsages
+            .Where(descendantEnvUsage => descendantEnvUsage.childClass is ExpressionEnvClass.ConstrainedEnv)
             .Aggregate(
                 seed: (ExpressionEnvClass)currentStackFrameEnv,
                 (aggr, next) => aggr.AddConstraints(next.childClass));

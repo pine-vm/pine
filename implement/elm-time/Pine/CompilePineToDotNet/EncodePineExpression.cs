@@ -93,16 +93,17 @@ public partial class CompileToCSharp
         };
     }
 
-    private static ExpressionSyntax NewConstructorOfExpressionVariant(
+    public static ExpressionSyntax NewConstructorOfExpressionVariant(
         string expressionVariantTypeName,
-        params ExpressionSyntax[] argumentsExpressions) => SyntaxFactory.ObjectCreationExpression(
+        params ExpressionSyntax[] argumentsExpressions) =>
+        SyntaxFactory.ObjectCreationExpression(
+            SyntaxFactory.QualifiedName(
                 SyntaxFactory.QualifiedName(
                     SyntaxFactory.QualifiedName(
-                        SyntaxFactory.QualifiedName(
-                            SyntaxFactory.IdentifierName("Pine"),
-                                SyntaxFactory.IdentifierName("PineVM")),
-                        SyntaxFactory.IdentifierName("Expression")),
-                    SyntaxFactory.IdentifierName(expressionVariantTypeName)))
-            .WithArgumentList(
-                SyntaxFactory.ArgumentList(SyntaxFactory.SeparatedList(argumentsExpressions.Select(SyntaxFactory.Argument))));
+                        SyntaxFactory.IdentifierName("Pine"),
+                        SyntaxFactory.IdentifierName("PineVM")),
+                    SyntaxFactory.IdentifierName("Expression")),
+                SyntaxFactory.IdentifierName(expressionVariantTypeName)))
+        .WithArgumentList(
+            SyntaxFactory.ArgumentList(SyntaxFactory.SeparatedList(argumentsExpressions.Select(SyntaxFactory.Argument))));
 }

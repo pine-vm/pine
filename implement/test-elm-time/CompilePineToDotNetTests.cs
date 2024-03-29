@@ -271,7 +271,8 @@ public class CompilePineToDotNetTests
                 envConstraint =
                 Pine.PineVM.EnvConstraintId.Create(
                     envClass: new Pine.PineVM.ExpressionEnvClass.ConstrainedEnv([], []),
-                    PineValue.EmptyList),
+                    PineValue.EmptyList,
+                    skipUnavailableItems: false),
 
                 expectedPaths = (IReadOnlyList<IReadOnlyList<int>>)[[]]
             },
@@ -288,7 +289,8 @@ public class CompilePineToDotNetTests
                 envConstraint =
                 Pine.PineVM.EnvConstraintId.Create(
                     envClass: new Pine.PineVM.ExpressionEnvClass.ConstrainedEnv([], []),
-                    PineValue.EmptyList),
+                    PineValue.EmptyList,
+                    skipUnavailableItems: false),
 
                 expectedPaths = (IReadOnlyList<IReadOnlyList<int>>)[[0]]
             },
@@ -314,7 +316,8 @@ public class CompilePineToDotNetTests
                 envConstraint =
                 Pine.PineVM.EnvConstraintId.Create(
                     envClass: new Pine.PineVM.ExpressionEnvClass.ConstrainedEnv([], []),
-                    PineValue.EmptyList),
+                    PineValue.EmptyList,
+                    skipUnavailableItems: false),
 
                 expectedPaths = (IReadOnlyList<IReadOnlyList<int>>)[[13]]
             },
