@@ -350,6 +350,7 @@ emitExpressionInDeclarationBlock stackBeforeAddingDeps environmentPrefix blockDe
 type ClosureCapture
     = DeconstructionCapture EnvironmentDeconstructionEntry
     | ExpressionCapture Expression
+    | FunctionCapture Pine.Value ParsedFunctionValue
 
 
 emitDeclarationBlock :
@@ -552,11 +553,33 @@ emitDeclarationBlock stackBefore environmentPrefix blockDeclarations config =
                 )
                 allBlockDeclarationsAsFunctions
 
+        closureCaptureFromExpr : Expression -> ClosureCapture
+        closureCaptureFromExpr expr =
+            let
+                continueWithDefault =
+                    ExpressionCapture expr
+            in
+            {- TODO: Make impl to get value more robust, should work for any independent expression.
+               A simple example would be wrapping in a StringTagExpression.
+            -}
+            case expr of
+                LiteralExpression closureCaptureValue ->
+                    case parseFunctionRecordFromValueTagged closureCaptureValue of
+                        Err _ ->
+                            continueWithDefault
+
+                        Ok parsedFunction ->
+                            FunctionCapture closureCaptureValue parsedFunction
+
+                _ ->
+                    continueWithDefault
+
         closureCaptures : List ( String, ClosureCapture )
         closureCaptures =
             List.concat
-                [ List.map (Tuple.mapSecond DeconstructionCapture) config.closureCaptures
-                , List.map (Tuple.mapSecond ExpressionCapture)
+                [ List.map (Tuple.mapSecond DeconstructionCapture)
+                    config.closureCaptures
+                , List.map (Tuple.mapSecond closureCaptureFromExpr)
                     (closureCapturesForInternals ++ closureCapturesForBlockDecls)
                 ]
 
@@ -588,11 +611,26 @@ emitDeclarationBlock stackBefore environmentPrefix blockDeclarations config =
         newEnvironmentFunctionsFromClosureCaptures : List EnvironmentFunctionEntry
         newEnvironmentFunctionsFromClosureCaptures =
             List.map
-                (\( captureName, _ ) ->
-                    { functionName = captureName
-                    , parameterCount = 0
-                    , expectedEnvironment = IndependentEnvironment
-                    }
+                (\( captureName, closureCapture ) ->
+                    case closureCapture of
+                        FunctionCapture _ parsedFunction ->
+                            { functionName = captureName
+                            , parameterCount = parsedFunction.parameterCount
+                            , expectedEnvironment =
+                                ImportedEnvironment { pathToRecordFromEnvEntry = [] }
+                            }
+
+                        ExpressionCapture _ ->
+                            { functionName = captureName
+                            , parameterCount = 0
+                            , expectedEnvironment = IndependentEnvironment
+                            }
+
+                        DeconstructionCapture _ ->
+                            { functionName = captureName
+                            , parameterCount = 0
+                            , expectedEnvironment = IndependentEnvironment
+                            }
                 )
                 closureCaptures
 
@@ -651,6 +689,9 @@ emitDeclarationBlock stackBefore environmentPrefix blockDeclarations config =
 
                         ExpressionCapture expression ->
                             emitExpression stackBefore expression
+
+                        FunctionCapture functionRecordValue _ ->
+                            Ok (Pine.LiteralExpression functionRecordValue)
                 )
                 closureCaptures
     in
@@ -1682,17 +1723,18 @@ updateRecordOfPartiallyAppliedFunction config =
         ]
 
 
+type alias ParsedFunctionValue =
+    { innerFunctionValue : Pine.Value
+    , innerFunction : Pine.Expression
+    , parameterCount : Int
+    , envFunctions : List Pine.Value
+    , argumentsAlreadyCollected : List Pine.Value
+    }
+
+
 parseFunctionRecordFromValueTagged :
     Pine.Value
-    ->
-        Result
-            String
-            { innerFunctionValue : Pine.Value
-            , innerFunction : Pine.Expression
-            , parameterCount : Int
-            , envFunctions : List Pine.Value
-            , argumentsAlreadyCollected : List Pine.Value
-            }
+    -> Result String ParsedFunctionValue
 parseFunctionRecordFromValueTagged value =
     case value of
         Pine.BlobValue _ ->
@@ -1716,15 +1758,7 @@ parseFunctionRecordFromValueTagged value =
 
 parseFunctionRecordFromValue :
     Pine.Value
-    ->
-        Result
-            String
-            { innerFunctionValue : Pine.Value
-            , innerFunction : Pine.Expression
-            , parameterCount : Int
-            , envFunctions : List Pine.Value
-            , argumentsAlreadyCollected : List Pine.Value
-            }
+    -> Result String ParsedFunctionValue
 parseFunctionRecordFromValue value =
     case value of
         Pine.ListValue listItems ->
