@@ -1948,7 +1948,7 @@ view state =
                                                 , Element.padding 4
                                                 , Element.scale 0.8
                                                 , Element.centerY
-                                                , Element.htmlAttribute (HA.title "Close editor")
+                                                , Element.htmlAttribute (HA.title "Close")
                                                 ]
                                                 { label = headerIconElementFromTypeAndColor (Just ( Visuals.CloseEditorIcon, "white" ))
                                                 , onPress = Just UserInputCloseEditor
@@ -2380,15 +2380,35 @@ viewFileTreeList =
 toggleEnlargedPaneButton : WorkspaceActiveStruct -> WorkspacePane -> Element.Element WorkspaceEventStructure
 toggleEnlargedPaneButton state pane =
     let
-        ( icon, onPress ) =
+        ( icon, onPress, titleVerb ) =
             if state.viewEnlargedPane == Just pane then
-                ( Visuals.ShrinkActionIcon, Nothing )
+                ( Visuals.ShrinkActionIcon
+                , Nothing
+                , "Shrink"
+                )
 
             else if state.viewEnlargedPane == Nothing then
-                ( Visuals.GrowActionIcon, Just pane )
+                ( Visuals.GrowActionIcon
+                , Just pane
+                , "Enlarge"
+                )
 
             else
-                ( Visuals.GrowActionIcon, Nothing )
+                ( Visuals.GrowActionIcon
+                , Nothing
+                , "Enlarge"
+                )
+
+        titleSubject =
+            case pane of
+                EditorPane ->
+                    "Editor Pane"
+
+                OutputPane ->
+                    "Output Pane"
+
+        title =
+            titleVerb ++ " " ++ titleSubject
 
         iconSize =
             20
@@ -2397,6 +2417,7 @@ toggleEnlargedPaneButton state pane =
         [ Element.Background.color (Element.rgb 0.2 0.2 0.2)
         , Element.mouseOver [ Element.Background.color (Element.rgb 0.3 0.3 0.3) ]
         , Element.padding 4
+        , Element.htmlAttribute (HA.title title)
         ]
         { label =
             Visuals.iconSvgElementFromIcon { color = "rgba(255,255,255,0.7)" } icon
@@ -2855,8 +2876,25 @@ popupWindowElementAttributesFromAttributes { title, titleIcon, guideParagraphIte
             |> Maybe.map (FontAwesome.view >> Element.html >> Element.el [])
             |> Maybe.withDefault Element.none
         , title |> Element.text
+        , Element.Input.button
+            [ Element.mouseOver [ Element.Background.color (Element.rgba 1 1 1 0.2) ]
+            , Element.padding 3
+            , Element.alignRight
+            , Element.htmlAttribute (HA.title "Close")
+            ]
+            { label =
+                FontAwesome.Solid.xmark
+                    |> FontAwesome.view
+                    |> Element.html
+                    |> Element.el []
+            , onPress = Just UserInputClosePopup
+            }
         ]
-            |> Element.row (Element.spacing defaultFontSize :: headingAttributes 3)
+            |> Element.row
+                (Element.spacing defaultFontSize
+                    :: Element.width Element.fill
+                    :: headingAttributes 3
+                )
       , guideParagraphItems |> Element.paragraph [ elementFontSizePercent 80 ]
       , contentElement
       ]
@@ -2868,7 +2906,8 @@ popupWindowElementAttributesFromAttributes { title, titleIcon, guideParagraphIte
         |> Element.el
             [ Element.Background.color (Element.rgb 0 0 0)
             , Element.Border.color (Element.rgb 0.8 0.8 0.8)
-            , Element.Border.width 2
+            , Element.Border.width 1
+            , Element.Border.rounded 8
             , Element.width (Element.px 800)
             , Element.centerX
             , Element.centerY
@@ -3658,6 +3697,7 @@ buttonElement buttonConfig =
         [ Element.Background.color buttonBackgroundColor.default
         , Element.mouseOver [ Element.Background.color buttonBackgroundColor.mouseOver ]
         , Element.paddingXY defaultFontSize (defaultFontSize // 2)
+        , Element.Border.rounded 2
         ]
         { label = buttonConfig.label
         , onPress = buttonConfig.onPress
@@ -3756,7 +3796,7 @@ titlebarMenuEntryDropdownContent state menuEntry =
     menuEntries
         |> Element.column
             [ Element.spacing 2
-            , Element.paddingXY 2 8
+            , Element.paddingXY 4 4
             , Element.width Element.shrink
             ]
         |> Element.el
