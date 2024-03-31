@@ -5,8 +5,8 @@
     <TargetFramework>net8.0</TargetFramework>
     <RootNamespace>ElmTime</RootNamespace>
     <AssemblyName>elm-time</AssemblyName>
-    <AssemblyVersion>2024.0329.0.0</AssemblyVersion>
-    <FileVersion>2024.0329.0.0</FileVersion>
+    <AssemblyVersion>2024.0331.0.0</AssemblyVersion>
+    <FileVersion>2024.0331.0.0</FileVersion>
     <Nullable>enable</Nullable>
     <GenerateEmbeddedFilesManifest>true</GenerateEmbeddedFilesManifest>
   </PropertyGroup>
@@ -39,7 +39,7 @@
 
   <ItemGroup>
     <PackageReference Include="certes" Version="3.0.4" />
-    <PackageReference Include="JavaScriptEngineSwitcher.V8" Version="3.21.5" />
+    <PackageReference Include="JavaScriptEngineSwitcher.V8" Version="3.24.2" />
     <PackageReference Include="Jint" Version="3.0.1" />
     <PackageReference Include="LibGit2Sharp" Version="0.28.0" />
     <PackageReference Include="McMaster.Extensions.CommandLineUtils" Version="4.1.0" />
