@@ -18,7 +18,7 @@ namespace ElmTime;
 
 public class Program
 {
-    public static string AppVersionId => "2024-04-01";
+    public static string AppVersionId => "0.1.0";
 
     private static int AdminInterfaceDefaultPort => 4000;
 
@@ -47,7 +47,7 @@ public class Program
             new McMaster.Extensions.CommandLineUtils.HelpText.DefaultHelpTextGenerator { SortCommandsByName = false }
         };
 
-        app.VersionOption(template: "-v|--version", shortFormVersion: "version " + AppVersionId);
+        app.VersionOption(template: "-v|--version", shortFormVersion: "elm-time " + AppVersionId);
 
         var installCommand = app.Command("install", installCommand =>
         {
