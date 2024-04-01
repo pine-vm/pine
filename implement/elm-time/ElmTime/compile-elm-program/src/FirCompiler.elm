@@ -87,7 +87,7 @@ type Deconstruction
 
 
 type alias EmitStack =
-    { importedFunctions : Dict.Dict String Pine.Value
+    { importedFunctions : Dict.Dict String ( EnvironmentFunctionEntry, Pine.Value )
     , declarationsDependencies : Dict.Dict String (Set.Set String)
 
     -- The functions in the first item in the environment list
@@ -188,7 +188,6 @@ emitExpression stack expression =
         DeclarationBlockExpression declarations innerExpression ->
             emitExpressionInDeclarationBlock
                 stack
-                { availableEmittedFunctions = [] }
                 declarations
                 innerExpression
 
@@ -218,7 +217,6 @@ emitFunctionExpression : EmitStack -> List FunctionParam -> Expression -> Result
 emitFunctionExpression stack functionParams functionBody =
     emitExpressionInDeclarationBlock
         stack
-        { availableEmittedFunctions = [] }
         Dict.empty
         (FunctionExpression functionParams functionBody)
 
@@ -226,11 +224,6 @@ emitFunctionExpression stack functionParams functionBody =
 type alias DeclarationBlockFunctionEntry =
     { parameters : List FunctionParam
     , innerExpression : Expression
-    }
-
-
-type alias EmitDeclarationBlockPrefix =
-    { availableEmittedFunctions : List ( EnvironmentFunctionEntry, Pine.Value )
     }
 
 
@@ -244,15 +237,20 @@ type alias EmitDeclarationBlockResult =
 
 emitExpressionInDeclarationBlock :
     EmitStack
-    -> EmitDeclarationBlockPrefix
     -> Dict.Dict String Expression
     -> Expression
     -> Result String Pine.Expression
-emitExpressionInDeclarationBlock stackBeforeAddingDeps environmentPrefix blockDeclarations mainExpression =
+emitExpressionInDeclarationBlock stackBeforeAddingDeps blockDeclarations mainExpression =
     let
         blockDeclarationsIncludingImports =
-            Dict.union blockDeclarations
-                (Dict.map (always LiteralExpression) stackBeforeAddingDeps.importedFunctions)
+            Dict.foldr
+                (\functionName ( _, importedVal ) aggregate ->
+                    Dict.insert functionName
+                        (LiteralExpression importedVal)
+                        aggregate
+                )
+                blockDeclarations
+                stackBeforeAddingDeps.importedFunctions
 
         stackBefore =
             { stackBeforeAddingDeps
@@ -320,7 +318,6 @@ emitExpressionInDeclarationBlock stackBeforeAddingDeps environmentPrefix blockDe
         case
             emitDeclarationBlock
                 stackBefore
-                environmentPrefix
                 usedBlockDeclarations
                 { closureCaptures = closureCaptures
                 , additionalDeps = [ mainExpression ]
@@ -355,19 +352,18 @@ type ClosureCapture
 
 emitDeclarationBlock :
     EmitStack
-    -> EmitDeclarationBlockPrefix
     -> Dict.Dict String Expression
     ->
         { closureCaptures : List ( String, EnvironmentDeconstructionEntry )
         , additionalDeps : List Expression
         }
     -> Result String ( EmitStack, EmitDeclarationBlockResult )
-emitDeclarationBlock stackBefore environmentPrefix blockDeclarations config =
+emitDeclarationBlock stackBefore blockDeclarations config =
     let
         availableEmittedDependencies : Dict.Dict String (Set.Set String)
         availableEmittedDependencies =
-            List.foldl
-                (\( availableEmitted, _ ) ->
+            Dict.foldl
+                (\_ ( availableEmitted, _ ) ->
                     Dict.insert
                         availableEmitted.functionName
                         (case availableEmitted.expectedEnvironment of
@@ -382,7 +378,7 @@ emitDeclarationBlock stackBefore environmentPrefix blockDeclarations config =
                         )
                 )
                 Dict.empty
-                environmentPrefix.availableEmittedFunctions
+                stackBefore.importedFunctions
 
         blockDeclarationsDirectDependencies : Dict.Dict String (Set.Set String)
         blockDeclarationsDirectDependencies =
@@ -437,16 +433,27 @@ emitDeclarationBlock stackBefore environmentPrefix blockDeclarations config =
 
         usedAvailableEmitted : List ( EnvironmentFunctionEntry, Pine.Expression )
         usedAvailableEmitted =
-            List.foldl
-                (\( availableEmitted, emittedValue ) aggregate ->
+            Dict.foldr
+                (\_ ( availableEmitted, emittedValue ) aggregate ->
                     if Set.member availableEmitted.functionName allDependencies then
-                        ( availableEmitted, Pine.LiteralExpression emittedValue ) :: aggregate
+                        if Set.member availableEmitted.functionName stackBeforeAvailableDeclarations then
+                            aggregate
+
+                        else
+                            ( availableEmitted, Pine.LiteralExpression emittedValue ) :: aggregate
 
                     else
                         aggregate
                 )
                 []
-                environmentPrefix.availableEmittedFunctions
+                stackBefore.importedFunctions
+
+        usedAvailableEmittedNames : Set.Set String
+        usedAvailableEmittedNames =
+            List.foldl
+                (\( envFunc, _ ) aggregate -> Set.insert envFunc.functionName aggregate)
+                Set.empty
+                usedAvailableEmitted
 
         blockDeclarationsList : List ( String, Expression )
         blockDeclarationsList =
@@ -534,10 +541,14 @@ emitDeclarationBlock stackBefore environmentPrefix blockDeclarations config =
                                     not (Set.member declName declDependencies)
                                         && (Set.diff declDependencies stackBeforeAvailableDeclarations == Set.empty)
                                 then
-                                    ( declName
-                                    , asFunction.innerExpression
-                                    )
-                                        :: aggregate
+                                    if Set.member declName usedAvailableEmittedNames then
+                                        aggregate
+
+                                    else
+                                        ( declName
+                                        , asFunction.innerExpression
+                                        )
+                                            :: aggregate
 
                                 else
                                     aggregate
@@ -553,33 +564,12 @@ emitDeclarationBlock stackBefore environmentPrefix blockDeclarations config =
                 )
                 allBlockDeclarationsAsFunctions
 
-        closureCaptureFromExpr : Expression -> ClosureCapture
-        closureCaptureFromExpr expr =
-            let
-                continueWithDefault =
-                    ExpressionCapture expr
-            in
-            {- TODO: Make impl to get value more robust, should work for any independent expression.
-               A simple example would be wrapping in a StringTagExpression.
-            -}
-            case expr of
-                LiteralExpression closureCaptureValue ->
-                    case parseFunctionRecordFromValueTagged closureCaptureValue of
-                        Err _ ->
-                            continueWithDefault
-
-                        Ok parsedFunction ->
-                            FunctionCapture closureCaptureValue parsedFunction
-
-                _ ->
-                    continueWithDefault
-
         closureCaptures : List ( String, ClosureCapture )
         closureCaptures =
             List.concat
                 [ List.map (Tuple.mapSecond DeconstructionCapture)
                     config.closureCaptures
-                , List.map (Tuple.mapSecond closureCaptureFromExpr)
+                , List.map (Tuple.mapSecond ExpressionCapture)
                     (closureCapturesForInternals ++ closureCapturesForBlockDecls)
                 ]
 

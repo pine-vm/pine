@@ -1084,7 +1084,6 @@ emitClosureExpressionTests =
                             emitClosureResult =
                                 FirCompiler.emitExpressionInDeclarationBlock
                                     emptyEmitStack
-                                    { availableEmittedFunctions = [] }
                                     (Dict.fromList environmentFunctions)
                                     rootAsExpression
                         in

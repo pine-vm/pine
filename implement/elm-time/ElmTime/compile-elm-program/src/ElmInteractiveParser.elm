@@ -205,7 +205,6 @@ compileInteractiveSubmission environment submission =
                                         (\functionDeclarationCompilation ->
                                             emitExpressionInDeclarationBlock
                                                 emitStack
-                                                { availableEmittedFunctions = [] }
                                                 (Dict.singleton declarationName functionDeclarationCompilation)
                                                 functionDeclarationCompilation
                                         )
@@ -259,7 +258,6 @@ compileInteractiveSubmission environment submission =
                             |> Result.andThen
                                 (emitExpressionInDeclarationBlock
                                     emitStack
-                                    { availableEmittedFunctions = [] }
                                     Dict.empty
                                 )
                     of

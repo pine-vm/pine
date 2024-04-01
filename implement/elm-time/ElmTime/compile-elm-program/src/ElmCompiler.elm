@@ -918,11 +918,38 @@ compilationAndEmitStackFromModulesInCompilation availableModules { moduleAliases
                     )
                     Dict.empty
 
-        importedFunctions : Dict.Dict String Pine.Value
-        importedFunctions =
+        importedFunctionsBeforeParse : Dict.Dict String Pine.Value
+        importedFunctionsBeforeParse =
             Dict.union
                 importedModulesDeclarationsFlat
                 moduleImports.importedFunctions
+
+        importedFunctions : Dict.Dict String ( FirCompiler.EnvironmentFunctionEntry, Pine.Value )
+        importedFunctions =
+            Dict.map
+                (\functionName functionValue ->
+                    let
+                        ( paramCount, expectedEnv ) =
+                            case FirCompiler.parseFunctionRecordFromValueTagged functionValue of
+                                Err _ ->
+                                    ( 0
+                                    , FirCompiler.LocalEnvironment { expectedDecls = [] }
+                                    )
+
+                                Ok functionRecord ->
+                                    ( functionRecord.parameterCount
+                                    , FirCompiler.ImportedEnvironment
+                                        { pathToRecordFromEnvEntry = [] }
+                                    )
+                    in
+                    ( { functionName = functionName
+                      , parameterCount = paramCount
+                      , expectedEnvironment = expectedEnv
+                      }
+                    , functionValue
+                    )
+                )
+                importedFunctionsBeforeParse
 
         emitStack =
             { importedFunctions = importedFunctions
@@ -2652,7 +2679,7 @@ emitModuleFunctionDeclarations stackBefore declarations =
         allModuleDeclarations =
             Dict.union declarations.exposedDeclarations declarations.supportingDeclarations
 
-        importedFunctionsNotShadowed : Dict.Dict String Pine.Value
+        importedFunctionsNotShadowed : Dict.Dict String ( FirCompiler.EnvironmentFunctionEntry, Pine.Value )
         importedFunctionsNotShadowed =
             Dict.filter
                 (\importedFunctionName _ ->
@@ -2694,40 +2721,9 @@ emitModuleFunctionDeclarations stackBefore declarations =
                 Dict.empty
                 declarationsDirectDependencies
 
-        usedImports : Dict.Dict String Pine.Value
-        usedImports =
-            Dict.filter
-                (\declName _ -> Set.member declName aggregateTransitiveDependencies)
-                importedFunctionsNotShadowed
-
         usedImportsAvailableEmittedFunctions : List ( FirCompiler.EnvironmentFunctionEntry, Pine.Value )
         usedImportsAvailableEmittedFunctions =
-            Dict.toList usedImports
-                |> List.map
-                    (\( functionName, functionValue ) ->
-                        let
-                            ( parameterCount, expectedEnv, envEntryValue ) =
-                                case FirCompiler.parseFunctionRecordFromValueTagged functionValue of
-                                    Err _ ->
-                                        ( 0
-                                        , FirCompiler.LocalEnvironment { expectedDecls = [] }
-                                        , Pine.encodeExpressionAsValue (Pine.LiteralExpression functionValue)
-                                        )
-
-                                    Ok functionRecord ->
-                                        ( functionRecord.parameterCount
-                                        , FirCompiler.ImportedEnvironment
-                                            { pathToRecordFromEnvEntry = [] }
-                                        , functionValue
-                                        )
-                        in
-                        ( { functionName = functionName
-                          , parameterCount = parameterCount
-                          , expectedEnvironment = expectedEnv
-                          }
-                        , envEntryValue
-                        )
-                    )
+            Dict.values importedFunctionsNotShadowed
 
         recursionDomains : List (Set.Set String)
         recursionDomains =
@@ -2808,10 +2804,18 @@ emitModuleFunctionDeclarations stackBefore declarations =
                     Dict.filter
                         (\declName _ -> Set.member declName recursionDomainDeclarationsToIncludeInBlock)
                         recursionDomainDeclarations
+
+                importedFunctions : Dict.Dict String ( FirCompiler.EnvironmentFunctionEntry, Pine.Value )
+                importedFunctions =
+                    List.foldl
+                        (\( importRecord, value ) aggregate ->
+                            Dict.insert importRecord.functionName ( importRecord, value ) aggregate
+                        )
+                        Dict.empty
+                        availableEmittedFunctionsIncludingImports
             in
             FirCompiler.emitDeclarationBlock
-                emitStack
-                { availableEmittedFunctions = availableEmittedFunctionsIncludingImports }
+                { emitStack | importedFunctions = importedFunctions }
                 recursionDomainDeclarationsInBlock
                 { closureCaptures = []
                 , additionalDeps = Dict.values recursionDomainDeclarations
