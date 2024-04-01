@@ -205,8 +205,8 @@ idivHelper dividend divisor quotient =
 
 pow : Int -> Int -> Int
 pow base exponent =
-    if lt exponent 0 then
-        0
+    if Pine_kernel.is_sorted_ascending_int [ exponent, 0 ] then
+        1
 
     else
         powHelper base exponent 1
@@ -214,11 +214,11 @@ pow base exponent =
 
 powHelper : Int -> Int -> Int -> Int
 powHelper base exponent accumulator =
-    if eq exponent 0 then
+    if Pine_kernel.equal [ exponent, 0 ] then
         accumulator
 
     else
-        powHelper base (sub exponent 1) (mul base accumulator)
+        powHelper base (Pine_kernel.add_int [ exponent, -1 ]) (Pine_kernel.mul_int [ base, accumulator ])
 
 
 and : Bool -> Bool -> Bool
@@ -653,7 +653,21 @@ map f xs =
 
 indexedMap : (Int -> a -> b) -> List a -> List b
 indexedMap f xs =
-    map2 f (range 0 (length xs - 1)) xs
+    indexedMapHelp f 0 xs []
+
+
+indexedMapHelp : (Int -> a -> b) -> Int -> List a -> List b -> List b
+indexedMapHelp f index xs acc =
+    case xs of
+        [] ->
+            Pine_kernel.reverse acc
+
+        x :: following ->
+            indexedMapHelp
+                f
+                (index + 1)
+                following
+                (Pine_kernel.concat [ [ f index x ], acc ])
 
 
 foldl : (a -> b -> b) -> b -> List a -> b
@@ -673,12 +687,41 @@ foldr func acc list =
 
 filter : (a -> Bool) -> List a -> List a
 filter isGood list =
-    foldr (\\x xs -> if isGood x then cons x xs else xs) [] list
+    filterHelp isGood list []
+
+
+filterHelp : (a -> Bool) -> List a -> List a -> List a
+filterHelp isGood list acc =
+    case list of
+        [] ->
+            Pine_kernel.reverse acc
+
+        x :: xs ->
+            if isGood x then
+                filterHelp isGood xs (Pine_kernel.concat [ [ x ], acc ])
+
+            else
+                filterHelp isGood xs acc
 
 
 filterMap : (a -> Maybe b) -> List a -> List b
 filterMap f xs =
-    foldr (maybeCons f) [] xs
+    filterMapHelp f xs []
+
+
+filterMapHelp : (a -> Maybe b) -> List a -> List b -> List b
+filterMapHelp f xs acc =
+    case xs of
+        [] ->
+            Pine_kernel.reverse acc
+
+        x :: remaining ->
+            case f x of
+                Just value ->
+                    filterMapHelp f remaining (Pine_kernel.concat [ [ value ], acc ])
+
+                Nothing ->
+                    filterMapHelp f remaining acc
 
 
 maybeCons : (a -> Maybe b) -> a -> List b -> List b
@@ -717,7 +760,16 @@ member x xs =
 
 all : (a -> Bool) -> List a -> Bool
 all isOkay list =
-    not (any (not << isOkay) list)
+    case list of
+        [] ->
+            True
+
+        x :: xs ->
+            if isOkay x then
+                all isOkay xs
+
+            else
+                False
 
 
 any : (a -> Bool) -> List a -> Bool
@@ -761,7 +813,7 @@ sum numbers =
 
 append : List a -> List a -> List a
 append xs ys =
-    concat [ xs, ys ]
+    Pine_kernel.concat [ xs, ys ]
 
 
 concat : List (List a) -> List a
@@ -771,7 +823,7 @@ concat lists =
 
 concatMap : (a -> List b) -> List a -> List b
 concatMap f list =
-    concat (map f list)
+    foldr (\\x xs -> Pine_kernel.concat [ f x, xs ]) [] list
 
 
 intersperse : a -> List a -> List a
@@ -1102,22 +1154,28 @@ uncons string =
 
 isEmpty : String -> Bool
 isEmpty string =
-    string == ""
+    Pine_kernel.equal [ string, "" ]
 
 
 length : String -> Int
-length =
-    toList >> List.length
+length string =
+    case string of
+    String list ->
+        Pine_kernel.length list
 
 
 reverse : String -> String
-reverse =
-    toList >> List.reverse >> fromList
+reverse string =
+    case string of
+    String list ->
+        String (Pine_kernel.reverse list)
 
 
 repeat : Int -> String -> String
-repeat n =
-    toList >> List.repeat n >> List.concat >> fromList
+repeat n string =
+    case string of
+    String list ->
+        String (Pine_kernel.concat (List.repeat n list))
 
 
 replace : String -> String -> String -> String
@@ -1137,18 +1195,21 @@ concat strings =
 
 split : String -> String -> List String
 split sep string =
-    if sep == "" then
-        List.map fromChar (toList string)
+    case sep of
+    String sepList ->
+        if Pine_kernel.equal [ sepList, [] ] then
+            List.map fromChar (toList string)
 
-    else splitHelperOnList [] (toList sep) (toList string)
+        else
+            splitHelperOnList [] sepList (toList string)
 
 
 splitHelperOnList : List Char -> List Char -> List Char -> List String
 splitHelperOnList current sep string =
-    if string == [] then
+    if Pine_kernel.equal [ string, [] ] then
         [ fromList current ]
 
-    else if sep == (List.take (List.length sep) string) then
+    else if Pine_kernel.equal [ sep, (List.take (List.length sep) string) ] then
         [ fromList current ] ++ splitHelperOnList [] sep (List.drop (List.length sep) string)
 
     else
@@ -1157,7 +1218,9 @@ splitHelperOnList current sep string =
 
 join : String -> List String -> String
 join sep chunks =
-    fromList (joinOnList (toList sep) (List.map toList chunks))
+    case sep of
+    String sepList ->
+        String (joinOnList sepList (List.map toList chunks))
 
 
 joinOnList : List Char -> List (List Char) -> List Char
@@ -1171,7 +1234,7 @@ joinOnList sep chunks =
             then
                 nextChunk
             else
-                nextChunk ++ sep ++ joinOnList sep remaining
+                Pine_kernel.concat [ nextChunk, sep, joinOnList sep remaining ]
 
 
 slice : Int -> Int -> String -> String
@@ -1218,18 +1281,38 @@ dropRight n string =
 
 contains : String -> String -> Bool
 contains pattern string =
-    if startsWith pattern string then
+    case (pattern, string) of
+        (String patternList, String stringList) ->
+            if Pine_kernel.equal [ patternList, [] ] then
+                True
+
+            else
+                containsOnList patternList stringList
+
+
+containsOnList : List Char -> List Char -> Bool
+containsOnList pattern string =
+    if Pine_kernel.equal
+        [ Pine_kernel.take [ Pine_kernel.length pattern, string ]
+        , pattern
+        ]
+    then
         True
     else
-        if Pine_kernel.is_sorted_ascending_int [ length string, length pattern ] then
+        if Pine_kernel.is_sorted_ascending_int [ Pine_kernel.length string, Pine_kernel.length pattern ] then
             False
         else
-            contains pattern (dropLeft 1 string)
+            containsOnList pattern (Pine_kernel.skip [ 1, string ])
 
 
 startsWith : String -> String -> Bool
 startsWith pattern string =
-    left (length pattern) string == pattern
+    case (pattern, string) of
+        (String patternList, String stringList) ->
+            Pine_kernel.equal
+                [ Pine_kernel.take [ Pine_kernel.length patternList, stringList ]
+                , patternList
+                ]
 
 
 endsWith : String -> String -> Bool
@@ -1333,7 +1416,7 @@ fromIntAsList int =
         fromUnsignedIntAsList int
 
     else
-        [ '-' ] ++ fromUnsignedIntAsList -int
+        Pine_kernel.concat [ [ '-' ], fromUnsignedIntAsList -int ]
 
 
 fromUnsignedIntAsList : Int -> List Char
@@ -1435,7 +1518,10 @@ dropWhileList predicate stringList =
 
 padLeft : Int -> Char -> String -> String
 padLeft n char string =
-    repeat (n - length string) (fromChar char) ++ string
+    case string of
+    String list ->
+        String
+            (Pine_kernel.concat [ List.repeat (n - Pine_kernel.length list) char, list ])
 
 
 lines : String -> List String
@@ -1448,7 +1534,9 @@ lines string =
 
 foldr : (Char -> b -> b) -> b -> String -> b
 foldr func acc string =
-    List.foldr func acc (toList string)
+    case string of
+    String list ->
+        List.foldr func acc list
 
 
 """
