@@ -178,7 +178,7 @@ compileInteractiveSubmission environment submission =
                 Err error ->
                     Ok
                         (buildExpressionForNewStateAndResponse
-                            { newStateExpression = Pine.EnvironmentExpression
+                            { newStateExpression = Pine.environmentExpr
                             , responseExpression =
                                 Pine.LiteralExpression (Pine.valueFromString ("Failed to parse submission: " ++ error))
                             }
@@ -269,7 +269,7 @@ compileInteractiveSubmission environment submission =
                         Ok pineExpression ->
                             Ok
                                 (buildExpressionForNewStateAndResponse
-                                    { newStateExpression = Pine.EnvironmentExpression
+                                    { newStateExpression = Pine.environmentExpr
                                     , responseExpression = pineExpression
                                     }
                                 )

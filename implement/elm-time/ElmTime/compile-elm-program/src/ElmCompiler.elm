@@ -2037,7 +2037,7 @@ compileElmSyntaxPattern elmPattern =
                                         { expression = Pine.LiteralExpression pineFunctionForRecordAccessAsValue
                                         , environment =
                                             Pine.ListExpression
-                                                [ Pine.EnvironmentExpression
+                                                [ Pine.environmentExpr
                                                 , Pine.LiteralExpression (Pine.valueFromString fieldName)
                                                 ]
                                         }
@@ -2203,13 +2203,13 @@ pineFunctionForRecordUpdate : Pine.Expression
 pineFunctionForRecordUpdate =
     let
         recordExpression =
-            listItemFromIndexExpression_Pine 0 Pine.EnvironmentExpression
+            listItemFromIndexExpression_Pine 0 Pine.environmentExpr
 
         recordFieldsExpression =
             pineKernel_ListHead_Pine (listItemFromIndexExpression_Pine 1 recordExpression)
 
         fieldsUpdatesExpression =
-            listItemFromIndexExpression_Pine 1 Pine.EnvironmentExpression
+            listItemFromIndexExpression_Pine 1 Pine.environmentExpr
 
         recursiveFunction : Pine.Value
         recursiveFunction =
@@ -2257,19 +2257,19 @@ recursiveFunctionToUpdateFieldsInRecord =
     let
         functionReferenceLocalExpression : Pine.Expression
         functionReferenceLocalExpression =
-            listItemFromIndexExpression_Pine 0 Pine.EnvironmentExpression
+            listItemFromIndexExpression_Pine 0 Pine.environmentExpr
 
         fieldPairsLocalExpression : Pine.Expression
         fieldPairsLocalExpression =
-            listItemFromIndexExpression_Pine 1 Pine.EnvironmentExpression
+            listItemFromIndexExpression_Pine 1 Pine.environmentExpr
 
         processedFieldsLocalExpression : Pine.Expression
         processedFieldsLocalExpression =
-            listItemFromIndexExpression_Pine 2 Pine.EnvironmentExpression
+            listItemFromIndexExpression_Pine 2 Pine.environmentExpr
 
         remainingFieldsLocalExpression : Pine.Expression
         remainingFieldsLocalExpression =
-            listItemFromIndexExpression_Pine 3 Pine.EnvironmentExpression
+            listItemFromIndexExpression_Pine 3 Pine.environmentExpr
 
         remainingFieldsNextLocalExpression : Pine.Expression
         remainingFieldsNextLocalExpression =
@@ -2348,10 +2348,10 @@ pineFunctionForRecordAccess : Pine.Expression
 pineFunctionForRecordAccess =
     let
         recordExpression =
-            listItemFromIndexExpression_Pine 0 Pine.EnvironmentExpression
+            listItemFromIndexExpression_Pine 0 Pine.environmentExpr
 
         fieldNameLocalExpression =
-            listItemFromIndexExpression_Pine 1 Pine.EnvironmentExpression
+            listItemFromIndexExpression_Pine 1 Pine.environmentExpr
 
         recordFieldsExpression =
             pineKernel_ListHead_Pine (listItemFromIndexExpression_Pine 1 recordExpression)
@@ -2385,13 +2385,13 @@ recursiveFunctionToLookupFieldInRecord : Pine.Expression
 recursiveFunctionToLookupFieldInRecord =
     let
         selfFunctionLocalExpression =
-            listItemFromIndexExpression_Pine 0 Pine.EnvironmentExpression
+            listItemFromIndexExpression_Pine 0 Pine.environmentExpr
 
         fieldNameLocalExpression =
-            listItemFromIndexExpression_Pine 1 Pine.EnvironmentExpression
+            listItemFromIndexExpression_Pine 1 Pine.environmentExpr
 
         remainingFieldsLocalExpression =
-            listItemFromIndexExpression_Pine 2 Pine.EnvironmentExpression
+            listItemFromIndexExpression_Pine 2 Pine.environmentExpr
 
         continueWithRemainingExpression =
             Pine.ParseAndEvalExpression
@@ -2827,7 +2827,7 @@ emitModuleFunctionDeclarations stackBefore declarations =
                                         getFunctionInnerExpressionFromIndex declarationIndex =
                                             let
                                                 getEnvFunctionsExpression =
-                                                    Pine.EnvironmentExpression
+                                                    Pine.environmentExpr
                                                         |> listItemFromIndexExpression_Pine 0
                                             in
                                             Pine.LiteralExpression
@@ -2837,7 +2837,7 @@ emitModuleFunctionDeclarations stackBefore declarations =
                                                             FirCompiler.listItemFromIndexExpression_Pine
                                                                 declarationIndex
                                                                 getEnvFunctionsExpression
-                                                        , environment = Pine.EnvironmentExpression
+                                                        , environment = Pine.environmentExpr
                                                         }
                                                     )
                                                 )
@@ -3056,7 +3056,7 @@ compileElmChoiceTypeTagConstructorValue { tagName, argumentsCount } =
         1 ->
             Pine.ListExpression
                 [ Pine.LiteralExpression (Pine.valueFromString tagName)
-                , Pine.ListExpression [ Pine.EnvironmentExpression ]
+                , Pine.ListExpression [ Pine.environmentExpr ]
                 ]
                 |> Pine.encodeExpressionAsValue
 
@@ -3073,9 +3073,9 @@ compileElmChoiceTypeTagConstructorValue { tagName, argumentsCount } =
                         , Pine.ListExpression
                             [ Pine.ListExpression
                                 [ Pine.LiteralExpression Pine.stringAsValue_Literal
-                                , Pine.EnvironmentExpression
+                                , Pine.environmentExpr
                                 ]
-                            , Pine.EnvironmentExpression
+                            , Pine.environmentExpr
                                 |> Pine.encodeExpressionAsValue
                                 |> Pine.LiteralExpression
                             ]
@@ -3090,7 +3090,7 @@ compileElmChoiceTypeTagConstructorValue { tagName, argumentsCount } =
                 , List.range 0 (argumentsCount - 1)
                     |> List.map
                         (\paramIndex ->
-                            Pine.EnvironmentExpression
+                            Pine.environmentExpr
                                 |> listItemFromIndexExpression_Pine 1
                                 |> listItemFromIndexExpression_Pine paramIndex
                         )

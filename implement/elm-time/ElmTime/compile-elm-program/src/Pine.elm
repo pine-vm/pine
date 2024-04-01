@@ -15,6 +15,7 @@ module Pine exposing
     , displayStringFromPineError
     , emptyEvalContext
     , encodeExpressionAsValue
+    , environmentExpr
     , environmentFromDeclarations
     , evaluateExpression
     , falseValue
@@ -41,8 +42,6 @@ import BigInt
 import Common
 import Dict
 import Hex
-import Maybe.Extra
-import Result.Extra
 
 
 type Expression
@@ -114,7 +113,7 @@ addToEnvironment names context =
 
 emptyEvalContext : EvalContext
 emptyEvalContext =
-    { environment = ListValue [] }
+    { environment = listValue_Empty }
 
 
 evaluateExpression : EvalContext -> Expression -> Result (PathDescription String) Value
@@ -270,7 +269,7 @@ kernelFunctions =
                             head
 
                         [] ->
-                            ListValue []
+                            listValue_Empty
                 )
           )
         , ( "add_int"
@@ -303,10 +302,10 @@ kernelFunction_Negate value =
                     BlobValue (4 :: rest)
 
                 _ ->
-                    ListValue []
+                    listValue_Empty
 
         ListValue _ ->
-            ListValue []
+            listValue_Empty
 
 
 kernel_function_concat : Value -> Value
@@ -315,7 +314,7 @@ kernel_function_concat value =
         ListValue list ->
             case list of
                 [] ->
-                    ListValue []
+                    listValue_Empty
 
                 (BlobValue _) :: _ ->
                     BlobValue
@@ -346,7 +345,7 @@ kernel_function_concat value =
                         )
 
         _ ->
-            ListValue []
+            listValue_Empty
 
 
 list_all_same : List a -> Bool
@@ -461,31 +460,13 @@ kernelFunctionExpectingListOfBigIntAndProducingBigInt combine seed =
                 itemValue :: following ->
                     case bigIntFromValue itemValue of
                         Err _ ->
-                            ListValue []
+                            listValue_Empty
 
                         Ok itemInt ->
                             combineRecursive following (combine aggregate itemInt)
     in
     kernelFunctionExpectingList
         (\list -> combineRecursive list seed)
-
-
-kernelFunctionExpectingListOfTypeBool : (List Bool -> Bool) -> KernelFunction
-kernelFunctionExpectingListOfTypeBool apply =
-    kernelFunctionExpectingList
-        (\list ->
-            case list of
-                [] ->
-                    ListValue []
-
-                _ ->
-                    case Maybe.Extra.combine (List.map boolFromValue list) of
-                        Nothing ->
-                            ListValue []
-
-                        Just bools ->
-                            valueFromBool (apply bools)
-        )
 
 
 kernelFunctionExpectingExactlyTwoArguments :
@@ -501,18 +482,18 @@ kernelFunctionExpectingExactlyTwoArguments configuration =
                 [ arg0Value, arg1Value ] ->
                     case configuration.mapArg0 arg0Value of
                         Err _ ->
-                            ListValue []
+                            listValue_Empty
 
                         Ok arg0 ->
                             case configuration.mapArg1 arg1Value of
                                 Err _ ->
-                                    ListValue []
+                                    listValue_Empty
 
                                 Ok arg1 ->
                                     configuration.apply arg0 arg1
 
                 _ ->
-                    ListValue []
+                    listValue_Empty
         )
 
 
@@ -523,19 +504,7 @@ kernelFunctionExpectingList continueWithList value =
             continueWithList list
 
         _ ->
-            ListValue []
-
-
-boolFromValue : Value -> Maybe Bool
-boolFromValue value =
-    if value == trueValue then
-        Just True
-
-    else if value == falseValue then
-        Just False
-
-    else
-        Nothing
+            listValue_Empty
 
 
 valueFromBool : Bool -> Value
@@ -646,6 +615,64 @@ prependAllLines prefix text =
 
 valueFromString : String -> Value
 valueFromString string =
+    case string of
+        "list_head" ->
+            stringAsValue_list_head
+
+        "skip" ->
+            stringAsValue_skip
+
+        "equal" ->
+            stringAsValue_equal
+
+        "EQ" ->
+            stringAsValue_EQ
+
+        "GT" ->
+            stringAsValue_GT
+
+        "LT" ->
+            stringAsValue_LT
+
+        "String" ->
+            stringAsValue_String
+
+        "Nothing" ->
+            stringAsValue_Nothing
+
+        "Just" ->
+            stringAsValue_Just
+
+        "KernelApplication" ->
+            stringAsValue_KernelApplication
+
+        "Literal" ->
+            stringAsValue_Literal
+
+        "List" ->
+            stringAsValue_List
+
+        "ParseAndEval" ->
+            stringAsValue_ParseAndEval
+
+        "Conditional" ->
+            stringAsValue_Conditional
+
+        "Environment" ->
+            stringAsValue_Environment
+
+        "Function" ->
+            stringAsValue_Function
+
+        "StringTag" ->
+            stringAsValue_StringTag
+
+        _ ->
+            computeValueFromString string
+
+
+computeValueFromString : String -> Value
+computeValueFromString string =
     ListValue
         (String.foldr (\char aggregate -> valueFromChar char :: aggregate) [] string)
 
@@ -754,6 +781,25 @@ blobValueFromBigInt bigint =
 
 valueFromInt : Int -> Value
 valueFromInt int =
+    case int of
+        1 ->
+            valueFromInt_1
+
+        2 ->
+            valueFromInt_2
+
+        3 ->
+            valueFromInt_3
+
+        4 ->
+            valueFromInt_4
+
+        _ ->
+            computeValueFromInt int
+
+
+computeValueFromInt : Int -> Value
+computeValueFromInt int =
     BlobValue (blobValueFromInt int)
 
 
@@ -938,9 +984,7 @@ encodeExpressionAsValue expression =
                 )
 
         EnvironmentExpression ->
-            encodeUnionToPineValue
-                stringAsValue_Environment
-                (ListValue [])
+            environmentExpressionAsValue
 
         StringTagExpression tag tagged ->
             encodeUnionToPineValue
@@ -950,6 +994,13 @@ encodeExpressionAsValue expression =
                     , encodeExpressionAsValue tagged
                     ]
                 )
+
+
+environmentExpressionAsValue : Value
+environmentExpressionAsValue =
+    encodeUnionToPineValue
+        stringAsValue_Environment
+        listValue_Empty
 
 
 parseExpressionFromValue : Value -> Result String Expression
@@ -997,31 +1048,26 @@ parseExpressionFromValueDict =
                         Err err
           )
         , ( "Environment"
-          , \_ -> Ok EnvironmentExpression
+          , \_ -> Ok environmentExpr
           )
         , ( "StringTag"
           , \value ->
-                case parsePineListValue value of
+                case parseListWithExactlyTwoElements value of
                     Err err ->
                         Err err
 
-                    Ok list ->
-                        case parseListWithExactlyTwoElements list of
+                    Ok ( tagValue, taggedValue ) ->
+                        case stringFromValue tagValue of
                             Err err ->
                                 Err err
 
-                            Ok ( tagValue, taggedValue ) ->
-                                case stringFromValue tagValue of
+                            Ok tag ->
+                                case parseExpressionFromValue taggedValue of
                                     Err err ->
                                         Err err
 
-                                    Ok tag ->
-                                        case parseExpressionFromValue taggedValue of
-                                            Err err ->
-                                                Err err
-
-                                            Ok tagged ->
-                                                Ok (StringTagExpression tag tagged)
+                                    Ok tagged ->
+                                        Ok (StringTagExpression tag tagged)
           )
         ]
 
@@ -1254,7 +1300,7 @@ encodeUnionToPineValue tagNameValue unionTagValue =
 
 parseUnionFromPineValue : List ( ( String, Value ), Value -> Result String a ) -> Value -> Result String a
 parseUnionFromPineValue tags value =
-    case Result.andThen parseListWithExactlyTwoElements (parsePineListValue value) of
+    case parseListWithExactlyTwoElements value of
         Err err ->
             Err ("Failed to parse union: " ++ err)
 
@@ -1266,8 +1312,12 @@ parseUnionFromPineValue tags value =
             of
                 Nothing ->
                     Err
-                        ("Unexpected tag name: "
-                            ++ Result.Extra.unpack identity identity (stringFromValue tagNameValue)
+                        (case stringFromValue tagNameValue of
+                            Ok tagName ->
+                                "Unexpected tag name: " ++ tagName
+
+                            Err err ->
+                                "Failed decoding tag name: " ++ err
                         )
 
                 Just ( ( tagName, _ ), tagDecode ) ->
@@ -1305,96 +1355,166 @@ parseListOfPairs list =
     continueRecursive list []
 
 
-parseListWithExactlyTwoElements : List a -> Result String ( a, a )
-parseListWithExactlyTwoElements list =
-    case list of
-        [ a, b ] ->
-            Ok ( a, b )
-
-        _ ->
-            Err ("Unexpected number of elements in list: Not 2 but " ++ String.fromInt (List.length list))
-
-
-parsePineListValue : Value -> Result String (List Value)
-parsePineListValue value =
+parseListWithExactlyTwoElements : Value -> Result String ( Value, Value )
+parseListWithExactlyTwoElements value =
     case value of
-        ListValue list ->
-            Ok list
-
         BlobValue _ ->
             Err "Is not list but blob"
+
+        ListValue list ->
+            case list of
+                [ a, b ] ->
+                    Ok ( a, b )
+
+                _ ->
+                    Err ("Unexpected number of elements in list: Not 2 but " ++ String.fromInt (List.length list))
+
+
+environmentExpr : Expression
+environmentExpr =
+    EnvironmentExpression
+
+
+stringAsValue_list_head : Value
+stringAsValue_list_head =
+    computeValueFromString "list_head"
+
+
+stringAsValue_skip : Value
+stringAsValue_skip =
+    computeValueFromString "skip"
+
+
+stringAsValue_equal : Value
+stringAsValue_equal =
+    computeValueFromString "equal"
 
 
 stringAsValue_Literal : Value
 stringAsValue_Literal =
-    valueFromString "Literal"
+    computeValueFromString "Literal"
 
 
 stringAsValue_List : Value
 stringAsValue_List =
-    valueFromString "List"
+    computeValueFromString "List"
 
 
 stringAsValue_ParseAndEval : Value
 stringAsValue_ParseAndEval =
-    valueFromString "ParseAndEval"
+    computeValueFromString "ParseAndEval"
 
 
 stringAsValue_KernelApplication : Value
 stringAsValue_KernelApplication =
-    valueFromString "KernelApplication"
+    computeValueFromString "KernelApplication"
 
 
 stringAsValue_Conditional : Value
 stringAsValue_Conditional =
-    valueFromString "Conditional"
+    computeValueFromString "Conditional"
 
 
 stringAsValue_Environment : Value
 stringAsValue_Environment =
-    valueFromString "Environment"
+    computeValueFromString "Environment"
 
 
 stringAsValue_Function : Value
 stringAsValue_Function =
-    valueFromString "Function"
+    computeValueFromString "Function"
 
 
 stringAsValue_StringTag : Value
 stringAsValue_StringTag =
-    valueFromString "StringTag"
+    computeValueFromString "StringTag"
 
 
 stringAsValue_functionName : Value
 stringAsValue_functionName =
-    valueFromString "functionName"
+    computeValueFromString "functionName"
 
 
 stringAsValue_argument : Value
 stringAsValue_argument =
-    valueFromString "argument"
+    computeValueFromString "argument"
 
 
 stringAsValue_condition : Value
 stringAsValue_condition =
-    valueFromString "condition"
+    computeValueFromString "condition"
 
 
 stringAsValue_ifTrue : Value
 stringAsValue_ifTrue =
-    valueFromString "ifTrue"
+    computeValueFromString "ifTrue"
 
 
 stringAsValue_ifFalse : Value
 stringAsValue_ifFalse =
-    valueFromString "ifFalse"
+    computeValueFromString "ifFalse"
 
 
 stringAsValue_environment : Value
 stringAsValue_environment =
-    valueFromString "environment"
+    computeValueFromString "environment"
 
 
 stringAsValue_expression : Value
 stringAsValue_expression =
-    valueFromString "expression"
+    computeValueFromString "expression"
+
+
+stringAsValue_EQ : Value
+stringAsValue_EQ =
+    computeValueFromString "EQ"
+
+
+stringAsValue_LT : Value
+stringAsValue_LT =
+    computeValueFromString "LT"
+
+
+stringAsValue_GT : Value
+stringAsValue_GT =
+    computeValueFromString "GT"
+
+
+stringAsValue_String : Value
+stringAsValue_String =
+    computeValueFromString "String"
+
+
+stringAsValue_Just : Value
+stringAsValue_Just =
+    computeValueFromString "Just"
+
+
+stringAsValue_Nothing : Value
+stringAsValue_Nothing =
+    computeValueFromString "Nothing"
+
+
+valueFromInt_1 : Value
+valueFromInt_1 =
+    computeValueFromInt 1
+
+
+valueFromInt_2 : Value
+valueFromInt_2 =
+    computeValueFromInt 2
+
+
+valueFromInt_3 : Value
+valueFromInt_3 =
+    computeValueFromInt 3
+
+
+valueFromInt_4 : Value
+valueFromInt_4 =
+    computeValueFromInt 4
+
+
+listValue_Empty : Value
+listValue_Empty =
+    ListValue []

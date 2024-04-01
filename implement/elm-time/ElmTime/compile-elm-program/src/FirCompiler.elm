@@ -684,7 +684,7 @@ emitDeclarationBlock stackBefore environmentPrefix blockDeclarations config =
                             Ok
                                 (pineExpressionForDeconstructions
                                     deconstruction
-                                    (listItemFromIndexExpression_Pine 1 Pine.EnvironmentExpression)
+                                    (listItemFromIndexExpression_Pine 1 Pine.environmentExpr)
                                 )
 
                         ExpressionCapture expression ->
@@ -731,7 +731,7 @@ emitDeclarationBlock stackBefore environmentPrefix blockDeclarations config =
 
                                 prevEnvFunctionsExpr : Pine.Expression
                                 prevEnvFunctionsExpr =
-                                    listItemFromIndexExpression_Pine 0 Pine.EnvironmentExpression
+                                    listItemFromIndexExpression_Pine 0 Pine.environmentExpr
 
                                 forwardedItems : List Pine.Expression
                                 forwardedItems =
@@ -939,7 +939,7 @@ emitReferenceExpression name compilation =
                 Just deconstruction ->
                     Ok
                         (pineExpressionForDeconstructions deconstruction
-                            (listItemFromIndexExpression_Pine 1 Pine.EnvironmentExpression)
+                            (listItemFromIndexExpression_Pine 1 Pine.environmentExpr)
                         )
 
 
@@ -1161,7 +1161,7 @@ emitFunctionApplication functionExpression arguments compilation =
                                             (\( _, deconstruction ) ->
                                                 pineExpressionForDeconstructions
                                                     deconstruction
-                                                    (listItemFromIndexExpression_Pine 1 Pine.EnvironmentExpression)
+                                                    (listItemFromIndexExpression_Pine 1 Pine.environmentExpr)
                                             )
                                             closureCaptures
 
@@ -1178,7 +1178,7 @@ emitFunctionApplication functionExpression arguments compilation =
 
                                     prevEnvFunctionsExpr : Pine.Expression
                                     prevEnvFunctionsExpr =
-                                        listItemFromIndexExpression_Pine 0 Pine.EnvironmentExpression
+                                        listItemFromIndexExpression_Pine 0 Pine.environmentExpr
 
                                     forwardedItems : List Pine.Expression
                                     forwardedItems =
@@ -1274,7 +1274,7 @@ emitFunctionApplicationPine emitStack arguments functionExpressionPine =
                                             ]
 
                                     findReplacementForExpression expression =
-                                        if expression == Pine.EnvironmentExpression then
+                                        if expression == Pine.environmentExpr then
                                             Just mappedEnvironment
 
                                         else
@@ -1308,7 +1308,7 @@ emitApplyFunctionFromCurrentEnvironment compilation { functionName } arguments =
         Just ( functionIndexInEnv, function ) ->
             let
                 getEnvFunctionsExpression =
-                    Pine.EnvironmentExpression
+                    Pine.environmentExpr
                         |> listItemFromIndexExpression_Pine 0
 
                 getFunctionExpression =
@@ -1570,13 +1570,13 @@ adaptivePartialApplicationRecursiveExpression : Pine.Expression
 adaptivePartialApplicationRecursiveExpression =
     let
         selfFunctionLocalExpression =
-            listItemFromIndexExpression_Pine 0 Pine.EnvironmentExpression
+            listItemFromIndexExpression_Pine 0 Pine.environmentExpr
 
         functionLocalExpression =
-            listItemFromIndexExpression_Pine 1 Pine.EnvironmentExpression
+            listItemFromIndexExpression_Pine 1 Pine.environmentExpr
 
         remainingArgumentsLocalExpression =
-            listItemFromIndexExpression_Pine 2 Pine.EnvironmentExpression
+            listItemFromIndexExpression_Pine 2 Pine.environmentExpr
 
         nextArgumentLocalExpression =
             listItemFromIndexExpression_Pine 0 remainingArgumentsLocalExpression
@@ -2078,7 +2078,7 @@ transformPineExpressionWithOptionalReplacement findReplacement expression =
                     )
 
                 Pine.EnvironmentExpression ->
-                    ( Pine.EnvironmentExpression
+                    ( Pine.environmentExpr
                     , { referencesOriginalEnvironment = True
                       }
                     )
