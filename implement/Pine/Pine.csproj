@@ -3,13 +3,13 @@
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
     <Nullable>enable</Nullable>
-    <AssemblyVersion>0.1.0</AssemblyVersion>
-    <FileVersion>0.1.0</FileVersion>
+    <AssemblyVersion>0.1.1</AssemblyVersion>
+    <FileVersion>0.1.1</FileVersion>
   </PropertyGroup>
 
   <PropertyGroup>
     <PackageId>Pine</PackageId>
-    <Version>0.1.0</Version>
+    <Version>0.1.1</Version>
     <Description>PineVM is a virtual machine running programs written in functional programming languages</Description>
     <PackageTags>Functional;Elm;Runtime;Compiler;VM;DBMS</PackageTags>
     <RepositoryUrl>https://github.com/elm-time/elm-time.git</RepositoryUrl>
@@ -17,6 +17,7 @@
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <Authors>Viir</Authors>
     <PackageLicenseFile>License.txt</PackageLicenseFile>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
   </PropertyGroup>
 
   <ItemGroup>

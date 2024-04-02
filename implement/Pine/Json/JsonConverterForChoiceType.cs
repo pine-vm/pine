@@ -13,11 +13,11 @@ namespace Pine.Json;
 /// Generates JSON converters for C# types representing choice types (aka discriminated unions, tagged unions).
 /// 
 /// The discussions on representing sum types in C# are ongoing, and Microsoft has not yet settled on a design.
-/// For updates on the progress around sum types in C#, see also <https://github.com/dotnet/csharplang/tree/main/meetings/working-groups/discriminated-unions> and <https://github.com/dotnet/csharplang/issues/113>
+/// For updates on the progress around sum types in C#, see also https://github.com/dotnet/csharplang/tree/main/meetings/working-groups/discriminated-unions and https://github.com/dotnet/csharplang/issues/113
 /// 
 /// This JSON converter factory supports the approach of representing choice types as records in C#.
 /// 
-/// For more information, see the guide in the file JsonConverterForChoiceType.md
+/// For more information, see the guide in the file https://github.com/elm-time/elm-time/blob/main/implement/Pine/Json/JsonConverterForChoiceType.md
 /// </summary>
 public class JsonConverterForChoiceType : JsonConverterFactory
 {
@@ -112,7 +112,9 @@ public class JsonConverterForChoiceType : JsonConverterFactory
         var allProperties = variantType.GetProperties();
 
         var constructorsResults =
-            variantType.GetConstructors().OrderBy(c => c.IsPublic ? 0 : 1).ThenByDescending(c => c.GetParameters().Length)
+            variantType.GetConstructors()
+            .OrderBy(c => c.IsPublic ? 0 : 1)
+            .ThenByDescending(c => c.GetParameters().Length)
             .Select(constructor =>
             {
                 var constructorParams = constructor.GetParameters();
