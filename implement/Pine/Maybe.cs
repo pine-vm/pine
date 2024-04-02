@@ -10,9 +10,21 @@ namespace Pine;
 [JsonConverter(typeof(Json.JsonConverterForChoiceType))]
 public abstract record Maybe<JustT>
 {
+    /// <summary>
+    /// Explicit constructor for the 'Nothing' case.
+    /// </summary>
     public static Maybe<JustT> nothing() => new Nothing();
 
+    /// <summary>
+    /// Explicit constructor for the 'Just' case.
+    /// </summary>
     public static Maybe<JustT> just(JustT just) => new Just(just);
+
+    /// <summary>
+    /// Implicit constructor for the 'Just' case.
+    /// </summary>
+    public static implicit operator Maybe<JustT>(JustT just) =>
+        Maybe<JustT>.just(just);
 
     public bool IsNothing() =>
         this switch

@@ -53,23 +53,22 @@ public class ElmInteropJint
     {
         if (originalExpression is not Esprima.Ast.CallExpression originalCallExpression)
         {
-            return Result<string, Esprima.Ast.Expression>.err("Not a call expression");
+            return "Not a call expression";
         }
 
         if (originalCallExpression.Callee is not Esprima.Ast.Identifier originalCallExpressionCallee)
         {
-            return Result<string, Esprima.Ast.Expression>.err("Does not call F3");
+            return "Does not call F3";
         }
 
         if (originalCallExpressionCallee.Name != "F3")
-            return Result<string, Esprima.Ast.Expression>.err("Does not call F3");
+            return "Does not call F3";
 
         return
-            Result<string, Esprima.Ast.Expression>.ok(
-                originalCallExpression
-                .UpdateWith(
-                    callee: originalCallExpression.Callee,
-                    arguments: Esprima.Ast.NodeList.Create<Esprima.Ast.Expression>(
-                        [new Esprima.Ast.Identifier(delegateIdentifier)])));
+            originalCallExpression
+            .UpdateWith(
+                callee: originalCallExpression.Callee,
+                arguments: Esprima.Ast.NodeList.Create<Esprima.Ast.Expression>(
+                    [new Esprima.Ast.Identifier(delegateIdentifier)]));
     }
 }

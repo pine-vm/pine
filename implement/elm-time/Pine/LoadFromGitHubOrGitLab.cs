@@ -177,7 +177,7 @@ public static class LoadFromGitHubOrGitLab
                             if (gitRepository.Lookup(commitId) is Commit commit)
                                 return Result<string, Commit>.ok(commit);
 
-                            return Result<string, Commit>.err("Did not find commit " + commitId);
+                            return "Did not find commit " + commitId;
                         });
 
                     return
@@ -185,7 +185,7 @@ public static class LoadFromGitHubOrGitLab
                         .AndThen(startCommit =>
                         {
                             ParsedUrlInRepository partInRepositoryWithCommit(Commit replacementCommit) =>
-                            parsedUrl.inRepository == null ?
+                            parsedUrl.inRepository is null ?
                             new ParsedUrlInRepository(GitObjectType.tree, @ref: replacementCommit.Sha, path: "") :
                             parsedUrl.inRepository with { @ref = replacementCommit.Sha };
 
@@ -292,7 +292,7 @@ public static class LoadFromGitHubOrGitLab
                                 }
                                 catch (Exception e)
                                 {
-                                    return Result<string, LoadFromUrlSuccess>.err("Failed to convert from git object:\n" + e);
+                                    return "Failed to convert from git object:\n" + e;
                                 }
                             });
                         });

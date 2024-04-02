@@ -221,7 +221,7 @@ public static class Elm019Binaries
 
             if (1 <= outputFiles.Count)
             {
-                return Result<string, ElmMakeOk>.ok(new ElmMakeOk(outputFiles.First().content));
+                return new ElmMakeOk(outputFiles.First().content);
             }
 
             if (!ElmMakeOutputQualifiesForRetry(standardErrorText: commandResults.processOutput.StandardError))
@@ -231,11 +231,11 @@ public static class Elm019Binaries
 
         var lastAttemptResults = attemptsResults.Last();
 
-        return Result<string, ElmMakeOk>.err(
+        return
             "Failed for " + attemptsResults.Count + " attempts. Output file not found. Maybe the output from the Elm make process from the last attempt helps to find the cause:" +
             "\nExit Code: " + lastAttemptResults.processOutput.ExitCode +
             "\nStandard Output:\n'" + lastAttemptResults.processOutput.StandardOutput + "'" +
-            "\nStandard Error:\n'" + lastAttemptResults.processOutput.StandardError + "'");
+            "\nStandard Error:\n'" + lastAttemptResults.processOutput.StandardError + "'";
     }
 
     public static bool ElmMakeOutputQualifiesForRetry(string standardErrorText)

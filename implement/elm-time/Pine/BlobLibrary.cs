@@ -159,8 +159,8 @@ public class BlobLibrary
 
             if (!httpResponse.IsSuccessStatusCode)
             {
-                return Result<string, ReadOnlyMemory<byte>>.err(
-                    "Unexpected HTTP response status code: " + (int)httpResponse.StatusCode + " (" + httpResponse.StatusCode + ")");
+                return
+                    "Unexpected HTTP response status code: " + (int)httpResponse.StatusCode + " (" + httpResponse.StatusCode + ")";
             }
 
             var responseContent = await httpResponse.Content.ReadAsByteArrayAsync();
@@ -169,7 +169,7 @@ public class BlobLibrary
         }
         catch (Exception e)
         {
-            return Result<string, ReadOnlyMemory<byte>>.err("Runtime exception: " + e);
+            return "Runtime exception: " + e;
         }
     }
 

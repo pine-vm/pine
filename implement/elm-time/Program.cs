@@ -1491,18 +1491,13 @@ public class Program
 
                         if (sourceDirectoriesNotInInputDirectory.IsEmpty)
                         {
-                            return
-                                Result<string, LoadForMakeResult>.ok(
-                                    new LoadForMakeResult(filteredSourceTree,
-                                        [],
-                                        pathToElmFile.Replace('\\', '/').Split('/')));
+                            return new LoadForMakeResult(filteredSourceTree, [], pathToElmFile.Replace('\\', '/').Split('/'));
                         }
 
                         if (loadInputDirectoryOk.origin is not LoadCompositionOrigin.FromLocalFileSystem)
                         {
                             return
-                                Result<string, LoadForMakeResult>.err(
-                                    "Failed to work with elm.json file containing directory which is not contained in input directory: This configuration is only supported when loading from a local file system");
+                                "Failed to work with elm.json file containing directory which is not contained in input directory: This configuration is only supported when loading from a local file system";
                         }
 
                         string absoluteSourceDirectoryFromRelative(ElmJsonStructure.RelativeDirectory relDir)
@@ -1596,32 +1591,32 @@ public class Program
 
                         return
                             Make(
-                                    sourceFiles: PineValueComposition.TreeToFlatDictionaryWithPathComparer(loadSourceFilesOk.sourceFiles),
-                                    workingDirectoryRelative: loadSourceFilesOk.workingDirectoryRelative,
-                                    pathToFileWithElmEntryPoint: loadSourceFilesOk.pathToFileWithElmEntryPoint,
-                                    outputFileName: Path.GetFileName(outputPathArgument),
-                                    elmMakeCommandAppendix: elmMakeCommandAppendix)
-                                .Unpack(
-                                    fromErr: error =>
-                                    {
-                                        DotNetConsoleWriteProblemCausingAbort(
-                                            "Failed to make " + pathToElmFileArgument.Value + ":\n" + error);
-                                        return 20;
-                                    },
-                                    fromOk: makeOk =>
-                                    {
-                                        var outputPath = Path.GetFullPath(outputPathArgument);
+                                sourceFiles: PineValueComposition.TreeToFlatDictionaryWithPathComparer(loadSourceFilesOk.sourceFiles),
+                                workingDirectoryRelative: loadSourceFilesOk.workingDirectoryRelative,
+                                pathToFileWithElmEntryPoint: loadSourceFilesOk.pathToFileWithElmEntryPoint,
+                                outputFileName: Path.GetFileName(outputPathArgument),
+                                elmMakeCommandAppendix: elmMakeCommandAppendix)
+                            .Unpack(
+                                fromErr: error =>
+                                {
+                                    DotNetConsoleWriteProblemCausingAbort(
+                                        "Failed to make " + pathToElmFileArgument.Value + ":\n" + error);
+                                    return 20;
+                                },
+                                fromOk: makeOk =>
+                                {
+                                    var outputPath = Path.GetFullPath(outputPathArgument);
 
-                                        var outputDirectory = Path.GetDirectoryName(outputPath);
+                                    var outputDirectory = Path.GetDirectoryName(outputPath);
 
-                                        if (outputDirectory is not null)
-                                            Directory.CreateDirectory(outputDirectory);
+                                    if (outputDirectory is not null)
+                                        Directory.CreateDirectory(outputDirectory);
 
-                                        File.WriteAllBytes(outputPath, makeOk.producedFile.ToArray());
-                                        Console.WriteLine("Saved the output to " + outputPath);
+                                    File.WriteAllBytes(outputPath, makeOk.producedFile.ToArray());
+                                    Console.WriteLine("Saved the output to " + outputPath);
 
-                                        return 0;
-                                    });
+                                    return 0;
+                                });
                     });
             });
         });

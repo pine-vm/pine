@@ -82,8 +82,7 @@ public class StateShim
                 Result<string, IReadOnlyList<NamedExposedFunction>>.ok(listExposedFunctionsResponse.Functions),
 
                 _ =>
-                Result<string, IReadOnlyList<NamedExposedFunction>>.err(
-                    "Unexpected type of response: " + JsonSerializer.Serialize(decodeOk))
+                "Unexpected type of response: " + JsonSerializer.Serialize(decodeOk)
             });
     }
 
@@ -93,7 +92,7 @@ public class StateShim
         ApplyFunction(
             process,
             request: request,
-            stateSource: Maybe<StateSource>.just(MainStateBranch),
+            MainStateBranch,
             stateDestinationBranches: request.commitResultingState ? [MainBranchName] : []);
 
     public static Result<string, AdminInterface.ApplyDatabaseFunctionSuccess> ApplyFunction(
@@ -116,10 +115,10 @@ public class StateShim
                 var matchingFunctions = exposedFunctions.Where(c => c.functionName == request.functionName).ToImmutableList();
 
                 if (matchingFunctions.IsEmpty)
-                    return Result<string, NamedExposedFunction>.err(
+                    return
                         "None of the exposed functions matches name '" + request.functionName +
                         "'. This app only exposes the following " + exposedFunctions.Count + " functions: "
-                        + string.Join(", ", exposedFunctions.Select(ef => ef.functionName)));
+                        + string.Join(", ", exposedFunctions.Select(ef => ef.functionName));
 
                 return
                 Result<string, NamedExposedFunction>.ok(matchingFunctions.First());
@@ -156,14 +155,13 @@ public class StateShim
                                 committedResultingState: stateDestinationBranches.Contains(MainBranchName))),
 
                             _ =>
-                            Result<string, AdminInterface.ApplyDatabaseFunctionSuccess>.err(
-                                "Unexpected type of response: " + JsonSerializer.Serialize(responseOk))
+                            "Unexpected type of response: " + JsonSerializer.Serialize(responseOk)
                         });
                 }
                 catch (Exception e)
                 {
-                    return Result<string, AdminInterface.ApplyDatabaseFunctionSuccess>.err(
-                        "Failed to parse response string: " + e);
+                    return
+                        "Failed to parse response string: " + e;
                 }
             }));
     }

@@ -83,12 +83,12 @@ public static class PineValueHashTree
             var count = int.Parse(asciiStringUpToNull.Split(' ').ElementAt(1));
 
             if (count != expectedCount)
-                return Result<string, PineValue>.err("Unexpected count: got " + count + ", but I expected " + expectedCount);
+                return "Unexpected count: got " + count + ", but I expected " + expectedCount;
 
-            return Result<string, PineValue>.ok(PineValue.Blob(serializedValue[beginningToRemoveLength..]));
+            return PineValue.Blob(serializedValue[beginningToRemoveLength..]);
         }
 
-        if (asciiStringUpToFirstSpace == "list")
+        if (asciiStringUpToFirstSpace is "list")
         {
             var beginningToRemoveLength = asciiStringUpToNull.Length + 1;
 
@@ -101,8 +101,8 @@ public static class PineValueHashTree
             var expectedRemainingLength = parsedElementCount * elementHashLength;
 
             if (remainingBytes.Length != expectedRemainingLength)
-                return Result<string, PineValue>.err(
-                    "Unexpected remaining length: " + remainingBytes.Length + " instead of " + expectedRemainingLength);
+                return
+                    "Unexpected remaining length: " + remainingBytes.Length + " instead of " + expectedRemainingLength;
 
             var elementsHashes =
                 Enumerable.Range(0, parsedElementCount)
@@ -114,13 +114,13 @@ public static class PineValueHashTree
                 var loadedElementSerialRepresentation = loadSerializedValueByHash(elementHash);
 
                 if (loadedElementSerialRepresentation == null)
-                    return Result<string, PineValue>.err(
-                        "Failed to load list element " + CommonConversion.StringBase16(elementHash));
+                    return
+                        "Failed to load list element " + CommonConversion.StringBase16(elementHash);
 
                 if (!SHA256.HashData(loadedElementSerialRepresentation.Value.Span).AsSpan()
                         .SequenceEqual(elementHash.Span))
-                    return Result<string, PineValue>.err(
-                        "Hash for loaded element does not match " + CommonConversion.StringBase16(elementHash));
+                    return
+                        "Hash for loaded element does not match " + CommonConversion.StringBase16(elementHash);
 
                 return DeserializeFromHashTree(loadedElementSerialRepresentation.Value, loadSerializedValueByHash);
             }
@@ -135,19 +135,19 @@ public static class PineValueHashTree
                     .FirstOrDefault(elementResult => elementResult.loadResult is Result<string, PineValue>.Err err);
 
             if (firstFailed.loadResult != null)
-                return Result<string, PineValue>.err(
+                return
                     "Failed to load element " +
                     CommonConversion.StringBase16(firstFailed.elementHash) + ": " +
-                    (firstFailed.loadResult as Result<string, PineValue>.Err)!.Value);
+                    (firstFailed.loadResult as Result<string, PineValue>.Err)!.Value;
 
-            return Result<string, PineValue>.ok(
+            return
                 PineValue.List(
                     loadElementsResults
                         .Select(elementResult => elementResult.loadResult.Extract(error => throw new Exception(error)))
-                        .ToImmutableList()));
+                        .ToImmutableList());
         }
 
-        return Result<string, PineValue>.err("Invalid prefix: '" + asciiStringUpToFirstSpace + "'.");
+        return "Invalid prefix: '" + asciiStringUpToFirstSpace + "'.";
     }
 
     public static ReadOnlyMemory<byte> ComputeHashSorted(TreeNodeWithStringPath treeNode) =>
@@ -166,7 +166,7 @@ public static class PineValueHashTree
 
         return
             listValue.Elements
-                .Select(item => FindNodeByHash(item, hash))
-                .FirstOrDefault(matchInItem => matchInItem is not null);
+            .Select(item => FindNodeByHash(item, hash))
+            .FirstOrDefault(matchInItem => matchInItem is not null);
     }
 }

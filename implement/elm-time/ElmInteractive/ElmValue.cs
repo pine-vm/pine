@@ -32,7 +32,7 @@ public abstract record ElmValue
     override public string ToString() =>
         ElmValueAsExpression(this).expressionString;
 
-    public static readonly string ElmRecordTypeTagName = "Elm_Record";
+    public const string ElmRecordTypeTagName = "Elm_Record";
 
     public static readonly PineValue ElmRecordTypeTagNameAsValue =
         PineValueAsString.ValueFromString(ElmRecordTypeTagName);
@@ -116,24 +116,23 @@ public abstract record ElmValue
         PineValue pineValue)
     {
         if (pineValue == PineVM.TrueValue)
-            return Result<string, ElmValue>.ok(TrueValue);
+            return TrueValue;
 
         if (pineValue == PineVM.FalseValue)
-            return Result<string, ElmValue>.ok(FalseValue);
+            return FalseValue;
 
         return pineValue switch
         {
             PineValue.BlobValue blobValue =>
             blobValue.Bytes.Length == 0
             ?
-            Result<string, ElmValue>.ok(new ElmInternal("empty-blob"))
+            new ElmInternal("empty-blob")
             :
             blobValue.Bytes.Length > 10
             ?
-            Result<string, ElmValue>.ok(
-                PineVM.ParseExpressionFromValueDefault(pineValue)
-                .Map(_ => (ElmValue)new ElmInternal("expression"))
-                .WithDefault(new ElmInternal("___error_skipped_large_blob___")))
+            PineVM.ParseExpressionFromValueDefault(pineValue)
+            .Map(_ => (ElmValue)new ElmInternal("expression"))
+            .WithDefault(new ElmInternal("___error_skipped_large_blob___"))
             :
             (blobValue.Bytes.Span[0] switch
             {
@@ -152,7 +151,7 @@ public abstract record ElmValue
             .AndThen(listValues =>
             {
                 Result<string, ElmValue> resultAsList() =>
-                Result<string, ElmValue>.ok(new ElmList(listValues));
+                new ElmList(listValues);
 
                 if (listValues.Count == 0)
                     return resultAsList();
@@ -170,9 +169,9 @@ public abstract record ElmValue
                         {
                             if (0 < tagName.Value.Length && char.IsUpper(tagName.Value[0]))
                             {
-                                if (tagName.Value == ElmRecordTypeTagName)
+                                if (tagName.Value is ElmRecordTypeTagName)
                                 {
-                                    if (tagArgumentsList.Elements.Count == 1)
+                                    if (tagArgumentsList.Elements.Count is 1)
                                     {
                                         var recordValue = tagArgumentsList.Elements[0];
 
@@ -186,9 +185,9 @@ public abstract record ElmValue
                                         "Wrong number of tag arguments: " + tagArgumentsList.Elements.Count);
                                 }
 
-                                if (tagName.Value == "String")
+                                if (tagName.Value is "String")
                                 {
-                                    if (tagArgumentsList.Elements.Count == 1)
+                                    if (tagArgumentsList.Elements.Count is 1)
                                     {
                                         var charsList = tagArgumentsList.Elements[0];
 
@@ -198,20 +197,18 @@ public abstract record ElmValue
                                             ElmList charsListAsList =>
                                             TryMapElmValueToString(charsListAsList)
                                             .Map(chars => Result<string, ElmValue>.ok(new ElmString(chars)))
-                                            .WithDefault(Result<string, ElmValue>.err("Failed to map chars")),
+                                            .WithDefault("Failed to map chars"),
 
                                             _ =>
-                                            Result<string, ElmValue>.err(
-                                                "Unexpected shape of tag arguments: " + charsList.GetType().Name)
+                                            "Unexpected shape of tag arguments: " + charsList.GetType().Name
                                         })
                                         .MapError(error => "Failed to extract value under String tag: " + error);
                                     }
 
-                                    return Result<string, ElmValue>.err("Unexpected shape of tag arguments");
+                                    return "Unexpected shape of tag arguments";
                                 }
 
-                                return Result<string, ElmValue>.ok(
-                                    new ElmTag(tagName.Value, tagArgumentsList.Elements));
+                                return new ElmTag(tagName.Value, tagArgumentsList.Elements);
                             }
                         }
                         else
@@ -286,10 +283,9 @@ public abstract record ElmValue
                     Result<string, (string, ElmValue)> continueWithFieldName(string fieldName) =>
                         (0 < fieldName.Length && !char.IsUpper(fieldName[0]))
                         ?
-                        Result<string, (string, ElmValue)>.ok((fieldName, fieldValue))
+                        (fieldName, fieldValue)
                         :
-                        Result<string, (string, ElmValue)>.err(
-                            "Field name does start with uppercase: '" + fieldName + "'");
+                        "Field name does start with uppercase: '" + fieldName + "'";
 
                     return fieldNameValue switch
                     {
@@ -303,12 +299,11 @@ public abstract record ElmValue
                         continueWithFieldName(fieldName.Value),
 
                         _ =>
-                        Result<string, (string, ElmValue)>.err("Unexpected type in field name value.")
+                        "Unexpected type in field name value."
                     };
                 }
                 else
-                    return Result<string, (string, ElmValue)>.err(
-                        "Unexpected number of list items: " + fieldListItems.Elements.Count);
+                    return "Unexpected number of list items: " + fieldListItems.Elements.Count;
             }
             else
                 return Result<string, (string, ElmValue)>.err("Not a list.");
@@ -329,7 +324,7 @@ public abstract record ElmValue
             }),
 
             _ =>
-            Result<string, ElmRecord>.err("Value is not a list.")
+            "Value is not a list."
         };
     }
 
@@ -341,7 +336,7 @@ public abstract record ElmValue
         elmValue switch
         {
             ElmChar elmChar =>
-            Maybe<int>.just(elmChar.Value),
+            elmChar.Value,
 
             _ =>
             Maybe<int>.nothing()
@@ -462,13 +457,15 @@ public abstract record ElmValue
     public static Maybe<bool> ElmListItemsLookLikeTupleItems(IReadOnlyList<ElmValue> list)
     {
         if (3 < list.Count)
-            return Maybe<bool>.just(false);
+        {
+            return false;
+        }
         else
         {
             var areAllItemsEqual = AreElmValueListItemTypesEqual(list);
 
             if (areAllItemsEqual is Maybe<bool>.Just areAllItemsEqualJust)
-                return Maybe<bool>.just(!areAllItemsEqualJust.Value);
+                return !areAllItemsEqualJust.Value;
             else
                 return Maybe<bool>.nothing();
         }
@@ -485,10 +482,10 @@ public abstract record ElmValue
             .ToList();
 
         if (pairsTypesEqual.All(item => item is Maybe<bool>.Just itemJust && itemJust.Value))
-            return Maybe<bool>.just(true);
+            return true;
 
         if (pairsTypesEqual.Any(item => item is Maybe<bool>.Just itemJust && !itemJust.Value))
-            return Maybe<bool>.just(false);
+            return false;
 
         return Maybe<bool>.nothing();
     }
@@ -496,13 +493,13 @@ public abstract record ElmValue
     public static Maybe<bool> AreElmValueTypesEqual(ElmValue valueA, ElmValue valueB)
     {
         if (valueA is ElmInteger && valueB is ElmInteger)
-            return Maybe<bool>.just(true);
+            return true;
 
         if (valueA is ElmChar && valueB is ElmChar)
-            return Maybe<bool>.just(true);
+            return true;
 
         if (valueA is ElmString && valueB is ElmString)
-            return Maybe<bool>.just(true);
+            return true;
 
         if (valueA is ElmList && valueB is ElmList)
             return Maybe<bool>.nothing();
@@ -513,7 +510,7 @@ public abstract record ElmValue
             var recordBFieldNames = recordB.Fields.Select(field => field.FieldName).ToList();
 
             if (!recordAFieldNames.OrderBy(name => name).SequenceEqual(recordBFieldNames))
-                return Maybe<bool>.just(false);
+                return false;
 
             return Maybe<bool>.nothing();
         }
@@ -524,6 +521,6 @@ public abstract record ElmValue
         if (valueA is ElmInternal && valueB is ElmInternal)
             return Maybe<bool>.nothing();
 
-        return Maybe<bool>.just(false);
+        return false;
     }
 }

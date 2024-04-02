@@ -365,10 +365,11 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
                             new StateShim.InterfaceToHost.ApplyFunctionShimRequestStruct(
                                 functionName: updateElmAppEvent.functionName,
                                 arguments: updateElmAppEvent.arguments.MapStateArgument(takesState =>
-                                takesState ?
-                                Maybe<StateShim.InterfaceToHost.StateSource>.just(
-                                    new StateShim.InterfaceToHost.StateSource.BranchStateSource("main")) :
-                                    Maybe<StateShim.InterfaceToHost.StateSource>.nothing()),
+                                takesState
+                                ?
+                                new StateShim.InterfaceToHost.StateSource.BranchStateSource("main")
+                                :
+                                Maybe<StateShim.InterfaceToHost.StateSource>.nothing()),
                                 stateDestinationBranches: ["main"]));
 
                     var eventString = JsonSerializer.Serialize<StateShim.InterfaceToHost.StateShimRequestStruct>(eventStateShimRequest);

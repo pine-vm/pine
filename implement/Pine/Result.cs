@@ -10,14 +10,26 @@ namespace Pine;
 public abstract record Result<ErrT, OkT>
 {
     /// <summary>
-    /// Constructor for the 'Err' case.
+    /// Explicit constructor for the 'Err' case.
     /// </summary>
     public static Result<ErrT, OkT> err(ErrT err) => new Err(err);
 
     /// <summary>
-    /// Constructor for the 'Ok' case.
+    /// Explicit constructor for the 'Ok' case.
     /// </summary>
     public static Result<ErrT, OkT> ok(OkT ok) => new Ok(ok);
+
+    /// <summary>
+    /// Implicit constructor for the 'Err' case.
+    /// </summary>
+    public static implicit operator Result<ErrT, OkT>(ErrT err) =>
+        Result<ErrT, OkT>.err(err);
+
+    /// <summary>
+    /// Implicit constructor for the 'Ok' case.
+    /// </summary>
+    public static implicit operator Result<ErrT, OkT>(OkT ok) =>
+        Result<ErrT, OkT>.ok(ok);
 
     /// <summary>
     /// Returns whether this value represents an error case.

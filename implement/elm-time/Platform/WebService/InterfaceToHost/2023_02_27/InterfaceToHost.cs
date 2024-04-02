@@ -57,7 +57,7 @@ public record Maybe<JustT>(object? Nothing = default, JustT? Just = default)
     public Pine.Maybe<JustT> AsPineMaybe()
     {
         if (Just is { } just)
-            return Pine.Maybe<JustT>.just(just);
+            return just;
 
         return Pine.Maybe<JustT>.nothing();
     }
