@@ -94,17 +94,23 @@ public class JsonConverterForPineValue : JsonConverter<PineValue>
             }
         }
 
-        if (PineValueAsString.StringFromValue(value) is Result<string, string>.Ok asString && 0 < asString.Value.Length)
+        if (value is PineValue.ListValue listValue)
         {
-            if (!asString.Value.All(asChar => (asChar & 0xff00) == 0x400 || (asChar & 0xff00) == 0x200))
+            if (0 < listValue.Elements.Count)
             {
-                writer.WriteStartObject();
+                if (PineValueAsString.StringFromValue(value) is Result<string, string>.Ok asString && 0 < asString.Value.Length)
+                {
+                    if (!asString.Value.All(asChar => (asChar & 0xff00) == 0x400 || (asChar & 0xff00) == 0x200))
+                    {
+                        writer.WriteStartObject();
 
-                writer.WriteString("ListAsString", asString.Value);
+                        writer.WriteString("ListAsString", asString.Value);
 
-                writer.WriteEndObject();
+                        writer.WriteEndObject();
 
-                return;
+                        return;
+                    }
+                }
             }
         }
 

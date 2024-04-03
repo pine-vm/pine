@@ -17,9 +17,9 @@ public static class PineValueAsInteger
         var signedBlobValue = BlobValueFromSignedInteger(integer);
 
         if (signedBlobValue.Span[0] != 4)
-            return Result<string, ReadOnlyMemory<byte>>.err("Argument is a negative integer.");
+            return "Argument is a negative integer.";
 
-        return Result<string, ReadOnlyMemory<byte>>.ok(signedBlobValue[1..]);
+        return signedBlobValue[1..];
     }
 
     public static PineValue ValueFromSignedInteger(System.Numerics.BigInteger integer) =>
@@ -45,38 +45,39 @@ public static class PineValueAsInteger
     public static Result<string, System.Numerics.BigInteger> SignedIntegerFromValue(PineValue value)
     {
         if (value is not PineValue.BlobValue blob)
-            return Result<string, System.Numerics.BigInteger>.err(
-                "Only a BlobValue can represent an integer.");
+            return "Only a BlobValue can represent an integer.";
 
         return SignedIntegerFromBlobValue(blob.Bytes.Span);
     }
 
     public static Result<string, System.Numerics.BigInteger> SignedIntegerFromBlobValue(ReadOnlySpan<byte> blobValue)
     {
-        if (blobValue.Length < 1)
-            return Result<string, System.Numerics.BigInteger>.err(
-                "Empty blob is not a valid integer because the sign byte is missing. Did you mean to use an unsigned integer?");
+        if (blobValue.Length < 2)
+            return "Empty blob is not a valid integer because it is shorter than 2 bytes. Did you mean to use an unsigned integer?";
 
         var signByte = blobValue[0];
 
-        if (signByte != 4 && signByte != 2)
-            return Result<string, System.Numerics.BigInteger>.err(
-                "Unexpected value for sign byte of integer: " + signByte);
+        if (signByte is not 4 && signByte is not 2)
+            return "Unexpected value for sign byte of integer: " + signByte;
 
-        var isNegative = signByte != 4;
-
-        var integerValue = UnsignedIntegerFromBlobValue(blobValue[1..]);
+        var absValue = UnsignedIntegerFromBlobValue(blobValue[1..]);
 
         return
-            Result<string, System.Numerics.BigInteger>.ok(
-                integerValue * new System.Numerics.BigInteger(isNegative ? -1 : 1));
+            signByte is 4
+            ?
+            absValue
+            :
+            absValue * System.Numerics.BigInteger.MinusOne;
     }
 
     public static Result<string, System.Numerics.BigInteger> UnsignedIntegerFromValue(PineValue value) =>
         value switch
         {
-            PineValue.BlobValue blob => Result<string, System.Numerics.BigInteger>.ok(UnsignedIntegerFromBlobValue(blob.Bytes.Span)),
-            _ => Result<string, System.Numerics.BigInteger>.err("Only a BlobValue can represent an integer.")
+            PineValue.BlobValue blob =>
+            UnsignedIntegerFromBlobValue(blob.Bytes.Span),
+
+            _ =>
+            "Only a BlobValue can represent an integer."
         };
 
     public static System.Numerics.BigInteger UnsignedIntegerFromBlobValue(ReadOnlySpan<byte> blobValue) =>

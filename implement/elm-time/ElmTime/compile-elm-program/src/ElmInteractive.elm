@@ -708,23 +708,31 @@ json_encode_pineValue dictionary value =
                 (\entryName entryValue aggregate ->
                     case entryValue of
                         Pine.BlobValue blob ->
-                            { aggregate
-                                | blobDict = Dict.insert blob entryName aggregate.blobDict
-                            }
+                            if List.length blob < 3 then
+                                aggregate
+
+                            else
+                                { aggregate
+                                    | blobDict = Dict.insert blob entryName aggregate.blobDict
+                                }
 
                         Pine.ListValue list ->
-                            let
-                                hash =
-                                    pineListValueFastHash list
+                            if list == [] then
+                                aggregate
 
-                                assocList =
-                                    Dict.get hash aggregate.listDict
-                                        |> Maybe.withDefault []
-                                        |> (::) ( list, entryName )
-                            in
-                            { aggregate
-                                | listDict = Dict.insert hash assocList aggregate.listDict
-                            }
+                            else
+                                let
+                                    hash =
+                                        pineListValueFastHash list
+
+                                    assocList =
+                                        Dict.get hash aggregate.listDict
+                                            |> Maybe.withDefault []
+                                            |> (::) ( list, entryName )
+                                in
+                                { aggregate
+                                    | listDict = Dict.insert hash assocList aggregate.listDict
+                                }
                 )
                 { blobDict = Dict.empty, listDict = Dict.empty }
                 dictionary
@@ -745,11 +753,15 @@ json_encode_pineValue_Internal dictionary value =
         Pine.ListValue list ->
             let
                 defaultListEncoding () =
-                    Json.Encode.object
-                        [ ( "List"
-                          , Json.Encode.list (json_encode_pineValue_Internal dictionary) list
-                          )
-                        ]
+                    if list == [] then
+                        jsonEncodeEmptyList
+
+                    else
+                        Json.Encode.object
+                            [ ( "List"
+                              , Json.Encode.list (json_encode_pineValue_Internal dictionary) list
+                              )
+                            ]
 
                 continueWithoutReference () =
                     case Pine.stringFromListValue list of
@@ -784,20 +796,63 @@ json_encode_pineValue_Internal dictionary value =
                                     ]
 
         Pine.BlobValue blob ->
-            case Dict.get blob dictionary.blobDict of
-                Just reference ->
-                    Json.Encode.object
-                        [ ( "Reference"
-                          , Json.Encode.string reference
-                          )
-                        ]
-
-                Nothing ->
+            let
+                defaultBlobEncoding () =
                     Json.Encode.object
                         [ ( "Blob"
                           , Json.Encode.list Json.Encode.int blob
                           )
                         ]
+
+                tryFindReference () =
+                    case Dict.get blob dictionary.blobDict of
+                        Just reference ->
+                            Json.Encode.object
+                                [ ( "Reference"
+                                  , Json.Encode.string reference
+                                  )
+                                ]
+
+                        Nothing ->
+                            defaultBlobEncoding ()
+            in
+            case blob of
+                [] ->
+                    jsonEncodeEmptyBlob
+
+                _ ->
+                    if List.length blob < 3 then
+                        case Pine.intFromValue value of
+                            Err _ ->
+                                defaultBlobEncoding ()
+
+                            Ok asInt ->
+                                Json.Encode.object
+                                    [ ( "BlobAsInt"
+                                      , Json.Encode.int asInt
+                                      )
+                                    ]
+
+                    else
+                        tryFindReference ()
+
+
+jsonEncodeEmptyList : Json.Encode.Value
+jsonEncodeEmptyList =
+    Json.Encode.object
+        [ ( "List"
+          , Json.Encode.list identity []
+          )
+        ]
+
+
+jsonEncodeEmptyBlob : Json.Encode.Value
+jsonEncodeEmptyBlob =
+    Json.Encode.object
+        [ ( "Blob"
+          , Json.Encode.list Json.Encode.int []
+          )
+        ]
 
 
 json_decode_pineValue : Json.Decode.Decoder ( Pine.Value, Dict.Dict String Pine.Value )
@@ -865,9 +920,9 @@ resolvePineValueReferenceToLiteralRecursive stack dictionary valueSupportingRef 
             Ok literal
 
         ListSupportingReference list ->
-            list
-                |> List.map (resolvePineValueReferenceToLiteralRecursive stack dictionary)
-                |> Result.Extra.combine
+            Common.resultListMapCombine
+                (resolvePineValueReferenceToLiteralRecursive stack dictionary)
+                list
                 |> Result.map Pine.ListValue
 
         ReferenceValue reference ->
@@ -894,11 +949,17 @@ resolvePineValueReferenceToLiteralRecursive stack dictionary valueSupportingRef 
                             )
 
                     Just foundEntry ->
-                        resolvePineValueReferenceToLiteralRecursive
-                            (Set.insert reference stack)
-                            dictionary
-                            foundEntry
-                            |> Result.mapError (Tuple.mapFirst ((::) reference))
+                        case
+                            resolvePineValueReferenceToLiteralRecursive
+                                (Set.insert reference stack)
+                                dictionary
+                                foundEntry
+                        of
+                            Err ( errorStack, errorMessage ) ->
+                                Err ( reference :: errorStack, errorMessage )
+
+                            Ok resolvedValue ->
+                                Ok resolvedValue
 
 
 json_decode_pineValueDictionaryEntry : Json.Decode.Decoder ( String, PineValueSupportingReference )
@@ -912,7 +973,11 @@ json_decode_pineValueApplyingDictionary : Dict.Dict String Pine.Value -> Json.De
 json_decode_pineValueApplyingDictionary dictionary =
     json_decode_pineValueGeneric
         { decodeListElement =
-            Json.Decode.lazy (\_ -> json_decode_pineValueWithDictionary dictionary |> Json.Decode.map Tuple.first)
+            Json.Decode.lazy
+                (\_ ->
+                    Json.Decode.map Tuple.first
+                        (json_decode_pineValueWithDictionary dictionary)
+                )
         , consList = Pine.ListValue
         , decodeReference =
             \reference ->
@@ -955,6 +1020,8 @@ json_decode_pineValueGeneric config =
     Json.Decode.oneOf
         [ Json.Decode.field "List"
             (Json.Decode.list config.decodeListElement |> Json.Decode.map config.consList)
+        , Json.Decode.field "BlobAsInt" Json.Decode.int
+            |> Json.Decode.map (Pine.valueFromInt >> config.consLiteral)
         , Json.Decode.field "ListAsString" Json.Decode.string
             |> Json.Decode.map (Pine.valueFromString >> config.consLiteral)
         , Json.Decode.field "Blob" (Json.Decode.list Json.Decode.int)

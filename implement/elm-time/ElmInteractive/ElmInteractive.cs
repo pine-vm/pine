@@ -168,7 +168,8 @@ public class ElmInteractive
             });
     }
 
-    private static Result<string, (CompileInteractiveEnvironmentResult compileResult, CompilationCache compilationCache)> CompileInteractiveEnvironmentForModules(
+    private static Result<string, (CompileInteractiveEnvironmentResult compileResult, CompilationCache compilationCache)>
+        CompileInteractiveEnvironmentForModules(
         IReadOnlyList<string> elmModulesTexts,
         CompileInteractiveEnvironmentResult? parentEnvironment,
         IJavaScriptEngine evalElmPreparedJavaScriptEngine,
@@ -353,6 +354,8 @@ public class ElmInteractive
 
         public string? ListAsString { init; get; }
 
+        public int? BlobAsInt { init; get; }
+
         public string? Reference { init; get; }
 
         public record DictionaryEntry(string key, PineValueJson value);
@@ -360,8 +363,9 @@ public class ElmInteractive
 
     internal record PineValueMappedForTransport(
         string? ListAsString,
+        int? BlobAsInt,
         IReadOnlyList<PineValueMappedForTransport>? List,
-        PineValue origin)
+        PineValue Origin)
         : IEquatable<PineValueMappedForTransport>
     {
         public virtual bool Equals(PineValueMappedForTransport? other) =>
@@ -369,15 +373,18 @@ public class ElmInteractive
 
         public override int GetHashCode()
         {
-            if (ListAsString is not null)
-                return ListAsString.GetHashCode();
+            if (ListAsString is { } asString)
+                return asString.GetHashCode();
 
-            return origin.GetHashCode();
+            if (BlobAsInt is { } asInt)
+                return asInt;
+
+            return Origin.GetHashCode();
         }
 
         public static bool Equals(PineValueMappedForTransport? left, PineValueMappedForTransport? right)
         {
-            if (left is null && right is null)
+            if (ReferenceEquals(left, right))
                 return true;
 
             if (left is null || right is null)
@@ -386,7 +393,10 @@ public class ElmInteractive
             if (left.ListAsString is { } leftString && right.ListAsString is { } rightString)
                 return leftString == rightString;
 
-            return left.origin.Equals(right.origin);
+            if (left.BlobAsInt != right.BlobAsInt)
+                return false;
+
+            return left.Origin.Equals(right.Origin);
         }
 
         public static PineValueMappedForTransport FromPineValue(
@@ -407,16 +417,45 @@ public class ElmInteractive
             PineValue pineValue,
             IDictionary<PineValue, PineValueMappedForTransport>? cache)
         {
-            if (PineValueAsString.StringFromValue(pineValue) is Result<string, string>.Ok asString)
-                return new PineValueMappedForTransport(ListAsString: asString.Value, List: null, origin: pineValue);
-
             if (pineValue is PineValue.ListValue listComponent)
+            {
+                if (0 < listComponent.Elements.Count)
+                {
+                    if (PineValueAsString.StringFromValue(pineValue) is Result<string, string>.Ok asString)
+                        return new PineValueMappedForTransport(
+                            ListAsString: asString.Value,
+                            BlobAsInt: null,
+                            List: null,
+                            Origin: pineValue);
+                }
+
                 return new PineValueMappedForTransport(
                     ListAsString: null,
+                    BlobAsInt: null,
                     List: listComponent.Elements.Select(item => FromPineValue(item, cache)).ToList(),
-                    origin: pineValue);
+                    Origin: pineValue);
+            }
 
-            return new PineValueMappedForTransport(ListAsString: null, List: null, origin: pineValue);
+            if (pineValue is PineValue.BlobValue blobValue)
+            {
+                if (1 < blobValue.Bytes.Length && blobValue.Bytes.Length < 3)
+                {
+                    if (PineValueAsInteger.SignedIntegerFromBlobValue(blobValue.Bytes.Span) is Result<string, System.Numerics.BigInteger>.Ok asInt)
+                    {
+                        return new PineValueMappedForTransport(
+                            ListAsString: null,
+                            BlobAsInt: (int)asInt.Value,
+                            List: null,
+                            Origin: pineValue);
+                    }
+                }
+            }
+
+            return new PineValueMappedForTransport(
+                ListAsString: null,
+                BlobAsInt: null,
+                List: null,
+                Origin: pineValue);
         }
     }
 
@@ -434,16 +473,19 @@ public class ElmInteractive
         if (pineValue.ListAsString is { } asString)
             return new PineValueJson { ListAsString = asString };
 
+        if (pineValue.BlobAsInt is { } asInt)
+            return new PineValueJson { BlobAsInt = asInt };
+
         if (pineValue.List is { } asList)
         {
             return new PineValueJson
             {
-                List = asList.Select(e => FromPineValueWithoutBuildingDictionary(e, dictionary)).ToList()
+                List = [.. asList.Select(e => FromPineValueWithoutBuildingDictionary(e, dictionary))]
             };
         }
 
-        if (pineValue.origin is PineValue.BlobValue blobComponent)
-            return new PineValueJson { Blob = blobComponent.Bytes.ToArray().Select(b => (int)b).ToImmutableArray() };
+        if (pineValue.Origin is PineValue.BlobValue blobComponent)
+            return new PineValueJson { Blob = [.. blobComponent.Bytes.ToArray()] };
 
         throw new NotImplementedException("Unexpected shape");
     }
@@ -465,6 +507,16 @@ public class ElmInteractive
 
         void mutatingCountUsagesRecursive(PineValueMappedForTransport mappedForTransport)
         {
+            {
+                if (mappedForTransport.Origin is PineValue.BlobValue blob)
+                    if (blob.Bytes.Length < 3)
+                        return;
+
+                if (mappedForTransport.Origin is PineValue.ListValue list)
+                    if (list.Elements.Count < 1)
+                        return;
+            }
+
             if (!usageCountLowerBoundDictionary.TryGetValue(mappedForTransport, out var usageCountLowerBound))
                 usageCountLowerBound = 0;
 
@@ -534,7 +586,7 @@ public class ElmInteractive
             dictionary
             .ToImmutableDictionary(
                 keySelector: entry => entry.Value,
-                elementSelector: entry => entry.Key.origin);
+                elementSelector: entry => entry.Key.Origin);
 
         var cacheEntry = (json: pineValueJson, dictionary: decodeResponseDictionary);
 
@@ -570,6 +622,9 @@ public class ElmInteractive
 
         if (fromJson.ListAsString is { } listAsString)
             return PineValueAsString.ValueFromString(listAsString);
+
+        if (fromJson.BlobAsInt is { } asInt)
+            return PineValueAsInteger.ValueFromSignedInteger(asInt);
 
         if (fromJson.Reference is { } reference)
         {
