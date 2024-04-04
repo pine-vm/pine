@@ -42,23 +42,47 @@ public static class PineValueAsInteger
         return memory;
     }
 
-    public static Result<string, System.Numerics.BigInteger> SignedIntegerFromValue(PineValue value)
+    public static Result<string, System.Numerics.BigInteger> SignedIntegerFromValueStrict(PineValue value) =>
+        SignedIntegerFromValue(value, rejectLeadingZero: true, rejectNegativeZero: true);
+
+    public static Result<string, System.Numerics.BigInteger> SignedIntegerFromValueRelaxed(PineValue value) =>
+        SignedIntegerFromValue(value, rejectLeadingZero: false, rejectNegativeZero: false);
+
+    public static Result<string, System.Numerics.BigInteger> SignedIntegerFromValue(
+        PineValue value,
+        bool rejectLeadingZero,
+        bool rejectNegativeZero)
     {
         if (value is not PineValue.BlobValue blob)
-            return "Only a BlobValue can represent an integer.";
+            return "Not a blob.";
 
-        return SignedIntegerFromBlobValue(blob.Bytes.Span);
+        return SignedIntegerFromBlobValue(
+            blob.Bytes.Span,
+            rejectLeadingZero: rejectLeadingZero,
+            rejectNegativeZero: rejectNegativeZero);
     }
 
-    public static Result<string, System.Numerics.BigInteger> SignedIntegerFromBlobValue(ReadOnlySpan<byte> blobValue)
+    public static Result<string, System.Numerics.BigInteger> SignedIntegerFromBlobValueStrict(ReadOnlySpan<byte> blobValue) =>
+        SignedIntegerFromBlobValue(blobValue, rejectLeadingZero: true, rejectNegativeZero: true);
+
+    public static Result<string, System.Numerics.BigInteger> SignedIntegerFromBlobValueRelaxed(ReadOnlySpan<byte> blobValue) =>
+        SignedIntegerFromBlobValue(blobValue, rejectLeadingZero: false, rejectNegativeZero: false);
+
+    public static Result<string, System.Numerics.BigInteger> SignedIntegerFromBlobValue(
+        ReadOnlySpan<byte> blobValue,
+        bool rejectLeadingZero,
+        bool rejectNegativeZero)
     {
         if (blobValue.Length < 2)
-            return "Empty blob is not a valid integer because it is shorter than 2 bytes. Did you mean to use an unsigned integer?";
+            return "Not a valid integer because it is shorter than 2 bytes. Did you mean to use an unsigned integer?";
 
         var signByte = blobValue[0];
 
         if (signByte is not 4 && signByte is not 2)
             return "Unexpected value for sign byte of integer: " + signByte;
+
+        if (rejectLeadingZero && 2 < blobValue.Length && blobValue[1] is 0)
+            return "Avoid ambiguous leading zero.";
 
         var absValue = UnsignedIntegerFromBlobValue(blobValue[1..]);
 
@@ -66,6 +90,10 @@ public static class PineValueAsInteger
             signByte is 4
             ?
             absValue
+            :
+            rejectNegativeZero && absValue == 0
+            ?
+            "Avoid ambiguous negative zero."
             :
             absValue * System.Numerics.BigInteger.MinusOne;
     }

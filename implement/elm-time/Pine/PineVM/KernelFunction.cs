@@ -73,7 +73,7 @@ public static class KernelFunction
 
     public static PineValue skip(PineValue value) =>
         KernelFunctionExpectingExactlyTwoArguments(
-            PineValueAsInteger.SignedIntegerFromValue,
+            PineValueAsInteger.SignedIntegerFromValueRelaxed,
             Result<string, PineValue>.ok,
             compose: skip,
             value);
@@ -99,7 +99,7 @@ public static class KernelFunction
 
     public static PineValue take(PineValue value) =>
         KernelFunctionExpectingExactlyTwoArguments(
-            PineValueAsInteger.SignedIntegerFromValue,
+            PineValueAsInteger.SignedIntegerFromValueRelaxed,
             Result<string, PineValue>.ok,
             compose: take,
             value);
@@ -176,10 +176,10 @@ public static class KernelFunction
 
     public static PineValue add_int(PineValue summandA, PineValue summandB)
     {
-        if (PineValueAsInteger.SignedIntegerFromValue(summandA) is not Result<string, BigInteger>.Ok intA)
+        if (PineValueAsInteger.SignedIntegerFromValueRelaxed(summandA) is not Result<string, BigInteger>.Ok intA)
             return PineValue.EmptyList;
 
-        if (PineValueAsInteger.SignedIntegerFromValue(summandB) is not Result<string, BigInteger>.Ok intB)
+        if (PineValueAsInteger.SignedIntegerFromValueRelaxed(summandB) is not Result<string, BigInteger>.Ok intB)
             return PineValue.EmptyList;
 
         return add_int(intA.Value, intB.Value);
@@ -196,10 +196,10 @@ public static class KernelFunction
 
     public static PineValue mul_int(PineValue factorA, PineValue factorB)
     {
-        if (PineValueAsInteger.SignedIntegerFromValue(factorA) is not Result<string, BigInteger>.Ok intA)
+        if (PineValueAsInteger.SignedIntegerFromValueRelaxed(factorA) is not Result<string, BigInteger>.Ok intA)
             return PineValue.EmptyList;
 
-        if (PineValueAsInteger.SignedIntegerFromValue(factorB) is not Result<string, BigInteger>.Ok intB)
+        if (PineValueAsInteger.SignedIntegerFromValueRelaxed(factorB) is not Result<string, BigInteger>.Ok intB)
             return PineValue.EmptyList;
 
         return mul_int(intA.Value, intB.Value);
@@ -232,19 +232,23 @@ public static class KernelFunction
             (x, y) switch
             {
                 (PineValue.BlobValue blobX, PineValue.BlobValue blobY) =>
-                    (PineValueAsInteger.SignedIntegerFromBlobValue(blobX.Bytes.Span),
-                            PineValueAsInteger.SignedIntegerFromBlobValue(blobY.Bytes.Span)) switch
-                    {
-                        (Result<string, BigInteger>.Ok intX, Result<string, BigInteger>.Ok intY) =>
-                            BigInteger.Compare(intX.Value, intY.Value),
+                (PineValueAsInteger.SignedIntegerFromBlobValueRelaxed(blobX.Bytes.Span),
+                PineValueAsInteger.SignedIntegerFromBlobValueRelaxed(blobY.Bytes.Span)) switch
+                {
+                    (Result<string, BigInteger>.Ok intX, Result<string, BigInteger>.Ok intY) =>
+                    BigInteger.Compare(intX.Value, intY.Value),
 
-                        (Result<string, BigInteger>.Ok _, _) => -1,
-                        (_, Result<string, BigInteger>.Ok _) => 1,
-                        _ => 0
-                    },
+                    (Result<string, BigInteger>.Ok _, _) =>
+                    -1,
+
+                    (_, Result<string, BigInteger>.Ok _) =>
+                    1,
+
+                    _ => 0
+                },
 
                 (PineValue.ListValue listX, PineValue.ListValue listY) =>
-                    listX.Elements.Count - listY.Elements.Count,
+                listX.Elements.Count - listY.Elements.Count,
 
                 (PineValue.ListValue _, _) => -1,
 
@@ -268,7 +272,7 @@ public static class KernelFunction
         KernelFunctionExpectingList(
             value,
             list =>
-            PineVM.ResultListMapCombine(list, PineValueAsInteger.SignedIntegerFromValue)
+            PineVM.ResultListMapCombine(list, PineValueAsInteger.SignedIntegerFromValueRelaxed)
             .Map(ints => aggregate(ints))
             .WithDefault(PineValue.EmptyList));
 

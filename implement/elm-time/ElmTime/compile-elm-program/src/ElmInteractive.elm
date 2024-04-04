@@ -822,7 +822,7 @@ json_encode_pineValue_Internal dictionary value =
 
                 _ ->
                     if List.length blob < 3 then
-                        case Pine.intFromValue value of
+                        case intFromBlobValueStrict blob of
                             Err _ ->
                                 defaultBlobEncoding ()
 
@@ -835,6 +835,64 @@ json_encode_pineValue_Internal dictionary value =
 
                     else
                         tryFindReference ()
+
+
+intFromBlobValueStrict : List Int -> Result String Int
+intFromBlobValueStrict blobBytes =
+    case blobBytes of
+        [] ->
+            Err "Empty blob does not encode an integer."
+
+        [ _ ] ->
+            Err "Blob with only one byte does not encode an integer."
+
+        sign :: absFirst :: following ->
+            let
+                computeAbsValue () =
+                    if following == [] then
+                        Ok absFirst
+
+                    else if absFirst == 0 then
+                        Err "Avoid ambiguous leading zero."
+
+                    else
+                        case following of
+                            [ b1 ] ->
+                                Ok ((absFirst * 256) + b1)
+
+                            [ b1, b2 ] ->
+                                Ok ((absFirst * 65536) + (b1 * 256) + b2)
+
+                            [ b1, b2, b3 ] ->
+                                Ok ((absFirst * 16777216) + (b1 * 65536) + (b2 * 256) + b3)
+
+                            [ b1, b2, b3, b4 ] ->
+                                Ok ((absFirst * 4294967296) + (b1 * 16777216) + (b2 * 65536) + (b3 * 256) + b4)
+
+                            [ b1, b2, b3, b4, b5 ] ->
+                                Ok ((absFirst * 1099511627776) + (b1 * 4294967296) + (b2 * 16777216) + (b3 * 65536) + (b4 * 256) + b5)
+
+                            _ ->
+                                Err "Failed to map to int - unsupported number of bytes"
+            in
+            case sign of
+                4 ->
+                    computeAbsValue ()
+
+                2 ->
+                    case computeAbsValue () of
+                        Err err ->
+                            Err err
+
+                        Ok absValue ->
+                            if absValue == 0 then
+                                Err "Avoid ambiguous negative zero."
+
+                            else
+                                Ok -absValue
+
+                _ ->
+                    Err ("Unexpected value for sign byte: " ++ String.fromInt sign)
 
 
 jsonEncodeEmptyList : Json.Encode.Value

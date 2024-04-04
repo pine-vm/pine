@@ -440,7 +440,7 @@ public class ElmInteractive
             {
                 if (1 < blobValue.Bytes.Length && blobValue.Bytes.Length < 3)
                 {
-                    if (PineValueAsInteger.SignedIntegerFromBlobValue(blobValue.Bytes.Span) is Result<string, System.Numerics.BigInteger>.Ok asInt)
+                    if (PineValueAsInteger.SignedIntegerFromBlobValueStrict(blobValue.Bytes.Span) is Result<string, System.Numerics.BigInteger>.Ok asInt)
                     {
                         return new PineValueMappedForTransport(
                             ListAsString: null,

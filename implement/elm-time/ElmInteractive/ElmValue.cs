@@ -124,7 +124,7 @@ public abstract record ElmValue
         return pineValue switch
         {
             PineValue.BlobValue blobValue =>
-            blobValue.Bytes.Length == 0
+            blobValue.Bytes.Length is 0
             ?
             new ElmInternal("empty-blob")
             :
@@ -137,7 +137,7 @@ public abstract record ElmValue
             (blobValue.Bytes.Span[0] switch
             {
                 4 or 2 =>
-                PineValueAsInteger.SignedIntegerFromValue(blobValue)
+                PineValueAsInteger.SignedIntegerFromValueRelaxed(blobValue)
                 .Map(bigInt => (ElmValue)new ElmInteger(bigInt)),
 
                 _ =>
@@ -153,10 +153,10 @@ public abstract record ElmValue
                 Result<string, ElmValue> resultAsList() =>
                 new ElmList(listValues);
 
-                if (listValues.Count == 0)
+                if (listValues.Count is 0)
                     return resultAsList();
 
-                if (listValues.Count == 2)
+                if (listValues.Count is 2)
                 {
                     var tagNameChars = listValues[0];
                     var tagArguments = listValues[1];

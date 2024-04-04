@@ -101,7 +101,7 @@ public class ReducePineExpression
                             {
                                 if (TryEvaluateExpressionIndependent(argumentList.List[0]) is Result<string, PineValue>.Ok okSkipCountValue)
                                 {
-                                    if (PineValueAsInteger.SignedIntegerFromValue(okSkipCountValue.Value) is Result<string, BigInteger>.Ok okSkipCount)
+                                    if (PineValueAsInteger.SignedIntegerFromValueRelaxed(okSkipCountValue.Value) is Result<string, BigInteger>.Ok okSkipCount)
                                     {
                                         if (argumentList.List[1] is Expression.ListExpression partiallySkippedList)
                                             return new Expression.ListExpression(

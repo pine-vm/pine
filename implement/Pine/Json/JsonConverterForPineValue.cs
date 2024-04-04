@@ -84,7 +84,7 @@ public class JsonConverterForPineValue : JsonConverter<PineValue>
 
     public override void Write(Utf8JsonWriter writer, PineValue value, JsonSerializerOptions options)
     {
-        if (PineValueAsInteger.SignedIntegerFromValue(value) is Result<string, System.Numerics.BigInteger>.Ok asInt)
+        if (PineValueAsInteger.SignedIntegerFromValueStrict(value) is Result<string, System.Numerics.BigInteger>.Ok asInt)
         {
             if (asInt.Value < long.MaxValue && long.MinValue < asInt.Value)
             {

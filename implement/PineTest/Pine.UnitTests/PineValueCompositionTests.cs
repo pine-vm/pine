@@ -244,7 +244,7 @@ public class PineValueCompositionTests
                 PineValueAsInteger.ValueFromSignedInteger(testCase);
 
             var toIntegerResult =
-                PineValueAsInteger.SignedIntegerFromValue(asPineValue)
+                PineValueAsInteger.SignedIntegerFromValueStrict(asPineValue)
                 .Extract(error => throw new Exception(error));
 
             Assert.AreEqual(testCase, toIntegerResult);

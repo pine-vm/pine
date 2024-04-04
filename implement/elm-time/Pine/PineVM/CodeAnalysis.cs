@@ -772,7 +772,7 @@ public class CodeAnalysis
                 return null;
 
             return
-                PineValueAsInteger.SignedIntegerFromValue(skipCountLiteral.Value)
+                PineValueAsInteger.SignedIntegerFromValueRelaxed(skipCountLiteral.Value)
                     .Unpack<ExprMappedToParentEnv?>(
                         fromErr: _ => null,
                         fromOk: skipValue => new ExprMappedToParentEnv.PathInParentEnv([.. pathPrefix.Path, (int)skipValue]));

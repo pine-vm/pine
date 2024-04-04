@@ -75,7 +75,7 @@ public partial class CompileToCSharp
 
         if (argumentExpression is Expression.LiteralExpression literal)
         {
-            if (PineValueAsInteger.SignedIntegerFromValue(literal.Value) is Result<string, BigInteger>.Ok okInteger &&
+            if (PineValueAsInteger.SignedIntegerFromValueStrict(literal.Value) is Result<string, BigInteger>.Ok okInteger &&
                 PineValueAsInteger.ValueFromSignedInteger(okInteger.Value) == literal.Value)
             {
                 if (okInteger.Value >= long.MinValue && okInteger.Value <= long.MaxValue)

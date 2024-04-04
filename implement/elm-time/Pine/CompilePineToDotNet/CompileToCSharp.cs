@@ -1522,7 +1522,7 @@ public partial class CompileToCSharp
 
         static long? attemptMapToSignedInteger(PineValue pineValue)
         {
-            if (PineValueAsInteger.SignedIntegerFromValue(pineValue) is Result<string, BigInteger>.Ok okInteger &&
+            if (PineValueAsInteger.SignedIntegerFromValueStrict(pineValue) is Result<string, BigInteger>.Ok okInteger &&
                 PineValueAsInteger.ValueFromSignedInteger(okInteger.Value) == pineValue &&
                 okInteger.Value < long.MaxValue && long.MinValue < okInteger.Value)
                 return (long)okInteger.Value;
