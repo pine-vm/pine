@@ -208,54 +208,56 @@ public static class KernelFunction
     public static PineValue mul_int(BigInteger factorA, BigInteger factorB) =>
         PineValueAsInteger.ValueFromSignedInteger(factorA * factorB);
 
-    public static PineValue is_sorted_ascending_int(PineValue value) =>
-        PineVM.ValueFromBool(sort_int(value) == value);
-
-    public static PineValue sort_int(PineValue value) =>
-        value switch
-        {
-            PineValue.ListValue list =>
-                PineValue.List(
-                    [.. list.Elements
-                        .Select(sort_int)
-                        .Order(valueComparerInt)
-                        ]),
-
-            _ => value,
-        };
-
-    private static readonly BlobValueIntComparer valueComparerInt = new();
-
-    private class BlobValueIntComparer : IComparer<PineValue>
+    public static PineValue is_sorted_ascending_int(PineValue value)
     {
-        public int Compare(PineValue? x, PineValue? y) =>
-            (x, y) switch
+        if (value is PineValue.BlobValue blobValue)
+        {
+            var isSorted = true;
+
+            if(blobValue.Bytes.Length > 0)
             {
-                (PineValue.BlobValue blobX, PineValue.BlobValue blobY) =>
-                (PineValueAsInteger.SignedIntegerFromBlobValueRelaxed(blobX.Bytes.Span),
-                PineValueAsInteger.SignedIntegerFromBlobValueRelaxed(blobY.Bytes.Span)) switch
+                var previous = blobValue.Bytes.Span[0];
+
+                foreach (var current in blobValue.Bytes.Span[1..])
                 {
-                    (Result<string, BigInteger>.Ok intX, Result<string, BigInteger>.Ok intY) =>
-                    BigInteger.Compare(intX.Value, intY.Value),
+                    if (current < previous)
+                    {
+                        isSorted = false;
+                        break;
+                    }
 
-                    (Result<string, BigInteger>.Ok _, _) =>
-                    -1,
+                    previous = current;
+                }
+            }
 
-                    (_, Result<string, BigInteger>.Ok _) =>
-                    1,
+            return PineVM.ValueFromBool(isSorted);
+        }
 
-                    _ => 0
-                },
+        if (value is PineValue.ListValue listValue)
+        {
+            if (listValue.Elements.Count == 0)
+                return PineVM.ValueFromBool(true);
 
-                (PineValue.ListValue listX, PineValue.ListValue listY) =>
-                listX.Elements.Count - listY.Elements.Count,
+            if (PineValueAsInteger.SignedIntegerFromValueRelaxed(listValue.Elements[0]) is not Result<string, BigInteger>.Ok firstInt)
+                return PineValue.EmptyList;
 
-                (PineValue.ListValue _, _) => -1,
+            var previous = firstInt.Value;
 
-                (_, PineValue.ListValue _) => 1,
+            foreach (var next in listValue.Elements)
+            {
+                if (PineValueAsInteger.SignedIntegerFromValueRelaxed(next) is not Result<string, BigInteger>.Ok nextInt)
+                    return PineValue.EmptyList;
 
-                _ => 0
-            };
+                if (nextInt.Value < previous)
+                    return PineVM.ValueFromBool(false);
+
+                previous = nextInt.Value;
+            }
+
+            return PineVM.ValueFromBool(true);
+        }
+
+        throw new Exception("Unexpected value type: " + value.GetType().FullName);
     }
 
     private static PineValue KernelFunctionExpectingListOfBigIntAndProducingBigInt(

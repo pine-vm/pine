@@ -19,7 +19,6 @@ module Pine exposing
     , environmentFromDeclarations
     , evaluateExpression
     , falseValue
-    , intFromBigInt
     , intFromValue
     , kernelFunction_Negate
     , mapFromListValueOrBlobValue
@@ -279,7 +278,7 @@ kernelFunctions =
           , kernelFunctionExpectingListOfBigIntAndProducingBigInt BigInt.mul (BigInt.fromInt 1)
           )
         , ( "is_sorted_ascending_int"
-          , \arg -> valueFromBool (is_sorted_ascending_int arg)
+          , kernel_function_is_sorted_ascending_int
           )
         ]
 
@@ -358,49 +357,43 @@ list_all_same list =
             List.all ((==) first) rest
 
 
-is_sorted_ascending_int : Value -> Bool
-is_sorted_ascending_int value =
-    value == sort_int value
-
-
-sort_int : Value -> Value
-sort_int value =
+kernel_function_is_sorted_ascending_int : Value -> Value
+kernel_function_is_sorted_ascending_int value =
     case value of
-        BlobValue _ ->
-            value
+        BlobValue bytes ->
+            valueFromBool (List.sort bytes == bytes)
 
         ListValue list ->
-            ListValue
-                (List.sortWith sort_int_order
-                    (List.map sort_int list)
-                )
+            case list of
+                [] ->
+                    valueFromBool True
+
+                first :: rest ->
+                    case intFromValue first of
+                        Err _ ->
+                            listValue_Empty
+
+                        Ok firstInt ->
+                            is_sorted_ascending_int_recursive rest firstInt
 
 
-sort_int_order : Value -> Value -> Order
-sort_int_order x y =
-    case ( x, y ) of
-        ( BlobValue blobX, BlobValue blobY ) ->
-            case ( bigIntFromBlobValue blobX, bigIntFromBlobValue blobY ) of
-                ( Ok intX, Ok intY ) ->
-                    BigInt.compare intX intY
+is_sorted_ascending_int_recursive : List Value -> Int -> Value
+is_sorted_ascending_int_recursive remaining previous =
+    case remaining of
+        [] ->
+            trueValue
 
-                ( Ok _, Err _ ) ->
-                    LT
+        next :: rest ->
+            case intFromValue next of
+                Err _ ->
+                    listValue_Empty
 
-                ( Err _, Ok _ ) ->
-                    GT
+                Ok nextInt ->
+                    if nextInt < previous then
+                        falseValue
 
-                ( Err _, Err _ ) ->
-                    EQ
-
-        ( ListValue listX, ListValue listY ) ->
-            compare (List.length listX) (List.length listY)
-
-        ( ListValue _, BlobValue _ ) ->
-            LT
-
-        ( BlobValue _, ListValue _ ) ->
-            GT
+                    else
+                        is_sorted_ascending_int_recursive rest nextInt
 
 
 mapFromListValueOrBlobValue : { fromList : List Value -> a, fromBlob : List Int -> a } -> Value -> a
@@ -882,20 +875,6 @@ intFromUnsignedBlobValue intValueBytes =
                 ("Failed to map to int - unsupported number of bytes: "
                     ++ String.fromInt (List.length intValueBytes)
                 )
-
-
-intFromBigInt : BigInt.BigInt -> Result String Int
-intFromBigInt bigInt =
-    case String.toInt (BigInt.toString bigInt) of
-        Nothing ->
-            Err "Failed to String.toInt"
-
-        Just int ->
-            if String.fromInt int /= BigInt.toString bigInt then
-                Err "Integer out of supported range for String.toInt"
-
-            else
-                Ok int
 
 
 bigIntFromValue : Value -> Result String BigInt.BigInt
