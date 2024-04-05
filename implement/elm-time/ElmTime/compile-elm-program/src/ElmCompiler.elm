@@ -57,7 +57,6 @@ import FirCompiler
         )
 import List.Extra
 import Pine
-import Result.Extra
 import Set
 
 
@@ -1376,78 +1375,76 @@ compileElmSyntaxLetBlock :
     -> Elm.Syntax.Expression.LetBlock
     -> Result String Expression
 compileElmSyntaxLetBlock stackBefore letBlock =
-    letBlock.declarations
-        |> List.concatMap
+    case
+        Common.resultListMapCombine
             (\letDeclaration ->
                 case Elm.Syntax.Node.value letDeclaration of
-                    Elm.Syntax.Expression.LetFunction letFunction ->
-                        let
-                            declName : String
-                            declName =
-                                Elm.Syntax.Node.value (Elm.Syntax.Node.value letFunction.declaration).name
-                        in
-                        []
+                    Elm.Syntax.Expression.LetFunction _ ->
+                        Ok []
 
                     Elm.Syntax.Expression.LetDestructuring (Elm.Syntax.Node.Node _ pattern) (Elm.Syntax.Node.Node _ destructuredExpressionElm) ->
                         case compileElmSyntaxExpression stackBefore destructuredExpressionElm of
                             Err err ->
-                                [ Err err ]
+                                Err err
 
                             Ok destructuredExpression ->
                                 case compileElmSyntaxPattern pattern of
                                     Err err ->
-                                        [ Err err ]
+                                        Err err
 
                                     Ok compiledPattern ->
-                                        List.map
-                                            (\( declName, deconsExpr ) ->
-                                                Ok
+                                        Ok
+                                            (List.map
+                                                (\( declName, deconsExpr ) ->
                                                     ( declName
                                                     , applicableDeclarationFromConstructorExpression
                                                         (expressionForDeconstructions deconsExpr destructuredExpression)
                                                     )
+                                                )
+                                                compiledPattern.declarations
                                             )
-                                            compiledPattern.declarations
             )
-        |> Result.Extra.combine
-        |> Result.andThen
-            (\newAvailableDeclarations ->
-                let
-                    inlineableDeclarations =
-                        List.foldl
-                            (\( declName, declExpr ) ->
-                                Dict.insert declName declExpr
-                            )
-                            stackBefore.inlineableDeclarations
-                            newAvailableDeclarations
+            letBlock.declarations
+    of
+        Err err ->
+            Err err
 
-                    stack =
-                        { stackBefore
-                            | inlineableDeclarations = inlineableDeclarations
-                        }
-                in
-                case
-                    Common.resultListMapCombine
-                        (\(Elm.Syntax.Node.Node _ letEntry) ->
-                            compileElmSyntaxLetDeclaration stack letEntry
+        Ok newAvailableDeclarations ->
+            let
+                inlineableDeclarations =
+                    List.foldl
+                        (\( declName, declExpr ) ->
+                            Dict.insert declName declExpr
                         )
-                        letBlock.declarations
-                of
-                    Err error ->
-                        Err ("Failed to compile declaration in let block: " ++ error)
+                        stackBefore.inlineableDeclarations
+                        (List.concat newAvailableDeclarations)
 
-                    Ok letEntries ->
-                        case compileElmSyntaxExpression stack (Elm.Syntax.Node.value letBlock.expression) of
-                            Err err ->
-                                Err err
+                stack =
+                    { stackBefore
+                        | inlineableDeclarations = inlineableDeclarations
+                    }
+            in
+            case
+                Common.resultListMapCombine
+                    (\(Elm.Syntax.Node.Node _ letEntry) ->
+                        compileElmSyntaxLetDeclaration stack letEntry
+                    )
+                    letBlock.declarations
+            of
+                Err error ->
+                    Err ("Failed to compile declaration in let block: " ++ error)
 
-                            Ok expression ->
-                                Ok
-                                    (DeclarationBlockExpression
-                                        (Dict.fromList (List.concat letEntries))
-                                        expression
-                                    )
-            )
+                Ok letEntries ->
+                    case compileElmSyntaxExpression stack (Elm.Syntax.Node.value letBlock.expression) of
+                        Err err ->
+                            Err err
+
+                        Ok expression ->
+                            Ok
+                                (DeclarationBlockExpression
+                                    (Dict.fromList (List.concat letEntries))
+                                    expression
+                                )
 
 
 compileElmSyntaxLetDeclaration :
@@ -2824,7 +2821,7 @@ emitModuleFunctionDeclarations stackBefore declarations =
                     (\( blockEmitStack, blockDeclarationsEmitted ) ->
                         recursionDomainDeclarations
                             |> Dict.toList
-                            |> List.map
+                            |> Common.resultListMapCombine
                                 (\( declarationName, declarationExpression ) ->
                                     let
                                         getFunctionInnerExpressionFromIndex : Int -> Pine.Expression
@@ -2928,7 +2925,6 @@ emitModuleFunctionDeclarations stackBefore declarations =
                                                         )
                                                     )
                                 )
-                            |> Result.Extra.combine
                             |> Result.mapError
                                 (\err ->
                                     "Failed in recursion domain: "
