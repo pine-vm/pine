@@ -173,7 +173,7 @@ public class ElmInteractiveTests
             var responseDisplayText =
                 submissionResult.Unpack(
                     fromErr: err => throw new Exception(err),
-                    fromOk: ok => ok.interactiveResponse.displayText);
+                    fromOk: ok => ok.InteractiveResponse.DisplayText);
 
             Assert.AreEqual(expected: """["123","34567834567"]""", responseDisplayText);
         }

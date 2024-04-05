@@ -145,7 +145,7 @@ public class InteractiveSessionPine : IInteractiveSession
             .Map(r => new SubmissionResponse(r, inspectionLog));
     }
 
-    public Result<string, ElmInteractive.EvaluatedSctructure> Submit(
+    public Result<string, ElmInteractive.EvaluatedStruct> Submit(
         string submission,
         Action<string>? addInspectionLogEntry)
     {
@@ -199,16 +199,16 @@ public class InteractiveSessionPine : IInteractiveSession
                             {
                                 if (evalOk is not PineValue.ListValue evalResultListComponent)
                                 {
-                                    return Result<string, ElmInteractive.EvaluatedSctructure>.err(
-                                        "Type mismatch: Pine expression evaluated to a blob");
+                                    return
+                                    "Type mismatch: Pine expression evaluated to a blob";
                                 }
 
                                 if (evalResultListComponent.Elements.Count != 2)
                                 {
-                                    return Result<string, ElmInteractive.EvaluatedSctructure>.err(
-                                        "Type mismatch: Pine expression evaluated to a list with unexpected number of elements: " +
-                                        evalResultListComponent.Elements.Count +
-                                        " instead of 2");
+                                    return
+                                    "Type mismatch: Pine expression evaluated to a list with unexpected number of elements: " +
+                                    evalResultListComponent.Elements.Count +
+                                    " instead of 2";
                                 }
 
                                 buildPineEvalContextTask = System.Threading.Tasks.Task.FromResult(
@@ -218,7 +218,6 @@ public class InteractiveSessionPine : IInteractiveSession
 
                                 var parseSubmissionResponseResult =
                                     ElmInteractive.SubmissionResponseFromResponsePineValue(
-                                        compileElmPreparedJavaScriptEngine.Value,
                                         response: evalResultListComponent.Elements[1]);
 
                                 logDuration("parse-result");

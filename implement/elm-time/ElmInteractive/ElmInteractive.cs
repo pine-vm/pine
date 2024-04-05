@@ -25,7 +25,7 @@ public class ElmInteractive
             compileElmProgramCodeFiles =>
             System.Threading.Tasks.Task.Run(() => PrepareJavaScriptToEvaluateElm(compileElmProgramCodeFiles)));
 
-    public static Result<string, EvaluatedSctructure> EvaluateSubmissionAndGetResultingValue(
+    public static Result<string, EvaluatedStruct> EvaluateSubmissionAndGetResultingValue(
         IJavaScriptEngine evalElmPreparedJavaScriptEngine,
         TreeNodeWithStringPath? appCodeTree,
         string submission,
@@ -48,14 +48,14 @@ public class ElmInteractive
         var responseStructure =
             System.Text.Json.JsonSerializer.Deserialize<EvaluateSubmissionResponseStructure>(responseJson)!;
 
-        if (responseStructure.DecodedArguments == null)
+        if (responseStructure.DecodedArguments is null)
             throw new Exception("Failed to decode arguments: " + responseStructure.FailedToDecodeArguments);
 
-        if (responseStructure.DecodedArguments.Evaluated == null)
-            return Result<string, EvaluatedSctructure>.err(responseStructure.DecodedArguments.FailedToEvaluate!);
+        if (responseStructure.DecodedArguments.Evaluated is null)
+            return responseStructure.DecodedArguments.FailedToEvaluate!;
 
-        return Result<string, EvaluatedSctructure>.ok(
-            responseStructure.DecodedArguments.Evaluated);
+        return
+            responseStructure.DecodedArguments.Evaluated;
     }
 
     public static IReadOnlyList<string> GetDefaultElmCoreModulesTexts(
@@ -327,7 +327,7 @@ public class ElmInteractive
         PineValueJson environment,
         string submission);
 
-    public static Result<string, EvaluatedSctructure> SubmissionResponseFromResponsePineValue(
+    public static Result<string, EvaluatedStruct> SubmissionResponseFromResponsePineValue(
         IJavaScriptEngine evalElmPreparedJavaScriptEngine,
         PineValue response)
     {
@@ -339,10 +339,16 @@ public class ElmInteractive
                     options: compilerInterfaceJsonSerializerOptions)).ToString()!;
 
         var responseStructure =
-            System.Text.Json.JsonSerializer.Deserialize<Result<string, EvaluatedSctructure>>(responseJson)!;
+            System.Text.Json.JsonSerializer.Deserialize<Result<string, EvaluatedStruct>>(responseJson)!;
 
         return responseStructure;
     }
+
+    public static Result<string, EvaluatedStruct> SubmissionResponseFromResponsePineValue(
+        PineValue response) =>
+        ElmValue.PineValueAsElmValue(response)
+        .MapError(err => "Failed to convert Pine value to Elm value: " + err)
+        .Map(elmValue => new EvaluatedStruct(ElmValue.ElmValueAsExpression(elmValue).expressionString));
 
     public record PineValueJson
     {
@@ -771,14 +777,14 @@ public class ElmInteractive
 
     private record EvaluateSubmissionResponseStructure
         (string? FailedToDecodeArguments = null,
-        DecodedArgumentsSctructure? DecodedArguments = null);
+        DecodedArgumentsStruct? DecodedArguments = null);
 
-    private record DecodedArgumentsSctructure(
+    private record DecodedArgumentsStruct(
         string? FailedToEvaluate = null,
-        EvaluatedSctructure? Evaluated = null);
+        EvaluatedStruct? Evaluated = null);
 
-    public record EvaluatedSctructure(
-        string displayText);
+    public record EvaluatedStruct(
+        string DisplayText);
 
     private static readonly System.Text.Json.JsonSerializerOptions compilerInterfaceJsonSerializerOptions =
         new()

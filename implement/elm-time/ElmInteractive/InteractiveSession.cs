@@ -46,8 +46,8 @@ public interface IInteractiveSession : IDisposable
         };
 
     public record SubmissionResponse(
-        ElmInteractive.EvaluatedSctructure interactiveResponse,
-        IReadOnlyList<string>? inspectionLog = null);
+        ElmInteractive.EvaluatedStruct InteractiveResponse,
+        IReadOnlyList<string>? InspectionLog = null);
 }
 
 public enum ElmEngineTypeCLI

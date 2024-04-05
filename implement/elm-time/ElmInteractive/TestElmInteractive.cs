@@ -253,13 +253,13 @@ public class TestElmInteractive
                         {
                             if (sessionStep.step.ExpectedResponse is { } expectedResponse)
                             {
-                                if (expectedResponse != submissionResultOk.interactiveResponse?.displayText)
+                                if (expectedResponse != submissionResultOk.InteractiveResponse?.DisplayText)
                                 {
                                     var errorText =
                                     "Response from interactive does not match expected value. Expected:\n" +
                                     expectedResponse +
                                     "\nBut got this response:\n" +
-                                    submissionResultOk.interactiveResponse?.displayText;
+                                    submissionResultOk.InteractiveResponse?.DisplayText;
 
                                     return Result<InteractiveScenarioTestStepFailure, IInteractiveSession.SubmissionResponse>.err(
                                         new InteractiveScenarioTestStepFailure(
@@ -347,8 +347,11 @@ public class TestElmInteractive
         return
             (sessionStep.GetNodeAtPath(["submission.txt"]) switch
             {
-                TreeNodeWithStringPath.BlobNode submissionBlob => Result<string, string>.ok(Encoding.UTF8.GetString(submissionBlob.Bytes.Span)),
-                _ => Result<string, string>.err("Missing submission"),
+                TreeNodeWithStringPath.BlobNode submissionBlob =>
+                Result<string, string>.ok(Encoding.UTF8.GetString(submissionBlob.Bytes.Span)),
+
+                _ =>
+                Result<string, string>.err("Missing submission"),
             })
             .Map(submission => new ScenarioStep(submission, expectedResponse));
     }

@@ -128,12 +128,6 @@ public abstract record ElmValue
             ?
             new ElmInternal("empty-blob")
             :
-            blobValue.Bytes.Length > 10
-            ?
-            PineVM.ParseExpressionFromValueDefault(pineValue)
-            .Map(_ => (ElmValue)new ElmInternal("expression"))
-            .WithDefault(new ElmInternal("___error_skipped_large_blob___"))
-            :
             (blobValue.Bytes.Span[0] switch
             {
                 4 or 2 =>
@@ -141,6 +135,12 @@ public abstract record ElmValue
                 .Map(bigInt => (ElmValue)new ElmInteger(bigInt)),
 
                 _ =>
+                blobValue.Bytes.Length > 10
+                ?
+                PineVM.ParseExpressionFromValueDefault(pineValue)
+                .Map(_ => (ElmValue)new ElmInternal("expression"))
+                .WithDefault(new ElmInternal("___error_skipped_large_blob___"))
+                : 
                 PineValueAsInteger.UnsignedIntegerFromValue(blobValue)
                 .Map(bigInt => (ElmValue)new ElmChar((int)bigInt))
             }),
@@ -391,15 +391,15 @@ public abstract record ElmValue
         static string applyNeedsParens((string expressionString, bool needsParens) tuple) =>
             tuple.needsParens ? "(" + tuple.expressionString + ")" : tuple.expressionString;
 
-        if (elmTag.TagName == "Set_elm_builtin")
+        if (elmTag.TagName is "Set_elm_builtin")
         {
-            if (elmTag.Arguments.Count == 1)
+            if (elmTag.Arguments.Count is 1)
             {
                 var singleArgument = elmTag.Arguments[0];
 
                 var singleArgumentDictToList = ElmValueDictToList(singleArgument);
 
-                if (singleArgumentDictToList.Count == 0)
+                if (singleArgumentDictToList.Count is 0)
                     return ("Set.empty", needsParens: false);
 
                 var setElements = singleArgumentDictToList.Select(field => field.key).ToList();
@@ -410,26 +410,31 @@ public abstract record ElmValue
             }
         }
 
-        if (elmTag.TagName == "RBEmpty_elm_builtin")
+        if (elmTag.TagName is "RBEmpty_elm_builtin")
             return ("Dict.empty", needsParens: false);
 
         var dictToList = ElmValueDictToList(elmTag);
 
-        if (dictToList.Count == 0)
+        if (dictToList.Count is 0)
         {
             var (needsParens, argumentsString) =
                 elmTag.Arguments.Count switch
                 {
-                    0 => (false, ""),
-                    _ => (true, " " + string.Join(" ", elmTag.Arguments.Select(ElmValueAsExpression).Select(applyNeedsParens)))
+                    0 =>
+                    (false, ""),
+
+                    _ =>
+                    (true, " " + string.Join(" ", elmTag.Arguments.Select(ElmValueAsExpression).Select(applyNeedsParens)))
                 };
 
             return (elmTag.TagName + argumentsString, needsParens);
         }
 
-        return ("Dict.fromList [" +
+        return
+            ("Dict.fromList [" +
             string.Join(",",
-            dictToList.Select(field => "(" + ElmValueAsExpression(field.key).expressionString + "," + ElmValueAsExpression(field.value).expressionString + ")")) + "]",
+            dictToList
+            .Select(field => "(" + ElmValueAsExpression(field.key).expressionString + "," + ElmValueAsExpression(field.value).expressionString + ")")) + "]",
             needsParens: true);
     }
 
@@ -441,12 +446,12 @@ public abstract record ElmValue
 
     public static T ElmValueDictFoldr<T>(Func<ElmValue, ElmValue, T, T> func, T aggregate, ElmValue elmValue)
     {
-        if (elmValue is ElmTag elmTag && elmTag.TagName == "RBNode_elm_builtin" && elmTag.Arguments.Count == 5)
+        if (elmValue is ElmTag elmTag && elmTag.TagName is "RBNode_elm_builtin" && elmTag.Arguments.Count is 5)
         {
-            var key = elmTag.Arguments[0];
-            var value = elmTag.Arguments[1];
-            var left = elmTag.Arguments[2];
-            var right = elmTag.Arguments[3];
+            var key = elmTag.Arguments[1];
+            var value = elmTag.Arguments[2];
+            var left = elmTag.Arguments[3];
+            var right = elmTag.Arguments[4];
 
             return ElmValueDictFoldr(func, func(key, value, ElmValueDictFoldr(func, aggregate, right)), left);
         }

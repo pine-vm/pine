@@ -1257,11 +1257,11 @@ public class Program
                                     CommandLineInterface.FormatIntegerForDisplay(evalStopwatch.ElapsedMilliseconds) + " ms.");
 
                                 console.WriteLine(
-                                    "Inspection log has " + (evalOk.inspectionLog?.Count ?? 0) + " entries:\n" +
-                                    string.Join("\n", evalOk.inspectionLog.EmptyIfNull()));
+                                    "Inspection log has " + (evalOk.InspectionLog?.Count ?? 0) + " entries:\n" +
+                                    string.Join("\n", evalOk.InspectionLog.EmptyIfNull()));
                             }
 
-                            console.WriteLine(evalOk.interactiveResponse.displayText);
+                            console.WriteLine(evalOk.InteractiveResponse.DisplayText);
 
                             return submission;
                         });

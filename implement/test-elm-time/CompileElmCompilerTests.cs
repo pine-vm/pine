@@ -59,7 +59,7 @@ public class CompileElmCompilerTests
         var testSubmissionResponse =
             testSubmissionResult.Extract(err => throw new Exception(err));
 
-        Assert.AreEqual("4", testSubmissionResponse.interactiveResponse.displayText);
+        Assert.AreEqual("4", testSubmissionResponse.InteractiveResponse.DisplayText);
 
         var interactiveEnvironmentValue = interactiveSession.CurrentEnvironmentValue();
 
@@ -260,7 +260,7 @@ public class CompileElmCompilerTests
         var testSubmissionResponse =
             testSubmissionResult.Extract(err => throw new Exception(err));
 
-        Assert.AreEqual("False", testSubmissionResponse.interactiveResponse.displayText);
+        Assert.AreEqual("False", testSubmissionResponse.InteractiveResponse.DisplayText);
 
         var interactiveEnvironmentValue = interactiveSession.CurrentEnvironmentValue();
 
