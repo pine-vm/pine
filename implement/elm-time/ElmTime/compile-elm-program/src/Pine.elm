@@ -227,7 +227,7 @@ kernelFunctions =
           )
         , ( "skip"
           , kernelFunctionExpectingExactlyTwoArguments
-                { mapArg0 = \countValue -> intFromValue countValue
+                { mapArg0 = intFromValue
                 , mapArg1 = Ok
                 , apply =
                     \count sequence ->
@@ -240,7 +240,7 @@ kernelFunctions =
           )
         , ( "take"
           , kernelFunctionExpectingExactlyTwoArguments
-                { mapArg0 = \countValue -> intFromValue countValue
+                { mapArg0 = intFromValue
                 , mapArg1 = Ok
                 , apply =
                     \count sequence ->
@@ -677,12 +677,37 @@ valueFromChar char =
 
 stringFromValue : Value -> Result String String
 stringFromValue value =
-    case value of
-        ListValue charsValues ->
-            stringFromListValue charsValues
+    if value == stringAsValue_Literal then
+        Ok "Literal"
 
-        _ ->
-            Err "Only a ListValue can represent a string."
+    else if value == stringAsValue_List then
+        Ok "List"
+
+    else if value == stringAsValue_ParseAndEval then
+        Ok "ParseAndEval"
+
+    else if value == stringAsValue_KernelApplication then
+        Ok "KernelApplication"
+
+    else if value == stringAsValue_Conditional then
+        Ok "Conditional"
+
+    else if value == stringAsValue_Environment then
+        Ok "Environment"
+
+    else if value == stringAsValue_Function then
+        Ok "Function"
+
+    else if value == stringAsValue_StringTag then
+        Ok "StringTag"
+
+    else
+        case value of
+            ListValue charsValues ->
+                stringFromListValue charsValues
+
+            _ ->
+                Err "Not a list"
 
 
 stringFromListValue : List Value -> Result String String
@@ -983,72 +1008,71 @@ environmentExpressionAsValue =
 
 
 parseExpressionFromValue : Value -> Result String Expression
-parseExpressionFromValue =
-    parseUnionFromPineValue parseExpressionFromValueDict
+parseExpressionFromValue exprValue =
+    case parseListWithExactlyTwoElements exprValue of
+        Err err ->
+            Err ("Failed to parse union: " ++ err)
 
+        Ok ( tagNameValue, unionTagValue ) ->
+            case stringFromValue tagNameValue of
+                Err err ->
+                    Err ("Failed parsing tag name: " ++ err)
 
-parseExpressionFromValueDict : List ( ( String, Value ), Value -> Result String Expression )
-parseExpressionFromValueDict =
-    List.map
-        (\( tagName, parse ) ->
-            ( ( tagName, valueFromString tagName ), parse )
-        )
-        [ ( "Literal"
-          , \value -> Ok (LiteralExpression value)
-          )
-        , ( "List"
-          , parseListExpression
-          )
-        , ( "ParseAndEval"
-          , \value ->
-                case parseParseAndEvalExpression value of
-                    Ok parseAndEval ->
-                        Ok (ParseAndEvalExpression parseAndEval)
+                Ok tagName ->
+                    case tagName of
+                        "Literal" ->
+                            Ok (LiteralExpression unionTagValue)
 
-                    Err err ->
-                        Err err
-          )
-        , ( "KernelApplication"
-          , \value ->
-                case parseKernelApplicationExpression value of
-                    Ok kernelApplication ->
-                        Ok (KernelApplicationExpression kernelApplication)
+                        "List" ->
+                            parseListExpression unionTagValue
 
-                    Err err ->
-                        Err err
-          )
-        , ( "Conditional"
-          , \value ->
-                case parseConditionalExpression value of
-                    Ok conditional ->
-                        Ok (ConditionalExpression conditional)
+                        "ParseAndEval" ->
+                            case parseParseAndEvalExpression unionTagValue of
+                                Ok parseAndEval ->
+                                    Ok (ParseAndEvalExpression parseAndEval)
 
-                    Err err ->
-                        Err err
-          )
-        , ( "Environment"
-          , \_ -> Ok environmentExpr
-          )
-        , ( "StringTag"
-          , \value ->
-                case parseListWithExactlyTwoElements value of
-                    Err err ->
-                        Err err
+                                Err err ->
+                                    Err err
 
-                    Ok ( tagValue, taggedValue ) ->
-                        case stringFromValue tagValue of
-                            Err err ->
-                                Err err
+                        "KernelApplication" ->
+                            case parseKernelApplicationExpression unionTagValue of
+                                Ok kernelApplication ->
+                                    Ok (KernelApplicationExpression kernelApplication)
 
-                            Ok tag ->
-                                case parseExpressionFromValue taggedValue of
-                                    Err err ->
-                                        Err err
+                                Err err ->
+                                    Err err
 
-                                    Ok tagged ->
-                                        Ok (StringTagExpression tag tagged)
-          )
-        ]
+                        "Conditional" ->
+                            case parseConditionalExpression unionTagValue of
+                                Ok conditional ->
+                                    Ok (ConditionalExpression conditional)
+
+                                Err err ->
+                                    Err err
+
+                        "Environment" ->
+                            Ok environmentExpr
+
+                        "StringTag" ->
+                            case parseListWithExactlyTwoElements unionTagValue of
+                                Err err ->
+                                    Err err
+
+                                Ok ( tagValue, taggedValue ) ->
+                                    case stringFromValue tagValue of
+                                        Err err ->
+                                            Err err
+
+                                        Ok tag ->
+                                            case parseExpressionFromValue taggedValue of
+                                                Err err ->
+                                                    Err err
+
+                                                Ok tagged ->
+                                                    Ok (StringTagExpression tag tagged)
+
+                        _ ->
+                            Err ("Unexpected expr tag: " ++ tagName)
 
 
 parseListExpression : Value -> Result String Expression
@@ -1275,37 +1299,6 @@ parseConditionalExpression expressionValue =
 encodeUnionToPineValue : Value -> Value -> Value
 encodeUnionToPineValue tagNameValue unionTagValue =
     ListValue [ tagNameValue, unionTagValue ]
-
-
-parseUnionFromPineValue : List ( ( String, Value ), Value -> Result String a ) -> Value -> Result String a
-parseUnionFromPineValue tags value =
-    case parseListWithExactlyTwoElements value of
-        Err err ->
-            Err ("Failed to parse union: " ++ err)
-
-        Ok ( tagNameValue, unionTagValue ) ->
-            case
-                Common.listFind
-                    (\( ( _, availableTagValue ), _ ) -> availableTagValue == tagNameValue)
-                    tags
-            of
-                Nothing ->
-                    Err
-                        (case stringFromValue tagNameValue of
-                            Ok tagName ->
-                                "Unexpected tag name: " ++ tagName
-
-                            Err err ->
-                                "Failed decoding tag name: " ++ err
-                        )
-
-                Just ( ( tagName, _ ), tagDecode ) ->
-                    case tagDecode unionTagValue of
-                        Err err ->
-                            Err (("Failed to parse value for tag " ++ tagName ++ ": ") ++ err)
-
-                        Ok ok ->
-                            Ok ok
 
 
 parseListOfPairs : List Value -> Result String (List ( Value, Value ))
