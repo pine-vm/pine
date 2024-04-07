@@ -30,12 +30,12 @@ I copied the executable file to '/bin/elm-time'. You will be able to use the 'el
 As part of a deployment, Elm-Time compiles the app program code.
 The compiler requires the program code to contain the entry point for a web server app. In addition, it offers various functions we can use independent of each other as needed. It supports projects without a front-end or with multiple front-ends apps.
 
-Here is an example app containing backend and frontend: <https://github.com/elm-time/elm-time/tree/0ae86d63e4353c8225794fd3cc214121d6c02847/implement/example-apps/docker-image-default-app>
+Here is an example app containing backend and frontend: <https://github.com/elm-time/elm-time/tree/5be007cd5a827be1561226713d8c01ae929e51c8/implement/example-apps/docker-image-default-app>
 
 We can use this command to run a server and deploy this app:
 
 ```cmd
-elm-time  run-server  --public-urls="http://*:5000"  --deploy=https://github.com/elm-time/elm-time/tree/0ae86d63e4353c8225794fd3cc214121d6c02847/implement/example-apps/docker-image-default-app
+elm-time  run-server  --public-urls="http://*:5000"  --deploy=https://github.com/elm-time/elm-time/tree/5be007cd5a827be1561226713d8c01ae929e51c8/implement/example-apps/docker-image-default-app
 ```
 
 When running this command, we get an output like this:
@@ -44,28 +44,34 @@ When running this command, we get an output like this:
 I got no path to a persistent store for the process. This process will not be persisted!
 Loading app config to deploy...
 This path looks like a URL into a remote git repository. Trying to load from there...
-This path points to commit 0ae86d63e4353c8225794fd3cc214121d6c02847
-The first parent commit with same tree is https://github.com/elm-time/elm-time/tree/3f192abd835ddb3c7ed9802fb83b036ba37b5ac9/implement/example-apps/docker-image-default-app
-Loaded source composition fd5d797f02af65e87bad9a70522b47d2d63ea680609f7c94c7463b88010c3ed2 from 'https://github.com/elm-time/elm-time/tree/0ae86d63e4353c8225794fd3cc214121d6c02847/implement/example-apps/docker-image-default-app'.
-Starting web server with admin interface (using engine JavaScript_Jint)...
-info: ElmTime.Platform.WebServer.StartupAdminInterface[0]
+This path points to commit 5be007cd5a827be1561226713d8c01ae929e51c8
+The first parent commit with same tree is https://github.com/elm-time/elm-time/tree/1d5c77b5bd9f2f18c11a4f41e37fb4cfb1ba6dd6/implement/example-apps/docker-image-default-app
+Loaded source composition b360367bb08010eb39902695fd4e776f7975263a777d695e26cdda110c4fd6e0 from 'https://github.com/elm-time/elm-time/tree/5be007cd5a827be1561226713d8c01ae929e51c8/implement/example-apps/docker-image-default-app'.
+Starting web server with admin interface (using engine JavaScript_V8 { })...
+info: ElmTime.Platform.WebService.StartupAdminInterface[0]
+      letsEncryptRenewalServiceCertificateCompleted: False
+info: ElmTime.Platform.WebService.StartupAdminInterface[0]
       Begin to build the process live representation.
-info: ElmTime.Platform.WebServer.StartupAdminInterface[0]
+info: ElmTime.Platform.WebService.StartupAdminInterface[0]
       Begin to restore the process state.
-info: ElmTime.Platform.WebServer.StartupAdminInterface[0]
+info: ElmTime.Platform.WebService.StartupAdminInterface[0]
       Found 1 composition log records to use for restore.
-info: ElmTime.Platform.WebServer.StartupAdminInterface[0]
+info: ElmTime.Platform.WebService.StartupAdminInterface[0]
       Restored the process state in 0 seconds.
-info: ElmTime.Platform.WebServer.StartupAdminInterface[0]
+info: ElmTime.Platform.WebService.StartupAdminInterface[0]
       Completed building the process live representation.
-info: ElmTime.Platform.WebServer.PublicAppState[0]
+info: ElmTime.Platform.WebService.PublicAppState[0]
+      disableLetsEncrypt: null
+info: ElmTime.Platform.WebService.PublicAppState[0]
       I did not find 'letsEncryptOptions' in the configuration. I continue without Let's Encrypt.
 info: Microsoft.Hosting.Lifetime[14]
       Now listening on: http://[::]:5000
 info: Microsoft.Hosting.Lifetime[0]
       Application started. Press Ctrl+C to shut down.
-info: ElmTime.Platform.WebServer.StartupAdminInterface[0]
-      Started the public app at 'http://*:5000'.
+info: Microsoft.Hosting.Lifetime[0]
+      Hosting environment: Production
+info: ElmTime.Platform.WebService.StartupAdminInterface[0]
+      Started the public app at 'http://[::]:5000'.
 Completed starting the web server with the admin interface at 'http://*:4000'.
 ```
 
@@ -149,7 +155,7 @@ The tree we modeled with this record type has two leaves:
 + `debug.javascript.base64 : String`
 + `javascript.base64 : String`
 
-Backend apps often use the output from `elm make` send the frontend to web browsers with HTTP responses. We can also see this in the [example app](https://github.com/elm-time/elm-time/blob/30f16796f49d9c86b2975b145b188c5abfd4f7ca/implement/example-apps/docker-image-default-app/src/Backend/Main.elm#L43-L55) mentioned earlier:
+Backend apps often use the output from `elm make` send the frontend to web browsers with HTTP responses. We can also see this in the [example app](https://github.com/elm-time/elm-time/blob/5be007cd5a827be1561226713d8c01ae929e51c8/implement/example-apps/docker-image-default-app/src/Backend/Main.elm#L43-L55) mentioned earlier:
 
 ```Elm
     httpResponse =
@@ -195,7 +201,7 @@ The `SourceFiles` module provides access to the app source code files.
 
 By adding a declaration to this module, we can pick a source file and read its contents. The compilation step for this module happens before the one for the front-end. Therefore the source files are available to both front-end and back-end apps.
 
-The [app 'Elm Editor' uses this interface](https://github.com/elm-time/elm-time/blob/0ae86d63e4353c8225794fd3cc214121d6c02847/implement/example-apps/elm-editor/src/CompilationInterface/SourceFiles.elm) to get the contents of various files in the app code directory. The app uses some of these files in the front-end and some in the back-end.
+The [app 'Elm Editor' uses this interface](https://github.com/elm-time/elm-time/blob/5be007cd5a827be1561226713d8c01ae929e51c8/implement/example-apps/elm-editor/src/CompilationInterface/SourceFiles.elm) to get the contents of various files in the app code directory. The app uses some of these files in the front-end and some in the back-end.
 
 ```Elm
 module CompilationInterface.SourceFiles exposing (..)
@@ -261,7 +267,7 @@ migrate state =
 
 We don't have to return the same value here. We can also use the migration to make a custom atomic update to our back-end apps state.
 
-Here is another example, almost as simple, with the back-end state just a primitive type, migrating from an `Int` to a `String`: <https://github.com/elm-time/elm-time/blob/0ae86d63e4353c8225794fd3cc214121d6c02847/implement/test-elm-time/example-elm-apps/migrate-from-int-to-string-builder-web-app/src/Backend/MigrateState.elm>
+Here is another example, almost as simple, with the back-end state just a primitive type, migrating from an `Int` to a `String`: <https://github.com/elm-time/elm-time/blob/5be007cd5a827be1561226713d8c01ae929e51c8/implement/test-elm-time/test-elm-apps/migrate-from-int-to-string-builder-web-app/src/Backend/MigrateState.elm>
 
 ### `web-service.json`
 
