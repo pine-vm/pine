@@ -65,8 +65,8 @@ public class StateShim
                 serializeStateResponse.Result,
 
                 _ =>
-                Result<string, JsonElement>.err(
-                    "Unexpected type of response: " + JsonSerializer.Serialize(decodeOk))
+                (Result<string, JsonElement>)
+                "Unexpected type of response: " + JsonSerializer.Serialize(decodeOk)
             });
     }
 
@@ -185,8 +185,8 @@ public class StateShim
                 .MapError(err => "Failed to estimate serialized state length: " + err),
 
                 _ =>
-                Result<string, long>.err(
-                    "Unexpected type of response: " + JsonSerializer.Serialize(responseOk))
+                (Result<string, long>)
+                "Unexpected type of response: " + JsonSerializer.Serialize(responseOk)
             });
     }
 

@@ -185,8 +185,9 @@ namespace ElmTime
 
                         if (0 < otherErrors.Count)
                         {
-                            return CompilationResult.err(
-                                otherErrors.Select(error => new LocatedCompilationError(error.location, error: CompilationError.AsCompilationError(error.error))).ToImmutableList());
+                            return
+                                (CompilationResult)
+                                otherErrors.Select(error => new LocatedCompilationError(error.location, error: CompilationError.AsCompilationError(error.error))).ToImmutableList();
                         }
 
                         Result<string, ReadOnlyMemory<byte>> ElmMake(
@@ -251,7 +252,7 @@ namespace ElmTime
                                         }
                                         catch (Exception e)
                                         {
-                                            return Result<string, ReadOnlyMemory<byte>>.err("Failed with runtime exception: " + e);
+                                            return "Failed with runtime exception: " + e;
                                         }
                                     }
 
@@ -280,14 +281,15 @@ namespace ElmTime
                          * */
                         if (0 < newDependenciesWithError.Count)
                         {
-                            return CompilationResult.err(
+                            return
+                                (CompilationResult)
                                 newDependenciesWithError.Select(dep => new LocatedCompilationError(
                                     location: null,
                                     error: new CompilationError(
                                         DependencyError:
                                         dep.Item2.report.dependencyKeySummary + " " +
                                         dep.Item1.result.Unpack(fromErr: error => error, fromOk: _ => throw new NotImplementedException()))))
-                                .ToImmutableList());
+                                .ToImmutableList();
                         }
 
                         var newStackFrame =
@@ -636,10 +638,9 @@ namespace ElmTime
             var moduleDeclarationMatch = Regex.Match(elmModuleText, "^module\\s+([^\\s]+)");
 
             if (!moduleDeclarationMatch.Success)
-                return Result<string, IReadOnlyList<string>>.err("Did not find module declaration");
+                return "Did not find module declaration";
 
-            return
-                Result<string, IReadOnlyList<string>>.ok(moduleDeclarationMatch.Groups[1].Value.Split('.'));
+            return moduleDeclarationMatch.Groups[1].Value.Split('.');
         }
     }
 

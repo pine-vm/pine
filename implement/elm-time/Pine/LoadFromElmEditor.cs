@@ -156,8 +156,8 @@ namespace Pine
         {
             var parsedUrl = ParseUrl(sourceUrl);
 
-            if (parsedUrl == null)
-                return Result<string, LoadFromUrlSuccess>.err("Failed to parse string '" + sourceUrl + "' as Elm Editor URL.");
+            if (parsedUrl is null)
+                return "Failed to parse string '" + sourceUrl + "' as Elm Editor URL.";
 
             LoadFromUrlSuccess returnValueFromTree(TreeNodeWithStringPath tree) =>
                 new(parsedUrl: parsedUrl, tree: tree);
@@ -191,7 +191,7 @@ namespace Pine
                     .Map(returnValueFromTree);
             }
 
-            return Result<string, LoadFromUrlSuccess>.err("Project state has an unexpected shape: " + parsedUrl.projectStateString);
+            return "Project state has an unexpected shape: " + parsedUrl.projectStateString;
         }
 
         public static Result<string, TreeNodeWithStringPath> LoadProjectState(ProjectState_2021_01.ProjectState projectState)
@@ -204,8 +204,7 @@ namespace Pine
 
                 if (loadFromGitHost is Result<string, LoadFromGitHubOrGitLab.LoadFromUrlSuccess>.Err loadFromGitHostError)
                 {
-                    return Result<string, TreeNodeWithStringPath>.err(
-                        "Failed to load from Git host: " + loadFromGitHostError);
+                    return "Failed to load from Git host: " + loadFromGitHostError;
                 }
 
                 baseComposition = loadFromGitHost.Map(loaded => loaded.tree).Extract(error => throw new Exception(error));

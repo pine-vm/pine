@@ -139,21 +139,21 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
 
                 ReductionWithResolvedDependencies? reduction = null;
 
-                if (reductionRecord?.appConfig?.HashBase16 != null && reductionRecord?.elmAppState?.HashBase16 != null)
+                if (reductionRecord?.appConfig?.HashBase16 is { } appConfigHash && reductionRecord?.elmAppState?.HashBase16 is { } appStateHash)
                 {
-                    var appConfigComponent = storeReader.LoadComponent(reductionRecord.appConfig.HashBase16);
+                    var appConfigComponent = storeReader.LoadComponent(appConfigHash);
 
-                    var elmAppStateComponent = storeReader.LoadComponent(reductionRecord.elmAppState.HashBase16);
+                    var elmAppStateComponent = storeReader.LoadComponent(appStateHash);
 
-                    if (appConfigComponent != null && elmAppStateComponent != null)
+                    if (appConfigComponent is not null && elmAppStateComponent is not null)
                     {
                         var appConfigAsTree =
                         PineValueComposition.ParseAsTreeWithStringPath(appConfigComponent)
-                        .Extract(_ => throw new Exception("Unexpected content of appConfigComponent " + reductionRecord.appConfig?.HashBase16 + ": Failed to parse as tree."));
+                        .Extract(_ => throw new Exception("Unexpected content of appConfigComponent " + appConfigHash + ": Failed to parse as tree."));
 
                         if (elmAppStateComponent is not PineValue.BlobValue elmAppStateComponentBlob)
                         {
-                            throw new Exception("Unexpected content of elmAppStateComponent " + reductionRecord.elmAppState?.HashBase16 + ": This is not a blob.");
+                            throw new Exception("Unexpected content of elmAppStateComponent " + appStateHash + ": This is not a blob.");
                         }
 
                         reduction = new ReductionWithResolvedDependencies
@@ -197,8 +197,7 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
 
             logger?.Invoke(message);
 
-            return
-                Result<string, RestoreFromCompositionEventSequenceResult>.err(message);
+            return message;
         }
 
         logger?.Invoke("Found " + compositionEventsFromLatestReduction.Count + " composition log records to use for restore.");
@@ -226,13 +225,12 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
         var firstCompositionLogRecord =
             compositionLogRecords.FirstOrDefault();
 
-        if (firstCompositionLogRecord.reduction == null &&
+        if (firstCompositionLogRecord.reduction is null &&
             firstCompositionLogRecord.compositionRecord.parentHashBase16 != CompositionLogRecordInFile.CompositionLogFirstRecordParentHashBase16)
         {
             return
-                Result<string, RestoreFromCompositionEventSequenceResult>.err(
-                    "Failed to get sufficient history: Composition log record points to parent " +
-                    firstCompositionLogRecord.compositionRecord.parentHashBase16);
+                "Failed to get sufficient history: Composition log record points to parent " +
+                firstCompositionLogRecord.compositionRecord.parentHashBase16;
         }
 
         var initialProcessRepresentation = new PersistentProcessLiveRepresentationDuringRestore(
@@ -288,15 +286,14 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
                     });
             }
 
-            if (compositionEvent.RevertProcessTo != null)
+            if (compositionEvent.RevertProcessTo is { } revertProcessTo)
             {
-                if (compositionEvent.RevertProcessTo.HashBase16 != process.lastCompositionLogRecordHashBase16)
+                if (revertProcessTo.HashBase16 != process.lastCompositionLogRecordHashBase16)
                 {
                     return
-                        Result<string, PersistentProcessLiveRepresentationDuringRestore>.err(
-                            "Error in enumeration of process composition events: Got revert to " +
-                            compositionEvent.RevertProcessTo.HashBase16 +
-                            ", but previous version in the enumerated sequence was " + process.lastCompositionLogRecordHashBase16 + ".");
+                        "Error in enumeration of process composition events: Got revert to " +
+                        revertProcessTo.HashBase16 +
+                        ", but previous version in the enumerated sequence was " + process.lastCompositionLogRecordHashBase16 + ".";
                 }
 
                 return continueOk(process);
@@ -326,8 +323,9 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
                     aggregateOk.lastAppConfig is null ||
                     aggregateOk.lastElmAppVolatileProcess is null)
                 {
-                    return Result<string, RestoreFromCompositionEventSequenceResult>.err(
-                        "Failed to get sufficient history: " + nameof(compositionLogRecords) + " does not contain app init.");
+                    return
+                        (Result<string, RestoreFromCompositionEventSequenceResult>)
+                        "Failed to get sufficient history: " + nameof(compositionLogRecords) + " does not contain app init.";
                 }
 
                 return
@@ -374,11 +372,11 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
 
                     var eventString = JsonSerializer.Serialize<StateShim.InterfaceToHost.StateShimRequestStruct>(eventStateShimRequest);
 
-                    if (processBefore.lastElmAppVolatileProcess == null)
-                        return Result<string, PersistentProcessLiveRepresentationDuringRestore>.ok(processBefore);
+                    if (processBefore.lastElmAppVolatileProcess is not { } lastElmAppVolatileProcess)
+                        return processBefore;
 
                     var processEventReturnValue =
-                        processBefore.lastElmAppVolatileProcess.ProcessEvent(eventString);
+                        lastElmAppVolatileProcess.ProcessEvent(eventString);
 
                     var processEventResult =
                         JsonSerializer.Deserialize<Result<string, object>>(processEventReturnValue);
@@ -392,12 +390,12 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
             var applyFunctionOnElmAppState =
                 JsonSerializer.Deserialize<CompositionLogRecordInFile.ApplyFunctionOnStateEvent>(applyFunctionOnElmAppStateSerial);
 
-            if (processBefore.lastElmAppVolatileProcess is null)
-                return Result<string, PersistentProcessLiveRepresentationDuringRestore>.err("Process is null, no app deployed");
+            if (processBefore.lastElmAppVolatileProcess is not { } lastElmAppVolatileProcess)
+                return "Process is null, no app deployed";
 
             return
                 StateShim.StateShim.ApplyFunctionOnMainBranch(
-                    process: processBefore.lastElmAppVolatileProcess,
+                    process: lastElmAppVolatileProcess,
                     new AdminInterface.ApplyDatabaseFunctionRequest(
                         functionName: applyFunctionOnElmAppState.functionName,
                         serializedArgumentsJson: applyFunctionOnElmAppState.serializedArgumentsJson,
@@ -407,17 +405,16 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
 
         if (compositionEvent.SetElmAppState is { } setElmAppState)
         {
-            if (processBefore.lastElmAppVolatileProcess == null)
+            if (processBefore.lastElmAppVolatileProcess is not { } lastElmAppVolatileProcess)
             {
-                return Result<string, PersistentProcessLiveRepresentationDuringRestore>.err(
-                    "Failed to load the serialized state with the elm app: Looks like no app was deployed so far.");
+                return "Failed to load the serialized state with the elm app: Looks like no app was deployed so far.";
             }
 
             var projectedElmAppState = JsonSerializer.Deserialize<JsonElement>(setElmAppState);
 
             return
                 StateShim.StateShim.SetAppStateOnMainBranch(
-                    process: processBefore.lastElmAppVolatileProcess,
+                    process: lastElmAppVolatileProcess,
                     stateJson: projectedElmAppState)
                 .MapError(error => "Set state function in the hosted app returned an error: " + error)
                 .Map(_ => processBefore);
@@ -426,14 +423,14 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
         if (compositionEvent.DeployAppConfigAndMigrateElmAppState is { } deployAppConfigAndMigrateElmAppState)
         {
             var elmAppStateBefore =
-                processBefore.lastElmAppVolatileProcess is null ?
-                (JsonElement?)null
-                :
+                processBefore.lastElmAppVolatileProcess is { } lastElmAppVolatileProcess ?
                 StateShim.StateShim.GetAppStateFromMainBranch(processBefore.lastElmAppVolatileProcess)
-                .Extract(err => throw new Exception("Failed to get serialized state: " + err));
+                .Extract(err => throw new Exception("Failed to get serialized state: " + err))
+                :
+                (JsonElement?)null;
 
             if (!elmAppStateBefore.HasValue)
-                return Result<string, PersistentProcessLiveRepresentationDuringRestore>.err("No state from previous app");
+                return "No state from previous app";
 
             var prepareProcessResult =
                 ProcessFromDeployment(
@@ -462,8 +459,8 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
                     applyFunctionResponse.Result,
 
                     _ =>
-                    Result<string, StateShim.InterfaceToHost.FunctionApplicationResult>.err(
-                        "Unexpected type of response: " + JsonSerializer.Serialize(shimResponse))
+                    (Result<string, StateShim.InterfaceToHost.FunctionApplicationResult>)
+                    "Unexpected type of response: " + JsonSerializer.Serialize(shimResponse)
                 })
                 .Map(shimResponse => JsonSerializer.Deserialize<InterfaceToHost.BackendEventResponseStruct>(
                     shimResponse.resultLessStateJson.WithDefaultBuilder(() => throw new Exception("Missing resultLessStateJson"))))
@@ -484,10 +481,8 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
                 });
         }
 
-        if (compositionEvent.DeployAppConfigAndInitElmAppState != null)
+        if (compositionEvent.DeployAppConfigAndInitElmAppState is { } appConfig)
         {
-            var appConfig = compositionEvent.DeployAppConfigAndInitElmAppState;
-
             var prepareProcessResult =
                 ProcessFromDeployment(
                     appConfig,
@@ -509,7 +504,9 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
                     StateShim.InterfaceToHost.StateShimResponseStruct.ApplyFunctionShimResponse applyFunctionResponse =>
                     applyFunctionResponse.Result,
 
-                    _ => Result<string, StateShim.InterfaceToHost.FunctionApplicationResult>.err("Unexpected response variant")
+                    _ =>
+                    (Result<string, StateShim.InterfaceToHost.FunctionApplicationResult>)
+                    "Unexpected response variant"
                 })
                 .Map(applyInitOk =>
                 {
@@ -532,8 +529,7 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
                 });
         }
 
-        return Result<string, PersistentProcessLiveRepresentationDuringRestore>.err(
-            "Unexpected shape of composition event: " + JsonSerializer.Serialize(compositionEvent));
+        return "Unexpected shape of composition event: " + JsonSerializer.Serialize(compositionEvent);
     }
 
     public static Result<string, StateShim.InterfaceToHost.StateShimResponseStruct> InitBranchesInElmInJsProcess(
@@ -615,16 +611,15 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
                                 taskResult: taskResult)))),
 
                     _ =>
-                    Result<string, UpdateElmAppStateForEvent>.err(
-                        "Unexpected structure in webServiceEvent_2023_02_27: " +
-                        JsonSerializer.Serialize(webServiceEvent_2023_02_27))
+                    "Unexpected structure in webServiceEvent_2023_02_27: " +
+                    JsonSerializer.Serialize(webServiceEvent_2023_02_27)
                 };
         }
         catch (JsonException)
         {
         }
 
-        return Result<string, UpdateElmAppStateForEvent>.err("Did not match any expected shape");
+        return "Did not match any expected shape";
     }
 
     private static Result<string, StateShim.InterfaceToHost.StateShimResponseStruct> AttemptProcessRequest(
@@ -646,9 +641,9 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
         }
         catch (Exception parseException)
         {
-            return Result<string, StateShim.InterfaceToHost.StateShimResponseStruct>.err(
+            return
                 "Failed to parse event response from the app. Looks like the loaded elm app is not compatible with the interface.\nI got following response from the app:\n" +
-                eventResponseSerial + "\nException: " + parseException);
+                eventResponseSerial + "\nException: " + parseException;
         }
     }
 
@@ -747,9 +742,10 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
             Action<string>? logger = null,
             Func<IJavaScriptEngine>? overrideJavaScriptEngineFactory = null)
     {
-        var projectionResult = IProcessStoreReader.ProjectFileStoreReaderForAppendedCompositionLogEvent(
-            originalFileStore: fileStoreReader,
-            compositionLogEvent: compositionLogEvent);
+        var projectionResult =
+            IProcessStoreReader.ProjectFileStoreReaderForAppendedCompositionLogEvent(
+                originalFileStore: fileStoreReader,
+                compositionLogEvent: compositionLogEvent);
 
         try
         {
@@ -762,7 +758,7 @@ public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposab
         }
         catch (Exception e)
         {
-            return Result<string, FileStoreReaderProjectionResult>.err("Failed with exception: " + e);
+            return "Failed with exception: " + e;
         }
     }
 

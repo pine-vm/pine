@@ -2205,10 +2205,7 @@ public class Program
 
             if (!httpResponse.IsSuccessStatusCode)
             {
-                return
-                    Result<string, IReadOnlyList<StateShim.InterfaceToHost.NamedExposedFunction>>.err(
-                        "HTTP response status code not OK: " + httpResponse.StatusCode + ", content:\n" +
-                        responseContentString);
+                return "HTTP response status code not OK: " + httpResponse.StatusCode + ", content:\n" + responseContentString;
             }
 
             return
@@ -2217,9 +2214,7 @@ public class Program
         }
         catch (Exception e)
         {
-            return
-                Result<string, IReadOnlyList<StateShim.InterfaceToHost.NamedExposedFunction>>.err(
-                    "Failed with runtime exception:\n" + e);
+            return "Failed with runtime exception:\n" + e;
         }
     }
 

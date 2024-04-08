@@ -503,8 +503,7 @@ public class PublicAppState
         }
         catch (Exception exception)
         {
-            return
-                Result<string, InterfaceToHost.RuntimeInformationRecord>.err(exception.ToString());
+            return exception.ToString();
         }
     }
 
@@ -533,13 +532,9 @@ public class PublicAppState
         {
             return new InterfaceToHost.TaskResult.CreateVolatileProcessResponse
             (
-                Result: Result<InterfaceToHost.CreateVolatileProcessErrorStructure, InterfaceToHost.CreateVolatileProcessComplete>.err
-                (
-                    new InterfaceToHost.CreateVolatileProcessErrorStructure
-                    (
-                        exceptionToString: createVolatileProcessException.ToString()
-                    )
-                )
+                Result:
+                new InterfaceToHost.CreateVolatileProcessErrorStructure(
+                    exceptionToString: createVolatileProcessException.ToString())
             );
         }
     }
@@ -561,19 +556,11 @@ public class PublicAppState
                 processId: volatileProcessId
             );
 
-            return
-                Result<InterfaceToHost.CreateVolatileProcessErrorStructure, InterfaceToHost.CreateVolatileProcessComplete>.ok(completeStructure);
+            return completeStructure;
         }
         catch (Exception exception)
         {
-            return
-                Result<InterfaceToHost.CreateVolatileProcessErrorStructure, InterfaceToHost.CreateVolatileProcessComplete>.err
-                (
-                    new InterfaceToHost.CreateVolatileProcessErrorStructure
-                    (
-                        exceptionToString: exception.ToString()
-                    )
-                );
+            return new InterfaceToHost.CreateVolatileProcessErrorStructure(exceptionToString: exception.ToString());
         }
     }
 
@@ -583,26 +570,22 @@ public class PublicAppState
     {
         if (!volatileProcesses.TryGetValue(requestToVolatileProcess.processId, out var volatileProcess))
         {
-            return Result<InterfaceToHost.RequestToVolatileProcessError, InterfaceToHost.RequestToVolatileProcessComplete>.err
-            (
+            return
                 new InterfaceToHost.RequestToVolatileProcessError
                 (
                     ProcessNotFound: new object(),
                     RequestToVolatileProcessOtherError: null
-                )
-            );
+                );
         }
 
         if (volatileProcess is not VolatileProcessCSharp { } volatileProcessCSharp)
-            return Result<InterfaceToHost.RequestToVolatileProcessError, InterfaceToHost.RequestToVolatileProcessComplete>.err
-            (
+            return
                 new InterfaceToHost.RequestToVolatileProcessError
                 (
                     ProcessNotFound: null,
                     RequestToVolatileProcessOtherError:
                     "Process " + requestToVolatileProcess.processId + " is not a C# process: " + volatileProcess.GetType().FullName
-                )
-            );
+                );
 
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
 
@@ -610,15 +593,13 @@ public class PublicAppState
 
         stopwatch.Stop();
 
-        return Result<InterfaceToHost.RequestToVolatileProcessError, InterfaceToHost.RequestToVolatileProcessComplete>.ok
-        (
+        return
             new InterfaceToHost.RequestToVolatileProcessComplete
             (
                 exceptionToString: Maybe.NothingFromNull(fromVolatileProcessResult.Exception?.ToString()),
                 returnValueToString: Maybe.NothingFromNull(fromVolatileProcessResult.ReturnValue?.ToString()),
                 durationInMilliseconds: stopwatch.ElapsedMilliseconds
-            )
-        );
+            );
     }
 
     private Result<InterfaceToHost.RequestToVolatileProcessError, object>
@@ -627,26 +608,24 @@ public class PublicAppState
     {
         if (!volatileProcesses.TryGetValue(writeToVolatileProcess.processId, out var volatileProcess))
         {
-            return Result<InterfaceToHost.RequestToVolatileProcessError, object>.err
-            (
+            return
                 new InterfaceToHost.RequestToVolatileProcessError
                 (
                     ProcessNotFound: new object(),
                     RequestToVolatileProcessOtherError: null
-                )
-            );
+                );
         }
 
         if (volatileProcess is not VolatileProcessNative { } volatileProcessNative)
-            return Result<InterfaceToHost.RequestToVolatileProcessError, object>.err
-            (
+        {
+            return
                 new InterfaceToHost.RequestToVolatileProcessError
                 (
                     ProcessNotFound: null,
                     RequestToVolatileProcessOtherError:
                     "Process " + writeToVolatileProcess.processId + " is not a native process: " + volatileProcess.GetType().FullName
-                )
-            );
+                );
+        }
 
         byte[] inputBytes;
 
@@ -656,20 +635,16 @@ public class PublicAppState
         }
         catch (Exception exception)
         {
-            return Result<InterfaceToHost.RequestToVolatileProcessError, object>.err
-                (
-                new InterfaceToHost.RequestToVolatileProcessError
-                (
+            return
+                new InterfaceToHost.RequestToVolatileProcessError(
                     ProcessNotFound: null,
                     RequestToVolatileProcessOtherError:
-                    "Could not convert stdInBase64 to bytes: " + exception
-                    )
-                );
+                    "Could not convert stdInBase64 to bytes: " + exception);
         }
 
         volatileProcessNative.WriteToStdIn(inputBytes);
 
-        return Result<InterfaceToHost.RequestToVolatileProcessError, object>.ok(new object());
+        return new object();
     }
 
     private Result<InterfaceToHost.RequestToVolatileProcessError, InterfaceToHost.ReadAllFromVolatileProcessNativeSuccessStruct>
@@ -678,34 +653,32 @@ public class PublicAppState
     {
         if (!volatileProcesses.TryGetValue(request.ProcessId, out var volatileProcess))
         {
-            return Result<InterfaceToHost.RequestToVolatileProcessError, InterfaceToHost.ReadAllFromVolatileProcessNativeSuccessStruct>.err
-            (
+            return
                 new InterfaceToHost.RequestToVolatileProcessError
                 (
                     ProcessNotFound: new object(),
                     RequestToVolatileProcessOtherError: null
-                )
-            );
+                );
         }
 
         if (volatileProcess is not VolatileProcessNative { } volatileProcessNative)
-            return Result<InterfaceToHost.RequestToVolatileProcessError, InterfaceToHost.ReadAllFromVolatileProcessNativeSuccessStruct>.err
-            (
+        {
+            return
                 new InterfaceToHost.RequestToVolatileProcessError
                 (
                     ProcessNotFound: null,
                     RequestToVolatileProcessOtherError:
                     "Process " + request.ProcessId + " is not a native process: " + volatileProcess.GetType().FullName
-                )
-            );
+                );
+        }
 
         var read = volatileProcessNative.ReadAll();
 
-        return Result<InterfaceToHost.RequestToVolatileProcessError, InterfaceToHost.ReadAllFromVolatileProcessNativeSuccessStruct>.ok(
+        return
             new InterfaceToHost.ReadAllFromVolatileProcessNativeSuccessStruct(
                 stdOutBase64: Convert.ToBase64String(read.StdOut.Span),
                 stdErrBase64: Convert.ToBase64String(read.StdErr.Span),
-                exitCode: Maybe.NothingFromNull(read.ExitCode)));
+                exitCode: Maybe.NothingFromNull(read.ExitCode));
     }
 
     private InterfaceToHost.TaskResult PerformProcessTaskTerminateVolatileProcess(

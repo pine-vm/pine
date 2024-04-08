@@ -115,9 +115,8 @@ public static class LoadFromGitHubOrGitLab
 
         var parsedUrl = ParseUrl(sourceUrl);
 
-        if (parsedUrl == null)
-            return Result<string, LoadFromUrlSuccess>.err(
-                "Failed to parse string '" + sourceUrl + "' as GitHub or GitLab URL.");
+        if (parsedUrl is null)
+            return "Failed to parse string '" + sourceUrl + "' as GitHub or GitLab URL.";
 
         string? branchName = null;
         bool refLooksLikeCommit = false;
@@ -579,7 +578,7 @@ public static class LoadFromGitHubOrGitLab
 
     private static Result<object, GitObject> FindGitObjectAtPath(Tree root, IEnumerable<string> nodesNames)
     {
-        if (root == null)
+        if (root is null)
             return Result<object, GitObject>.err(new object());
 
         GitObject? currentObject = root;
@@ -588,7 +587,7 @@ public static class LoadFromGitHubOrGitLab
         {
             var currentTree = currentObject as Tree;
 
-            if (currentTree == null)
+            if (currentTree is null)
                 return Result<object, GitObject>.err(new object());
 
             var treeEntry = currentTree?[nodeName];
@@ -601,10 +600,10 @@ public static class LoadFromGitHubOrGitLab
                 treeEntry.Target;
         }
 
-        if (currentObject == null)
+        if (currentObject is null)
             return Result<object, GitObject>.err(new object());
 
-        return Result<object, GitObject>.ok(currentObject);
+        return currentObject;
     }
 
     private static byte[] GitBlobSHAFromBlobContent(byte[] blobContent)

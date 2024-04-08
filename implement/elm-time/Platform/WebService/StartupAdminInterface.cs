@@ -549,8 +549,7 @@ public class StartupAdminInterface
             Result<string, IReadOnlyList<StateShim.InterfaceToHost.NamedExposedFunction>> listDatabaseFunctions()
             {
                 if (getPublicAppHost() is not { } publicAppHost)
-                    return Result<string, IReadOnlyList<StateShim.InterfaceToHost.NamedExposedFunction>>.err(
-                        "No application deployed.");
+                    return "No application deployed.";
 
                 return publicAppHost.ProcessLiveRepresentation.ListDatabaseFunctions();
             }
@@ -561,8 +560,7 @@ public class StartupAdminInterface
                 lock (avoidConcurrencyLock)
                 {
                     if (getPublicAppHost() is not { } publicAppHost)
-                        return Result<string, AdminInterface.ApplyDatabaseFunctionSuccess>.err(
-                            "No application deployed.");
+                        return "No application deployed.";
 
                     return publicAppHost.ProcessLiveRepresentation.ApplyFunctionOnMainBranch(storeWriter: processStoreWriter, request);
                 }

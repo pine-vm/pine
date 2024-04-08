@@ -173,7 +173,7 @@ public static class ElmModule
                                 Maybe<(IReadOnlyList<string> path, string content)>.nothing(),
 
                                 fromOk: moduleName =>
-                                Maybe<(IReadOnlyList<string> path, string content)>.just((blobPathAndContent.path, blobContentAsString)));
+                                (blobPathAndContent.path, blobContentAsString));
                     }
                     catch
                     {

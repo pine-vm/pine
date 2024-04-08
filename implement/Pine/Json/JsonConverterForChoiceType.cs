@@ -93,8 +93,10 @@ public class JsonConverterForChoiceType : JsonConverterFactory
             .ListCombine()
             .AndThen(variants =>
             variants.Count < 1 ?
-            Result<string, ParsedType>.err("Did not find any variant declaration in this type")
-            : Result<string, ParsedType>.ok(new ParsedType(variants)));
+            (Result<string, ParsedType>)
+            "Did not find any variant declaration in this type"
+            :
+            new ParsedType(variants));
     }
 
     private static Result<string, ParsedType.Variant> ParseUnionTypeVariant(Type variantType)
@@ -128,18 +130,22 @@ public class JsonConverterForChoiceType : JsonConverterFactory
                             .FirstOrDefault(p => string.Equals(p.Name, constructorParams[i].Name, StringComparison.OrdinalIgnoreCase));
 
                         if (constructorParamProperty is null)
-                            return Result<string, ConstructorParameter>.err(
-                                "Did not find a matching property for constructor param " + constructorParam.Name);
+                        {
+                            return
+                                (Result<string, ConstructorParameter>)
+                                "Did not find a matching property for constructor param " + constructorParam.Name;
+                        }
 
                         JsonIgnore? jsonIgnore = null;
 
                         if (constructorParamProperty.CustomAttributes.Any(ca => ca.AttributeType.Equals(typeof(JsonIgnoreAttribute))))
                             jsonIgnore = new JsonIgnore(DefaultValueFromType(constructorParamProperty.PropertyType));
 
-                        return Result<string, ConstructorParameter>.ok(
+                        return
+                            (Result<string, ConstructorParameter>)
                             new ConstructorParameter(
                                 PropertyInfo: constructorParamProperty,
-                                JsonIgnore: jsonIgnore));
+                                JsonIgnore: jsonIgnore);
 
                     })
                     .ToImmutableList();
@@ -154,11 +160,10 @@ public class JsonConverterForChoiceType : JsonConverterFactory
         foreach (var constructorResult in constructorsResults)
         {
             if (constructorResult is Result<string, (ConstructorInfo, IReadOnlyList<ConstructorParameter>)>.Ok constructorMatch)
-                return Result<string, ParsedType.Variant>.ok(
-                    new ParsedType.Variant(variantType.Name, variantType, constructorMatch.Value.Item1, constructorMatch.Value.Item2));
+                return new ParsedType.Variant(variantType.Name, variantType, constructorMatch.Value.Item1, constructorMatch.Value.Item2);
         }
 
-        return Result<string, ParsedType.Variant>.err("Did not find a matching constructor");
+        return "Did not find a matching constructor";
     }
 }
 

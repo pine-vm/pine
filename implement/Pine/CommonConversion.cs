@@ -99,11 +99,11 @@ public class CommonConversion
     {
         try
         {
-            return Result<ExceptionT, OkT>.ok(func());
+            return func();
         }
         catch (ExceptionT e)
         {
-            return Result<ExceptionT, OkT>.err(e);
+            return e;
         }
     }
 }
