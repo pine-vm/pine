@@ -477,7 +477,8 @@ emitDeclarationBlock stackBefore blockDeclarations config =
             }
             -> List a
         composeEnvironmentFunctions { prefix, forwarded, appendedFromDecls, appendedFromClosureCaptures } =
-            prefix ++ forwarded ++ appendedFromDecls ++ appendedFromClosureCaptures
+            List.concat
+                [ prefix, forwarded, appendedFromDecls, appendedFromClosureCaptures ]
 
         prefixEnvironmentFunctions : List EnvironmentFunctionEntry
         prefixEnvironmentFunctions =
@@ -658,7 +659,7 @@ emitDeclarationBlock stackBefore blockDeclarations config =
                 (\( functionName, blockDeclAsFunction ) ->
                     case emitFunction blockDeclAsFunction of
                         Err err ->
-                            Err ("Failed to emit '" ++ functionName ++ "': " ++ err)
+                            Err (String.join "" [ "Failed to emit '", functionName, "': ", err ])
 
                         Ok emittedExpression ->
                             Ok ( functionName, ( blockDeclAsFunction, emittedExpression ) )
@@ -716,8 +717,10 @@ emitDeclarationBlock stackBefore blockDeclarations config =
 
                                 appendedEnvFunctionsExpressions : List Pine.Expression
                                 appendedEnvFunctionsExpressions =
-                                    newEnvFunctionsExpressionsFromDecls
-                                        ++ closureCapturesExpressions
+                                    List.concat
+                                        [ newEnvFunctionsExpressionsFromDecls
+                                        , closureCapturesExpressions
+                                        ]
 
                                 prevEnvFunctionsExpr : Pine.Expression
                                 prevEnvFunctionsExpr =
@@ -733,9 +736,11 @@ emitDeclarationBlock stackBefore blockDeclarations config =
 
                                 envFunctionsExpression =
                                     Pine.ListExpression
-                                        (prependedEnvFunctionsExpressions
-                                            ++ forwardedItems
-                                            ++ appendedEnvFunctionsExpressions
+                                        (List.concat
+                                            [ prependedEnvFunctionsExpressions
+                                            , forwardedItems
+                                            , appendedEnvFunctionsExpressions
+                                            ]
                                         )
 
                                 parseAndEmitFunction : Expression -> ( DeclarationBlockFunctionEntry, Result String Pine.Expression )
@@ -865,13 +870,15 @@ recursionDomainsFromDeclarationDependencies declarationDependencies =
                             if dependingOnAnyCurrentOrFollowing then
                                 if nextDependingOnNewDomain then
                                     -- Merge the new domain into the current domain
-                                    skipped ++ [ Set.union domainToInsert next ] ++ rest
+                                    List.concat
+                                        [ skipped, [ Set.union domainToInsert next ], rest ]
 
                                 else
                                     insertDomainRecursive domainToInsert (skipped ++ [ next ]) rest
 
                             else
-                                skipped ++ [ domainToInsert ] ++ following
+                                List.concat
+                                    [ skipped, [ domainToInsert ], following ]
             in
             insertDomainRecursive (Set.singleton declName) [] recursionDomains
     in
@@ -914,16 +921,18 @@ emitReferenceExpression name compilation =
             case Dict.get name compilation.environmentDeconstructions of
                 Nothing ->
                     Err
-                        ("Failed referencing '"
-                            ++ name
-                            ++ "'. "
-                            ++ String.fromInt (Dict.size compilation.environmentDeconstructions)
-                            ++ " deconstructions in scope: "
-                            ++ String.join ", " (Dict.keys compilation.environmentDeconstructions)
-                            ++ ". "
-                            ++ String.fromInt (List.length compilation.environmentFunctions)
-                            ++ " functions in scope: "
-                            ++ String.join ", " (List.map .functionName compilation.environmentFunctions)
+                        (String.join ""
+                            [ "Failed referencing '"
+                            , name
+                            , "'. "
+                            , String.fromInt (Dict.size compilation.environmentDeconstructions)
+                            , " deconstructions in scope: "
+                            , String.join ", " (Dict.keys compilation.environmentDeconstructions)
+                            , ". "
+                            , String.fromInt (List.length compilation.environmentFunctions)
+                            , " functions in scope: "
+                            , String.join ", " (List.map .functionName compilation.environmentFunctions)
+                            ]
                         )
 
                 Just deconstruction ->
@@ -1092,10 +1101,12 @@ emitFunctionApplication functionExpression arguments compilation =
                 case emitExpression compilation argumentExpression of
                     Err err ->
                         Err
-                            ("Failed emitting argument "
-                                ++ String.fromInt argumentIndex
-                                ++ " for function application: "
-                                ++ err
+                            (String.join ""
+                                [ "Failed emitting argument "
+                                , String.fromInt argumentIndex
+                                , " for function application: "
+                                , err
+                                ]
                             )
 
                     Ok result ->
@@ -1157,7 +1168,8 @@ emitFunctionApplication functionExpression arguments compilation =
 
                                     environmentFunctions : List EnvironmentFunctionEntry
                                     environmentFunctions =
-                                        compilation.environmentFunctions ++ envFunctionsFromClosureCaptures
+                                        List.concat
+                                            [ compilation.environmentFunctions, envFunctionsFromClosureCaptures ]
 
                                     newEmitStack =
                                         { compilation
@@ -1181,8 +1193,10 @@ emitFunctionApplication functionExpression arguments compilation =
                                     envFunctionsExpr : Pine.Expression
                                     envFunctionsExpr =
                                         Pine.ListExpression
-                                            (forwardedItems
-                                                ++ appendedEnvFunctionsExpressions
+                                            (List.concat
+                                                [ forwardedItems
+                                                , appendedEnvFunctionsExpressions
+                                                ]
                                             )
                                 in
                                 case emitExpression newEmitStack funcBody of
@@ -1382,20 +1396,24 @@ emitApplyFunctionFromCurrentEnvironment compilation { functionName } arguments =
                                     case currentEnvironmentFunctionEntryFromName nextExpectedFunctionName of
                                         Nothing ->
                                             Err
-                                                ("Function '"
-                                                    ++ functionName
-                                                    ++ "' expects environment function '"
-                                                    ++ nextExpectedFunctionName
-                                                    ++ "' but it is not in the environment"
+                                                (String.join ""
+                                                    [ "Function '"
+                                                    , functionName
+                                                    , "' expects environment function '"
+                                                    , nextExpectedFunctionName
+                                                    , "' but it is not in the environment"
+                                                    ]
                                                 )
 
                                         Just ( indexInEnv, _ ) ->
                                             buildEnvironmentRecursive
-                                                (alreadyMapped
-                                                    ++ [ listItemFromIndexExpression_Pine
+                                                (List.concat
+                                                    [ alreadyMapped
+                                                    , [ listItemFromIndexExpression_Pine
                                                             indexInEnv
                                                             getEnvFunctionsExpression
-                                                       ]
+                                                      ]
+                                                    ]
                                                 )
                                                 remainingExpectedFunctions
 
@@ -1527,24 +1545,27 @@ adaptivePartialApplicationExpression :
     , applicationFunctionSource : Maybe Pine.Expression
     }
     -> Pine.Expression
-adaptivePartialApplicationExpression { function, arguments, applicationFunctionSource } =
-    if arguments == [] then
-        function
+adaptivePartialApplicationExpression config =
+    if config.arguments == [] then
+        config.function
 
     else
         let
             applicationFunctionExpr =
-                Maybe.withDefault
-                    (Pine.LiteralExpression adaptivePartialApplicationRecursiveValue)
-                    applicationFunctionSource
+                case config.applicationFunctionSource of
+                    Just applicationFunctionSource ->
+                        applicationFunctionSource
+
+                    Nothing ->
+                        Pine.LiteralExpression adaptivePartialApplicationRecursiveValue
         in
         Pine.ParseAndEvalExpression
             { expression = applicationFunctionExpr
             , environment =
                 Pine.ListExpression
                     [ applicationFunctionExpr
-                    , function
-                    , Pine.ListExpression arguments
+                    , config.function
+                    , Pine.ListExpression config.arguments
                     ]
             }
 
@@ -1741,8 +1762,10 @@ parseFunctionRecordFromValueTagged value =
 
                 _ ->
                     Err
-                        ("List does not have the expected number of items: "
-                            ++ String.fromInt (List.length listItems)
+                        (String.join ""
+                            [ "List does not have the expected number of items: "
+                            , String.fromInt (List.length listItems)
+                            ]
                         )
 
 

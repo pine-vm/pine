@@ -1220,16 +1220,16 @@ join : String -> List String -> String
 join sep chunks =
     case sep of
     String sepList ->
-        String (joinOnList sepList (List.map toList chunks))
+        String (joinOnList sepList chunks)
 
 
-joinOnList : List Char -> List (List Char) -> List Char
+joinOnList : List Char -> List String -> List Char
 joinOnList sep chunks =
     case chunks of
         [] ->
             []
 
-        nextChunk :: remaining ->
+        (String nextChunk) :: remaining ->
             if remaining == []
             then
                 nextChunk

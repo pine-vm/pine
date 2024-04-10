@@ -129,7 +129,9 @@ evaluateExpression context expression =
                             Err err ->
                                 Err
                                     (DescribePathNode
-                                        ("Failed to evaluate list item " ++ String.fromInt listElementIndex ++ ": ")
+                                        (String.join ""
+                                            [ "Failed to evaluate list item ", String.fromInt listElementIndex, ": " ]
+                                        )
                                         err
                                     )
 
@@ -149,7 +151,9 @@ evaluateExpression context expression =
                 Err error ->
                     Err
                         (DescribePathNode
-                            ("Failed parse and evaluate of '" ++ describeExpression 1 parseAndEval.expression ++ "'")
+                            (String.join ""
+                                [ "Failed parse and evaluate of '", describeExpression 1 parseAndEval.expression, "'" ]
+                            )
                             error
                         )
 
@@ -161,7 +165,9 @@ evaluateExpression context expression =
                 Err error ->
                     Err
                         (DescribePathNode
-                            ("Failed to evaluate argument for kernel function " ++ application.functionName ++ ": ")
+                            (String.join ""
+                                [ "Failed to evaluate argument for kernel function ", application.functionName, ": " ]
+                            )
                             error
                         )
 
@@ -198,7 +204,13 @@ evaluateExpression context expression =
             in
             case evaluateExpression context tagged of
                 Err err ->
-                    Err (DescribePathNode ("Failed to evaluate tagged expression '" ++ tag ++ "': ") err)
+                    Err
+                        (DescribePathNode
+                            (String.join ""
+                                [ "Failed to evaluate tagged expression '", tag, "': " ]
+                            )
+                            err
+                        )
 
                 Ok ok ->
                     Ok ok
@@ -412,7 +424,12 @@ evaluateParseAndEval context parseAndEval =
         Err error ->
             Err
                 (DescribePathNode
-                    ("Failed to evaluate environment '" ++ describeExpression 1 parseAndEval.environment ++ "'")
+                    (String.join ""
+                        [ "Failed to evaluate environment '"
+                        , describeExpression 1 parseAndEval.environment
+                        , "'"
+                        ]
+                    )
                     error
                 )
 
@@ -421,7 +438,12 @@ evaluateParseAndEval context parseAndEval =
                 Err error ->
                     Err
                         (DescribePathNode
-                            ("Failed to evaluate expression '" ++ describeExpression 1 parseAndEval.expression ++ "'")
+                            (String.join ""
+                                [ "Failed to evaluate expression '"
+                                , describeExpression 1 parseAndEval.expression
+                                , "'"
+                                ]
+                            )
                             error
                         )
 
@@ -430,7 +452,12 @@ evaluateParseAndEval context parseAndEval =
                         Err error ->
                             Err
                                 (DescribePathNode
-                                    ("Failed to parse expression from value '" ++ describeValue 3 functionValue ++ "'")
+                                    (String.join ""
+                                        [ "Failed to parse expression from value '"
+                                        , describeValue 3 functionValue
+                                        , "'"
+                                        ]
+                                    )
                                     (DescribePathEnd error)
                                 )
 
@@ -523,30 +550,40 @@ describeExpression : Int -> Expression -> String
 describeExpression depthLimit expression =
     case expression of
         ListExpression list ->
-            "list["
-                ++ (if depthLimit < 1 then
-                        "..."
+            String.join ""
+                [ "list["
+                , if depthLimit < 1 then
+                    "..."
 
-                    else
-                        String.join "," (List.map (describeExpression (depthLimit - 1)) list)
-                   )
-                ++ "]"
+                  else
+                    String.join "," (List.map (describeExpression (depthLimit - 1)) list)
+                , "]"
+                ]
 
         LiteralExpression literal ->
-            "literal(" ++ describeValue (depthLimit - 1) literal ++ ")"
+            String.join ""
+                [ "literal("
+                , describeValue (depthLimit - 1) literal
+                , ")"
+                ]
 
         ParseAndEvalExpression parseAndEval ->
-            "parse-and-eval("
-                ++ (if depthLimit < 1 then
-                        "..."
+            String.join ""
+                [ "parse-and-eval("
+                , if depthLimit < 1 then
+                    "..."
 
-                    else
-                        describeExpression (depthLimit - 1) parseAndEval.expression
-                   )
-                ++ ")"
+                  else
+                    describeExpression (depthLimit - 1) parseAndEval.expression
+                , ")"
+                ]
 
         KernelApplicationExpression application ->
-            "kernel-application(" ++ application.functionName ++ ")"
+            String.join ""
+                [ "kernel-application("
+                , application.functionName
+                , ")"
+                ]
 
         ConditionalExpression _ ->
             "conditional"
@@ -555,26 +592,34 @@ describeExpression depthLimit expression =
             "environment"
 
         StringTagExpression tag tagged ->
-            "string-tag-" ++ tag ++ "(" ++ describeExpression (depthLimit - 1) tagged ++ ")"
+            String.join ""
+                [ "string-tag-"
+                , tag
+                , "("
+                , describeExpression (depthLimit - 1) tagged
+                , ")"
+                ]
 
 
 describeValue : Int -> Value -> String
 describeValue maxDepth value =
     case value of
         BlobValue blob ->
-            "BlobValue 0x" ++ hexadecimalRepresentationFromBlobValue blob
+            String.join ""
+                [ "BlobValue 0x", hexadecimalRepresentationFromBlobValue blob ]
 
         ListValue list ->
             let
                 standard =
-                    "["
-                        ++ (if maxDepth < 0 then
-                                "..."
+                    String.join ""
+                        [ "["
+                        , if maxDepth < 0 then
+                            "..."
 
-                            else
-                                String.join ", " (List.map (describeValue (maxDepth - 1)) list)
-                           )
-                        ++ "]"
+                          else
+                            String.join ", " (List.map (describeValue (maxDepth - 1)) list)
+                        , "]"
+                        ]
             in
             String.join " "
                 [ "ListValue"
@@ -583,7 +628,8 @@ describeValue maxDepth value =
                         ""
 
                     Ok string ->
-                        "\"" ++ string ++ "\""
+                        String.join ""
+                            [ "\"", string, "\"" ]
                 , standard
                 ]
 
@@ -595,7 +641,8 @@ displayStringFromPineError error =
             end
 
         DescribePathNode nodeDescription node ->
-            nodeDescription ++ "\n" ++ prependAllLines "  " (displayStringFromPineError node)
+            String.join ""
+                [ nodeDescription, "\n", prependAllLines "  " (displayStringFromPineError node) ]
 
 
 prependAllLines : String -> String -> String
@@ -734,8 +781,10 @@ stringFromListValue values =
 
                                 _ ->
                                     Err
-                                        ("Failed to map to char - unsupported number of bytes: "
-                                            ++ String.fromInt (List.length intValueBytes)
+                                        (String.join ""
+                                            [ "Failed to map to char - unsupported number of bytes: "
+                                            , String.fromInt (List.length intValueBytes)
+                                            ]
                                         )
 
                         _ ->
@@ -743,7 +792,7 @@ stringFromListValue values =
     in
     case continueRecursive values [] of
         Err err ->
-            Err ("Failed to map list items to chars: " ++ err)
+            Err (String.join "" [ "Failed to map list items to chars: ", err ])
 
         Ok chars ->
             Ok (String.fromList (List.reverse chars))
@@ -868,7 +917,7 @@ intFromValue value =
                             Result.map negate (intFromUnsignedBlobValue intValueBytes)
 
                         _ ->
-                            Err ("Unexpected value for sign byte: " ++ String.fromInt sign)
+                            Err (String.join "" [ "Unexpected value for sign byte: ", String.fromInt sign ])
 
 
 intFromUnsignedBlobValue : List Int -> Result String Int
@@ -897,8 +946,10 @@ intFromUnsignedBlobValue intValueBytes =
 
         _ ->
             Err
-                ("Failed to map to int - unsupported number of bytes: "
-                    ++ String.fromInt (List.length intValueBytes)
+                (String.join ""
+                    [ "Failed to map to int - unsupported number of bytes: "
+                    , String.fromInt (List.length intValueBytes)
+                    ]
                 )
 
 
@@ -927,7 +978,7 @@ bigIntFromBlobValue blobValue =
                     Ok (BigInt.negate (bigIntFromUnsignedBlobValue intValueBytes))
 
                 _ ->
-                    Err ("Unexpected value for sign byte: " ++ String.fromInt sign)
+                    Err (String.join "" [ "Unexpected value for sign byte: ", String.fromInt sign ])
 
 
 bigIntFromUnsignedBlobValue : List Int -> BigInt.BigInt
@@ -1011,12 +1062,12 @@ parseExpressionFromValue : Value -> Result String Expression
 parseExpressionFromValue exprValue =
     case parseListWithExactlyTwoElements exprValue of
         Err err ->
-            Err ("Failed to parse union: " ++ err)
+            Err (String.join "" [ "Failed to parse union: ", err ])
 
         Ok ( tagNameValue, unionTagValue ) ->
             case stringFromValue tagNameValue of
                 Err err ->
-                    Err ("Failed parsing tag name: " ++ err)
+                    Err (String.join "" [ "Failed parsing tag name: ", err ])
 
                 Ok tagName ->
                     case tagName of
@@ -1072,7 +1123,7 @@ parseExpressionFromValue exprValue =
                                                     Ok (StringTagExpression tag tagged)
 
                         _ ->
-                            Err ("Unexpected expr tag: " ++ tagName)
+                            Err (String.join "" [ "Unexpected expr tag: ", tagName ])
 
 
 parseListExpression : Value -> Result String Expression
@@ -1088,10 +1139,12 @@ parseListExpression value =
                     case parseExpressionFromValue itemValue of
                         Err itemErr ->
                             Err
-                                ("Failed to parse list item at index "
-                                    ++ String.fromInt (List.length aggregate)
-                                    ++ ": "
-                                    ++ itemErr
+                                (String.join ""
+                                    [ "Failed to parse list item at index "
+                                    , String.fromInt (List.length aggregate)
+                                    , ": "
+                                    , itemErr
+                                    ]
                                 )
 
                         Ok item ->
@@ -1114,7 +1167,7 @@ parseParseAndEvalExpression value =
         ListValue list ->
             case parseListOfPairs list of
                 Err err ->
-                    Err ("Failed to parse kernel application expression: " ++ err)
+                    Err (String.join "" [ "Failed to parse kernel application expression: ", err ])
 
                 Ok pairs ->
                     case
@@ -1185,8 +1238,10 @@ parseKernelApplicationExpression expressionValue =
                             of
                                 Nothing ->
                                     Err
-                                        ("Unexpected value for field 'functionName': "
-                                            ++ Result.withDefault "not a string" (stringFromValue functionNameValue)
+                                        (String.join ""
+                                            [ "Unexpected value for field 'functionName': "
+                                            , Result.withDefault "not a string" (stringFromValue functionNameValue)
+                                            ]
                                         )
 
                                 Just ( functionName, _ ) ->
@@ -1203,7 +1258,10 @@ parseKernelApplicationExpression expressionValue =
                                         Just ( _, argumentValue ) ->
                                             case parseExpressionFromValue argumentValue of
                                                 Err error ->
-                                                    Err ("Failed to parse field 'argument': " ++ error)
+                                                    Err
+                                                        (String.join ""
+                                                            [ "Failed to parse field 'argument': ", error ]
+                                                        )
 
                                                 Ok argument ->
                                                     Ok
@@ -1217,12 +1275,14 @@ parseKernelFunctionFromName functionName =
     case Dict.get functionName kernelFunctions of
         Nothing ->
             Err
-                ("Did not find kernel function '"
-                    ++ functionName
-                    ++ "'. There are "
-                    ++ String.fromInt (Dict.size kernelFunctions)
-                    ++ " kernel functions available: "
-                    ++ String.join ", " (Dict.keys kernelFunctions)
+                (String.join ""
+                    [ "Did not find kernel function '"
+                    , functionName
+                    , "'. There are "
+                    , String.fromInt (Dict.size kernelFunctions)
+                    , " kernel functions available: "
+                    , String.join ", " (Dict.keys kernelFunctions)
+                    ]
                 )
 
         Just kernelFunction ->
@@ -1238,7 +1298,7 @@ parseConditionalExpression expressionValue =
         ListValue list ->
             case parseListOfPairs list of
                 Err err ->
-                    Err ("Failed to parse kernel application expression: " ++ err)
+                    Err (String.join "" [ "Failed to parse kernel application expression: ", err ])
 
                 Ok pairs ->
                     case
