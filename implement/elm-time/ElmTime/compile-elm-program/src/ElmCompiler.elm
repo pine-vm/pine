@@ -111,6 +111,13 @@ type alias ElmModuleInCompilation =
     }
 
 
+type alias ModuleImportsMerged =
+    { modulesDeclarationsFlat : Dict.Dict String Pine.Value
+    , choiceTypeTagConstructorDeclarations : Dict.Dict String { argumentsCount : Int }
+    , recordConstructorsFieldsNames : Dict.Dict String (List String)
+    }
+
+
 type ElmModuleTypeDeclaration
     = ElmModuleChoiceTypeDeclaration ElmModuleChoiceType
     | ElmModuleRecordTypeDeclaration (List String)
@@ -301,11 +308,16 @@ expandElmInteractiveEnvironmentWithModules environmentBefore newParsedElmModules
                     case
                         Common.resultListMapCombine
                             (\file ->
-                                listModuleTransitiveDependencies
-                                    (List.map .parsedModule newParsedElmModules)
-                                    file.parsedModule
-                                    |> Result.mapError (Tuple.pair file)
-                                    |> Result.map (Tuple.pair file)
+                                case
+                                    listModuleTransitiveDependencies
+                                        (List.map .parsedModule newParsedElmModules)
+                                        file.parsedModule
+                                of
+                                    Err error ->
+                                        Err ( file, error )
+
+                                    Ok moduleNames ->
+                                        Ok ( file, moduleNames )
                             )
                             newParsedElmModules
                     of
@@ -759,89 +771,29 @@ compilationAndEmitStackFromModulesInCompilation availableModules { moduleAliases
                 parsedImports
                 compilationStackForImport
 
-        importedRecordConstructorsFieldsNames : Dict.Dict String (List String)
-        importedRecordConstructorsFieldsNames =
-            moduleImports.importedModules
-                |> Dict.toList
-                |> List.concatMap
-                    (\( importedModuleName, importedModule ) ->
-                        importedModule.typeDeclarations
-                            |> Dict.toList
-                            |> List.filterMap
-                                (\( typeName, typeDeclaration ) ->
-                                    case typeDeclaration of
-                                        ElmModuleRecordTypeDeclaration fields ->
-                                            Just
-                                                ( String.join "." (List.concat [ importedModuleName, [ typeName ] ])
-                                                , fields
-                                                )
-
-                                        _ ->
-                                            Nothing
-                                )
-                    )
-                |> Dict.fromList
+        mergedImports : ModuleImportsMerged
+        mergedImports =
+            Dict.foldl
+                mergeModuleImports
+                { modulesDeclarationsFlat = Dict.empty
+                , choiceTypeTagConstructorDeclarations = Dict.empty
+                , recordConstructorsFieldsNames = Dict.empty
+                }
+                moduleImports.importedModules
 
         importedChoiceTypeTagConstructorDeclarations : Dict.Dict String { argumentsCount : Int }
         importedChoiceTypeTagConstructorDeclarations =
-            [ moduleImports.importedModules
-                |> Dict.toList
-                |> List.concatMap
-                    (\( importedModuleName, importedModule ) ->
-                        importedModule.typeDeclarations
-                            |> Dict.toList
-                            |> List.concatMap
-                                (\( _, typeDeclaration ) ->
-                                    case typeDeclaration of
-                                        ElmModuleChoiceTypeDeclaration choiceTypeDeclaration ->
-                                            choiceTypeDeclaration.tags
-                                                |> Dict.toList
-                                                |> List.concatMap
-                                                    (\( tagName, tag ) ->
-                                                        let
-                                                            qualifiedName =
-                                                                String.join "."
-                                                                    (List.concat [ importedModuleName, [ tagName ] ])
+            Dict.foldl
+                (\_ typeDeclaration ->
+                    case typeDeclaration of
+                        ElmModuleChoiceTypeDeclaration choiceTypeDeclaration ->
+                            Dict.union choiceTypeDeclaration.tags
 
-                                                            isAutoImported =
-                                                                Set.member
-                                                                    qualifiedName
-                                                                    elmDeclarationsToExposeToGlobalDefaultQualifiedNames
-
-                                                            allNames =
-                                                                if isAutoImported then
-                                                                    [ qualifiedName, tagName ]
-
-                                                                else
-                                                                    [ qualifiedName ]
-                                                        in
-                                                        List.map
-                                                            (\name ->
-                                                                ( name
-                                                                , { argumentsCount = tag.argumentsCount }
-                                                                )
-                                                            )
-                                                            allNames
-                                                    )
-
-                                        _ ->
-                                            []
-                                )
-                    )
-            , moduleImports.importedTypes
-                |> Dict.toList
-                |> List.concatMap
-                    (\( _, typeDeclaration ) ->
-                        case typeDeclaration of
-                            ElmModuleChoiceTypeDeclaration choiceTypeDeclaration ->
-                                Dict.toList choiceTypeDeclaration.tags
-
-                            _ ->
-                                []
-                    )
-            ]
-                |> List.concat
-                |> Dict.fromList
+                        _ ->
+                            identity
+                )
+                mergedImports.choiceTypeTagConstructorDeclarations
+                moduleImports.importedTypes
 
         localTypeDeclarationsSeparate :
             { choiceTypeTagDeclarations : Dict.Dict String { argumentsCount : Int }
@@ -876,7 +828,7 @@ compilationAndEmitStackFromModulesInCompilation availableModules { moduleAliases
         declarationsFromTypeAliasesFieldsNames =
             Dict.union
                 localTypeDeclarationsSeparate.recordTypeDeclarations
-                importedRecordConstructorsFieldsNames
+                mergedImports.recordConstructorsFieldsNames
 
         choiceTypeTagConstructorDeclarations =
             Dict.union
@@ -908,24 +860,10 @@ compilationAndEmitStackFromModulesInCompilation availableModules { moduleAliases
                         declarationsFromChoiceTypes
             }
 
-        importedModulesDeclarationsFlat : Dict.Dict String Pine.Value
-        importedModulesDeclarationsFlat =
-            moduleImports.importedModules
-                |> Dict.foldl
-                    (\moduleName importedModule modulesAggregate ->
-                        importedModule.functionDeclarations
-                            |> Dict.foldl
-                                (\declName ->
-                                    Dict.insert (String.join "." (List.concat [ moduleName, [ declName ] ]))
-                                )
-                                modulesAggregate
-                    )
-                    Dict.empty
-
         importedFunctionsBeforeParse : Dict.Dict String Pine.Value
         importedFunctionsBeforeParse =
             Dict.union
-                importedModulesDeclarationsFlat
+                mergedImports.modulesDeclarationsFlat
                 moduleImports.importedFunctions
 
         importedFunctions : Dict.Dict String ( FirCompiler.EnvironmentFunctionEntry, Pine.Value )
@@ -965,6 +903,83 @@ compilationAndEmitStackFromModulesInCompilation availableModules { moduleAliases
     ( compilationStack
     , emitStack
     )
+
+
+mergeModuleImports : List String -> ElmModuleInCompilation -> ModuleImportsMerged -> ModuleImportsMerged
+mergeModuleImports importedModuleName importedModule aggregateImports =
+    let
+        moduleNameFlat =
+            String.join "." importedModuleName
+
+        modulesDeclarationsFlat : Dict.Dict String Pine.Value
+        modulesDeclarationsFlat =
+            Dict.foldl
+                (\declName ->
+                    Dict.insert (String.join "." [ moduleNameFlat, declName ])
+                )
+                aggregateImports.modulesDeclarationsFlat
+                importedModule.functionDeclarations
+
+        typeDecls :
+            { choiceTypeTags : Dict.Dict String { argumentsCount : Int }
+            , recordConstructors : Dict.Dict String (List String)
+            }
+        typeDecls =
+            Dict.foldl
+                (\typeName typeDeclaration aggregate ->
+                    case typeDeclaration of
+                        ElmModuleChoiceTypeDeclaration choiceTypeDeclaration ->
+                            { aggregate
+                                | choiceTypeTags =
+                                    Dict.foldl
+                                        (\tagName tag innerAggregate ->
+                                            let
+                                                qualifiedName =
+                                                    String.join "." [ moduleNameFlat, tagName ]
+
+                                                isAutoImported =
+                                                    Set.member
+                                                        qualifiedName
+                                                        elmDeclarationsToExposeToGlobalDefaultQualifiedNames
+
+                                                withQualifiedName =
+                                                    Dict.insert
+                                                        qualifiedName
+                                                        { argumentsCount = tag.argumentsCount }
+                                                        innerAggregate
+                                            in
+                                            if isAutoImported then
+                                                Dict.insert
+                                                    tagName
+                                                    { argumentsCount = tag.argumentsCount }
+                                                    withQualifiedName
+
+                                            else
+                                                withQualifiedName
+                                        )
+                                        aggregate.choiceTypeTags
+                                        choiceTypeDeclaration.tags
+                            }
+
+                        ElmModuleRecordTypeDeclaration fields ->
+                            { aggregate
+                                | recordConstructors =
+                                    Dict.insert
+                                        (String.join "." [ moduleNameFlat, typeName ])
+                                        fields
+                                        aggregate.recordConstructors
+                            }
+                )
+                { choiceTypeTags = aggregateImports.choiceTypeTagConstructorDeclarations
+                , recordConstructors = aggregateImports.recordConstructorsFieldsNames
+                }
+                importedModule.typeDeclarations
+    in
+    { aggregateImports
+        | modulesDeclarationsFlat = modulesDeclarationsFlat
+        , choiceTypeTagConstructorDeclarations = typeDecls.choiceTypeTags
+        , recordConstructorsFieldsNames = typeDecls.recordConstructors
+    }
 
 
 moduleImportsFromCompilationStack :
@@ -1187,26 +1202,30 @@ compileElmSyntaxExpression stack elmExpression =
                 compileElmSyntaxExpression stack orderedElmExpression
 
             else
-                compileElmSyntaxExpression stack (Elm.Syntax.Node.value leftExpr)
-                    |> Result.mapError ((++) "Failed to compile left expression: ")
-                    |> Result.andThen
-                        (\leftExpression ->
-                            compileElmSyntaxExpression stack (Elm.Syntax.Node.value rightExpr)
-                                |> Result.mapError ((++) "Failed to compile right expression: ")
-                                |> Result.andThen
-                                    (\rightExpression ->
-                                        compileElmFunctionOrValueLookup
-                                            ( [], String.join "" [ "(", operator, ")" ] )
-                                            stack
-                                            |> Result.map
-                                                (\operationFunction ->
-                                                    FunctionApplicationExpression
-                                                        operationFunction
-                                                        [ leftExpression, rightExpression ]
-                                                )
-                                    )
-                        )
-                    |> Result.mapError ((++) ("Failed to compile OperatorApplication '" ++ operator ++ "': "))
+                case compileElmSyntaxExpression stack (Elm.Syntax.Node.value leftExpr) of
+                    Err err ->
+                        Err ("Failed to compile left expression of OperatorApplication: " ++ err)
+
+                    Ok leftExpression ->
+                        case compileElmSyntaxExpression stack (Elm.Syntax.Node.value rightExpr) of
+                            Err err ->
+                                Err ("Failed to compile right expression of OperatorApplication: " ++ err)
+
+                            Ok rightExpression ->
+                                case
+                                    compileElmFunctionOrValueLookup
+                                        ( [], String.join "" [ "(", operator, ")" ] )
+                                        stack
+                                of
+                                    Err err ->
+                                        Err ("Failed to compile operator: " ++ err)
+
+                                    Ok operationFunction ->
+                                        Ok
+                                            (FunctionApplicationExpression
+                                                operationFunction
+                                                [ leftExpression, rightExpression ]
+                                            )
 
         Elm.Syntax.Expression.PrefixOperator operator ->
             compileElmFunctionOrValueLookup ( [], String.join "" [ "(", operator, ")" ] ) stack
@@ -1937,48 +1956,47 @@ compileElmSyntaxPattern elmPattern =
             continueWithListOrTupleItems tupleElements
 
         Elm.Syntax.Pattern.UnConsPattern unconsLeft unconsRight ->
-            unconsLeft
-                |> Elm.Syntax.Node.value
-                |> compileElmSyntaxPattern
-                |> Result.andThen
-                    (\leftSide ->
-                        unconsRight
-                            |> Elm.Syntax.Node.value
-                            |> compileElmSyntaxPattern
-                            |> Result.map
-                                (\rightSide ->
-                                    let
-                                        conditionExpressions =
-                                            \deconstructedExpression ->
-                                                [ [ KernelApplicationExpression
-                                                        { functionName = "negate"
-                                                        , argument =
-                                                            equalCondition
-                                                                [ deconstructedExpression
-                                                                , listSkipExpression 1 deconstructedExpression
-                                                                ]
-                                                        }
-                                                  ]
-                                                , leftSide.conditionExpressions
-                                                    (listItemFromIndexExpression 0 deconstructedExpression)
-                                                , rightSide.conditionExpressions
-                                                    (listSkipExpression 1 deconstructedExpression)
-                                                ]
-                                                    |> List.concat
+            case compileElmSyntaxPattern (Elm.Syntax.Node.value unconsLeft) of
+                Err err ->
+                    Err err
 
-                                        declarations =
-                                            [ leftSide.declarations
-                                                |> List.map (Tuple.mapSecond ((::) (ListItemDeconstruction 0)))
-                                            , rightSide.declarations
-                                                |> List.map (Tuple.mapSecond ((::) (SkipItemsDeconstruction 1)))
+                Ok leftSide ->
+                    case compileElmSyntaxPattern (Elm.Syntax.Node.value unconsRight) of
+                        Err err ->
+                            Err err
+
+                        Ok rightSide ->
+                            let
+                                conditionExpressions =
+                                    \deconstructedExpression ->
+                                        List.concat
+                                            [ [ KernelApplicationExpression
+                                                    { functionName = "negate"
+                                                    , argument =
+                                                        equalCondition
+                                                            [ deconstructedExpression
+                                                            , listSkipExpression 1 deconstructedExpression
+                                                            ]
+                                                    }
+                                              ]
+                                            , leftSide.conditionExpressions
+                                                (listItemFromIndexExpression 0 deconstructedExpression)
+                                            , rightSide.conditionExpressions
+                                                (listSkipExpression 1 deconstructedExpression)
                                             ]
-                                                |> List.concat
-                                    in
-                                    { conditionExpressions = conditionExpressions
-                                    , declarations = declarations
-                                    }
-                                )
-                    )
+
+                                declarations =
+                                    List.concat
+                                        [ leftSide.declarations
+                                            |> List.map (Tuple.mapSecond ((::) (ListItemDeconstruction 0)))
+                                        , rightSide.declarations
+                                            |> List.map (Tuple.mapSecond ((::) (SkipItemsDeconstruction 1)))
+                                        ]
+                            in
+                            Ok
+                                { conditionExpressions = conditionExpressions
+                                , declarations = declarations
+                                }
 
         Elm.Syntax.Pattern.NamedPattern qualifiedName choiceTypeArgumentPatterns ->
             Common.resultListIndexedMapCombine
@@ -2532,16 +2550,44 @@ getDeclarationValueFromCompilation ( localModuleName, nameInModule ) compilation
                                     Ok (applicableDeclaration [])
 
                                 Nothing ->
+                                    let
+                                        declsReport =
+                                            if stringStartsWithUpper nameInModule then
+                                                let
+                                                    allTypesNames =
+                                                        Dict.foldl
+                                                            (\typeName value aggregate ->
+                                                                case value of
+                                                                    ElmModuleChoiceTypeDeclaration choiceType ->
+                                                                        List.concat [ [ typeName ], Dict.keys choiceType.tags, aggregate ]
+
+                                                                    ElmModuleRecordTypeDeclaration _ ->
+                                                                        typeName :: aggregate
+                                                            )
+                                                            []
+                                                            moduleValue.typeDeclarations
+                                                in
+                                                [ "There are "
+                                                , String.fromInt (List.length allTypesNames)
+                                                , " type declarations available in that module: "
+                                                , String.join ", " allTypesNames
+                                                ]
+
+                                            else
+                                                [ "There are "
+                                                , String.fromInt (Dict.size moduleValue.functionDeclarations)
+                                                , " function declarations available in that module: "
+                                                , String.join ", " (Dict.keys moduleValue.functionDeclarations)
+                                                ]
+                                    in
                                     Err
                                         (String.join ""
                                             [ "Did not find '"
                                             , nameInModule
                                             , "' in module '"
                                             , String.join "." canonicalModuleName
-                                            , "'. There are "
-                                            , String.fromInt (Dict.size moduleValue.functionDeclarations)
-                                            , " function declarations available in that module: "
-                                            , String.join ", " (Dict.keys moduleValue.functionDeclarations)
+                                            , "'. "
+                                            , String.join "" declsReport
                                             ]
                                         )
 
