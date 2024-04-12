@@ -323,15 +323,13 @@ expandElmInteractiveEnvironmentWithModules environmentBefore newParsedElmModules
                     of
                         Err ( file, error ) ->
                             Err
-                                (String.join ""
-                                    [ "Failed to resolve dependencies for module "
-                                    , String.join "."
+                                ("Failed to resolve dependencies for module "
+                                    ++ String.join "."
                                         (Elm.Syntax.Module.moduleName
                                             (Elm.Syntax.Node.value file.parsedModule.moduleDefinition)
                                         )
-                                    , ": "
-                                    , error
-                                    ]
+                                    ++ ": "
+                                    ++ error
                                 )
 
                         Ok modulesWithDependencies ->
@@ -380,16 +378,14 @@ expandElmInteractiveEnvironmentWithModules environmentBefore newParsedElmModules
                                                             of
                                                                 Err error ->
                                                                     Err
-                                                                        (String.join ""
-                                                                            [ "Failed to compile elm module '"
-                                                                            , String.join
+                                                                        ("Failed to compile elm module '"
+                                                                            ++ String.join
                                                                                 "."
                                                                                 (Elm.Syntax.Node.value
                                                                                     (moduleNameFromSyntaxFile moduleToTranslate.parsedModule)
                                                                                 )
-                                                                            , "': "
-                                                                            , error
-                                                                            ]
+                                                                            ++ "': "
+                                                                            ++ error
                                                                         )
 
                                                                 Ok ( moduleName, moduleValue ) ->
@@ -555,7 +551,7 @@ compileElmModuleIntoNamedExports availableModules moduleToTranslate =
                                 []
 
                             Elm.Syntax.Declaration.InfixDeclaration infixDeclaration ->
-                                [ ( String.join "" [ "(", Elm.Syntax.Node.value infixDeclaration.operator, ")" ]
+                                [ ( "(" ++ Elm.Syntax.Node.value infixDeclaration.operator ++ ")"
                                   , Elm.Syntax.Node.value infixDeclaration.function
                                   )
                                 ]
@@ -623,7 +619,7 @@ compileElmModuleIntoNamedExports availableModules moduleToTranslate =
                     (\functionName functionDeclaration ->
                         case compileElmSyntaxFunction initialCompilationStack functionDeclaration of
                             Err err ->
-                                Err (String.join "" [ "Failed to compile function '", functionName, "': ", err ])
+                                Err ("Failed to compile function '" ++ functionName ++ "': " ++ err)
 
                             Ok ( _, compiledFunction ) ->
                                 Ok compiledFunction
@@ -1193,7 +1189,7 @@ compileElmSyntaxExpression stack elmExpression =
                 appliedFunctionElmSyntax :: argumentsElmSyntax ->
                     compileElmSyntaxApplication stack appliedFunctionElmSyntax argumentsElmSyntax
 
-        Elm.Syntax.Expression.OperatorApplication operator _ leftExpr rightExpr ->
+        Elm.Syntax.Expression.OperatorApplication operator _ (Elm.Syntax.Node.Node _ leftExpr) (Elm.Syntax.Node.Node _ rightExpr) ->
             let
                 orderedElmExpression =
                     mapExpressionForOperatorPrecedence elmExpression
@@ -1202,33 +1198,38 @@ compileElmSyntaxExpression stack elmExpression =
                 compileElmSyntaxExpression stack orderedElmExpression
 
             else
-                case compileElmSyntaxExpression stack (Elm.Syntax.Node.value leftExpr) of
-                    Err err ->
-                        Err ("Failed to compile left expression of OperatorApplication: " ++ err)
+                case searchCompileElmSyntaxOperatorOptimized stack operator leftExpr rightExpr of
+                    Just result ->
+                        result
 
-                    Ok leftExpression ->
-                        case compileElmSyntaxExpression stack (Elm.Syntax.Node.value rightExpr) of
+                    Nothing ->
+                        case compileElmSyntaxExpression stack leftExpr of
                             Err err ->
-                                Err ("Failed to compile right expression of OperatorApplication: " ++ err)
+                                Err ("Failed to compile left expression of OperatorApplication: " ++ err)
 
-                            Ok rightExpression ->
-                                case
-                                    compileElmFunctionOrValueLookup
-                                        ( [], String.join "" [ "(", operator, ")" ] )
-                                        stack
-                                of
+                            Ok leftExpression ->
+                                case compileElmSyntaxExpression stack rightExpr of
                                     Err err ->
-                                        Err ("Failed to compile operator: " ++ err)
+                                        Err ("Failed to compile right expression of OperatorApplication: " ++ err)
 
-                                    Ok operationFunction ->
-                                        Ok
-                                            (FunctionApplicationExpression
-                                                operationFunction
-                                                [ leftExpression, rightExpression ]
-                                            )
+                                    Ok rightExpression ->
+                                        case
+                                            compileElmFunctionOrValueLookup
+                                                ( [], "(" ++ operator ++ ")" )
+                                                stack
+                                        of
+                                            Err err ->
+                                                Err ("Failed to compile operator: " ++ err)
+
+                                            Ok operationFunction ->
+                                                Ok
+                                                    (FunctionApplicationExpression
+                                                        operationFunction
+                                                        [ leftExpression, rightExpression ]
+                                                    )
 
         Elm.Syntax.Expression.PrefixOperator operator ->
-            compileElmFunctionOrValueLookup ( [], String.join "" [ "(", operator, ")" ] ) stack
+            compileElmFunctionOrValueLookup ( [], "(" ++ operator ++ ")" ) stack
 
         Elm.Syntax.Expression.IfBlock elmCondition elmExpressionIfTrue elmExpressionIfFalse ->
             case compileElmSyntaxExpression stack (Elm.Syntax.Node.value elmCondition) of
@@ -1651,7 +1652,7 @@ compileElmSyntaxRecordUpdate stack setters recordName =
             (\( fieldName, fieldExpr ) ->
                 case compileElmSyntaxExpression stack fieldExpr of
                     Err err ->
-                        Err (String.join "" [ "Failed to compile record update field '", fieldName, "': ", err ])
+                        Err ("Failed to compile record update field '" ++ fieldName ++ "': " ++ err)
 
                     Ok compiledFieldExpr ->
                         Ok ( fieldName, compiledFieldExpr )
@@ -2004,12 +2005,10 @@ compileElmSyntaxPattern elmPattern =
                     case conditionsAndDeclarationsFromItemPattern argIndex argPattern of
                         Err err ->
                             Err
-                                (String.join ""
-                                    [ "Failed for named pattern argument "
-                                    , String.fromInt argIndex
-                                    , ": "
-                                    , err
-                                    ]
+                                ("Failed for named pattern argument "
+                                    ++ String.fromInt argIndex
+                                    ++ ": "
+                                    ++ err
                                 )
 
                         Ok ok ->
@@ -2121,6 +2120,100 @@ compileElmSyntaxPattern elmPattern =
 
         Elm.Syntax.Pattern.HexPattern _ ->
             Err "Unsupported type of pattern: HexPattern"
+
+
+{-| Uses simple type inference to search for optimized compilation of operator application.
+For example, in a sequence of ++ operators: If any element is a string literal, within the rules
+of Elm, all other elements also must be of type String.
+This constraint of types allows for the emission of a specialized representation,
+reducing compiled code size and runtime overhead.
+-}
+searchCompileElmSyntaxOperatorOptimized :
+    CompilationStack
+    -> String
+    -> Elm.Syntax.Expression.Expression
+    -> Elm.Syntax.Expression.Expression
+    -> Maybe (Result String Expression)
+searchCompileElmSyntaxOperatorOptimized stack operator leftExpr rightExpr =
+    case operator of
+        "++" ->
+            let
+                items =
+                    List.concat
+                        [ flattenOperatorAppSequencePlusPlus leftExpr
+                        , flattenOperatorAppSequencePlusPlus rightExpr
+                        ]
+
+                anyItemIsString =
+                    List.any
+                        (\item ->
+                            case item of
+                                Elm.Syntax.Expression.Literal _ ->
+                                    True
+
+                                _ ->
+                                    False
+                        )
+                        items
+            in
+            if not anyItemIsString then
+                Nothing
+
+            else
+                case Common.resultListMapCombine (compileElmSyntaxExpression stack) items of
+                    Err err ->
+                        Just (Err err)
+
+                    Ok expressions ->
+                        let
+                            {- Depend on the specific representation of Elm strings
+                               to retrieve the lists of characters before concatenation and
+                               compose the resulting 'String' after concatenation.
+                            -}
+                            stringsExpressions =
+                                List.map
+                                    (\stringExpr ->
+                                        FirCompiler.listItemFromIndexExpression 0
+                                            (FirCompiler.listItemFromIndexExpression 1 stringExpr)
+                                    )
+                                    expressions
+
+                            concatExpr =
+                                FirCompiler.KernelApplicationExpression
+                                    { functionName = "concat"
+                                    , argument = FirCompiler.ListExpression stringsExpressions
+                                    }
+                        in
+                        Just
+                            (Ok
+                                (FirCompiler.ListExpression
+                                    [ LiteralExpression elmStringTypeTagNameAsValue
+                                    , ListExpression [ concatExpr ]
+                                    ]
+                                )
+                            )
+
+        _ ->
+            Nothing
+
+
+flattenOperatorAppSequencePlusPlus :
+    Elm.Syntax.Expression.Expression
+    -> List Elm.Syntax.Expression.Expression
+flattenOperatorAppSequencePlusPlus expr =
+    case expr of
+        Elm.Syntax.Expression.OperatorApplication operator _ (Elm.Syntax.Node.Node _ leftExpr) (Elm.Syntax.Node.Node _ rightExpr) ->
+            if operator == "++" then
+                List.concat
+                    [ flattenOperatorAppSequencePlusPlus leftExpr
+                    , flattenOperatorAppSequencePlusPlus rightExpr
+                    ]
+
+            else
+                [ expr ]
+
+        _ ->
+            [ expr ]
 
 
 mapExpressionForOperatorPrecedence : Elm.Syntax.Expression.Expression -> Elm.Syntax.Expression.Expression
@@ -2488,6 +2581,12 @@ compileElmFunctionOrValueLookup ( moduleName, localName ) compilation =
                 compileElmFunctionOrValueLookupWithoutLocalResolution ( moduleName, localName ) compilation
 
             Just applicableDeclaration ->
+                let
+                    log =
+                        Debug.log "inlining in compileElmFunctionOrValueLookup"
+                            { flatName = String.join "." (moduleName ++ [ localName ])
+                            }
+                in
                 Ok (applicableDeclaration [])
 
     else
@@ -2532,14 +2631,12 @@ getDeclarationValueFromCompilation ( localModuleName, nameInModule ) compilation
             case compilation.availableModules |> Dict.get canonicalModuleName of
                 Nothing ->
                     Err
-                        (String.join ""
-                            [ "Did not find module '"
-                            , String.join "." canonicalModuleName
-                            , "'. There are "
-                            , String.fromInt (Dict.size compilation.availableModules)
-                            , " declarations in this scope: "
-                            , String.join ", " (List.map (String.join ".") (Dict.keys compilation.availableModules))
-                            ]
+                        ("Did not find module '"
+                            ++ String.join "." canonicalModuleName
+                            ++ "'. There are "
+                            ++ String.fromInt (Dict.size compilation.availableModules)
+                            ++ " declarations in this scope: "
+                            ++ String.join ", " (List.map (String.join ".") (Dict.keys compilation.availableModules))
                         )
 
                 Just moduleValue ->
@@ -2567,28 +2664,24 @@ getDeclarationValueFromCompilation ( localModuleName, nameInModule ) compilation
                                                             []
                                                             moduleValue.typeDeclarations
                                                 in
-                                                [ "There are "
-                                                , String.fromInt (List.length allTypesNames)
-                                                , " type declarations available in that module: "
-                                                , String.join ", " allTypesNames
-                                                ]
+                                                "There are "
+                                                    ++ String.fromInt (List.length allTypesNames)
+                                                    ++ " type declarations available in that module: "
+                                                    ++ String.join ", " allTypesNames
 
                                             else
-                                                [ "There are "
-                                                , String.fromInt (Dict.size moduleValue.functionDeclarations)
-                                                , " function declarations available in that module: "
-                                                , String.join ", " (Dict.keys moduleValue.functionDeclarations)
-                                                ]
+                                                "There are "
+                                                    ++ String.fromInt (Dict.size moduleValue.functionDeclarations)
+                                                    ++ " function declarations available in that module: "
+                                                    ++ String.join ", " (Dict.keys moduleValue.functionDeclarations)
                                     in
                                     Err
-                                        (String.join ""
-                                            [ "Did not find '"
-                                            , nameInModule
-                                            , "' in module '"
-                                            , String.join "." canonicalModuleName
-                                            , "'. "
-                                            , String.join "" declsReport
-                                            ]
+                                        ("Did not find '"
+                                            ++ nameInModule
+                                            ++ "' in module '"
+                                            ++ String.join "." canonicalModuleName
+                                            ++ "'. "
+                                            ++ declsReport
                                         )
 
                         Just declarationValue ->
@@ -2661,6 +2754,10 @@ compileLookupForInlineableDeclaration ( moduleName, name ) expression =
 emitModuleValue : ElmModuleInCompilation -> Pine.Value
 emitModuleValue parsedModule =
     let
+        log =
+            Debug.log "\nemitModuleValue\n\n"
+                { functionDeclarations_names = Dict.keys parsedModule.functionDeclarations }
+
         typeDescriptions : List ( String, Pine.Value )
         typeDescriptions =
             parsedModule.typeDeclarations
@@ -2671,6 +2768,17 @@ emitModuleValue parsedModule =
             Dict.toList parsedModule.functionDeclarations
     in
     List.concat [ emittedFunctions, typeDescriptions ]
+        |> List.map
+            (\( declName, declValue ) ->
+                let
+                    log_declaration =
+                        Debug.log "emit declaration"
+                            { declName = declName
+                            , declSize = FirCompiler.estimatePineValueSize declValue
+                            }
+                in
+                ( declName, declValue )
+            )
         |> List.map Pine.valueFromContextExpansionWithName
         |> Pine.ListValue
 
@@ -2785,6 +2893,14 @@ emitModuleFunctionDeclarations stackBefore declarations =
             FirCompiler.recursionDomainsFromDeclarationDependencies
                 declarationsTransitiveDependencies
 
+        {-
+           log =
+               Debug.log "\nemitModuleFunctionDeclarations\n"
+                   { recursionDomains = recursionDomains
+
+                   -- , importedFunctionsNotShadowed = Dict.keys importedFunctionsNotShadowed
+                   }
+        -}
         emitStack =
             { stackBefore
                 | declarationsDependencies =
@@ -2860,6 +2976,14 @@ emitModuleFunctionDeclarations stackBefore declarations =
                     Dict.filter
                         (\declName _ -> Set.member declName recursionDomainDeclarationsToIncludeInBlock)
                         recursionDomainDeclarations
+
+                log_in_block =
+                    Debug.log "\nin block"
+                        { domain = currentRecursionDomain
+                        , to_include = Dict.keys recursionDomainDeclarationsInBlock
+                        , y_availableEmittedFunctions =
+                            List.map (Tuple.first >> .functionName) availableEmittedFunctionsIncludingImports
+                        }
 
                 importedFunctions : Dict.Dict String ( FirCompiler.EnvironmentFunctionEntry, Pine.Value )
                 importedFunctions =
@@ -2957,6 +3081,17 @@ emitModuleFunctionDeclarations stackBefore declarations =
                                             Err err
 
                                         Ok declMatch ->
+                                            {-
+                                               let
+                                                   log_decl_begin =
+                                                       Debug.log "emit module declaration"
+                                                           { declarationName = declarationName
+                                                           , param_count = declMatch.parameterCount
+                                                           , env_functions_expr_independent =
+                                                               pineExpressionIsIndependent blockDeclarationsEmitted.envFunctionsExpression
+                                                           }
+                                               in
+                                            -}
                                             evaluateAsIndependentExpression
                                                 (if declMatch.parameterCount < 1 then
                                                     FirCompiler.emitWrapperForPartialApplicationZero
@@ -2986,12 +3121,10 @@ emitModuleFunctionDeclarations stackBefore declarations =
                                 )
                             |> Result.mapError
                                 (\err ->
-                                    String.join ""
-                                        [ "Failed in recursion domain: "
-                                        , String.join ", " (Set.toList currentRecursionDomain)
-                                        , ": "
-                                        , err
-                                        ]
+                                    "Failed in recursion domain: "
+                                        ++ String.join ", " (Set.toList currentRecursionDomain)
+                                        ++ ": "
+                                        ++ err
                                 )
                             |> Result.map
                                 (\emittedForExposeOrReuse ->
@@ -3048,6 +3181,18 @@ emitModuleFunctionDeclarations stackBefore declarations =
                                                 )
                                                 []
                                                 emittedForExposeOrReuse
+
+                                        {-
+                                           log_finish =
+                                               Debug.log "\nemit module declaration finish"
+                                                   { emittedDeclarations =
+                                                       List.map (Tuple.first >> .functionName)
+                                                           emittedDeclarations
+                                                   , emittedDeclarationsFromExposed =
+                                                       List.map (Tuple.first >> .functionName)
+                                                           emittedDeclarationsFromExposed
+                                                   }
+                                        -}
                                     in
                                     { emittedDeclarations = emittedDeclarations
                                     , exposedDeclarations = exposedDeclarations
@@ -3224,6 +3369,14 @@ shouldInlineDeclaration name expression =
         True
 
     else
+        {-
+           let
+               log =
+                   Debug.log "shouldInlineDeclaration (estimatePineValueSize)"
+                       { name = name
+                       }
+           in
+        -}
         case expression of
             LiteralExpression value ->
                 estimatePineValueSize value < 50 * 1000
@@ -3239,7 +3392,7 @@ listModuleTransitiveDependencies :
 listModuleTransitiveDependencies allFiles file =
     case listModuleTransitiveDependenciesExcludingModules Set.empty allFiles file of
         Err ( modulePath, error ) ->
-            Err (String.join "" [ error, ": ", String.join " -> " (List.map (String.join ".") modulePath) ])
+            Err (error ++ ": " ++ String.join " -> " (List.map (String.join ".") modulePath))
 
         Ok ok ->
             Ok ok
@@ -3350,7 +3503,7 @@ separateEnvironmentDeclarations environmentDeclarations =
                     if stringStartsWithUpper declNameFlat then
                         case Result.andThen parseModuleValue (getDeclarationsFromEnvironment declValue) of
                             Err err ->
-                                Err (String.join "" [ "Failed to parse module ", declNameFlat, ": ", err ])
+                                Err ("Failed to parse module " ++ declNameFlat ++ ": " ++ err)
 
                             Ok moduleDeclarations ->
                                 Ok

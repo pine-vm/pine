@@ -659,7 +659,7 @@ emitDeclarationBlock stackBefore blockDeclarations config =
                 (\( functionName, blockDeclAsFunction ) ->
                     case emitFunction blockDeclAsFunction of
                         Err err ->
-                            Err (String.join "" [ "Failed to emit '", functionName, "': ", err ])
+                            Err ("Failed to emit '" ++ functionName ++ "': " ++ err)
 
                         Ok emittedExpression ->
                             Ok ( functionName, ( blockDeclAsFunction, emittedExpression ) )
@@ -1101,12 +1101,10 @@ emitFunctionApplication functionExpression arguments compilation =
                 case emitExpression compilation argumentExpression of
                     Err err ->
                         Err
-                            (String.join ""
-                                [ "Failed emitting argument "
-                                , String.fromInt argumentIndex
-                                , " for function application: "
-                                , err
-                                ]
+                            ("Failed emitting argument "
+                                ++ String.fromInt argumentIndex
+                                ++ " for function application: "
+                                ++ err
                             )
 
                     Ok result ->
@@ -1396,13 +1394,11 @@ emitApplyFunctionFromCurrentEnvironment compilation { functionName } arguments =
                                     case currentEnvironmentFunctionEntryFromName nextExpectedFunctionName of
                                         Nothing ->
                                             Err
-                                                (String.join ""
-                                                    [ "Function '"
-                                                    , functionName
-                                                    , "' expects environment function '"
-                                                    , nextExpectedFunctionName
-                                                    , "' but it is not in the environment"
-                                                    ]
+                                                ("Function '"
+                                                    ++ functionName
+                                                    ++ "' expects environment function '"
+                                                    ++ nextExpectedFunctionName
+                                                    ++ "' but it is not in the environment"
                                                 )
 
                                         Just ( indexInEnv, _ ) ->
@@ -1762,10 +1758,8 @@ parseFunctionRecordFromValueTagged value =
 
                 _ ->
                     Err
-                        (String.join ""
-                            [ "List does not have the expected number of items: "
-                            , String.fromInt (List.length listItems)
-                            ]
+                        ("List does not have the expected number of items: "
+                            ++ String.fromInt (List.length listItems)
                         )
 
 
