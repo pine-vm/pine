@@ -1276,17 +1276,21 @@ emitFunctionApplicationPine emitStack arguments functionExpressionPine =
                                             ]
 
                                     findReplacementForExpression expression =
-                                        if expression == Pine.environmentExpr then
-                                            Just mappedEnvironment
+                                        case expression of
+                                            Pine.EnvironmentExpression ->
+                                                Just mappedEnvironment
 
-                                        else
-                                            Nothing
+                                            _ ->
+                                                Nothing
+
+                                    ( afterReplace, _ ) =
+                                        transformPineExpressionWithOptionalReplacement
+                                            findReplacementForExpression
+                                            functionRecord.innerFunction
                                 in
-                                transformPineExpressionWithOptionalReplacement
-                                    findReplacementForExpression
-                                    functionRecord.innerFunction
-                                    |> Tuple.first
-                                    |> searchForExpressionReductionRecursive { maxDepth = 5 }
+                                searchForExpressionReductionRecursive
+                                    { maxDepth = 5 }
+                                    afterReplace
                 )
 
 
@@ -1875,11 +1879,12 @@ searchReductionForParseAndEvalExpression originalExpression =
                     Ok parsedExpression ->
                         let
                             findReplacementForExpression expression =
-                                if expression == Pine.EnvironmentExpression then
-                                    Just originalExpression.environment
+                                case expression of
+                                    Pine.EnvironmentExpression ->
+                                        Just originalExpression.environment
 
-                                else
-                                    Nothing
+                                    _ ->
+                                        Nothing
 
                             ( reducedExpr, transformResult ) =
                                 transformPineExpressionWithOptionalReplacement
@@ -1904,10 +1909,8 @@ searchForExpressionReductionRecursive { maxDepth } expression =
 
     else
         let
-            transformed =
-                expression
-                    |> transformPineExpressionWithOptionalReplacement searchForExpressionReduction
-                    |> Tuple.first
+            ( transformed, _ ) =
+                transformPineExpressionWithOptionalReplacement searchForExpressionReduction expression
         in
         if transformed == expression then
             transformed
