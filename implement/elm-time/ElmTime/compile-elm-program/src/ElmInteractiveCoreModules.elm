@@ -47,6 +47,9 @@ type Bool = True | False
 type String
     = String (List Char.Char)
 
+    -- We need another tag to prevent the compiler from assuming that the condition for tag 'String' is always true.
+    | AnyOtherKind
+
 
 {-| Represents the relative ordering of two things.
 The relations are less than, equal to, and greater than.
@@ -603,7 +606,7 @@ module List exposing
   )
 
 
-import Basics exposing (..)
+import Basics
 import Maybe exposing (Maybe(..))
 
 
@@ -1110,7 +1113,7 @@ module String exposing
   )
 
 
-import Basics exposing (..)
+import Basics
 import Char
 import List exposing ((::))
 import Maybe exposing (Maybe)
@@ -1544,7 +1547,7 @@ foldr func acc string =
 module Array exposing (..)
 
 
-import Basics exposing (..)
+import Basics
 import Bitwise
 import List
 import Maybe exposing (Maybe(..))
@@ -1940,7 +1943,7 @@ Insert, remove, and query operations all take *O(log n)* time.
 -}
 
 
-import Basics exposing (..)
+import Basics
 import Maybe exposing (..)
 import List exposing (..)
 

@@ -70,6 +70,7 @@ type alias CompilationStack =
     , availableModules : Dict.Dict (List String) ElmModuleInCompilation
     , inlineableDeclarations : Dict.Dict String (List Expression -> Expression)
     , elmValuesToExposeToGlobal : Dict.Dict String (List String)
+    , localTypeDeclarations : Dict.Dict String ElmModuleTypeDeclaration
     }
 
 
@@ -780,6 +781,7 @@ compilationAndEmitStackFromModulesInCompilation availableModules { moduleAliases
             , availableModules = availableModules
             , inlineableDeclarations = Dict.empty
             , elmValuesToExposeToGlobal = elmValuesToExposeToGlobalDefault
+            , localTypeDeclarations = localTypeDeclarations
             }
 
         moduleImports =
@@ -1435,7 +1437,7 @@ compileElmSyntaxLetBlock stackBefore letBlock =
                                 Err err
 
                             Ok destructuredExpression ->
-                                case compileElmSyntaxPattern pattern of
+                                case compileElmSyntaxPattern stackBefore pattern of
                                     Err err ->
                                         Err err
 
@@ -1514,7 +1516,7 @@ compileElmSyntaxLetDeclaration stack declaration =
                     Err err
 
                 Ok compiledExpression ->
-                    case compileElmSyntaxPattern patternSyntax of
+                    case compileElmSyntaxPattern stack patternSyntax of
                         Err err ->
                             Err ("Failed destructuring in let block: " ++ err)
 
@@ -1574,7 +1576,7 @@ compileElmSyntaxFunctionWithoutName stackBefore function =
     case
         Common.resultListMapCombine
             (\pattern ->
-                case compileElmSyntaxPattern pattern of
+                case compileElmSyntaxPattern stackBefore pattern of
                     Err err ->
                         Err err
 
@@ -1840,7 +1842,7 @@ compileElmSyntaxCaseBlockCase :
             , thenExpression : Expression
             }
 compileElmSyntaxCaseBlockCase stackBefore caseBlockValueExpression ( Elm.Syntax.Node.Node _ elmPattern, Elm.Syntax.Node.Node _ elmExpression ) =
-    case compileElmSyntaxPattern elmPattern of
+    case compileElmSyntaxPattern stackBefore elmPattern of
         Err error ->
             Err error
 
@@ -1890,14 +1892,15 @@ compileElmSyntaxCaseBlockCase stackBefore caseBlockValueExpression ( Elm.Syntax.
 
 
 compileElmSyntaxPattern :
-    Elm.Syntax.Pattern.Pattern
+    CompilationStack
+    -> Elm.Syntax.Pattern.Pattern
     ->
         Result
             String
             { conditionExpressions : Expression -> List Expression
             , declarations : List ( String, List Deconstruction )
             }
-compileElmSyntaxPattern elmPattern =
+compileElmSyntaxPattern compilation elmPattern =
     let
         continueWithOnlyEqualsCondition :
             Expression
@@ -1915,7 +1918,7 @@ compileElmSyntaxPattern elmPattern =
             -> Elm.Syntax.Pattern.Pattern
             -> Result String { conditions : Expression -> List Expression, declarations : List ( String, List Deconstruction ) }
         conditionsAndDeclarationsFromItemPattern itemIndex itemPattern =
-            case compileElmSyntaxPattern itemPattern of
+            case compileElmSyntaxPattern compilation itemPattern of
                 Err err ->
                     Err err
 
@@ -2006,12 +2009,12 @@ compileElmSyntaxPattern elmPattern =
             continueWithListOrTupleItems tupleElements
 
         Elm.Syntax.Pattern.UnConsPattern (Elm.Syntax.Node.Node _ unconsLeft) (Elm.Syntax.Node.Node _ unconsRight) ->
-            case compileElmSyntaxPattern unconsLeft of
+            case compileElmSyntaxPattern compilation unconsLeft of
                 Err err ->
                     Err err
 
                 Ok leftSide ->
-                    case compileElmSyntaxPattern unconsRight of
+                    case compileElmSyntaxPattern compilation unconsRight of
                         Err err ->
                             Err err
 
@@ -2049,30 +2052,100 @@ compileElmSyntaxPattern elmPattern =
                                 }
 
         Elm.Syntax.Pattern.NamedPattern qualifiedName choiceTypeArgumentPatterns ->
-            Common.resultListIndexedMapCombine
-                (\argIndex (Elm.Syntax.Node.Node _ argPattern) ->
-                    case conditionsAndDeclarationsFromItemPattern argIndex argPattern of
-                        Err err ->
-                            Err
-                                ("Failed for named pattern argument "
-                                    ++ String.fromInt argIndex
-                                    ++ ": "
-                                    ++ err
-                                )
+            case
+                Common.resultListIndexedMapCombine
+                    (\argIndex (Elm.Syntax.Node.Node _ argPattern) ->
+                        case conditionsAndDeclarationsFromItemPattern argIndex argPattern of
+                            Err err ->
+                                Err
+                                    ("Failed for named pattern argument "
+                                        ++ String.fromInt argIndex
+                                        ++ ": "
+                                        ++ err
+                                    )
 
-                        Ok ok ->
-                            Ok ok
-                )
-                choiceTypeArgumentPatterns
-                |> Result.map
-                    (\itemsResults ->
-                        let
-                            conditionExpressions : Expression -> List Expression
-                            conditionExpressions =
-                                \deconstructedExpression ->
-                                    let
-                                        matchingTagCondition =
-                                            case Dict.get qualifiedName.name elmDeclarationsOverridesExpressions of
+                            Ok ok ->
+                                Ok ok
+                    )
+                    choiceTypeArgumentPatterns
+            of
+                Err err ->
+                    Err err
+
+                Ok itemsResults ->
+                    let
+                        conditionExpressions : Expression -> List Expression
+                        conditionExpressions =
+                            \deconstructedExpression ->
+                                let
+                                    typeSourceModule =
+                                        case qualifiedName.moduleName of
+                                            [] ->
+                                                Nothing
+
+                                            _ ->
+                                                case Dict.get qualifiedName.moduleName compilation.moduleAliases of
+                                                    Just fromAlias ->
+                                                        Just fromAlias
+
+                                                    Nothing ->
+                                                        Just qualifiedName.moduleName
+
+                                    typeInfoMaybe : Maybe ( String, ElmModuleChoiceType )
+                                    typeInfoMaybe =
+                                        case typeSourceModule of
+                                            Nothing ->
+                                                {-
+                                                   TODO: Expand lookup of type to also support cases of import all (exposing (..))
+                                                -}
+                                                case Dict.get qualifiedName.name compilation.localTypeDeclarations of
+                                                    Nothing ->
+                                                        Nothing
+
+                                                    Just typeDeclaration ->
+                                                        case typeDeclaration of
+                                                            ElmModuleChoiceTypeDeclaration choiceTypeDeclaration ->
+                                                                Just ( qualifiedName.name, choiceTypeDeclaration )
+
+                                                            _ ->
+                                                                Nothing
+
+                                            Just sourceModuleName ->
+                                                case Dict.get sourceModuleName compilation.availableModules of
+                                                    Nothing ->
+                                                        Nothing
+
+                                                    Just moduleInCompilation ->
+                                                        Common.listMapFind
+                                                            (\( typeName, typeDeclaration ) ->
+                                                                case typeDeclaration of
+                                                                    ElmModuleChoiceTypeDeclaration choiceTypeDeclaration ->
+                                                                        if Dict.member qualifiedName.name choiceTypeDeclaration.tags then
+                                                                            Just ( typeName, choiceTypeDeclaration )
+
+                                                                        else
+                                                                            Nothing
+
+                                                                    _ ->
+                                                                        Nothing
+                                                            )
+                                                            (Dict.toList moduleInCompilation.typeDeclarations)
+
+                                    tagIsOnlyPossible : Bool
+                                    tagIsOnlyPossible =
+                                        case typeInfoMaybe of
+                                            Nothing ->
+                                                False
+
+                                            Just ( _, choiceType ) ->
+                                                Dict.size choiceType.tags == 1
+
+                                    matchingTagConditions =
+                                        if tagIsOnlyPossible then
+                                            []
+
+                                        else
+                                            [ case Dict.get qualifiedName.name elmDeclarationsOverridesExpressions of
                                                 Just tagNameExpressionFromOverrides ->
                                                     equalCondition
                                                         [ tagNameExpressionFromOverrides
@@ -2084,25 +2157,26 @@ compileElmSyntaxPattern elmPattern =
                                                         [ LiteralExpression (Pine.valueFromString qualifiedName.name)
                                                         , pineKernel_ListHead deconstructedExpression
                                                         ]
+                                            ]
 
-                                        argumentsConditions =
-                                            itemsResults
-                                                |> List.concatMap
-                                                    (.conditions
-                                                        >> (|>) (listItemFromIndexExpression 1 deconstructedExpression)
-                                                    )
-                                    in
-                                    matchingTagCondition :: argumentsConditions
+                                    argumentsConditions =
+                                        itemsResults
+                                            |> List.concatMap
+                                                (.conditions
+                                                    >> (|>) (listItemFromIndexExpression 1 deconstructedExpression)
+                                                )
+                                in
+                                List.concat [ matchingTagConditions, argumentsConditions ]
 
-                            declarations =
-                                itemsResults
-                                    |> List.concatMap .declarations
-                                    |> List.map (Tuple.mapSecond ((::) (ListItemDeconstruction 1)))
-                        in
+                        declarations =
+                            itemsResults
+                                |> List.concatMap .declarations
+                                |> List.map (Tuple.mapSecond ((::) (ListItemDeconstruction 1)))
+                    in
+                    Ok
                         { conditionExpressions = conditionExpressions
                         , declarations = declarations
                         }
-                    )
 
         Elm.Syntax.Pattern.CharPattern char ->
             continueWithOnlyEqualsCondition (LiteralExpression (Pine.valueFromChar char))
@@ -2146,7 +2220,7 @@ compileElmSyntaxPattern elmPattern =
                 }
 
         Elm.Syntax.Pattern.AsPattern (Elm.Syntax.Node.Node _ aliasedPattern) (Elm.Syntax.Node.Node _ alias) ->
-            compileElmSyntaxPattern aliasedPattern
+            compileElmSyntaxPattern compilation aliasedPattern
                 |> Result.map
                     (\aliasedResult ->
                         { aliasedResult
@@ -2155,7 +2229,7 @@ compileElmSyntaxPattern elmPattern =
                     )
 
         Elm.Syntax.Pattern.ParenthesizedPattern (Elm.Syntax.Node.Node _ parenthesized) ->
-            compileElmSyntaxPattern parenthesized
+            compileElmSyntaxPattern compilation parenthesized
 
         Elm.Syntax.Pattern.UnitPattern ->
             Ok

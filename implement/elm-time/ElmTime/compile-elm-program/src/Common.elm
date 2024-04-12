@@ -27,6 +27,21 @@ listFind predicate list =
                 listFind predicate rest
 
 
+listMapFind : (a -> Maybe b) -> List a -> Maybe b
+listMapFind mapItem list =
+    case list of
+        [] ->
+            Nothing
+
+        item :: rest ->
+            case mapItem item of
+                Just itemOk ->
+                    Just itemOk
+
+                Nothing ->
+                    listMapFind mapItem rest
+
+
 listFindWithIndex : (a -> Bool) -> List a -> Maybe ( Int, a )
 listFindWithIndex predicate list =
     listFindWithIndexHelper 0 predicate list
