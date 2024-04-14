@@ -28,7 +28,7 @@ public class LoadFromGitHubTests
 
         var loadFromGithubResult =
             Pine.LoadFromGitHubOrGitLab.LoadFromUrl(
-                "https://github.com/elm-time/elm-time/tree/30c482748f531899aac2b2d4895e5f0e52258be7/implement/PersistentProcess/example-elm-apps/default-full-stack-app")
+                "https://github.com/pine-vm/pine/tree/30c482748f531899aac2b2d4895e5f0e52258be7/implement/PersistentProcess/example-elm-apps/default-full-stack-app")
             .Extract(error => throw new Exception("Failed to load from GitHub: " + error));
 
         var loadedFilesNamesAndContents =
@@ -62,7 +62,7 @@ public class LoadFromGitHubTests
 
         var loadFromGithubResult =
             Pine.LoadFromGitHubOrGitLab.LoadFromUrl(
-                "https://github.com/elm-time/elm-time/blob/30c482748f531899aac2b2d4895e5f0e52258be7/")
+                "https://github.com/pine-vm/pine/blob/30c482748f531899aac2b2d4895e5f0e52258be7/")
             .Extract(error => throw new Exception("Failed to load from GitHub: " + error));
 
         var loadedFilesNamesAndContents =
@@ -96,7 +96,7 @@ public class LoadFromGitHubTests
 
         var loadFromGithubResult =
             Pine.LoadFromGitHubOrGitLab.LoadFromUrl(
-                "https://github.com/elm-time/elm-time/blob/30c482748f531899aac2b2d4895e5f0e52258be7/README.md")
+                "https://github.com/pine-vm/pine/blob/30c482748f531899aac2b2d4895e5f0e52258be7/README.md")
             .Extract(error => throw new Exception("Failed to load from GitHub: " + error));
 
         var blobContent =
@@ -144,7 +144,7 @@ public class LoadFromGitHubTests
     {
         var loadFromGithubResult =
             Pine.LoadFromGitHubOrGitLab.LoadFromUrl(
-                "https://github.com/elm-time/elm-time")
+                "https://github.com/pine-vm/pine")
             .Extract(error => throw new Exception("Failed to load from GitHub: " + error));
 
         var loadedFilesPathsAndContents =
@@ -201,7 +201,7 @@ public class LoadFromGitHubTests
             {
                 var loadFromGitHubResult =
                     Pine.LoadFromGitHubOrGitLab.LoadFromUrl(
-                        sourceUrl: "https://github.com/elm-time/elm-time/blob/30c482748f531899aac2b2d4895e5f0e52258be7/README.md",
+                        sourceUrl: "https://github.com/pine-vm/pine/blob/30c482748f531899aac2b2d4895e5f0e52258be7/README.md",
                         getRepositoryFilesPartialForCommit:
                         request => Pine.Result<string, IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>>>.ok(consultServer(request)))
                     .Extract(error => throw new Exception("Failed to load from GitHub: " + error));
@@ -223,7 +223,7 @@ public class LoadFromGitHubTests
 
                 var loadFromGitHubResult =
                     Pine.LoadFromGitHubOrGitLab.LoadFromUrl(
-                        sourceUrl: "https://github.com/elm-time/elm-time/blob/30c482748f531899aac2b2d4895e5f0e52258be7/azure-pipelines.yml",
+                        sourceUrl: "https://github.com/pine-vm/pine/blob/30c482748f531899aac2b2d4895e5f0e52258be7/azure-pipelines.yml",
                         getRepositoryFilesPartialForCommit:
                         request => Pine.Result<string, IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>>>.ok(consultServer(request)))
                     .Extract(error => throw new Exception("Failed to load from GitHub: " + error));

@@ -1,6 +1,6 @@
 # Elm Editor
 
-[Elm Editor](https://github.com/elm-time/elm-time/tree/main/implement/example-apps/elm-editor) is a web app for developing Elm programs.
+[Elm Editor](https://github.com/pine-vm/pine/tree/main/implement/example-apps/elm-editor) is a web app for developing Elm programs.
 
 As an integrated development environment, it assists us in reading, writing, and testing Elm programs and in collaborating with other developers.
 

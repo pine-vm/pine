@@ -14,7 +14,7 @@
   <PropertyGroup>
     <Description>Runtime environment for the Elm programming language</Description>
     <PackageTags>Elm;Runtime;DBMS</PackageTags>
-    <RepositoryUrl>https://github.com/elm-time/elm-time.git</RepositoryUrl>
+    <RepositoryUrl>https://github.com/pine-vm/pine.git</RepositoryUrl>
     <PackageProjectUrl>https://elm-time.org</PackageProjectUrl>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <Authors>Viir</Authors>

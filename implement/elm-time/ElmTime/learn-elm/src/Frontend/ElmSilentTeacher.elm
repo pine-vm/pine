@@ -657,7 +657,7 @@ view state =
                         , Element.height Element.fill
                         ]
               , [ Element.text "To learn about Elm Silent Teacher, see "
-                , linkElementFromHref "https://github.com/elm-time/elm-time/blob/main/guide/elm-silent-teacher.md"
+                , linkElementFromHref "https://github.com/pine-vm/pine/blob/main/guide/elm-silent-teacher.md"
                 ]
                     |> Element.paragraph [ Element.Font.size (defaultFontSize - 2) ]
               ]

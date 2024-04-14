@@ -36,7 +36,7 @@ public class SelfTest
 
         var loadFromGithubResult =
             LoadFromGitHubOrGitLab.LoadFromUrl(
-                    "https://github.com/elm-time/elm-time/blob/30c482748f531899aac2b2d4895e5f0e52258be7/")
+                    "https://github.com/pine-vm/pine/blob/30c482748f531899aac2b2d4895e5f0e52258be7/")
                 .Extract(error => throw new Exception("Failed to load from GitHub: " + error));
 
         var loadedFilesNamesAndContents =
@@ -78,7 +78,7 @@ public class SelfTest
                 elmEngineType: new ElmEngineType.JavaScript_V8(),
                 deletePreviousProcess: false,
                 copyProcess: null,
-                deployApp: "https://github.com/elm-time/elm-time/tree/1b8d4ff50a3ae94921f9e0f3357abf2bc1a696f3/implement/example-apps/minimal-backend-hello-world");
+                deployApp: "https://github.com/pine-vm/pine/tree/1b8d4ff50a3ae94921f9e0f3357abf2bc1a696f3/implement/example-apps/minimal-backend-hello-world");
 
         webHost.StartAsync().Wait();
 

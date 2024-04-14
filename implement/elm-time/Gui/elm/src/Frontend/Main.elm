@@ -386,7 +386,7 @@ viewAdminInterfaceConfig state config =
       , [ Element.text "To check for newer versions, see "
         , Visuals.linkElementFromHref { newTabLink = False } "https://elm-time.org/download"
         , Element.text " or "
-        , Visuals.linkElementFromHref { newTabLink = False } "https://github.com/elm-time/elm-time/releases"
+        , Visuals.linkElementFromHref { newTabLink = False } "https://github.com/pine-vm/pine/releases"
         ]
       ]
         |> List.map (Element.paragraph [])
@@ -410,7 +410,7 @@ viewAdminInterfaceConfig state config =
         |> Element.column [ Element.spacing 10 ]
     , [ [ Element.text "The easiest way to use the APIs is via the command-line interface in the elm-time executable file." ]
       , [ Element.text "To learn about the admin interface and how to deploy an app, see "
-        , Visuals.linkElementFromHref { newTabLink = False } "https://github.com/elm-time/elm-time/blob/main/guide/how-to-configure-and-deploy-an-elm-backend-app.md"
+        , Visuals.linkElementFromHref { newTabLink = False } "https://github.com/pine-vm/pine/blob/main/guide/how-to-configure-and-deploy-an-elm-backend-app.md"
         ]
       ]
         |> List.map (Element.paragraph [])

@@ -54,13 +54,13 @@ type alias WindowSize =
 
 linkToSourceCodeRepository : String
 linkToSourceCodeRepository =
-    "https://github.com/elm-time/elm-time"
+    "https://github.com/pine-vm/pine"
 
 
 topNavigationElements : List NavigationLink
 topNavigationElements =
     [ PageNavigationLink HomePage
-    , ExternalNavigationLink { label = "Learn", url = "https://github.com/elm-time/elm-time/tree/main/guide" }
+    , ExternalNavigationLink { label = "Learn", url = "https://github.com/pine-vm/pine/tree/main/guide" }
     , PageNavigationLink DownloadPage
     , PageNavigationLink NewsPage
     ]
@@ -338,7 +338,7 @@ header =
 viewFooter : Element.Device -> Element.Element e
 viewFooter _ =
     [ [ Visuals.linkElementFromUrlAndLabel
-            { url = "https://github.com/elm-time/elm-time/tree/main/implement/website/elm-time"
+            { url = "https://github.com/pine-vm/pine/tree/main/implement/website/elm-time"
             , labelElement = Element.text " Site Source"
             , newTabLink = False
             }

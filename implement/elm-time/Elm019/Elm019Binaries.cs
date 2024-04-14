@@ -159,7 +159,7 @@ public static class Elm019Binaries
     {
         /*
         2020-04-01: Avoid the sporadic failures as reported at
-        https://github.com/elm-time/elm-time/blob/a206b8095e9f2300f413ef381342db1dca790542/explore/2020-04-01.automate-testing/2020-04-01.automate-testing.md
+        https://github.com/pine-vm/pine/blob/a206b8095e9f2300f413ef381342db1dca790542/explore/2020-04-01.automate-testing/2020-04-01.automate-testing.md
         Retry for these class of errors.
         */
         const int maxRetryCount = 2;

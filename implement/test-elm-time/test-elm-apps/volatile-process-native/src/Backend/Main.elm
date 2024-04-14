@@ -21,19 +21,19 @@ volatileProcessExecutableFileFromOsPlatform =
     [ ( "WINDOWS"
       , { hashSha256Base16 = "3a30fcae96bb305187bf2fb7064fd465d0283d160e346bf3b47e24ecefd80752"
         , hintUrls =
-            [ "https://github.com/elm-time/elm-time/releases/download/native-tools-2023-06-30/native-tools-bin-74c0bbc4fb8ea4e3511a080e4e0fd5541793ef2c-win10-x64.zip" ]
+            [ "https://github.com/pine-vm/pine/releases/download/native-tools-2023-06-30/native-tools-bin-74c0bbc4fb8ea4e3511a080e4e0fd5541793ef2c-win10-x64.zip" ]
         }
       )
     , ( "LINUX"
       , { hashSha256Base16 = "7367c3ba48cbc0911f6e3e9682964324ca977a47fe7863265f47e99fdfb0b29f"
         , hintUrls =
-            [ "https://github.com/elm-time/elm-time/releases/download/native-tools-2023-06-30/native-tools-bin-74c0bbc4fb8ea4e3511a080e4e0fd5541793ef2c-linux-x64.zip" ]
+            [ "https://github.com/pine-vm/pine/releases/download/native-tools-2023-06-30/native-tools-bin-74c0bbc4fb8ea4e3511a080e4e0fd5541793ef2c-linux-x64.zip" ]
         }
       )
     , ( "OSX"
       , { hashSha256Base16 = "5e51e7229278a328ecc3c2b81f2fc70d2e3d250230c14f4d42feb75ae522d335"
         , hintUrls =
-            [ "https://github.com/elm-time/elm-time/releases/download/native-tools-2023-06-30/native-tools-bin-74c0bbc4fb8ea4e3511a080e4e0fd5541793ef2c-osx-x64.zip" ]
+            [ "https://github.com/pine-vm/pine/releases/download/native-tools-2023-06-30/native-tools-bin-74c0bbc4fb8ea4e3511a080e4e0fd5541793ef2c-osx-x64.zip" ]
         }
       )
     ]

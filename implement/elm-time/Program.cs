@@ -42,7 +42,7 @@ public class Program
         var app = new CommandLineApplication
         {
             Name = "elm-time",
-            Description = "Elm-Time - runtime environment for Elm.\nTo get help or report an issue, see https://github.com/elm-time/elm-time/discussions",
+            Description = "Elm-Time - runtime environment for Elm.\nTo get help or report an issue, see https://github.com/pine-vm/pine/discussions",
             HelpTextGenerator =
             new McMaster.Extensions.CommandLineUtils.HelpText.DefaultHelpTextGenerator { SortCommandsByName = false }
         };

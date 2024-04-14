@@ -121,7 +121,7 @@ public class ProcessStoreReaderInFileStore(IFileStore fileStore)
             var payloadStartIndex =
                 /*
                 Previous implementation used `File.WriteAllText`:
-                https://github.com/elm-time/elm-time/blob/1cd3f00bdf5a05e9bda479c534b0458b2496393c/implement/PersistentProcess/PersistentProcess.Common/ProcessStore.cs#L183
+                https://github.com/pine-vm/pine/blob/1cd3f00bdf5a05e9bda479c534b0458b2496393c/implement/PersistentProcess/PersistentProcess.Common/ProcessStore.cs#L183
                 Looking at the files from stores in production, it seems like that caused addition of BOM.
                 */
                 fileContent.Value.Span.StartsWith(new byte[] { 0xEF, 0xBB, 0xBF })

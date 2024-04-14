@@ -16,14 +16,14 @@ public static class LoadFromGitHubOrGitLab
 
     /// <summary>
     /// Sample address to a tree:
-    /// https://github.com/elm-time/elm-time/tree/2fe621f492eced8a6f0da6e89e0aa90d01d6a04c/guide
+    /// https://github.com/pine-vm/pine/tree/2fe621f492eced8a6f0da6e89e0aa90d01d6a04c/guide
     /// 
     /// Sample address to a blob:
-    /// https://github.com/elm-time/elm-time/blob/2fe621f492eced8a6f0da6e89e0aa90d01d6a04c/guide/persistence-in-elm-time.md
+    /// https://github.com/pine-vm/pine/blob/2fe621f492eced8a6f0da6e89e0aa90d01d6a04c/guide/persistence-in-elm-time.md
     /// 
     /// Support loading from the root tree:
-    /// https://github.com/elm-time/elm-time/tree/02dd3ba746a020d011b3e7da69b245fe63933350/
-    /// https://github.com/elm-time/elm-time/tree/02dd3ba746a020d011b3e7da69b245fe63933350
+    /// https://github.com/pine-vm/pine/tree/02dd3ba746a020d011b3e7da69b245fe63933350/
+    /// https://github.com/pine-vm/pine/tree/02dd3ba746a020d011b3e7da69b245fe63933350
     ///
     /// Blob on GitLab:
     /// https://gitlab.com/gilmi/strema/-/blob/de9f6a401f89215cb6cebbbbf2eed0252aeef1d1/overview.org

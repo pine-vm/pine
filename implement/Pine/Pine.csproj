@@ -12,7 +12,7 @@
     <Version>0.1.7</Version>
     <Description>The cross-platform Elm runtime environment</Description>
     <PackageTags>Functional;Elm;Runtime;Compiler;VM;DBMS</PackageTags>
-    <RepositoryUrl>https://github.com/elm-time/elm-time.git</RepositoryUrl>
+    <RepositoryUrl>https://github.com/pine-vm/pine.git</RepositoryUrl>
     <PackageProjectUrl>https://elm-time.org</PackageProjectUrl>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <Authors>Viir</Authors>

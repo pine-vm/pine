@@ -2820,11 +2820,11 @@ activityBar =
 
         bottomActionItems =
             [ { icon = Visuals.ChatActionIcon
-              , linkUrl = Just "https://github.com/elm-time/elm-time/discussions"
+              , linkUrl = Just "https://github.com/pine-vm/pine/discussions"
               , title = "Elm Editor Discussions"
               }
             , { icon = Visuals.GitHubActionIcon
-              , linkUrl = Just "https://github.com/elm-time/elm-time/tree/main/implement/example-apps/elm-editor"
+              , linkUrl = Just "https://github.com/pine-vm/pine/tree/main/implement/example-apps/elm-editor"
               , title = "Elm Editor source code on GitHub"
               }
             ]

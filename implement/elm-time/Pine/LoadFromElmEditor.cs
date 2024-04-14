@@ -6,14 +6,14 @@ using System.Text;
 namespace Pine
 {
     /// <summary>
-    /// Project state models based on https://github.com/elm-time/elm-time/blob/742650b6a6f1e3dc723d76fbb8c189ca16a0bee6/implement/example-apps/elm-editor/src/ProjectState_2021_01.elm
+    /// Project state models based on https://github.com/pine-vm/pine/blob/742650b6a6f1e3dc723d76fbb8c189ca16a0bee6/implement/example-apps/elm-editor/src/ProjectState_2021_01.elm
     /// </summary>
     namespace ProjectState_2021_01
     {
         /*
          * Example JSON:
          * 
-         * {"base":"https://github.com/elm-time/elm-time/tree/742650b6a6f1e3dc723d76fbb8c189ca16a0bee6/implement/example-apps/elm-editor/default-app","differenceFromBase":{"removeNodes":[],"changeBlobs":[[["src","Main.elm"],[{"ReuseBytes":[537]},{"RemoveBytes":[6]},{"AddBytes":[{"AsBase64":"ICAgIDQK"}]},{"ReuseBytes":[553]}]]]}}
+         * {"base":"https://github.com/pine-vm/pine/tree/742650b6a6f1e3dc723d76fbb8c189ca16a0bee6/implement/example-apps/elm-editor/default-app","differenceFromBase":{"removeNodes":[],"changeBlobs":[[["src","Main.elm"],[{"ReuseBytes":[537]},{"RemoveBytes":[6]},{"AddBytes":[{"AsBase64":"ICAgIDQK"}]},{"ReuseBytes":[553]}]]]}}
          * 
          * */
         public record ProjectState(
@@ -31,7 +31,7 @@ namespace Pine
             IReadOnlyList<(IReadOnlyList<string>, IReadOnlyList<BlobChangeSequenceElement>)> changeBlobs)
         {
             /// <summary>
-            /// https://github.com/elm-time/elm-time/blob/742650b6a6f1e3dc723d76fbb8c189ca16a0bee6/implement/example-apps/elm-editor/src/ProjectState_2021_01.elm#L69-L96
+            /// https://github.com/pine-vm/pine/blob/742650b6a6f1e3dc723d76fbb8c189ca16a0bee6/implement/example-apps/elm-editor/src/ProjectState_2021_01.elm#L69-L96
             /// 
             /// applyBlobChanges : List BlobChangeSequenceElement -> Bytes.Bytes -> Bytes.Bytes
             /// </summary>
@@ -216,7 +216,7 @@ namespace Pine
         }
 
         /// <summary>
-        /// https://github.com/elm-time/elm-time/blob/742650b6a6f1e3dc723d76fbb8c189ca16a0bee6/implement/example-apps/elm-editor/src/FileTreeInWorkspace.elm#L106-L132
+        /// https://github.com/pine-vm/pine/blob/742650b6a6f1e3dc723d76fbb8c189ca16a0bee6/implement/example-apps/elm-editor/src/FileTreeInWorkspace.elm#L106-L132
         /// 
         /// applyProjectStateDifference_2021_01 : ProjectState_2021_01.ProjectStateDifference -> FileTree.FileTreeNode Bytes.Bytes -> Result String (FileTree.FileTreeNode Bytes.Bytes)
         /// </summary>
