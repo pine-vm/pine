@@ -2258,6 +2258,76 @@ searchCompileElmSyntaxOperatorOptimized :
     -> Maybe (Result String Expression)
 searchCompileElmSyntaxOperatorOptimized stack operator leftExpr rightExpr =
     case operator of
+        "==" ->
+            {-
+               For the general case, '==' will be compiled to 'Basics.eq', which is polymorphic and has a more complex
+               implementation to handle 'Set' and 'Dict' instances.
+               If we can prove at compile time that the operand type cannot contain any 'Set' or 'Dict',
+               we can emit a direct usage of the 'equal' kernel function.
+            -}
+            let
+                exprCannotContainSetOrDict : Elm.Syntax.Expression.Expression -> Bool
+                exprCannotContainSetOrDict expr =
+                    case expr of
+                        Elm.Syntax.Expression.Literal _ ->
+                            True
+
+                        Elm.Syntax.Expression.CharLiteral _ ->
+                            True
+
+                        Elm.Syntax.Expression.Integer _ ->
+                            True
+
+                        Elm.Syntax.Expression.Hex _ ->
+                            True
+
+                        Elm.Syntax.Expression.Floatable _ ->
+                            True
+
+                        Elm.Syntax.Expression.ListExpr listExpr ->
+                            List.all (\(Elm.Syntax.Node.Node _ listItem) -> exprCannotContainSetOrDict listItem) listExpr
+
+                        Elm.Syntax.Expression.TupledExpression tupleExpr ->
+                            List.all (\(Elm.Syntax.Node.Node _ listItem) -> exprCannotContainSetOrDict listItem) tupleExpr
+
+                        Elm.Syntax.Expression.FunctionOrValue _ localName ->
+                            {-
+                               Cover choice type tags without arguments, like 'Nothing' or 'LT'.
+                            -}
+                            stringStartsWithUpper localName
+
+                        Elm.Syntax.Expression.ParenthesizedExpression (Elm.Syntax.Node.Node _ parenthesized) ->
+                            exprCannotContainSetOrDict parenthesized
+
+                        _ ->
+                            False
+
+                operandCannotContainSetOrDict =
+                    exprCannotContainSetOrDict leftExpr || exprCannotContainSetOrDict rightExpr
+            in
+            if not operandCannotContainSetOrDict then
+                Nothing
+
+            else
+                case compileElmSyntaxExpression stack leftExpr of
+                    Err err ->
+                        Just (Err err)
+
+                    Ok leftExprCompiled ->
+                        case compileElmSyntaxExpression stack rightExpr of
+                            Err err ->
+                                Just (Err err)
+
+                            Ok rightExprCompiled ->
+                                Just
+                                    (Ok
+                                        (KernelApplicationExpression
+                                            { functionName = "equal"
+                                            , argument = ListExpression [ leftExprCompiled, rightExprCompiled ]
+                                            }
+                                        )
+                                    )
+
         "++" ->
             let
                 items =
@@ -2301,14 +2371,14 @@ searchCompileElmSyntaxOperatorOptimized stack operator leftExpr rightExpr =
                                     expressions
 
                             concatExpr =
-                                FirCompiler.KernelApplicationExpression
+                                KernelApplicationExpression
                                     { functionName = "concat"
-                                    , argument = FirCompiler.ListExpression stringsExpressions
+                                    , argument = ListExpression stringsExpressions
                                     }
                         in
                         Just
                             (Ok
-                                (FirCompiler.ListExpression
+                                (ListExpression
                                     [ LiteralExpression elmStringTypeTagNameAsValue
                                     , ListExpression [ concatExpr ]
                                     ]

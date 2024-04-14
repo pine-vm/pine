@@ -517,7 +517,7 @@ emitDeclarationBlock stackBefore blockDeclarations config =
                         ReferenceExpression environmentFunctionPartialApplicationName
 
                     else
-                        LiteralExpression adaptivePartialApplicationRecursiveValue
+                        LiteralExpression (adaptivePartialApplicationRecursiveValue ())
                   )
                 ]
 
@@ -1557,7 +1557,7 @@ adaptivePartialApplicationExpression config =
                         applicationFunctionSource
 
                     Nothing ->
-                        Pine.LiteralExpression adaptivePartialApplicationRecursiveValue
+                        Pine.LiteralExpression (adaptivePartialApplicationRecursiveValue ())
         in
         Pine.ParseAndEvalExpression
             { expression = applicationFunctionExpr
@@ -1570,8 +1570,8 @@ adaptivePartialApplicationExpression config =
             }
 
 
-adaptivePartialApplicationRecursiveValue : Pine.Value
-adaptivePartialApplicationRecursiveValue =
+adaptivePartialApplicationRecursiveValue : () -> Pine.Value
+adaptivePartialApplicationRecursiveValue () =
     Pine.encodeExpressionAsValue adaptivePartialApplicationRecursiveExpression
 
 
