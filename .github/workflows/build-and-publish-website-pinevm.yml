@@ -1,0 +1,37 @@
+name: Build and publish website PineVM
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+    - "implement/website/pinevm/**"
+    - ".github/workflows/build-and-publish-website-pinevm.yml"
+
+jobs:
+  build-and-deploy:
+
+    runs-on: ubuntu-22.04
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: download build tool
+      run: |
+        pwsh -nologo -noprofile -command "Invoke-WebRequest 'https://github.com/elm-time/elm-time/releases/download/v0.1.6/elm-time-bin-v0.1.6-linux-x64.zip' -OutFile elm-time-linux-x64.zip"
+        pwsh -nologo -noprofile -command "& { Add-Type -A 'System.IO.Compression.FileSystem'; [IO.Compression.ZipFile]::ExtractToDirectory('elm-time-linux-x64.zip','./elm-time');}"
+    - name: install build tool
+      run: |
+        chmod  +x  ./elm-time/elm-time
+        sudo  ./elm-time/elm-time  install
+
+    - name: Build for Netlify
+      working-directory: ./implement/website/pinevm
+      run: |
+        elm-time  make  src/Netlify.elm  --output=netlify.zip
+        pwsh -nologo -noprofile -command "& { Add-Type -A 'System.IO.Compression.FileSystem'; [IO.Compression.ZipFile]::ExtractToDirectory('netlify.zip','./out/netlify/docs');}"
+
+    - name: Deploy to Netlify
+      working-directory: ./implement/website/pinevm
+      run: |
+        npm  install  netlify-cli  --save-dev
+        netlify  deploy  --dir ./out/netlify/docs  --site pinevm-org  --alias preview  --auth  ${{ secrets.WEBSITE_NETLIFY_AUTH_TOKEN }}
