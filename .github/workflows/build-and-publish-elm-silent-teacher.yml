@@ -15,11 +15,11 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
-    - name: download elm-time
+    - name: download build tool
       run: |
         pwsh -nologo -noprofile -command "Invoke-WebRequest 'https://github.com/pine-vm/pine/releases/download/v2023-09-12/elm-time-bin-v2023-09-12-linux-x64.zip' -OutFile elm-time-linux-x64.zip"
         pwsh -nologo -noprofile -command "& { Add-Type -A 'System.IO.Compression.FileSystem'; [IO.Compression.ZipFile]::ExtractToDirectory('elm-time-linux-x64.zip','./elm-time');}"
-    - name: install elm-time
+    - name: install build tool
       run: |
         chmod  +x  ./elm-time/elm-time
         sudo  ./elm-time/elm-time  install

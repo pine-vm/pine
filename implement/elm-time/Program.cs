@@ -18,7 +18,7 @@ namespace ElmTime;
 
 public class Program
 {
-    public static string AppVersionId => "0.1.7";
+    public static string AppVersionId => "0.1.8";
 
     private static int AdminInterfaceDefaultPort => 4000;
 
@@ -41,13 +41,13 @@ public class Program
 
         var app = new CommandLineApplication
         {
-            Name = "elm-time",
-            Description = "Elm-Time - runtime environment for Elm.\nTo get help or report an issue, see https://github.com/pine-vm/pine/discussions",
+            Name = "pine",
+            Description = "Pine - runtime environment for Elm.\nTo get help or report an issue, see https://github.com/pine-vm/pine/discussions",
             HelpTextGenerator =
             new McMaster.Extensions.CommandLineUtils.HelpText.DefaultHelpTextGenerator { SortCommandsByName = false }
         };
 
-        app.VersionOption(template: "-v|--version", shortFormVersion: "elm-time " + AppVersionId);
+        app.VersionOption(template: "-v|--version", shortFormVersion: "pine " + AppVersionId);
 
         var installCommand = app.Command("install", installCommand =>
         {
@@ -217,7 +217,7 @@ public class Program
                         "\n\n",
                         app.Description,
                         "Usage: " + elmFsCommandName + " [command] [options]",
-                        "These are common elm-time commands used in various situations:",
+                        "These are common pine commands used in various situations:",
                         string.Join("\n\n", groupsTexts),
                         "'" + elmFsCommandName + " help -a' lists available subcommands.\nSee '" + elmFsCommandName + " help <command>' to read about a specific subcommand.");
 
@@ -1878,7 +1878,7 @@ public class Program
         var elmCompilerOption =
             cmd.Option(
                 template: "--elm-compiler",
-                description: "Select a program for compiling Elm programs. Defaults to the version integrated with Elm-Time.",
+                description: "Select a program for compiling Elm programs. Defaults to the version integrated with Pine.",
                 optionType: CommandOptionType.SingleValue,
                 inherited: true);
 
@@ -2740,7 +2740,7 @@ public class Program
         return (commandName, checkInstallation);
     }
 
-    private static string ReportFilePath => Path.Combine(Environment.CurrentDirectory, "elm-time-tool", "report");
+    private static string ReportFilePath => Path.Combine(Environment.CurrentDirectory, "pine-tool", "report");
 
     static readonly System.Text.Json.JsonSerializerOptions reportJsonSerializerOptions = new()
     {
@@ -2768,7 +2768,7 @@ public class Program
     {
         httpRequest.Headers.UserAgent.Add(
             new System.Net.Http.Headers.ProductInfoHeaderValue(
-                new System.Net.Http.Headers.ProductHeaderValue("elm-time-cli", AppVersionId)));
+                new System.Net.Http.Headers.ProductHeaderValue("pine-cli", AppVersionId)));
 
         return httpRequest;
     }

@@ -3,17 +3,17 @@
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
     <Nullable>enable</Nullable>
-    <AssemblyVersion>0.1.7</AssemblyVersion>
-    <FileVersion>0.1.7</FileVersion>
+    <AssemblyVersion>0.1.8</AssemblyVersion>
+    <FileVersion>0.1.8</FileVersion>
   </PropertyGroup>
 
   <PropertyGroup>
     <PackageId>Pine</PackageId>
-    <Version>0.1.7</Version>
+    <Version>0.1.8</Version>
     <Description>The cross-platform Elm runtime environment</Description>
     <PackageTags>Functional;Elm;Runtime;Compiler;VM;DBMS</PackageTags>
     <RepositoryUrl>https://github.com/pine-vm/pine.git</RepositoryUrl>
-    <PackageProjectUrl>https://elm-time.org</PackageProjectUrl>
+    <PackageProjectUrl>https://pinevm.org</PackageProjectUrl>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <Authors>Viir</Authors>
     <PackageLicenseFile>License.txt</PackageLicenseFile>

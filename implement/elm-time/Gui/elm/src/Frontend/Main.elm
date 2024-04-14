@@ -384,7 +384,7 @@ viewAdminInterfaceConfig state config =
         ]
       , [ Element.text ("This instance currently runs version " ++ config.elmTimeVersionId ++ ".") ]
       , [ Element.text "To check for newer versions, see "
-        , Visuals.linkElementFromHref { newTabLink = False } "https://elm-time.org/download"
+        , Visuals.linkElementFromHref { newTabLink = False } "https://pinevm.org/download"
         , Element.text " or "
         , Visuals.linkElementFromHref { newTabLink = False } "https://github.com/pine-vm/pine/releases"
         ]

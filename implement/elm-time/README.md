@@ -1,4 +1,4 @@
-Elm-Time is an open-source, cross-platform runtime environment for the Elm programming language.
+Pine is the cross-platform Elm runtime environment.
 
-+ Website: https://elm-time.org
++ Website: https://pinevm.org
 + Source code repository: https://github.com/pine-vm/pine

@@ -5,7 +5,7 @@ The backend includes a web server and a database persisting the application stat
 
 ## Installing and Registering the `elm-time` Command
 
-In this guide, I use the `elm-time` command-line interface (CLI) program. You can find all downloads at <https://elm-time.org/downloads> and <https://github.com/pine-vm/pine/releases>
+In this guide, I use the `elm-time` command-line interface (CLI) program. You can find all downloads at <https://pinevm.org/downloads> and <https://github.com/pine-vm/pine/releases>
 
 To register the elm-time executable on your system, run the `elm-time  install` command. If you use Linux or PowerShell on Windows, you can achieve this by running the following command after navigating to the directory containing the executable file extracted from the downloaded archive:
 

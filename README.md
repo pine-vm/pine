@@ -12,12 +12,12 @@ The integrated Elm compiler offers various interfaces supporting the automatic g
 
 Download the pre-built Pine binary for your platform at <https://pinevm.org/download>, or on the [releases page](https://github.com/pine-vm/pine/releases) on GitHub.
 
-The `elm-time` executable file integrates all functionality to build apps and operate web services.
+The `pine` executable file integrates all functionality to build apps and operate web services.
 
 The command below runs a server and deploys a full-stack web app:
 
 ```txt
-elm-time  run-server  --public-urls="http://*:5000"  --deploy=https://github.com/pine-vm/pine/tree/8dbd5c91853fbcef3b645d95bccc01a886ccd7e2/implement/example-apps/docker-image-default-app
+pine  run-server  --public-urls="http://*:5000"  --deploy=https://github.com/pine-vm/pine/tree/8dbd5c91853fbcef3b645d95bccc01a886ccd7e2/implement/example-apps/docker-image-default-app
 ```
 
 
