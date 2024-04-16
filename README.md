@@ -23,10 +23,10 @@ pine  run-server  --public-urls="http://*:5000"  --deploy=https://github.com/pin
 
 ## Docker Image
 
-To deploy in a docker container, use the `elm-time/elm-time` image from the [GitHub Container registry](https://github.com/pine-vm/pine/pkgs/container/elm-time) (`ghcr.io/elm-time/elm-time`). The tags are aligned with the version IDs in the CLI executable file.
+To deploy in a docker container, use the `pine-vm/pine` image from the [GitHub Container registry](https://github.com/pine-vm/pine/pkgs/container/pine) (`ghcr.io/pine-vm/pine`). The tags are aligned with the version IDs in the CLI executable file.
 
 ```txt
-docker  run  -p 5000:80  -p 4000:4000  --env "APPSETTING_adminPassword=test"  ghcr.io/elm-time/elm-time
+docker  run  -p 5000:80  -p 4000:4000  --env "APPSETTING_adminPassword=test"  ghcr.io/pine-vm/pine
 ```
 
 

@@ -15,13 +15,13 @@ You can find the source code for this example at <https://github.com/pine-vm/pin
 To run the app with the default source code, use the `run-server` command as follows:
 
 ```cmd
-elm-time  run-server  --deploy=https://github.com/pine-vm/pine/tree/main/implement/example-apps/rich-chat-room
+pine  run-server  --deploy=https://github.com/pine-vm/pine/tree/main/implement/example-apps/rich-chat-room
 ```
 
 If you have copied (and modified) the code on your local file system, you can run the app with this command:
 
 ```cmd
-elm-time  run-server  --deploy=.
+pine  run-server  --deploy=.
 ```
 
 ## Fast Distribution of Messages in the Chat Room Using Long-Polling

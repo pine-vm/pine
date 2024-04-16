@@ -408,7 +408,7 @@ viewAdminInterfaceConfig state config =
             |> Element.column [ Element.spacing 10 ]
       ]
         |> Element.column [ Element.spacing 10 ]
-    , [ [ Element.text "The easiest way to use the APIs is via the command-line interface in the elm-time executable file." ]
+    , [ [ Element.text "The easiest way to use the APIs is via the command-line interface in the Pine executable file." ]
       , [ Element.text "To learn about the admin interface and how to deploy an app, see "
         , Visuals.linkElementFromHref { newTabLink = False } "https://github.com/pine-vm/pine/blob/main/guide/how-to-configure-and-deploy-an-elm-backend-app.md"
         ]

@@ -3,26 +3,26 @@
 This guide covers running a backend app programmed in Elm, including configuration, deployment, and migrations.
 The backend includes a web server and a database persisting the application state and automating state migrations.
 
-## Installing and Registering the `elm-time` Command
+## Installing and Registering the `pine` Command
 
-In this guide, I use the `elm-time` command-line interface (CLI) program. You can find all downloads at <https://pinevm.org/downloads> and <https://github.com/pine-vm/pine/releases>
+In this guide, I use the `pine` command-line interface (CLI) program. You can find all downloads at <https://pinevm.org/downloads> and <https://github.com/pine-vm/pine/releases>
 
-To register the elm-time executable on your system, run the `elm-time  install` command. If you use Linux or PowerShell on Windows, you can achieve this by running the following command after navigating to the directory containing the executable file extracted from the downloaded archive:
+To register the pine executable on your system, run the `pine  install` command. If you use Linux or PowerShell on Windows, you can achieve this by running the following command after navigating to the directory containing the executable file extracted from the downloaded archive:
 
 ```text
-./elm-time  install
+./pine  install
 ```
 
 In Windows, you will get a confirmation like this:
 
 ```text
-I added the path 'C:\Users\John\Downloads\elm-time-bin-v2023-08-19-win10-x64' to the 'PATH' environment variable for the current user account. You will be able to use the 'elm-time' command in newer instances of the Command Prompt.
+I added the path 'C:\Users\John\Downloads\pine-bin-v0.3.0-win-x64' to the 'PATH' environment variable for the current user account. You will be able to use the 'pine' command in newer instances of the Command Prompt.
 ```
 
 On Linux, the confirmation of the installation looks like this:
 
 ```text
-I copied the executable file to '/bin/elm-time'. You will be able to use the 'elm-time' command in newer terminal instances.
+I copied the executable file to '/bin/pine'. You will be able to use the 'pine' command in newer terminal instances.
 ```
 
 ## Running a Server and Deploying an App
@@ -30,12 +30,12 @@ I copied the executable file to '/bin/elm-time'. You will be able to use the 'el
 As part of a deployment, Elm-Time compiles the app program code.
 The compiler requires the program code to contain the entry point for a web server app. In addition, it offers various functions we can use independent of each other as needed. It supports projects without a front-end or with multiple front-ends apps.
 
-Here is an example app containing backend and frontend: <https://github.com/pine-vm/pine/tree/5be007cd5a827be1561226713d8c01ae929e51c8/implement/example-apps/docker-image-default-app>
+Here is an example app containing backend and frontend: <https://github.com/pine-vm/pine/tree/bd6a65808505eef741e159fb33c7ecf5c351b53d/implement/example-apps/docker-image-default-app>
 
 We can use this command to run a server and deploy this app:
 
 ```cmd
-elm-time  run-server  --public-urls="http://*:5000"  --deploy=https://github.com/pine-vm/pine/tree/5be007cd5a827be1561226713d8c01ae929e51c8/implement/example-apps/docker-image-default-app
+pine  run-server  --public-urls="http://*:5000"  --deploy=https://github.com/pine-vm/pine/tree/bd6a65808505eef741e159fb33c7ecf5c351b53d/implement/example-apps/docker-image-default-app
 ```
 
 When running this command, we get an output like this:
@@ -44,9 +44,9 @@ When running this command, we get an output like this:
 I got no path to a persistent store for the process. This process will not be persisted!
 Loading app config to deploy...
 This path looks like a URL into a remote git repository. Trying to load from there...
-This path points to commit 5be007cd5a827be1561226713d8c01ae929e51c8
-The first parent commit with same tree is https://github.com/pine-vm/pine/tree/1d5c77b5bd9f2f18c11a4f41e37fb4cfb1ba6dd6/implement/example-apps/docker-image-default-app
-Loaded source composition b360367bb08010eb39902695fd4e776f7975263a777d695e26cdda110c4fd6e0 from 'https://github.com/pine-vm/pine/tree/5be007cd5a827be1561226713d8c01ae929e51c8/implement/example-apps/docker-image-default-app'.
+This path points to commit bd6a65808505eef741e159fb33c7ecf5c351b53d
+The first parent commit with same tree is https://github.com/pine-vm/pine/tree/ec9bf5da38a7d9915b903e9225ebc10417b73e9d/implement/example-apps/docker-image-default-app
+Loaded source composition 1760759d9ec6a517bebf061989f79f20b1c0cb0958275604c6a311166628b1f4 from 'https://github.com/pine-vm/pine/tree/bd6a65808505eef741e159fb33c7ecf5c351b53d/implement/example-apps/docker-image-default-app'.
 Starting web server with admin interface (using engine JavaScript_V8 { })...
 info: ElmTime.Platform.WebService.StartupAdminInterface[0]
       letsEncryptRenewalServiceCertificateCompleted: False
@@ -284,7 +284,7 @@ On startup, the server restores the state of the process from the given store lo
 Here is a complete command to run a server that maintains the persistence of the Elm-Time process:
 
 ```cmd
-elm-time  run-server  --process-store=./process-store  --admin-password=test  --admin-urls="http://*:4000"  --public-urls="http://*:5000"
+pine  run-server  --process-store=./process-store  --admin-password=test  --admin-urls="http://*:4000"  --public-urls="http://*:5000"
 ```
 
 When running this command, we will get an output like this:
@@ -322,13 +322,13 @@ But we don't need a web browser to interact with the admin interface. The comman
 
 ## Deploy an App to an Existing Server
 
-Use the `elm-time  deploy` command to deploy an app to a running server in an atomic operation.
+Use the `pine  deploy` command to deploy an app to a running server in an atomic operation.
 
 With this command, we need to specify the path to the app to deploy and the destination site to deploy to.
 Here is an example that matches the admin interface configured with the `run-server` command above:
 
 ```cmd
-elm-time  deploy  --init-app-state  https://github.com/pine-vm/pine/tree/0ae86d63e4353c8225794fd3cc214121d6c02847/implement/example-apps/docker-image-default-app  http://localhost:4000
+pine  deploy  --init-app-state  https://github.com/pine-vm/pine/tree/0ae86d63e4353c8225794fd3cc214121d6c02847/implement/example-apps/docker-image-default-app  http://localhost:4000
 ```
 
 The `--init-app-state` option means we do not migrate the previous backend state but reset it to the value from the init function.
@@ -342,9 +342,9 @@ The server at 'http://localhost:4000/api/deploy-and-init-app-state' is asking fo
 
 We enter the same password we gave with the `--admin-password` option on the command to run the server.
 
-The `elm-time  deploy` command also writes a report of the deployment attempt into a file under the current directory. It points out the exact path to the report file in a log message:
+The `pine  deploy` command also writes a report of the deployment attempt into a file under the current directory. It points out the exact path to the report file in a log message:
 ```text
-Saved report to file 'C:\Users\John\elm-time-tool\report\2023-02-17T15-28-25_deploy.json'.
+Saved report to file 'C:\Users\John\pine-tool\report\2023-02-17T15-28-25_deploy.json'.
 ```
 
 In this report, we can see if the deployment was successful and how much time it took. If a migration fails, we also find a description of the problem in this report.
@@ -355,18 +355,18 @@ If you do not use the `--admin-password` option with the `run-server` command, t
 Configuring the password using the environment variable makes it easier to reuse the standard Docker image:
 
 ```cmd
-docker  run  -p 5000:80  -p 4000:4000  --env "APPSETTING_adminPassword=test"  ghcr.io/elm-time/elm-time
+docker  run  -p 5000:80  -p 4000:4000  --env "APPSETTING_adminPassword=test"  ghcr.io/pine-vm/pine
 ```
 
 ## Manage the Process Store
 
 The process store contains not only the latest state of the app but also the event log.
-In the Docker image `elm-time/elm-time`, the process store is located in the directory `/elm-time/process-store`.
+In the Docker image `pine-vm/pine`, the process store is located in the directory `/pine/process-store`.
 You can copy this directory to backup the process store or copy it to another container.
 
 Alternatively, use a [docker volume](https://docs.docker.com/storage/volumes/) to map this directory to another location:
 ```powershell
-docker  run  --mount source=your-docker-volume-name,destination=/elm-time/process-store  -p 80:80  -p 4000:4000  ghcr.io/elm-time/elm-time
+docker  run  --mount source=your-docker-volume-name,destination=/pine/process-store  -p 80:80  -p 4000:4000  ghcr.io/pine-vm/pine
 ```
 
 ## Support HTTPS

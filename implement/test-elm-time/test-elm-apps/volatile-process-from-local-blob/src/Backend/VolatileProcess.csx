@@ -9,9 +9,9 @@
 #r "System.Text.Json"
 
 /*
-Use the `elm-time  describe` command to get the hash of a file:
+Use the `pine  describe` command to get the hash of a file:
 
-elm-time  describe  ./assembly/assembly.dll
+pine  describe  ./assembly/assembly.dll
 Loaded composition d0adb9c0632d35c7a982da279276879c7d49a99dd7c004277f78d34dd718e961 from './assembly/assembly.dll'.
 Composition d0adb9c0632d35c7a982da279276879c7d49a99dd7c004277f78d34dd718e961 is a blob containing 4096 bytes
 */

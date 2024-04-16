@@ -43,14 +43,14 @@ downloadPlatforms =
 
 dockerImageUrl : String
 dockerImageUrl =
-    "https://github.com/pine-vm/pine/pkgs/container/elm-time"
+    "https://github.com/pine-vm/pine/pkgs/container/pine"
 
 
 downloads : DownloadLinksByPlatform
 downloads =
-    { linux = "https://github.com/pine-vm/pine/releases/download/v0.1.4/elm-time-bin-v0.1.4-linux-x64.zip"
-    , windows = "https://github.com/pine-vm/pine/releases/download/v0.1.4/elm-time-bin-v0.1.4-win-x64.zip"
-    , macOS = "https://github.com/pine-vm/pine/releases/download/v0.1.4/elm-time-bin-v0.1.4-osx-x64.zip"
+    { linux = "https://github.com/pine-vm/pine/releases/download/v0.3.0/pine-bin-v0.3.0-linux-x64.zip"
+    , windows = "https://github.com/pine-vm/pine/releases/download/v0.3.0/pine-bin-v0.3.0-win-x64.zip"
+    , macOS = "https://github.com/pine-vm/pine/releases/download/v0.3.0/pine-bin-v0.3.0-osx-x64.zip"
     }
 
 
