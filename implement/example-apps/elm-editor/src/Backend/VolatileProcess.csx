@@ -9,8 +9,8 @@
 #r "System.Runtime.InteropServices.RuntimeInformation"
 #r "System.Text.Json"
 
-#r "Pine"
-#r "elm-time"
+#r "Pine.Core"
+#r "pine-cli"
 
 using Pine;
 using System;

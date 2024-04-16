@@ -6,7 +6,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\Pine\Pine.csproj" />
+    <ProjectReference Include="..\..\Pine.Core\Pine.Core.csproj" />
   </ItemGroup>
 
   <ItemGroup>
