@@ -21,7 +21,7 @@ steps:
   inputs:
     command: restore
     projects: |
-      **/elm-time.csproj
+      **/pine.csproj
       **/test-elm-time.csproj
 
 - task: DotNetCoreCLI@2
@@ -39,5 +39,5 @@ steps:
     testRunner: VSTest
     testResultsFiles: '**/*.trx'
 
-- script: dotnet publish ./implement/elm-time/elm-time.csproj
+- script: dotnet publish ./implement/pine/pine.csproj
   displayName: 'publish web host'

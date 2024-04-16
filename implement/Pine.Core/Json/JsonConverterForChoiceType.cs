@@ -17,7 +17,7 @@ namespace Pine.Json;
 /// 
 /// This JSON converter factory supports the approach of representing choice types as records in C#.
 /// 
-/// For more information, see the guide in the file https://github.com/pine-vm/pine/blob/main/implement/Pine/Json/JsonConverterForChoiceType.md
+/// For more information, see the guide in the file https://github.com/pine-vm/pine/blob/main/implement/Pine.Core/Json/JsonConverterForChoiceType.md
 /// </summary>
 public class JsonConverterForChoiceType : JsonConverterFactory
 {

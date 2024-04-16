@@ -41,7 +41,7 @@ jobs:
       run: |
         dotnet test ./implement/PineTest/Pine.UnitTests/Pine.UnitTests.csproj --logger "trx"  --diag "./implement/PineTest/Pine.UnitTests/TestResults/diag-log.txt"  --verbosity  diagnostic
 
-    - name: Run Elm-Time tests with dotnet test
+    - name: Run tests with dotnet test
       run: |
         dotnet test ./implement/test-elm-time/test-elm-time.csproj --logger "trx"  --diag "./implement/test-elm-time/TestResults/diag-log.txt"  --verbosity  diagnostic
 
@@ -63,36 +63,36 @@ jobs:
           ./implement/**/TestResults/**/*.trx
           ./implement/**/TestResults/**/*.json
 
-    - name: dotnet publish Elm-Time
-      run: dotnet publish -c Debug -r ${{ matrix.publish-runtime-id }} --self-contained true -p:PublishSingleFile=true  -p:PublishReadyToRun=true -p:PublishReadyToRunShowWarnings=true  --output ./dotnet-build  ./implement/elm-time
+    - name: dotnet publish Pine
+      run: dotnet publish -c Debug -r ${{ matrix.publish-runtime-id }} --self-contained true -p:PublishSingleFile=true  -p:PublishReadyToRun=true -p:PublishReadyToRunShowWarnings=true  --output ./dotnet-build  ./implement/pine
 
     - name: Copy artifacts to publish
       shell: pwsh
       run: |
         New-Item -ItemType Directory -Force -Path "./publish";
-        Get-ChildItem -Path "./dotnet-build/" -Filter "elm-time*" | ForEach-Object { Copy-Item -Path $_.FullName -Destination "./publish/" }
+        Get-ChildItem -Path "./dotnet-build/" -Filter "pine*" | ForEach-Object { Copy-Item -Path $_.FullName -Destination "./publish/" }
 
     - name: Publish artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: elm-time-bin-${{ github.sha }}-${{ matrix.publish-runtime-id }}
+        name: pine-bin-${{ github.sha }}-${{ matrix.publish-runtime-id }}
         path: ./publish
 
     - name: dotnet publish with separate assemblies
-      run: dotnet publish -c Debug ./implement/elm-time --output ./publish-separate-assemblies
+      run: dotnet publish -c Debug ./implement/pine --output ./publish-separate-assemblies
 
     - name: Publish artifacts with separate assemblies
       uses: actions/upload-artifact@v4
       with:
-        name: elm-time-separate-assemblies-${{ github.sha }}-${{ matrix.publish-runtime-id }}
+        name: pine-separate-assemblies-${{ github.sha }}-${{ matrix.publish-runtime-id }}
         path: ./publish-separate-assemblies
 
     - name: self-test
-      run: ./publish/elm-time  self-test
+      run: ./publish/pine  self-test
 
-    - name: Elm App Compiler - Run tests with elm-time elm-test-rs
+    - name: Elm App Compiler - Run tests with pine elm-test-rs
       # Adapt to elm-test-rs crashing on macOS
       # elm-test-rs also wrote the following before crashing:
       # elm: security: createProcess: runInteractiveProcess: exec: does not exist (No such file or directory)
       if: ${{ !contains( matrix.environment, 'macos') }}
-      run: ./publish/elm-time  elm-test-rs  ./implement/elm-time/ElmTime/compile-elm-program
+      run: ./publish/pine  elm-test-rs  ./implement/pine/ElmTime/compile-elm-program

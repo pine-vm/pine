@@ -172,7 +172,7 @@ public class LoadFromGitHubTests
 
             var server = Pine.GitPartialForCommitServer.Run(
                 urls: [serverUrl],
-                gitCloneUrlPrefixes: ["https://github.com/elm-time/"],
+                gitCloneUrlPrefixes: ["https://github.com/pine-vm/"],
                 fileCacheDirectory: System.IO.Path.Combine(tempWorkingDirectory, "server-cache"));
 
             IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> consultServer(

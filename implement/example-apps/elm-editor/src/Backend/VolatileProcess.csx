@@ -10,7 +10,7 @@
 #r "System.Text.Json"
 
 #r "Pine.Core"
-#r "pine-cli"
+#r "pine"
 
 using Pine;
 using System;

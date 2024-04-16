@@ -26,7 +26,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\elm-time\elm-time.csproj" />
+    <ProjectReference Include="..\pine\pine.csproj" />
   </ItemGroup>
 
   <ItemGroup>

@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
   push:
     paths:
-    - "implement/elm-time/ElmTime/**"
+    - "implement/pine/ElmTime/**"
     - ".github/workflows/build-and-publish-elm-silent-teacher.yml"
 
 jobs:
@@ -25,13 +25,13 @@ jobs:
         sudo  ./elm-time/elm-time  install
 
     - name: Build for Netlify
-      working-directory: ./implement/elm-time/ElmTime/learn-elm
+      working-directory: ./implement/pine/ElmTime/learn-elm
       run: |
         elm-time  make  src/Frontend/ElmSilentTeacher/Build.elm  --output=netlify.zip
         pwsh -nologo -noprofile -command "& { Add-Type -A 'System.IO.Compression.FileSystem'; [IO.Compression.ZipFile]::ExtractToDirectory('netlify.zip','./out/netlify');}"
 
     - name: Deploy to Netlify
-      working-directory: ./implement/elm-time/ElmTime/learn-elm
+      working-directory: ./implement/pine/ElmTime/learn-elm
       run: |
         npm  install  netlify-cli  --save-dev
         netlify  deploy  --dir ./out/netlify  --site silent-teacher  --alias preview  --auth  ${{ secrets.WEBSITE_NETLIFY_AUTH_TOKEN }}

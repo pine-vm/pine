@@ -4,13 +4,13 @@ WORKDIR /app
 
 # Copy everything and build
 COPY . ./
-WORKDIR /app/elm-time
+WORKDIR /app/pine
 RUN dotnet publish -c Debug -o out
 
 # Build runtime image
 FROM mcr.microsoft.com/dotnet/aspnet:8.0.4 AS binaries
 
-COPY --from=build-env /app/elm-time/out /elm-time/dotnet/
+COPY --from=build-env /app/pine/out /pine/dotnet/
 
 # Build the process with a deployment for the default app.
 FROM binaries AS build-default-config
@@ -22,10 +22,10 @@ RUN apt install -y git
 
 COPY ./example-apps/docker-image-default-app /docker-image-default-app/
 
-RUN dotnet "/elm-time/dotnet/elm-time.dll"  deploy  /docker-image-default-app/  /elm-time/process-store  --init-app-state
+RUN dotnet "/pine/dotnet/pine.dll"  deploy  /docker-image-default-app/  /pine/process-store  --init-app-state
 
-WORKDIR /elm-time
+WORKDIR /pine
 
-ENTRYPOINT ["dotnet", "/elm-time/dotnet/elm-time.dll", "run-server", "--process-store=/elm-time/process-store"]
+ENTRYPOINT ["dotnet", "/pine/dotnet/pine.dll", "run-server", "--process-store=/pine/process-store"]
 
 # ENV APPSETTING_adminPassword="password-for-admin-interface"
