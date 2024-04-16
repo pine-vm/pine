@@ -48,7 +48,7 @@ jobs:
       shell: pwsh
       run: |
         New-Item -ItemType Directory -Force -Path "./publish";
-        Get-ChildItem -Path "./dotnet-build/" -Filter "pine-cli*" | ForEach-Object { Copy-Item -Path $_.FullName -Destination "./publish/" }
+        Get-ChildItem -Path "./dotnet-build/" -Filter "pine*" | ForEach-Object { Copy-Item -Path $_.FullName -Destination "./publish/" }
 
     - name: Publish artifacts
       uses: actions/upload-artifact@v4
