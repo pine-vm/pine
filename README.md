@@ -1,6 +1,7 @@
 # Pine
 
-Cross-platform runtime environment for the Elm programming language
+Pine is a runtime for the Elm programming language.   
+It's built on .NET and runs on Linux, Windows, and macOS.
 
 Pine integrates web server and database management system, automating the persistence and maintenance of application state and database migrations.
 
