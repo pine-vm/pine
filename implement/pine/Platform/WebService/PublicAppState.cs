@@ -286,7 +286,7 @@ public class PublicAppState
             if (headerContentType != null)
                 context.Response.ContentType = headerContentType;
 
-            context.Response.Headers.XPoweredBy = "Elm-Time";
+            context.Response.Headers.XPoweredBy = "Pine";
 
             ReadOnlyMemory<byte>? contentAsByteArray = null;
 

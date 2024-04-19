@@ -352,7 +352,7 @@ view state =
                 , Element.Font.size defaultFontSize
                 ]
             |> List.singleton
-    , title = "Elm-Time Admin Interface"
+    , title = "Pine Admin Interface"
     }
 
 
@@ -379,7 +379,7 @@ viewAdminInterfaceConfig state config =
             ]
                 |> Element.wrappedRow [ Element.spacing 10 ]
     in
-    [ [ [ Element.text "Welcome to the Elm-Time admin interface for the instance at "
+    [ [ [ Element.text "Welcome to the Pine admin interface for the instance at "
         , Visuals.linkElementFromHref { newTabLink = False } (Url.toString instanceUrl)
         ]
       , [ Element.text ("This instance currently runs version " ++ config.elmTimeVersionId ++ ".") ]

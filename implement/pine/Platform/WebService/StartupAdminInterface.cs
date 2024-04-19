@@ -454,7 +454,7 @@ public class StartupAdminInterface
             {
                 context.Request.Headers.TryGetValue("Authorization", out var requestAuthorizationHeaderValue);
 
-                context.Response.Headers.XPoweredBy = "Elm-Time";
+                context.Response.Headers.XPoweredBy = "Pine";
 
                 AuthenticationHeaderValue.TryParse(
                     requestAuthorizationHeaderValue.FirstOrDefault(), out var requestAuthorization);
@@ -1155,7 +1155,7 @@ public class StartupAdminInterface
         return
             HtmlDocument(
                 HtmlFromLines(
-                    "Welcome to the Elm-Time admin interface version " + Program.AppVersionId + ".",
+                    "Welcome to the Pine admin interface version " + Program.AppVersionId + ".",
                     describeErrorElement));
     }
 

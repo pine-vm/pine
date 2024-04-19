@@ -27,15 +27,15 @@ I copied the executable file to '/bin/pine'. You will be able to use the 'pine' 
 
 ## Running a Server and Deploying an App
 
-As part of a deployment, Elm-Time compiles the app program code.
+As part of a deployment, Pine compiles the Elm app program code.
 The compiler requires the program code to contain the entry point for a web server app. In addition, it offers various functions we can use independent of each other as needed. It supports projects without a front-end or with multiple front-ends apps.
 
-Here is an example app containing backend and frontend: <https://github.com/pine-vm/pine/tree/bd6a65808505eef741e159fb33c7ecf5c351b53d/implement/example-apps/docker-image-default-app>
+Here is an example app containing backend and frontend: <https://github.com/pine-vm/pine/tree/67658db8f7e2ed50a9dd2a3ffcfaba2e20c7615d/implement/example-apps/docker-image-default-app>
 
 We can use this command to run a server and deploy this app:
 
 ```cmd
-pine  run-server  --public-urls="http://*:5000"  --deploy=https://github.com/pine-vm/pine/tree/bd6a65808505eef741e159fb33c7ecf5c351b53d/implement/example-apps/docker-image-default-app
+pine  run-server  --public-urls="http://*:5000"  --deploy=https://github.com/pine-vm/pine/tree/67658db8f7e2ed50a9dd2a3ffcfaba2e20c7615d/implement/example-apps/docker-image-default-app
 ```
 
 When running this command, we get an output like this:
@@ -44,9 +44,9 @@ When running this command, we get an output like this:
 I got no path to a persistent store for the process. This process will not be persisted!
 Loading app config to deploy...
 This path looks like a URL into a remote git repository. Trying to load from there...
-This path points to commit bd6a65808505eef741e159fb33c7ecf5c351b53d
-The first parent commit with same tree is https://github.com/pine-vm/pine/tree/ec9bf5da38a7d9915b903e9225ebc10417b73e9d/implement/example-apps/docker-image-default-app
-Loaded source composition 1760759d9ec6a517bebf061989f79f20b1c0cb0958275604c6a311166628b1f4 from 'https://github.com/pine-vm/pine/tree/bd6a65808505eef741e159fb33c7ecf5c351b53d/implement/example-apps/docker-image-default-app'.
+This path points to commit 67658db8f7e2ed50a9dd2a3ffcfaba2e20c7615d
+The first parent commit with same tree is https://github.com/pine-vm/pine/tree/5007bb0929fbd14e6bf701c97d048573e07fb672/implement/example-apps/docker-image-default-app
+Loaded source composition 52e5acafc9ec2087e1b6700a2b4f0d9f8d199e15944f7bb51da8cc5545b6f58e from 'https://github.com/pine-vm/pine/tree/67658db8f7e2ed50a9dd2a3ffcfaba2e20c7615d/implement/example-apps/docker-image-default-app'.
 Starting web server with admin interface (using engine JavaScript_V8 { })...
 info: ElmTime.Platform.WebService.StartupAdminInterface[0]
       letsEncryptRenewalServiceCertificateCompleted: False
@@ -79,7 +79,7 @@ When this server has completed starting, we can see the deployed app at http://l
 
 ## App Code Structure Conventions
 
-This section covers the conventions for structuring the app code so that we can deploy it using Elm-Time. The [example apps](https://github.com/pine-vm/pine/tree/main/implement/example-apps) follow these conventions, but not every example app uses all available options, so the listing below is a more concise reference.
+This section covers the conventions for structuring the app code so that we can deploy it using Pine. The [example apps](https://github.com/pine-vm/pine/tree/main/implement/example-apps) follow these conventions, but not every example app uses all available options, so the listing below is a more concise reference.
 
 ### `Backend.Main` Elm Module
 
@@ -155,7 +155,7 @@ The tree we modeled with this record type has two leaves:
 + `debug.javascript.base64 : String`
 + `javascript.base64 : String`
 
-Backend apps often use the output from `elm make` send the frontend to web browsers with HTTP responses. We can also see this in the [example app](https://github.com/pine-vm/pine/blob/5be007cd5a827be1561226713d8c01ae929e51c8/implement/example-apps/docker-image-default-app/src/Backend/Main.elm#L43-L55) mentioned earlier:
+Backend apps often use the output from `elm make` send the frontend to web browsers with HTTP responses. We can also see this in the [example app](https://github.com/pine-vm/pine/blob/67658db8f7e2ed50a9dd2a3ffcfaba2e20c7615d/implement/example-apps/docker-image-default-app/src/Backend/Main.elm#L43-L55) mentioned earlier:
 
 ```Elm
     httpResponse =
@@ -167,7 +167,9 @@ Backend apps often use the output from `elm make` send the frontend to web brows
         then
             { statusCode = 200
             , bodyAsBase64 = Just CompilationInterface.ElmMake.elm_make____src_Frontend_Main_elm.debug.base64
-            , headersToAdd = []
+            , headersToAdd =
+                [ { name = "Content-Type", values = [ "text/html" ] }
+                ]
             }
 
         else
@@ -201,7 +203,7 @@ The `SourceFiles` module provides access to the app source code files.
 
 By adding a declaration to this module, we can pick a source file and read its contents. The compilation step for this module happens before the one for the front-end. Therefore the source files are available to both front-end and back-end apps.
 
-The [app 'Elm Editor' uses this interface](https://github.com/pine-vm/pine/blob/5be007cd5a827be1561226713d8c01ae929e51c8/implement/example-apps/elm-editor/src/CompilationInterface/SourceFiles.elm) to get the contents of various files in the app code directory. The app uses some of these files in the front-end and some in the back-end.
+The [app 'Elm Editor' uses this interface](https://github.com/pine-vm/pine/blob/67658db8f7e2ed50a9dd2a3ffcfaba2e20c7615d/implement/example-apps/elm-editor/src/CompilationInterface/SourceFiles.elm) to get the contents of various files in the app code directory. The app uses some of these files in the front-end and some in the back-end.
 
 ```Elm
 module CompilationInterface.SourceFiles exposing (..)
@@ -281,7 +283,7 @@ At the beginning of this guide, we ran a server and deployed an app in a single 
 When running a server, we want to configure two aspects: The location where to persist the process state, and the password to access the admin interface.
 On startup, the server restores the state of the process from the given store location. During operation, it appends to the history in the same store. Currently, the only supported kind of store location is a directory on the file system.
 
-Here is a complete command to run a server that maintains the persistence of the Elm-Time process:
+Here is a complete command to run a server that maintains the persistence of the Elm web service state:
 
 ```cmd
 pine  run-server  --process-store=./process-store  --admin-password=test  --admin-urls="http://*:4000"  --public-urls="http://*:5000"
@@ -315,7 +317,7 @@ When we navigate to http://localhost:4000/ using a web browser, we find a prompt
 When we log in at http://localhost:4000/, we get this message:
 
 ```
-Welcome to the Elm-Time admin interface version 2023-02-16.
+Welcome to the Pine admin interface version 0.3.1.
 ```
 
 But we don't need a web browser to interact with the admin interface. The command-line interface offers a range of commands to operate a running server, for example, to deploy a new version of an app.
@@ -328,7 +330,7 @@ With this command, we need to specify the path to the app to deploy and the dest
 Here is an example that matches the admin interface configured with the `run-server` command above:
 
 ```cmd
-pine  deploy  --init-app-state  https://github.com/pine-vm/pine/tree/0ae86d63e4353c8225794fd3cc214121d6c02847/implement/example-apps/docker-image-default-app  http://localhost:4000
+pine  deploy  --init-app-state  https://github.com/pine-vm/pine/tree/67658db8f7e2ed50a9dd2a3ffcfaba2e20c7615d/implement/example-apps/docker-image-default-app  http://localhost:4000
 ```
 
 The `--init-app-state` option means we do not migrate the previous backend state but reset it to the value from the init function.
@@ -371,7 +373,7 @@ docker  run  --mount source=your-docker-volume-name,destination=/pine/process-st
 
 ## Support HTTPS
 
-The Elm-Time web host supports HTTPS. Thanks to the [`FluffySpoon.AspNet.LetsEncrypt`](https://github.com/ffMathy/FluffySpoon.AspNet.LetsEncrypt) project, it can automatically get an SSL certificate from [Let's Encrypt](https://letsencrypt.org/). To configure this, add a `letsEncryptOptions` property to the `web-service.json` file as follows:
+The Pine web host supports HTTPS. Thanks to the [`FluffySpoon.AspNet.LetsEncrypt`](https://github.com/ffMathy/FluffySpoon.AspNet.LetsEncrypt) project, it can automatically get an SSL certificate from [Let's Encrypt](https://letsencrypt.org/). To configure this, add a `letsEncryptOptions` property to the `web-service.json` file as follows:
 ```json
 {
     "letsEncryptOptions": {
