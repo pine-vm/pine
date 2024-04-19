@@ -153,11 +153,11 @@ public class Program
                     title = "Develop and learn:",
                     commands = new[]
                     {
+                        makeCommand,
                         compileCommand,
                         interactiveCommand,
                         describeCommand,
                         elmTestRsCommand,
-                        makeCommand,
                     }
                 },
             }
@@ -594,7 +594,7 @@ public class Program
     private static CommandLineApplication AddCompileCommand(CommandLineApplication app) =>
         app.Command("compile", compileCommand =>
         {
-            compileCommand.Description = "Compile app source code the same way as would be done when deploying.";
+            compileCommand.Description = "Compile app source code the same way as would be done when deploying a web service.";
             compileCommand.UnrecognizedArgumentHandling = UnrecognizedArgumentHandling.Throw;
 
             var sourceArgument = compileCommand.Argument("source", "Path to the app program code to compile.").IsRequired(allowEmptyStrings: false);
