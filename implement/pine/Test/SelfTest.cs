@@ -72,6 +72,7 @@ public class SelfTest
         using var webHost =
             RunServer.BuildWebHostToRunServer(
                 processStorePath: null,
+                processStoreReadonlyPath: null,
                 adminInterfaceUrls: null,
                 adminPassword: null,
                 publicAppUrls: ["http://localhost:" + serverHttpPort],

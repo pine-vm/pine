@@ -18,7 +18,7 @@ namespace ElmTime;
 
 public class Program
 {
-    public static string AppVersionId => "0.3.0";
+    public static string AppVersionId => "0.3.1";
 
     private static int AdminInterfaceDefaultPort => 4000;
 
@@ -280,7 +280,18 @@ public class Program
 
             var adminUrlsDefault = "http://*:" + AdminInterfaceDefaultPort;
 
-            var processStoreOption = runServerCommand.Option("--process-store", "Directory in the file system to contain the process store.", CommandOptionType.SingleValue);
+            var processStoreOption =
+            runServerCommand.Option(
+                "--process-store",
+                "Directory in the file system to contain the process store.",
+                CommandOptionType.SingleValue);
+
+            var processStoreReadonlyOption =
+            runServerCommand.Option(
+                "--process-store-readonly",
+                "If the primary process store is empty at startup, the system will try to replicate from this location.",
+                CommandOptionType.SingleValue);
+
             var deletePreviousProcessOption = runServerCommand.Option("--delete-previous-process", "Delete the previous backend process found in the given store. If you don't use this option, the server restores the process from the persistent store on startup.", CommandOptionType.NoValue);
             var adminUrlsOption = runServerCommand.Option("--admin-urls", "URLs for the admin interface. The default is " + adminUrlsDefault + ".", CommandOptionType.SingleValue);
             var adminPasswordOption = runServerCommand.Option("--admin-password", "Password for the admin interface at '--admin-urls'.", CommandOptionType.SingleValue);
@@ -307,6 +318,7 @@ public class Program
 
                 var webHost = RunServer.BuildWebHostToRunServer(
                     processStorePath: processStorePath,
+                    processStoreReadonlyPath: processStoreReadonlyOption.Value(),
                     adminInterfaceUrls: adminInterfaceUrls,
                     adminPassword: adminPasswordOption.Value(),
                     publicAppUrls: publicAppUrls,

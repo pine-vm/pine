@@ -22,10 +22,15 @@ RUN apt install -y git
 
 COPY ./example-apps/docker-image-default-app /docker-image-default-app/
 
-RUN dotnet "/pine/dotnet/pine.dll"  deploy  /docker-image-default-app/  /pine/process-store  --init-app-state
+RUN dotnet "/pine/dotnet/pine.dll"  deploy  /docker-image-default-app/  /pine-vm/process-store  --init-app-state
 
 WORKDIR /pine
 
-ENTRYPOINT ["dotnet", "/pine/dotnet/pine.dll", "run-server", "--process-store=/pine/process-store"]
+# Mounting a docker volume can shadow the previous state of the process store:
+#
+# docker  volume  create  docker-volume-name
+# docker  run  --mount 'source=docker-volume-name,destination=/pine-vm/process-store'  ....
+
+ENTRYPOINT ["dotnet", "/pine/dotnet/pine.dll", "run-server", "--process-store=/pine-vm/process-store", "--process-store-readonly=/elm-time/process-store"]
 
 # ENV APPSETTING_adminPassword="password-for-admin-interface"

@@ -16,6 +16,7 @@ public class RunServer
 {
     public static IWebHost BuildWebHostToRunServer(
         string? processStorePath,
+        string? processStoreReadonlyPath,
         string? adminInterfaceUrls,
         string? adminPassword,
         IReadOnlyList<string>? publicAppUrls,
@@ -76,6 +77,16 @@ public class RunServer
 
         var processStoreFileStore = buildProcessStoreFileStore();
 
+        if (processStoreReadonlyPath is not null)
+        {
+            Console.WriteLine("Merging read-only process store from '" + processStoreReadonlyPath + "'.");
+
+            processStoreFileStore =
+                processStoreFileStore?.MergeReader(
+                    new FileStoreFromSystemIOFile(processStoreReadonlyPath),
+                    promoteOnReadFileContentFromSecondary: true);
+        }
+
         if (copyProcess is not null)
         {
             var copyFiles =
@@ -90,10 +101,14 @@ public class RunServer
         var javaScriptEngineFactory =
             elmEngineType switch
             {
-                ElmInteractive.ElmEngineType.JavaScript_Jint => JavaScriptEngineJintOptimizedForElmApps.Create,
-                ElmInteractive.ElmEngineType.JavaScript_V8 => new Func<IJavaScriptEngine>(JavaScriptEngineFromJavaScriptEngineSwitcher.ConstructJavaScriptEngine),
+                ElmInteractive.ElmEngineType.JavaScript_Jint =>
+                JavaScriptEngineJintOptimizedForElmApps.Create,
 
-                object other => throw new NotImplementedException("Engine type not implemented here: " + other)
+                ElmInteractive.ElmEngineType.JavaScript_V8 =>
+                new Func<IJavaScriptEngine>(JavaScriptEngineFromJavaScriptEngineSwitcher.ConstructJavaScriptEngine),
+
+                object other =>
+                throw new NotImplementedException("Engine type not implemented here: " + other)
             };
 
         if (deployApp is not null)
