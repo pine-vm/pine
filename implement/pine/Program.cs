@@ -136,6 +136,18 @@ public class Program
                 },
                 new
                 {
+                    title = "Develop and learn:",
+                    commands = new[]
+                    {
+                        makeCommand,
+                        compileCommand,
+                        interactiveCommand,
+                        describeCommand,
+                        elmTestRsCommand,
+                    }
+                },
+                new
+                {
                     title = "Operate servers and maintain live systems:",
                     commands = new[]
                     {
@@ -146,18 +158,6 @@ public class Program
                         listFunctionsCommand,
                         applyFunctionCommand,
                         truncateProcessHistoryCommand,
-                    }
-                },
-                new
-                {
-                    title = "Develop and learn:",
-                    commands = new[]
-                    {
-                        makeCommand,
-                        compileCommand,
-                        interactiveCommand,
-                        describeCommand,
-                        elmTestRsCommand,
                     }
                 },
             }
