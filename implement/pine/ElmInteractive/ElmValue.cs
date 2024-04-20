@@ -41,7 +41,32 @@ public abstract record ElmValue
         : ElmValue;
 
     public record ElmTag(string TagName, IReadOnlyList<ElmValue> Arguments)
-        : ElmValue;
+        : ElmValue
+    {
+        public virtual bool Equals(ElmTag? otherTag)
+        {
+            if (otherTag is null)
+                return false;
+
+            if (TagName != otherTag.TagName)
+                return false;
+
+            if (Arguments.Count != otherTag.Arguments.Count)
+                return false;
+
+            for (int i = 0; i < Arguments.Count; i++)
+            {
+                if (!Arguments[i].Equals(otherTag.Arguments[i]))
+                    return false;
+            }
+
+            return true;
+        }
+
+        override public int GetHashCode() =>
+            TagName.GetHashCode() ^
+            Arguments.Select(a => a.GetHashCode()).Aggregate((a, b) => a ^ b);
+    }
 
     public record ElmList(IReadOnlyList<ElmValue> Elements)
         : ElmValue
@@ -140,7 +165,7 @@ public abstract record ElmValue
                 PineVM.ParseExpressionFromValueDefault(pineValue)
                 .Map(_ => (ElmValue)new ElmInternal("expression"))
                 .WithDefault(new ElmInternal("___error_skipped_large_blob___"))
-                : 
+                :
                 PineValueAsInteger.UnsignedIntegerFromValue(blobValue)
                 .Map(bigInt => (ElmValue)new ElmChar((int)bigInt))
             }),
