@@ -11,6 +11,9 @@ namespace ElmTime.ElmInteractive;
 /// </summary>
 public static class ElmInteractiveEnvironment
 {
+    public record ParsedInteractiveEnvironment(
+       IReadOnlyList<(string moduleName, ElmModule moduleContent)> Modules);
+
     public static Result<string, PineValue> ApplyFunctionInElmModule(
         PineVM pineVM,
         PineValue interactiveEnvironment,
@@ -32,11 +35,13 @@ public static class ElmInteractiveEnvironment
                         .ToImmutableList();
 
                     if (combinedArguments.Count != functionRecord.functionParameterCount)
-                        return Result<string, PineValue>.err(
-                            "Partial application not implemented yet. Got " +
+                    {
+                        return (Result<string, PineValue>)
+                            ("Partial application not implemented yet. Got " +
                             combinedArguments.Count +
                             " arguments, expected " +
                             functionRecord.functionParameterCount);
+                    }
 
                     var combinedEnvironment =
                     PineValue.List([PineValue.List(functionRecord.envFunctions),
@@ -55,36 +60,23 @@ public static class ElmInteractiveEnvironment
         string declarationName,
         PineVM? pineVM = null)
     {
-        var parseModulesResult =
-            interactiveEnvironment switch
-            {
-                PineValue.ListValue listValue =>
-                listValue.Elements
-                .Select(ParseNamedElmModule)
-                .ListCombine(),
-
-                _ =>
-                Result<string, IReadOnlyList<(string moduleName, ElmModule moduleContent)>>.err(
-                    "interactive environment not a list")
-            };
-
         return
-            parseModulesResult
-            .AndThen(modules =>
+            ParseInteractiveEnvironment(interactiveEnvironment)
+            .AndThen(parsedEnv =>
             {
                 var selectedModule =
-                    modules
+                    parsedEnv.Modules
                     .FirstOrDefault(moduleNameAndContent => moduleNameAndContent.moduleName == moduleName);
 
                 if (selectedModule.moduleContent is null)
-                    return Result<string, FunctionRecord>.err("module not found");
+                    return (Result<string, FunctionRecord>)"module not found";
 
                 var functionDeclaration =
                     selectedModule.moduleContent.FunctionDeclarations
                     .FirstOrDefault(fd => fd.Key == declarationName);
 
                 if (functionDeclaration.Value is null)
-                    return Result<string, FunctionRecord>.err("declaration not found");
+                    return (Result<string, FunctionRecord>)"declaration " + declarationName + " not found";
 
                 return
                 ParseTagged(functionDeclaration.Value)
@@ -93,7 +85,17 @@ public static class ElmInteractiveEnvironment
                 ?
                 ParseFunctionRecordFromValue(taggedFunctionDeclaration.value, pineVM)
                 :
-                Result<string, FunctionRecord>.err("Unexpected tag: " + taggedFunctionDeclaration.name));
+                /*
+                (Result<string, FunctionRecord>)"Unexpected tag: " + taggedFunctionDeclaration.name
+
+                If the declaration has zero parameters, it could be encoded as plain PineValue without wrapping in a 'Function' record.
+                */
+                new FunctionRecord(
+                    innerFunction: new Expression.LiteralExpression(functionDeclaration.Value),
+                    functionParameterCount: 0,
+                    envFunctions: [],
+                    argumentsAlreadyCollected: [])
+                );
             });
     }
 
@@ -108,11 +110,13 @@ public static class ElmInteractiveEnvironment
             .ToImmutableList();
 
         if (combinedArguments.Count != functionRecord.functionParameterCount)
-            return Result<string, PineValue>.err(
+        {
+            return
                 "Partial application not implemented yet. Got " +
                 combinedArguments.Count +
                 " arguments, expected " +
-                functionRecord.functionParameterCount);
+                functionRecord.functionParameterCount;
+        }
 
         var combinedEnvironment =
         PineValue.List([PineValue.List(functionRecord.envFunctions),
@@ -159,7 +163,8 @@ public static class ElmInteractiveEnvironment
                         Result<string, IReadOnlyList<PineValue>>.ok(listValue.Elements),
 
                         _ =>
-                        Result<string, IReadOnlyList<PineValue>>.err("envFunctionsValue is not a list")
+                        (Result<string, IReadOnlyList<PineValue>>)
+                        "envFunctionsValue is not a list"
                     })
                     .AndThen(envFunctions =>
                     {
@@ -170,8 +175,8 @@ public static class ElmInteractiveEnvironment
                             Result<string, IReadOnlyList<PineValue>>.ok(listValue.Elements),
 
                             _ =>
-                            Result<string, IReadOnlyList<PineValue>>.err(
-                                "argumentsAlreadyCollectedValue is not a list")
+                            (Result<string, IReadOnlyList<PineValue>>)
+                            "argumentsAlreadyCollectedValue is not a list"
                         })
                         .AndThen(argumentsAlreadyCollected =>
                         {
@@ -187,11 +192,27 @@ public static class ElmInteractiveEnvironment
                 }
                 ))
                 :
-                Result<string, FunctionRecord>.err(
-                    "List does not have the expected number of items: " + functionRecordListItems.Elements.Count),
+                "List does not have the expected number of items: " + functionRecordListItems.Elements.Count,
 
                 _ =>
-                Result<string, FunctionRecord>.err("Is not a list but a blob")
+                "Is not a list but a blob"
+            };
+    }
+
+    public static Result<string, ParsedInteractiveEnvironment> ParseInteractiveEnvironment(
+        PineValue interactiveEnvironment)
+    {
+        return
+            interactiveEnvironment switch
+            {
+                PineValue.ListValue listValue =>
+                listValue.Elements
+                .Select(ParseNamedElmModule)
+                .ListCombine()
+                .Map(modules => new ParsedInteractiveEnvironment(Modules: modules)),
+
+                _ =>
+                "interactive environment not a list"
             };
     }
 
@@ -223,7 +244,7 @@ public static class ElmInteractiveEnvironment
                 .ListCombine(),
 
                 _ =>
-                Result<string, IReadOnlyList<(string name, PineValue value)>>.err("module not a list")
+                "module not a list"
             };
 
         return
@@ -243,9 +264,8 @@ public static class ElmInteractiveEnvironment
                     .ToImmutableArray();
 
                 return
-                    Result<string, ElmModule>.ok(
-                        new ElmModule(
-                            FunctionDeclarations: functionDeclarations));
+                    (Result<string, ElmModule>)
+                    new ElmModule(FunctionDeclarations: functionDeclarations);
             });
     }
 
@@ -258,9 +278,9 @@ public static class ElmInteractiveEnvironment
             PineValueAsString.StringFromValue(listValue.Elements[0])
             .Map(tag => (tag, listValue.Elements[1]))
             :
-            Result<string, (string, PineValue)>.err("Unexpected list length: " + listValue.Elements.Count),
+            "Unexpected list length: " + listValue.Elements.Count,
 
             _ =>
-            Result<string, (string, PineValue)>.err("Expected list")
+            "Expected list"
         };
 }

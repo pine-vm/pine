@@ -18,7 +18,7 @@ namespace ElmTime;
 
 public class Program
 {
-    public static string AppVersionId => "0.3.3";
+    public static string AppVersionId => "0.3.4";
 
     private static int AdminInterfaceDefaultPort => 4000;
 
@@ -874,6 +874,13 @@ public class Program
                     description: "Option to submit a string as if entered during the interactive session.",
                     optionType: CommandOptionType.MultipleValue);
 
+            var saveToFileOption =
+                interactiveCommand
+                .Option(
+                    template: "--save-to-file",
+                    description: "Path to a file to save the session state to, after compiling context app and initial submissions.",
+                    optionType: CommandOptionType.SingleValue);
+
             var testCommand =
                 interactiveCommand.Command("test", testCommand =>
                 {
@@ -1213,7 +1220,9 @@ public class Program
                 var initStepsSubmission =
                 initStepsPath switch
                 {
-                    null => [],
+                    null =>
+                    [],
+
                     not null =>
                     LoadComposition.LoadFromPathResolvingNetworkDependencies(initStepsPath)
                     .LogToActions(console.WriteLine)
@@ -1297,6 +1306,35 @@ public class Program
                     console.WriteLine(promptPrefix + submission);
 
                     processSubmission(submission);
+                }
+
+                if (saveToFileOption.Value() is { } saveToFile)
+                {
+                    console.WriteLine("Got option to save session state to " + saveToFile + "...");
+
+                    if (interactiveSession is not ElmInteractive.InteractiveSessionPine pineSession)
+                    {
+                        console.WriteLine("Cannot save session state for this engine type: " + interactiveSession.GetType().Name);
+                    }
+                    else
+                    {
+                        var sessionState = pineSession.CurrentEnvironmentValue();
+
+                        var (environmentJson, _) =
+                        ElmInteractive.ElmInteractive.FromPineValueBuildingDictionary(
+                            sessionState,
+                            ElmInteractive.ElmInteractive.CompilationCache.Empty);
+
+                        var environmentJsonString =
+                            System.Text.Json.JsonSerializer.Serialize(environmentJson.json,
+                                options: ElmInteractive.ElmInteractive.compilerInterfaceJsonSerializerOptions);
+
+                        File.WriteAllText(saveToFile, environmentJsonString);
+
+                        console.WriteLine(
+                            "Saved session state to " + saveToFile + ", as JSON with total length of " +
+                            environmentJsonString.Length);
+                    }
                 }
 
                 ReadLine.HistoryEnabled = true;

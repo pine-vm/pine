@@ -279,14 +279,8 @@ public abstract record ElmValue
                         PineValue.List(elmTag.Arguments.Select(ElmValueAsPineValue).ToList())]),
 
                 ElmRecord elmRecord =>
-                PineValue.List(
-                    [ElmRecordTypeTagNameAsValue,
-                        PineValue.List(
-                            [PineValue.List(
-                            [.. elmRecord.Fields.Select(field =>
-                            PineValue.List(
-                                [PineValueAsString.ValueFromString(field.FieldName),
-                                    ElmValueAsPineValue(field.Value)]))])])]),
+                ElmRecordAsPineValue(
+                    [.. elmRecord.Fields.Select(field => (field.FieldName, ElmValueAsPineValue(field.Value)))]),
 
                 _ =>
                 throw new NotImplementedException(
@@ -294,13 +288,23 @@ public abstract record ElmValue
             };
     }
 
+    public static PineValue ElmRecordAsPineValue(IReadOnlyList<(string FieldName, PineValue FieldValue)> fields) =>
+        PineValue.List(
+            [ElmRecordTypeTagNameAsValue,
+            PineValue.List(
+                [PineValue.List(
+                    [.. fields.Select(field =>
+                    PineValue.List(
+                        [PineValueAsString.ValueFromString(field.FieldName),
+                        field.FieldValue]))])])]);
+
     public static Result<string, ElmRecord> ElmValueAsElmRecord(ElmValue elmValue)
     {
         static Result<string, (string, ElmValue)> tryMapToRecordField(ElmValue fieldElmValue)
         {
             if (fieldElmValue is ElmList fieldListItems)
             {
-                if (fieldListItems.Elements.Count == 2)
+                if (fieldListItems.Elements.Count is 2)
                 {
                     var fieldNameValue = fieldListItems.Elements[0];
                     var fieldValue = fieldListItems.Elements[1];
@@ -317,8 +321,8 @@ public abstract record ElmValue
                         ElmList fieldNameValueList =>
                         TryMapElmValueToString(fieldNameValueList)
                         .Map(continueWithFieldName)
-                        .WithDefault(Result<string, (string, ElmValue)>.err(
-                            "Failed parsing field name value.")),
+                        .WithDefault((Result<string, (string, ElmValue)>)
+                            "Failed parsing field name value."),
 
                         ElmString fieldName =>
                         continueWithFieldName(fieldName.Value),
@@ -331,7 +335,7 @@ public abstract record ElmValue
                     return "Unexpected number of list items: " + fieldListItems.Elements.Count;
             }
             else
-                return Result<string, (string, ElmValue)>.err("Not a list.");
+                return "Not a list.";
         }
 
         return elmValue switch
@@ -343,9 +347,9 @@ public abstract record ElmValue
                 var recordFieldsNames = recordFields.Select(field => field.Item1).ToList();
 
                 if (recordFieldsNames.OrderBy(name => name).SequenceEqual(recordFieldsNames))
-                    return Result<string, ElmRecord>.ok(new ElmRecord(recordFields));
+                    return new ElmRecord(recordFields);
                 else
-                    return Result<string, ElmRecord>.err("Unexpected order of fields.");
+                    return (Result<string, ElmRecord>)"Unexpected order of fields.";
             }),
 
             _ =>
