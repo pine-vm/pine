@@ -30,12 +30,14 @@ public class InteractiveSessionPine : IInteractiveSession
 
     public InteractiveSessionPine(
         TreeNodeWithStringPath compileElmProgramCodeFiles,
+        PineValue? initialState,
         TreeNodeWithStringPath? appCodeTree,
         bool caching,
         DynamicPGOShare? autoPGO)
         :
         this(
             compileElmProgramCodeFiles: compileElmProgramCodeFiles,
+            initialState: initialState,
             appCodeTree: appCodeTree,
             BuildPineVM(caching: caching, autoPGO: autoPGO))
     {
@@ -43,11 +45,13 @@ public class InteractiveSessionPine : IInteractiveSession
 
     public InteractiveSessionPine(
         TreeNodeWithStringPath compileElmProgramCodeFiles,
+        PineValue? initialState,
         TreeNodeWithStringPath? appCodeTree,
         IPineVM pineVM)
         :
         this(
             compileElmProgramCodeFiles: compileElmProgramCodeFiles,
+            initialState: initialState,
             appCodeTree: appCodeTree,
             (pineVM, pineVMCache: null))
     {
@@ -55,6 +59,7 @@ public class InteractiveSessionPine : IInteractiveSession
 
     private InteractiveSessionPine(
         TreeNodeWithStringPath compileElmProgramCodeFiles,
+        PineValue? initialState,
         TreeNodeWithStringPath? appCodeTree,
         (IPineVM pineVM, PineVMCache? pineVMCache) pineVMAndCache)
     {
@@ -67,7 +72,9 @@ public class InteractiveSessionPine : IInteractiveSession
             InteractiveSessionJavaScript.JavaScriptEngineFlavor.V8));
 
         buildPineEvalContextTask = System.Threading.Tasks.Task.Run(() =>
-            CompileInteractiveEnvironment(appCodeTree: appCodeTree));
+            CompileInteractiveEnvironment(
+                initialState: initialState,
+                appCodeTree: appCodeTree));
     }
 
     private static (IPineVM, PineVMCache?) BuildPineVM(
@@ -91,7 +98,9 @@ public class InteractiveSessionPine : IInteractiveSession
 
     private static readonly ConcurrentDictionary<string, Result<string, PineValue>> compileEvalContextCache = new();
 
-    private Result<string, PineValue> CompileInteractiveEnvironment(TreeNodeWithStringPath? appCodeTree)
+    private Result<string, PineValue> CompileInteractiveEnvironment(
+        PineValue? initialState,
+        TreeNodeWithStringPath? appCodeTree)
     {
         var appCodeTreeHash =
             appCodeTree switch
@@ -107,21 +116,22 @@ public class InteractiveSessionPine : IInteractiveSession
                 valueFactory: _ =>
                 {
                     var compileInteractiveEnvironmentResults =
-                    lastCompilationCache.compileInteractiveEnvironmentResults
+                    lastCompilationCache.CompileInteractiveEnvironmentResults
                     .Union(compiledEnvironmentCache.Keys);
 
                     var resultWithCache =
                         ElmInteractive.CompileInteractiveEnvironment(
                             compileElmPreparedJavaScriptEngine.Value,
+                            initialState: initialState,
                             appCodeTree: appCodeTree,
                             lastCompilationCache with
                             {
-                                compileInteractiveEnvironmentResults = compileInteractiveEnvironmentResults
+                                CompileInteractiveEnvironmentResults = compileInteractiveEnvironmentResults
                             });
 
                     lastCompilationCache = resultWithCache.Unpack(fromErr: _ => lastCompilationCache, fromOk: ok => ok.compilationCache);
 
-                    foreach (var compileEnvironmentResult in lastCompilationCache.compileInteractiveEnvironmentResults)
+                    foreach (var compileEnvironmentResult in lastCompilationCache.CompileInteractiveEnvironmentResults)
                     {
                         compiledEnvironmentCache[compileEnvironmentResult] = compileEnvironmentResult;
                     }
@@ -286,6 +296,7 @@ public class InteractiveSessionPine : IInteractiveSession
 
         var profilingSession = new InteractiveSessionPine(
             compileElmProgramCodeFiles: compileElmProgramCodeFiles,
+            initialState: null,
             appCodeTree: null,
             profilingVM.PineVM);
 
@@ -298,7 +309,7 @@ public class InteractiveSessionPine : IInteractiveSession
             exprUsageSamples
             .Select(sample => sample.Analysis.Value.ToMaybe())
             .WhereNotNothing()
-            .SelectMany(usage => usage)
+            .SelectMany(analysis => analysis)
             .ToImmutableList();
 
         var pineExpressionsToOptimize =

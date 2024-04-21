@@ -5,6 +5,7 @@ using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Collections.Immutable;
+using System.IO;
 using System.Linq;
 using System.Text;
 using System.Text.Json.Serialization;
@@ -14,6 +15,13 @@ namespace ElmTime.ElmInteractive;
 
 public class ElmInteractive
 {
+    public static IFileStore CompiledModulesCacheFileStoreDefault =>
+        new FileStoreFromSystemIOFile(
+            Path.Combine(Filesystem.CacheDirectory, "elm-interactive-compiled-modules", Program.AppVersionId));
+
+    public static Pine.ElmInteractive.ICompiledModulesCache CompiledModulesCacheDefault =>
+        new Pine.ElmInteractive.CompiledModulesFileCache(CompiledModulesCacheFileStoreDefault);
+
     public static readonly ConcurrentDictionary<TreeNodeWithStringPath, System.Threading.Tasks.Task<string>>
         JavaScriptToEvaluateElmFromCompilerTask = new();
 
@@ -70,6 +78,7 @@ public class ElmInteractive
 
     internal static Result<string, (PineValue compileResult, CompilationCache compilationCache)> CompileInteractiveEnvironment(
         IJavaScriptEngine evalElmPreparedJavaScriptEngine,
+        PineValue? initialState,
         TreeNodeWithStringPath? appCodeTree,
         CompilationCache compilationCacheBefore)
     {
@@ -80,7 +89,8 @@ public class ElmInteractive
 
         return
             CompileInteractiveEnvironmentForModulesCachingIncrements(
-                elmModulesTexts: allModulesTexts,
+                initialState: initialState,
+                elmModulesTextsBeforeSort: allModulesTexts,
                 evalElmPreparedJavaScriptEngine,
                 compilationCacheBefore)
             .Map(compileResultAndCache =>
@@ -88,13 +98,22 @@ public class ElmInteractive
             compileResultAndCache.compilationCache));
     }
 
-    private static Result<string, (CompileInteractiveEnvironmentResult compileResult, CompilationCache compilationCache)> CompileInteractiveEnvironmentForModulesCachingIncrements(
-        IReadOnlyList<string> elmModulesTexts,
+    private static Result<string, (CompileInteractiveEnvironmentResult compileResult, CompilationCache compilationCache)>
+        CompileInteractiveEnvironmentForModulesCachingIncrements(
+        PineValue? initialState,
+        IReadOnlyList<string> elmModulesTextsBeforeSort,
         IJavaScriptEngine evalElmPreparedJavaScriptEngine,
         CompilationCache compilationCacheBefore)
     {
+        if (initialState is not null)
+            throw new NotImplementedException("initialState is not implemented");
+
+        var elmModulesTexts =
+            ElmSyntax.ElmModule.ModulesTextOrderedForCompilationByDependencies(elmModulesTextsBeforeSort)
+            .ToImmutableList();
+
         var baseResults =
-            compilationCacheBefore.compileInteractiveEnvironmentResults
+            compilationCacheBefore.CompileInteractiveEnvironmentResults
             .Where(cachedResult =>
             {
                 var cachedResultAllModules = cachedResult.AllModulesTextsList;
@@ -103,42 +122,67 @@ public class ElmInteractive
             })
             .ToImmutableList();
 
-        var closestBase =
+        var closestBaseInMemory =
             baseResults
             .OrderByDescending(c => c.AllModulesTextsList.Count)
             .OfType<CompileInteractiveEnvironmentResult?>()
             .FirstOrDefault();
 
-        var elmModulesTextsFromBase =
-            closestBase is null ?
+        var elmModulesTextsFromBaseInMemory =
+            closestBaseInMemory is null ?
             elmModulesTexts :
             elmModulesTexts
-            .Skip(closestBase.AllModulesTextsList.Count)
+            .Skip(closestBaseInMemory.AllModulesTextsList.Count)
             .ToImmutableList();
 
-        var elmModulesTextsFromBaseOrderedByDependencies =
-            ElmSyntax.ElmModule.ModulesTextOrderedForCompilationByDependencies(elmModulesTextsFromBase)
-            .ToImmutableList();
+        var closestBaseFromFile =
+            CompiledModulesCacheDefault.GetClosestBase(elmModulesTexts);
 
-        var initResult =
-            closestBase is not null
-            ?
-            Result<string, (CompileInteractiveEnvironmentResult compileResult, CompilationCache compilationCache)>.ok(
-                (closestBase, compilationCacheBefore))
-            :
-            CompileInteractiveEnvironmentForModules(
-                elmModulesTexts: [],
-                evalElmPreparedJavaScriptEngine: evalElmPreparedJavaScriptEngine,
-                parentEnvironment: null,
-                compilationCacheBefore: compilationCacheBefore);
+        var elmModulesTextsFromBaseFromFile =
+            closestBaseFromFile.HasValue ?
+            elmModulesTexts
+            .Skip(closestBaseFromFile.Value.CompiledModules.Count)
+            .ToImmutableList() :
+            elmModulesTexts;
+
+        Result<string, (CompileInteractiveEnvironmentResult compileResult, CompilationCache compilationCache)> chooseInitResult()
+        {
+            if (closestBaseFromFile.HasValue)
+            {
+                return (new CompileInteractiveEnvironmentResult(
+                    lastIncrementModulesTexts: closestBaseFromFile.Value.CompiledModules,
+                    environmentPineValueJson: closestBaseFromFile.Value.CompiledValueJson,
+                    environmentPineValue: closestBaseFromFile.Value.CompiledValue,
+                    environmentDictionary: ImmutableDictionary<string, PineValue>.Empty,
+                    parent: null),
+                    compilationCacheBefore);
+            }
+
+            if (closestBaseInMemory is not null)
+            {
+                return (closestBaseInMemory, compilationCacheBefore);
+            }
+
+            return
+                CompileInteractiveEnvironmentForModules(
+                    elmModulesTexts: [],
+                    evalElmPreparedJavaScriptEngine: evalElmPreparedJavaScriptEngine,
+                    parentEnvironment: null,
+                    compilationCacheBefore: compilationCacheBefore);
+        }
 
         return
-            initResult
+            chooseInitResult()
             .AndThen(seed =>
             {
+                var elmModulesTextsFromBase =
+                    elmModulesTexts
+                    .Skip(seed.compileResult.AllModulesTextsList.Count)
+                    .ToImmutableList();
+
                 return
                     ResultExtension.AggregateExitingOnFirstError(
-                        sequence: elmModulesTextsFromBaseOrderedByDependencies,
+                        sequence: elmModulesTextsFromBase,
                         aggregateFunc: (prev, elmCoreModuleText) =>
                         {
                             var resultBeforeCache =
@@ -152,13 +196,17 @@ public class ElmInteractive
                             resultBeforeCache
                             .Map(beforeCache =>
                             {
+                                CompiledModulesCacheDefault.Set(
+                                    beforeCache.compileResult.AllModulesTextsList,
+                                    beforeCache.compileResult.environmentPineValue);
+
                                 var compileInteractiveEnvironmentResults =
-                                beforeCache.compilationCache.compileInteractiveEnvironmentResults.Add(beforeCache.compileResult);
+                                beforeCache.compilationCache.CompileInteractiveEnvironmentResults.Add(beforeCache.compileResult);
 
                                 var cache = beforeCache.compilationCache
                                 with
                                 {
-                                    compileInteractiveEnvironmentResults = compileInteractiveEnvironmentResults
+                                    CompileInteractiveEnvironmentResults = compileInteractiveEnvironmentResults
                                 };
 
                                 return (beforeCache.compileResult, cache);
@@ -176,7 +224,8 @@ public class ElmInteractive
         CompilationCache compilationCacheBefore)
     {
         var environmentBefore =
-            parentEnvironment is null ? FromPineValueWithoutBuildingDictionary(PineValue.EmptyList) :
+            parentEnvironment is null ?
+            FromPineValueWithoutBuildingDictionary(PineValue.EmptyList) :
             parentEnvironment.environmentPineValueJson;
 
         var argumentsJson = System.Text.Json.JsonSerializer.Serialize(
@@ -197,7 +246,15 @@ public class ElmInteractive
             responseStructure
             .Map(fromJson =>
             {
-                var environmentPineValue = ParsePineValueFromJson(fromJson!, dictionary: parentEnvironment?.environmentDictionary);
+                var parentEnvDictionary =
+                MergePineValueFromJsonDictionary(
+                    environmentBefore!,
+                    parentEnvironment?.environmentDictionary.ToImmutableDictionary());
+
+                var environmentPineValue =
+                ParsePineValueFromJson(
+                    fromJson!,
+                    parentDictionary: parentEnvDictionary);
 
                 var (environmentJson, compilationCacheTask) =
                 FromPineValueBuildingDictionary(
@@ -214,15 +271,28 @@ public class ElmInteractive
             });
     }
 
-    internal record CompileInteractiveEnvironmentResult(
-        IImmutableList<string> lastIncrementModulesTexts,
+    static long EstimatePineValueMemoryUsage(PineValue pineValue) =>
+        pineValue switch
+        {
+            PineValue.BlobValue blobValue =>
+            blobValue.Bytes.Length + 100,
+
+            PineValue.ListValue listValue =>
+            listValue.Elements.Sum(EstimatePineValueMemoryUsage) + 100,
+
+            _ =>
+            throw new NotImplementedException("Not implemented for value type: " + pineValue.GetType().FullName)
+        };
+
+    public record CompileInteractiveEnvironmentResult(
+        IReadOnlyList<string> lastIncrementModulesTexts,
         PineValueJson environmentPineValueJson,
         PineValue environmentPineValue,
         IReadOnlyDictionary<string, PineValue> environmentDictionary,
         CompileInteractiveEnvironmentResult? parent) : IEquatable<CompileInteractiveEnvironmentResult>
     {
-        public IImmutableList<string> AllModulesTextsList =>
-            parent is null ? lastIncrementModulesTexts : parent.AllModulesTextsList.AddRange(lastIncrementModulesTexts);
+        public IReadOnlyList<string> AllModulesTextsList =>
+            parent is null ? lastIncrementModulesTexts : [.. parent.AllModulesTextsList, .. lastIncrementModulesTexts];
 
         public ReadOnlyMemory<byte> Hash => HashCache.Value;
 
@@ -300,19 +370,21 @@ public class ElmInteractive
 
         var response =
             responseStructure
-            .Map(fromJson => ParsePineValueFromJson(fromJson, dictionary: environmentJson.dictionary));
+            .Map(fromJson => ParsePineValueFromJson(
+                fromJson,
+                parentDictionary: environmentJson.dictionary.ToImmutableDictionary()));
 
         logDuration("Deserialize (from " + CommandLineInterface.FormatIntegerForDisplay(responseJson.Length) + " chars) and " + nameof(ParsePineValueFromJson));
 
         return response.Map(value => (value, compilationCacheTask.Result));
     }
 
-    internal record CompilationCache(
-        IImmutableDictionary<PineValue, PineValueMappedForTransport> valueMappedForTransportCache,
-        IImmutableDictionary<PineValue, (PineValueJson, IReadOnlyDictionary<string, PineValue>)> valueJsonCache,
-        IImmutableSet<CompileInteractiveEnvironmentResult> compileInteractiveEnvironmentResults)
+    public record CompilationCache(
+        IImmutableDictionary<PineValue, PineValueMappedForTransport> ValueMappedForTransportCache,
+        IImmutableDictionary<PineValue, (PineValueJson, IReadOnlyDictionary<string, PineValue>)> ValueJsonCache,
+        IImmutableSet<CompileInteractiveEnvironmentResult> CompileInteractiveEnvironmentResults)
     {
-        internal static CompilationCache Empty =>
+        public static CompilationCache Empty =>
             new(
                 ImmutableDictionary<PineValue, PineValueMappedForTransport>.Empty,
                 ImmutableDictionary<PineValue, (PineValueJson, IReadOnlyDictionary<string, PineValue>)>.Empty,
@@ -367,7 +439,7 @@ public class ElmInteractive
         public record DictionaryEntry(string key, PineValueJson value);
     }
 
-    internal record PineValueMappedForTransport(
+    public record PineValueMappedForTransport(
         string? ListAsString,
         int? BlobAsInt,
         IReadOnlyList<PineValueMappedForTransport>? List,
@@ -496,16 +568,16 @@ public class ElmInteractive
         throw new NotImplementedException("Unexpected shape");
     }
 
-    internal static ((PineValueJson json, IReadOnlyDictionary<string, PineValue> dictionary), System.Threading.Tasks.Task<CompilationCache>)
+    public static ((PineValueJson json, IReadOnlyDictionary<string, PineValue> dictionary), System.Threading.Tasks.Task<CompilationCache>)
         FromPineValueBuildingDictionary(
         PineValue pineValue,
         CompilationCache compilationCache)
     {
-        if (compilationCache.valueJsonCache.TryGetValue(pineValue, out var cached))
+        if (compilationCache.ValueJsonCache.TryGetValue(pineValue, out var cached))
             return (cached, System.Threading.Tasks.Task.FromResult(compilationCache));
 
         var valueMappedForTransportCache = new Dictionary<PineValue, PineValueMappedForTransport>(
-            compilationCache.valueMappedForTransportCache);
+            compilationCache.ValueMappedForTransportCache);
 
         var intermediate = PineValueMappedForTransport.FromPineValue(pineValue, cache: valueMappedForTransportCache);
 
@@ -577,6 +649,10 @@ public class ElmInteractive
 
         var dictionaryForSerial =
             dictionary
+            /*
+             * Order the dictionary entries so that earlier entries do not reference later ones.
+             * */
+            .OrderBy(entry => EstimatePineValueMemoryUsage(entry.Key.Origin))
             .Select(entry => new PineValueJson.DictionaryEntry(
                 key: entry.Value,
                 value: FromPineValueWithoutBuildingDictionary(entry.Key, dictionary, doNotDictionaryOnFirstLevel: true)))
@@ -599,7 +675,7 @@ public class ElmInteractive
         var compilationCacheTask = System.Threading.Tasks.Task.Run(() =>
         {
             var valueJsonCache = new Dictionary<PineValue, (PineValueJson, IReadOnlyDictionary<string, PineValue>)>(
-                compilationCache.valueJsonCache)
+                compilationCache.ValueJsonCache)
             {
                 [pineValue] = cacheEntry
             };
@@ -608,8 +684,8 @@ public class ElmInteractive
                 compilationCache
                 with
                 {
-                    valueMappedForTransportCache = valueMappedForTransportCache.ToImmutableDictionary(),
-                    valueJsonCache = valueJsonCache.ToImmutableDictionary()
+                    ValueMappedForTransportCache = valueMappedForTransportCache.ToImmutableDictionary(),
+                    ValueJsonCache = valueJsonCache.ToImmutableDictionary()
                 };
         });
 
@@ -618,10 +694,12 @@ public class ElmInteractive
 
     public static PineValue ParsePineValueFromJson(
         PineValueJson fromJson,
-        IReadOnlyDictionary<string, PineValue>? dictionary)
+        ImmutableDictionary<string, PineValue>? parentDictionary)
     {
+        var dictionary = MergePineValueFromJsonDictionary(fromJson, parentDictionary);
+
         if (fromJson.List is { } list)
-            return PineValue.List(list.Select(item => ParsePineValueFromJson(item, dictionary)).ToImmutableList());
+            return PineValue.List([.. list.Select(item => ParsePineValueFromJson(item, dictionary))]);
 
         if (fromJson.Blob is { } blob)
             return PineValue.Blob([.. blob.Select(b => (byte)b)]);
@@ -637,12 +715,35 @@ public class ElmInteractive
             return
                 dictionary switch
                 {
-                    null => throw new Exception("Cannot resolve reference '" + reference + "' because dictionary is null"),
-                    not null => dictionary[reference]
+                    null =>
+                    throw new Exception("Cannot resolve reference '" + reference + "' because dictionary is null"),
+
+                    not null =>
+                    dictionary[reference]
                 };
         }
 
         throw new NotImplementedException("Unexpected shape of Pine value from JSON");
+    }
+
+
+    public static ImmutableDictionary<string, PineValue>? MergePineValueFromJsonDictionary(
+        PineValueJson fromJson,
+        ImmutableDictionary<string, PineValue>? parentDictionary)
+    {
+        var dictionary = parentDictionary;
+
+        if (fromJson.Dictionary is { } dictionaryEntries)
+        {
+            dictionary =
+                dictionaryEntries
+                .Aggregate(
+                    seed: dictionary ?? ImmutableDictionary<string, PineValue>.Empty,
+                    func: (dictionary, entry) =>
+                    dictionary.Add(entry.key, ParsePineValueFromJson(entry.value, dictionary)));
+        }
+
+        return dictionary;
     }
 
     private static IReadOnlyList<string>? ModulesTextsFromAppCodeTree(TreeNodeWithStringPath? appCodeTree) =>
@@ -651,7 +752,7 @@ public class ElmInteractive
         :
         CompileTree(appCodeTree) is { } compiledTree ?
         TreeToFlatDictionaryWithPathComparer(compiledTree)
-        .Select(appCodeFile => appCodeFile.Key.Last().EndsWith(".elm") ? Encoding.UTF8.GetString(appCodeFile.Value.ToArray()) : null)
+        .Select(appCodeFile => appCodeFile.Key.Last().EndsWith(".elm") ? Encoding.UTF8.GetString(appCodeFile.Value.Span) : null)
         .WhereNotNull()
         .ToImmutableList()
         :
@@ -786,7 +887,7 @@ public class ElmInteractive
     public record EvaluatedStruct(
         string DisplayText);
 
-    private static readonly System.Text.Json.JsonSerializerOptions compilerInterfaceJsonSerializerOptions =
+    public static readonly System.Text.Json.JsonSerializerOptions compilerInterfaceJsonSerializerOptions =
         new()
         {
             DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,

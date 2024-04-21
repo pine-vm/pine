@@ -49,6 +49,7 @@ public class CompileElmCompilerTests
         using var interactiveSession =
             new InteractiveSessionPine(
                 compilerProgram,
+                initialState: null,
                 appCodeTree: null,
                 caching: true,
                 autoPGO: pgoShare);
@@ -152,7 +153,7 @@ public class CompileElmCompilerTests
             ElmInteractive.ParsePineValueFromJson(
                 responseStructure
                 .Extract(err => throw new Exception(err)),
-                dictionary: null);
+                parentDictionary: null);
 
         var responseAsElmValue =
             ElmValue.PineValueAsElmValue(parsedModulePineValue)
@@ -250,6 +251,7 @@ public class CompileElmCompilerTests
         using var interactiveSession =
             new InteractiveSessionPine(
                 compilerProgram,
+                initialState: null,
                 appCodeTree: null,
                 caching: true,
                 autoPGO: pgoShare);
@@ -344,18 +346,18 @@ public class CompileElmCompilerTests
             allAvailableElmFiles
             .First(c => c.blobAtPath.path.SequenceEqual(["src", "ElmCompiler.elm"]));
 
-        var elmModulesTextsForInteractiveCompiler =
+        var elmModulesTextsForElmCompiler =
             ElmTime.ElmSyntax.ElmModule.ModulesTextOrderedForCompilationByDependencies(
                 rootModulesTexts: [rootElmFile.moduleText],
                 availableModulesTexts: [.. allAvailableElmFiles.Select(f => f.moduleText)]);
 
-        var elmModulesForInteractiveCompiler =
-            elmModulesTextsForInteractiveCompiler
+        var elmModulesForElmCompiler =
+            elmModulesTextsForElmCompiler
             .Select(moduleText => allAvailableElmFiles.First(c => c.moduleText == moduleText).blobAtPath)
             .ToImmutableArray();
 
         var compilerWithPackagesTree =
-            elmModulesForInteractiveCompiler
+            elmModulesForElmCompiler
             .Aggregate(
                 seed: compilerProgramOnlyElmJson,
                 func: (aggregate, elmModule) =>
@@ -363,6 +365,7 @@ public class CompileElmCompilerTests
 
         using var compilerInteractiveSession = new InteractiveSessionPine(
             compileElmProgramCodeFiles: compilerProgram,
+            initialState: null,
             appCodeTree: compilerWithPackagesTree,
             caching: true,
             autoPGO: pgoShare);

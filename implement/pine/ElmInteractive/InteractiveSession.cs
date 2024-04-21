@@ -37,6 +37,7 @@ public interface IInteractiveSession : IDisposable
             ElmEngineType.Pine pineConfig =>
             new InteractiveSessionPine(
                 compileElmProgramCodeFiles: compileElmProgramCodeFiles,
+                initialState: null,
                 appCodeTree: appCodeTree,
                 caching: pineConfig.Caching,
                 autoPGO: pineConfig.DynamicPGOShare),

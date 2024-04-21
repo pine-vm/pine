@@ -1103,6 +1103,7 @@ public class Program
 
                                     return new ElmInteractive.InteractiveSessionPine(
                                         compileElmProgramCodeFiles: compileElmProgramCodeFiles,
+                                        initialState: null,
                                         appCodeTree: appCodeTree,
                                         pineVMWithCompiledAssembly);
                                 }
