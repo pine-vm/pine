@@ -14,7 +14,7 @@
     <Description>Runtime environment for the Elm programming language</Description>
     <PackageTags>Elm;Runtime;DBMS</PackageTags>
     <RepositoryUrl>https://github.com/pine-vm/pine.git</RepositoryUrl>
-    <PackageProjectUrl>https://pinevm.org</PackageProjectUrl>
+    <PackageProjectUrl>https://pine-vm.org</PackageProjectUrl>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <Authors>Viir</Authors>
     <PackageLicenseFile>License.txt</PackageLicenseFile>

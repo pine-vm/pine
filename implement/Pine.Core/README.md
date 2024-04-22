@@ -1,4 +1,4 @@
 Pine is the cross-platform Elm runtime environment.
 
-+ Website: <https://pinevm.org>
++ Website: <https://pine-vm.org>
 + Source code repository: <https://github.com/pine-vm/pine>

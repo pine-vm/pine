@@ -1,4 +1,4 @@
-This directory contains the program to build the website at [pinevm.org](https://pinevm.org)
+This directory contains the program to build the website at [pine-vm.org](https://pine-vm.org)
 
 The `blobMain` function in the [`Netlify` module](./src/Netlify.elm) builds the static website for deploying on Netlify.
 

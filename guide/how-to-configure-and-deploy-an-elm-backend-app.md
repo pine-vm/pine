@@ -5,7 +5,7 @@ The backend includes a web server and a database persisting the application stat
 
 ## Installing and Registering the `pine` Command
 
-In this guide, I use the `pine` command-line interface (CLI) program. You can find all downloads at <https://pinevm.org/downloads> and <https://github.com/pine-vm/pine/releases>
+In this guide, I use the `pine` command-line interface (CLI) program. You can find all downloads at <https://pine-vm.org/downloads> and <https://github.com/pine-vm/pine/releases>
 
 To register the pine executable on your system, run the `pine  install` command. If you use Linux or PowerShell on Windows, you can achieve this by running the following command after navigating to the directory containing the executable file extracted from the downloaded archive:
 

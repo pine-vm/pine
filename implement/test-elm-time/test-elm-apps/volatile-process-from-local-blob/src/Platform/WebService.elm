@@ -3,7 +3,7 @@ module Platform.WebService exposing (..)
 {-| This module contains the types describing the Pine / Elm web service platform.
 To build a web service app in Elm, copy this module file into your project and add a declaration with the name `webServiceMain` to an Elm module.
 
-For the latest version of the documentation, see <https://pinevm.org>
+For the latest version of the documentation, see <https://pine-vm.org>
 
 -}
 

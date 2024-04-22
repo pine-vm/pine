@@ -13,7 +13,7 @@
     <Description>The cross-platform Elm runtime environment</Description>
     <PackageTags>Functional;Elm;Runtime;Compiler;VM;DBMS</PackageTags>
     <RepositoryUrl>https://github.com/pine-vm/pine.git</RepositoryUrl>
-    <PackageProjectUrl>https://pinevm.org</PackageProjectUrl>
+    <PackageProjectUrl>https://pine-vm.org</PackageProjectUrl>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <Authors>Viir</Authors>
     <PackageLicenseFile>License.txt</PackageLicenseFile>
