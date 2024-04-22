@@ -5,7 +5,7 @@ namespace Pine;
 
 /// <summary>
 /// A choice type that represents values that may or may not exist.
-/// The only two possible variants are <see cref="Nothing"/> and <see cref="Just"/>.
+/// The only two variants are <see cref="Nothing"/> and <see cref="Just"/>.
 /// </summary>
 [JsonConverter(typeof(Json.JsonConverterForChoiceType))]
 public abstract record Maybe<JustT>

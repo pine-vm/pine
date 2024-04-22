@@ -10,14 +10,18 @@ using System.Text.Json.Serialization;
 namespace Pine.Json;
 
 /// <summary>
+/// <para>
 /// Generates JSON converters for C# types representing choice types (aka discriminated unions, tagged unions).
+/// </para>
 /// 
-/// The discussions on representing sum types in C# are ongoing, and Microsoft has not yet settled on a design.
-/// For updates on the progress around sum types in C#, see also https://github.com/dotnet/csharplang/tree/main/meetings/working-groups/discriminated-unions and https://github.com/dotnet/csharplang/issues/113
-/// 
+/// <para>
+/// The discussions on how to add sum types to C# are ongoing, and Microsoft has not yet settled on a design.
+/// For updates on the progress around sum types in C#, see also <see href="https://github.com/dotnet/csharplang/tree/main/meetings/working-groups/discriminated-unions"/> and <see href="https://github.com/dotnet/csharplang/issues/113"/>
+/// </para>
 /// This JSON converter factory supports the approach of representing choice types as records in C#.
-/// 
-/// For more information, see the guide in the file https://github.com/pine-vm/pine/blob/main/implement/Pine.Core/Json/JsonConverterForChoiceType.md
+/// <para>
+/// For more information, see the guide in the file <see href="https://github.com/pine-vm/pine/blob/main/implement/Pine.Core/Json/JsonConverterForChoiceType.md"/>
+/// </para>
 /// </summary>
 public class JsonConverterForChoiceType : JsonConverterFactory
 {

@@ -2,7 +2,7 @@
 
 The `JsonConverterForChoiceType` generates JSON converters for C# types representing choice types (aka discriminated unions).
 
-The discussions on representing sum types in C# are ongoing, and Microsoft has not yet settled on a design.
+The discussions on how to add sum types to C# are ongoing, and Microsoft has not yet settled on a design.
 
 For updates on the progress around sum types in C#, see also  <https://github.com/dotnet/csharplang/tree/main/meetings/working-groups/discriminated-unions> and <https://github.com/dotnet/csharplang/issues/113>
 
