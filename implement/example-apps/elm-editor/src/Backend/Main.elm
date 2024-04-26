@@ -285,6 +285,12 @@ updateForHttpRequestEventExceptRequestsToVolatileProcess httpRequestEvent stateB
                                 (staticContentHttpHeaders { contentType = "text/javascript", contentEncoding = Nothing })
                                 |> continueWithStaticHttpResponse
 
+                        Just (Backend.Route.StaticFileRoute Backend.Route.FrontendLanguageServiceWorkerJavaScriptRoute) ->
+                            httpResponseOkWithBodyAsBase64
+                                (Just languageServiceWorkerJavaScriptBase64)
+                                (staticContentHttpHeaders { contentType = "text/javascript", contentEncoding = Nothing })
+                                |> continueWithStaticHttpResponse
+
                         Just (Backend.Route.StaticFileRoute Backend.Route.MonacoFrameDocumentRoute) ->
                             httpResponseOkWithStringContent monacoHtmlDocument
                                 (staticContentHttpHeaders { contentType = "text/html", contentEncoding = Nothing })
@@ -296,6 +302,30 @@ updateForHttpRequestEventExceptRequestsToVolatileProcess httpRequestEvent stateB
                               }
                             , []
                             )
+
+
+languageServiceWorkerJavaScript : String
+languageServiceWorkerJavaScript =
+    CompilationInterface.ElmMake.elm_make____src_LanguageServiceWorker_elm.javascript.utf8
+        ++ """
+const app = Elm.LanguageServiceWorker.init();
+
+onmessage = function ({ data }) {
+    app.ports.receiveRequest.send(data);
+};
+
+app.ports.sendResponse.subscribe(function(response) {
+    console.log(response);
+    postMessage(response);
+})
+
+"""
+
+
+languageServiceWorkerJavaScriptBase64 : String
+languageServiceWorkerJavaScriptBase64 =
+    Maybe.withDefault "Failed encoding as base64"
+        (Base64.fromString languageServiceWorkerJavaScript)
 
 
 updateForRequestToVolatileProcessResult :
@@ -498,6 +528,25 @@ window.addEventListener('message', function(e) {
     }
 }, false);
 
+
+if (window.Worker) {
+    const langServiceWorker = new Worker("language-service-worker.js");
+
+    app.ports.sendRequestToLanguageService.subscribe(function(message) {
+        langServiceWorker.postMessage(message);
+    });
+
+    function receiveResponseFromLanguageService(message) {
+        app.ports.receiveResponseFromLanguageService?.send(message);
+    }
+
+    langServiceWorker.onmessage = function(message) {
+        console.log('Message received from language service worker');
+        receiveResponseFromLanguageService(message.data);
+    }
+} else {
+    console.error("Failed to set up language service: Browser doesn't support web workers.");
+}
 
 </script>
 

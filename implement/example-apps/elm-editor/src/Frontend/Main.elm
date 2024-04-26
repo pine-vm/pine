@@ -54,6 +54,7 @@ import Json.Encode
 import Keyboard.Event
 import Keyboard.Key
 import LanguageService
+import LanguageServiceInterface
 import List.Extra
 import Parser
 import Result.Extra
@@ -75,6 +76,12 @@ port receiveMessageFromMonacoFrame : (Json.Encode.Value -> msg) -> Sub msg
 
 
 port receiveMessageFromContainerHtml : (Json.Encode.Value -> msg) -> Sub msg
+
+
+port sendRequestToLanguageService : Json.Encode.Value -> Cmd msg
+
+
+port receiveResponseFromLanguageService : (Json.Encode.Value -> msg) -> Sub msg
 
 
 type alias ElmMakeRequestStructure =
@@ -226,6 +233,7 @@ type WorkspaceEventStructure
     | BackendElmMakeResponseEvent ElmMakeRequestStructure (Result (Http.Detailed.Error String) ElmMakeResponseStructure)
     | UserInputSetEnlargedPane (Maybe WorkspacePane)
     | UserInputSetInspectionOnCompile Bool
+    | ResponseFromLanguageServiceEvent Json.Encode.Value
 
 
 type UserInputLoadFromGitEventStructure
@@ -308,6 +316,7 @@ subscriptions : State -> Sub Event
 subscriptions _ =
     [ receiveMessageFromMonacoFrame (MonacoEditorEvent >> WorkspaceEvent)
     , receiveMessageFromContainerHtml ReceiveMessageFromContainerHtmlEvent
+    , receiveResponseFromLanguageService (ResponseFromLanguageServiceEvent >> WorkspaceEvent)
     , Time.every 500 TimeHasArrived
     , Browser.Events.onKeyDown (Keyboard.Event.decodeKeyboardEvent |> Json.Decode.map UserInputKeyDownEvent)
     , Browser.Events.onMouseDown
@@ -971,14 +980,10 @@ updateWorkspaceWithoutCmdToUpdateEditor updateConfig event stateBefore =
                             updateWorkspaceWithoutCmdToUpdateEditor updateConfig UserInputInspectSyntax stateBefore
 
                         Frontend.MonacoEditor.RequestCompletionItemsEvent requestCompletionItems ->
-                            stateBefore
-                                |> provideCompletionItems requestCompletionItems
-                                |> Tuple.mapSecond provideCompletionItemsInMonacoEditorCmd
+                            updateToProvideCompletionItemsRequest requestCompletionItems stateBefore
 
                         Frontend.MonacoEditor.RequestHoverEvent requestHoverEvent ->
-                            stateBefore
-                                |> provideHover requestHoverEvent
-                                |> Tuple.mapSecond provideHoverInMonacoEditorCmd
+                            updateToProvideHoverRequest requestHoverEvent stateBefore
 
                         Frontend.MonacoEditor.DidFocusEditorWidgetEvent ->
                             ( stateBefore, Cmd.none )
@@ -1083,6 +1088,34 @@ updateWorkspaceWithoutCmdToUpdateEditor updateConfig event stateBefore =
 
             else
                 updateWorkspaceWithoutCmdToUpdateEditor updateConfig UserInputCompile state
+
+        ResponseFromLanguageServiceEvent responseJson ->
+            case
+                Json.Decode.decodeValue
+                    CompilationInterface.GenerateJsonConverters.jsonDecodeLanguageServiceResponse
+                    responseJson
+            of
+                Err _ ->
+                    ( stateBefore, Cmd.none )
+
+                Ok responseWithId ->
+                    case responseWithId.response of
+                        Err _ ->
+                            ( stateBefore, Cmd.none )
+
+                        Ok response ->
+                            let
+                                cmd =
+                                    case response of
+                                        LanguageServiceInterface.ProvideHoverResponse provideHover ->
+                                            provideHoverInMonacoEditorCmd provideHover
+
+                                        LanguageServiceInterface.ProvideCompletionItemsResponse completionItems ->
+                                            provideCompletionItemsInMonacoEditorCmd completionItems
+                            in
+                            ( stateBefore
+                            , cmd
+                            )
 
 
 updateCompilationForElmMakeRequestResponse :
@@ -1190,59 +1223,72 @@ parseElmFormatResponse response =
                 Err response
 
 
-provideCompletionItems :
-    Frontend.MonacoEditor.RequestCompletionItemsStruct
-    -> WorkspaceActiveStruct
-    -> ( WorkspaceActiveStruct, List Frontend.MonacoEditor.MonacoCompletionItem )
-provideCompletionItems request stateBefore =
-    case stateBefore.editing.filePathOpenedInEditor of
-        Nothing ->
-            ( stateBefore, [] )
-
-        Just filePathOpenedInEditor ->
-            updateAndGetFromLanguageService
-                (LanguageService.provideCompletionItems
-                    { filePathOpenedInEditor = filePathOpenedInEditor
-                    , textUntilPosition = request.textUntilPosition
-                    , cursorLineNumber = request.cursorLineNumber
-                    }
-                )
-                stateBefore
-
-
-provideHover :
+updateToProvideHoverRequest :
     Frontend.MonacoEditor.RequestHoverStruct
     -> WorkspaceActiveStruct
-    -> ( WorkspaceActiveStruct, List String )
-provideHover request stateBefore =
-    case stateBefore.editing.filePathOpenedInEditor of
+    -> ( WorkspaceActiveStruct, Cmd WorkspaceEventStructure )
+updateToProvideHoverRequest request workspaceStateBefore =
+    case workspaceStateBefore.editing.filePathOpenedInEditor of
         Nothing ->
-            ( stateBefore, [] )
+            ( workspaceStateBefore
+            , Cmd.none
+            )
 
         Just filePathOpenedInEditor ->
-            updateAndGetFromLanguageService
-                (LanguageService.provideHover
+            updateForRequestToLanguageService
+                (LanguageServiceInterface.ProvideHoverRequest
                     { filePathOpenedInEditor = filePathOpenedInEditor
                     , positionLineNumber = request.positionLineNumber
                     , positionColumn = request.positionColumn
                     , lineText = request.lineText
                     }
                 )
-                stateBefore
+                workspaceStateBefore
 
 
-updateAndGetFromLanguageService :
-    (LanguageService.LanguageServiceState -> a)
+updateToProvideCompletionItemsRequest :
+    Frontend.MonacoEditor.RequestCompletionItemsStruct
     -> WorkspaceActiveStruct
-    -> ( WorkspaceActiveStruct, a )
-updateAndGetFromLanguageService getFromLangService stateBefore =
-    let
-        languageServiceState =
-            LanguageService.updateLanguageServiceState stateBefore.fileTree stateBefore.languageServiceState
-    in
-    ( { stateBefore | languageServiceState = languageServiceState }
-    , getFromLangService languageServiceState
+    -> ( WorkspaceActiveStruct, Cmd WorkspaceEventStructure )
+updateToProvideCompletionItemsRequest request workspaceStateBefore =
+    case workspaceStateBefore.editing.filePathOpenedInEditor of
+        Nothing ->
+            ( workspaceStateBefore, Cmd.none )
+
+        Just filePathOpenedInEditor ->
+            updateForRequestToLanguageService
+                (LanguageServiceInterface.ProvideCompletionItemsRequest
+                    { filePathOpenedInEditor = filePathOpenedInEditor
+                    , cursorLineNumber = request.cursorLineNumber
+                    , textUntilPosition = request.textUntilPosition
+                    }
+                )
+                workspaceStateBefore
+
+
+updateForRequestToLanguageService :
+    LanguageServiceInterface.Request
+    -> WorkspaceActiveStruct
+    -> ( WorkspaceActiveStruct, Cmd WorkspaceEventStructure )
+updateForRequestToLanguageService request workspaceStateBefore =
+    ( workspaceStateBefore
+    , sendRequestToLanguageService
+        (CompilationInterface.GenerateJsonConverters.jsonEncodeLanguageServiceRequestInWorkspace
+            { id = ""
+            , request =
+                { workspace = workspaceForLangServiceRequest workspaceStateBefore
+                , request = request
+                }
+            }
+        )
     )
+
+
+workspaceForLangServiceRequest : WorkspaceActiveStruct -> LanguageServiceInterface.FileTreeNode
+workspaceForLangServiceRequest workspace =
+    FileTree.mapBlobs
+        (\{ asBase64 } -> { asBase64 = asBase64 })
+        workspace.fileTree
 
 
 processEventUrlChanged : Url.Url -> State -> ( State, Cmd Event )

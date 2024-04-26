@@ -8,6 +8,7 @@ import Frontend.MonacoEditor
 import FrontendBackendInterface
 import Json.Decode
 import Json.Encode
+import LanguageServiceInterface
 import WorkspaceState_2021_01
 
 
@@ -68,4 +69,24 @@ jsonEncodeWorkspaceStateDiff_2021_01 =
 
 jsonDecodeWorkspaceStateDiff_2021_01 : Json.Decode.Decoder WorkspaceState_2021_01.WorkspaceStateDifference
 jsonDecodeWorkspaceStateDiff_2021_01 =
+    Json.Decode.fail "The compiler replaces this declaration."
+
+
+jsonEncodeLanguageServiceRequestInWorkspace : LanguageServiceInterface.RequestInWorkspaceWithId -> Json.Encode.Value
+jsonEncodeLanguageServiceRequestInWorkspace =
+    always (Json.Encode.string "The compiler replaces this declaration.")
+
+
+jsonDecodeLanguageServiceRequestInWorkspace : Json.Decode.Decoder LanguageServiceInterface.RequestInWorkspaceWithId
+jsonDecodeLanguageServiceRequestInWorkspace =
+    Json.Decode.fail "The compiler replaces this declaration."
+
+
+jsonEncodeLanguageServiceResponse : LanguageServiceInterface.ResponseWithId -> Json.Encode.Value
+jsonEncodeLanguageServiceResponse =
+    always (Json.Encode.string "The compiler replaces this declaration.")
+
+
+jsonDecodeLanguageServiceResponse : Json.Decode.Decoder LanguageServiceInterface.ResponseWithId
+jsonDecodeLanguageServiceResponse =
     Json.Decode.fail "The compiler replaces this declaration."

@@ -1,5 +1,6 @@
 module FileTree exposing (..)
 
+import Common
 import Dict
 import List
 import Tuple
@@ -155,6 +156,28 @@ mapBlobs mapBlob node =
 
         BlobNode blob ->
             BlobNode (mapBlob blob)
+
+
+mapBlobsOrReturnFirstError : (a -> Result err b) -> FileTreeNode a -> Result ( List String, err ) (FileTreeNode b)
+mapBlobsOrReturnFirstError tryMapBlob node =
+    case node of
+        TreeNode tree ->
+            Common.resultListMapCombine
+                (\( childName, childNode ) ->
+                    mapBlobsOrReturnFirstError tryMapBlob childNode
+                        |> Result.mapError (Tuple.mapFirst ((::) childName))
+                        |> Result.map (Tuple.pair childName)
+                )
+                tree
+                |> Result.map TreeNode
+
+        BlobNode blob ->
+            case tryMapBlob blob of
+                Err err ->
+                    Err ( [], err )
+
+                Ok mappedBlob ->
+                    Ok (BlobNode mappedBlob)
 
 
 mapBlobsWithPath : (( List String, a ) -> b) -> FileTreeNode a -> FileTreeNode b

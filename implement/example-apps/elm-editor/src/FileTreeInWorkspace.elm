@@ -225,3 +225,16 @@ blobValueFromBytes asBytes =
             |> Base64.fromBytes
             |> Maybe.withDefault "Error encoding in base64"
     }
+
+
+blobValueFromBase64 : String -> Result String BlobNodeWithCache
+blobValueFromBase64 asBase64 =
+    case Base64.toBytes asBase64 of
+        Nothing ->
+            Err "Failed to decode as base64"
+
+        Just asBytes ->
+            Ok
+                { asBytes = asBytes
+                , asBase64 = asBase64
+                }

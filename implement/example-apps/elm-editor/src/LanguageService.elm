@@ -1,7 +1,7 @@
 module LanguageService exposing (..)
 
-{-| This module contains language services for Elm programs.
-These functions enable editor features like completion suggestions and hover tips.
+{-| Language services for Elm programs.
+These functions enable features like completion suggestions and hover tips in the code editor.
 -}
 
 import Common
@@ -23,6 +23,7 @@ import Elm.Syntax.TypeAnnotation
 import FileTree
 import FileTreeInWorkspace
 import Frontend.MonacoEditor
+import LanguageServiceInterface
 import Maybe.Extra
 
 
@@ -99,8 +100,10 @@ initLanguageServiceState =
     }
 
 
+{-| <https://microsoft.github.io/monaco-editor/typedoc/interfaces/languages.HoverProvider.html#provideHover>
+-}
 provideHover :
-    { filePathOpenedInEditor : List String, positionLineNumber : Int, positionColumn : Int, lineText : String }
+    LanguageServiceInterface.ProvideHoverRequestStruct
     -> LanguageServiceState
     -> List String
 provideHover request languageServiceState =
@@ -313,8 +316,10 @@ listTypeReferencesFromTypeAnnotation node =
             List.concatMap listTypeReferencesFromTypeAnnotation [ input, return ]
 
 
+{-| <https://microsoft.github.io/monaco-editor/typedoc/interfaces/languages.CompletionItemProvider.html#provideCompletionItems>
+-}
 provideCompletionItems :
-    { filePathOpenedInEditor : List String, cursorLineNumber : Int, textUntilPosition : String }
+    LanguageServiceInterface.ProvideCompletionItemsRequestStruct
     -> LanguageServiceState
     -> List Frontend.MonacoEditor.MonacoCompletionItem
 provideCompletionItems request languageServiceState =

@@ -37,3 +37,33 @@ commonPrefixLength listA listB =
 
                     else
                         0
+
+
+resultListMapCombine :
+    (item -> Result err itemOk)
+    -> List item
+    -> Result err (List itemOk)
+resultListMapCombine mapItem list =
+    resultListMapCombineHelper [] mapItem list
+
+
+resultListMapCombineHelper :
+    List itemOk
+    -> (item -> Result err itemOk)
+    -> List item
+    -> Result err (List itemOk)
+resultListMapCombineHelper completeList mapItem sourceList =
+    case sourceList of
+        [] ->
+            Ok (List.reverse completeList)
+
+        item :: tail ->
+            case mapItem item of
+                Ok itemOk ->
+                    resultListMapCombineHelper
+                        (itemOk :: completeList)
+                        mapItem
+                        tail
+
+                Err err ->
+                    Err err
