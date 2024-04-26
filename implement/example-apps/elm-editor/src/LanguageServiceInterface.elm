@@ -27,6 +27,7 @@ type alias FileTreeNode =
 
 type alias FileTreeBlobNode =
     { asBase64 : String
+    , asText : Maybe String
     }
 
 

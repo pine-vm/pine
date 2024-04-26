@@ -1287,7 +1287,11 @@ updateForRequestToLanguageService request workspaceStateBefore =
 workspaceForLangServiceRequest : WorkspaceActiveStruct -> LanguageServiceInterface.FileTreeNode
 workspaceForLangServiceRequest workspace =
     FileTree.mapBlobs
-        (\{ asBase64 } -> { asBase64 = asBase64 })
+        (\{ asBytes, asBase64 } ->
+            { asBase64 = asBase64
+            , asText = Common.decodeBytesToString asBytes
+            }
+        )
         workspace.fileTree
 
 
@@ -1301,7 +1305,7 @@ processEventUrlChanged url stateBefore =
             Frontend.WorkspaceStateInUrl.filePathToOpenFromUrl url
                 |> Maybe.map (String.split "/" >> List.concatMap (String.split "\\"))
 
-        workspaceWithMatchingStateHashAlreadyLoaded =
+        workspaceWithMatchingStateHashAlreadyLoaded () =
             case stateBefore.workspace of
                 WorkspaceActive workspaceActive ->
                     Just
@@ -1332,7 +1336,7 @@ processEventUrlChanged url stateBefore =
             )
 
         Just (Ok workspaceDescription) ->
-            if workspaceWithMatchingStateHashAlreadyLoaded then
+            if workspaceWithMatchingStateHashAlreadyLoaded () then
                 ( stateBefore, Cmd.none )
 
             else

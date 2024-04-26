@@ -4,7 +4,6 @@ module LanguageService exposing (..)
 These functions enable features like completion suggestions and hover tips in the code editor.
 -}
 
-import Common
 import CompilationInterface.SourceFiles
 import CompileElmApp
 import Elm.Syntax.Comments
@@ -21,7 +20,6 @@ import Elm.Syntax.Type
 import Elm.Syntax.TypeAlias
 import Elm.Syntax.TypeAnnotation
 import FileTree
-import FileTreeInWorkspace
 import Frontend.MonacoEditor
 import LanguageServiceInterface
 import Maybe.Extra
@@ -38,8 +36,14 @@ type alias LanguageServiceStateFileTreeNodeBlob =
          Convert to other representation before comparing.
       -}
       sourceBase64 : String
-    , parsedFile : Maybe ParsedModuleCache
+    , textContent : Maybe FileTextContent
     , parsedFileLastSuccess : Maybe ParsedModuleCache
+    }
+
+
+type alias FileTextContent =
+    { text : String
+    , parsedFile : Maybe ParsedModuleCache
     }
 
 
@@ -330,24 +334,29 @@ provideCompletionItems request languageServiceState =
         Just currentFileCacheItem ->
             let
                 cursorIsInCommentInCompleteSyntax =
-                    case currentFileCacheItem.parsedFile of
+                    case currentFileCacheItem.textContent of
                         Nothing ->
                             False
 
-                        Just parsedFile ->
-                            locationIsInComment
-                                { row = request.cursorLineNumber
-                                , column =
-                                    (request.textUntilPosition
-                                        |> String.lines
-                                        |> List.reverse
-                                        |> List.head
-                                        |> Maybe.withDefault ""
-                                        |> String.length
-                                    )
-                                        + 1
-                                }
-                                parsedFile.syntax
+                        Just textContent ->
+                            case textContent.parsedFile of
+                                Nothing ->
+                                    False
+
+                                Just parsedFile ->
+                                    locationIsInComment
+                                        { row = request.cursorLineNumber
+                                        , column =
+                                            (request.textUntilPosition
+                                                |> String.lines
+                                                |> List.reverse
+                                                |> List.head
+                                                |> Maybe.withDefault ""
+                                                |> String.length
+                                            )
+                                                + 1
+                                        }
+                                        parsedFile.syntax
             in
             if cursorIsInCommentInCompleteSyntax then
                 []
@@ -882,7 +891,7 @@ markdownElmCodeBlockFromCodeLines codeLines =
     String.join "\n" (List.map ((++) "    ") codeLines)
 
 
-updateLanguageServiceState : FileTreeInWorkspace.FileTreeNode -> LanguageServiceState -> LanguageServiceState
+updateLanguageServiceState : LanguageServiceInterface.FileTreeNode -> LanguageServiceState -> LanguageServiceState
 updateLanguageServiceState fileTree state =
     let
         compileFileCacheEntry ( blobPath, fileTreeBlob ) =
@@ -890,23 +899,28 @@ updateLanguageServiceState fileTree state =
                 maybePreviousCached =
                     state.fileTreeParseCache |> FileTree.getBlobAtPathFromFileTree blobPath
 
-                buildNewEntry _ =
+                buildNewEntry () =
                     let
-                        parsedFile =
-                            fileTreeBlob.asBytes
-                                |> Common.decodeBytesToString
-                                |> Maybe.andThen
-                                    (\asString ->
-                                        asString
-                                            |> CompileElmApp.parseElmModuleText
-                                            |> Result.toMaybe
-                                            |> Maybe.map (\syntax -> { text = asString, syntax = syntax })
-                                    )
+                        textContent =
+                            case fileTreeBlob.asText of
+                                Nothing ->
+                                    Nothing
+
+                                Just asString ->
+                                    let
+                                        parsedFile =
+                                            asString
+                                                |> CompileElmApp.parseElmModuleText
+                                                |> Result.toMaybe
+                                                |> Maybe.map (\syntax -> { text = asString, syntax = syntax })
+                                    in
+                                    Just { text = asString, parsedFile = parsedFile }
                     in
                     { sourceBase64 = fileTreeBlob.asBase64
-                    , parsedFile = parsedFile
+                    , textContent = textContent
                     , parsedFileLastSuccess =
-                        Maybe.Extra.or parsedFile (Maybe.andThen .parsedFileLastSuccess maybePreviousCached)
+                        Maybe.andThen .parsedFileLastSuccess maybePreviousCached
+                            |> Maybe.Extra.orElse (Maybe.andThen .parsedFile textContent)
                     }
             in
             case maybePreviousCached of
@@ -921,7 +935,7 @@ updateLanguageServiceState fileTree state =
                         buildNewEntry ()
     in
     { state
-        | fileTreeParseCache = fileTree |> FileTree.mapBlobsWithPath compileFileCacheEntry
+        | fileTreeParseCache = FileTree.mapBlobsWithPath compileFileCacheEntry fileTree
     }
 
 

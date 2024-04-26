@@ -79,44 +79,32 @@ handleRequest :
     -> State
     -> ( Result String LanguageServiceInterface.Response, State )
 handleRequest requestInWorkspace stateBefore =
-    case FileTree.mapBlobsOrReturnFirstError parseFileTreeBlobFromRequest requestInWorkspace.workspace of
-        Err ( filePath, err ) ->
-            ( Err ("Failed to parse workspace file " ++ String.join "/" filePath ++ ": " ++ err)
-            , stateBefore
-            )
+    let
+        languageServiceState =
+            LanguageService.updateLanguageServiceState requestInWorkspace.workspace stateBefore
 
-        Ok fileTree ->
-            let
-                languageServiceState =
-                    LanguageService.updateLanguageServiceState fileTree stateBefore
+        serviceResponse =
+            case requestInWorkspace.request of
+                LanguageServiceInterface.ProvideHoverRequest provideHoverRequest ->
+                    LanguageServiceInterface.ProvideHoverResponse
+                        (LanguageService.provideHover
+                            provideHoverRequest
+                            languageServiceState
+                        )
 
-                serviceResponse =
-                    case requestInWorkspace.request of
-                        LanguageServiceInterface.ProvideHoverRequest provideHoverRequest ->
-                            LanguageServiceInterface.ProvideHoverResponse
-                                (LanguageService.provideHover
-                                    provideHoverRequest
-                                    languageServiceState
-                                )
-
-                        LanguageServiceInterface.ProvideCompletionItemsRequest provideCompletionItemsRequest ->
-                            LanguageServiceInterface.ProvideCompletionItemsResponse
-                                (LanguageService.provideCompletionItems
-                                    provideCompletionItemsRequest
-                                    languageServiceState
-                                )
-            in
-            ( Ok serviceResponse
-            , languageServiceState
-            )
+                LanguageServiceInterface.ProvideCompletionItemsRequest provideCompletionItemsRequest ->
+                    LanguageServiceInterface.ProvideCompletionItemsResponse
+                        (LanguageService.provideCompletionItems
+                            provideCompletionItemsRequest
+                            languageServiceState
+                        )
+    in
+    ( Ok serviceResponse
+    , languageServiceState
+    )
 
 
 sendResponseCmd : LanguageServiceInterface.ResponseWithId -> Cmd.Cmd e
 sendResponseCmd response =
     sendResponse
         (CompilationInterface.GenerateJsonConverters.jsonEncodeLanguageServiceResponse response)
-
-
-parseFileTreeBlobFromRequest : LanguageServiceInterface.FileTreeBlobNode -> Result String FileTreeInWorkspace.BlobNodeWithCache
-parseFileTreeBlobFromRequest { asBase64 } =
-    FileTreeInWorkspace.blobValueFromBase64 asBase64
