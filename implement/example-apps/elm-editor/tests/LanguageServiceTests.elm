@@ -1,11 +1,11 @@
 module LanguageServiceTests exposing (..)
 
-import Bytes
-import Bytes.Encode
+import Base64
 import Expect
-import FileTreeInWorkspace
+import FileTree
 import Frontend.MonacoEditor
 import LanguageService
+import LanguageServiceInterface
 import Test
 
 
@@ -203,7 +203,10 @@ hoverExpectationFromScenario otherFiles ( fileOpenedInEditorPath, fileOpenedInEd
                 expectedItems
 
         splitElements ->
-            Expect.fail ("Unexpected shape of fileOpenedInEditorText: Unexpected number of split symbols: " ++ String.fromInt (List.length splitElements - 1))
+            Expect.fail
+                ("Unexpected shape of fileOpenedInEditorText: Unexpected number of split symbols: "
+                    ++ String.fromInt (List.length splitElements - 1)
+                )
 
 
 hoverExpectationFromScenarioDescribingOpenFile :
@@ -215,7 +218,7 @@ hoverExpectationFromScenarioDescribingOpenFile otherFiles fileOpenedInEditor exp
     let
         languageServiceState =
             buildLanguageServiceStateFindingParsableModuleText
-                { maxLinesToRemoveBeforeCursor = 3 }
+                { maxLinesToRemoveBeforeCursor = 0 }
                 otherFiles
                 fileOpenedInEditor
 
@@ -789,11 +792,17 @@ expectationFromScenario otherFiles ( fileOpenedInEditorPath, fileOpenedInEditorT
         [ textUntilCursor, textAfterCursor ] ->
             expectationFromScenarioDescribingOpenFile
                 otherFiles
-                { filePath = fileOpenedInEditorPath, textUntilCursor = textUntilCursor, textAfterCursor = textAfterCursor }
+                { filePath = fileOpenedInEditorPath
+                , textUntilCursor = textUntilCursor
+                , textAfterCursor = textAfterCursor
+                }
                 expectedItems
 
         splitElements ->
-            Expect.fail ("Unexpected shape of fileOpenedInEditorText: Unexpected number of split symbols: " ++ String.fromInt (List.length splitElements - 1))
+            Expect.fail
+                ("Unexpected shape of fileOpenedInEditorText: Unexpected number of split symbols: "
+                    ++ String.fromInt (List.length splitElements - 1)
+                )
 
 
 expectationFromScenarioDescribingOpenFile :
@@ -832,15 +841,28 @@ buildLanguageServiceStateFindingParsableModuleText { maxLinesToRemoveBeforeCurso
         fileTreeWithPreviousLinesRemoved linesToRemove =
             let
                 textUntilCursor =
-                    textUntilCursorLines |> List.reverse |> List.drop linesToRemove |> List.reverse |> String.join "\n"
+                    textUntilCursorLines
+                        |> List.reverse
+                        |> List.drop linesToRemove
+                        |> List.reverse
+                        |> String.join "\n"
 
                 fileOpenedInEditorText =
                     textUntilCursor ++ fileOpenedInEditor.textAfterCursor
+
+                allFiles =
+                    ( fileOpenedInEditor.filePath, fileOpenedInEditorText )
+                        :: otherFiles
             in
-            ( fileOpenedInEditor.filePath, fileOpenedInEditorText )
-                :: otherFiles
-                |> List.map (Tuple.mapSecond fileContentFromString)
-                |> FileTreeInWorkspace.sortedFileTreeFromListOfBlobsAsBytes
+            allFiles
+                |> List.foldl
+                    (\( filePath, fileContentString ) ->
+                        FileTree.setNodeAtPathInSortedFileTree
+                            ( filePath
+                            , FileTree.BlobNode (fileContentFromString fileContentString)
+                            )
+                    )
+                    (FileTree.TreeNode [])
     in
     List.range 0 maxLinesToRemoveBeforeCursor
         |> List.foldr
@@ -848,9 +870,17 @@ buildLanguageServiceStateFindingParsableModuleText { maxLinesToRemoveBeforeCurso
             LanguageService.initLanguageServiceState
 
 
-fileContentFromString : String -> Bytes.Bytes
-fileContentFromString =
-    Bytes.Encode.string >> Bytes.Encode.encode
+fileContentFromString : String -> LanguageServiceInterface.FileTreeBlobNode
+fileContentFromString asText =
+    { asBase64 =
+        case Base64.fromString asText of
+            Just base64 ->
+                base64
+
+            Nothing ->
+                "Failed encoding to base64"
+    , asText = Just asText
+    }
 
 
 stringTrimUpToLineBreaks : String -> String

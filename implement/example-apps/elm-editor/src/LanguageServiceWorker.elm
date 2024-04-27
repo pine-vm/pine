@@ -4,8 +4,6 @@ port module LanguageServiceWorker exposing (..)
 -}
 
 import CompilationInterface.GenerateJsonConverters
-import FileTree
-import FileTreeInWorkspace
 import Json.Decode
 import Json.Encode
 import LanguageService
