@@ -944,8 +944,13 @@ elmCoreModules =
     [ CompilationInterface.SourceFiles.file_tree____elm_core_modules_implicit_import
         |> listAllFilesFromSourceFileTreeNode
         |> List.map (\( _, fileContent ) -> { moduleText = fileContent.utf8, implicitImport = True })
-    , CompilationInterface.SourceFiles.file_tree____elm_core_modules_explicit_import
-        |> listAllFilesFromSourceFileTreeNode
+    , [ CompilationInterface.SourceFiles.file_tree____elm_core_modules_explicit_import
+      , CompilationInterface.SourceFiles.file_tree____elm_kernel_modules_json_src
+      , CompilationInterface.SourceFiles.file_tree____elm_kernel_modules_http_src
+      , CompilationInterface.SourceFiles.file_tree____elm_kernel_modules_html_src
+      , CompilationInterface.SourceFiles.file_tree____elm_kernel_modules_browser_src
+      ]
+        |> List.concatMap listAllFilesFromSourceFileTreeNode
         |> List.map (\( _, fileContent ) -> { moduleText = fileContent.utf8, implicitImport = False })
     ]
         |> List.concat

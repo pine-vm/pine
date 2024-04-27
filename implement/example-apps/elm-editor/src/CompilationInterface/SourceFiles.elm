@@ -27,3 +27,23 @@ file_tree____elm_core_modules_implicit_import =
 file_tree____elm_core_modules_explicit_import : FileTreeNode { utf8 : String }
 file_tree____elm_core_modules_explicit_import =
     BlobNode { utf8 = "The compiler replaces this declaration." }
+
+
+file_tree____elm_kernel_modules_json_src : FileTreeNode { utf8 : String }
+file_tree____elm_kernel_modules_json_src =
+    BlobNode { utf8 = "The compiler replaces this declaration." }
+
+
+file_tree____elm_kernel_modules_http_src : FileTreeNode { utf8 : String }
+file_tree____elm_kernel_modules_http_src =
+    BlobNode { utf8 = "The compiler replaces this declaration." }
+
+
+file_tree____elm_kernel_modules_html_src : FileTreeNode { utf8 : String }
+file_tree____elm_kernel_modules_html_src =
+    BlobNode { utf8 = "The compiler replaces this declaration." }
+
+
+file_tree____elm_kernel_modules_browser_src : FileTreeNode { utf8 : String }
+file_tree____elm_kernel_modules_browser_src =
+    BlobNode { utf8 = "The compiler replaces this declaration." }
