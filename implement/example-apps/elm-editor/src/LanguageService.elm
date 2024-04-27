@@ -919,8 +919,8 @@ updateLanguageServiceState fileTree state =
                     { sourceBase64 = fileTreeBlob.asBase64
                     , textContent = textContent
                     , parsedFileLastSuccess =
-                        Maybe.andThen .parsedFileLastSuccess maybePreviousCached
-                            |> Maybe.Extra.orElse (Maybe.andThen .parsedFile textContent)
+                        Maybe.andThen .parsedFile textContent
+                            |> Maybe.Extra.orElse (Maybe.andThen .parsedFileLastSuccess maybePreviousCached)
                     }
             in
             case maybePreviousCached of
