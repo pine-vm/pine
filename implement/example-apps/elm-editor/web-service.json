@@ -6,7 +6,7 @@
     "httpRequestEventSizeLimit": 5500000,
     "disabled____________________letsEncryptOptions": {
         "Domains": [
-            "editor.elm-time.org",
+            "play.pine-vm.org",
             "elm-editor.com"
         ],
         "Email": "viir@viir.de",
