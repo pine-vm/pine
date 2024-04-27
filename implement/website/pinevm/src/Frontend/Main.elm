@@ -62,6 +62,7 @@ topNavigationElements : List NavigationLink
 topNavigationElements =
     [ PageNavigationLink HomePage
     , ExternalNavigationLink { label = "Learn", url = "https://github.com/pine-vm/pine/tree/main/guide" }
+    , ExternalNavigationLink { label = "Playground", url = "https://elm-editor.com" }
     , PageNavigationLink DownloadPage
     , PageNavigationLink NewsPage
     ]
