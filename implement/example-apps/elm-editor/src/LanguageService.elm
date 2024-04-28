@@ -947,6 +947,7 @@ elmCoreModules =
     , [ CompilationInterface.SourceFiles.file_tree____elm_core_modules_explicit_import
       , CompilationInterface.SourceFiles.file_tree____elm_kernel_modules_json_src
       , CompilationInterface.SourceFiles.file_tree____elm_kernel_modules_http_src
+      , CompilationInterface.SourceFiles.file_tree____elm_kernel_modules_time_src
       , CompilationInterface.SourceFiles.file_tree____elm_kernel_modules_html_src
       , CompilationInterface.SourceFiles.file_tree____elm_kernel_modules_browser_src
       ]

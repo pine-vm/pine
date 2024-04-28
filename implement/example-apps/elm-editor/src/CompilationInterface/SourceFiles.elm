@@ -39,6 +39,11 @@ file_tree____elm_kernel_modules_http_src =
     BlobNode { utf8 = "The compiler replaces this declaration." }
 
 
+file_tree____elm_kernel_modules_time_src : FileTreeNode { utf8 : String }
+file_tree____elm_kernel_modules_time_src =
+    BlobNode { utf8 = "The compiler replaces this declaration." }
+
+
 file_tree____elm_kernel_modules_html_src : FileTreeNode { utf8 : String }
 file_tree____elm_kernel_modules_html_src =
     BlobNode { utf8 = "The compiler replaces this declaration." }
