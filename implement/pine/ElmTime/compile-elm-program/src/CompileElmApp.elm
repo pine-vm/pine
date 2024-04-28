@@ -525,6 +525,7 @@ parseElmJsonSourceDirectoryPath pathInJson =
         let
             pathItems =
                 String.split "/" pathInJson
+                    |> List.Extra.dropWhile String.isEmpty
         in
         List.foldl
             (\nextSegment { parentLevel, subdirectories } ->

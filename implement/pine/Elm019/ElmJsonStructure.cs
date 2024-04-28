@@ -16,14 +16,14 @@ public record ElmJsonStructure(
     {
         var initialRecord = new RelativeDirectory(ParentLevel: 0, Subdirectories: []);
 
-        if (sourceDirectory == ".")
-            return initialRecord;
-
         sourceDirectory = sourceDirectory.Replace('\\', '/');
 
         sourceDirectory = sourceDirectory.StartsWith("./") ? sourceDirectory[2..] : sourceDirectory;
 
-        var segmentsStrings = sourceDirectory.Split('/');
+        var segmentsStrings =
+            sourceDirectory
+            .Split('/')
+            .SkipWhile(segment => segment is "");
 
         return
             segmentsStrings
@@ -43,6 +43,10 @@ public record ElmJsonStructure(
                                     {
                                         ParentLevel = aggregate.ParentLevel + 1
                                     },
+
+                            "." =>
+                            aggregate,
+
                             _ =>
                                 aggregate with
                                 {
