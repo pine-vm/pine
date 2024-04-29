@@ -166,14 +166,14 @@ public class ElmTestRs
         }
         catch (Exception e)
         {
-            return Result<string, IReadOnlyList<(string rawLine, ElmTestRsReportJsonEntry parsedLine)>>.err(
+            return
                 string.Join(
                     "\n",
                     "Failed to parse process output (" + e.GetType().Name + ", " + e.Message + ")",
                     "StandardOutput:",
                     processOutput.StandardOutput,
                     "StandardError:",
-                    processOutput.StandardError));
+                    processOutput.StandardError);
         }
     }
 
@@ -237,7 +237,13 @@ public class ElmTestRs
                 overallSuccess);
         }
 
-        if (@event.@event == "testsCompleted" && @event.status != "pass")
+        /*
+         * The "testsCompleted" label was renamed to "testCompleted" here:
+         * https://github.com/mpizenberg/elm-test-runner/commit/9bd86cc9108bac40c477805f479a60afa62230c1
+         * See the discussion at https://github.com/mpizenberg/elm-test-rs/issues/101
+         * */
+        if ((@event.@event is "testsCompleted" || @event.@event is "testCompleted") &&
+            @event.status is not "pass")
         {
             var textsFromLabels =
                 (@event.labels ?? []).SkipLast(1).Select(label => ("\n↓ " + label, ElmTestRsConsoleOutputColor.DefaultColor))
@@ -246,7 +252,7 @@ public class ElmTestRs
 
             static IReadOnlyList<string> renderFailureReasonData(ElmTestRsReportJsonEntryFailureReasonData failureReasonData)
             {
-                if (failureReasonData.Equality != null)
+                if (failureReasonData.Equality is not null)
                 {
                     return [
                         "",
@@ -259,8 +265,8 @@ public class ElmTestRs
                     ];
                 }
 
-                if (failureReasonData.String != null)
-                    return ["", failureReasonData.String, ""];
+                if (failureReasonData.String is { } failureReasonDataString)
+                    return ["", failureReasonDataString, ""];
 
                 throw new Exception("Incomplete match on sum type.");
             }

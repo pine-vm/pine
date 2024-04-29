@@ -643,6 +643,8 @@ public class Program
 
                 static void saveTextToFileAndReportToConsole(string filePath, string text)
                 {
+                    filePath = Path.GetFullPath(filePath);
+
                     Directory.CreateDirectory(Path.GetDirectoryName(filePath)!);
 
                     File.WriteAllText(filePath, text ?? "", Encoding.UTF8);
