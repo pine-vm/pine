@@ -148,12 +148,19 @@ hoverItemsFromParsedModule parsedModule languageServiceState =
         parsedDeclarationsAndReferences =
             listDeclarationsAndReferencesInFile parsedModule.syntax
 
+        currentModuleDeclarations :
+            { fromTopLevel : List { completionItem : Frontend.MonacoEditor.MonacoCompletionItem, isExposed : Bool }
+            , fromLocals : List { completionItem : Frontend.MonacoEditor.MonacoCompletionItem, scope : Elm.Syntax.Range.Range }
+            }
         currentModuleDeclarations =
             completionItemsFromModule parsedModule
 
+        importExposings : List Frontend.MonacoEditor.MonacoCompletionItem
         importExposings =
             importExposingsFromFile parsedModule languageServiceState
+                ++ commonImplicitTopLevelImports languageServiceState
 
+        localDeclarationsAndImportExposings : List ( DeclarationScope, Frontend.MonacoEditor.MonacoCompletionItem )
         localDeclarationsAndImportExposings =
             ((List.map .completionItem currentModuleDeclarations.fromTopLevel
                 ++ importExposings
@@ -190,14 +197,9 @@ hoverItemsFromParsedModule parsedModule languageServiceState =
                 |> List.map (Tuple.mapSecond .documentation)
 
         getHoverForFunctionOrName : Elm.Syntax.Node.Node ( Elm.Syntax.ModuleName.ModuleName, String ) -> Maybe String
-        getHoverForFunctionOrName functionOrNameNode =
+        getHoverForFunctionOrName (Elm.Syntax.Node.Node functionOrNameNodeRange ( moduleName, nameInModule )) =
             let
-                ( moduleName, nameInModule ) =
-                    Elm.Syntax.Node.value functionOrNameNode
-
-                functionOrNameNodeRange =
-                    Elm.Syntax.Node.range functionOrNameNode
-
+                itemsBeforeFilteringByNameInModule : List Frontend.MonacoEditor.MonacoCompletionItem
                 itemsBeforeFilteringByNameInModule =
                     if moduleName == [] then
                         localDeclarationsAndImportExposings
@@ -227,13 +229,11 @@ hoverItemsFromParsedModule parsedModule languageServiceState =
                 |> List.map .documentation
                 |> List.head
 
+        getForHoversForReferenceNode : Elm.Syntax.Node.Node ( List String, String ) -> List ( Elm.Syntax.Range.Range, String )
         getForHoversForReferenceNode functionOrNameNode =
             let
-                ( moduleName, nameInModule ) =
-                    Elm.Syntax.Node.value functionOrNameNode
-
-                wholeRange =
-                    Elm.Syntax.Node.range functionOrNameNode
+                (Elm.Syntax.Node.Node wholeRange ( moduleName, nameInModule )) =
+                    functionOrNameNode
 
                 wholeRangeEnd =
                     wholeRange.end
@@ -456,6 +456,7 @@ provideCompletionItemsInModule request languageServiceState =
 
         importExposings =
             importExposingsFromFile request.fileOpenedInEditor languageServiceState
+                ++ commonImplicitTopLevelImports languageServiceState
 
         localDeclarationsAndImportExposings =
             List.map .completionItem currentModuleDeclarations.fromTopLevel
@@ -669,6 +670,59 @@ importExposingsFromFile fileOpenedInEditor languageServiceState =
                                                     importedModuleItems
                                                         |> List.filter (.insertText >> (==) exposedName)
                                                 )
+            )
+
+
+commonImplicitTopLevelImports : LanguageServiceState -> List Frontend.MonacoEditor.MonacoCompletionItem
+commonImplicitTopLevelImports languageServiceState =
+    languageServiceState.coreModulesCache
+        |> List.concatMap
+            (\coreModule ->
+                let
+                    (Elm.Syntax.Node.Node _ moduleDefinition) =
+                        coreModule.parseResult.syntax.moduleDefinition
+
+                    moduleName =
+                        Elm.Syntax.Module.moduleName moduleDefinition
+
+                    moduleCompletionItems =
+                        completionItemsFromModule coreModule.parseResult
+
+                    isItemExposed : Frontend.MonacoEditor.MonacoCompletionItem -> Bool
+                    isItemExposed item =
+                        case moduleName of
+                            [ "Basics" ] ->
+                                True
+
+                            [ "String" ] ->
+                                case item.label of
+                                    "String" ->
+                                        True
+
+                                    _ ->
+                                        False
+
+                            [ "Maybe" ] ->
+                                case item.label of
+                                    "Maybe" ->
+                                        True
+
+                                    "Just" ->
+                                        True
+
+                                    "Nothing" ->
+                                        True
+
+                                    _ ->
+                                        False
+
+                            _ ->
+                                False
+                in
+                moduleCompletionItems.fromTopLevel
+                    |> List.filter .isExposed
+                    |> List.map .completionItem
+                    |> List.filter isItemExposed
             )
 
 

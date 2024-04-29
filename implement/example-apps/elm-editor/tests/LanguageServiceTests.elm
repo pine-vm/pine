@@ -183,6 +183,69 @@ function argumentName =
 """
                     [ """    argumentName : Int"""
                     ]
+        , Test.test "On Int" <|
+            \_ ->
+                expectationFromScenarioInMain
+                    """
+module Main exposing (..)
+
+
+function : I👈🚁nt -> Int
+function argumentName =
+    argumentName
+
+"""
+                    [ """
+    type Int = Int
+
+An `Int` is a whole number. Valid syntax for integers includes:
+
+    0
+    42
+    9000
+    0xFF   -- 255 in hexadecimal
+    0x000A --  10 in hexadecimal
+
+**Note:** `Int` math is well-defined in the range `-2^31` to `2^31 - 1`. Outside
+of that range, the behavior is determined by the compilation target. When
+generating JavaScript, the safe range expands to `-(2^53 - 1)` to `2^53 - 1` for some
+operations, but if we generate WebAssembly some day, we would do the traditional
+[integer overflow][io]. This quirk is necessary to get good performance on
+quirky compilation targets.
+
+**Historical Note:** The name `Int` comes from the term [integer][]. It appears
+that the `int` abbreviation was introduced in [ALGOL 68][68], shortening it
+from `integer` in [ALGOL 60][60]. Today, almost all programming languages use
+this abbreviation.
+
+[io]: https://en.wikipedia.org/wiki/Integer_overflow
+[integer]: https://en.wikipedia.org/wiki/Integer
+[60]: https://en.wikipedia.org/wiki/ALGOL_60
+[68]: https://en.wikipedia.org/wiki/ALGOL_68
+"""
+                    ]
+        , Test.test "On not" <|
+            \_ ->
+                expectationFromScenarioInMain
+                    """
+module Main exposing (..)
+
+
+false : Bool
+false =
+    no👈🚁t True
+
+
+"""
+                    [ """
+not : Bool -> Bool
+
+Negate a boolean value.
+
+    not True == False
+    not False == True
+"""
+                    ]
         ]
 
 
