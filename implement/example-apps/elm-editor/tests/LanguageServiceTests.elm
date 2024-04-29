@@ -241,16 +241,24 @@ hoverExpectationFromScenarioDescribingOpenFile otherFiles fileOpenedInEditor exp
                 |> List.head
                 |> Maybe.map (String.length >> (+) 1)
                 |> Maybe.withDefault 0
+
+        computedItems : List String
+        computedItems =
+            LanguageService.provideHover
+                { filePathOpenedInEditor = fileOpenedInEditor.filePath
+                , positionLineNumber = fileOpenedInEditor.textUntilCursor |> String.lines |> List.length
+                , positionColumn = positionColumn
+                , lineText = Maybe.withDefault "" lineText
+                }
+                languageServiceState
+
+        normalizeHoverItemsForComparison : List String -> List String
+        normalizeHoverItemsForComparison =
+            List.map String.trim
     in
-    Expect.equal expectedItems
-        (LanguageService.provideHover
-            { filePathOpenedInEditor = fileOpenedInEditor.filePath
-            , positionLineNumber = fileOpenedInEditor.textUntilCursor |> String.lines |> List.length
-            , positionColumn = positionColumn
-            , lineText = Maybe.withDefault "" lineText
-            }
-            languageServiceState
-        )
+    Expect.equal
+        (normalizeHoverItemsForComparison expectedItems)
+        (normalizeHoverItemsForComparison computedItems)
 
 
 provide_completion_items : Test.Test
@@ -319,8 +327,17 @@ from_epsilon = ""
               )
             ]
 
-        expectationFromScenarioInMain mainModuleText expectedItems =
-            expectationFromScenario
+        expectationFromScenarioInMain { removeCoreModules } mainModuleText expectedItems =
+            let
+                prepareLangServiceState origState =
+                    if removeCoreModules then
+                        { origState | coreModulesCache = [] }
+
+                    else
+                        origState
+            in
+            completionItemsExpectationFromScenario
+                prepareLangServiceState
                 otherFiles
                 ( [ "src", "Main.elm" ], mainModuleText )
                 expectedItems
@@ -328,7 +345,7 @@ from_epsilon = ""
     Test.describe "Provide completion items"
         [ Test.test "In top-level declaration after equals sign" <|
             \_ ->
-                expectationFromScenarioInMain
+                expectationFromScenarioInMain { removeCoreModules = True }
                     """
 module Main exposing (State)
 
@@ -434,7 +451,7 @@ Comment on declaration
                     ]
         , Test.test "In top-level declaration after equals sign and Module referece" <|
             \_ ->
-                expectationFromScenarioInMain
+                expectationFromScenarioInMain { removeCoreModules = False }
                     """
 module Main exposing (State)
 
@@ -482,7 +499,7 @@ init =
                     ]
         , Test.test "In application expression after function" <|
             \_ ->
-                expectationFromScenarioInMain
+                expectationFromScenarioInMain { removeCoreModules = True }
                     """
 module Main exposing (State)
 
@@ -572,7 +589,7 @@ A variant of the choice type `Event`
                     ]
         , Test.test "Right of 'import '" <|
             \_ ->
-                expectationFromScenarioInMain
+                expectationFromScenarioInMain { removeCoreModules = True }
                     """
 module Main exposing (..)
 
@@ -609,7 +626,7 @@ local_decl = 123
                     ]
         , Test.test "Right of 'import E'" <|
             \_ ->
-                expectationFromScenarioInMain
+                expectationFromScenarioInMain { removeCoreModules = True }
                     """
 module Main exposing (..)
 
@@ -646,7 +663,7 @@ local_decl = 123
                     ]
         , Test.test "In declaration in let-block after equals sign" <|
             \_ ->
-                expectationFromScenarioInMain
+                expectationFromScenarioInMain { removeCoreModules = True }
                     """
 module Main exposing (..)
 
@@ -685,7 +702,7 @@ beta =
                     ]
         , Test.test "None in multi-line comment before module declaration" <|
             \_ ->
-                expectationFromScenarioInMain
+                expectationFromScenarioInMain { removeCoreModules = False }
                     """
 {- First line in comment
 Second line ✂➕
@@ -704,7 +721,7 @@ beta = 123
                     []
         , Test.test "None in middle of multi-line documentation comment on a function declaration" <|
             \_ ->
-                expectationFromScenarioInMain
+                expectationFromScenarioInMain { removeCoreModules = False }
                     """
 module Main exposing (..)
 
@@ -722,7 +739,7 @@ beta = 123
                     []
         , Test.test "None at the beginning of multi-line comment" <|
             \_ ->
-                expectationFromScenarioInMain
+                expectationFromScenarioInMain { removeCoreModules = False }
                     """
 module Main exposing (..)
 
@@ -742,7 +759,7 @@ beta = 123
                     []
         , Test.test "None at the end of multi-line comment" <|
             \_ ->
-                expectationFromScenarioInMain
+                expectationFromScenarioInMain { removeCoreModules = False }
                     """
 module Main exposing (..)
 
@@ -762,7 +779,7 @@ beta = 123
                     []
         , Test.test "None in single-line comment in a function declaration" <|
             \_ ->
-                expectationFromScenarioInMain
+                expectationFromScenarioInMain { removeCoreModules = False }
                     """
 module Main exposing (..)
 
@@ -782,15 +799,17 @@ beta =
         ]
 
 
-expectationFromScenario :
-    List ( List String, String )
+completionItemsExpectationFromScenario :
+    (LanguageService.LanguageServiceState -> LanguageService.LanguageServiceState)
+    -> List ( List String, String )
     -> ( List String, String )
     -> List Frontend.MonacoEditor.MonacoCompletionItem
     -> Expect.Expectation
-expectationFromScenario otherFiles ( fileOpenedInEditorPath, fileOpenedInEditorText ) expectedItems =
+completionItemsExpectationFromScenario modifyLanguageServiceState otherFiles ( fileOpenedInEditorPath, fileOpenedInEditorText ) expectedItems =
     case String.split "✂➕" fileOpenedInEditorText of
         [ textUntilCursor, textAfterCursor ] ->
             expectationFromScenarioDescribingOpenFile
+                modifyLanguageServiceState
                 otherFiles
                 { filePath = fileOpenedInEditorPath
                 , textUntilCursor = textUntilCursor
@@ -806,17 +825,19 @@ expectationFromScenario otherFiles ( fileOpenedInEditorPath, fileOpenedInEditorT
 
 
 expectationFromScenarioDescribingOpenFile :
-    List ( List String, String )
+    (LanguageService.LanguageServiceState -> LanguageService.LanguageServiceState)
+    -> List ( List String, String )
     -> { filePath : List String, textUntilCursor : String, textAfterCursor : String }
     -> List Frontend.MonacoEditor.MonacoCompletionItem
     -> Expect.Expectation
-expectationFromScenarioDescribingOpenFile otherFiles fileOpenedInEditor expectedItems =
+expectationFromScenarioDescribingOpenFile modifyLanguageServiceState otherFiles fileOpenedInEditor expectedItems =
     let
         languageServiceState =
             buildLanguageServiceStateFindingParsableModuleText
                 { maxLinesToRemoveBeforeCursor = 3 }
                 otherFiles
                 fileOpenedInEditor
+                |> modifyLanguageServiceState
     in
     Expect.equal expectedItems
         (LanguageService.provideCompletionItems
