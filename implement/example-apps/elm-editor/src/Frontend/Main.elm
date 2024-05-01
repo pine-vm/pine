@@ -53,7 +53,6 @@ import Json.Decode
 import Json.Encode
 import Keyboard.Event
 import Keyboard.Key
-import LanguageService
 import LanguageServiceInterface
 import List.Extra
 import Parser
@@ -122,7 +121,6 @@ type alias WorkspaceActiveStruct =
     , elmFormat : Maybe ElmFormatState
     , viewEnlargedPane : Maybe WorkspacePane
     , enableInspectionOnCompile : Bool
-    , languageServiceState : LanguageService.LanguageServiceState
     }
 
 
@@ -3989,7 +3987,6 @@ initWorkspaceFromFileTreeAndFileSelection { fileTree, filePathOpenedInEditor } =
     , elmFormat = Nothing
     , viewEnlargedPane = Nothing
     , enableInspectionOnCompile = False
-    , languageServiceState = LanguageService.initLanguageServiceState
     }
 
 
