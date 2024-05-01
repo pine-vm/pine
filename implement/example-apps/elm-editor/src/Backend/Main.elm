@@ -12,7 +12,6 @@ import CompilationInterface.ElmMake
 import CompilationInterface.SourceFiles
 import Dict
 import FileTree
-import MonacoHtml
 import Platform.WebService
 import Set
 import Url
@@ -291,11 +290,6 @@ updateForHttpRequestEventExceptRequestsToVolatileProcess httpRequestEvent stateB
                                 (staticContentHttpHeaders { contentType = "text/javascript", contentEncoding = Nothing })
                                 |> continueWithStaticHttpResponse
 
-                        Just (Backend.Route.StaticFileRoute Backend.Route.MonacoFrameDocumentRoute) ->
-                            httpResponseOkWithStringContent monacoHtmlDocument
-                                (staticContentHttpHeaders { contentType = "text/html", contentEncoding = Nothing })
-                                |> continueWithStaticHttpResponse
-
                         Just Backend.Route.ApiRoute ->
                             ( { stateBefore
                                 | pendingHttpRequests = httpRequestEvent :: stateBefore.pendingHttpRequests |> List.take 10
@@ -552,20 +546,6 @@ if (window.Worker) {
 
 </html>
 """
-
-
-monacoHtmlDocument : String
-monacoHtmlDocument =
-    MonacoHtml.monacoHtmlDocumentFromCdnUrl (monacoCdnURLs |> List.head |> Maybe.withDefault "Missing URL to CDN")
-
-
-{-| <https://github.com/microsoft/monaco-editor/issues/583>
--}
-monacoCdnURLs : List String
-monacoCdnURLs =
-    [ "https://cdn.jsdelivr.net/npm/monaco-editor@0.46.0/min"
-    , "https://unpkg.com/monaco-editor@0.46.0/min"
-    ]
 
 
 contentTypeFromStaticFileExtensionDict : Dict.Dict String String

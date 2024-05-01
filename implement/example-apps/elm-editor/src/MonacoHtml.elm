@@ -4,6 +4,20 @@ module MonacoHtml exposing (..)
 -}
 
 
+monacoHtmlDocument : String
+monacoHtmlDocument =
+    monacoHtmlDocumentFromCdnUrl (monacoCdnURLs |> List.head |> Maybe.withDefault "Missing URL to CDN")
+
+
+{-| <https://github.com/microsoft/monaco-editor/issues/583>
+-}
+monacoCdnURLs : List String
+monacoCdnURLs =
+    [ "https://cdn.jsdelivr.net/npm/monaco-editor@0.46.0/min"
+    , "https://unpkg.com/monaco-editor@0.46.0/min"
+    ]
+
+
 {-| Combine from samples:
 
   - <https://github.com/microsoft/monaco-editor/blob/1396f98763b08e4b8dc3d9e16e23ceb67d8456e9/docs/integrate-amd.md>

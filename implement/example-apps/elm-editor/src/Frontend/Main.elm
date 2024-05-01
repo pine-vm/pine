@@ -55,6 +55,7 @@ import Keyboard.Event
 import Keyboard.Key
 import LanguageServiceInterface
 import List.Extra
+import MonacoHtml
 import Parser
 import Result.Extra
 import SHA256
@@ -3959,7 +3960,7 @@ provideHoverInMonacoEditorCmd =
 monacoEditorElement : State -> Element.Element event
 monacoEditorElement _ =
     Html.iframe
-        [ HA.src "/monaco"
+        [ HA.srcdoc MonacoHtml.monacoHtmlDocument
         , HA.id "monaco-iframe"
         , HA.style "width" "100%"
         , HA.style "height" "100%"

@@ -20,7 +20,6 @@ type StaticFile
     = FrontendHtmlDocumentRoute { debug : Bool }
     | FrontendElmJavascriptRoute { debug : Bool }
     | FrontendLanguageServiceWorkerJavaScriptRoute
-    | MonacoFrameDocumentRoute
 
 
 elmMadeScriptFileNameDefault : String
@@ -50,7 +49,6 @@ routeFromUrl =
             [ Url.Parser.map (StaticFileRoute (FrontendElmJavascriptRoute { debug = False })) (Url.Parser.s elmMadeScriptFileNameDefault)
             , Url.Parser.map (StaticFileRoute (FrontendElmJavascriptRoute { debug = True })) (Url.Parser.s elmMadeScriptFileNameDebug)
             , Url.Parser.map (StaticFileRoute FrontendLanguageServiceWorkerJavaScriptRoute) (Url.Parser.s languageServiceWorkerJavascriptPath)
-            , Url.Parser.map (StaticFileRoute MonacoFrameDocumentRoute) (Url.Parser.s "monaco")
             , Url.Parser.map ApiRoute (Url.Parser.s "api")
             , Url.Parser.map (StaticFileRoute (FrontendHtmlDocumentRoute { debug = True })) (Url.Parser.s "enable-elm-debug")
             ]
