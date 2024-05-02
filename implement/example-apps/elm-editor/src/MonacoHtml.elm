@@ -344,22 +344,49 @@ monacoHtmlDocumentFromCdnUrl cdnUrlToMin =
                 constructor() {
                     super();
 
+                    /*
+                    Setting up in the constructor would work when using shadow DOM, but since we integrate without shadow DOM, setup is done from connectedCallback.
+
+                    this.setupMonaco();
+                    */
+                }
+
+                connectedCallback() {
+
+                    this.setupMonaco();
+                }
+
+                setupMonaco() {
+
+                    const template = /** @type HTMLTemplateElement */ (
+                        document.getElementById("editor-template")
+                    );
+
+                    const editorNode = template.content.cloneNode(true);
+
+                    /*
+                    At the moment, we avoid implementations placing Monaco in a shadow DOM because of this bug that breaks hover providers: <https://github.com/microsoft/monaco-editor/issues/3409>
+                    Other features like markers and completion suggestions worked normally inside the shadow DOM, but the hover popups did not show up.
+
                     const shadowRoot = this.attachShadow({ mode: "open" });
 
                     // Copy over editor styles
                     const styles = document.querySelectorAll(
                         "link[rel='stylesheet'][data-name^='vs/']"
                     );
+
                     for (const style of styles) {
                         shadowRoot.appendChild(style.cloneNode(true));
                     }
 
-                    const template = /** @type HTMLTemplateElement */ (
-                        document.getElementById("editor-template")
-                    );
-                    shadowRoot.appendChild(template.content.cloneNode(true));
+                    shadowRoot.appendChild(editorNode);
 
-                    this._editor = shadowRoot.querySelector("#container");
+                    this._editor = shadowRoot.querySelector("#monaco-container");
+                    */
+
+                    this.appendChild(editorNode);
+                    this._editor = this.querySelector("#monaco-container");
+
                     this._monacoEditor = monaco.editor.create(this._editor, {
                         automaticLayout: true,
                         language: 'Elm',
@@ -470,7 +497,7 @@ monacoHtmlDocumentFromCdnUrl cdnUrlToMin =
 
 <template id="editor-template">
 \t<div
-\t\tid="container"
+\t\tid="monaco-container"
 \t\tstyle="overflow: hidden; width: 100%; height: 100%; position: absolute"
 \t></div>
 </template>
