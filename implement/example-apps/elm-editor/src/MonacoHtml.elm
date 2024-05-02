@@ -35,8 +35,6 @@ monacoHtmlDocumentFromCdnUrl cdnUrlToMin =
 </head>
 <body style="margin:0;height:93vh;">
 
-<div id="container" style="height:100%;width:100%;"></div>
-
 <script type="text/javascript" src=\""""
         ++ cdnUrlToMin
         ++ """/vs/loader.js"></script>
@@ -154,25 +152,6 @@ monacoHtmlDocumentFromCdnUrl cdnUrlToMin =
 
         if(message.ProvideHoverEvent)
             provideHoverEventFromElm(message.ProvideHoverEvent[0]);
-    }
-
-    function tryCompleteSetup() {
-        var editorModel = getEditorModel();
-
-        if(editorModel == null) {
-            setTimeout(tryCompleteSetup, 500);
-        }
-        else {
-            editorModel.onDidChangeContent(function() {
-                var content = getEditorModel().getValue();
-
-                // console.log("onDidChangeContent:\\n" + content);
-
-                parent?.messageFromMonacoFrame?.({"DidChangeContentEvent":[content]});
-            });
-
-            parent?.messageFromMonacoFrame?.({"CompletedSetupEvent":[]});
-        }
     }
 
     function editorEventOnDidFocusEditorWidget() {
@@ -312,6 +291,27 @@ monacoHtmlDocumentFromCdnUrl cdnUrlToMin =
             triggerCharacters: ["."," "]
         });
 
+        monaco.editor.onDidCreateModel(function(model) {
+            function forwardDidChangeContent() {
+            
+                var content = model.getValue();
+
+                // console.log("onDidChangeContent:\\n" + content);
+
+                parent?.messageFromMonacoFrame?.({"DidChangeContentEvent":[content]});
+            }
+
+            var handle = null;
+            model.onDidChangeContent(() => {
+            // debounce
+            clearTimeout(handle);
+            handle = setTimeout(() => forwardDidChangeContent(), 500);
+            });
+
+            parent?.messageFromMonacoFrame?.({"CompletedSetupEvent":[]});
+        });
+
+
         monaco.languages.registerHoverProvider('Elm', {
             provideHover: function (model, position) {
                 var textUntilPosition = model.getValueInRange({startLineNumber: 1, startColumn: 1, endLineNumber: position.lineNumber, endColumn: position.column});
@@ -334,114 +334,148 @@ monacoHtmlDocumentFromCdnUrl cdnUrlToMin =
             colors: {},
         });
 
-        var editor = monaco.editor.create(document.getElementById('container'), {
-            value: "Initialization of editor is not complete yet",
-            language: 'Elm',
-            automaticLayout: true,
-            scrollBeyondLastLine: false,
-            theme: "dark-plus",
-        }, {
-            // https://github.com/microsoft/monaco-editor/issues/2241#issuecomment-764694521
-            // https://stackoverflow.com/questions/54795603/always-show-the-show-more-section-in-monaco-editor/59040199#59040199
-            storageService: {
-                get(key) {
-                    // console.log("storageService.get: " + key);
-                },
-                remove() { },
-                getBoolean(key) {
-                    // console.log("storageService.getBoolean: " + key);
+        customElements.define(
+            "code-view-monaco",
+            class CodeViewMonaco extends HTMLElement {
+                _monacoEditor;
+                /** @type HTMLElement */
+                _editor;
 
-                    if (key === 'expandSuggestionDocs') {
-                        return monacoStorageSettingExpandSuggestionDocs;
+                constructor() {
+                    super();
+
+                    const shadowRoot = this.attachShadow({ mode: "open" });
+
+                    // Copy over editor styles
+                    const styles = document.querySelectorAll(
+                        "link[rel='stylesheet'][data-name^='vs/']"
+                    );
+                    for (const style of styles) {
+                        shadowRoot.appendChild(style.cloneNode(true));
                     }
-                },
-                getNumber(key) {
-                    // console.log("storageService.getNumber: " + key);
-                },
-                store(key, value) {
-                    // console.log("storageService.store: " + key);
 
-                    if (key === 'expandSuggestionDocs')
-                        monacoStorageSettingExpandSuggestionDocs = value;
-                },
-                set(key) {
-                    // console.log("storageService.set: " + key);
-                },
-                onWillSaveState() {},
-                onDidChangeStorage() {},
-                onDidChangeValue() {},
+                    const template = /** @type HTMLTemplateElement */ (
+                        document.getElementById("editor-template")
+                    );
+                    shadowRoot.appendChild(template.content.cloneNode(true));
+
+                    this._editor = shadowRoot.querySelector("#container");
+                    this._monacoEditor = monaco.editor.create(this._editor, {
+                        automaticLayout: true,
+                        language: 'Elm',
+                        value: "Initialization of editor is not complete yet",
+                        scrollBeyondLastLine: false,
+                        theme: "dark-plus",
+                    }, {
+                        // https://github.com/microsoft/monaco-editor/issues/2241#issuecomment-764694521
+                        // https://stackoverflow.com/questions/54795603/always-show-the-show-more-section-in-monaco-editor/59040199#59040199
+                        storageService: {
+                            get(key) {
+                                // console.log("storageService.get: " + key);
+                            },
+                            remove() { },
+                            getBoolean(key) {
+                                // console.log("storageService.getBoolean: " + key);
+
+                                if (key === 'expandSuggestionDocs') {
+                                    return monacoStorageSettingExpandSuggestionDocs;
+                                }
+                            },
+                            getNumber(key) {
+                                // console.log("storageService.getNumber: " + key);
+                            },
+                            store(key, value) {
+                                // console.log("storageService.store: " + key);
+
+                                if (key === 'expandSuggestionDocs')
+                                    monacoStorageSettingExpandSuggestionDocs = value;
+                            },
+                            set(key) {
+                                // console.log("storageService.set: " + key);
+                            },
+                            onWillSaveState() {},
+                            onDidChangeStorage() {},
+                            onDidChangeValue() {},
+                        }
+                    });
+
+                    this._monacoEditor.onDidFocusEditorWidget(() => {
+
+                        editorEventOnDidFocusEditorWidget();
+                    });
+
+                    this._monacoEditor.addAction({
+                        id: 'close-editor-action',
+                        label: 'Close Editor',
+                        keybindings: [],
+                        precondition: null,
+                        keybindingContext: null,
+
+                        contextMenuGroupId: 'z-other',
+                        contextMenuOrder: 99,
+
+                        run: function(ed) {
+                            editorActionCloseEditor();
+                            return null;
+                        }
+                    });
+
+                    this._monacoEditor.addAction({
+                        id: 'format-document-action',
+                        label: 'Format Document',
+                        keybindings: [
+                            monaco.KeyMod.Shift | monaco.KeyMod.Alt | monaco.KeyCode.KEY_F
+                        ],
+                        precondition: null,
+                        keybindingContext: null,
+
+                        run: function(ed) {
+                            editorActionFormatDocument();
+                            return null;
+                        }
+                    });
+
+                    this._monacoEditor.addAction({
+                        id: 'compile-action',
+                        label: 'Compile',
+                        keybindings: [
+                            monaco.KeyMod.Shift | monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter
+                        ],
+                        precondition: null,
+                        keybindingContext: null,
+
+                        run: function(ed) {
+                            editorActionCompile();
+                            return null;
+                        }
+                    });
+
+                    this._monacoEditor.addAction({
+                        id: 'inspect-syntax-action',
+                        label: 'Inspect Syntax',
+                        keybindings: [],
+                        precondition: null,
+                        keybindingContext: null,
+
+                        run: function(ed) {
+                            editorActionInspectSyntax();
+                            return null;
+                        }
+                    });
+                }
             }
-        });
-
-        editor.onDidFocusEditorWidget(() => {
-
-            editorEventOnDidFocusEditorWidget();
-        });
-
-        editor.addAction({
-            id: 'close-editor-action',
-            label: 'Close Editor',
-            keybindings: [],
-            precondition: null,
-            keybindingContext: null,
-
-            contextMenuGroupId: 'z-other',
-            contextMenuOrder: 99,
-
-            run: function(ed) {
-                editorActionCloseEditor();
-                return null;
-            }
-        });
-
-        editor.addAction({
-            id: 'format-document-action',
-            label: 'Format Document',
-            keybindings: [
-                monaco.KeyMod.Shift | monaco.KeyMod.Alt | monaco.KeyCode.KEY_F
-            ],
-            precondition: null,
-            keybindingContext: null,
-
-            run: function(ed) {
-                editorActionFormatDocument();
-                return null;
-            }
-        });
-
-        editor.addAction({
-            id: 'compile-action',
-            label: 'Compile',
-            keybindings: [
-                monaco.KeyMod.Shift | monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter
-            ],
-            precondition: null,
-            keybindingContext: null,
-
-            run: function(ed) {
-                editorActionCompile();
-                return null;
-            }
-        });
-
-        editor.addAction({
-            id: 'inspect-syntax-action',
-            label: 'Inspect Syntax',
-            keybindings: [],
-            precondition: null,
-            keybindingContext: null,
-
-            run: function(ed) {
-                editorActionInspectSyntax();
-                return null;
-            }
-        });
-
-        window.theEditor = editor;
-
-        tryCompleteSetup();
+        );
     });
 </script>
+
+<template id="editor-template">
+\t<div
+\t\tid="container"
+\t\tstyle="overflow: hidden; width: 100%; height: 100%; position: absolute"
+\t></div>
+</template>
+
+<code-view-monaco></code-view-monaco>
 
 </body>
 </html>
