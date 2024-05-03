@@ -3249,7 +3249,7 @@ viewOutputPaneContentFromCompilationComplete workspace compilation loweringCompl
                     in
                     if elmMakeRequestEntryPointFilePathAbs /= filePathOpenedInEditor then
                         Just
-                            ("⚠️ Last compilation started for another file: '"
+                            ("Last compilation started for another file: '"
                                 ++ String.join "/" elmMakeRequestEntryPointFilePathAbs
                                 ++ "'"
                             )
@@ -3258,7 +3258,7 @@ viewOutputPaneContentFromCompilationComplete workspace compilation loweringCompl
                         Nothing
 
                     else
-                        Just "⚠️ File contents changed since compiling"
+                        Just "File contents changed since compiling"
 
         offerToggleInspection =
             case loweringComplete.loweringResult of
@@ -3287,14 +3287,20 @@ viewOutputPaneContentFromCompilationComplete workspace compilation loweringCompl
         warnAboutOutdatedOrOfferModifyCompilationElement =
             case warnAboutOutdatedCompilationText of
                 Just warnText ->
-                    warnText
+                    [ FontAwesome.Solid.triangleExclamation
+                        |> FontAwesome.view
+                        |> Element.html
+                        |> Element.el []
+                    , Element.text " "
+                    , warnText
                         |> Element.text
-                        |> List.singleton
+                    ]
                         |> Element.paragraph
                             [ Element.padding (defaultFontSize // 2)
-                            , Element.Background.color (Element.rgb 0.3 0.2 0.1)
+                            , Element.Background.color (Element.rgb 0.4 0.1 0)
                             , Element.width Element.fill
                             , Element.transparent (warnAboutOutdatedCompilationText == Nothing)
+                            , Element.htmlAttribute (HA.style "user-select" "none")
                             ]
 
                 Nothing ->
