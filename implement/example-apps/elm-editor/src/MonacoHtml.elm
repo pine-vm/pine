@@ -53,12 +53,20 @@ monacoHtmlDocumentFromCdnUrl cdnUrlToMin =
         return monaco?.editor?.getModels()[0];
     }
 
-    function monacoEditorSetValue(newValue) {
-        getEditorModel()?.setValue(newValue);
+    function monacoEditorSetContent(newValue, language) {
+
+        if(typeof monaco != "object")
+            return;
+
+        var textModel = monaco?.editor?.getModels()[0];
+
+        textModel?.setValue(newValue);
+        monaco?.editor?.setModelLanguage(textModel, language);
     }
 
     function monacoEditorSetModelMarkers(markers) {
-        if (typeof monaco === 'undefined')
+
+        if(typeof monaco != "object")
             return;
 
         monaco?.editor?.setModelMarkers(getEditorModel(), "", markers.map(monacoMarkerFromElmMonacoMarker));
@@ -138,8 +146,8 @@ monacoHtmlDocumentFromCdnUrl cdnUrlToMin =
     }
 
     function dispatchMessage(message) {
-        if(message.SetValue)
-            monacoEditorSetValue(message.SetValue[0]);
+        if(message.SetContent)
+            monacoEditorSetContent(message.SetContent[0].value, message.SetContent[0].language);
 
         if(message.SetModelMarkers)
             monacoEditorSetModelMarkers(message.SetModelMarkers[0]);
@@ -268,7 +276,11 @@ monacoHtmlDocumentFromCdnUrl cdnUrlToMin =
 
     require(['vs/editor/editor.main'], function() {
 
-        monaco.languages.register({ id: 'Elm' });
+        monaco.languages.register({
+            id: 'Elm',
+            aliases: ["elm"],
+            extensions: [".elm"]
+            });
 
         monaco.languages.setMonarchTokensProvider('Elm', window.elm_monarch);
 
@@ -294,18 +306,25 @@ monacoHtmlDocumentFromCdnUrl cdnUrlToMin =
         monaco.editor.onDidCreateModel(function(model) {
             function forwardDidChangeContent() {
             
-                var content = model.getValue();
+                var textModelValue = model.getValue();
 
-                // console.log("onDidChangeContent:\\n" + content);
+                // console.log("onDidChangeContent:\\n" + textModelValue);
 
-                parent?.messageFromMonacoFrame?.({"DidChangeContentEvent":[content]});
+                const eventRecord = {
+                    textModelValue : textModelValue,
+                    uri : model.uri.toString()
+                };
+
+                parent?.messageFromMonacoFrame?.({
+                    "DidChangeContentEvent" : [ eventRecord ]
+                    });
             }
 
             var handle = null;
             model.onDidChangeContent(() => {
             // debounce
             clearTimeout(handle);
-            handle = setTimeout(() => forwardDidChangeContent(), 500);
+            handle = setTimeout(() => forwardDidChangeContent(), 400);
             });
 
             parent?.messageFromMonacoFrame?.({"CompletedSetupEvent":[]});

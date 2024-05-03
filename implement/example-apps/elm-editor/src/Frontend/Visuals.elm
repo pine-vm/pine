@@ -1,7 +1,7 @@
 module Frontend.Visuals exposing (..)
 
-import Dict
 import Element
+import Frontend.FileEditor as FileEditor exposing (FileContentType)
 import Html
 import Svg
 import Svg.Attributes
@@ -22,29 +22,24 @@ type Icon
 
 iconFromFileName : String -> Maybe ( Icon, String )
 iconFromFileName fileName =
-    let
-        ending =
-            fileName
-                |> String.split "."
-                |> List.reverse
-                |> List.head
-                |> Maybe.withDefault fileName
-                |> String.toLower
-    in
-    if ending == fileName then
-        Nothing
-
-    else
-        fileTypeIconFromFileNameEnding |> Dict.get ending
+    FileEditor.fileContentTypeFromFileName fileName
+        |> Maybe.andThen iconFromFileContentType
 
 
-fileTypeIconFromFileNameEnding : Dict.Dict String ( Icon, String )
-fileTypeIconFromFileNameEnding =
-    [ ( "elm", ( FileTypeElmIcon, "#529BBA" ) )
-    , ( "json", ( FileTypeJsonIcon, "#DBCD68" ) )
-    , ( "md", ( FileTypeMarkdownIcon, "#529BBA" ) )
-    ]
-        |> Dict.fromList
+iconFromFileContentType : FileContentType -> Maybe ( Icon, String )
+iconFromFileContentType contentType =
+    case contentType of
+        FileEditor.ElmContent ->
+            Just ( FileTypeElmIcon, "#529BBA" )
+
+        FileEditor.JsonContent ->
+            Just ( FileTypeJsonIcon, "#DBCD68" )
+
+        FileEditor.MarkdownContent ->
+            Just ( FileTypeMarkdownIcon, "#529BBA" )
+
+        _ ->
+            Nothing
 
 
 iconSvgElementFromIcon : { color : String } -> Icon -> Element.Element event

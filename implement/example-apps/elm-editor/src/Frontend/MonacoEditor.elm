@@ -5,16 +5,22 @@ module Frontend.MonacoEditor exposing (..)
 
 
 type MessageToEditor
-    = SetValue String
+    = SetContent SetContentStruct
     | SetModelMarkers (List EditorMarker)
     | RevealPositionInCenter { lineNumber : Int, column : Int }
     | ProvideCompletionItemsEvent (List MonacoCompletionItem)
     | ProvideHoverEvent (List String)
 
 
+type alias SetContentStruct =
+    { value : String
+    , language : String
+    }
+
+
 type MessageFromEditor
     = CompletedSetupEvent
-    | DidChangeContentEvent String
+    | DidChangeContentEvent DidChangeContentEventStruct
     | DidFocusEditorWidgetEvent
     | EditorActionCloseEditorEvent
     | EditorActionFormatDocumentEvent
@@ -22,6 +28,12 @@ type MessageFromEditor
     | EditorActionInspectSyntaxEvent
     | RequestCompletionItemsEvent RequestCompletionItemsStruct
     | RequestHoverEvent RequestHoverStruct
+
+
+type alias DidChangeContentEventStruct =
+    { textModelValue : String
+    , uri : String
+    }
 
 
 type alias RequestCompletionItemsStruct =

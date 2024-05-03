@@ -40,6 +40,7 @@ import FontAwesome.Solid
 import FontAwesome.Styles
 import Frontend.BrowserApplicationInitWithTime as BrowserApplicationInitWithTime
 import Frontend.ContainerHtml
+import Frontend.FileEditor as FileEditor exposing (FileContentType(..))
 import Frontend.MonacoEditor
 import Frontend.Visuals as Visuals
 import Frontend.WorkspaceStateInUrl
@@ -114,7 +115,7 @@ type WorkspaceStateStruct
 
 type alias WorkspaceActiveStruct =
     { fileTree : FileTreeInWorkspace.FileTreeNode
-    , editing : { filePathOpenedInEditor : Maybe (List String) }
+    , editing : { fileLocationOpenInEditor : Maybe ( List String, String ) }
     , decodeMessageFromMonacoEditorError : Maybe Json.Decode.Error
     , lastTextReceivedFromEditor : Maybe String
     , compilation : Maybe CompilationState
@@ -221,14 +222,14 @@ type Event
 type WorkspaceEventStructure
     = MonacoEditorEvent Json.Decode.Value
     | UserInputChangeTextInEditor String
-    | UserInputOpenFileInEditor (List String)
+    | UserInputOpenFileInEditor ( List String, String )
     | UserInputFormat
     | UserInputCancelFormatting
     | UserInputCompile
     | UserInputInspectSyntax
     | UserInputCloseEditor
-    | UserInputRevealPositionInEditor { filePath : List String, lineNumber : Int, column : Int }
-    | BackendElmFormatResponseEvent { filePath : List String, result : Result (Http.Detailed.Error String) FrontendBackendInterface.FormatElmModuleTextResponseStructure }
+    | UserInputRevealPositionInEditor { fileLocation : ( List String, String ), lineNumber : Int, column : Int }
+    | BackendElmFormatResponseEvent { fileLocation : ( List String, String ), result : Result (Http.Detailed.Error String) FrontendBackendInterface.FormatElmModuleTextResponseStructure }
     | BackendElmMakeResponseEvent ElmMakeRequestStructure (Result (Http.Detailed.Error String) ElmMakeResponseStructure)
     | UserInputSetEnlargedPane (Maybe WorkspacePane)
     | UserInputSetInspectionOnCompile Bool
@@ -506,7 +507,7 @@ update event stateBefore =
                 | popup = Nothing
                 , workspace =
                     { fileTree = fileTree
-                    , filePathOpenedInEditor = Nothing
+                    , fileLocationOpenInEditor = Nothing
                     }
                         |> initWorkspaceFromFileTreeAndFileSelection
                         |> WorkspaceActive
@@ -732,12 +733,20 @@ setWorkspaceStateInUrlForBookmark { createDiffIfBaseAvailable } workspaceActive 
                 state.lastBackendLoadFromGitResult
                     |> Maybe.andThen (Tuple.second >> Result.toMaybe)
                     |> Maybe.andThen Result.toMaybe
+
+        filePathToOpen =
+            case workspaceActive.editing.fileLocationOpenInEditor of
+                Nothing ->
+                    Nothing
+
+                Just ( directoryPath, fileName ) ->
+                    Just (directoryPath ++ [ fileName ])
     in
     state.url
         |> Frontend.WorkspaceStateInUrl.setWorkspaceStateInUrl
             workspaceActive.fileTree
             baseToUse
-            { filePathToOpen = workspaceActive.editing.filePathOpenedInEditor }
+            { filePathToOpen = filePathToOpen }
 
 
 updateForUserInputLoadFromGit : { time : Time.Posix } -> UserInputLoadFromGitEventStructure -> LoadFromGitDialogState -> ( LoadFromGitDialogState, Cmd Event )
@@ -787,116 +796,181 @@ updateWorkspace :
     -> ( WorkspaceActiveStruct, Cmd WorkspaceEventStructure )
 updateWorkspace updateConfig event stateBeforeApplyingEvent =
     let
-        ( stateBeforeConsiderCompile, cmd ) =
+        ( stateAfterApplyEvent, eventCmd ) =
             updateWorkspaceWithoutCmdToUpdateEditor updateConfig event stateBeforeApplyingEvent
 
-        textForEditor =
-            stateBeforeConsiderCompile
-                |> fileOpenedInEditorFromWorkspace
-                |> Maybe.andThen (Tuple.second >> .asBytes >> stringFromFileContent)
-                |> Maybe.withDefault "Failed to map file content to string."
-
-        setTextToEditorCmd =
-            if Just textForEditor == state.lastTextReceivedFromEditor then
-                Nothing
-
-            else
-                Just (setTextInMonacoEditorCmd textForEditor)
-
-        setModelMarkersToEditorCmd =
-            case fileOpenedInEditorFromWorkspace stateBeforeConsiderCompile of
-                Nothing ->
-                    Nothing
-
-                Just fileOpenedInEditor ->
-                    if
-                        (stateBeforeConsiderCompile.compilation == stateBeforeApplyingEvent.compilation)
-                            && (Just (Tuple.first fileOpenedInEditor) == filePathOpenedInEditorFromWorkspace stateBeforeApplyingEvent)
-                            && (setTextToEditorCmd == Nothing)
-                    then
-                        Nothing
-
-                    else
-                        case stateBeforeConsiderCompile.compilation of
-                            Just compilation ->
-                                case compilation.loweringLastIteration of
-                                    LoweringComplete loweringComplete ->
-                                        let
-                                            loweringMarkers =
-                                                case loweringComplete.loweringResult of
-                                                    Ok _ ->
-                                                        []
-
-                                                    Err (DependencyLoweringError _) ->
-                                                        []
-
-                                                    Err (LoweringError loweringErrors) ->
-                                                        loweringErrors
-                                                            |> editorDocumentMarkersFromFailedLowering
-                                                                { compileRequest = compilation.origin.requestFromUser
-                                                                , fileOpenedInEditor = fileOpenedInEditor
-                                                                }
-
-                                            elmMakeMarkers =
-                                                loweringComplete.elmMakeResult
-                                                    |> Maybe.andThen Result.toMaybe
-                                                    |> Maybe.andThen .reportFromJson
-                                                    |> editorDocumentMarkersFromElmMakeReport
-                                                        { elmMakeRequest = loweringComplete.elmMakeRequest
-                                                        , fileOpenedInEditor = fileOpenedInEditor
-                                                        }
-                                        in
-                                        [ loweringMarkers, elmMakeMarkers ]
-                                            |> List.concat
-                                            |> setModelMarkersInMonacoEditorCmd
-                                            |> Just
-
-                                    _ ->
-                                        Nothing
-
-                            _ ->
-                                Nothing
-
-        triggerCompileForFirstOpenedModule =
-            (stateBeforeConsiderCompile
-                |> filePathOpenedInEditorFromWorkspace
-                |> Maybe.andThen (List.reverse >> List.head)
-                |> Maybe.map (String.endsWith ".elm")
-                |> Maybe.withDefault False
-            )
-                && (stateBeforeConsiderCompile.compilation == Nothing)
-                && (stateBeforeConsiderCompile.syntaxInspection == Nothing)
-
-        ( state, compileCmd ) =
-            if triggerCompileForFirstOpenedModule then
-                compileFileOpenedInEditor stateBeforeConsiderCompile
-
-            else
-                ( stateBeforeConsiderCompile, Cmd.none )
+        ( state, afterEventCmd ) =
+            updateWorkspaceAfterEvent stateBeforeApplyingEvent stateAfterApplyEvent
     in
     ( state
     , Cmd.batch
-        [ cmd
-        , Maybe.withDefault Cmd.none setTextToEditorCmd
-        , Maybe.withDefault Cmd.none setModelMarkersToEditorCmd
-        , compileCmd
+        [ eventCmd
+        , afterEventCmd
         ]
     )
 
 
-filePathOpenedInEditorFromWorkspace : WorkspaceActiveStruct -> Maybe (List String)
-filePathOpenedInEditorFromWorkspace =
+updateWorkspaceAfterEvent :
+    WorkspaceActiveStruct
+    -> WorkspaceActiveStruct
+    -> ( WorkspaceActiveStruct, Cmd WorkspaceEventStructure )
+updateWorkspaceAfterEvent stateBeforeApplyEvent stateAfterEvent =
+    case fileOpenedInEditorFromWorkspace stateAfterEvent of
+        Nothing ->
+            ( stateAfterEvent, Cmd.none )
+
+        Just fileOpenInEditor ->
+            let
+                ( fileLocation, fileContent ) =
+                    fileOpenInEditor
+            in
+            case stringFromFileContent fileContent.asBytes of
+                Nothing ->
+                    ( stateAfterEvent, Cmd.none )
+
+                Just textForEditor ->
+                    let
+                        ( _, fileName ) =
+                            fileLocation
+
+                        fileLocationOpenedBeforeEvent =
+                            fileLocationOpenInEditorFromWorkspace stateBeforeApplyEvent
+
+                        fileLocationChanged =
+                            fileLocationOpenedBeforeEvent /= Just fileLocation
+
+                        compilationChanged =
+                            stateBeforeApplyEvent.compilation /= stateAfterEvent.compilation
+
+                        fileContentType : Maybe FileContentType
+                        fileContentType =
+                            FileEditor.fileContentTypeFromFileName fileName
+
+                        setTextToEditorCmd : Maybe (Cmd WorkspaceEventStructure)
+                        setTextToEditorCmd =
+                            if Just textForEditor == state.lastTextReceivedFromEditor then
+                                Nothing
+
+                            else
+                                Just
+                                    (setContentInMonacoEditorCmd
+                                        { text = textForEditor
+                                        , language =
+                                            Maybe.withDefault "txt"
+                                                (Maybe.map monacoLanguageNameForFileContent fileContentType)
+                                        }
+                                    )
+
+                        setModelMarkersToEditorCmd =
+                            if not (compilationChanged || fileLocationChanged) then
+                                Nothing
+
+                            else
+                                case stateAfterEvent.compilation of
+                                    Just compilation ->
+                                        case compilation.loweringLastIteration of
+                                            LoweringComplete loweringComplete ->
+                                                let
+                                                    loweringMarkers =
+                                                        case loweringComplete.loweringResult of
+                                                            Ok _ ->
+                                                                []
+
+                                                            Err (DependencyLoweringError _) ->
+                                                                []
+
+                                                            Err (LoweringError loweringErrors) ->
+                                                                loweringErrors
+                                                                    |> editorDocumentMarkersFromFailedLowering
+                                                                        { compileRequest = compilation.origin.requestFromUser
+                                                                        , fileOpenInEditor = fileOpenInEditor
+                                                                        }
+
+                                                    elmMakeMarkers =
+                                                        loweringComplete.elmMakeResult
+                                                            |> Maybe.andThen Result.toMaybe
+                                                            |> Maybe.andThen .reportFromJson
+                                                            |> editorDocumentMarkersFromElmMakeReport
+                                                                { elmMakeRequest = loweringComplete.elmMakeRequest
+                                                                , fileOpenInEditor = fileOpenInEditor
+                                                                }
+                                                in
+                                                [ loweringMarkers, elmMakeMarkers ]
+                                                    |> List.concat
+                                                    |> setModelMarkersInMonacoEditorCmd
+                                                    |> Just
+
+                                            _ ->
+                                                Nothing
+
+                                    _ ->
+                                        Nothing
+
+                        triggerCompileForFirstOpenedModule : Bool
+                        triggerCompileForFirstOpenedModule =
+                            (fileContentType == Just ElmContent)
+                                && (stateAfterEvent.compilation == Nothing)
+                                && (stateAfterEvent.syntaxInspection == Nothing)
+
+                        ( state, compileCmd ) =
+                            if triggerCompileForFirstOpenedModule then
+                                compileFileOpenedInEditor stateAfterEvent
+
+                            else
+                                ( stateAfterEvent, Cmd.none )
+                    in
+                    ( state
+                    , Cmd.batch
+                        [ Maybe.withDefault Cmd.none setTextToEditorCmd
+                        , Maybe.withDefault Cmd.none setModelMarkersToEditorCmd
+                        , compileCmd
+                        ]
+                    )
+
+
+monacoLanguageNameForFileContent : FileContentType -> String
+monacoLanguageNameForFileContent fileContent =
+    case fileContent of
+        ElmContent ->
+            "Elm"
+
+        JsonContent ->
+            "json"
+
+        XmlContent ->
+            "xml"
+
+        MarkdownContent ->
+            "markdown"
+
+        HtmlContent ->
+            "html"
+
+        CssContent ->
+            "css"
+
+
+fileLocationOpenInEditorFromWorkspace : WorkspaceActiveStruct -> Maybe ( List String, String )
+fileLocationOpenInEditorFromWorkspace =
     fileOpenedInEditorFromWorkspace >> Maybe.map Tuple.first
 
 
-fileOpenedInEditorFromWorkspace : WorkspaceActiveStruct -> Maybe ( List String, FileTreeInWorkspace.BlobNodeWithCache )
+fileOpenedInEditorFromWorkspace : WorkspaceActiveStruct -> Maybe ( ( List String, String ), FileTreeInWorkspace.BlobNodeWithCache )
 fileOpenedInEditorFromWorkspace workspaceActive =
-    case workspaceActive.editing.filePathOpenedInEditor of
+    case workspaceActive.editing.fileLocationOpenInEditor of
         Nothing ->
             Nothing
 
         Just filePathOpenedInEditor ->
-            case workspaceActive.fileTree |> FileTree.getBlobAtPathFromFileTree filePathOpenedInEditor of
+            let
+                ( directoryPath, fileName ) =
+                    filePathOpenedInEditor
+            in
+            case
+                FileTree.getBlobAtPathFromFileTree
+                    (directoryPath ++ [ fileName ])
+                    workspaceActive.fileTree
+            of
                 Nothing ->
                     Nothing
 
@@ -911,8 +985,12 @@ updateWorkspaceWithoutCmdToUpdateEditor :
     -> ( WorkspaceActiveStruct, Cmd WorkspaceEventStructure )
 updateWorkspaceWithoutCmdToUpdateEditor updateConfig event stateBefore =
     case event of
-        UserInputOpenFileInEditor filePath ->
-            if FileTree.getBlobAtPathFromFileTree filePath stateBefore.fileTree == Nothing then
+        UserInputOpenFileInEditor fileLocation ->
+            let
+                ( directoryPath, fileName ) =
+                    fileLocation
+            in
+            if FileTree.getBlobAtPathFromFileTree (directoryPath ++ [ fileName ]) stateBefore.fileTree == Nothing then
                 ( stateBefore, Cmd.none )
 
             else
@@ -920,16 +998,20 @@ updateWorkspaceWithoutCmdToUpdateEditor updateConfig event stateBefore =
                     editing =
                         stateBefore.editing
                   in
-                  { stateBefore | editing = { editing | filePathOpenedInEditor = Just filePath } }
+                  { stateBefore | editing = { editing | fileLocationOpenInEditor = Just fileLocation } }
                 , Cmd.none
                 )
 
         UserInputChangeTextInEditor inputText ->
-            ( case stateBefore.editing.filePathOpenedInEditor of
+            ( case stateBefore.editing.fileLocationOpenInEditor of
                 Nothing ->
                     stateBefore
 
-                Just filePath ->
+                Just ( directoryPath, fileName ) ->
+                    let
+                        filePath =
+                            directoryPath ++ [ fileName ]
+                    in
                     { stateBefore
                         | fileTree =
                             stateBefore.fileTree
@@ -942,7 +1024,7 @@ updateWorkspaceWithoutCmdToUpdateEditor updateConfig event stateBefore =
 
         UserInputRevealPositionInEditor revealPositionInEditor ->
             ( stateBefore
-            , if (stateBefore |> fileOpenedInEditorFromWorkspace |> Maybe.map Tuple.first) == Just revealPositionInEditor.filePath then
+            , if (stateBefore |> fileOpenedInEditorFromWorkspace |> Maybe.map Tuple.first) == Just revealPositionInEditor.fileLocation then
                 revealPositionInCenterInMonacoEditorCmd
                     { lineNumber = revealPositionInEditor.lineNumber, column = revealPositionInEditor.column }
 
@@ -961,7 +1043,7 @@ updateWorkspaceWithoutCmdToUpdateEditor updateConfig event stateBefore =
                 Ok decodedMonacoEditorEvent ->
                     case decodedMonacoEditorEvent of
                         Frontend.MonacoEditor.DidChangeContentEvent content ->
-                            stateBefore |> updateWorkspaceWithoutCmdToUpdateEditor updateConfig (UserInputChangeTextInEditor content)
+                            stateBefore |> updateWorkspaceWithoutCmdToUpdateEditor updateConfig (UserInputChangeTextInEditor content.textModelValue)
 
                         Frontend.MonacoEditor.CompletedSetupEvent ->
                             ( { stateBefore | lastTextReceivedFromEditor = Nothing }, Cmd.none )
@@ -1016,7 +1098,7 @@ updateWorkspaceWithoutCmdToUpdateEditor updateConfig event stateBefore =
                     stateBefore.editing
               in
               { stateBefore
-                | editing = { editing | filePathOpenedInEditor = Nothing }
+                | editing = { editing | fileLocationOpenInEditor = Nothing }
                 , elmFormat = Nothing
               }
             , Cmd.none
@@ -1025,7 +1107,7 @@ updateWorkspaceWithoutCmdToUpdateEditor updateConfig event stateBefore =
         BackendElmFormatResponseEvent formatResponseEvent ->
             case stateBefore.elmFormat of
                 Just (ElmFormatInProgress formatStart) ->
-                    ( if Just formatResponseEvent.filePath /= stateBefore.editing.filePathOpenedInEditor then
+                    ( if Just formatResponseEvent.fileLocation /= stateBefore.editing.fileLocationOpenInEditor then
                         stateBefore
 
                       else
@@ -1038,12 +1120,18 @@ updateWorkspaceWithoutCmdToUpdateEditor updateConfig event stateBefore =
                                     formatResult =
                                         formatResponseEvent.result
                                             |> Result.map parseElmFormatResponse
+
+                                    ( directoryPath, fileName ) =
+                                        formatResponseEvent.fileLocation
+
+                                    filePath =
+                                        directoryPath ++ [ fileName ]
                                 in
                                 { stateBefore
                                     | fileTree =
                                         stateBefore.fileTree
                                             |> FileTreeInWorkspace.setBlobAtPathInSortedFileTreeFromBytes
-                                                ( formatResponseEvent.filePath
+                                                ( filePath
                                                 , fileContentFromString formattedText
                                                 )
                                     , elmFormat = Just (ElmFormatResult formatStart formatResult)
@@ -1227,16 +1315,16 @@ updateToProvideHoverRequest :
     -> WorkspaceActiveStruct
     -> ( WorkspaceActiveStruct, Cmd WorkspaceEventStructure )
 updateToProvideHoverRequest request workspaceStateBefore =
-    case workspaceStateBefore.editing.filePathOpenedInEditor of
+    case workspaceStateBefore.editing.fileLocationOpenInEditor of
         Nothing ->
             ( workspaceStateBefore
             , Cmd.none
             )
 
-        Just filePathOpenedInEditor ->
+        Just ( directoryPath, fileName ) ->
             updateForRequestToLanguageService
                 (LanguageServiceInterface.ProvideHoverRequest
-                    { filePathOpenedInEditor = filePathOpenedInEditor
+                    { filePathOpenedInEditor = directoryPath ++ [ fileName ]
                     , positionLineNumber = request.positionLineNumber
                     , positionColumn = request.positionColumn
                     , lineText = request.lineText
@@ -1250,14 +1338,14 @@ updateToProvideCompletionItemsRequest :
     -> WorkspaceActiveStruct
     -> ( WorkspaceActiveStruct, Cmd WorkspaceEventStructure )
 updateToProvideCompletionItemsRequest request workspaceStateBefore =
-    case workspaceStateBefore.editing.filePathOpenedInEditor of
+    case workspaceStateBefore.editing.fileLocationOpenInEditor of
         Nothing ->
             ( workspaceStateBefore, Cmd.none )
 
-        Just filePathOpenedInEditor ->
+        Just ( directoryPath, fileName ) ->
             updateForRequestToLanguageService
                 (LanguageServiceInterface.ProvideCompletionItemsRequest
-                    { filePathOpenedInEditor = filePathOpenedInEditor
+                    { filePathOpenedInEditor = directoryPath ++ [ fileName ]
                     , cursorLineNumber = request.cursorLineNumber
                     , textUntilPosition = request.textUntilPosition
                     }
@@ -1451,11 +1539,24 @@ updateForLoadedWorkspaceState config loadedBaseWorkspaceState workspaceStateDiff
                 composedWorkspaceStateHashBase16 =
                     Frontend.WorkspaceStateInUrl.workspaceStateCompositionHash composedWorkspaceState
 
+                fileLocationOpenInEditor =
+                    case config.filePathToOpen of
+                        Nothing ->
+                            Nothing
+
+                        Just filePathToOpen ->
+                            case List.reverse filePathToOpen of
+                                [] ->
+                                    Nothing
+
+                                fileName :: directoryPathReversed ->
+                                    Just ( List.reverse directoryPathReversed, fileName )
+
                 continueIfHashOk =
                     { stateBefore
                         | workspace =
                             { fileTree = FileTreeInWorkspace.mapBlobsFromBytes composedWorkspaceState
-                            , filePathOpenedInEditor = config.filePathToOpen
+                            , fileLocationOpenInEditor = fileLocationOpenInEditor
                             }
                                 |> initWorkspaceFromFileTreeAndFileSelection
                                 |> WorkspaceActive
@@ -1503,7 +1604,7 @@ elmFormatCmdFromState state =
         Nothing ->
             Nothing
 
-        Just ( filePath, fileContent ) ->
+        Just ( fileLocation, fileContent ) ->
             case stringFromFileContent fileContent.asBytes of
                 Nothing ->
                     Nothing
@@ -1524,7 +1625,11 @@ elmFormatCmdFromState state =
                     ( fileContentString
                     , requestToApiCmd request
                         jsonDecoder
-                        (Result.map Tuple.second >> (\result -> BackendElmFormatResponseEvent { filePath = filePath, result = result }))
+                        (Result.map Tuple.second
+                            >> (\result ->
+                                    BackendElmFormatResponseEvent { fileLocation = fileLocation, result = result }
+                               )
+                        )
                     )
                         |> Just
 
@@ -1626,12 +1731,15 @@ prepareCompileForFileOpenedInEditor :
     WorkspaceActiveStruct
     -> Maybe { requestFromUserIdentity : ElmMakeRequestStructure, compile : () -> CompilationState }
 prepareCompileForFileOpenedInEditor workspace =
-    case workspace.editing.filePathOpenedInEditor of
+    case workspace.editing.fileLocationOpenInEditor of
         Nothing ->
             Nothing
 
-        Just entryPointFilePath ->
+        Just ( entryPointDirectoryPath, entryPointFileName ) ->
             let
+                entryPointFilePath =
+                    entryPointDirectoryPath ++ [ entryPointFileName ]
+
                 filesBeforeLowering =
                     workspace.fileTree
                         |> FileTree.flatListOfBlobsFromFileTreeNode
@@ -1640,10 +1748,7 @@ prepareCompileForFileOpenedInEditor workspace =
                     filesBeforeLowering |> List.map Tuple.first |> List.member (directoryPath ++ [ "elm.json" ])
 
                 workingDirectoryPath =
-                    entryPointFilePath
-                        |> List.reverse
-                        |> List.drop 1
-                        |> List.reverse
+                    entryPointDirectoryPath
                         |> List.Extra.inits
                         |> List.sortBy (List.length >> negate)
                         |> List.filter directoryContainsElmJson
@@ -1915,7 +2020,7 @@ view state =
                                     ]
 
                         workspaceView =
-                            case workspaceActive.editing.filePathOpenedInEditor of
+                            case workspaceActive.editing.fileLocationOpenInEditor of
                                 Nothing ->
                                     { editorPaneHeader =
                                         [ Element.text "Choose a file to open in the editor" ]
@@ -1925,7 +2030,7 @@ view state =
                                             selectEventFromFileTreeNode upperPath ( nodeName, nodeContent ) =
                                                 case nodeContent of
                                                     FileTree.BlobNode _ ->
-                                                        Just (UserInputOpenFileInEditor (upperPath ++ [ nodeName ]))
+                                                        Just (UserInputOpenFileInEditor ( upperPath, nodeName ))
 
                                                     FileTree.TreeNode _ ->
                                                         Nothing
@@ -1943,8 +2048,12 @@ view state =
                                                 ]
                                     }
 
-                                Just filePathOpenedInEditor ->
+                                Just ( directoryPath, fileName ) ->
                                     let
+                                        fileContentType : Maybe FileContentType
+                                        fileContentType =
+                                            FileEditor.fileContentTypeFromFileName fileName
+
                                         headerIconElementFromTypeAndColor maybeTypeAndColor =
                                             maybeTypeAndColor
                                                 |> Maybe.map
@@ -1955,41 +2064,34 @@ view state =
                                                 |> Element.el [ Element.width (Element.px defaultFontSize) ]
 
                                         filePathElement =
-                                            case List.reverse filePathOpenedInEditor of
-                                                [] ->
-                                                    Element.none
+                                            let
+                                                directorySeparatorIconElement =
+                                                    headerIconElementFromTypeAndColor (Just ( Visuals.DirectoryCollapsedIcon, "white" ))
 
-                                                fileName :: directoryPathReversed ->
-                                                    let
-                                                        directorySeparatorIconElement =
-                                                            headerIconElementFromTypeAndColor (Just ( Visuals.DirectoryCollapsedIcon, "white" ))
+                                                fileIconElement =
+                                                    fileName
+                                                        |> Visuals.iconFromFileName
+                                                        |> headerIconElementFromTypeAndColor
 
-                                                        fileIconElement =
-                                                            filePathOpenedInEditor
-                                                                |> List.reverse
-                                                                |> List.head
-                                                                |> Maybe.andThen Visuals.iconFromFileName
-                                                                |> headerIconElementFromTypeAndColor
+                                                elementFromPathSegmentText appendDirectorySeparator segmentText =
+                                                    [ Element.text segmentText
+                                                    , if appendDirectorySeparator then
+                                                        directorySeparatorIconElement
 
-                                                        elementFromPathSegmentText appendDirectorySeparator segmentText =
-                                                            [ Element.text segmentText
-                                                            , if appendDirectorySeparator then
-                                                                directorySeparatorIconElement
-
-                                                              else
-                                                                Element.none
-                                                            ]
-                                                                |> Element.row
-                                                                    [ Element.spacing (defaultFontSize // 2)
-                                                                    , Element.alpha 0.83
-                                                                    ]
-                                                    in
-                                                    (directoryPathReversed |> List.reverse |> List.map (elementFromPathSegmentText True))
-                                                        ++ [ [ fileIconElement, fileName |> elementFromPathSegmentText False ]
-                                                                |> Element.row [ Element.spacing (defaultFontSize // 2) ]
-                                                           ]
+                                                      else
+                                                        Element.none
+                                                    ]
                                                         |> Element.row
-                                                            [ Element.spacing (defaultFontSize // 2) ]
+                                                            [ Element.spacing (defaultFontSize // 2)
+                                                            , Element.alpha 0.83
+                                                            ]
+                                            in
+                                            (directoryPath |> List.map (elementFromPathSegmentText True))
+                                                ++ [ [ fileIconElement, fileName |> elementFromPathSegmentText False ]
+                                                        |> Element.row [ Element.spacing (defaultFontSize // 2) ]
+                                                   ]
+                                                |> Element.row
+                                                    [ Element.spacing (defaultFontSize // 2) ]
 
                                         closeEditorElement =
                                             Element.Input.button
@@ -2003,6 +2105,30 @@ view state =
                                                 , onPress = Just UserInputCloseEditor
                                                 }
 
+                                        buttonsElements : List (Element.Element WorkspaceEventStructure)
+                                        buttonsElements =
+                                            case fileContentType of
+                                                Just ElmContent ->
+                                                    [ buttonElement
+                                                        { label =
+                                                            Element.row
+                                                                [ Element.spacing defaultFontSize
+                                                                , Element.htmlAttribute (HA.title "Format")
+                                                                ]
+                                                                [ FontAwesome.Solid.indent
+                                                                    |> FontAwesome.view
+                                                                    |> Element.html
+                                                                    |> Element.el []
+                                                                , Element.text "Format"
+                                                                ]
+                                                        , onPress = Just UserInputFormat
+                                                        }
+                                                    , buttonCompile
+                                                    ]
+
+                                                _ ->
+                                                    []
+
                                         headerElement =
                                             [ [ filePathElement, closeEditorElement ]
                                                 |> Element.row
@@ -2012,22 +2138,7 @@ view state =
                                                     , Element.alignLeft
                                                     , Element.htmlAttribute (HA.style "user-select" "none")
                                                     ]
-                                            , [ buttonElement
-                                                    { label =
-                                                        Element.row
-                                                            [ Element.spacing defaultFontSize
-                                                            , Element.htmlAttribute (HA.title "Format")
-                                                            ]
-                                                            [ FontAwesome.Solid.indent
-                                                                |> FontAwesome.view
-                                                                |> Element.html
-                                                                |> Element.el []
-                                                            , Element.text "Format"
-                                                            ]
-                                                    , onPress = Just UserInputFormat
-                                                    }
-                                              , buttonCompile
-                                              ]
+                                            , buttonsElements
                                                 |> Element.row
                                                     [ Element.spacing defaultFontSize
                                                     , Element.width Element.fill
@@ -3049,7 +3160,7 @@ viewOutputPaneContent state =
             case state.compilation of
                 Nothing ->
                     { mainContent =
-                        if filePathOpenedInEditorFromWorkspace state == Nothing then
+                        if fileLocationOpenInEditorFromWorkspace state == Nothing then
                             Element.none
 
                         else
@@ -3125,22 +3236,29 @@ viewOutputPaneContentFromCompilationComplete workspace compilation loweringCompl
             elmMakeRequest.workingDirectoryPath
                 ++ elmMakeRequest.entryPointFilePathFromWorkingDirectory
 
+        warnAboutOutdatedCompilationText : Maybe String
         warnAboutOutdatedCompilationText =
-            if
-                Just elmMakeRequestEntryPointFilePathAbs
-                    /= filePathOpenedInEditorFromWorkspace workspace
-            then
-                Just
-                    ("⚠️ Last compilation started for another file: '"
-                        ++ String.join "/" elmMakeRequestEntryPointFilePathAbs
-                        ++ "'"
-                    )
+            case fileLocationOpenInEditorFromWorkspace workspace of
+                Nothing ->
+                    Nothing
 
-            else if currentFileContentIsStillSame then
-                Nothing
+                Just ( directoryPath, fileName ) ->
+                    let
+                        filePathOpenedInEditor =
+                            directoryPath ++ [ fileName ]
+                    in
+                    if elmMakeRequestEntryPointFilePathAbs /= filePathOpenedInEditor then
+                        Just
+                            ("⚠️ Last compilation started for another file: '"
+                                ++ String.join "/" elmMakeRequestEntryPointFilePathAbs
+                                ++ "'"
+                            )
 
-            else
-                Just "⚠️ File contents changed since compiling"
+                    else if currentFileContentIsStillSame then
+                        Nothing
+
+                    else
+                        Just "⚠️ File contents changed since compiling"
 
         offerToggleInspection =
             case loweringComplete.loweringResult of
@@ -3410,29 +3528,34 @@ viewLoweringCompileError : CompileElmApp.LocatedCompilationError -> Element.Elem
 viewLoweringCompileError locatedLoweringError =
     case locatedLoweringError of
         CompileElmApp.LocatedInSourceFiles errorLocation loweringError ->
-            let
-                locationElement =
-                    viewElmMakeErrorLocation
-                        errorLocation.filePath
-                        (compilationSyntaxRangeAsElmMakeReportRegion errorLocation.locationInModuleText)
+            case List.reverse errorLocation.filePath of
+                [] ->
+                    Element.none
 
-                errorDescriptionElement =
-                    -- Work around problem described at https://github.com/mdgriffith/elm-ui/issues/49#issuecomment-550229883
-                    [ loweringError
-                        |> loweringCompilationErrorDisplayText
-                        |> Html.text
-                        |> Element.html
-                    ]
-                        |> Element.paragraph
-                            [ Element.htmlAttribute (HA.style "white-space" "pre-wrap")
-                            , Element.htmlAttribute attributeMonospaceFont
+                fileName :: directoryPathReversed ->
+                    let
+                        locationElement =
+                            viewElmMakeErrorLocation
+                                ( List.reverse directoryPathReversed, fileName )
+                                (compilationSyntaxRangeAsElmMakeReportRegion errorLocation.locationInModuleText)
+
+                        errorDescriptionElement =
+                            -- Work around problem described at https://github.com/mdgriffith/elm-ui/issues/49#issuecomment-550229883
+                            [ loweringError
+                                |> loweringCompilationErrorDisplayText
+                                |> Html.text
+                                |> Element.html
                             ]
-            in
-            [ locationElement, errorDescriptionElement ]
-                |> Element.column
-                    [ Element.spacing (defaultFontSize // 2)
-                    , Element.width Element.fill
-                    ]
+                                |> Element.paragraph
+                                    [ Element.htmlAttribute (HA.style "white-space" "pre-wrap")
+                                    , Element.htmlAttribute attributeMonospaceFont
+                                    ]
+                    in
+                    [ locationElement, errorDescriptionElement ]
+                        |> Element.column
+                            [ Element.spacing (defaultFontSize // 2)
+                            , Element.width Element.fill
+                            ]
 
 
 loweringCompilationErrorDisplayText : CompileElmApp.CompilationError -> String
@@ -3472,12 +3595,20 @@ viewElmMakeCompileError elmMakeRequest elmMakeError =
                             (elmMakeRequest.files |> List.map .path)
                             elmMakeError.path
 
+                    displayPathLocation =
+                        case List.reverse displayPath of
+                            [] ->
+                                ( [], "error parsing - empty path" )
+
+                            fileName :: directoryPathReversed ->
+                                ( List.reverse directoryPathReversed, fileName )
+
                     problemHeadingElement =
                         [ elmMakeProblem.title
                             |> elmEditorProblemDisplayTitleFromReportTitle
                             |> Element.text
                             |> Element.el [ Element.Font.bold ]
-                        , viewElmMakeErrorLocation displayPath elmMakeProblem.region
+                        , viewElmMakeErrorLocation displayPathLocation elmMakeProblem.region
                         ]
                             |> Element.column
                                 [ Element.spacing (defaultFontSize // 2)
@@ -3498,8 +3629,15 @@ viewElmMakeCompileError elmMakeRequest elmMakeError =
             ]
 
 
-viewElmMakeErrorLocation : List String -> ElmMakeExecutableFile.ElmMakeReportRegion -> Element.Element WorkspaceEventStructure
-viewElmMakeErrorLocation filePath regionInFile =
+viewElmMakeErrorLocation : ( List String, String ) -> ElmMakeExecutableFile.ElmMakeReportRegion -> Element.Element WorkspaceEventStructure
+viewElmMakeErrorLocation fileLocation regionInFile =
+    let
+        ( directoryPath, fileName ) =
+            fileLocation
+
+        filePath =
+            directoryPath ++ [ fileName ]
+    in
     (String.join "/" filePath
         ++ " - Line "
         ++ String.fromInt regionInFile.start.line
@@ -3510,7 +3648,7 @@ viewElmMakeErrorLocation filePath regionInFile =
         |> Element.el
             (Element.Events.onClick
                 (UserInputRevealPositionInEditor
-                    { filePath = filePath
+                    { fileLocation = fileLocation
                     , lineNumber = regionInFile.start.line
                     , column = regionInFile.start.column
                     }
@@ -3566,18 +3704,23 @@ viewElementFromElmMakeCompileErrorMessage =
 
 
 editorDocumentMarkersFromFailedLowering :
-    { compileRequest : ElmMakeRequestStructure, fileOpenedInEditor : ( List String, FileTreeInWorkspace.BlobNodeWithCache ) }
+    { compileRequest : ElmMakeRequestStructure
+    , fileOpenInEditor : ( ( List String, String ), FileTreeInWorkspace.BlobNodeWithCache )
+    }
     -> List CompileElmApp.LocatedCompilationError
     -> List Frontend.MonacoEditor.EditorMarker
-editorDocumentMarkersFromFailedLowering { compileRequest, fileOpenedInEditor } compileErrors =
+editorDocumentMarkersFromFailedLowering { compileRequest, fileOpenInEditor } compileErrors =
     let
-        filePathOpenedInEditor =
-            Tuple.first fileOpenedInEditor
+        ( directoryPath, fileName ) =
+            Tuple.first fileOpenInEditor
+
+        filePathOpenInEditor =
+            directoryPath ++ [ fileName ]
 
         fileOpenedInEditorBase64 =
-            (Tuple.second fileOpenedInEditor).asBase64
+            (Tuple.second fileOpenInEditor).asBase64
     in
-    case compileRequest.files |> List.filter (.path >> (==) filePathOpenedInEditor) |> List.head of
+    case compileRequest.files |> List.filter (.path >> (==) filePathOpenInEditor) |> List.head of
         Nothing ->
             []
 
@@ -3591,7 +3734,7 @@ editorDocumentMarkersFromFailedLowering { compileRequest, fileOpenedInEditor } c
                         (\locatedCompilationError ->
                             case locatedCompilationError of
                                 CompileElmApp.LocatedInSourceFiles location error ->
-                                    if location.filePath == filePathOpenedInEditor then
+                                    if location.filePath == filePathOpenInEditor then
                                         Just
                                             (editorDocumentMarkerFromLoweringCompileError
                                                 ( compilationSyntaxRangeAsElmMakeReportRegion location.locationInModuleText
@@ -3605,23 +3748,28 @@ editorDocumentMarkersFromFailedLowering { compileRequest, fileOpenedInEditor } c
 
 
 editorDocumentMarkersFromElmMakeReport :
-    { elmMakeRequest : ElmMakeRequestStructure, fileOpenedInEditor : ( List String, FileTreeInWorkspace.BlobNodeWithCache ) }
+    { elmMakeRequest : ElmMakeRequestStructure
+    , fileOpenInEditor : ( ( List String, String ), FileTreeInWorkspace.BlobNodeWithCache )
+    }
     -> Maybe (Result String ElmMakeExecutableFile.ElmMakeReportFromJson)
     -> List Frontend.MonacoEditor.EditorMarker
-editorDocumentMarkersFromElmMakeReport { elmMakeRequest, fileOpenedInEditor } maybeReportFromJson =
+editorDocumentMarkersFromElmMakeReport { elmMakeRequest, fileOpenInEditor } maybeReportFromJson =
     case maybeReportFromJson of
         Nothing ->
             []
 
         Just reportFromJson ->
             let
-                filePathOpenedInEditor =
-                    Tuple.first fileOpenedInEditor
+                ( directoryPath, fileName ) =
+                    Tuple.first fileOpenInEditor
+
+                filePathOpenInEditor =
+                    directoryPath ++ [ fileName ]
 
                 fileOpenedInEditorBase64 =
-                    (Tuple.second fileOpenedInEditor).asBase64
+                    (Tuple.second fileOpenInEditor).asBase64
             in
-            case elmMakeRequest.files |> List.filter (.path >> (==) filePathOpenedInEditor) |> List.head of
+            case elmMakeRequest.files |> List.filter (.path >> (==) filePathOpenInEditor) |> List.head of
                 Nothing ->
                     []
 
@@ -3645,7 +3793,7 @@ editorDocumentMarkersFromElmMakeReport { elmMakeRequest, fileOpenedInEditor } ma
                                                 (.path
                                                     >> filePathFromExistingPathsAndElmMakeReportPathString
                                                         (elmMakeRequest.files |> List.map .path)
-                                                    >> (==) filePathOpenedInEditor
+                                                    >> (==) filePathOpenInEditor
                                                 )
                                             |> List.concatMap .problems
                                             |> List.map editorDocumentMarkerFromElmMakeProblem
@@ -3922,11 +4070,11 @@ titlebarMenuEntryLabel menuEntry =
             "Workspace"
 
 
-setTextInMonacoEditorCmd : String -> Cmd WorkspaceEventStructure
-setTextInMonacoEditorCmd =
-    Frontend.MonacoEditor.SetValue
-        >> CompilationInterface.GenerateJsonConverters.jsonEncodeMessageToMonacoEditor
-        >> sendMessageToMonacoFrame
+setContentInMonacoEditorCmd : { text : String, language : String } -> Cmd WorkspaceEventStructure
+setContentInMonacoEditorCmd content =
+    Frontend.MonacoEditor.SetContent { value = content.text, language = content.language }
+        |> CompilationInterface.GenerateJsonConverters.jsonEncodeMessageToMonacoEditor
+        |> sendMessageToMonacoFrame
 
 
 revealPositionInCenterInMonacoEditorCmd : { lineNumber : Int, column : Int } -> Cmd WorkspaceEventStructure
@@ -3976,11 +4124,11 @@ defaultWorkspaceLink =
 
 
 initWorkspaceFromFileTreeAndFileSelection :
-    { fileTree : FileTreeInWorkspace.FileTreeNode, filePathOpenedInEditor : Maybe (List String) }
+    { fileTree : FileTreeInWorkspace.FileTreeNode, fileLocationOpenInEditor : Maybe ( List String, String ) }
     -> WorkspaceActiveStruct
-initWorkspaceFromFileTreeAndFileSelection { fileTree, filePathOpenedInEditor } =
+initWorkspaceFromFileTreeAndFileSelection { fileTree, fileLocationOpenInEditor } =
     { fileTree = fileTree
-    , editing = { filePathOpenedInEditor = filePathOpenedInEditor }
+    , editing = { fileLocationOpenInEditor = fileLocationOpenInEditor }
     , decodeMessageFromMonacoEditorError = Nothing
     , lastTextReceivedFromEditor = Nothing
     , compilation = Nothing
