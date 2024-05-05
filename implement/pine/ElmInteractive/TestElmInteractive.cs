@@ -52,11 +52,12 @@ public class TestElmInteractive
 
     public record ScenarioStep(
         string Submission,
-        string? ExpectedResponse);
+        string? ExpectedResponse,
+        string? ExpectedErrorContains);
 
     public record InteractiveScenarioTestReport(
         Scenario Scenario,
-        ImmutableList<(string name, Result<InteractiveScenarioTestStepFailure, IInteractiveSession.SubmissionResponse> result)> StepsReports,
+        ImmutableList<(string name, Result<InteractiveScenarioTestStepFailure, InteractiveScenarioTestStepSuccess> result)> StepsReports,
         TimeSpan ElapsedTime)
     {
         public bool Passed => StepsReports.All(s => s.result.IsOk());
@@ -65,6 +66,15 @@ public class TestElmInteractive
     public record InteractiveScenarioTestStepFailure(
         string submission,
         string errorAsText);
+
+    public abstract record InteractiveScenarioTestStepSuccess
+    {
+        public record ErrorAsExpected(string ErrorAsText)
+            : InteractiveScenarioTestStepSuccess;
+
+        public record SubmissionResponseOk(IInteractiveSession.SubmissionResponse SubmissionResponse)
+            : InteractiveScenarioTestStepSuccess;
+    }
 
     public static ParsedScenarios ParseElmInteractiveScenarios(
         TreeNodeWithStringPath scenariosTree,
@@ -224,7 +234,38 @@ public class TestElmInteractive
             parsedScenario.Steps
             .Select(sessionStep =>
             {
-                Result<InteractiveScenarioTestStepFailure, IInteractiveSession.SubmissionResponse> getResult()
+                Result<InteractiveScenarioTestStepFailure, InteractiveScenarioTestStepSuccess> continueWithErrorMessage(
+                    string errorMessage)
+                {
+                    if (sessionStep.step.ExpectedErrorContains is { } expectedErrorContains)
+                    {
+                        if (!errorMessage.Contains(expectedErrorContains, StringComparison.InvariantCultureIgnoreCase))
+                        {
+                            var errorText =
+                            "Error from interactive does not contain expected value. Expected:\n" +
+                            expectedErrorContains +
+                            "\nBut got this error:\n" +
+                            errorMessage;
+
+                            return
+                            (Result<InteractiveScenarioTestStepFailure, InteractiveScenarioTestStepSuccess>)
+                            new InteractiveScenarioTestStepFailure(
+                                submission: sessionStep.step.Submission,
+                                errorAsText: errorText);
+                        }
+
+                        return
+                        (Result<InteractiveScenarioTestStepFailure, InteractiveScenarioTestStepSuccess>)
+                        new InteractiveScenarioTestStepSuccess.ErrorAsExpected(errorMessage);
+                    }
+
+                    return
+                    new InteractiveScenarioTestStepFailure(
+                        submission: sessionStep.step.Submission,
+                        errorAsText: errorMessage);
+                }
+
+                Result<InteractiveScenarioTestStepFailure, InteractiveScenarioTestStepSuccess> getResult()
                 {
                     try
                     {
@@ -241,42 +282,36 @@ public class TestElmInteractive
                                 new TestInteractiveScenarioLogEntry.SubmissionResponseStruct(
                                     Result: submissionResult)));
 
-                        var submissionResultMappedErr =
-                        submissionResult
-                        .MapError(err => new InteractiveScenarioTestStepFailure(
-                            submission: sessionStep.step.Submission,
-                            errorAsText: "Submission result has error: " + err));
-
                         return
-                        submissionResultMappedErr
-                        .AndThen(submissionResultOk =>
-                        {
-                            if (sessionStep.step.ExpectedResponse is { } expectedResponse)
+                        submissionResult
+                        .Unpack(
+                            fromErr: err => continueWithErrorMessage("Submission result has error: " + err),
+                            fromOk: submissionResultOk =>
                             {
-                                if (expectedResponse != submissionResultOk.InteractiveResponse?.DisplayText)
+                                if (sessionStep.step.ExpectedResponse is { } expectedResponse)
                                 {
-                                    var errorText =
-                                    "Response from interactive does not match expected value. Expected:\n" +
-                                    expectedResponse +
-                                    "\nBut got this response:\n" +
-                                    submissionResultOk.InteractiveResponse?.DisplayText;
+                                    if (expectedResponse != submissionResultOk.InteractiveResponse?.DisplayText)
+                                    {
+                                        var errorText =
+                                        "Response from interactive does not match expected value. Expected:\n" +
+                                        expectedResponse +
+                                        "\nBut got this response:\n" +
+                                        submissionResultOk.InteractiveResponse?.DisplayText;
 
-                                    return Result<InteractiveScenarioTestStepFailure, IInteractiveSession.SubmissionResponse>.err(
+                                        return
+                                        (Result<InteractiveScenarioTestStepFailure, InteractiveScenarioTestStepSuccess>)
                                         new InteractiveScenarioTestStepFailure(
                                             submission: sessionStep.step.Submission,
-                                            errorAsText: errorText));
+                                            errorAsText: errorText);
+                                    }
                                 }
-                            }
 
-                            return submissionResultMappedErr;
-                        });
+                                return new InteractiveScenarioTestStepSuccess.SubmissionResponseOk(submissionResultOk);
+                            });
                     }
                     catch (Exception e)
                     {
-                        return Result<InteractiveScenarioTestStepFailure, IInteractiveSession.SubmissionResponse>.err(
-                            new InteractiveScenarioTestStepFailure(
-                                submission: sessionStep.step.Submission,
-                                errorAsText: "Runtime exception:\n" + e));
+                        return continueWithErrorMessage("Runtime exception:\n" + e);
                     }
                 }
 
@@ -344,6 +379,13 @@ public class TestElmInteractive
             :
             null;
 
+        var expectedErrorContains =
+            sessionStep.GetNodeAtPath(["expected-error-contains.txt"]) is TreeNodeWithStringPath.BlobNode expectedErrorContainsBlob
+            ?
+            Encoding.UTF8.GetString(expectedErrorContainsBlob.Bytes.Span)
+            :
+            null;
+
         return
             (sessionStep.GetNodeAtPath(["submission.txt"]) switch
             {
@@ -353,6 +395,9 @@ public class TestElmInteractive
                 _ =>
                 Result<string, string>.err("Missing submission"),
             })
-            .Map(submission => new ScenarioStep(submission, expectedResponse));
+            .Map(submission => new ScenarioStep(
+                submission,
+                ExpectedResponse: expectedResponse,
+                ExpectedErrorContains: expectedErrorContains));
     }
 }

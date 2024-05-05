@@ -431,9 +431,9 @@ expandEnvWithModulesRecursive environmentBefore parsedElmModules =
                         nextEnvironment =
                             Dict.insert moduleName moduleValue environmentBefore
                     in
-                    expandEnvWithModulesRecursive
-                        nextEnvironment
-                        followingModules
+                        expandEnvWithModulesRecursive
+                            nextEnvironment
+                            followingModules
 
 
 compileElmModuleIntoNamedExports :
@@ -2784,7 +2784,11 @@ recursiveFunctionToLookupFieldInRecord =
                 [ Pine.ListExpression []
                 , remainingFieldsLocalExpression
                 ]
-        , ifTrue = continueWithRemainingExpression
+        , ifTrue =
+            Pine.ParseAndEvalExpression
+                { expression = Pine.LiteralExpression (Pine.valueFromString "Invalid record access")
+                , environment = fieldNameLocalExpression
+                }
         , ifFalse =
             Pine.ConditionalExpression
                 { condition =

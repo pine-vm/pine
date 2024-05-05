@@ -125,21 +125,29 @@ public class PineVM : IPineVM
     public Result<string, PineValue> EvaluateParseAndEvalExpression(
         Expression.ParseAndEvalExpression parseAndEval,
         PineValue environment) =>
+        EvaluateExpression(parseAndEval.environment, environment)
+        .AndThen(environmentValue =>
         EvaluateExpression(parseAndEval.expression, environment)
         .MapError(error => "Failed to evaluate function: " + error)
         .AndThen(functionValue => ParseExpressionFromValue(functionValue)
-        .MapError(error => "Failed to parse expression from function value: " + error)
-        .AndThen(functionExpression => EvaluateExpression(parseAndEval.environment, environment)
+        .MapError(error =>
+        "Failed to parse expression from function value: " + error +
+        " - functionValue is " +
+        PineValueAsString.StringFromValue(functionValue)
+        .Unpack(fromErr: _ => "not a string", fromOk: asString => "string \'" + asString + "\'") +
+        " - environmentValue is " +
+        PineValueAsString.StringFromValue(environmentValue)
+        .Unpack(fromErr: _ => "not a string", fromOk: asString => "string \'" + asString + "\'"))
         .MapError(error => "Failed to evaluate argument: " + error)
-        .AndThen(argumentValue =>
+        .AndThen(functionExpression =>
         {
-            if (argumentValue is PineValue.ListValue list)
+            if (environmentValue is PineValue.ListValue list)
             {
                 FunctionApplicationMaxEnvSize =
                 FunctionApplicationMaxEnvSize < list.Elements.Count ? list.Elements.Count : FunctionApplicationMaxEnvSize;
             }
 
-            var evalResult = EvaluateExpression(environment: argumentValue, expression: functionExpression);
+            var evalResult = EvaluateExpression(environment: environmentValue, expression: functionExpression);
 
             return evalResult;
         })));
