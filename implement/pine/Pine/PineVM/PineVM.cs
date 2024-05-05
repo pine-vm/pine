@@ -73,7 +73,7 @@ public class PineVM : IPineVM
         PineValue environment)
     {
         if (expression is Expression.LiteralExpression literalExpression)
-            return Result<string, PineValue>.ok(literalExpression.Value);
+            return literalExpression.Value;
 
         if (expression is Expression.ListExpression listExpression)
         {
@@ -106,7 +106,7 @@ public class PineVM : IPineVM
 
         if (expression is Expression.EnvironmentExpression)
         {
-            return Result<string, PineValue>.ok(environment);
+            return environment;
         }
 
         if (expression is Expression.StringTagExpression stringTagExpression)
@@ -190,20 +190,22 @@ public class PineVM : IPineVM
     public static Result<string, bool> ParseBoolFromValue(PineValue value) =>
         value == TrueValue
         ?
-        Result<string, bool>.ok(true)
+        true
         :
-        value == FalseValue ? Result<string, bool>.ok(false)
+        value == FalseValue
+        ?
+        false
         :
-        Result<string, bool>.err("Value is neither True nor False");
+        "Value is neither True nor False";
 
     public static Result<string, PineValue> EncodeExpressionAsValue(Expression expression) =>
         expression switch
         {
             Expression.LiteralExpression literal =>
-            Result<string, PineValue>.ok(EncodeChoiceTypeVariantAsPineValue("Literal", literal.Value)),
+            EncodeChoiceTypeVariantAsPineValue("Literal", literal.Value),
 
             Expression.EnvironmentExpression =>
-            Result<string, PineValue>.ok(EncodeChoiceTypeVariantAsPineValue("Environment", PineValue.EmptyList)),
+            EncodeChoiceTypeVariantAsPineValue("Environment", PineValue.EmptyList),
 
             Expression.ListExpression list =>
             list.List.Select(EncodeExpressionAsValue)
@@ -226,7 +228,7 @@ public class PineVM : IPineVM
                 PineValue.List([PineValueAsString.ValueFromString(stringTag.tag), encodedTagged]))),
 
             _ =>
-            Result<string, PineValue>.err("Unsupported expression type: " + expression.GetType().FullName)
+            "Unsupported expression type: " + expression.GetType().FullName
         };
 
     public static Result<string, Expression> ParseExpressionFromValue(
@@ -234,7 +236,7 @@ public class PineVM : IPineVM
         IReadOnlyDictionary<PineValue, Expression.DelegatingExpression> parseExpressionOverrides)
     {
         if (parseExpressionOverrides.TryGetValue(value, out var delegatingExpression))
-            return Result<string, Expression>.ok(delegatingExpression);
+            return delegatingExpression;
 
         return
             ParseChoiceFromPineValue(
@@ -256,7 +258,7 @@ public class PineVM : IPineVM
         ImmutableDictionary<string, Func<Func<PineValue, Result<string, Expression>>, PineValue, Result<string, Expression>>>.Empty
         .SetItem(
             "Literal",
-            (_, literal) => Result<string, Expression>.ok(new Expression.LiteralExpression(literal)))
+            (_, literal) => new Expression.LiteralExpression(literal))
         .SetItem(
             "List",
             (generalParser, listValue) =>
@@ -277,7 +279,7 @@ public class PineVM : IPineVM
             .Map(conditional => (Expression)conditional))
         .SetItem(
             "Environment",
-            (_, _) => Result<string, Expression>.ok(new Expression.EnvironmentExpression()))
+            (_, _) => new Expression.EnvironmentExpression())
         .SetItem(
             "StringTag",
             (generalParser, value) => ParseStringTagExpression(generalParser, value)
@@ -338,15 +340,14 @@ public class PineVM : IPineVM
     {
         if (!NamedKernelFunctions.TryGetValue(functionName, out var kernelFunction))
         {
-            return Result<string, Expression.KernelApplicationExpression>.err(
-                "Did not find kernel function '" + functionName + "'");
+            return "Did not find kernel function '" + functionName + "'";
         }
 
-        return Result<string, Expression.KernelApplicationExpression>.ok(
+        return
             new Expression.KernelApplicationExpression(
                 functionName: functionName,
                 function: kernelFunction,
-                argument: argument));
+                argument: argument);
     }
 
     public static Result<string, PineValue> EncodeConditionalExpressionAsValue(Expression.ConditionalExpression conditionalExpression) =>
@@ -397,13 +398,13 @@ public class PineVM : IPineVM
         .AndThen(record =>
         {
             if (!record.TryGetValue(fieldA.name, out var fieldAValue))
-                return Result<string, Record>.err("Did not find field " + fieldA.name);
+                return "Did not find field " + fieldA.name;
 
             if (!record.TryGetValue(fieldB.name, out var fieldBValue))
-                return Result<string, Record>.err("Did not find field " + fieldB.name);
+                return "Did not find field " + fieldB.name;
 
             if (!record.TryGetValue(fieldC.name, out var fieldCValue))
-                return Result<string, Record>.err("Did not find field " + fieldC.name);
+                return "Did not find field " + fieldC.name;
 
             return
             fieldA.decode(fieldAValue)
@@ -423,10 +424,10 @@ public class PineVM : IPineVM
         .AndThen(record =>
         {
             if (!record.TryGetValue(fieldA.name, out var fieldAValue))
-                return Result<string, Record>.err("Did not find field " + fieldA.name);
+                return "Did not find field " + fieldA.name;
 
             if (!record.TryGetValue(fieldB.name, out var fieldBValue))
-                return Result<string, Record>.err("Did not find field " + fieldB.name);
+                return "Did not find field " + fieldB.name;
 
             return
             fieldA.decode(fieldAValue)
@@ -449,7 +450,7 @@ public class PineVM : IPineVM
         .AndThen(list =>
         list
         .Aggregate(
-            seed: Result<string, ImmutableDictionary<string, PineValue>>.ok(ImmutableDictionary<string, PineValue>.Empty),
+            seed: (Result<string, ImmutableDictionary<string, PineValue>>)ImmutableDictionary<string, PineValue>.Empty,
             func: (aggregate, listElement) => aggregate.AndThen(recordFields =>
             ParsePineListValue(listElement)
             .AndThen(ParseListWithExactlyTwoElements)
@@ -472,10 +473,10 @@ public class PineVM : IPineVM
         .AndThen(tagNameValueAndValue =>
         {
             if (!variants.TryGetValue(tagNameValueAndValue.Item1, out var variant))
-                return Result<string, T>.err(
+                return (Result<string, T>)
                     "Unexpected tag name: " +
                     PineValueAsString.StringFromValue(tagNameValueAndValue.Item1)
-                    .Extract(err => "Failed to parse as string: " + err));
+                    .Extract(err => "Failed to parse as string: " + err);
 
             return variant(generalParser, tagNameValueAndValue.Item2)!;
         });
@@ -483,17 +484,18 @@ public class PineVM : IPineVM
     public static Result<string, IImmutableList<PineValue>> ParsePineListValue(PineValue value)
     {
         if (value is not PineValue.ListValue listValue)
-            return Result<string, IImmutableList<PineValue>>.err("Not a list");
+            return "Not a list";
 
-        return Result<string, IImmutableList<PineValue>>.ok(
-            listValue.Elements as IImmutableList<PineValue> ?? listValue.Elements.ToImmutableList());
+        return
+            Result<string, IImmutableList<PineValue>>.ok(
+                listValue.Elements as IImmutableList<PineValue> ?? listValue.Elements.ToImmutableList());
     }
 
     public static Result<string, (T, T)> ParseListWithExactlyTwoElements<T>(IImmutableList<T> list)
     {
-        if (list.Count != 2)
-            return Result<string, (T, T)>.err("Unexpected number of elements in list: Not 2 but " + list.Count);
+        if (list.Count is not 2)
+            return "Unexpected number of elements in list: Not 2 but " + list.Count;
 
-        return Result<string, (T, T)>.ok((list[0], list[1]));
+        return (list[0], list[1]);
     }
 }
