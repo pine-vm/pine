@@ -1,0 +1,12 @@
+let
+    syntaxNodes : List (Syntax.Node DemoSyntax.NodeContent)
+    syntaxNodes =
+        [ Syntax.Node
+            { start = { row = 1, column = 1 }, end = { row = 1, column = 2 } }
+            { alfa = 123, beta = "abc" }
+        , Syntax.Node
+            { start = { row = 1, column = 3 }, end = { row = 1, column = 4 } }
+            { alfa = 456, beta = "def" }
+        ]
+in
+DemoSyntax.concatNodeContentBeta syntaxNodes
