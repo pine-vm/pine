@@ -48,9 +48,9 @@ dockerImageUrl =
 
 downloads : DownloadLinksByPlatform
 downloads =
-    { linux = "https://github.com/pine-vm/pine/releases/download/v0.3.0/pine-bin-v0.3.0-linux-x64.zip"
-    , windows = "https://github.com/pine-vm/pine/releases/download/v0.3.0/pine-bin-v0.3.0-win-x64.zip"
-    , macOS = "https://github.com/pine-vm/pine/releases/download/v0.3.0/pine-bin-v0.3.0-osx-x64.zip"
+    { linux = "https://github.com/pine-vm/pine/releases/download/v0.3.6/pine-bin-v0.3.6-linux-x64.zip"
+    , windows = "https://github.com/pine-vm/pine/releases/download/v0.3.6/pine-bin-v0.3.6-win-x64.zip"
+    , macOS = "https://github.com/pine-vm/pine/releases/download/v0.3.6/pine-bin-v0.3.6-osx-x64.zip"
     }
 
 
