@@ -179,13 +179,14 @@ evaluateExpression context expression =
                     Err (DescribePathNode "Failed to evaluate condition" error)
 
                 Ok conditionValue ->
-                    evaluateExpression context
-                        (if conditionValue == trueValue then
-                            conditional.ifTrue
+                    if conditionValue == trueValue then
+                        evaluateExpression context conditional.ifTrue
 
-                         else
-                            conditional.ifFalse
-                        )
+                    else if conditionValue == falseValue then
+                        evaluateExpression context conditional.ifFalse
+
+                    else
+                        Ok listValue_Empty
 
         EnvironmentExpression ->
             Ok context.environment

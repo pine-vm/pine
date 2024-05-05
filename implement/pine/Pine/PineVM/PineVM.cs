@@ -165,7 +165,11 @@ public class PineVM : IPineVM
         EvaluateExpression(conditional.condition, environment)
         .MapError(error => "Failed to evaluate condition: " + error)
         .AndThen(conditionValue =>
-        EvaluateExpression(conditionValue == TrueValue ? conditional.ifTrue : conditional.ifFalse, environment));
+        conditionValue == TrueValue ?
+        EvaluateExpression(conditional.ifTrue, environment) :
+        conditionValue == FalseValue ?
+        EvaluateExpression(conditional.ifFalse, environment) :
+        PineValue.EmptyList);
 
     private static readonly IReadOnlyDictionary<string, Func<PineValue, PineValue>> NamedKernelFunctions =
         ImmutableDictionary<string, Func<PineValue, PineValue>>.Empty
