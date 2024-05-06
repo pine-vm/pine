@@ -1,1 +1,1 @@
-invalid record access
+invalid record access - not a record

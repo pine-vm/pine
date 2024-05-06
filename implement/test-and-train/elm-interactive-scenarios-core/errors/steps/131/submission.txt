@@ -1,4 +1,4 @@
 let
-    theRecord = { alpha = 1, beta = 2 }
+    notARecord = 1234
 in
-theRecord.gamma
+notARecord.field_name

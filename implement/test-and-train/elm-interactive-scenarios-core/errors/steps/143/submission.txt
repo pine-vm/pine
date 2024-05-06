@@ -1,0 +1,4 @@
+let
+    aRecord = { alpha = 1, beta = 2 }
+in
+{ aRecord | gamma = "test" }

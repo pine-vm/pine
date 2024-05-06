@@ -2611,7 +2611,13 @@ pineFunctionForRecordUpdate =
                         }
                     ]
                 ]
-        , ifFalse = Pine.ListExpression []
+        , ifFalse =
+            Pine.ParseAndEvalExpression
+                { expression =
+                    Pine.LiteralExpression
+                        (Pine.valueFromString "invalid record update - not a record")
+                , environment = recordExpression
+                }
         }
 
 
@@ -2661,53 +2667,76 @@ recursiveFunctionToUpdateFieldsInRecord =
         { condition =
             equalCondition_Pine
                 [ Pine.ListExpression []
-                , remainingFieldsLocalExpression
+                , fieldPairsLocalExpression
                 ]
-        , ifTrue = processedFieldsLocalExpression
+        , ifTrue =
+            Pine.KernelApplicationExpression
+                { functionName = "concat"
+                , argument =
+                    Pine.ListExpression
+                        [ processedFieldsLocalExpression
+                        , remainingFieldsLocalExpression
+                        ]
+                }
         , ifFalse =
             Pine.ConditionalExpression
                 { condition =
                     equalCondition_Pine
-                        [ listItemFromIndexExpression_Pine 0 remainingFieldsNextLocalExpression
-                        , firstFieldNameLocalExpression
+                        [ Pine.ListExpression []
+                        , remainingFieldsLocalExpression
                         ]
                 , ifTrue =
                     Pine.ParseAndEvalExpression
-                        { expression = functionReferenceLocalExpression
-                        , environment =
-                            Pine.ListExpression
-                                [ functionReferenceLocalExpression
-                                , listSkipExpression_Pine 1 fieldPairsLocalExpression
-                                , Pine.KernelApplicationExpression
-                                    { functionName = "concat"
-                                    , argument =
-                                        Pine.ListExpression
-                                            [ processedFieldsLocalExpression
-                                            , Pine.ListExpression
-                                                [ firstFieldPairLocalExpression ]
-                                            ]
-                                    }
-                                , listSkipExpression_Pine 1 remainingFieldsLocalExpression
-                                ]
+                        { expression =
+                            Pine.LiteralExpression
+                                (Pine.valueFromString "invalid record update - field name not found")
+                        , environment = firstFieldNameLocalExpression
                         }
                 , ifFalse =
-                    Pine.ParseAndEvalExpression
-                        { expression = functionReferenceLocalExpression
-                        , environment =
-                            Pine.ListExpression
-                                [ functionReferenceLocalExpression
-                                , fieldPairsLocalExpression
-                                , Pine.KernelApplicationExpression
-                                    { functionName = "concat"
-                                    , argument =
-                                        Pine.ListExpression
-                                            [ processedFieldsLocalExpression
-                                            , Pine.ListExpression
-                                                [ remainingFieldsNextLocalExpression ]
-                                            ]
-                                    }
-                                , listSkipExpression_Pine 1 remainingFieldsLocalExpression
+                    Pine.ConditionalExpression
+                        { condition =
+                            equalCondition_Pine
+                                [ listItemFromIndexExpression_Pine 0 remainingFieldsNextLocalExpression
+                                , firstFieldNameLocalExpression
                                 ]
+                        , ifTrue =
+                            Pine.ParseAndEvalExpression
+                                { expression = functionReferenceLocalExpression
+                                , environment =
+                                    Pine.ListExpression
+                                        [ functionReferenceLocalExpression
+                                        , listSkipExpression_Pine 1 fieldPairsLocalExpression
+                                        , Pine.KernelApplicationExpression
+                                            { functionName = "concat"
+                                            , argument =
+                                                Pine.ListExpression
+                                                    [ processedFieldsLocalExpression
+                                                    , Pine.ListExpression
+                                                        [ firstFieldPairLocalExpression ]
+                                                    ]
+                                            }
+                                        , listSkipExpression_Pine 1 remainingFieldsLocalExpression
+                                        ]
+                                }
+                        , ifFalse =
+                            Pine.ParseAndEvalExpression
+                                { expression = functionReferenceLocalExpression
+                                , environment =
+                                    Pine.ListExpression
+                                        [ functionReferenceLocalExpression
+                                        , fieldPairsLocalExpression
+                                        , Pine.KernelApplicationExpression
+                                            { functionName = "concat"
+                                            , argument =
+                                                Pine.ListExpression
+                                                    [ processedFieldsLocalExpression
+                                                    , Pine.ListExpression
+                                                        [ remainingFieldsNextLocalExpression ]
+                                                    ]
+                                            }
+                                        , listSkipExpression_Pine 1 remainingFieldsLocalExpression
+                                        ]
+                                }
                         }
                 }
         }
@@ -2746,7 +2775,13 @@ pineFunctionForRecordAccess =
                         , recordFieldsExpression
                         ]
                 }
-        , ifFalse = Pine.ListExpression []
+        , ifFalse =
+            Pine.ParseAndEvalExpression
+                { expression =
+                    Pine.LiteralExpression
+                        (Pine.valueFromString "invalid record access - not a record")
+                , environment = fieldNameLocalExpression
+                }
         }
 
 
@@ -2786,7 +2821,9 @@ recursiveFunctionToLookupFieldInRecord =
                 ]
         , ifTrue =
             Pine.ParseAndEvalExpression
-                { expression = Pine.LiteralExpression (Pine.valueFromString "Invalid record access")
+                { expression =
+                    Pine.LiteralExpression
+                        (Pine.valueFromString "invalid record access - field name not found")
                 , environment = fieldNameLocalExpression
                 }
         , ifFalse =

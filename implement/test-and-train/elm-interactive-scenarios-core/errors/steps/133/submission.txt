@@ -1,0 +1,4 @@
+let
+    notARecord = 1234
+in
+{ notARecord | field_name = "new value" }
