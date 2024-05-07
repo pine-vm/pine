@@ -300,7 +300,7 @@ public abstract record ElmValue
 
     public static Result<string, ElmRecord> ElmValueAsElmRecord(ElmValue elmValue)
     {
-        static Result<string, (string, ElmValue)> tryMapToRecordField(ElmValue fieldElmValue)
+        static Result<string, (string fieldName, ElmValue fieldValue)> tryMapToRecordField(ElmValue fieldElmValue)
         {
             if (fieldElmValue is ElmList fieldListItems)
             {
@@ -344,12 +344,17 @@ public abstract record ElmValue
             recordFieldList.Elements.Select(tryMapToRecordField).ListCombine()
             .AndThen(recordFields =>
             {
-                var recordFieldsNames = recordFields.Select(field => field.Item1).ToList();
+                var recordFieldsNames = recordFields.Select(field => field.fieldName).ToImmutableArray();
 
-                if (recordFieldsNames.OrderBy(name => name).SequenceEqual(recordFieldsNames))
+                var recordFieldsNamesOrdered =
+                    recordFieldsNames.OrderBy(name => name, StringComparer.Ordinal).ToImmutableArray();
+
+                if (recordFieldsNamesOrdered.SequenceEqual(recordFieldsNames))
                     return new ElmRecord(recordFields);
                 else
-                    return (Result<string, ElmRecord>)"Unexpected order of fields.";
+                    return
+                    (Result<string, ElmRecord>)
+                    ("Unexpected order of " + recordFieldsNames.Length + " fields: " + string.Join(", ", recordFieldsNames));
             }),
 
             _ =>
