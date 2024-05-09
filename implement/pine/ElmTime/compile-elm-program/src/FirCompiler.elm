@@ -908,17 +908,31 @@ parseFunctionParameters expression =
 
 emitReferenceExpression : String -> EmitStack -> Result String Pine.Expression
 emitReferenceExpression name compilation =
-    case
-        emitApplyFunctionFromCurrentEnvironment
-            compilation
-            { functionName = name }
-            []
-    of
-        Just functionApplicationResult ->
-            functionApplicationResult
+    {-
+       Prioritize environmentDeconstructions before environmentFunctions here to
+       support shadowing for function parameters.
+       A source language like Elm does not support shadowing anyway, but the current
+       implementation of the Elm compiler sometimes lowers to Fir code that introduces declarations,
+       which can result in shadowing when nested.
+       An example is the `pseudoParamName` in `compileElmSyntaxCaseBlock`
+    -}
+    case Dict.get name compilation.environmentDeconstructions of
+        Just deconstruction ->
+            Ok
+                (pineExpressionForDeconstructions deconstruction
+                    (listItemFromIndexExpression_Pine 1 Pine.environmentExpr)
+                )
 
         Nothing ->
-            case Dict.get name compilation.environmentDeconstructions of
+            case
+                emitApplyFunctionFromCurrentEnvironment
+                    compilation
+                    { functionName = name }
+                    []
+            of
+                Just functionApplicationResult ->
+                    functionApplicationResult
+
                 Nothing ->
                     Err
                         (String.join ""
@@ -933,12 +947,6 @@ emitReferenceExpression name compilation =
                             , " functions in scope: "
                             , String.join ", " (List.map .functionName compilation.environmentFunctions)
                             ]
-                        )
-
-                Just deconstruction ->
-                    Ok
-                        (pineExpressionForDeconstructions deconstruction
-                            (listItemFromIndexExpression_Pine 1 Pine.environmentExpr)
                         )
 
 

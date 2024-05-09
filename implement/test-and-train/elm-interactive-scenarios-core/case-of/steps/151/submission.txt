@@ -1,0 +1,30 @@
+let
+    first_case_of list =
+        case list of
+        [] ->
+            Err "is empty"
+
+        _ ->
+            Ok { alfa = [ { beta = 79 } ] }
+
+    second_case_of list =
+        case list of
+        [] ->
+            Err "is empty"
+
+        first :: _ ->
+            Ok { gamma = first.beta }
+
+in
+case first_case_of [ 1, 3 ] of
+Err _ ->
+    "err in first"
+
+Ok firstRecord ->
+    case second_case_of firstRecord.alfa of
+    Err _ ->
+        "err in second"
+
+    Ok secondRecord ->
+        secondRecord
+
