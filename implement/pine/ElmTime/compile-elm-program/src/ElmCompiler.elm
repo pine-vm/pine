@@ -128,11 +128,6 @@ type alias ElmModuleChoiceType =
     }
 
 
-pineKernelModuleName : String
-pineKernelModuleName =
-    "Pine_kernel"
-
-
 elmStringTypeTagName : String
 elmStringTypeTagName =
     "String"
@@ -1407,35 +1402,60 @@ compileElmSyntaxApplication stack appliedFunctionElmSyntax argumentsElmSyntax =
             in
             case appliedFunctionElmSyntax of
                 Elm.Syntax.Expression.FunctionOrValue functionModuleName functionLocalName ->
-                    if functionModuleName == [ pineKernelModuleName ] then
-                        case arguments of
-                            [ singleArgumentExpression ] ->
-                                Ok
-                                    (KernelApplicationExpression
-                                        { functionName = functionLocalName
-                                        , argument = singleArgumentExpression
-                                        }
-                                    )
+                    let
+                        continueWithDefaultNamedApplication () =
+                            let
+                                functionFlatName =
+                                    String.join "." (List.concat [ functionModuleName, [ functionLocalName ] ])
+                            in
+                            case Dict.get functionFlatName elmDeclarationsOverridesExpressions of
+                                Just declarationOverride ->
+                                    Ok declarationOverride
 
-                            _ ->
-                                Err "Invalid argument list for kernel application: Wrap arguments into a single list expression"
+                                Nothing ->
+                                    case Dict.get functionFlatName stack.inlineableDeclarations of
+                                        Just applicableDeclaration ->
+                                            Ok (applicableDeclaration arguments)
 
-                    else
-                        let
-                            functionFlatName =
-                                String.join "." (List.concat [ functionModuleName, [ functionLocalName ] ])
-                        in
-                        case Dict.get functionFlatName elmDeclarationsOverridesExpressions of
-                            Just declarationOverride ->
-                                Ok declarationOverride
+                                        _ ->
+                                            continueWithDefaultApplication ()
+                    in
+                    case functionModuleName of
+                        [ "Pine_kernel" ] ->
+                            case arguments of
+                                [ singleArgumentExpression ] ->
+                                    Ok
+                                        (KernelApplicationExpression
+                                            { functionName = functionLocalName
+                                            , argument = singleArgumentExpression
+                                            }
+                                        )
 
-                            Nothing ->
-                                case Dict.get functionFlatName stack.inlineableDeclarations of
-                                    Just applicableDeclaration ->
-                                        Ok (applicableDeclaration arguments)
+                                _ ->
+                                    Err "Invalid argument list for kernel application: Wrap arguments into a single list expression"
 
-                                    _ ->
-                                        continueWithDefaultApplication ()
+                        [ "Debug" ] ->
+                            case functionLocalName of
+                                "log" ->
+                                    case arguments of
+                                        [ _, contentArg ] ->
+                                            let
+                                                stringTag =
+                                                    "Elm application of Debug.log"
+                                            in
+                                            Ok (StringTagExpression stringTag contentArg)
+
+                                        _ ->
+                                            Err "Invalid argument list for Debug.log: Expected two arguments"
+
+                                "toString" ->
+                                    Err "Unsupported - Debug.toString is not implemented yet"
+
+                                _ ->
+                                    continueWithDefaultNamedApplication ()
+
+                        _ ->
+                            continueWithDefaultNamedApplication ()
 
                 _ ->
                     continueWithDefaultApplication ()
@@ -2891,8 +2911,7 @@ getDeclarationValueFromCompilation ( localModuleName, nameInModule ) compilation
 
         flatName =
             String.join "." (List.concat [ canonicalModuleName, [ nameInModule ] ])
-
-        continueWithDefault () =
+    in
             case compilation.availableModules |> Dict.get canonicalModuleName of
                 Nothing ->
                     Err
@@ -2951,54 +2970,6 @@ getDeclarationValueFromCompilation ( localModuleName, nameInModule ) compilation
 
                         Just declarationValue ->
                             Ok (LiteralExpression declarationValue)
-    in
-    case Dict.get canonicalModuleName getDeclarationValueFromCompilationOverrides of
-        Nothing ->
-            continueWithDefault ()
-
-        Just overrides ->
-            case Dict.get nameInModule overrides of
-                Just overrideValue ->
-                    Result.map LiteralExpression overrideValue
-
-                Nothing ->
-                    continueWithDefault ()
-
-
-getDeclarationValueFromCompilationOverrides : Dict.Dict (List String) (Dict.Dict String (Result String Pine.Value))
-getDeclarationValueFromCompilationOverrides =
-    [ ( [ "Debug" ]
-      , [ ( "log"
-            -- TODO: mapping for Debug.log so we can get messages.
-          , FunctionExpression
-                [ [ ( "message", [] ) ], [ ( "payload", [] ) ] ]
-                (ReferenceExpression "payload")
-                |> FirCompiler.emitExpression
-                    { importedFunctions = Dict.empty
-                    , declarationsDependencies = Dict.empty
-                    , environmentFunctions = []
-                    , environmentDeconstructions = Dict.empty
-                    }
-                |> Result.andThen evaluateAsIndependentExpression
-          )
-        , ( "toString"
-            -- TODO: mapping for Debug.toString
-          , FunctionExpression
-                [ [ ( "elm_value", [] ) ] ]
-                (LiteralExpression (valueFromString "Debug.toString is not implemented yet"))
-                |> FirCompiler.emitExpression
-                    { importedFunctions = Dict.empty
-                    , declarationsDependencies = Dict.empty
-                    , environmentFunctions = []
-                    , environmentDeconstructions = Dict.empty
-                    }
-                |> Result.andThen evaluateAsIndependentExpression
-          )
-        ]
-            |> Dict.fromList
-      )
-    ]
-        |> Dict.fromList
 
 
 compileLookupForInlineableDeclaration : ( List String, String ) -> Expression -> Expression
@@ -3734,35 +3705,35 @@ separateEnvironmentDeclarations :
             , otherDeclarations : Dict.Dict String Pine.Value
             }
 separateEnvironmentDeclarations environmentDeclarations =
-    Dict.foldl
+        Dict.foldl
         (\declNameFlat declValue ->
             Result.andThen
                 (\aggregate ->
-                    if stringStartsWithUpper declNameFlat then
-                        case Result.andThen parseModuleValue (getDeclarationsFromEnvironment declValue) of
-                            Err err ->
-                                Err ("Failed to parse module " ++ declNameFlat ++ ": " ++ err)
+                        if stringStartsWithUpper declNameFlat then
+                            case Result.andThen parseModuleValue (getDeclarationsFromEnvironment declValue) of
+                                Err err ->
+                                    Err ("Failed to parse module " ++ declNameFlat ++ ": " ++ err)
 
-                            Ok moduleDeclarations ->
-                                Ok
-                                    { aggregate
-                                        | modules =
-                                            Dict.insert
-                                                (String.split "." declNameFlat)
-                                                ( declValue, moduleDeclarations )
-                                                aggregate.modules
-                                    }
+                                Ok moduleDeclarations ->
+                                    Ok
+                                        { aggregate
+                                            | modules =
+                                                Dict.insert
+                                                    (String.split "." declNameFlat)
+                                                    ( declValue, moduleDeclarations )
+                                                    aggregate.modules
+                                        }
 
-                    else
-                        Ok
-                            { aggregate
-                                | otherDeclarations =
-                                    Dict.insert declNameFlat declValue aggregate.otherDeclarations
-                            }
-                )
+                        else
+                            Ok
+                                { aggregate
+                                    | otherDeclarations =
+                                        Dict.insert declNameFlat declValue aggregate.otherDeclarations
+                                }
+            )
         )
         (Ok { modules = Dict.empty, otherDeclarations = Dict.empty })
-        environmentDeclarations
+            environmentDeclarations
 
 
 getDeclarationsFromEnvironment : Pine.Value -> Result String (Dict.Dict String Pine.Value)
