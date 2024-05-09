@@ -126,6 +126,7 @@ public class PineVM : IPineVM
         Expression.ParseAndEvalExpression parseAndEval,
         PineValue environment) =>
         EvaluateExpression(parseAndEval.environment, environment)
+        .MapError(error => "Failed to evaluate argument: " + error)
         .AndThen(environmentValue =>
         EvaluateExpression(parseAndEval.expression, environment)
         .MapError(error => "Failed to evaluate function: " + error)
@@ -138,7 +139,6 @@ public class PineVM : IPineVM
         " - environmentValue is " +
         PineValueAsString.StringFromValue(environmentValue)
         .Unpack(fromErr: _ => "not a string", fromOk: asString => "string \'" + asString + "\'"))
-        .MapError(error => "Failed to evaluate argument: " + error)
         .AndThen(functionExpression =>
         {
             if (environmentValue is PineValue.ListValue list)
