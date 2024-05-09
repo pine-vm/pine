@@ -426,9 +426,9 @@ expandEnvWithModulesRecursive environmentBefore parsedElmModules =
                         nextEnvironment =
                             Dict.insert moduleName moduleValue environmentBefore
                     in
-                        expandEnvWithModulesRecursive
-                            nextEnvironment
-                            followingModules
+                    expandEnvWithModulesRecursive
+                        nextEnvironment
+                        followingModules
 
 
 compileElmModuleIntoNamedExports :
@@ -1859,10 +1859,14 @@ compileCaseBlockInline stack caseBlockExpr caseBlockCases =
             Ok
                 (List.foldr
                     conditionalFromCase
-                    (ListExpression
-                        [ LiteralExpression stringAsValue_errorNoMatchingBranch
-                        , caseBlockExpr
-                        ]
+                    (PineFunctionApplicationExpression
+                        -- Crash in case none of the branches match.
+                        (Pine.ParseAndEvalExpression
+                            { expression = Pine.LiteralExpression stringAsValue_errorNoMatchingBranch
+                            , environment = Pine.EnvironmentExpression
+                            }
+                        )
+                        caseBlockExpr
                     )
                     cases
                 )
@@ -2912,64 +2916,64 @@ getDeclarationValueFromCompilation ( localModuleName, nameInModule ) compilation
         flatName =
             String.join "." (List.concat [ canonicalModuleName, [ nameInModule ] ])
     in
-            case compilation.availableModules |> Dict.get canonicalModuleName of
+    case compilation.availableModules |> Dict.get canonicalModuleName of
+        Nothing ->
+            Err
+                ("Did not find module '"
+                    ++ String.join "." canonicalModuleName
+                    ++ "'. There are "
+                    ++ String.fromInt (Dict.size compilation.availableModules)
+                    ++ " declarations in this scope: "
+                    ++ String.join ", " (List.map (String.join ".") (Dict.keys compilation.availableModules))
+                )
+
+        Just moduleValue ->
+            case Dict.get nameInModule moduleValue.functionDeclarations of
                 Nothing ->
-                    Err
-                        ("Did not find module '"
-                            ++ String.join "." canonicalModuleName
-                            ++ "'. There are "
-                            ++ String.fromInt (Dict.size compilation.availableModules)
-                            ++ " declarations in this scope: "
-                            ++ String.join ", " (List.map (String.join ".") (Dict.keys compilation.availableModules))
-                        )
+                    case Dict.get flatName compilation.inlineableDeclarations of
+                        Just applicableDeclaration ->
+                            Ok (applicableDeclaration [])
 
-                Just moduleValue ->
-                    case Dict.get nameInModule moduleValue.functionDeclarations of
                         Nothing ->
-                            case Dict.get flatName compilation.inlineableDeclarations of
-                                Just applicableDeclaration ->
-                                    Ok (applicableDeclaration [])
+                            let
+                                declsReport =
+                                    if stringStartsWithUpper nameInModule then
+                                        let
+                                            allTypesNames =
+                                                Dict.foldl
+                                                    (\typeName value aggregate ->
+                                                        case value of
+                                                            ElmModuleChoiceTypeDeclaration choiceType ->
+                                                                List.concat [ [ typeName ], Dict.keys choiceType.tags, aggregate ]
 
-                                Nothing ->
-                                    let
-                                        declsReport =
-                                            if stringStartsWithUpper nameInModule then
-                                                let
-                                                    allTypesNames =
-                                                        Dict.foldl
-                                                            (\typeName value aggregate ->
-                                                                case value of
-                                                                    ElmModuleChoiceTypeDeclaration choiceType ->
-                                                                        List.concat [ [ typeName ], Dict.keys choiceType.tags, aggregate ]
+                                                            ElmModuleRecordTypeDeclaration _ ->
+                                                                typeName :: aggregate
+                                                    )
+                                                    []
+                                                    moduleValue.typeDeclarations
+                                        in
+                                        "There are "
+                                            ++ String.fromInt (List.length allTypesNames)
+                                            ++ " type declarations available in that module: "
+                                            ++ String.join ", " allTypesNames
 
-                                                                    ElmModuleRecordTypeDeclaration _ ->
-                                                                        typeName :: aggregate
-                                                            )
-                                                            []
-                                                            moduleValue.typeDeclarations
-                                                in
-                                                "There are "
-                                                    ++ String.fromInt (List.length allTypesNames)
-                                                    ++ " type declarations available in that module: "
-                                                    ++ String.join ", " allTypesNames
+                                    else
+                                        "There are "
+                                            ++ String.fromInt (Dict.size moduleValue.functionDeclarations)
+                                            ++ " function declarations available in that module: "
+                                            ++ String.join ", " (Dict.keys moduleValue.functionDeclarations)
+                            in
+                            Err
+                                ("Did not find '"
+                                    ++ nameInModule
+                                    ++ "' in module '"
+                                    ++ String.join "." canonicalModuleName
+                                    ++ "'. "
+                                    ++ declsReport
+                                )
 
-                                            else
-                                                "There are "
-                                                    ++ String.fromInt (Dict.size moduleValue.functionDeclarations)
-                                                    ++ " function declarations available in that module: "
-                                                    ++ String.join ", " (Dict.keys moduleValue.functionDeclarations)
-                                    in
-                                    Err
-                                        ("Did not find '"
-                                            ++ nameInModule
-                                            ++ "' in module '"
-                                            ++ String.join "." canonicalModuleName
-                                            ++ "'. "
-                                            ++ declsReport
-                                        )
-
-                        Just declarationValue ->
-                            Ok (LiteralExpression declarationValue)
+                Just declarationValue ->
+                    Ok (LiteralExpression declarationValue)
 
 
 compileLookupForInlineableDeclaration : ( List String, String ) -> Expression -> Expression
@@ -3705,35 +3709,35 @@ separateEnvironmentDeclarations :
             , otherDeclarations : Dict.Dict String Pine.Value
             }
 separateEnvironmentDeclarations environmentDeclarations =
-        Dict.foldl
+    Dict.foldl
         (\declNameFlat declValue ->
             Result.andThen
                 (\aggregate ->
-                        if stringStartsWithUpper declNameFlat then
-                            case Result.andThen parseModuleValue (getDeclarationsFromEnvironment declValue) of
-                                Err err ->
-                                    Err ("Failed to parse module " ++ declNameFlat ++ ": " ++ err)
+                    if stringStartsWithUpper declNameFlat then
+                        case Result.andThen parseModuleValue (getDeclarationsFromEnvironment declValue) of
+                            Err err ->
+                                Err ("Failed to parse module " ++ declNameFlat ++ ": " ++ err)
 
-                                Ok moduleDeclarations ->
-                                    Ok
-                                        { aggregate
-                                            | modules =
-                                                Dict.insert
-                                                    (String.split "." declNameFlat)
-                                                    ( declValue, moduleDeclarations )
-                                                    aggregate.modules
-                                        }
+                            Ok moduleDeclarations ->
+                                Ok
+                                    { aggregate
+                                        | modules =
+                                            Dict.insert
+                                                (String.split "." declNameFlat)
+                                                ( declValue, moduleDeclarations )
+                                                aggregate.modules
+                                    }
 
-                        else
-                            Ok
-                                { aggregate
-                                    | otherDeclarations =
-                                        Dict.insert declNameFlat declValue aggregate.otherDeclarations
-                                }
-            )
+                    else
+                        Ok
+                            { aggregate
+                                | otherDeclarations =
+                                    Dict.insert declNameFlat declValue aggregate.otherDeclarations
+                            }
+                )
         )
         (Ok { modules = Dict.empty, otherDeclarations = Dict.empty })
-            environmentDeclarations
+        environmentDeclarations
 
 
 getDeclarationsFromEnvironment : Pine.Value -> Result String (Dict.Dict String Pine.Value)

@@ -1,0 +1,8 @@
+let
+    switch_func a =
+        case a of
+        0 -> "zero"
+        1 -> "one"
+
+in
+switch_func 3
