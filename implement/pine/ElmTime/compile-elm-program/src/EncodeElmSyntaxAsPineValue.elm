@@ -895,7 +895,11 @@ encodeElmSyntaxDefaultModuleDataAsPineValue defaultModuleData =
                 (List.map encodeElmStringAsPineValue >> Pine.ListValue)
                 defaultModuleData.moduleName
           )
-        , ( "exposingList", Pine.ListValue [] )
+        , ( "exposingList"
+          , encodeElmSyntaxNodeAsPineValue
+                encodeElmSyntaxImportExposingAsPineValue
+                defaultModuleData.exposingList
+          )
         ]
 
 
