@@ -123,8 +123,8 @@ public class CompileElmCompilerTests
 
 
             greet : String -> String
-            greet name =
-                "Hello, " ++ name ++ " 👋"
+            greet param_name =
+                "Hello, " ++ param_name ++ " 👋"
             
             """;
 
@@ -231,7 +231,7 @@ public class CompileElmCompilerTests
             ElmValue.ElmValueAsExpression(declarationDeclarationNode).expressionString;
 
         Assert.AreEqual(
-            """Node { end = { column = 30, row = 21 }, start = { column = 1, row = 20 } } { arguments = [Node { end = { column = 11, row = 20 }, start = { column = 7, row = 20 } } (VarPattern "name")], expression = Node { end = { column = 30, row = 21 }, start = { column = 5, row = 21 } } (OperatorApplication "++" Right (Node { end = { column = 14, row = 21 }, start = { column = 5, row = 21 } } (Literal "Hello, ")) (Node { end = { column = 30, row = 21 }, start = { column = 18, row = 21 } } (OperatorApplication "++" Right (Node { end = { column = 22, row = 21 }, start = { column = 18, row = 21 } } (FunctionOrValue [] "name")) (Node { end = { column = 30, row = 21 }, start = { column = 26, row = 21 } } (Literal " 👋"))))), name = Node { end = { column = 6, row = 20 }, start = { column = 1, row = 20 } } "greet" }""",
+            """Node { end = { column = 36, row = 21 }, start = { column = 1, row = 20 } } { arguments = [Node { end = { column = 17, row = 20 }, start = { column = 7, row = 20 } } (VarPattern "param_name")], expression = Node { end = { column = 36, row = 21 }, start = { column = 5, row = 21 } } (OperatorApplication "++" Right (Node { end = { column = 14, row = 21 }, start = { column = 5, row = 21 } } (Literal "Hello, ")) (Node { end = { column = 36, row = 21 }, start = { column = 18, row = 21 } } (OperatorApplication "++" Right (Node { end = { column = 28, row = 21 }, start = { column = 18, row = 21 } } (FunctionOrValue [] "param_name")) (Node { end = { column = 36, row = 21 }, start = { column = 32, row = 21 } } (Literal " 👋"))))), name = Node { end = { column = 6, row = 20 }, start = { column = 1, row = 20 } } "greet" }""",
             declarationDeclarationNodeAsExpression);
     }
 
