@@ -1,0 +1,1 @@
+AppModule.construct_variant_Gamma_from_nested_result (Ok ("testing nested", Ok 43))
