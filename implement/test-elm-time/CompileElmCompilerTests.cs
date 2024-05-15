@@ -35,8 +35,9 @@ public class CompileElmCompilerTests
 
             /*
              * Remove usages of Json.Decode and Json.Encode to speed up bootstrapping of the Elm compiler.
+             * Also, remove parsing portion and minimize dependencies in general for the first stage of bootstrapping.
              * */
-            "https://github.com/Viir/elm-syntax/tree/f7d9be0a1f346b22dfaa7b55679659874c72714b/"
+            "https://github.com/Viir/elm-syntax/tree/6e7011a54323c046624ebddf0802d40366aae3bb/"
         ];
 
     [TestMethod]

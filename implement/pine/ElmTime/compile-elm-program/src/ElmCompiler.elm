@@ -55,7 +55,6 @@ import FirCompiler
         , pineKernel_ListHead
         , pineKernel_ListHead_Pine
         )
-import List.Extra
 import Pine
 import Set
 
@@ -3662,7 +3661,7 @@ listModuleTransitiveDependenciesExcludingModules excluded allFiles file =
                 Err ( currentName :: moduleNames, err )
 
             Ok ok ->
-                Ok (List.Extra.unique (List.concat ok ++ [ currentName ]))
+                Ok (Common.listUnique (List.concat ok ++ [ currentName ]))
 
 
 getDirectDependenciesFromModule : Elm.Syntax.File.File -> Set.Set Elm.Syntax.ModuleName.ModuleName

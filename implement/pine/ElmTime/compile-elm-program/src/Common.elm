@@ -163,3 +163,32 @@ commonPrefixLength listA listB =
 
                     else
                         0
+
+
+{-| Remove duplicate values, keeping the first instance of each element which appears more than once.
+
+    unique [ 0, 1, 1, 0, 1 ]
+    --> [ 0, 1 ]
+
+-}
+listUnique : List a -> List a
+listUnique list =
+    listUniqueHelp identity [] list []
+
+
+listUniqueHelp : (a -> b) -> List b -> List a -> List a -> List a
+listUniqueHelp f existing remaining accumulator =
+    case remaining of
+        [] ->
+            List.reverse accumulator
+
+        first :: rest ->
+            let
+                computedFirst =
+                    f first
+            in
+            if List.member computedFirst existing then
+                listUniqueHelp f existing rest accumulator
+
+            else
+                listUniqueHelp f (computedFirst :: existing) rest (first :: accumulator)
