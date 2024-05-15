@@ -71,6 +71,7 @@ type alias CompilationStack =
     , inlineableDeclarations : Dict.Dict String (List Expression -> Expression)
     , elmValuesToExposeToGlobal : Dict.Dict String (List String)
     , localTypeDeclarations : Dict.Dict String ElmModuleTypeDeclaration
+    , depth : Int
     }
 
 
@@ -799,6 +800,7 @@ compilationAndEmitStackFromModulesInCompilation availableModules { moduleAliases
             , inlineableDeclarations = Dict.empty
             , elmValuesToExposeToGlobal = elmValuesToExposeToGlobalDefault
             , localTypeDeclarations = localTypeDeclarations
+            , depth = 0
             }
 
         moduleImports =
@@ -1190,7 +1192,13 @@ compileElmSyntaxExpression :
     CompilationStack
     -> Elm.Syntax.Expression.Expression
     -> Result String Expression
-compileElmSyntaxExpression stack elmExpression =
+compileElmSyntaxExpression stackBefore elmExpression =
+    let
+        stack =
+            { stackBefore
+                | depth = stackBefore.depth + 1
+            }
+    in
     case elmExpression of
         Elm.Syntax.Expression.Literal literal ->
             Ok (LiteralExpression (valueFromString literal))
@@ -1793,7 +1801,11 @@ compileElmSyntaxCaseBlock stack caseBlock =
                 Ok inlineVariant ->
                     let
                         pseudoParamName =
-                            "case-expr"
+                            {-
+                               Adapt to current limitation in FirCompiler:
+                               Since FirCompiler does not yet support shadowing, ensure we create a unique name here, by appending stack depth.
+                            -}
+                            "case-expr-" ++ String.fromInt stack.depth
 
                         innerExpr =
                             FirCompiler.ReferenceExpression pseudoParamName

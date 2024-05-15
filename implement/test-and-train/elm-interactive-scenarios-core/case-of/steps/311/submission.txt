@@ -1,0 +1,16 @@
+let
+    fibonacci n =
+        if n < 2 then n else fibonacci (n - 1) + fibonacci (n - 2)
+
+
+    nested_case_of list =
+        case List.drop 1 list of
+        [] ->
+            []
+
+        first :: rest ->
+            case fibonacci first of
+            nestedDecl ->
+                [ [ first, nestedDecl ], rest ]
+in
+nested_case_of [ 3, 7, 41, 43, 47 ]
