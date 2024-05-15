@@ -36,6 +36,7 @@ import Elm.Syntax.Node
 import Elm.Syntax.Pattern
 import Elm.Syntax.Range
 import Elm.Syntax.TypeAnnotation
+import ElmOperators
 import FirCompiler
     exposing
         ( Deconstruction(..)
@@ -147,31 +148,6 @@ elmRecordTypeTagName =
 elmRecordTypeTagNameAsValue : Pine.Value
 elmRecordTypeTagNameAsValue =
     Pine.valueFromString elmRecordTypeTagName
-
-
-operatorPrecendencePriority : Dict.Dict String Int
-operatorPrecendencePriority =
-    [ ( "<|", 0 )
-    , ( "|>", 0 )
-    , ( "||", 2 )
-    , ( "&&", 3 )
-    , ( "==", 4 )
-    , ( "/=", 4 )
-    , ( "<", 4 )
-    , ( ">", 4 )
-    , ( "<=", 4 )
-    , ( ">=", 4 )
-    , ( "++", 5 )
-    , ( "+", 6 )
-    , ( "-", 6 )
-    , ( "*", 7 )
-    , ( "//", 7 )
-    , ( "/", 7 )
-    , ( "^", 8 )
-    , ( "<<", 9 )
-    , ( ">>", 9 )
-    ]
-        |> Dict.fromList
 
 
 autoImportedModulesNames : List (List String)
@@ -2471,13 +2447,13 @@ mapExpressionForOperatorPrecedence originalExpression =
     case originalExpression of
         Elm.Syntax.Expression.OperatorApplication operator direction (Elm.Syntax.Node.Node leftRange leftExpr) (Elm.Syntax.Node.Node rightRange rightExpr) ->
             let
-                operatorPriority =
-                    case Dict.get operator operatorPrecendencePriority of
+                operatorPrecedence =
+                    case Dict.get operator ElmOperators.bySymbol of
                         Nothing ->
                             0
 
-                        Just priority ->
-                            priority
+                        Just { precedence } ->
+                            precedence
 
                 mappedLeftExpr =
                     mapExpressionForOperatorPrecedence leftExpr
@@ -2489,8 +2465,13 @@ mapExpressionForOperatorPrecedence originalExpression =
                     case mappedLeftExpr of
                         Elm.Syntax.Expression.OperatorApplication leftOperator _ leftLeftExpr leftRightExpr ->
                             let
-                                operatorLeftPriority =
-                                    operatorPrecendencePriority |> Dict.get leftOperator |> Maybe.withDefault 0
+                                operatorLeftPrecedence =
+                                    case Dict.get leftOperator ElmOperators.bySymbol of
+                                        Nothing ->
+                                            0
+
+                                        Just { precedence } ->
+                                            precedence
 
                                 areStillOrderedBySyntaxRange =
                                     compareLocations
@@ -2499,8 +2480,8 @@ mapExpressionForOperatorPrecedence originalExpression =
                                         == LT
                             in
                             if
-                                (operatorLeftPriority < operatorPriority)
-                                    || ((operatorLeftPriority == operatorPriority) && areStillOrderedBySyntaxRange)
+                                (operatorLeftPrecedence < operatorPrecedence)
+                                    || ((operatorLeftPrecedence == operatorPrecedence) && areStillOrderedBySyntaxRange)
                             then
                                 mapExpressionForOperatorPrecedence
                                     (Elm.Syntax.Expression.OperatorApplication leftOperator
@@ -2531,16 +2512,21 @@ mapExpressionForOperatorPrecedence originalExpression =
                 case mappedRightExpr of
                     Elm.Syntax.Expression.OperatorApplication rightOperator _ (Elm.Syntax.Node.Node rightLeftRange rightLeftExpr) rightRightExpr ->
                         let
-                            operatorRightPriority =
-                                operatorPrecendencePriority |> Dict.get rightOperator |> Maybe.withDefault 0
+                            operatorRightPrecedence =
+                                case Dict.get rightOperator ElmOperators.bySymbol of
+                                    Nothing ->
+                                        0
+
+                                    Just { precedence } ->
+                                        precedence
 
                             areStillOrderedBySyntaxRange =
                                 compareLocations leftRange.start rightLeftRange.start
                                     == LT
                         in
                         if
-                            (operatorRightPriority < operatorPriority)
-                                || ((operatorRightPriority == operatorPriority) && areStillOrderedBySyntaxRange)
+                            (operatorRightPrecedence < operatorPrecedence)
+                                || ((operatorRightPrecedence == operatorPrecedence) && areStillOrderedBySyntaxRange)
                         then
                             mapExpressionForOperatorPrecedence
                                 (Elm.Syntax.Expression.OperatorApplication rightOperator
