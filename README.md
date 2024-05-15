@@ -33,11 +33,13 @@ docker  run  -p 5000:80  -p 4000:4000  --env "APPSETTING_adminPassword=test"  gh
 
 ## Guides
 
-A selection of guides on the most popular topics:
+A selection of guides on popular topics:
 
 + Building full-stack web apps: [./guide/how-to-build-a-full-stack-web-app-in-elm.md](./guide/how-to-build-a-full-stack-web-app-in-elm.md)
 
 + Building a backend or web service: [./guide/how-to-build-a-backend-app-in-elm.md](./guide/how-to-build-a-backend-app-in-elm.md)
+
++ Using Elm compilation interfaces: [./guide/how-to-use-elm-compilation-interfaces.md](./guide/how-to-use-elm-compilation-interfaces.md)
 
 For an overview of all guides and documentation, see the [`guide` directory](./guide/).
 

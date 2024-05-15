@@ -101,154 +101,6 @@ webServiceMain =
     }
 ```
 
-### `CompilationInterface.ElmMake` Elm Module
-
-The `ElmMake` module provides an interface to run the `elm make` command and use the output file value in our Elm app.
-For each function declaration in this module, the compiler replaces the declaration with the output(s) from `elm  make`.
-
-Using the name of the declaration, we specify the source file name.
-Using a type signature on the function declaration, we select the flags for elm make and the encoding of the output file. This signature must always be a record type or an alias of a record type declared in the same module. Using the record field names, we select:
-
-+ Flags for elm make: `debug` or none.
-+ Output type: `javascript`, `html` or none for HTML.
-+ Encoding: Either `bytes` or `base64` or `utf8`.
-
-Here is an example that compiles a source file located at path `src/Frontend/Main.elm`:
-
-```Elm
-module CompilationInterface.ElmMake exposing (..)
-
-import Bytes
-import Bytes.Encode
-
-
-elm_make____src_Frontend_Main_elm : { bytes : Bytes.Bytes }
-elm_make____src_Frontend_Main_elm =
-    { bytes =
-        "The compiler replaces this value."
-            |> Bytes.Encode.string
-            |> Bytes.Encode.encode
-    }
-
-```
-
-We can also get the output encoded as a base64 string instead of `Bytes.Bytes`, by using the field name `base64`:
-
-```Elm
-elm_make____src_Frontend_Main_elm : { base64 : String }
-elm_make____src_Frontend_Main_elm =
-    { base64 = "The compiler replaces this value." }
-```
-
-We use nested record types to combine multiple of those names. For example, this declaration gets us two compilation variants of the same file, one without flags and one compiled the `--debug` flag:
-
-```Elm
-elm_make____src_Frontend_Main_elm : { debug : { javascript : { base64 : String } }, javascript : { base64 : String } }
-elm_make____src_Frontend_Main_elm =
-    { javascript = { base64 = "The compiler replaces this value." }
-    , debug = { javascript = { base64 = "The compiler replaces this value." } }
-    }
-```
-
-The tree we modeled with this record type has two leaves:
-
-+ `debug.javascript.base64 : String`
-+ `javascript.base64 : String`
-
-Backend apps often use the output from `elm make` send the frontend to web browsers with HTTP responses. We can also see this in the [example app](https://github.com/pine-vm/pine/blob/67658db8f7e2ed50a9dd2a3ffcfaba2e20c7615d/implement/example-apps/docker-image-default-app/src/Backend/Main.elm#L43-L55) mentioned earlier:
-
-```Elm
-    httpResponse =
-        if
-            httpRequestEvent.request.uri
-                |> Url.fromString
-                |> Maybe.map urlLeadsToFrontendHtmlDocument
-                |> Maybe.withDefault False
-        then
-            { statusCode = 200
-            , bodyAsBase64 = Just CompilationInterface.ElmMake.elm_make____src_Frontend_Main_elm.debug.base64
-            , headersToAdd =
-                [ { name = "Content-Type", values = [ "text/html" ] }
-                ]
-            }
-
-        else
-```
-
-### `CompilationInterface.GenerateJsonConverters` Elm Module
-
-This module provides automatically generated JSON encoders and decoders for Elm types.
-
-By adding a declaration in this module, we instruct the compiler to generate a JSON encoder or decoder. A common use case for this automation is types used at the interface between the front-end and the back-end.
-
-In this module, we can freely choose the names for functions, as we only need type annotations to tell the compiler what we want to have generated. To encode to JSON, add a function which takes this type and returns a `Json.Encode.Value`:
-
-```Elm
-jsonEncodeMessageToClient : FrontendBackendInterface.MessageToClient -> Json.Encode.Value
-jsonEncodeMessageToClient =
-    always (Json.Encode.string "The compiler replaces this declaration.")
-```
-
-To get a JSON decoder, declare a name for an instance of `Json.Decode.Decoder`:
-
-```Elm
-jsonDecodeMessageToClient : Json.Decode.Decoder FrontendBackendInterface.MessageToClient
-jsonDecodeMessageToClient =
-    Json.Decode.fail "The compiler replaces this declaration."
-```
-
-### `CompilationInterface.SourceFiles` Elm Module
-
-The `SourceFiles` module provides access to the app source code files.
-
-By adding a declaration to this module, we can pick a source file and read its contents. The compilation step for this module happens before the one for the front-end. Therefore the source files are available to both front-end and back-end apps.
-
-The [app 'Elm Editor' uses this interface](https://github.com/pine-vm/pine/blob/67658db8f7e2ed50a9dd2a3ffcfaba2e20c7615d/implement/example-apps/elm-editor/src/CompilationInterface/SourceFiles.elm) to get the contents of various files in the app code directory. The app uses some of these files in the front-end and some in the back-end.
-
-```Elm
-module CompilationInterface.SourceFiles exposing (..)
-
-{-| For documentation of the compilation interface, see <https://github.com/pine-vm/pine/blob/main/guide/how-to-configure-and-deploy-an-elm-backend-app.md#compilationinterfacesourcefiles-elm-module>
--}
-
-
-type FileTreeNode blobStructure
-    = BlobNode blobStructure
-    | TreeNode (List ( String, FileTreeNode blobStructure ))
-
-
-file_tree____static : FileTreeNode { base64 : String }
-file_tree____static =
-    TreeNode []
-
-
-file____src_Backend_VolatileProcess_csx : { utf8 : String }
-file____src_Backend_VolatileProcess_csx =
-    { utf8 = "The compiler replaces this declaration." }
-
-
-file_tree____elm_core_modules_implicit_import : FileTreeNode { utf8 : String }
-file_tree____elm_core_modules_implicit_import =
-    BlobNode { utf8 = "The compiler replaces this declaration." }
-
-
-file_tree____elm_core_modules_explicit_import : FileTreeNode { utf8 : String }
-file_tree____elm_core_modules_explicit_import =
-    BlobNode { utf8 = "The compiler replaces this declaration." }
-```
-
-To map the source file path to a name in this module, replace any non-alphanumeric character with an underscore. The directory separator (a slash or backslash on many operating systems) also becomes an underscore. Here are some examples:
-
-| file path                         | Name in the Elm module                    |
-| --------------------------------  | --------------------------                |
-| `README.md`                       | `file____README_md`                       |
-| `static/README.md`                | `file____static_README_md`                |
-| `static/chat.message-added.0.mp3` | `file____static_chat_message_added_0_mp3` |
-
-The compilation will fail if this module contains a name that matches more than one or none of the source files.
-
-Using the record type on a function declaration, we can choose from the encodings `bytes`, `base64` and `utf8`.
-
 ### `Backend.MigrateState` Elm Module
 
 We need to add the `Backend.MigrateState` module when we choose to migrate the back-end state during an app's deployment. We encode the migration in a function named `migrate` with types matching previous app and new app accordingly.
@@ -259,17 +111,17 @@ In the simplest case, we did not change the back-end state model since the last 
 module Backend.MigrateState exposing (migrate)
 
 import Backend.Main
-import Platform.WebServer
+import Platform.WebService
 
 
-migrate : Backend.Main.State -> ( Backend.Main.State, Platform.WebServer.Commands Backend.Main.State )
+migrate : Backend.Main.State -> ( Backend.Main.State, Platform.WebService.Commands Backend.Main.State )
 migrate state =
     ( state, [] )
 ```
 
 We don't have to return the same value here. We can also use the migration to make a custom atomic update to our back-end apps state.
 
-Here is another example, almost as simple, with the back-end state just a primitive type, migrating from an `Int` to a `String`: <https://github.com/pine-vm/pine/blob/5be007cd5a827be1561226713d8c01ae929e51c8/implement/test-elm-time/test-elm-apps/migrate-from-int-to-string-builder-web-app/src/Backend/MigrateState.elm>
+Here is another example, almost as simple, with the back-end state just a primitive type, migrating from an `Int` to a `String`: <https://github.com/pine-vm/pine/blob/e38b093b5f61d7d55c5a3b5c760a58e99c854136/implement/test-elm-time/test-elm-apps/migrate-from-int-to-string-builder-web-app/src/Backend/MigrateState.elm>
 
 ### `web-service.json`
 
@@ -289,18 +141,18 @@ Here is a complete command to run a server that maintains the persistence of the
 pine  run-server  --process-store=./process-store  --admin-password=test  --admin-urls="http://*:4000"  --public-urls="http://*:5000"
 ```
 
-When running this command, we will get an output like this:
+When running this command, we get an output like this:
 
 ```text
-Starting the web server with the admin interface...
-info: ElmTime.Platform.WebServer.StartupAdminInterface[0]
+Starting web server with admin interface (using engine JavaScript_V8 { })...
+info: ElmTime.Platform.WebService.StartupAdminInterface[0]
       Begin to build the process live representation.
-info: ElmTime.Platform.WebServer.StartupAdminInterface[0]
+info: ElmTime.Platform.WebService.StartupAdminInterface[0]
       Begin to restore the process state.
-info: ElmTime.Platform.WebServer.StartupAdminInterface[0]
+info: ElmTime.Platform.WebService.StartupAdminInterface[0]
       Found no composition record, default to initial state.
-info: ElmTime.Platform.WebServer.StartupAdminInterface[0]
-      Completed building the process live representation.
+fail: ElmTime.Platform.WebService.StartupAdminInterface[0]
+      Found no composition record, default to initial state.
 Completed starting the web server with the admin interface at 'http://*:4000'.
 ```
 

@@ -4,7 +4,7 @@ module CompilationInterface.GenerateJsonConverters exposing
     , testsValueToInterface
     )
 
-{-| For documentation of the compilation interface, see <https://github.com/pine-vm/pine/blob/main/guide/how-to-configure-and-deploy-an-elm-backend-app.md#compilationinterfacegeneratejsonconverters-elm-module>
+{-| For documentation of the compilation interface, see <https://github.com/pine-vm/pine/blob/main/guide/how-to-use-elm-compilation-interfaces.md#compilationinterfacegeneratejsonconverters-elm-module>
 -}
 
 import Json.Decode
