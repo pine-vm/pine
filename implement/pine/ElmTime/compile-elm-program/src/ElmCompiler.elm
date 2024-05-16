@@ -36,7 +36,6 @@ import Elm.Syntax.Node
 import Elm.Syntax.Pattern
 import Elm.Syntax.Range
 import Elm.Syntax.TypeAnnotation
-import ElmOperators
 import FirCompiler
     exposing
         ( Deconstruction(..)
@@ -1212,43 +1211,35 @@ compileElmSyntaxExpression stackBefore elmExpression =
                     compileElmSyntaxApplication stack appliedFunctionElmSyntax argumentsElmSyntax
 
         Elm.Syntax.Expression.OperatorApplication operator _ (Elm.Syntax.Node.Node _ leftExpr) (Elm.Syntax.Node.Node _ rightExpr) ->
-            let
-                orderedElmExpression =
-                    mapExpressionForOperatorPrecedence elmExpression
-            in
-            if orderedElmExpression /= elmExpression then
-                compileElmSyntaxExpression stack orderedElmExpression
+            case searchCompileElmSyntaxOperatorOptimized stack operator leftExpr rightExpr of
+                Just result ->
+                    result
 
-            else
-                case searchCompileElmSyntaxOperatorOptimized stack operator leftExpr rightExpr of
-                    Just result ->
-                        result
+                Nothing ->
+                    case compileElmSyntaxExpression stack leftExpr of
+                        Err err ->
+                            Err ("Failed to compile left expression of OperatorApplication: " ++ err)
 
-                    Nothing ->
-                        case compileElmSyntaxExpression stack leftExpr of
-                            Err err ->
-                                Err ("Failed to compile left expression of OperatorApplication: " ++ err)
+                        Ok leftExpression ->
+                            case compileElmSyntaxExpression stack rightExpr of
+                                Err err ->
+                                    Err ("Failed to compile right expression of OperatorApplication: " ++ err)
 
-                            Ok leftExpression ->
-                                case compileElmSyntaxExpression stack rightExpr of
-                                    Err err ->
-                                        Err ("Failed to compile right expression of OperatorApplication: " ++ err)
+                                Ok rightExpression ->
+                                    case
+                                        compileElmFunctionOrValueLookup
+                                            ( [], "(" ++ operator ++ ")" )
+                                            stack
+                                    of
+                                        Err err ->
+                                            Err ("Failed to compile operator: " ++ err)
 
-                                    Ok rightExpression ->
-                                        case
-                                            compileElmFunctionOrValueLookup
-                                                ( [], "(" ++ operator ++ ")" )
-                                                stack
-                                        of
-                                            Err err ->
-                                                Err ("Failed to compile operator: " ++ err)
-
-                                            Ok operationFunction ->
-                                                Ok
-                                                    (FunctionApplicationExpression
-                                                        operationFunction
-                                                        [ leftExpression, rightExpression ]
-                                                    )
+                                        Ok operationFunction ->
+                                            Ok
+                                                (FunctionApplicationExpression
+                                                    operationFunction
+                                                    [ leftExpression, rightExpression ]
+                                                )
 
         Elm.Syntax.Expression.PrefixOperator operator ->
             compileElmFunctionOrValueLookup ( [], "(" ++ operator ++ ")" ) stack
@@ -2439,121 +2430,6 @@ flattenOperatorAppSequencePlusPlus expr =
 
         _ ->
             [ expr ]
-
-
-mapExpressionForOperatorPrecedence : Elm.Syntax.Expression.Expression -> Elm.Syntax.Expression.Expression
-mapExpressionForOperatorPrecedence originalExpression =
-    case originalExpression of
-        Elm.Syntax.Expression.OperatorApplication operator direction (Elm.Syntax.Node.Node leftRange leftExpr) (Elm.Syntax.Node.Node rightRange rightExpr) ->
-            let
-                operatorPrecedence =
-                    case Dict.get operator ElmOperators.bySymbol of
-                        Nothing ->
-                            0
-
-                        Just { precedence } ->
-                            precedence
-
-                mappedLeftExpr =
-                    mapExpressionForOperatorPrecedence leftExpr
-
-                mappedRightExpr =
-                    mapExpressionForOperatorPrecedence rightExpr
-
-                orderedLeft =
-                    case mappedLeftExpr of
-                        Elm.Syntax.Expression.OperatorApplication leftOperator _ leftLeftExpr leftRightExpr ->
-                            let
-                                operatorLeftPrecedence =
-                                    case Dict.get leftOperator ElmOperators.bySymbol of
-                                        Nothing ->
-                                            0
-
-                                        Just { precedence } ->
-                                            precedence
-
-                                areStillOrderedBySyntaxRange =
-                                    compareLocations
-                                        leftRange.start
-                                        (Elm.Syntax.Node.range leftLeftExpr).start
-                                        == LT
-                            in
-                            if
-                                (operatorLeftPrecedence < operatorPrecedence)
-                                    || ((operatorLeftPrecedence == operatorPrecedence) && areStillOrderedBySyntaxRange)
-                            then
-                                mapExpressionForOperatorPrecedence
-                                    (Elm.Syntax.Expression.OperatorApplication leftOperator
-                                        direction
-                                        leftLeftExpr
-                                        (Elm.Syntax.Node.Node
-                                            (Elm.Syntax.Range.combine [ Elm.Syntax.Node.range leftRightExpr, rightRange ])
-                                            (Elm.Syntax.Expression.OperatorApplication operator direction leftRightExpr (Elm.Syntax.Node.Node rightRange rightExpr))
-                                        )
-                                    )
-
-                            else
-                                originalExpression
-
-                        _ ->
-                            originalExpression
-            in
-            if mappedLeftExpr /= leftExpr || mappedRightExpr /= rightExpr then
-                mapExpressionForOperatorPrecedence
-                    (Elm.Syntax.Expression.OperatorApplication
-                        operator
-                        direction
-                        (Elm.Syntax.Node.Node leftRange mappedLeftExpr)
-                        (Elm.Syntax.Node.Node rightRange mappedRightExpr)
-                    )
-
-            else
-                case mappedRightExpr of
-                    Elm.Syntax.Expression.OperatorApplication rightOperator _ (Elm.Syntax.Node.Node rightLeftRange rightLeftExpr) rightRightExpr ->
-                        let
-                            operatorRightPrecedence =
-                                case Dict.get rightOperator ElmOperators.bySymbol of
-                                    Nothing ->
-                                        0
-
-                                    Just { precedence } ->
-                                        precedence
-
-                            areStillOrderedBySyntaxRange =
-                                compareLocations leftRange.start rightLeftRange.start
-                                    == LT
-                        in
-                        if
-                            (operatorRightPrecedence < operatorPrecedence)
-                                || ((operatorRightPrecedence == operatorPrecedence) && areStillOrderedBySyntaxRange)
-                        then
-                            mapExpressionForOperatorPrecedence
-                                (Elm.Syntax.Expression.OperatorApplication rightOperator
-                                    direction
-                                    (Elm.Syntax.Node.Node
-                                        (Elm.Syntax.Range.combine
-                                            [ leftRange
-                                            , rightLeftRange
-                                            ]
-                                        )
-                                        (Elm.Syntax.Expression.OperatorApplication
-                                            operator
-                                            direction
-                                            (Elm.Syntax.Node.Node leftRange leftExpr)
-                                            (Elm.Syntax.Node.Node rightLeftRange rightLeftExpr)
-                                        )
-                                    )
-                                    rightRightExpr
-                                )
-
-                        else
-                            orderedLeft
-
-                    _ ->
-                        orderedLeft
-
-        _ ->
-            originalExpression
 
 
 compareLocations : Elm.Syntax.Range.Location -> Elm.Syntax.Range.Location -> Order
