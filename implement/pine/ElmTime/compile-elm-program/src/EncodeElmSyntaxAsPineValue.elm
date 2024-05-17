@@ -525,9 +525,9 @@ encodeElmSyntaxCaseBlockAsPineValue caseBlock =
                                             expressionNode
                                             |> Result.map
                                                 (\patternExpressionValue ->
-                                                    encodeRecordAsPineValue
-                                                        [ ( "pattern", patternValue )
-                                                        , ( "expression", patternExpressionValue )
+                                                    Pine.ListValue
+                                                        [ patternValue
+                                                        , patternExpressionValue
                                                         ]
                                                 )
                                     )
