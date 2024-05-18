@@ -1739,7 +1739,7 @@ compileElmSyntaxRecordUpdate stack setters recordName =
                                         , fieldExpr
                                         ]
                                 )
-                                settersExpressions
+                                (List.sortBy Tuple.first settersExpressions)
                             )
                         ]
                     )
@@ -2524,7 +2524,7 @@ The argument list contains pairs of field names and new values.
 Takes the following arguments:
 
 1.  The function itself, so that we don't have to depend on recursion in the environment.
-2.  A list of pairs of field names and new values.
+2.  A list of field updates, each as a tuple of field name and new value. The call site is responsible for sorting this list by field name. If the list of updates is not in the correct order, this function crashes at runtime.
 3.  The list of fields that have been processed so far.
 4.  The list of fields that are yet to be processed.
 
