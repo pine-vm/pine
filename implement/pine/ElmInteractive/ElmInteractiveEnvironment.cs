@@ -12,7 +12,7 @@ namespace ElmTime.ElmInteractive;
 public static class ElmInteractiveEnvironment
 {
     public record ParsedInteractiveEnvironment(
-       IReadOnlyList<(string moduleName, ElmModule moduleContent)> Modules);
+       IReadOnlyList<(string moduleName, PineValue moduleValue, ElmModule moduleContent)> Modules);
 
     public static Result<string, PineValue> ApplyFunctionInElmModule(
         PineVM pineVM,
@@ -25,8 +25,7 @@ public static class ElmInteractiveEnvironment
             ParseFunctionFromElmModule(
                 interactiveEnvironment: interactiveEnvironment,
                 moduleName: moduleName,
-                declarationName: declarationName,
-                pineVM: pineVM)
+                declarationName: declarationName)
                 .AndThen(functionRecord =>
                 {
                     var combinedArguments =
@@ -57,8 +56,7 @@ public static class ElmInteractiveEnvironment
     public static Result<string, FunctionRecord> ParseFunctionFromElmModule(
         PineValue interactiveEnvironment,
         string moduleName,
-        string declarationName,
-        PineVM? pineVM = null)
+        string declarationName)
     {
         return
             ParseInteractiveEnvironment(interactiveEnvironment)
@@ -78,29 +76,12 @@ public static class ElmInteractiveEnvironment
                 if (functionDeclaration.Value is null)
                     return (Result<string, FunctionRecord>)"declaration " + declarationName + " not found";
 
-                return
-                ParseTagged(functionDeclaration.Value)
-                .AndThen(taggedFunctionDeclaration =>
-                taggedFunctionDeclaration.name is "Function"
-                ?
-                ParseFunctionRecordFromValue(taggedFunctionDeclaration.value, pineVM)
-                :
-                /*
-                (Result<string, FunctionRecord>)"Unexpected tag: " + taggedFunctionDeclaration.name
-
-                If the declaration has zero parameters, it could be encoded as plain PineValue without wrapping in a 'Function' record.
-                */
-                new FunctionRecord(
-                    innerFunction: new Expression.LiteralExpression(functionDeclaration.Value),
-                    functionParameterCount: 0,
-                    envFunctions: [],
-                    argumentsAlreadyCollected: [])
-                );
+                return ParseFunctionRecordFromValueTagged(functionDeclaration.Value);
             });
     }
 
     public static Result<string, PineValue> ApplyFunction(
-        PineVM pineVM,
+        IPineVM pineVM,
         FunctionRecord functionRecord,
         IReadOnlyList<PineValue> arguments)
     {
@@ -136,6 +117,33 @@ public static class ElmInteractiveEnvironment
         int functionParameterCount,
         IReadOnlyList<PineValue> envFunctions,
         IReadOnlyList<PineValue> argumentsAlreadyCollected);
+
+    /// <summary>
+    /// Analog to 'parseFunctionRecordFromValueTagged' in the Elm compiler.
+    /// </summary>
+    public static Result<string, FunctionRecord> ParseFunctionRecordFromValueTagged(
+        PineValue pineValue,
+        PineVM? pineVM = null)
+    {
+        return
+            ParseTagged(pineValue)
+            .AndThen(taggedFunctionDeclaration =>
+            taggedFunctionDeclaration.name is "Function"
+            ?
+            ParseFunctionRecordFromValue(taggedFunctionDeclaration.value, pineVM)
+            :
+            /*
+            (Result<string, FunctionRecord>)"Unexpected tag: " + taggedFunctionDeclaration.name
+
+            If the declaration has zero parameters, it could be encoded as plain PineValue without wrapping in a 'Function' record.
+            */
+            new FunctionRecord(
+                innerFunction: new Expression.LiteralExpression(pineValue),
+                functionParameterCount: 0,
+                envFunctions: [],
+                argumentsAlreadyCollected: [])
+            );
+    }
 
     /// <summary>
     /// Analog to 'parseFunctionRecordFromValue' in the Elm compiler.
@@ -216,7 +224,7 @@ public static class ElmInteractiveEnvironment
             };
     }
 
-    public static Result<string, (string moduleName, ElmModule moduleContent)> ParseNamedElmModule(
+    public static Result<string, (string moduleName, PineValue moduleValue, ElmModule moduleContent)> ParseNamedElmModule(
         PineValue moduleValue) =>
         ParseTagged(moduleValue)
         .AndThen(tagged =>
@@ -225,7 +233,7 @@ public static class ElmInteractiveEnvironment
 
             return
                 ParseElmModule(tagged.value)
-                .Map(module => (moduleName, module));
+                .Map(module => (moduleName, tagged.value, module));
         });
 
     /// <summary>

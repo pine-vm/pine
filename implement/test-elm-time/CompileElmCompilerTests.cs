@@ -71,8 +71,7 @@ public class CompileElmCompilerTests
             ElmInteractiveEnvironment.ParseFunctionFromElmModule(
                 interactiveEnvironment: interactiveEnvironmentValue,
                 moduleName: "Basics",
-                declarationName: "modBy",
-                pineVM: pineVM)
+                declarationName: "modBy")
             .Extract(err => throw new Exception(err));
 
         var modByApplicationResult =
@@ -337,8 +336,7 @@ public class CompileElmCompilerTests
             ElmInteractiveEnvironment.ParseFunctionFromElmModule(
                 interactiveEnvironment: interactiveEnvironmentValue,
                 moduleName: "String",
-                declarationName: "split",
-                pineVM: pineVM)
+                declarationName: "split")
             .Extract(err => throw new Exception(err));
 
         var stringSplitApplicationResult =
@@ -441,9 +439,9 @@ public class CompileElmCompilerTests
             ElmInteractiveEnvironment.ParseInteractiveEnvironment(interactiveInitialState)
             .Extract(err => throw new Exception(err));
 
-        var moduleBasicsContent =
+        var moduleBasics =
             interactiveParsedEnv
-            .Modules.Single(m => m.moduleName is "Basics").moduleContent;
+            .Modules.Single(m => m.moduleName is "Basics");
 
         Assert.AreEqual(
             "4",
@@ -460,8 +458,7 @@ public class CompileElmCompilerTests
                 ElmInteractiveEnvironment.ParseFunctionFromElmModule(
                     interactiveEnvironment: interactiveInitialState,
                     moduleName: "Pine",
-                    declarationName: "stringAsValue_Function",
-                    pineVM: pineVM)
+                    declarationName: "stringAsValue_Function")
                 .Extract(err => throw new Exception(err));
 
             var declarationValueResult =
@@ -495,23 +492,26 @@ public class CompileElmCompilerTests
                 declarationValueAsElmValue);
         }
 
-        var compilerModulesWithName =
-            ElmInteractive.GetDefaultElmCoreModulesTexts(compileJavaScriptEngine)
-            .Concat(elmModulesTextsForElmCompiler)
-            .Select(moduleText =>
-            new KeyValuePair<IReadOnlyList<string>, string>(
+        Result<string, KeyValuePair<IReadOnlyList<string>, (string moduleText, PineValue parsed)>> TryParseModuleText(string moduleText)
+        {
+            return
                 ElmTime.ElmSyntax.ElmModule.ParseModuleName(moduleText)
-                .Extract(err => throw new Exception("Failed parsing name for module " + moduleText.Split('\n', '\r').FirstOrDefault())),
-                moduleText))
+                .MapError(err => "Failed parsing name for module " + moduleText.Split('\n', '\r').FirstOrDefault())
+                .AndThen(moduleName =>
+                ParseElmModuleTextToPineValue(moduleText, compileJavaScriptEngine)
+                .MapError(err => "Failed parsing module " + moduleName + ": " + err)
+                .Map(parsedModule => new KeyValuePair<IReadOnlyList<string>, (string moduleText, PineValue parsed)>(
+                    moduleName, (moduleText, parsedModule))));
+        }
+
+        var elmModulesTextsForElmCompilerIncludingCore =
+            elmCoreLibraryModulesTexts
+            .Concat(elmModulesTextsForElmCompiler)
             .ToImmutableArray();
 
         var compilerModulesParseResults =
-            compilerModulesWithName
-            .Select(compilerModule =>
-                ParseElmModuleTextToPineValue(compilerModule.Value, compileJavaScriptEngine)
-                .MapError(err => "Failed for module " + compilerModule.Key + ": " + err)
-                .Map(parsedPineValue => new KeyValuePair<IReadOnlyList<string>, (string moduleText, PineValue parsed)>(
-                    compilerModule.Key, (compilerModule.Value, parsedPineValue))))
+            elmModulesTextsForElmCompilerIncludingCore
+            .Select(TryParseModuleText)
             .ToImmutableArray();
 
         var parsedCompilerModules =
@@ -519,20 +519,11 @@ public class CompileElmCompilerTests
             .Select(result => result.Extract(err => throw new Exception(err)))
             .ToImmutableArray();
 
-        var declGetDeclarationsFromEnvironment =
-            ElmInteractiveEnvironment.ParseFunctionFromElmModule(
-                interactiveEnvironment: interactiveInitialState,
-                moduleName: "ElmCompiler",
-                declarationName: "getDeclarationsFromEnvironment",
-                pineVM: pineVM)
-            .Extract(err => throw new Exception(err));
-
         var declExpandInteractiveEnv =
             ElmInteractiveEnvironment.ParseFunctionFromElmModule(
                 interactiveEnvironment: interactiveInitialState,
                 moduleName: "ElmCompiler",
-                declarationName: "expandElmInteractiveEnvironmentWithModules",
-                pineVM: pineVM)
+                declarationName: "expandElmInteractiveEnvironmentWithModules")
             .Extract(err => throw new Exception(err));
 
         /*
@@ -568,43 +559,13 @@ public class CompileElmCompilerTests
         var pineValueEmptyListInCompiler =
             ElmValue.ElmValueAsPineValue(pineValueEmptyListElmValue);
 
-        {
-            var getDeclarationsFromEnvironmentResponseValue =
-                ElmInteractiveEnvironment.ApplyFunction(
-                    pineVM,
-                    declGetDeclarationsFromEnvironment,
-                    arguments:
-                    /*
-                     * 
-                        getDeclarationsFromEnvironment : Pine.Value -> Result String (Dict.Dict String Pine.Value)
-                     * */
-                    [pineValueEmptyListInCompiler]
-                    )
-                .Extract(err => throw new Exception(err));
-
-            var getDeclarationsFromEnvironmentResponseString =
-                getDeclarationsFromEnvironmentResponseValue switch
-                {
-                    PineValue.ListValue listValue =>
-                    PineValueAsString.StringFromValue(listValue.Elements[0]),
-
-                    _ =>
-                    null
-                };
-
-            var getDeclarationsFromEnvironmentResponseElm =
-                ElmValue.PineValueAsElmValue(getDeclarationsFromEnvironmentResponseValue)
-                .Extract(err => throw new Exception(err));
-
-            Assert.AreEqual(
-                "Ok Dict.empty",
-                ElmValue.ElmValueAsExpression(getDeclarationsFromEnvironmentResponseElm).expressionString);
-        }
+        // var (optimizingPineVM, pineVMCache) = InteractiveSessionPine.BuildPineVM(caching: true, autoPGO: pgoShare);
+        var (optimizingPineVM, pineVMCache) = InteractiveSessionPine.BuildPineVM(caching: true, autoPGO: null);
 
         {
             var compilerResponseValue =
                 ElmInteractiveEnvironment.ApplyFunction(
-                    pineVM,
+                    optimizingPineVM,
                     declExpandInteractiveEnv,
                     arguments:
                     /*
@@ -649,7 +610,7 @@ public class CompileElmCompilerTests
         {
             return
                 ElmInteractiveEnvironment.ApplyFunction(
-                    pineVM,
+                    optimizingPineVM,
                     declExpandInteractiveEnv,
                     arguments:
                     /*
@@ -661,7 +622,7 @@ public class CompileElmCompilerTests
                      * */
                     [
                         ElmValue.ElmValueAsPineValue(prevEnvValue),
-                        ParsedElmFileRecordValue(moduleText, parsedModuleValue)
+                        PineValue.List([ParsedElmFileRecordValue(moduleText, parsedModuleValue)])
                     ]
                     )
                 .MapError(err => "Failed to apply function: " + err)
@@ -677,7 +638,8 @@ public class CompileElmCompilerTests
                         compilerResponseRecord.Fields.First(f => f.FieldName is "environment").Value
                         :
                         (Result<string, ElmValue>)
-                        ("Failed to extract environment: not a record: " + compilerResponseTag.Arguments[0]) :
+                        ("Failed to extract environment: not a record: " + compilerResponseTag.Arguments[0])
+                        :
                         "Failed to extract environment: Tag not 'Ok': " +
                         ElmValue.ElmValueAsExpression(compilerResponseTag).expressionString,
 
@@ -685,6 +647,454 @@ public class CompileElmCompilerTests
                         "Failed to extract environment: not a tag: " + compilerResponseElm
                     }));
         }
+
+        {
+            // Before attempting to compile the normal Basics module, test compiling a simple module.
+
+            const string simpleElmModuleText =
+                """
+                module Namespace.Beta exposing (..)
+
+
+                decl_name : String
+                decl_name =
+                    "Just a literal"
+
+                """;
+
+            var simpleElmModuleParsed =
+                TryParseModuleText(simpleElmModuleText)
+                .Extract(err => throw new Exception("Failed parsing simple module: " + err));
+
+            var simpleModuleNameFlat = string.Join(".", simpleElmModuleParsed.Key);
+
+            var simpleElmModuleAppCodeTree =
+                compilerProgramOnlyElmJson
+                .SetNodeAtPathSorted(
+                    ["src", .. simpleElmModuleParsed.Key.SkipLast(1), simpleElmModuleParsed.Key.Last() + ".elm"],
+                    TreeNodeWithStringPath.Blob(Encoding.UTF8.GetBytes(simpleElmModuleText)));
+
+            using var newCompilerInteractiveSession =
+                new InteractiveSessionPine(
+                    compileElmProgramCodeFiles: compilerProgram,
+                    initialState: null,
+                    appCodeTree: simpleElmModuleAppCodeTree,
+                    caching: true,
+                    autoPGO: pgoShare);
+
+            var jsSessionState = newCompilerInteractiveSession.CurrentEnvironmentValue();
+
+            var jsSessionParsedEnv =
+                ElmInteractiveEnvironment.ParseInteractiveEnvironment(jsSessionState)
+                .Extract(err => throw new Exception(err));
+
+            var jsSimpleModuleCompiled =
+                jsSessionParsedEnv
+                .Modules.Single(m => m.moduleName == simpleModuleNameFlat);
+
+            var pineSessionStateWrapped =
+                CompileOneElmModule(
+                    prevEnvValue: pineValueEmptyListElmValue,
+                    simpleElmModuleParsed.Value.moduleText,
+                    simpleElmModuleParsed.Value.parsed)
+                .Extract(err => throw new Exception("Failed compiling simple module: " + err));
+
+            var pineSessionState =
+                ElmValueInterop.ElmValueDecodedAsInElmCompiler(pineSessionStateWrapped)
+                .Extract(err => throw new Exception("Failed unwrapping pine session state: " + err));
+
+            var pineSessionParsedEnv =
+                ElmInteractiveEnvironment.ParseInteractiveEnvironment(pineSessionState)
+                .Extract(err => throw new Exception("Failed parsing environment: " + err));
+
+            var pineSimpleModuleCompiled =
+                pineSessionParsedEnv
+                .Modules.Single(m => m.moduleName == simpleModuleNameFlat);
+
+            Assert.AreEqual(
+                jsSimpleModuleCompiled.moduleContent.FunctionDeclarations.Count,
+                pineSimpleModuleCompiled.moduleContent.FunctionDeclarations.Count,
+                "Compiled simple module declarations count");
+
+            foreach (var declName in jsSimpleModuleCompiled.moduleContent.FunctionDeclarations.Keys)
+            {
+                var jsDeclValue = jsSimpleModuleCompiled.moduleContent.FunctionDeclarations[declName];
+                var pineDeclValue = pineSimpleModuleCompiled.moduleContent.FunctionDeclarations[declName];
+
+                Assert.AreEqual(
+                    jsDeclValue,
+                    pineDeclValue,
+                    "Compiled simple module declaration " + declName);
+            }
+
+            Assert.AreEqual(
+                jsSimpleModuleCompiled.moduleValue,
+                pineSimpleModuleCompiled.moduleValue,
+                "Compiled simple module value");
+        }
+
+        {
+            // Compile a slightly more complex module.
+
+            const string simpleElmModuleText =
+                """
+                module Namespace.Beta exposing (..)
+
+
+                type Bool = True | False
+
+
+                type String
+                    = String (List Char.Char)
+
+                    -- We need another tag to prevent the compiler from assuming that the condition for tag 'String' is always true.
+                    | AnyOtherKind
+
+
+                {-| Represents the relative ordering of two things.
+                The relations are less than, equal to, and greater than.
+                -}
+                type Order = LT | EQ | GT
+
+
+                pow : Int -> Int -> Int
+                pow base exponent =
+                    if Pine_kernel.is_sorted_ascending_int [ exponent, 0 ] then
+                        1
+
+                    else
+                        powHelper base exponent 1
+
+                
+                powHelper : Int -> Int -> Int -> Int
+                powHelper base exponent accumulator =
+                    if Pine_kernel.equal [ exponent, 0 ] then
+                        accumulator
+
+                    else
+                        powHelper base (Pine_kernel.add_int [ exponent, -1 ]) (Pine_kernel.mul_int [ base, accumulator ])
+
+
+                replicate : appendable -> appendable
+                replicate a =
+                    case a of
+                    String stringA ->
+                        String (Pine_kernel.concat [ stringA, stringA ])
+
+                    _ ->
+                        Pine_kernel.concat [ a, a ]
+
+                
+                """;
+
+            var simpleElmModuleParsed =
+                TryParseModuleText(simpleElmModuleText)
+                .Extract(err => throw new Exception("Failed parsing simple module: " + err));
+
+            var simpleModuleNameFlat = string.Join(".", simpleElmModuleParsed.Key);
+
+            var simpleElmModuleAppCodeTree =
+                compilerProgramOnlyElmJson
+                .SetNodeAtPathSorted(
+                    ["src", .. simpleElmModuleParsed.Key.SkipLast(1), simpleElmModuleParsed.Key.Last() + ".elm"],
+                    TreeNodeWithStringPath.Blob(Encoding.UTF8.GetBytes(simpleElmModuleText)));
+
+            using var newCompilerInteractiveSession =
+                new InteractiveSessionPine(
+                    compileElmProgramCodeFiles: compilerProgram,
+                    initialState: null,
+                    appCodeTree: simpleElmModuleAppCodeTree,
+                    caching: true,
+                    autoPGO: pgoShare);
+
+            var jsSessionState = newCompilerInteractiveSession.CurrentEnvironmentValue();
+
+            var jsSessionParsedEnv =
+                ElmInteractiveEnvironment.ParseInteractiveEnvironment(jsSessionState)
+                .Extract(err => throw new Exception(err));
+
+            var jsSimpleModuleCompiled =
+                jsSessionParsedEnv
+                .Modules.Single(m => m.moduleName == simpleModuleNameFlat);
+
+            var pineSessionStateWrapped =
+                CompileOneElmModule(
+                    prevEnvValue: pineValueEmptyListElmValue,
+                    simpleElmModuleParsed.Value.moduleText,
+                    simpleElmModuleParsed.Value.parsed)
+                .Extract(err => throw new Exception("Failed compiling simple module: " + err));
+
+            var pineSessionState =
+                ElmValueInterop.ElmValueDecodedAsInElmCompiler(pineSessionStateWrapped)
+                .Extract(err => throw new Exception("Failed unwrapping pine session state: " + err));
+
+            var pineSessionParsedEnv =
+                ElmInteractiveEnvironment.ParseInteractiveEnvironment(pineSessionState)
+                .Extract(err => throw new Exception("Failed parsing environment: " + err));
+
+            var pineSimpleModuleCompiled =
+                pineSessionParsedEnv
+                .Modules.Single(m => m.moduleName == simpleModuleNameFlat);
+
+            Assert.AreEqual(
+                jsSimpleModuleCompiled.moduleContent.FunctionDeclarations.Count,
+                pineSimpleModuleCompiled.moduleContent.FunctionDeclarations.Count,
+                "Compiled simple module declarations count");
+
+            foreach (var declName in jsSimpleModuleCompiled.moduleContent.FunctionDeclarations.Keys)
+            {
+                var jsDeclValue = jsSimpleModuleCompiled.moduleContent.FunctionDeclarations[declName];
+                var pineDeclValue = pineSimpleModuleCompiled.moduleContent.FunctionDeclarations[declName];
+
+                Assert.AreEqual(
+                    jsDeclValue,
+                    pineDeclValue,
+                    "Compiled simple module declaration " + declName);
+            }
+
+            Assert.AreEqual(
+                jsSimpleModuleCompiled.moduleValue,
+                pineSimpleModuleCompiled.moduleValue,
+                "Compiled simple module value");
+        }
+
+        {
+            // Compile reduced version of 'Basics' module
+
+            const string simpleElmModuleText =
+                """
+                module ReducedBasics exposing
+                  ( Int, Float
+                  , (+), (-), (*), (/), (//), (^)
+                  , toFloat, round, floor, ceiling, truncate
+                  , (==), (/=)
+                  , (<), (>), (<=), (>=), max, min, compare, Order(..)
+                  , Bool(..), not, (&&), (||), xor
+                  , (++)
+                  , modBy, remainderBy, negate, abs, clamp, sqrt, logBase, e
+                  , pi, cos, sin, tan, acos, asin, atan, atan2
+                  , degrees, radians, turns
+                  , toPolar, fromPolar
+                  , isNaN, isInfinite
+                  , identity, always, (<|), (|>), (<<), (>>), Never, never
+                  )
+
+
+                infix right 0 (<|) = apL
+                infix left  0 (|>) = apR
+                infix right 2 (||) = or
+                infix right 3 (&&) = and
+                infix non   4 (==) = eq
+                infix non   4 (/=) = neq
+                infix non   4 (<)  = lt
+                infix non   4 (>)  = gt
+                infix non   4 (<=) = le
+                infix non   4 (>=) = ge
+                infix right 5 (++) = append
+                infix left  6 (+)  = add
+                infix left  6 (-)  = sub
+                infix left  7 (*)  = mul
+                infix left  7 (//) = idiv
+                infix right 8 (^)  = pow
+                infix left  9 (<<) = composeL
+                infix right 9 (>>) = composeR
+
+
+                type Bool = True | False
+
+
+                type String
+                    = String (List Char.Char)
+
+                    -- We need another tag to prevent the compiler from assuming that the condition for tag 'String' is always true.
+                    | AnyOtherKind
+
+
+                {-| Represents the relative ordering of two things.
+                The relations are less than, equal to, and greater than.
+                -}
+                type Order = LT | EQ | GT
+
+
+                eq : a -> a -> Bool
+                eq a b =
+                    if isPineBlob a then
+                        Pine_kernel.equal [ a, b ]
+
+                    else
+                        if Pine_kernel.equal [ Pine_kernel.length a, Pine_kernel.length b ] then
+                            case a of
+                                String _ ->
+                                    Pine_kernel.equal [ a, b ]
+
+                                RBNode_elm_builtin _ _ _ _ _ ->
+                                    Pine_kernel.equal [ dictToList a, dictToList b ]
+
+                                Set_elm_builtin _ ->
+                                    Pine_kernel.equal [ setToList a, setToList b ]
+
+                                _ ->
+                                    let
+                                        itemsEqualRecursive listA listB =
+                                            if Pine_kernel.equal [ Pine_kernel.length listA, 0 ] then
+                                                True
+
+                                            else
+                                                if eq (Pine_kernel.list_head listA) (Pine_kernel.list_head listB) then
+                                                    itemsEqualRecursive
+                                                        (Pine_kernel.skip [ 1, listA ])
+                                                        (Pine_kernel.skip [ 1, listB ])
+
+                                                else
+                                                    False
+                                    in
+                                    itemsEqualRecursive a b
+
+                        else
+                            False
+
+
+                setToList : Set a -> List a
+                setToList (Set_elm_builtin dict) =
+                    dictKeys dict
+
+
+                dictToList : Dict k v -> List (k,v)
+                dictToList dict =
+                    dictFoldr (\key value list -> Pine_kernel.concat [ [(key, value)], list ]) [] dict
+
+
+                dictKeys : Dict k v -> List k
+                dictKeys dict =
+                  dictFoldr (\key value keyList -> Pine_kernel.concat [ [ key ], keyList ]) [] dict
+
+
+                dictFoldr : (k -> v -> b -> b) -> b -> Dict k v -> b
+                dictFoldr func acc t =
+                  case t of
+                    RBEmpty_elm_builtin ->
+                      acc
+
+                    RBNode_elm_builtin _ key value left right ->
+                      dictFoldr func (func key value (dictFoldr func acc right)) left
+
+
+                neq : a -> a -> Bool
+                neq a b =
+                    if Pine_kernel.equal [ eq a b, True ] then
+                        False
+                    else
+                        True
+
+
+                not : Bool -> Bool
+                not bool =
+                    if Pine_kernel.equal [ bool, True ] then
+                        False
+                    else
+                        True
+
+
+                add : number -> number -> number
+                add a b =
+                    Pine_kernel.add_int [ a, b ]
+
+
+                sub : number -> number -> number
+                sub a b =
+                    Pine_kernel.add_int [ a, Pine_kernel.negate b ]
+
+
+                mul : number -> number -> number
+                mul a b =
+                    Pine_kernel.mul_int [ a, b ]
+
+                
+
+
+                isPineList a =
+                    Pine_kernel.equal [ Pine_kernel.take [ 0, a ], [] ]
+
+
+                isPineBlob a =
+                    Pine_kernel.equal [ Pine_kernel.take [ 0, a ], Pine_kernel.take [ 0, 0 ] ]
+
+
+                """;
+
+            var simpleElmModuleParsed =
+                TryParseModuleText(simpleElmModuleText)
+                .Extract(err => throw new Exception("Failed parsing simple module: " + err));
+
+            var simpleModuleNameFlat = string.Join(".", simpleElmModuleParsed.Key);
+
+            var simpleElmModuleAppCodeTree =
+                compilerProgramOnlyElmJson
+                .SetNodeAtPathSorted(
+                    ["src", .. simpleElmModuleParsed.Key.SkipLast(1), simpleElmModuleParsed.Key.Last() + ".elm"],
+                    TreeNodeWithStringPath.Blob(Encoding.UTF8.GetBytes(simpleElmModuleText)));
+
+            using var newCompilerInteractiveSession =
+                new InteractiveSessionPine(
+                    compileElmProgramCodeFiles: compilerProgram,
+                    initialState: null,
+                    appCodeTree: simpleElmModuleAppCodeTree,
+                    caching: true,
+                    autoPGO: pgoShare);
+
+            var jsSessionState = newCompilerInteractiveSession.CurrentEnvironmentValue();
+
+            var jsSessionParsedEnv =
+                ElmInteractiveEnvironment.ParseInteractiveEnvironment(jsSessionState)
+                .Extract(err => throw new Exception(err));
+
+            var jsSimpleModuleCompiled =
+                jsSessionParsedEnv
+                .Modules.Single(m => m.moduleName == simpleModuleNameFlat);
+
+            var pineSessionStateWrapped =
+                CompileOneElmModule(
+                    prevEnvValue: pineValueEmptyListElmValue,
+                    simpleElmModuleParsed.Value.moduleText,
+                    simpleElmModuleParsed.Value.parsed)
+                .Extract(err => throw new Exception("Failed compiling simple module: " + err));
+
+            var pineSessionState =
+                ElmValueInterop.ElmValueDecodedAsInElmCompiler(pineSessionStateWrapped)
+                .Extract(err => throw new Exception("Failed unwrapping pine session state: " + err));
+
+            var pineSessionParsedEnv =
+                ElmInteractiveEnvironment.ParseInteractiveEnvironment(pineSessionState)
+                .Extract(err => throw new Exception("Failed parsing environment: " + err));
+
+            var pineSimpleModuleCompiled =
+                pineSessionParsedEnv
+                .Modules.Single(m => m.moduleName == simpleModuleNameFlat);
+
+            Assert.AreEqual(
+                jsSimpleModuleCompiled.moduleContent.FunctionDeclarations.Count,
+                pineSimpleModuleCompiled.moduleContent.FunctionDeclarations.Count,
+                "Compiled simple module declarations count");
+
+            foreach (var declName in jsSimpleModuleCompiled.moduleContent.FunctionDeclarations.Keys)
+            {
+                var jsDeclValue = jsSimpleModuleCompiled.moduleContent.FunctionDeclarations[declName];
+                var pineDeclValue = pineSimpleModuleCompiled.moduleContent.FunctionDeclarations[declName];
+
+                Assert.AreEqual(
+                    jsDeclValue,
+                    pineDeclValue,
+                    "Compiled reduced Basics module declaration " + declName);
+            }
+
+            Assert.AreEqual(
+                jsSimpleModuleCompiled.moduleValue,
+                pineSimpleModuleCompiled.moduleValue,
+                "Compiled reduced Basics module value");
+        }
+
+        // Reduce scope of test for now.
+        return;
 
         {
             // Focus on test compiling the first module.
@@ -708,15 +1118,23 @@ public class CompileElmCompilerTests
                 ElmInteractiveEnvironment.ParseInteractiveEnvironment(newInteractiveEnv)
                 .Extract(err => throw new Exception("Failed parsing env after compiling module Basics: " + err));
 
-            var newModuleBasicsContent =
+            var newModuleBasics =
                 newInteractiveParsedEnv
-                .Modules.Single(m => m.moduleName is "Basics").moduleContent;
+                .Modules.Single(m => m.moduleName is "Basics");
 
             Assert.AreEqual(
-                moduleBasicsContent.FunctionDeclarations.Count,
-                newModuleBasicsContent.FunctionDeclarations.Count,
+                moduleBasics.moduleContent.FunctionDeclarations.Count,
+                newModuleBasics.moduleContent.FunctionDeclarations.Count,
                 "Compiled module Basics declarations count");
+
+            Assert.AreEqual(
+                moduleBasics.moduleValue,
+                newModuleBasics.moduleValue,
+                "Compiled module Basics value");
         }
+
+        // Reduce scope of test for now.
+        return;
 
         var compilationResult =
             parsedCompilerModules

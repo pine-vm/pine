@@ -77,7 +77,7 @@ public class InteractiveSessionPine : IInteractiveSession
                 appCodeTree: appCodeTree));
     }
 
-    private static (IPineVM, PineVMCache?) BuildPineVM(
+    public static (IPineVM, PineVMCache?) BuildPineVM(
         bool caching,
         DynamicPGOShare? autoPGO)
     {
