@@ -78,11 +78,8 @@ public class PineVM : IPineVM
         if (expression is Expression.ListExpression listExpression)
         {
             return
-                ResultListMapCombine(
-                    listExpression.List,
-                    elem => EvaluateExpression(elem, environment))
-                .MapError(err => "Failed to evaluate list element: " + err)
-                .Map(PineValue.List);
+                EvaluateListExpression(listExpression, environment)
+                .MapError(err => "Failed to evaluate list: " + err);
         }
 
         if (expression is Expression.ParseAndEvalExpression applicationExpression)
@@ -122,24 +119,40 @@ public class PineVM : IPineVM
         throw new NotImplementedException("Unexpected shape of expression: " + expression.GetType().FullName);
     }
 
+    public Result<string, PineValue> EvaluateListExpression(
+        Expression.ListExpression listExpression,
+        PineValue environment)
+    {
+        var listItems = new List<PineValue>(listExpression.List.Length);
+
+        for (var i = 0; i < listExpression.List.Length; i++)
+        {
+            var item = listExpression.List[i];
+
+            var itemResult = EvaluateExpression(item, environment);
+
+            if (itemResult is Result<string, PineValue>.Err itemErr)
+                return "Failed to evaluate list element [" + i + "]: " + itemErr.Value;
+
+            if (itemResult is Result<string, PineValue>.Ok itemOk)
+            {
+                listItems.Add(itemOk.Value);
+                continue;
+            }
+
+            throw new NotImplementedException("Unexpected result type: " + itemResult.GetType().FullName);
+        }
+
+        return PineValue.List(listItems);
+    }
+
     public Result<string, PineValue> EvaluateParseAndEvalExpression(
         Expression.ParseAndEvalExpression parseAndEval,
-        PineValue environment) =>
-        EvaluateExpression(parseAndEval.environment, environment)
-        .MapError(error => "Failed to evaluate argument: " + error)
-        .AndThen(environmentValue =>
-        EvaluateExpression(parseAndEval.expression, environment)
-        .MapError(error => "Failed to evaluate function: " + error)
-        .AndThen(functionValue => ParseExpressionFromValue(functionValue)
-        .MapError(error =>
-        "Failed to parse expression from function value: " + error +
-        " - functionValue is " +
-        PineValueAsString.StringFromValue(functionValue)
-        .Unpack(fromErr: _ => "not a string", fromOk: asString => "string \'" + asString + "\'") +
-        " - environmentValue is " +
-        PineValueAsString.StringFromValue(environmentValue)
-        .Unpack(fromErr: _ => "not a string", fromOk: asString => "string \'" + asString + "\'"))
-        .AndThen(functionExpression =>
+        PineValue environment)
+    {
+        Result<string, PineValue> continueWithEnvValueAndFunction(
+            PineValue environmentValue,
+            Expression functionExpression)
         {
             if (environmentValue is PineValue.ListValue list)
             {
@@ -150,7 +163,48 @@ public class PineVM : IPineVM
             var evalResult = EvaluateExpression(environment: environmentValue, expression: functionExpression);
 
             return evalResult;
-        })));
+        };
+
+        return
+            EvaluateExpression(parseAndEval.environment, environment) switch
+            {
+                Result<string, PineValue>.Err envErr =>
+                "Failed to evaluate argument: " + envErr.Value,
+
+                Result<string, PineValue>.Ok environmentValue =>
+                EvaluateExpression(parseAndEval.expression, environment) switch
+                {
+                    Result<string, PineValue>.Err exprErr =>
+                    "Failed to evaluate function: " + exprErr.Value,
+
+                    Result<string, PineValue>.Ok functionValue =>
+                    ParseExpressionFromValue(functionValue.Value) switch
+                    {
+                        Result<string, Expression>.Err parseErr =>
+                        "Failed to parse expression from function value: " + parseErr.Value +
+                        " - functionValue is " +
+                        PineValueAsString.StringFromValue(functionValue.Value)
+                        .Unpack(fromErr: _ => "not a string", fromOk: asString => "string \'" + asString + "\'") +
+                        " - environmentValue is " +
+                        PineValueAsString.StringFromValue(functionValue.Value)
+                        .Unpack(fromErr: _ => "not a string", fromOk: asString => "string \'" + asString + "\'"),
+
+                        Result<string, Expression>.Ok functionExpression =>
+                        continueWithEnvValueAndFunction(environmentValue.Value, functionExpression.Value),
+
+                        var otherResult =>
+                        throw new NotImplementedException("Unexpected result type for parse: " + otherResult.GetType().FullName)
+                    },
+
+                    var otherResult =>
+                    throw new NotImplementedException("Unexpected result type for expr: " + otherResult.GetType().FullName)
+                },
+
+                var otherResult =>
+                throw new NotImplementedException("Unexpected result type for env: " + otherResult.GetType().FullName)
+            };
+    }
+
 
     public Result<string, PineValue> EvaluateKernelApplicationExpression(
         PineValue environment,
@@ -162,14 +216,25 @@ public class PineVM : IPineVM
     public Result<string, PineValue> EvaluateConditionalExpression(
         PineValue environment,
         Expression.ConditionalExpression conditional) =>
-        EvaluateExpression(conditional.condition, environment)
-        .MapError(error => "Failed to evaluate condition: " + error)
-        .AndThen(conditionValue =>
-        conditionValue == TrueValue ?
-        EvaluateExpression(conditional.ifTrue, environment) :
-        conditionValue == FalseValue ?
-        EvaluateExpression(conditional.ifFalse, environment) :
-        PineValue.EmptyList);
+        EvaluateExpression(conditional.condition, environment) switch
+        {
+            Result<string, PineValue>.Ok conditionValue =>
+            conditionValue == TrueValue
+            ?
+            EvaluateExpression(conditional.ifTrue, environment)
+            :
+            conditionValue == FalseValue
+            ?
+            EvaluateExpression(conditional.ifFalse, environment)
+            :
+            PineValue.EmptyList,
+
+            Result<string, PineValue>.Err error =>
+            "Failed to evaluate condition: " + error,
+
+            var otherResult =>
+            throw new NotImplementedException("Unexpected result type: " + otherResult.GetType().FullName)
+        };
 
     private static readonly IReadOnlyDictionary<string, Func<PineValue, PineValue>> NamedKernelFunctions =
         ImmutableDictionary<string, Func<PineValue, PineValue>>.Empty
