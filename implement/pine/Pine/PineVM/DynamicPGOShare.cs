@@ -64,7 +64,7 @@ public class DynamicPGOShare : IDisposable
     }
 
     public IPineVM GetVMAutoUpdating(
-        IReadOnlyDictionary<PineValue, Func<PineVM.EvalExprDelegate, PineValue, Result<string, PineValue>>>? decodeExpressionOverrides = null,
+        PineVM.OverrideParseExprDelegate? overrideParseExpression = null,
         PineVM.OverrideEvalExprDelegate? overrideEvaluateExpression = null)
     {
         return new RedirectingVM(
@@ -73,7 +73,7 @@ public class DynamicPGOShare : IDisposable
                 expression,
                 environment,
                 initialProfileAggregationDelay: TimeSpan.FromSeconds(8),
-                decodeExpressionOverrides,
+                overrideParseExpression,
                 overrideEvaluateExpression));
     }
 
@@ -86,7 +86,7 @@ public class DynamicPGOShare : IDisposable
         Expression expression,
         PineValue environment,
         TimeSpan initialProfileAggregationDelay,
-        IReadOnlyDictionary<PineValue, Func<PineVM.EvalExprDelegate, PineValue, Result<string, PineValue>>>? decodeExpressionOverrides = null,
+        PineVM.OverrideParseExprDelegate? overrideParseExpression = null,
         PineVM.OverrideEvalExprDelegate? overrideEvaluateExpression = null)
     {
         var profileContainer =
@@ -103,7 +103,7 @@ public class DynamicPGOShare : IDisposable
                 expression,
                 environment: environment,
                 cancellationTokenSource: new CancellationTokenSource(),
-                decodeExpressionOverrides: decodeExpressionOverrides,
+                overrideParseExpression: overrideParseExpression,
                 overrideEvaluateExpression: overrideEvaluateExpression);
 
             profilingEvalTask.EvalTask.Wait(profileAggregationDelay, disposedCancellationTokenSource.Token);
@@ -166,7 +166,7 @@ public class DynamicPGOShare : IDisposable
         Expression expression,
         PineValue environment,
         CancellationTokenSource cancellationTokenSource,
-        IReadOnlyDictionary<PineValue, Func<PineVM.EvalExprDelegate, PineValue, Result<string, PineValue>>>? decodeExpressionOverrides = null,
+        PineVM.OverrideParseExprDelegate? overrideParseExpression = null,
         PineVM.OverrideEvalExprDelegate? overrideEvaluateExpression = null)
     {
         var compiledParseExpressionOverrides =
@@ -175,40 +175,36 @@ public class DynamicPGOShare : IDisposable
             .SelectWhereNotNull(compilation => compilation.DictionaryResult.WithDefault(null))
             .FirstOrDefault();
 
-        var combinedParseExpressionOverrides =
-            (decodeExpressionOverrides ?? ImmutableDictionary<PineValue, Func<PineVM.EvalExprDelegate, PineValue, Result<string, PineValue>>>.Empty)
-            .Aggregate(
-                seed:
-                compiledParseExpressionOverrides?.ToImmutableDictionary() ??
-                ImmutableDictionary<PineValue, Func<PineVM.EvalExprDelegate, PineValue, Result<string, PineValue>>>.Empty,
-                func: (dict, entry) => dict.SetItem(entry.Key, entry.Value));
-
-        var decodeExpressionOverridesDict =
-            combinedParseExpressionOverrides.Count < 1
+        var parseExpressionOverridesDict =
+            !(0 < compiledParseExpressionOverrides?.Count)
             ?
             null
             :
-            combinedParseExpressionOverrides
+            compiledParseExpressionOverrides
             .ToImmutableDictionary(
                 keySelector: encodedExprAndDelegate => encodedExprAndDelegate.Key,
                 elementSelector: encodedExprAndDelegate => new Expression.DelegatingExpression(encodedExprAndDelegate.Value));
 
-        var overrideDecodeExpression =
-            decodeExpressionOverridesDict switch
+        PineVM.OverrideParseExprDelegate overrideParseExpressionBeforeAddCompiled =
+            overrideParseExpression ?? (originalHandler => originalHandler);
+
+        var overrideParseExprIncludeCompiled =
+            parseExpressionOverridesDict switch
             {
                 null =>
-                new PineVM.OverrideParseExprDelegate(originalHandler => originalHandler),
+                overrideParseExpressionBeforeAddCompiled,
 
                 not null =>
+                new PineVM.OverrideParseExprDelegate(
                 originalHandler => value =>
                 {
-                    if (decodeExpressionOverridesDict.TryGetValue(value, out var delegatingExpression))
+                    if (parseExpressionOverridesDict.TryGetValue(value, out var delegatingExpression))
                     {
                         return Result<string, Expression>.ok(delegatingExpression);
                     }
 
-                    return originalHandler(value);
-                }
+                    return overrideParseExpressionBeforeAddCompiled(originalHandler)(value);
+                })
             };
 
         var newCancellationTokenSource = new CancellationTokenSource();
@@ -231,7 +227,7 @@ public class DynamicPGOShare : IDisposable
         }
 
         var profilingVM = new ProfilingPineVM(
-            overrideParseExpression: overrideDecodeExpression,
+            overrideParseExpression: overrideParseExprIncludeCompiled,
             overrideEvaluateExpression: OverrideEvalExprDelegate);
 
         var evalTask =

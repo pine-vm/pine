@@ -83,6 +83,20 @@ public class InteractiveSessionPine : IInteractiveSession
     {
         var cache = caching ? new PineVMCache() : null;
 
+        return (BuildPineVM(cache, autoPGO), cache);
+    }
+
+    public static IPineVM BuildPineVM(
+        PineVMCache? cache,
+        DynamicPGOShare? autoPGO)
+    {
+        var overrideParseExpression =
+            cache is null
+            ?
+            null
+            :
+            (PineVM.OverrideParseExprDelegate?)cache.BuildParseExprDelegate;
+
         var overrideEvaluateExpression =
             cache is null
             ?
@@ -91,9 +105,17 @@ public class InteractiveSessionPine : IInteractiveSession
             (PineVM.OverrideEvalExprDelegate?)cache.BuildEvalExprDelegate;
 
         if (autoPGO is not null)
-            return (autoPGO.GetVMAutoUpdating(overrideEvaluateExpression: overrideEvaluateExpression), cache);
+        {
+            return
+                autoPGO.GetVMAutoUpdating(
+                    overrideParseExpression: overrideParseExpression,
+                    overrideEvaluateExpression: overrideEvaluateExpression);
+        }
 
-        return (new PineVM(overrideEvaluateExpression: overrideEvaluateExpression), cache);
+        return
+            new PineVM(
+                overrideParseExpression: overrideParseExpression,
+                overrideEvaluateExpression: overrideEvaluateExpression);
     }
 
     private static readonly ConcurrentDictionary<string, Result<string, PineValue>> compileEvalContextCache = new();

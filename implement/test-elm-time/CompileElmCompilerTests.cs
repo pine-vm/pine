@@ -979,37 +979,6 @@ public class CompileElmCompilerTests
                       dictFoldr func (func key value (dictFoldr func acc right)) left
 
 
-                neq : a -> a -> Bool
-                neq a b =
-                    if Pine_kernel.equal [ eq a b, True ] then
-                        False
-                    else
-                        True
-
-
-                not : Bool -> Bool
-                not bool =
-                    if Pine_kernel.equal [ bool, True ] then
-                        False
-                    else
-                        True
-
-
-                add : number -> number -> number
-                add a b =
-                    Pine_kernel.add_int [ a, b ]
-
-
-                sub : number -> number -> number
-                sub a b =
-                    Pine_kernel.add_int [ a, Pine_kernel.negate b ]
-
-
-                mul : number -> number -> number
-                mul a b =
-                    Pine_kernel.mul_int [ a, b ]
-
-                
 
 
                 isPineList a =
@@ -1092,9 +1061,6 @@ public class CompileElmCompilerTests
                 pineSimpleModuleCompiled.moduleValue,
                 "Compiled reduced Basics module value");
         }
-
-        // Reduce scope of test for now.
-        return;
 
         {
             // Focus on test compiling the first module.
