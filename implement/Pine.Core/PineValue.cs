@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Frozen;
 using System.Collections.Generic;
 using System.Linq;
 
@@ -24,22 +25,90 @@ public abstract record PineValue : IEquatable<PineValue>
         Blob((ReadOnlyMemory<byte>)bytes);
 
     public static PineValue Blob(ReadOnlyMemory<byte> bytes) =>
-        bytes.Length == 0
+        bytes.Length is 0
         ?
         EmptyBlob
         :
+        bytes.Length is 1
+        ?
+        InternedBlobSingle[bytes.Span[0]]
+        :
+        bytes.Length is 2
+        ?
+        InternedBlobDouble[bytes.Span[0] * 256 + bytes.Span[1]]
+        :
         new BlobValue(bytes);
 
-    public static PineValue List(IReadOnlyList<PineValue> elements) =>
-        elements.Count == 0
-        ?
-        EmptyList
-        :
-        new ListValue(elements);
+    public static PineValue List(IReadOnlyList<PineValue> elements)
+    {
+        if (elements.Count is 0)
+            return EmptyList;
+
+        var newInstance = new ListValue(elements);
+
+        if (InternedLists?.TryGetValue(newInstance, out var interned) ?? false)
+            return interned;
+
+        return newInstance;
+    }
 
     public static readonly PineValue EmptyList = new ListValue([]);
 
     public static readonly PineValue EmptyBlob = new BlobValue(ReadOnlyMemory<byte>.Empty);
+
+    private static readonly PineValue[] InternedBlobSingle =
+        Enumerable.Range(0, 256)
+        .Select(i => new BlobValue(new byte[] { (byte)i }))
+        .ToArray();
+
+    private static readonly PineValue[] InternedBlobDouble =
+        Enumerable.Range(0, 256)
+        .SelectMany(i => Enumerable.Range(0, 256).Select(j => new BlobValue(new byte[] { (byte)i, (byte)j })))
+        .ToArray();
+
+    private static readonly IEnumerable<string> InternedStrings =
+        [
+        "String",
+        "Nothing",
+        "Just",
+
+        "EQ",
+        "LT",
+        "GT",
+
+        "list_head",
+        "skip",
+        "equal",
+
+        "Literal",
+        "List",
+        "ParseAndEval",
+        "Conditional",
+        "Environment",
+        "Function",
+        "KernelApplication",
+
+        "functionName",
+        "argument",
+        "condition",
+        "ifTrue",
+        "ifFalse",
+        "environment",
+        "function",
+        "expression"
+
+
+        ];
+
+    private static IEnumerable<ListValue> BuildInternedLists() =>
+        [
+        ..InternedStrings.Select(s => new ListValue(PineValueAsString.ListValueFromString(s)))
+        ];
+
+    private static readonly FrozenDictionary<ListValue, ListValue> InternedLists =
+        BuildInternedLists().ToFrozenDictionary(
+            keySelector: value => value,
+            elementSelector: value => value);
 
     /// <summary>
     /// A <see cref="PineValue"/> that is a list of <see cref="PineValue"/>s.

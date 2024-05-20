@@ -1,4 +1,4 @@
-﻿using Pine;
+using Pine;
 using System;
 using System.Linq;
 
@@ -42,7 +42,7 @@ public class ElmValueInterop
                     ElmValue.ElmInteger integer => Result<string, byte>.ok((byte)integer.Value),
                     _ => Result<string, byte>.err("Invalid element in BlobValue tag")
                 }))
-                .Map(bytes => (PineValue)new PineValue.BlobValue(bytes.ToArray())),
+                .Map(bytes => PineValue.Blob([.. bytes])),
 
                     _ =>
                     Result<string, PineValue>.err("Invalid arguments for BlobValue tag")
