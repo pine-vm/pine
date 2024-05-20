@@ -160,9 +160,20 @@ public class PineVM : IPineVM
                 FunctionApplicationMaxEnvSize < list.Elements.Count ? list.Elements.Count : FunctionApplicationMaxEnvSize;
             }
 
+            /*
+             * 2024-05-19 work around for stack overflow:
+             * After seeing some apps crash with stack overflow, reduce stack sizes by offloading to another thread.
+             * 
+
             var evalResult = EvaluateExpression(environment: environmentValue, expression: functionExpression);
 
             return evalResult;
+            */
+
+            var task =
+                System.Threading.Tasks.Task.Run(() => EvaluateExpression(environment: environmentValue, expression: functionExpression));
+
+            return task.Result;
         };
 
         return
