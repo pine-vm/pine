@@ -316,8 +316,8 @@ expandEnvWithModulesOrdered environmentBefore newParsedElmModules =
         Err error ->
             Err ("Failed to get declarations from environment: " ++ error)
 
-        Ok environmentBeforeDeclarations ->
-            case separateEnvironmentDeclarations environmentBeforeDeclarations of
+        Ok ( beforeBatchEnvList, beforeBatchDecls ) ->
+            case separateEnvironmentDeclarations beforeBatchDecls of
                 Err err ->
                     Err ("Failed to separate declarations from environment: " ++ err)
 
@@ -331,16 +331,17 @@ expandEnvWithModulesOrdered environmentBefore newParsedElmModules =
                                 separateEnvironmentDeclarationsBefore.modules
                             )
                             newParsedElmModules
+                            []
                     of
                         Err error ->
                             Err error
 
-                        Ok compiledModules ->
+                        Ok newCompiledModules ->
                             let
                                 modulesValues : List ( List String, Pine.Value )
                                 modulesValues =
-                                    Dict.foldl
-                                        (\moduleName moduleStruct aggregate ->
+                                    List.foldr
+                                        (\( moduleName, moduleStruct ) aggregate ->
                                             let
                                                 moduleValue =
                                                     emitModuleValue moduleStruct
@@ -349,30 +350,37 @@ expandEnvWithModulesOrdered environmentBefore newParsedElmModules =
                                                 :: aggregate
                                         )
                                         []
-                                        compiledModules
+                                        newCompiledModules
 
-                                modulesValuesWithFlatNames : List ( String, Pine.Value )
-                                modulesValuesWithFlatNames =
+                                newEnvironmentListEntries =
                                     List.map
                                         (\( moduleName, moduleValue ) ->
-                                            ( String.join "." moduleName, moduleValue )
+                                            Pine.valueFromContextExpansionWithName
+                                                ( String.join "." moduleName, moduleValue )
                                         )
                                         modulesValues
+
+                                newEnvironmentList =
+                                    List.concat
+                                        [ beforeBatchEnvList
+                                        , newEnvironmentListEntries
+                                        ]
                             in
                             Ok
                                 { addedModules = modulesValues
-                                , environment = Pine.environmentFromDeclarations modulesValuesWithFlatNames
+                                , environment = Pine.ListValue newEnvironmentList
                                 }
 
 
 expandEnvWithModulesRecursive :
     Dict.Dict Elm.Syntax.ModuleName.ModuleName ElmModuleInCompilation
     -> List ProjectParsedElmFile
-    -> Result String (Dict.Dict Elm.Syntax.ModuleName.ModuleName ElmModuleInCompilation)
-expandEnvWithModulesRecursive environmentBefore parsedElmModules =
+    -> List ( Elm.Syntax.ModuleName.ModuleName, ElmModuleInCompilation )
+    -> Result String (List ( Elm.Syntax.ModuleName.ModuleName, ElmModuleInCompilation ))
+expandEnvWithModulesRecursive beforeBatchModules parsedElmModules compiledModules =
     case parsedElmModules of
         [] ->
-            Ok environmentBefore
+            Ok (List.reverse compiledModules)
 
         moduleToTranslate :: followingModules ->
             let
@@ -381,12 +389,16 @@ expandEnvWithModulesRecursive environmentBefore parsedElmModules =
 
                 moduleName =
                     Elm.Syntax.Module.moduleName moduleToTranslateDefinition
+
+                availableModules =
+                    List.foldl
+                        (\( compiledModuleName, compiledModule ) aggregate ->
+                            Dict.insert compiledModuleName compiledModule aggregate
+                        )
+                        beforeBatchModules
+                        compiledModules
             in
-            case
-                compileElmModuleIntoNamedExports
-                    environmentBefore
-                    moduleToTranslate
-            of
+            case compileElmModuleIntoNamedExports availableModules moduleToTranslate of
                 Err error ->
                     Err
                         ("Failed to compile elm module '"
@@ -396,14 +408,10 @@ expandEnvWithModulesRecursive environmentBefore parsedElmModules =
                         )
 
                 Ok ( _, moduleValue ) ->
-                    let
-                        nextEnvironment : Dict.Dict Elm.Syntax.ModuleName.ModuleName ElmModuleInCompilation
-                        nextEnvironment =
-                            Dict.insert moduleName moduleValue environmentBefore
-                    in
                     expandEnvWithModulesRecursive
-                        nextEnvironment
+                        beforeBatchModules
                         followingModules
+                        (( moduleName, moduleValue ) :: compiledModules)
 
 
 compileElmModuleIntoNamedExports :
@@ -2905,16 +2913,18 @@ emitChoiceTypeValue : ElmModuleChoiceType -> Pine.Value
 emitChoiceTypeValue choiceType =
     Pine.valueFromContextExpansionWithName
         ( "ChoiceType"
-        , choiceType.tags
-            |> Dict.toList
-            |> List.map
-                (\( tagName, { argumentsCount } ) ->
+        , Pine.ListValue
+            (Dict.foldr
+                (\tagName { argumentsCount } aggregate ->
                     Pine.ListValue
                         [ Pine.valueFromString tagName
                         , Pine.valueFromInt argumentsCount
                         ]
+                        :: aggregate
                 )
-            |> Pine.ListValue
+                []
+                choiceType.tags
+            )
         )
 
 
@@ -2922,9 +2932,8 @@ emitRecordConstructorValue : List String -> Pine.Value
 emitRecordConstructorValue fields =
     Pine.valueFromContextExpansionWithName
         ( "RecordConstructor"
-        , fields
-            |> List.map Pine.valueFromString
-            |> Pine.ListValue
+        , Pine.ListValue
+            (List.map Pine.valueFromString fields)
         )
 
 
@@ -3633,19 +3642,24 @@ separateEnvironmentDeclarations environmentDeclarations =
 
                     Ok aggregate ->
                         if stringStartsWithUpper declNameFlat then
-                            case Result.andThen parseModuleValue (getDeclarationsFromEnvironment declValue) of
+                            case getDeclarationsFromEnvironment declValue of
                                 Err err ->
-                                    Err ("Failed to parse module " ++ declNameFlat ++ ": " ++ err)
+                                    Err ("Failed get decls from env: " ++ err)
 
-                                Ok moduleDeclarations ->
-                                    Ok
-                                        { aggregate
-                                            | modules =
-                                                Dict.insert
-                                                    (String.split "." declNameFlat)
-                                                    ( declValue, moduleDeclarations )
-                                                    aggregate.modules
-                                        }
+                                Ok ( _, declsFromEnv ) ->
+                                    case parseModuleValue declsFromEnv of
+                                        Err err ->
+                                            Err ("Failed to parse module " ++ declNameFlat ++ ": " ++ err)
+
+                                        Ok moduleDeclarations ->
+                                            Ok
+                                                { aggregate
+                                                    | modules =
+                                                        Dict.insert
+                                                            (String.split "." declNameFlat)
+                                                            ( declValue, moduleDeclarations )
+                                                            aggregate.modules
+                                                }
 
                         else
                             Ok
@@ -3658,7 +3672,7 @@ separateEnvironmentDeclarations environmentDeclarations =
             environmentDeclarations
 
 
-getDeclarationsFromEnvironment : Pine.Value -> Result String (Dict.Dict String Pine.Value)
+getDeclarationsFromEnvironment : Pine.Value -> Result String ( List Pine.Value, Dict.Dict String Pine.Value )
 getDeclarationsFromEnvironment environment =
     case environment of
         Pine.BlobValue _ ->
@@ -3668,22 +3682,23 @@ getDeclarationsFromEnvironment environment =
             case
                 Common.resultListMapCombine
                     (\environmentEntry ->
-                        (case environmentEntry of
+                        case environmentEntry of
                             Pine.BlobValue _ ->
-                                Err "Is not a list but a blob"
+                                Err "Failed parse env entry: Is not a list but a blob"
 
                             Pine.ListValue [ nameValue, namedValue ] ->
-                                Pine.stringFromValue nameValue
-                                    |> Result.mapError ((++) "Failed to parse string: ")
-                                    |> Result.map (\name -> ( name, namedValue ))
+                                case Pine.stringFromValue nameValue of
+                                    Err err ->
+                                        Err ("Failed parse env entry: Failed to parse name string: " ++ err)
+
+                                    Ok name ->
+                                        Ok ( name, namedValue )
 
                             Pine.ListValue list ->
                                 Err
-                                    ("Unexpected number of elements in environment entry list: Not 2 but "
+                                    ("Failed parse env entry: Unexpected number of elements in environment entry list: Not 2 but "
                                         ++ String.fromInt (List.length list)
                                     )
-                        )
-                            |> Result.mapError ((++) "Failed to parse environment entry: ")
                     )
                     environmentList
             of
@@ -3692,7 +3707,8 @@ getDeclarationsFromEnvironment environment =
 
                 Ok declarations ->
                     Ok
-                        (Dict.fromList
+                        ( environmentList
+                        , Dict.fromList
                             -- Elm Interactive allows shadowing, so ordering matters here.
                             (List.reverse declarations)
                         )
@@ -3703,9 +3719,12 @@ getDeclarationsFromEnvironment environment =
 parseModuleValue : Dict.Dict String Pine.Value -> Result String ElmModuleInCompilation
 parseModuleValue moduleValues =
     Dict.foldl
-        (\declName declValue ->
-            Result.andThen
-                (\aggregate ->
+        (\declName declValue aggregateResult ->
+            case aggregateResult of
+                Err err ->
+                    Err err
+
+                Ok aggregate ->
                     if stringStartsWithUpper declName then
                         case parseTypeDeclarationFromValueTagged declValue of
                             Err err ->
@@ -3730,7 +3749,6 @@ parseModuleValue moduleValues =
                                         declValue
                                         aggregate.functionDeclarations
                             }
-                )
         )
         (Ok
             { functionDeclarations = Dict.empty
@@ -3756,14 +3774,20 @@ parseTypeDeclarationFromValueTagged value =
                         Ok tagName ->
                             case tagName of
                                 "ChoiceType" ->
-                                    parseChoiceTypeFromValue functionRecord
-                                        |> Result.map ElmModuleChoiceTypeDeclaration
-                                        |> Result.mapError ((++) "Failed to parse choice type: ")
+                                    case parseChoiceTypeFromValue functionRecord of
+                                        Err err ->
+                                            Err ("Failed to parse choice type: " ++ err)
+
+                                        Ok choiceType ->
+                                            Ok (ElmModuleChoiceTypeDeclaration choiceType)
 
                                 "RecordConstructor" ->
-                                    parseRecordConstructorFromValue functionRecord
-                                        |> Result.map ElmModuleRecordTypeDeclaration
-                                        |> Result.mapError ((++) "Failed to parse record constructor: ")
+                                    case parseRecordConstructorFromValue functionRecord of
+                                        Err err ->
+                                            Err ("Failed to parse record constructor: " ++ err)
+
+                                        Ok recordConstructor ->
+                                            Ok (ElmModuleRecordTypeDeclaration recordConstructor)
 
                                 _ ->
                                     Err ("Unknown type tag: " ++ tagName)
@@ -3787,20 +3811,20 @@ parseChoiceTypeFromValue value =
                                 Err "Is not a list but a blob"
 
                             Pine.ListValue [ tagNameValue, argumentCountValue ] ->
-                                Pine.stringFromValue tagNameValue
-                                    |> Result.mapError ((++) "Failed to parse string: ")
-                                    |> Result.andThen
-                                        (\tagName ->
-                                            case Pine.intFromValue argumentCountValue of
-                                                Err err ->
-                                                    Err ("Failed to parse int: " ++ err)
+                                case Pine.stringFromValue tagNameValue of
+                                    Err err ->
+                                        Err ("Failed to parse string: " ++ err)
 
-                                                Ok argumentsCount ->
-                                                    Ok
-                                                        ( tagName
-                                                        , { argumentsCount = argumentsCount }
-                                                        )
-                                        )
+                                    Ok tagName ->
+                                        case Pine.intFromValue argumentCountValue of
+                                            Err err ->
+                                                Err ("Failed to parse int: " ++ err)
+
+                                            Ok argumentsCount ->
+                                                Ok
+                                                    ( tagName
+                                                    , { argumentsCount = argumentsCount }
+                                                    )
 
                             Pine.ListValue list ->
                                 Err

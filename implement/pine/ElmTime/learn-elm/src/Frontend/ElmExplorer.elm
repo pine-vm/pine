@@ -348,7 +348,7 @@ parseElmExplorerNodeValue nodeCategory nodeValue =
                 Err error ->
                     Err ("Failed to get declarations from environment: " ++ error)
 
-                Ok environmentBeforeDeclarations ->
+                Ok ( _, environmentBeforeDeclarations ) ->
                     case ElmCompiler.separateEnvironmentDeclarations environmentBeforeDeclarations of
                         Err err ->
                             Err ("Failed to separate declarations from environment: " ++ err)
@@ -377,7 +377,7 @@ parseElmExplorerNodeValue nodeCategory nodeValue =
         ElmModuleNode ->
             nodeValue
                 |> ElmCompiler.getDeclarationsFromEnvironment
-                |> Result.andThen ElmCompiler.parseModuleValue
+                |> Result.andThen (Tuple.second >> ElmCompiler.parseModuleValue)
                 |> Result.map
                     (\parsedModule ->
                         { children =
