@@ -187,11 +187,14 @@ view state =
                     Element.text "Loading..."
 
                 Success fullText ->
-                    [ [ "I received the following content from the backend:" |> Html.text ]
-                        |> Html.span []
-                    , Html.pre [ HA.style "white-space" "pre-wrap" ] [ Html.text fullText ]
-                    ]
-                        |> Html.div []
+                    Html.div []
+                        [ Html.span
+                            []
+                            [ Html.text "I received the following content from the backend:" ]
+                        , Html.pre
+                            [ HA.style "white-space" "pre-wrap" ]
+                            [ Html.text fullText ]
+                        ]
                         |> Element.html
 
         ( pageHeading, selectedPageContent ) =
@@ -203,27 +206,29 @@ view state =
                     ( "About", pageContentFromPageState pageState )
 
                 NotFound url ->
-                    ( "Not Found", ("I found nothing at " ++ url) |> Element.text )
+                    ( "Not Found"
+                    , Element.text ("I found nothing at " ++ url)
+                    )
 
         body =
             [ Frontend.Visuals.globalCssStyleHtmlElement
-            , [ viewNavigation
-                    |> Element.el [ Element.padding 8 ]
-              , pageHeading
-                    |> Element.text
-                    |> Element.el
-                        [ Element.Region.heading 1
-                        , Element.Font.size 24
-                        ]
-              , viewGuide
-              , selectedPageContent
-              ]
-                |> Element.column
-                    [ Element.width Element.fill
-                    , Element.height Element.fill
-                    , Element.padding 16
-                    , Element.spacing 16
+            , Element.column
+                [ Element.width Element.fill
+                , Element.height Element.fill
+                , Element.padding 16
+                , Element.spacing 16
+                ]
+                [ Element.el
+                    [ Element.padding 8 ]
+                    viewNavigation
+                , Element.el
+                    [ Element.Region.heading 1
+                    , Element.Font.size 24
                     ]
+                    (Element.text pageHeading)
+                , viewGuide
+                , selectedPageContent
+                ]
                 |> Element.layout
                     [ Element.Font.size 16
                     , Element.Font.family
@@ -249,7 +254,13 @@ viewNavigation =
     [ NavigateToHome, NavigateToAbout ]
         |> List.map
             (\offeredPage ->
-                [ [ offeredPage |> titleAndUrlFromOfferedPage |> Tuple.first |> Html.text ] |> htmlLinkToPage offeredPage ]
+                [ [ offeredPage
+                        |> titleAndUrlFromOfferedPage
+                        |> Tuple.first
+                        |> Html.text
+                  ]
+                    |> htmlLinkToPage offeredPage
+                ]
                     |> Html.span [ HA.style "margin" "4pt" ]
             )
         |> Html.div []
@@ -259,11 +270,11 @@ viewNavigation =
 htmlLinkToPage : OfferedPage -> (List (Html.Html Event) -> Html.Html Event)
 htmlLinkToPage page =
     let
-        url =
-            page |> titleAndUrlFromOfferedPage |> Tuple.second
+        ( _, url ) =
+            titleAndUrlFromOfferedPage page
 
         inputAttributes =
-            case url |> Url.fromString of
+            case Url.fromString url of
                 Nothing ->
                     []
 

@@ -31,13 +31,16 @@ subscriptions _ =
     }
 
 
-updateForHttpRequestEvent : Platform.WebService.HttpRequestEventStruct -> State -> ( State, Platform.WebService.Commands State )
+updateForHttpRequestEvent :
+    Platform.WebService.HttpRequestEventStruct
+    -> State
+    -> ( State, Platform.WebService.Commands State )
 updateForHttpRequestEvent httpRequestEvent stateBefore =
     let
         state =
             { stateBefore
                 | httpRequestsCount = stateBefore.httpRequestsCount + 1
-                , lastHttpRequests = httpRequestEvent :: stateBefore.lastHttpRequests |> List.take 4
+                , lastHttpRequests = httpRequestEvent :: List.take 4 stateBefore.lastHttpRequests
             }
 
         httpResponse =
@@ -48,7 +51,8 @@ updateForHttpRequestEvent httpRequestEvent stateBefore =
                     |> Maybe.withDefault False
             then
                 { statusCode = 200
-                , bodyAsBase64 = Just CompilationInterface.ElmMake.elm_make____src_Frontend_Main_elm.debug.base64
+                , bodyAsBase64 =
+                    Just CompilationInterface.ElmMake.elm_make____src_Frontend_Main_elm.debug.base64
                 , headersToAdd =
                     [ { name = "Content-Type", values = [ "text/html" ] }
                     ]
@@ -59,7 +63,9 @@ updateForHttpRequestEvent httpRequestEvent stateBefore =
                 , bodyAsBase64 =
                     [ CompilationInterface.SourceFiles.file____README_md.utf8
                     , ""
-                    , "This backend process received " ++ (state.httpRequestsCount |> String.fromInt) ++ " HTTP requests."
+                    , "This backend process received "
+                        ++ String.fromInt state.httpRequestsCount
+                        ++ " HTTP requests."
                     ]
                         |> String.join "\n"
                         |> Bytes.Encode.string
@@ -79,7 +85,7 @@ updateForHttpRequestEvent httpRequestEvent stateBefore =
 
 urlLeadsToFrontendHtmlDocument : Url.Url -> Bool
 urlLeadsToFrontendHtmlDocument url =
-    not (url.path == "/api" || (url.path |> String.startsWith "/api/"))
+    not (url.path == "/api" || String.startsWith "/api/" url.path)
 
 
 initState : State
