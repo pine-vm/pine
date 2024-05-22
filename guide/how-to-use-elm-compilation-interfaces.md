@@ -8,7 +8,7 @@ There are dedicated Elm compilation interfaces for the following use cases:
 + Invoke an `elm make` command to generate JavaScript or HTML documents.
 + Integrate files from other sources into the compilation and build process.
 
-### `CompilationInterface.GenerateJsonConverters` Elm Module
+### `CompilationInterface.GenerateJsonConverters` Module
 
 This module provides automatically generated JSON encoders and decoders for Elm types.
 
@@ -31,15 +31,13 @@ jsonDecodeMessageToClient =
 ```
 
 
-### `CompilationInterface.SourceFiles` Elm Module
+### `CompilationInterface.SourceFiles` Module
 
 The `SourceFiles` module provides access to the source files, regardless of their type or other usage.
 
 In addition to individual files, this module also supports accessing the contents of whole directories.
 
 By adding a declaration to this module, we can pick a source file and read its contents. The compilation step for this module happens before the one for the front-end. Therefore the source files are available to both front-end and back-end apps.
-
-The [app 'Elm Editor' uses this interface](https://github.com/pine-vm/pine/blob/67658db8f7e2ed50a9dd2a3ffcfaba2e20c7615d/implement/example-apps/elm-editor/src/CompilationInterface/SourceFiles.elm) to get the contents of various files in the app code directory. The app uses some of these files in the front-end and some in the back-end.
 
 ```Elm
 module CompilationInterface.SourceFiles exposing (..)
@@ -82,8 +80,11 @@ The compilation will fail if this module contains a name that matches more than 
 
 Using the record type on a function declaration, we can choose from the encodings `bytes`, `base64` and `utf8`.
 
+For some examples of typical usages, see <https://github.com/pine-vm/pine/blob/c764a804d90f1fa1002e1690b04487f7c06f765e/implement/example-apps/elm-editor/src/CompilationInterface/SourceFiles.elm>
 
-### `CompilationInterface.ElmMake` Elm Module
+In the example module linked above, we use this interface to get the contents of various files in the app code directory. Some of these files are used in the front end, and some are used in the back end.
+
+### `CompilationInterface.ElmMake` Module
 
 The `ElmMake` module provides an interface to run the `elm make` command and use the output file value in our Elm app.
 For each function declaration in this module, the compiler replaces the declaration with the output(s) from `elm  make`.
@@ -137,7 +138,7 @@ The tree we modeled with this record type has two leaves:
 + `debug.javascript.base64 : String`
 + `javascript.base64 : String`
 
-Backend apps often use the output from `elm make` send the frontend to web browsers with HTTP responses. We can also see this in the [example app](https://github.com/pine-vm/pine/blob/67658db8f7e2ed50a9dd2a3ffcfaba2e20c7615d/implement/example-apps/docker-image-default-app/src/Backend/Main.elm#L43-L55) mentioned earlier:
+Backend apps often use the output from `elm make` send the frontend to web browsers with HTTP responses. We can also see this in the [example app](https://github.com/pine-vm/pine/blob/c764a804d90f1fa1002e1690b04487f7c06f765e/implement/example-apps/docker-image-default-app/src/Backend/Main.elm#L46-L61) mentioned earlier:
 
 ```Elm
     httpResponse =
@@ -148,7 +149,8 @@ Backend apps often use the output from `elm make` send the frontend to web brows
                 |> Maybe.withDefault False
         then
             { statusCode = 200
-            , bodyAsBase64 = Just CompilationInterface.ElmMake.elm_make____src_Frontend_Main_elm.debug.base64
+            , bodyAsBase64 =
+                Just CompilationInterface.ElmMake.elm_make____src_Frontend_Main_elm.debug.base64
             , headersToAdd =
                 [ { name = "Content-Type", values = [ "text/html" ] }
                 ]
