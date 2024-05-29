@@ -226,11 +226,8 @@ public class DynamicPGOShare : IDisposable
             };
         }
 
-        var analysisParseCache = new PineVMCache();
-
         var profilingVM =
             new ProfilingPineVM(
-                analysisParseCache: analysisParseCache,
                 overrideParseExpression: overrideParseExprIncludeCompiled,
                 overrideEvaluateExpression: OverrideEvalExprDelegate);
 

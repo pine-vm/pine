@@ -54,14 +54,14 @@ public class ProfilingPineVM
     }
 
     public ProfilingPineVM(
-        PineVMCache analysisParseCache,
         PineVM.OverrideParseExprDelegate? overrideParseExpression = null,
         PineVM.OverrideEvalExprDelegate? overrideEvaluateExpression = null)
     {
         ConcurrentDictionary<Expression, CodeAnalysis.ExprAnalysis> exprAnalysisMutatedCache = new();
 
         PineVM.ParseExprDelegate parseExpressionFromValue =
-            analysisParseCache.BuildParseExprDelegate(Pine.PineVM.PineVM.ParseExpressionFromValueDefault);
+            overrideParseExpression?.Invoke(Pine.PineVM.PineVM.ParseExpressionFromValueDefault) ??
+            Pine.PineVM.PineVM.ParseExpressionFromValueDefault;
 
         PineVM =
             new PineVM(

@@ -315,7 +315,7 @@ public class InteractiveSessionPine : IInteractiveSession
 
         var profilingVM =
             new ProfilingPineVM(
-                analysisParseCache: cache,
+                overrideParseExpression: cache.BuildParseExprDelegate,
                 overrideEvaluateExpression: cache.BuildEvalExprDelegate);
 
         var profilingSession = new InteractiveSessionPine(
