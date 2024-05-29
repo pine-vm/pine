@@ -314,7 +314,9 @@ public class InteractiveSessionPine : IInteractiveSession
         var cache = new PineVMCache();
 
         var profilingVM =
-            new ProfilingPineVM(overrideEvaluateExpression: cache.BuildEvalExprDelegate);
+            new ProfilingPineVM(
+                analysisParseCache: cache,
+                overrideEvaluateExpression: cache.BuildEvalExprDelegate);
 
         var profilingSession = new InteractiveSessionPine(
             compileElmProgramCodeFiles: compileElmProgramCodeFiles,

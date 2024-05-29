@@ -310,7 +310,8 @@ public class CodeAnalysis
         IReadOnlyList<ExprUsageAnalysisStackEntry> stack,
         Expression expression,
         PineValue environment,
-        ConcurrentDictionary<Expression, ExprAnalysis> mutatedCache)
+        ConcurrentDictionary<Expression, ExprAnalysis> mutatedCache,
+        PineVM.ParseExprDelegate parseExpression)
     {
         var expressionId =
             CompilePineToDotNet.CompileToCSharp.CompiledExpressionId(expression)
@@ -356,7 +357,7 @@ public class CodeAnalysis
                     ?
                     null
                     :
-                    PineVM.ParseExpressionFromValueDefault(expressionValue)
+                    parseExpression(expressionValue)
                     .WithDefault(null);
 
                 return
@@ -474,21 +475,23 @@ public class CodeAnalysis
                 int parseCount = 0;
 
                 childEnvValue =
-                new PineVM(overrideEvaluateExpression: defaultHandler =>
-                new PineVM.EvalExprDelegate((expr, env) =>
-                {
-                    if (expr is Expression.ParseAndEvalExpression)
+                new PineVM(
+                    overrideParseExpression: _ => parseExpression,
+                    overrideEvaluateExpression: defaultHandler =>
+                    new PineVM.EvalExprDelegate((expr, env) =>
                     {
-                        ++parseCount;
-                    }
+                        if (expr is Expression.ParseAndEvalExpression)
+                        {
+                            ++parseCount;
+                        }
 
-                    if (100 < parseCount)
-                    {
-                        throw new Exception("Too many parsing steps: " + parseCount);
-                    }
+                        if (100 < parseCount)
+                        {
+                            throw new TooManyParsingStepsException("Too many parsing steps: " + parseCount);
+                        }
 
-                    return defaultHandler.Invoke(expr, env);
-                }))
+                        return defaultHandler.Invoke(expr, env);
+                    }))
                 /*
                  * Evaluation of the environment expression can fail here, since we are looking into all branches,
                  * including ones that are not reachable in the actual execution.
@@ -520,7 +523,8 @@ public class CodeAnalysis
                     nextStack,
                     parsedChildExpr,
                     childEnvValue,
-                    mutatedCache: mutatedCache);
+                    mutatedCache: mutatedCache,
+                    parseExpression: parseExpression);
 
             if (childEnvBeforeMapping.RootEnvClass is not ExpressionEnvClass.ConstrainedEnv childConstrainedEnv)
             {
@@ -629,6 +633,10 @@ public class CodeAnalysis
                     mergedEnvClass,
                     ExprOnRecursionPath: mergedExprOnRecursionPath,
                     usagesCompleteForRecursion));
+    }
+
+    private class TooManyParsingStepsException(string message) : Exception(message)
+    {
     }
 
     public static Func<IReadOnlyList<int>, ExprMappedToParentEnv?> BuildPathMapFromChildToParentEnv(

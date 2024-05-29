@@ -54,17 +54,14 @@ public class ProfilingPineVM
     }
 
     public ProfilingPineVM(
+        PineVMCache analysisParseCache,
         PineVM.OverrideParseExprDelegate? overrideParseExpression = null,
         PineVM.OverrideEvalExprDelegate? overrideEvaluateExpression = null)
     {
-        ConcurrentDictionary<PineValue, Result<string, Expression>> parseExpressionFromValueCache = new();
-
         ConcurrentDictionary<Expression, CodeAnalysis.ExprAnalysis> exprAnalysisMutatedCache = new();
 
-        Result<string, Expression> ParseExpressionFromValue(PineValue value) =>
-            parseExpressionFromValueCache.GetOrAdd(
-                value,
-                valueFactory: Pine.PineVM.PineVM.ParseExpressionFromValueDefault);
+        PineVM.ParseExprDelegate parseExpressionFromValue =
+            analysisParseCache.BuildParseExprDelegate(Pine.PineVM.PineVM.ParseExpressionFromValueDefault);
 
         PineVM =
             new PineVM(
@@ -87,7 +84,7 @@ public class ProfilingPineVM
                         {
                             return
                             defaultHandler(parseAndEval.expression, environment)
-                            .AndThen(innerExprValue => ParseExpressionFromValue(innerExprValue))
+                            .AndThen(innerExprValue => parseExpressionFromValue(innerExprValue))
                             .AndThen(parsedInnerExpr => defaultHandler(parseAndEval.environment, environment)
                             .Map(innerEnvValue =>
                             {
@@ -99,7 +96,8 @@ public class ProfilingPineVM
                                         AnalyzeExpressionUsage(
                                             parsedInnerExpr,
                                             innerEnvValue,
-                                            exprAnalysisMutatedCache);
+                                            exprAnalysisMutatedCache,
+                                            parseExpression: parseExpressionFromValue);
 
                                 }
                                 finally
@@ -126,14 +124,16 @@ public class ProfilingPineVM
     public static IReadOnlyList<ExpressionUsageAnalysis> AnalyzeExpressionUsage(
         Expression expression,
         PineValue environment,
-        ConcurrentDictionary<Expression, CodeAnalysis.ExprAnalysis> exprAnalysisMutatedCache)
+        ConcurrentDictionary<Expression, CodeAnalysis.ExprAnalysis> exprAnalysisMutatedCache,
+        PineVM.ParseExprDelegate parseExpression)
     {
         var analysisResult =
             CodeAnalysis.AnalyzeExpressionUsageRecursive(
                 [],
                 expression,
                 environment,
-                mutatedCache: exprAnalysisMutatedCache);
+                mutatedCache: exprAnalysisMutatedCache,
+                parseExpression: parseExpression);
 
         var rootConstraintId =
             analysisResult.RootEnvClass is not ExpressionEnvClass.ConstrainedEnv constrained

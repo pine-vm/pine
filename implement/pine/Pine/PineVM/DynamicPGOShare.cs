@@ -226,9 +226,13 @@ public class DynamicPGOShare : IDisposable
             };
         }
 
-        var profilingVM = new ProfilingPineVM(
-            overrideParseExpression: overrideParseExprIncludeCompiled,
-            overrideEvaluateExpression: OverrideEvalExprDelegate);
+        var analysisParseCache = new PineVMCache();
+
+        var profilingVM =
+            new ProfilingPineVM(
+                analysisParseCache: analysisParseCache,
+                overrideParseExpression: overrideParseExprIncludeCompiled,
+                overrideEvaluateExpression: OverrideEvalExprDelegate);
 
         var evalTask =
             Task.Run(() => profilingVM.PineVM.EvaluateExpression(expression, environment));
