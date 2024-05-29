@@ -413,10 +413,12 @@ public class CodeAnalysis
         {
             mutatedCache.AddOrUpdate(
                 expression,
+                addValueFactory: _ =>
                 new ExprAnalysis(
                     EnvDict: ImmutableDictionary.CreateRange(
                         [new KeyValuePair<PineValue, RecursiveAnalysisResult>(environment, recursiveAnalysisResult)])),
-                (expr, oldAnalysis) => new ExprAnalysis(oldAnalysis.EnvDict.SetItem(environment, recursiveAnalysisResult)));
+                updateValueFactory: (expr, oldAnalysis) =>
+                new ExprAnalysis(oldAnalysis.EnvDict.SetItem(environment, recursiveAnalysisResult)));
 
             return recursiveAnalysisResult;
         }
