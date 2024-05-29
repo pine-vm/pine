@@ -146,6 +146,8 @@ public class PineVM : IPineVM
         return PineValue.List(listItems);
     }
 
+    private static readonly System.Threading.AsyncLocal<int> evalDepth = new();
+
     public Result<string, PineValue> EvaluateParseAndEvalExpression(
         Expression.ParseAndEvalExpression parseAndEval,
         PineValue environment)
@@ -170,11 +172,46 @@ public class PineVM : IPineVM
             return evalResult;
             */
 
-            var task =
-                System.Threading.Tasks.Task.Run(() => EvaluateExpression(environment: environmentValue, expression: functionExpression));
+            var evalDelegate =
+                new Func<Result<string, PineValue>>(
+                    () => EvaluateExpression(environment: environmentValue, expression: functionExpression));
 
-            return task.Result;
-        };
+            evalDepth.Value++;
+
+            try
+            {
+                if (evalDepth.Value < 16)
+                {
+                    /*
+                     * As long as we don't risk the stack becoming too large, reuse the same thread/stack.
+                     * */
+                    return evalDelegate();
+                }
+
+                /*
+                 * Specify a cancellation token to prevent the Task framework from attempting synchronous execution.
+                 * From the documentation on Task:
+                 * > We will attempt inline execution only if an infinite wait was requested
+                 * > [...]
+                 * Source: https://github.com/dotnet/runtime/blob/087e15321bb712ef6fe8b0ba6f8bd12facf92629/src/libraries/System.Private.CoreLib/src/System/Threading/Tasks/Task.cs#L2997-L3008
+                 * */
+
+                var cancellationTokenSource = new System.Threading.CancellationTokenSource();
+
+                var task =
+                    System.Threading.Tasks.Task.Run(
+                        function: evalDelegate,
+                        cancellationToken: cancellationTokenSource.Token);
+
+                task.Wait(cancellationToken: cancellationTokenSource.Token);
+
+                return task.Result;
+            }
+            finally
+            {
+                evalDepth.Value--;
+            }
+        }
 
         return
             EvaluateExpression(parseAndEval.environment, environment) switch
