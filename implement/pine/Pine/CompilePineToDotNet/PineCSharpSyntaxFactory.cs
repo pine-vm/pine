@@ -110,6 +110,10 @@ public static class PineCSharpSyntaxFactory
 
     public const string ValueFromPathInValueDeclarationName = "ValueFromPathInValue";
 
+    public const string IsBlobDeclarationName = "IsBlob";
+
+    public const string IsListDeclarationName = "IsList";
+
     public static readonly MethodDeclarationSyntax ValueFromPathInValueDeclaration =
         SyntaxFactory.MethodDeclaration(
             SyntaxFactory.NullableType(
@@ -118,9 +122,9 @@ public static class PineCSharpSyntaxFactory
                 .WithModifiers(
                     SyntaxFactory.TokenList(
                         [
-                            SyntaxFactory.Token(SyntaxKind.PublicKeyword),
-                    SyntaxFactory.Token(SyntaxKind.StaticKeyword)
-                ]))
+                        SyntaxFactory.Token(SyntaxKind.PublicKeyword),
+                        SyntaxFactory.Token(SyntaxKind.StaticKeyword)
+                        ]))
                 .WithParameterList(
                     SyntaxFactory.ParameterList(
                         SyntaxFactory.SeparatedList<ParameterSyntax>(
@@ -247,6 +251,64 @@ public static class PineCSharpSyntaxFactory
                                                                                 SyntaxKind.NumericLiteralExpression,
                                                                 SyntaxFactory.Literal(1))))))))}))))));
 
+    public static readonly MethodDeclarationSyntax IsBlobDeclaration =
+        SyntaxFactory.MethodDeclaration(
+            SyntaxFactory.PredefinedType(
+                SyntaxFactory.Token(SyntaxKind.BoolKeyword)),
+            SyntaxFactory.Identifier(IsBlobDeclarationName))
+        .WithModifiers(
+            SyntaxFactory.TokenList(
+                [
+                    SyntaxFactory.Token(SyntaxKind.PublicKeyword),
+                    SyntaxFactory.Token(SyntaxKind.StaticKeyword)
+                ]))
+        .WithParameterList(
+            SyntaxFactory.ParameterList(
+                SyntaxFactory.SingletonSeparatedList<ParameterSyntax>(
+                    SyntaxFactory.Parameter(
+                        SyntaxFactory.Identifier("pineValue"))
+                    .WithType(
+                        SyntaxFactory.IdentifierName("PineValue")))))
+        .WithExpressionBody(
+            SyntaxFactory.ArrowExpressionClause(
+                SyntaxFactory.BinaryExpression(
+                    SyntaxKind.IsExpression,
+                    SyntaxFactory.IdentifierName("pineValue"),
+                    SyntaxFactory.QualifiedName(
+                        SyntaxFactory.IdentifierName(nameof(PineValue)),
+                        SyntaxFactory.IdentifierName(nameof(PineValue.BlobValue))))))
+        .WithSemicolonToken(
+            SyntaxFactory.Token(SyntaxKind.SemicolonToken));
+
+    public static readonly MethodDeclarationSyntax IsListDeclaration =
+        SyntaxFactory.MethodDeclaration(
+            SyntaxFactory.PredefinedType(
+                SyntaxFactory.Token(SyntaxKind.BoolKeyword)),
+            SyntaxFactory.Identifier(IsListDeclarationName))
+        .WithModifiers(
+            SyntaxFactory.TokenList(
+                [
+                    SyntaxFactory.Token(SyntaxKind.PublicKeyword),
+                    SyntaxFactory.Token(SyntaxKind.StaticKeyword)
+                ]))
+        .WithParameterList(
+            SyntaxFactory.ParameterList(
+                SyntaxFactory.SingletonSeparatedList<ParameterSyntax>(
+                    SyntaxFactory.Parameter(
+                        SyntaxFactory.Identifier("pineValue"))
+                    .WithType(
+                        SyntaxFactory.IdentifierName("PineValue")))))
+        .WithExpressionBody(
+            SyntaxFactory.ArrowExpressionClause(
+                SyntaxFactory.BinaryExpression(
+                    SyntaxKind.IsExpression,
+                    SyntaxFactory.IdentifierName("pineValue"),
+                    SyntaxFactory.QualifiedName(
+                        SyntaxFactory.IdentifierName(nameof(PineValue)),
+                        SyntaxFactory.IdentifierName(nameof(PineValue.ListValue))))))
+        .WithSemicolonToken(
+            SyntaxFactory.Token(SyntaxKind.SemicolonToken));
+
     public static StatementSyntax ConsoleWriteLineForLiteralString(string logEntry) =>
         SyntaxFactory.ExpressionStatement(
             SyntaxFactory.InvocationExpression(
@@ -357,6 +419,12 @@ public static class PineCSharpSyntaxFactory
                     PineValueEmptyListSyntax));
     }
 
+    public static bool IsList(PineValue pineValue) =>
+        pineValue is PineValue.ListValue;
+
+    public static bool IsBlob(PineValue pineValue) =>
+        pineValue is PineValue.BlobValue;
+
     public static ExpressionSyntax BuildCSharpExpressionToGetItemFromPathOrNull(
         ExpressionSyntax compositionExpr,
         IReadOnlyList<int> path)
@@ -385,6 +453,36 @@ public static class PineCSharpSyntaxFactory
                                             SyntaxKind.NumericLiteralExpression,
                                             SyntaxFactory.Literal(pathItem))))
                                         .Intersperse(SyntaxFactory.Token(SyntaxKind.CommaToken)))))})));
+    }
+
+    public static ExpressionSyntax BuildCSharpExpressionToCheckIsBlob(
+        ExpressionSyntax compositionExpr)
+    {
+        return
+            SyntaxFactory.InvocationExpression(
+                SyntaxFactory.IdentifierName(IsBlobDeclarationName))
+            .WithArgumentList(
+                SyntaxFactory.ArgumentList(
+                    SyntaxFactory.SeparatedList<ArgumentSyntax>(
+                        new SyntaxNodeOrToken[]
+                        {
+                            SyntaxFactory.Argument(compositionExpr)
+                        })));
+    }
+
+    public static ExpressionSyntax BuildCSharpExpressionToCheckIsList(
+        ExpressionSyntax compositionExpr)
+    {
+        return
+            SyntaxFactory.InvocationExpression(
+                SyntaxFactory.IdentifierName(IsListDeclarationName))
+            .WithArgumentList(
+                SyntaxFactory.ArgumentList(
+                    SyntaxFactory.SeparatedList<ArgumentSyntax>(
+                        new SyntaxNodeOrToken[]
+                        {
+                            SyntaxFactory.Argument(compositionExpr)
+                        })));
     }
 
     public static QualifiedNameSyntax EvalExprDelegateTypeSyntax =>

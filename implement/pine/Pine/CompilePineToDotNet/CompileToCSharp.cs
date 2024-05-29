@@ -469,6 +469,8 @@ public partial class CompileToCSharp
                                     ,
                                         .. compiledExpressionsMemberDeclarations.Cast<MemberDeclarationSyntax>()
                                         , PineCSharpSyntaxFactory.ValueFromPathInValueDeclaration
+                                        , PineCSharpSyntaxFactory.IsBlobDeclaration
+                                        , PineCSharpSyntaxFactory.IsListDeclaration
                                     ,
                                         .. staticFieldsDeclarations])),
                         UsingDirectives: usingDirectives));
@@ -1305,7 +1307,7 @@ public partial class CompileToCSharp
         ];
     }
 
-    public static Result<string, (IReadOnlyList<ArgumentSyntax> argumentList, CompiledExpressionDependencies argumentsDeps, ImmutableDictionary<PineVM.Expression, LetBinding> argumentsBindings)>
+    public static Result<string, (IReadOnlyList<ArgumentSyntax> argumentList, CompiledExpressionDependencies argumentsDeps, ImmutableDictionary<Expression, LetBinding> argumentsBindings)>
         ComposeArgumentList(
         ExpressionCompilationEnvironment parentEnv,
         Expression invocationEnvExpr,

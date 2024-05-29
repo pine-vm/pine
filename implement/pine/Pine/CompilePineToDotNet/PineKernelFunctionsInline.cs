@@ -19,31 +19,8 @@ public class PineKernelFunctionsInline
                 Expression.ListExpression argumentList =>
                 argumentList.List switch
                 {
-                    [var firstArgument, var secondArgument] =>
-                    CompileToCSharp.CompileToCSharpExpression(
-                        firstArgument,
-                        compilationEnv,
-                        createLetBindingsForCse: false)
-                    .AndThen(
-                        compileFirstArgOk =>
-                        CompileToCSharp.CompileToCSharpExpression(
-                            secondArgument,
-                            compilationEnv,
-                            createLetBindingsForCse: false)
-                        .Map(compileSecondArgOk =>
-                        compileFirstArgOk
-                        .MapOrAndThen(
-                            compilationEnv,
-                            firstArgCs =>
-                            compileSecondArgOk
-                            .Map(
-                                compilationEnv,
-                                secondArgCs =>
-                                PineValueFromBoolExpression(
-                                    SyntaxFactory.BinaryExpression(
-                                        SyntaxKind.EqualsExpression,
-                                        firstArgCs,
-                                        secondArgCs)))))),
+                [var firstArgument, var secondArgument] =>
+                TryInlineKernelFunction_Equal_two_args(firstArgument, secondArgument, compilationEnv),
 
                     _ =>
                     null
@@ -52,6 +29,93 @@ public class PineKernelFunctionsInline
                 _ =>
                 null
             };
+    }
+
+    public static Result<string, CompiledExpression>? TryInlineKernelFunction_Equal_two_args(
+        Expression firstArgument,
+        Expression secondArgument,
+        ExpressionCompilationEnvironment compilationEnv)
+    {
+        if (IsKernelAppTakingZeroFrom(firstArgument) is Expression firstArgumentTakenZero)
+        {
+            if (secondArgument == new Expression.LiteralExpression(PineValue.EmptyBlob))
+            {
+                return
+                    CompileToCSharp.CompileToCSharpExpression(
+                        firstArgumentTakenZero,
+                        compilationEnv,
+                        createLetBindingsForCse: false)
+                    .Map(firstArgumentTakenZeroCompiled =>
+                    firstArgumentTakenZeroCompiled
+                    .Map(
+                        environment: compilationEnv,
+                        firstArgumentTakenZeroCompiledOk =>
+                        PineValueFromBoolExpression(
+                            PineCSharpSyntaxFactory.BuildCSharpExpressionToCheckIsBlob(firstArgumentTakenZeroCompiledOk))));
+            }
+
+            if (secondArgument == new Expression.LiteralExpression(PineValue.EmptyList))
+            {
+                return
+                    CompileToCSharp.CompileToCSharpExpression(
+                        firstArgumentTakenZero,
+                        compilationEnv,
+                        createLetBindingsForCse: false)
+                    .Map(firstArgumentTakenZeroCompiled =>
+                    firstArgumentTakenZeroCompiled
+                    .Map(
+                        environment: compilationEnv,
+                        firstArgumentTakenZeroCompiledOk =>
+                        PineValueFromBoolExpression(
+                            PineCSharpSyntaxFactory.BuildCSharpExpressionToCheckIsList(firstArgumentTakenZeroCompiledOk))));
+            }
+        }
+
+        return
+            CompileToCSharp.CompileToCSharpExpression(
+                firstArgument,
+                compilationEnv,
+                createLetBindingsForCse: false)
+            .AndThen(
+                compileFirstArgOk =>
+                CompileToCSharp.CompileToCSharpExpression(
+                    secondArgument,
+                    compilationEnv,
+                    createLetBindingsForCse: false)
+                .Map(compileSecondArgOk =>
+                compileFirstArgOk
+                .MapOrAndThen(
+                    compilationEnv,
+                    firstArgCs =>
+                    compileSecondArgOk
+                    .Map(
+                        compilationEnv,
+                        secondArgCs =>
+                        PineValueFromBoolExpression(
+                            SyntaxFactory.BinaryExpression(
+                                SyntaxKind.EqualsExpression,
+                                firstArgCs,
+                                secondArgCs))))));
+    }
+
+    public static Expression? IsKernelAppTakingZeroFrom(Expression expression)
+    {
+        if (expression is not Expression.KernelApplicationExpression kernelApp)
+            return null;
+
+        if (kernelApp.functionName is not nameof(KernelFunction.take))
+            return null;
+
+        if (kernelApp.argument is not Expression.ListExpression takeArgumentList)
+            return null;
+
+        if (takeArgumentList.List.Length is not 2)
+            return null;
+
+        if (takeArgumentList.List[0] != new Expression.LiteralExpression(PineValueAsInteger.ValueFromSignedInteger(0)))
+            return null;
+
+        return takeArgumentList.List[1];
     }
 
     public static Result<string, CompiledExpression>? TryInlineKernelFunction_Length(
