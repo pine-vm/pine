@@ -50,7 +50,7 @@ public class PineKernelFunctionsInline
                     .Map(
                         environment: compilationEnv,
                         firstArgumentTakenZeroCompiledOk =>
-                        PineValueFromBoolExpression(
+                        PineCSharpSyntaxFactory.PineValueFromBoolExpression(
                             PineCSharpSyntaxFactory.BuildCSharpExpressionToCheckIsBlob(firstArgumentTakenZeroCompiledOk))));
             }
 
@@ -66,7 +66,7 @@ public class PineKernelFunctionsInline
                     .Map(
                         environment: compilationEnv,
                         firstArgumentTakenZeroCompiledOk =>
-                        PineValueFromBoolExpression(
+                        PineCSharpSyntaxFactory.PineValueFromBoolExpression(
                             PineCSharpSyntaxFactory.BuildCSharpExpressionToCheckIsList(firstArgumentTakenZeroCompiledOk))));
             }
         }
@@ -91,7 +91,7 @@ public class PineKernelFunctionsInline
                     .Map(
                         compilationEnv,
                         secondArgCs =>
-                        PineValueFromBoolExpression(
+                        PineCSharpSyntaxFactory.PineValueFromBoolExpression(
                             SyntaxFactory.BinaryExpression(
                                 SyntaxKind.EqualsExpression,
                                 firstArgCs,
@@ -350,23 +350,6 @@ public class PineKernelFunctionsInline
                         SwitchExpressionArmDefaultToPineValueEmptyList
                     }));
     }
-
-    public static ExpressionSyntax PineValueFromBoolExpression(ExpressionSyntax expressionSyntax) =>
-        SyntaxFactory.InvocationExpression(
-            SyntaxFactory.MemberAccessExpression(
-                SyntaxKind.SimpleMemberAccessExpression,
-                SyntaxFactory.MemberAccessExpression(
-                    SyntaxKind.SimpleMemberAccessExpression,
-                    SyntaxFactory.MemberAccessExpression(
-                        SyntaxKind.SimpleMemberAccessExpression,
-                        SyntaxFactory.IdentifierName("Pine"),
-                        SyntaxFactory.IdentifierName("PineVM")),
-                    SyntaxFactory.IdentifierName("PineVM")),
-                SyntaxFactory.IdentifierName(nameof(PineVM.PineVM.ValueFromBool))))
-        .WithArgumentList(
-            SyntaxFactory.ArgumentList(
-                SyntaxFactory.SingletonSeparatedList(
-                    SyntaxFactory.Argument(expressionSyntax))));
 
     public static readonly SwitchExpressionArmSyntax SwitchExpressionArmDefaultToNotImplementedException =
         SyntaxFactory.SwitchExpressionArm(

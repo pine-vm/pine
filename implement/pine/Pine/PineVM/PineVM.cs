@@ -223,19 +223,15 @@ public class PineVM : IPineVM
                 EvaluateExpression(parseAndEval.expression, environment) switch
                 {
                     Result<string, PineValue>.Err exprErr =>
-                    "Failed to evaluate function: " + exprErr.Value,
+                    "Failed to evaluate expression: " + exprErr.Value,
 
-                    Result<string, PineValue>.Ok functionValue =>
-                    ParseExpressionFromValue(functionValue.Value) switch
+                    Result<string, PineValue>.Ok expressionValue =>
+                    ParseExpressionFromValue(expressionValue.Value) switch
                     {
                         Result<string, Expression>.Err parseErr =>
-                        "Failed to parse expression from function value: " + parseErr.Value +
-                        " - functionValue is " +
-                        PineValueAsString.StringFromValue(functionValue.Value)
-                        .Unpack(fromErr: _ => "not a string", fromOk: asString => "string \'" + asString + "\'") +
-                        " - environmentValue is " +
-                        PineValueAsString.StringFromValue(functionValue.Value)
-                        .Unpack(fromErr: _ => "not a string", fromOk: asString => "string \'" + asString + "\'"),
+                        "Failed to parse expression from value: " + parseErr.Value +
+                        " - expressionValue is " + DescribeValueForErrorMessage(expressionValue.Value) +
+                        " - environmentValue is " + DescribeValueForErrorMessage(expressionValue.Value),
 
                         Result<string, Expression>.Ok functionExpression =>
                         continueWithEnvValueAndFunction(environmentValue.Value, functionExpression.Value),
@@ -252,6 +248,10 @@ public class PineVM : IPineVM
                 throw new NotImplementedException("Unexpected result type for env: " + otherResult.GetType().FullName)
             };
     }
+
+    public static string DescribeValueForErrorMessage(PineValue pineValue) =>
+        PineValueAsString.StringFromValue(pineValue)
+        .Unpack(fromErr: _ => "not a string", fromOk: asString => "string \'" + asString + "\'");
 
 
     public Result<string, PineValue> EvaluateKernelApplicationExpression(

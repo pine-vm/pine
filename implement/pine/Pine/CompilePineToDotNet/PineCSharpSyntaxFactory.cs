@@ -356,14 +356,34 @@ public static class PineCSharpSyntaxFactory
                                             SyntaxFactory.Parameter(
                                                 SyntaxFactory.Identifier("err")))
                                         .WithExpressionBody(
-                                            SyntaxFactory.ThrowExpression(
-                                                SyntaxFactory.ObjectCreationExpression(
-                                                    SyntaxFactory.IdentifierName(nameof(PineVM.GenericEvalException)))
-                                                .WithArgumentList(
-                                                    SyntaxFactory.ArgumentList(
-                                                        SyntaxFactory.SingletonSeparatedList(
-                                                            SyntaxFactory.Argument(
-                                                                SyntaxFactory.IdentifierName("err")))))))))));
+                                            ThrowGenericEvalRuntimeException(messageExpr: SyntaxFactory.IdentifierName("err"))
+                                            )))));
+    }
+
+    public static ExpressionSyntax ThrowGenericEvalRuntimeException(
+        ExpressionSyntax messageExpr)
+    {
+        return
+            SyntaxFactory.ThrowExpression(
+                SyntaxFactory.ObjectCreationExpression(
+                    SyntaxFactory.IdentifierName(nameof(PineVM.GenericEvalException)))
+                .WithArgumentList(
+                    SyntaxFactory.ArgumentList(
+                        SyntaxFactory.SingletonSeparatedList(
+                            SyntaxFactory.Argument(messageExpr)))));
+    }
+
+    public static ExpressionSyntax ThrowParseExpressionException(
+        ExpressionSyntax messageExpr)
+    {
+        return
+            SyntaxFactory.ThrowExpression(
+                SyntaxFactory.ObjectCreationExpression(
+                    SyntaxFactory.IdentifierName(nameof(PineVM.ParseExpressionException)))
+                .WithArgumentList(
+                    SyntaxFactory.ArgumentList(
+                        SyntaxFactory.SingletonSeparatedList(
+                            SyntaxFactory.Argument(messageExpr)))));
     }
 
     public static PineVM.Expression BuildPineExpressionToGetItemFromPath(
@@ -484,6 +504,35 @@ public static class PineCSharpSyntaxFactory
                             SyntaxFactory.Argument(compositionExpr)
                         })));
     }
+
+    public static ExpressionSyntax PineValueFromBoolExpression(ExpressionSyntax expressionSyntax) =>
+        InvocationExpressionOnPineVMClass(nameof(PineVM.PineVM.ValueFromBool))
+        .WithArgumentList(
+            SyntaxFactory.ArgumentList(
+                SyntaxFactory.SingletonSeparatedList(
+                    SyntaxFactory.Argument(expressionSyntax))));
+
+    public static ExpressionSyntax DescribeValueForErrorMessageExpression(
+        ExpressionSyntax pineValueExprSyntax) =>
+        InvocationExpressionOnPineVMClass(nameof(PineVM.PineVM.DescribeValueForErrorMessage))
+        .WithArgumentList(
+            SyntaxFactory.ArgumentList(
+                SyntaxFactory.SingletonSeparatedList(
+                    SyntaxFactory.Argument(pineValueExprSyntax))));
+
+    public static InvocationExpressionSyntax InvocationExpressionOnPineVMClass(
+        string memberIdentifierName) =>
+        SyntaxFactory.InvocationExpression(
+            SyntaxFactory.MemberAccessExpression(
+                SyntaxKind.SimpleMemberAccessExpression,
+                SyntaxFactory.MemberAccessExpression(
+                    SyntaxKind.SimpleMemberAccessExpression,
+                    SyntaxFactory.MemberAccessExpression(
+                        SyntaxKind.SimpleMemberAccessExpression,
+                        SyntaxFactory.IdentifierName("Pine"),
+                        SyntaxFactory.IdentifierName("PineVM")),
+                    SyntaxFactory.IdentifierName("PineVM")),
+                SyntaxFactory.IdentifierName(memberIdentifierName)));
 
     public static QualifiedNameSyntax EvalExprDelegateTypeSyntax =>
         SyntaxFactory.QualifiedName(

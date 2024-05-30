@@ -73,6 +73,7 @@ public partial class CompileToCSharp
             typeof(Func<,>),
             typeof(Enumerable),
             typeof(GenericEvalException),
+            typeof(ParseExpressionException),
         };
 
         var usingDirectives =
@@ -1148,15 +1149,27 @@ public partial class CompileToCSharp
 
         Result<string, CompiledExpression> continueForKnownExprValue(PineValue innerExpressionValue)
         {
+            var innerExprValueId = CompiledExpressionId(innerExpressionValue);
+
             return
                 compilerCache.ParseExpressionFromValue(innerExpressionValue)
-                /*
-                .MapError(err => "Failed to parse inner expression: " + err)
-                */
                 .Unpack(
                     fromErr: err =>
                     {
-                        return continueWithGenericCase();
+                        var messageTitle =
+                        "Failed to parse expression from value " +
+                        innerExprValueId.ExpressionHashBase16[..8] +
+                        ": " + err +
+                        " - expressionValue is " + PineVM.PineVM.DescribeValueForErrorMessage(innerExpressionValue);
+
+                        var throwSyntax = PineCSharpSyntaxFactory.ThrowParseExpressionException(
+                            SyntaxFactory.LiteralExpression(
+                                SyntaxKind.StringLiteralExpression,
+                                SyntaxFactory.Literal(messageTitle)));
+
+                        return
+                        (Result<string, CompiledExpression>)
+                        CompiledExpression.WithTypeGenericValue(throwSyntax);
                     },
                     fromOk:
                     innerExpression =>
