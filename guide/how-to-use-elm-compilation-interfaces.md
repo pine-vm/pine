@@ -92,8 +92,8 @@ For each function declaration in this module, the compiler replaces the declarat
 Using the name of the declaration, we specify the source file name.
 Using a type signature on the function declaration, we select the flags for elm make and the encoding of the output file. This signature must always be a record type or an alias of a record type declared in the same module. Using the record field names, we select:
 
-+ Flags for elm make: `debug` or none.
-+ Output type: `javascript`, `html` or none for HTML.
++ Flags for `elm  make`: `debug` or `optimize` or none.
++ Output type: `javascript`, `html` or none. If none is specified, the output defaults to HTML.
 + Encoding: Either `bytes` or `base64` or `utf8`.
 
 Here is an example that compiles a source file located at path `src/Frontend/Main.elm`:
@@ -133,12 +133,14 @@ elm_make____src_Frontend_Main_elm =
     }
 ```
 
-The tree we modeled with this record type has two leaves:
+In the example above, the tree structure of the declaration type has two leaves:
 
 + `debug.javascript.base64 : String`
 + `javascript.base64 : String`
 
-Backend apps often use the output from `elm make` send the frontend to web browsers with HTTP responses. We can also see this in the [example app](https://github.com/pine-vm/pine/blob/c764a804d90f1fa1002e1690b04487f7c06f765e/implement/example-apps/docker-image-default-app/src/Backend/Main.elm#L46-L61) mentioned earlier:
+Since the compilation flags differ between the two paths, the compilation process will invoke the `elm  make` command once for each of the flags to build the complete record value for that declaration.
+
+Backend apps often use the output from `elm  make` send the frontend to web browsers with HTTP responses. We can also see this in the [example app](https://github.com/pine-vm/pine/blob/c764a804d90f1fa1002e1690b04487f7c06f765e/implement/example-apps/docker-image-default-app/src/Backend/Main.elm#L46-L61) mentioned earlier:
 
 ```Elm
     httpResponse =
