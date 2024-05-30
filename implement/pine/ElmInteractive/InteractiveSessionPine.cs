@@ -282,14 +282,16 @@ public class InteractiveSessionPine : IInteractiveSession
         TreeNodeWithStringPath compileElmProgramCodeFiles,
         IReadOnlyList<TestElmInteractive.Scenario> scenarios,
         Pine.CompilePineToDotNet.SyntaxContainerConfig syntaxContainerConfig,
-        int limitNumber)
+        int limitNumber,
+        bool enableEvalExprCache)
     {
         var expressionsProfiles =
             scenarios
             .Select(scenario =>
             CollectExpressionsToOptimizeFromScenario(
                 compileElmProgramCodeFiles: compileElmProgramCodeFiles,
-                scenario: scenario))
+                scenario: scenario,
+                enableEvalExprCache: enableEvalExprCache))
             .ToImmutableArray();
 
         var aggregateExpressionsProfiles =
@@ -309,14 +311,15 @@ public class InteractiveSessionPine : IInteractiveSession
 
     public static IReadOnlyDictionary<ExpressionUsageAnalysis, ExpressionUsageProfile> CollectExpressionsToOptimizeFromScenario(
         TreeNodeWithStringPath compileElmProgramCodeFiles,
-        TestElmInteractive.Scenario scenario)
+        TestElmInteractive.Scenario scenario,
+        bool enableEvalExprCache)
     {
         var cache = new PineVMCache();
 
         var profilingVM =
             new ProfilingPineVM(
                 overrideParseExpression: cache.BuildParseExprDelegate,
-                overrideEvaluateExpression: cache.BuildEvalExprDelegate);
+                overrideEvaluateExpression: enableEvalExprCache ? cache.BuildEvalExprDelegate : null);
 
         var profilingSession = new InteractiveSessionPine(
             compileElmProgramCodeFiles: compileElmProgramCodeFiles,

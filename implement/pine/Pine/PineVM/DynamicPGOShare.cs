@@ -273,8 +273,8 @@ public class DynamicPGOShare : IDisposable
             .Select(expressionAndProfile => expressionAndProfile.Key)
             .ToImmutableHashSet();
 
-        if (previousCompilations.FirstOrDefault(c => expressionsToCompile.SetEquals(c.CompiledExpressions)) is { } matchigPrevious)
-            return matchigPrevious;
+        if (previousCompilations.FirstOrDefault(c => expressionsToCompile.SetEquals(c.CompiledExpressions)) is { } matchingPrevious)
+            return matchingPrevious;
 
         var selectExpressionsDuration = totalStopwatch.Elapsed;
 
@@ -317,7 +317,8 @@ public class DynamicPGOShare : IDisposable
         aggregateExpressionsProfiles
         .Where(expressionProfile =>
         4 < expressionProfile.Value.UsageCount && ShouldIncludeExpressionInCompilation(expressionProfile.Key.Expression))
-        .OrderByDescending(expressionAndProfile => expressionAndProfile.Value.UsageCount);
+        .OrderByDescending(expressionAndProfile => expressionAndProfile.Value.UsageCount)
+        .ThenBy(expressionAndProfile => expressionAndProfile.Key.CompiledExpressionId.ExpressionHashBase16);
 
     public static bool ShouldIncludeExpressionInCompilation(Expression expression) =>
         expression switch

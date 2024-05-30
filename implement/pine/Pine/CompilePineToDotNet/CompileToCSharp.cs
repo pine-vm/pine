@@ -104,8 +104,14 @@ public partial class CompileToCSharp
         }
 
         static Result<string, IReadOnlyDictionary<ExpressionUsageAnalysis, CompiledExpressionFunction>> CompileExpressionFunctions(
-            IReadOnlyCollection<ExpressionUsageAnalysis> expressionsUsages)
+            IReadOnlyCollection<ExpressionUsageAnalysis> expressionsUsagesBeforeOrdering)
         {
+            var expressionsUsages =
+                expressionsUsagesBeforeOrdering
+                .OrderBy(eu => eu.CompiledExpressionId.ExpressionHashBase16)
+                .ThenBy(eu => eu.EnvId?.HashBase16)
+                .ToImmutableArray();
+
             var dictionary = new Dictionary<ExpressionUsageAnalysis, CompiledExpressionFunction>();
 
             var expressions =
@@ -201,10 +207,6 @@ public partial class CompileToCSharp
                     if (dictionary.ContainsKey(expressionUsage))
                         continue;
 
-                    var withEnvDerivedId =
-                    CompiledExpressionId(expressionUsage.Expression)
-                    .Extract(err => throw new Exception(err));
-
                     var functionInterface =
                         compilationUnitEnv.GetInterfaceForExprUsage(
                             expression,
@@ -221,10 +223,12 @@ public partial class CompileToCSharp
                             expressionUsage,
                             branchesConstrainedEnvIds: supportedConstrainedEnvironments,
                             functionEnv)
-                            .MapError(err => "Failed to compile expression " + withEnvDerivedId.ExpressionHashBase16[..10] + ": " + err)
+                            .MapError(err =>
+                            "Failed to compile expression " +
+                            expressionUsage.CompiledExpressionId.ExpressionHashBase16[..10] + ": " + err)
                             .Map(ok =>
                                 new CompiledExpressionFunction(
-                                    withEnvDerivedId,
+                                    expressionUsage.CompiledExpressionId,
                                     ok.blockSyntax,
                                     ok.dependencies,
                                     functionEnv));
@@ -240,7 +244,9 @@ public partial class CompileToCSharp
                     {
                         return
                             result
-                            .MapError(err => "Failed to compile expression " + withEnvDerivedId + ": " + err)
+                            .MapError(err =>
+                            "Failed to compile expression " + expressionUsage.CompiledExpressionId.ExpressionHashBase16[..10] +
+                            ": " + err)
                             .Map(_ => (IReadOnlyDictionary<ExpressionUsageAnalysis, CompiledExpressionFunction>)
                             ImmutableDictionary<ExpressionUsageAnalysis, CompiledExpressionFunction>.Empty);
                     }
@@ -256,7 +262,8 @@ public partial class CompileToCSharp
             .AndThen(compiledExpressionsBeforeOrdering =>
             {
                 var compiledExpressions =
-                compiledExpressionsBeforeOrdering.OrderBy(ce => ce.Value.Identifier.ExpressionHashBase16).ToImmutableArray();
+                compiledExpressionsBeforeOrdering
+                .OrderBy(ce => ce.Key.CompiledExpressionId.ExpressionHashBase16).ToImmutableArray();
 
                 var aggregateDependencies =
                     CompiledExpressionDependencies.Union(compiledExpressions.Select(er => er.Value.Dependencies));
@@ -540,6 +547,8 @@ public partial class CompileToCSharp
 
                 var branchesForSpecializedRepr =
                 branchesEnvIds
+                // Order by number of items, to prioritize the more specialized branches.
+                .OrderByDescending(envId => envId.ParsedEnvItems.Count)
                 .Select(envId =>
                 {
                     return

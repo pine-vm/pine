@@ -6,10 +6,24 @@ using System.Linq;
 namespace Pine.PineVM;
 
 
-public record ExpressionUsageAnalysis(
-    Expression Expression,
-    EnvConstraintId? EnvId)
+public record ExpressionUsageAnalysis
 {
+    public Expression Expression { get; init; }
+
+    public CompilePineToDotNet.CompiledExpressionId CompiledExpressionId { init; get; }
+
+    public EnvConstraintId? EnvId { get; init; }
+
+    public ExpressionUsageAnalysis(Expression expression, EnvConstraintId? envId)
+    {
+        Expression = expression;
+        EnvId = envId;
+
+        CompiledExpressionId =
+            CompilePineToDotNet.CompileToCSharp.CompiledExpressionId(expression)
+            .Extract(err => throw new System.Exception(err));
+    }
+
     public override int GetHashCode()
     {
         return Expression.GetHashCode();
@@ -23,10 +37,8 @@ public record ExpressionUsageAnalysis(
         if (other is null)
             return false;
 
-        if (!Expression.Equals(other.Expression))
-        {
+        if (CompiledExpressionId.ExpressionHashBase16 != other.CompiledExpressionId.ExpressionHashBase16)
             return false;
-        }
 
         return EnvConstraintId.Equal(EnvId, other.EnvId);
     }
@@ -42,7 +54,7 @@ public record ExpressionUsageProfile(int UsageCount);
 
 public class ProfilingPineVM
 {
-    public static readonly ConcurrentQueue<System.TimeSpan> computeExpressionUsageTimes = new();
+    public readonly ConcurrentQueue<System.TimeSpan> computeExpressionUsageTimes = new();
 
     public IPineVM PineVM { init; get; }
 
