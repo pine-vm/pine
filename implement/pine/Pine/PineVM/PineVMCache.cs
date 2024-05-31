@@ -42,7 +42,11 @@ public class PineVMCache
     {
         return new PineVM.EvalExprDelegate((expression, environment) =>
         {
-            Result<string, PineValue> evalWithoutCache() => evalExprDelegate(expression, environment);
+            if (expression is Expression.DelegatingExpression)
+            {
+                // Dictionary lookup is not implemented for DelegatingExpression.
+                return evalExprDelegate(expression, environment);
+            }
 
             if (expression is Expression.ParseAndEvalExpression parseAndEvalExpr)
             {
@@ -65,7 +69,7 @@ public class PineVMCache
                 return evalResult;
             }
 
-            return evalWithoutCache();
+            return evalExprDelegate(expression, environment);
         });
     }
 }
