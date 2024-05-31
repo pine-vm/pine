@@ -259,8 +259,8 @@ emitExpressionInDeclarationBlock stackBeforeAddingDeps blockDeclarations mainExp
             { stackBeforeAddingDeps
                 | declarationsDependencies =
                     Dict.foldl
-                        (\declName declExpression ->
-                            Dict.insert declName (listDirectDependenciesOfExpression declExpression)
+                        (\declName declExpression aggregate ->
+                            Dict.insert declName (listDirectDependenciesOfExpression declExpression) aggregate
                         )
                         stackBeforeAddingDeps.declarationsDependencies
                         blockDeclarations
@@ -366,19 +366,19 @@ emitDeclarationBlock stackBefore blockDeclarations config =
         availableEmittedDependencies : Dict.Dict String (Set.Set String)
         availableEmittedDependencies =
             Dict.foldl
-                (\_ ( availableEmitted, _ ) ->
-                    Dict.insert
-                        availableEmitted.functionName
-                        (case availableEmitted.expectedEnvironment of
-                            LocalEnvironment localEnv ->
-                                Set.fromList localEnv.expectedDecls
+                (\_ ( availableEmitted, _ ) aggregate ->
+                    case availableEmitted.expectedEnvironment of
+                        LocalEnvironment localEnv ->
+                            Dict.insert
+                                availableEmitted.functionName
+                                (Set.fromList localEnv.expectedDecls)
+                                aggregate
 
-                            ImportedEnvironment _ ->
-                                Set.empty
+                        ImportedEnvironment _ ->
+                            aggregate
 
-                            IndependentEnvironment ->
-                                Set.empty
-                        )
+                        IndependentEnvironment ->
+                            aggregate
                 )
                 Dict.empty
                 stackBefore.importedFunctions
@@ -386,8 +386,8 @@ emitDeclarationBlock stackBefore blockDeclarations config =
         blockDeclarationsDirectDependencies : Dict.Dict String (Set.Set String)
         blockDeclarationsDirectDependencies =
             Dict.foldl
-                (\declName declExpression ->
-                    Dict.insert declName (listDirectDependenciesOfExpression declExpression)
+                (\declName declExpression aggregate ->
+                    Dict.insert declName (listDirectDependenciesOfExpression declExpression) aggregate
                 )
                 Dict.empty
                 blockDeclarations
@@ -981,9 +981,10 @@ listDirectDependenciesOfExpression expression =
             listDirectDependenciesOfExpression application.argument
 
         ConditionalExpression conditional ->
-            listDirectDependenciesOfExpression conditional.condition
-                |> Set.union (listDirectDependenciesOfExpression conditional.ifTrue)
-                |> Set.union (listDirectDependenciesOfExpression conditional.ifFalse)
+            Set.union (listDirectDependenciesOfExpression conditional.ifFalse)
+                (Set.union (listDirectDependenciesOfExpression conditional.ifTrue)
+                    (listDirectDependenciesOfExpression conditional.condition)
+                )
 
         ReferenceExpression reference ->
             Set.singleton reference
@@ -996,9 +997,12 @@ listDirectDependenciesOfExpression expression =
                 functionParamNames =
                     List.foldl
                         (\param aggregate ->
-                            List.foldl Set.insert
+                            List.foldl
+                                (\( declName, _ ) declAggregate ->
+                                    Set.insert declName declAggregate
+                                )
                                 aggregate
-                                (List.map Tuple.first param)
+                                param
                         )
                         Set.empty
                         functionParam
@@ -1289,11 +1293,11 @@ emitFunctionApplicationPine emitStack arguments functionExpressionPine =
                     Ok functionRecord ->
                         let
                             combinedArguments =
-                                [ List.map Pine.LiteralExpression
-                                    functionRecord.argumentsAlreadyCollected
-                                , arguments
-                                ]
-                                    |> List.concat
+                                List.concat
+                                    [ List.map Pine.LiteralExpression
+                                        functionRecord.argumentsAlreadyCollected
+                                    , arguments
+                                    ]
                         in
                         if functionRecord.parameterCount /= List.length combinedArguments then
                             Ok (genericPartialApplication ())
@@ -1302,9 +1306,8 @@ emitFunctionApplicationPine emitStack arguments functionExpressionPine =
                             let
                                 mappedEnvironment =
                                     Pine.ListExpression
-                                        [ functionRecord.envFunctions
-                                            |> List.map Pine.LiteralExpression
-                                            |> Pine.ListExpression
+                                        [ Pine.ListExpression
+                                            (List.map Pine.LiteralExpression functionRecord.envFunctions)
                                         , Pine.ListExpression combinedArguments
                                         ]
 
@@ -1348,36 +1351,39 @@ emitApplyFunctionFromCurrentEnvironment compilation { functionName } arguments =
         Just ( functionIndexInEnv, function ) ->
             let
                 getEnvFunctionsExpression =
-                    Pine.environmentExpr
-                        |> listItemFromIndexExpression_Pine 0
+                    listItemFromIndexExpression_Pine
+                        0
+                        Pine.environmentExpr
 
                 getFunctionExpression =
-                    getEnvFunctionsExpression
-                        |> listItemFromIndexExpression_Pine functionIndexInEnv
+                    listItemFromIndexExpression_Pine
+                        functionIndexInEnv
+                        getEnvFunctionsExpression
             in
             case function.expectedEnvironment of
                 ImportedEnvironment importedEnv ->
                     let
                         funcRecordLessTag =
-                            getFunctionExpression
-                                |> pineExpressionForDeconstructions importedEnv.pathToRecordFromEnvEntry
+                            pineExpressionForDeconstructions
+                                importedEnv.pathToRecordFromEnvEntry
+                                getFunctionExpression
 
                         {-
                            The paths here mirror the composition in 'buildRecordOfPartiallyAppliedFunction'
                         -}
                         importedGetFunctionExpr =
-                            funcRecordLessTag
-                                |> pineExpressionForDeconstructions
-                                    [ ListItemDeconstruction 1
-                                    , ListItemDeconstruction 0
-                                    ]
+                            pineExpressionForDeconstructions
+                                [ ListItemDeconstruction 1
+                                , ListItemDeconstruction 0
+                                ]
+                                funcRecordLessTag
 
                         importedGetEnvFunctionsExpression =
-                            funcRecordLessTag
-                                |> pineExpressionForDeconstructions
-                                    [ ListItemDeconstruction 1
-                                    , ListItemDeconstruction 2
-                                    ]
+                            pineExpressionForDeconstructions
+                                [ ListItemDeconstruction 1
+                                , ListItemDeconstruction 2
+                                ]
+                                funcRecordLessTag
                     in
                     Just
                         (Ok
@@ -1392,21 +1398,22 @@ emitApplyFunctionFromCurrentEnvironment compilation { functionName } arguments =
                                     }
 
                              else
-                                Pine.ParseAndEvalExpression
-                                    { expression =
-                                        Pine.ListExpression
-                                            [ Pine.LiteralExpression Pine.stringAsValue_Literal
-                                            , funcRecordLessTag
-                                            ]
-                                    , environment =
-                                        Pine.ListExpression
-                                            [ Pine.ListExpression []
-                                            , Pine.ListExpression arguments
-                                            ]
-                                    }
-                                    |> partialApplicationExpressionFromListOfArguments
-                                        arguments
-                                        compilation
+                                partialApplicationExpressionFromListOfArguments
+                                    arguments
+                                    compilation
+                                    (Pine.ParseAndEvalExpression
+                                        { expression =
+                                            Pine.ListExpression
+                                                [ Pine.LiteralExpression Pine.stringAsValue_Literal
+                                                , funcRecordLessTag
+                                                ]
+                                        , environment =
+                                            Pine.ListExpression
+                                                [ Pine.ListExpression []
+                                                , Pine.ListExpression arguments
+                                                ]
+                                        }
+                                    )
                             )
                         )
 
@@ -1480,27 +1487,27 @@ emitApplyFunctionFromCurrentEnvironment compilation { functionName } arguments =
                                             }
 
                                      else
-                                        (if function.parameterCount == 0 then
-                                            Pine.ParseAndEvalExpression
-                                                { expression = getFunctionExpression
-                                                , environment =
-                                                    Pine.ListExpression
-                                                        [ expectedEnvironment
-                                                        , Pine.ListExpression []
-                                                        ]
-                                                }
+                                        partialApplicationExpressionFromListOfArguments
+                                            arguments
+                                            compilation
+                                            (if function.parameterCount == 0 then
+                                                Pine.ParseAndEvalExpression
+                                                    { expression = getFunctionExpression
+                                                    , environment =
+                                                        Pine.ListExpression
+                                                            [ expectedEnvironment
+                                                            , Pine.ListExpression []
+                                                            ]
+                                                    }
 
-                                         else
-                                            buildRecordOfPartiallyAppliedFunction
-                                                { getFunctionInnerExpression = getFunctionExpression
-                                                , getEnvFunctionsExpression = expectedEnvironment
-                                                , parameterCount = function.parameterCount
-                                                , argumentsAlreadyCollected = []
-                                                }
-                                        )
-                                            |> partialApplicationExpressionFromListOfArguments
-                                                arguments
-                                                compilation
+                                             else
+                                                buildRecordOfPartiallyAppliedFunction
+                                                    { getFunctionInnerExpression = getFunctionExpression
+                                                    , getEnvFunctionsExpression = expectedEnvironment
+                                                    , parameterCount = function.parameterCount
+                                                    , argumentsAlreadyCollected = []
+                                                    }
+                                            )
                                     )
                                 )
 
@@ -1653,20 +1660,20 @@ adaptivePartialApplicationRecursiveExpression =
                             listItemFromIndexExpression_Pine 1 functionLocalExpression
 
                         innerFunction =
-                            partiallyAppliedFunctionRecord
-                                |> listItemFromIndexExpression_Pine 0
+                            listItemFromIndexExpression_Pine 0
+                                partiallyAppliedFunctionRecord
 
                         numberOfParametersExpectedByInnerFunction =
-                            partiallyAppliedFunctionRecord
-                                |> listItemFromIndexExpression_Pine 1
+                            listItemFromIndexExpression_Pine 1
+                                partiallyAppliedFunctionRecord
 
                         environmentFunctions =
-                            partiallyAppliedFunctionRecord
-                                |> listItemFromIndexExpression_Pine 2
+                            listItemFromIndexExpression_Pine 2
+                                partiallyAppliedFunctionRecord
 
                         previouslyCollectedArguments =
-                            partiallyAppliedFunctionRecord
-                                |> listItemFromIndexExpression_Pine 3
+                            listItemFromIndexExpression_Pine 3
+                                partiallyAppliedFunctionRecord
 
                         collectedArguments =
                             Pine.KernelApplicationExpression
@@ -2008,10 +2015,10 @@ searchForExpressionReduction expression =
                                     attemptReduceViaEval ()
 
                                 Ok skipCount ->
-                                    expressionList
-                                        |> List.drop skipCount
-                                        |> Pine.ListExpression
-                                        |> Just
+                                    Just
+                                        (Pine.ListExpression
+                                            (List.drop skipCount expressionList)
+                                        )
 
                         _ ->
                             attemptReduceViaEval ()
@@ -2364,19 +2371,36 @@ estimatePineValueSize value =
             10 + List.length blob
 
         Pine.ListValue list ->
-            -- Reduce stack depths by matching the most common cases with up to two elements inline.
-            case list of
-                [] ->
-                    10
+            10 + estimatePineListValueSizeHelper 0 list
 
-                [ single ] ->
-                    10 + estimatePineValueSize single
 
-                first :: second :: remaining ->
-                    10
-                        + estimatePineValueSize first
-                        + estimatePineValueSize second
-                        + List.foldl
-                            (\item sum -> sum + estimatePineValueSize item)
-                            0
-                            remaining
+estimatePineListValueSizeHelper : Int -> List Pine.Value -> Int
+estimatePineListValueSizeHelper accumulated list =
+    -- Reduce stack depths by matching the most common cases with few elements inline.
+    case list of
+        [] ->
+            accumulated
+
+        [ first ] ->
+            accumulated
+                + estimatePineValueSize first
+
+        [ first, second ] ->
+            accumulated
+                + estimatePineValueSize first
+                + estimatePineValueSize second
+
+        [ first, second, third ] ->
+            accumulated
+                + estimatePineValueSize first
+                + estimatePineValueSize second
+                + estimatePineValueSize third
+
+        first :: second :: third :: remaining ->
+            estimatePineListValueSizeHelper
+                (accumulated
+                    + estimatePineValueSize first
+                    + estimatePineValueSize second
+                    + estimatePineValueSize third
+                )
+                remaining
