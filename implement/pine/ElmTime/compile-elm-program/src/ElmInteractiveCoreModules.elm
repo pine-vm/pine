@@ -447,12 +447,15 @@ modBy divisor dividend =
             remainder
 
         else
-            add remainder divisor
+            Pine_kernel.add_int [ remainder, divisor ]
 
 
 remainderBy : Int -> Int -> Int
 remainderBy divisor dividend =
-    sub dividend (mul divisor (idiv dividend divisor))
+    Pine_kernel.add_int
+        [ dividend
+        , Pine_kernel.negate (Pine_kernel.mul_int [ divisor, (idiv dividend divisor)])
+        ]
 
 
 {-| Negate a number.
@@ -463,7 +466,7 @@ remainderBy divisor dividend =
 -}
 negate : number -> number
 negate n =
-  -n
+    Pine_kernel.negate n
 
 
 {-| Get the [absolute value][abs] of a number.
@@ -477,7 +480,10 @@ negate n =
 -}
 abs : number -> number
 abs n =
-  if lt n 0 then -n else n
+    if Pine_kernel.is_sorted_ascending_int [ 0, n ] then
+        n
+    else
+        Pine_kernel.negate n
 
 
 {-| Clamps a number within a given range. With the expression
@@ -1352,8 +1358,12 @@ toIntFromList stringAsList =
                         _ ->
                             ( stringAsList, 1 )
             in
-            Maybe.map ((*) signMultiplier)
-                (toUnsignedIntFromList valueString)
+            case toUnsignedIntFromList valueString of
+                Just unsigned ->
+                    Just (signMultiplier * unsigned)
+
+                Nothing ->
+                    Nothing
 
 
 toUnsignedIntFromList : List Char -> Maybe Int
@@ -1618,18 +1628,18 @@ toList array =
 
 
 map : (a -> b) -> Array a -> Array b
-map =
-    List.map
+map mapItem array =
+    List.map mapItem array
 
 
 foldr : (a -> b -> b) -> b -> Array a -> b
-foldr =
-    List.foldr
+foldr foldItem seed array =
+    List.foldr foldItem seed array
 
 
 foldl : (a -> b -> b) -> b -> Array a -> b
-foldl =
-    List.foldl
+foldl foldItem seed array =
+    List.foldl foldItem seed array
 
 """
     , """
