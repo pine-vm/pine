@@ -138,11 +138,30 @@ public abstract record PineValue : IEquatable<PineValue>
             if (other is null)
                 return false;
 
-            return ReferenceEquals(this, other)
-                ||
-                (slimHashCode == other.slimHashCode &&
-                Elements.Count == other.Elements.Count &&
-                Elements.SequenceEqual(other.Elements));
+            if (ReferenceEquals(this, other))
+                return true;
+
+            if (slimHashCode != other.slimHashCode || Elements.Count != other.Elements.Count)
+                return false;
+
+            for (int i = 0; i < Elements.Count; i++)
+            {
+                var selfElement = Elements[i];
+                var otherElement = other.Elements[i];
+
+                if (selfElement is ListValue selfList && otherElement is ListValue otherList)
+                {
+                    if (!selfList.Equals(otherList))
+                        return false;
+                }
+                else
+                {
+                    if (!selfElement.Equals(otherElement))
+                        return false;
+                }
+            }
+
+            return true;
         }
 
         public override int GetHashCode() => slimHashCode;
