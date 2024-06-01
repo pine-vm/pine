@@ -267,11 +267,11 @@ public class PineVM : IPineVM
         EvaluateExpression(conditional.condition, environment) switch
         {
             Result<string, PineValue>.Ok conditionValue =>
-            conditionValue == TrueValue
+            conditionValue == PineVMValues.TrueValue
             ?
             EvaluateExpression(conditional.ifTrue, environment)
             :
-            conditionValue == FalseValue
+            conditionValue == PineVMValues.FalseValue
             ?
             EvaluateExpression(conditional.ifFalse, environment)
             :
@@ -298,18 +298,14 @@ public class PineVM : IPineVM
         .SetItem(nameof(KernelFunction.mul_int), KernelFunction.mul_int)
         .SetItem(nameof(KernelFunction.is_sorted_ascending_int), KernelFunction.is_sorted_ascending_int);
 
-    public static PineValue ValueFromBool(bool b) => b ? TrueValue : FalseValue;
-
-    public static readonly PineValue TrueValue = PineValue.Blob([4]);
-
-    public static readonly PineValue FalseValue = PineValue.Blob([2]);
+    public static PineValue ValueFromBool(bool b) => b ? PineVMValues.TrueValue : PineVMValues.FalseValue;
 
     public static Result<string, bool> ParseBoolFromValue(PineValue value) =>
-        value == TrueValue
+        value == PineVMValues.TrueValue
         ?
         true
         :
-        value == FalseValue
+        value == PineVMValues.FalseValue
         ?
         false
         :

@@ -1,11 +1,9 @@
-using Pine;
-using Pine.PineVM;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 
-namespace ElmTime.ElmInteractive;
+namespace Pine.ElmInteractive;
 
 /// <summary>
 /// Corresponding to the type ElmValue in ElmInteractive.elm
@@ -137,166 +135,63 @@ public abstract record ElmValue
     public record ElmInternal(string Value)
         : ElmValue;
 
-    public static Result<string, ElmValue> PineValueAsElmValue(
-        PineValue pineValue)
-    {
-        if (pineValue == PineVM.TrueValue)
-            return TrueValue;
+    public static Maybe<string> TryMapElmValueToString(ElmList elmValues) =>
+        elmValues.Elements.Select(TryMapElmValueToChar).ListCombine()
+        .Map(chars => string.Join("", chars.Select(char.ConvertFromUtf32)));
 
-        if (pineValue == PineVM.FalseValue)
-            return FalseValue;
-
-        return pineValue switch
+    public static Maybe<int> TryMapElmValueToChar(ElmValue elmValue) =>
+        elmValue switch
         {
-            PineValue.BlobValue blobValue =>
-            blobValue.Bytes.Length is 0
-            ?
-            new ElmInternal("empty-blob")
-            :
-            (blobValue.Bytes.Span[0] switch
-            {
-                4 or 2 =>
-                PineValueAsInteger.SignedIntegerFromValueRelaxed(blobValue)
-                .Map(bigInt => (ElmValue)new ElmInteger(bigInt)),
-
-                _ =>
-                blobValue.Bytes.Length > 10
-                ?
-                PineVM.ParseExpressionFromValueDefault(pineValue)
-                .Map(_ => (ElmValue)new ElmInternal("expression"))
-                .WithDefault(new ElmInternal("___error_skipped_large_blob___"))
-                :
-                PineValueAsInteger.UnsignedIntegerFromValue(blobValue)
-                .Map(bigInt => (ElmValue)new ElmChar((int)bigInt))
-            }),
-
-            PineValue.ListValue list =>
-            list.Elements.Select(PineValueAsElmValue).ListCombine()
-            .MapError(error => "Failed to combine list: " + error)
-            .AndThen(listValues =>
-            {
-                Result<string, ElmValue> resultAsList() =>
-                new ElmList(listValues);
-
-                if (listValues.Count is 0)
-                    return resultAsList();
-
-                if (listValues.Count is 2)
-                {
-                    var tagNameChars = listValues[0];
-                    var tagArguments = listValues[1];
-
-                    if (tagNameChars is ElmList tagNameCharsList && tagArguments is ElmList tagArgumentsList)
-                    {
-                        var maybeTagName = TryMapElmValueToString(tagNameCharsList);
-
-                        if (maybeTagName is Maybe<string>.Just tagName)
-                        {
-                            if (0 < tagName.Value.Length && char.IsUpper(tagName.Value[0]))
-                            {
-                                if (tagName.Value is ElmRecordTypeTagName)
-                                {
-                                    if (tagArgumentsList.Elements.Count is 1)
-                                    {
-                                        var recordValue = tagArgumentsList.Elements[0];
-
-                                        return
-                                        ElmValueAsElmRecord(recordValue)
-                                        .MapError(error => "Failed to extract value under record tag: " + error)
-                                        .Map(r => (ElmValue)r);
-                                    }
-
-                                    return Result<string, ElmValue>.err(
-                                        "Wrong number of tag arguments: " + tagArgumentsList.Elements.Count);
-                                }
-
-                                if (tagName.Value is "String")
-                                {
-                                    if (tagArgumentsList.Elements.Count is 1)
-                                    {
-                                        var charsList = tagArgumentsList.Elements[0];
-
-                                        return
-                                        (charsList switch
-                                        {
-                                            ElmList charsListAsList =>
-                                            TryMapElmValueToString(charsListAsList)
-                                            .Map(chars => Result<string, ElmValue>.ok(new ElmString(chars)))
-                                            .WithDefault("Failed to map chars"),
-
-                                            _ =>
-                                            "Unexpected shape of tag arguments: " + charsList.GetType().Name
-                                        })
-                                        .MapError(error => "Failed to extract value under String tag: " + error);
-                                    }
-
-                                    return "Unexpected shape of tag arguments";
-                                }
-
-                                return new ElmTag(tagName.Value, tagArgumentsList.Elements);
-                            }
-                        }
-                        else
-                            return resultAsList();
-                    }
-
-                    return resultAsList();
-                }
-
-
-                return resultAsList();
-            }),
+            ElmChar elmChar =>
+            elmChar.Value,
 
             _ =>
-            throw new NotImplementedException(
-                "Not implemented for value type: " + pineValue.GetType().FullName)
+            Maybe<int>.nothing()
         };
-    }
 
-    public static PineValue ElmValueAsPineValue(ElmValue elmValue)
+    public static (string expressionString, bool needsParens) ElmValueAsExpression(ElmValue elmValue)
     {
         return
             elmValue switch
             {
-                ElmList elmList =>
-                PineValue.List(elmList.Elements.Select(ElmValueAsPineValue).ToList()),
+                ElmInteger integer =>
+                (integer.Value.ToString(), needsParens: false),
 
-                ElmChar elmChar =>
-                PineValueAsInteger.ValueFromUnsignedInteger(elmChar.Value)
-                .Extract(err => throw new Exception(err)),
+                ElmChar charValue =>
+                ("'" + char.ConvertFromUtf32(charValue.Value) + "'", needsParens: false),
 
-                ElmInteger elmInteger =>
-                PineValueAsInteger.ValueFromSignedInteger((int)elmInteger.Value),
+                ElmList list =>
+                ElmListItemsLookLikeTupleItems(list.Elements).WithDefault(false)
+                ?
+                ("(" + string.Join(",", list.Elements.Select(item => ElmValueAsExpression(item).expressionString)) + ")",
+                needsParens: false)
+                :
+                ("[" + string.Join(",", list.Elements.Select(item => ElmValueAsExpression(item).expressionString)) + "]",
+                needsParens: false),
 
-                ElmString elmString =>
-                PineValue.List(
-                    [PineValueAsString.ValueFromString("String"),
-                        PineValue.List([PineValueAsString.ValueFromString(elmString.Value)])]),
+                ElmString stringValue =>
+                ("\"" + stringValue.Value.Replace("\\", "\\\\").Replace("\"", "\\\"") + "\"", needsParens: false),
 
-                ElmTag elmTag =>
-                PineValue.List(
-                    [PineValueAsString.ValueFromString(elmTag.TagName),
-                        PineValue.List(elmTag.Arguments.Select(ElmValueAsPineValue).ToList())]),
+                ElmRecord record =>
+                (record.Fields.Count < 1)
+                ?
+                ("{}", needsParens: false)
+                :
+                ("{ " + string.Join(", ", record.Fields.Select(field =>
+                field.FieldName + " = " + ElmValueAsExpression(field.Value).expressionString)) + " }",
+                needsParens: false),
 
-                ElmRecord elmRecord =>
-                ElmRecordAsPineValue(
-                    [.. elmRecord.Fields.Select(field => (field.FieldName, ElmValueAsPineValue(field.Value)))]),
+                ElmTag tag =>
+                ElmTagAsExpression(tag),
+
+                ElmInternal internalValue =>
+                ("<" + internalValue.Value + ">", needsParens: false),
 
                 _ =>
                 throw new NotImplementedException(
                     "Not implemented for value type: " + elmValue.GetType().FullName)
             };
     }
-
-    public static PineValue ElmRecordAsPineValue(IReadOnlyList<(string FieldName, PineValue FieldValue)> fields) =>
-        PineValue.List(
-            [ElmRecordTypeTagNameAsValue,
-            PineValue.List(
-                [PineValue.List(
-                    [.. fields.Select(field =>
-                    PineValue.List(
-                        [PineValueAsString.ValueFromString(field.FieldName),
-                        field.FieldValue]))])])]);
 
     public static Result<string, ElmRecord> ElmValueAsElmRecord(ElmValue elmValue)
     {
@@ -360,64 +255,6 @@ public abstract record ElmValue
             _ =>
             "Value is not a list."
         };
-    }
-
-    public static Maybe<string> TryMapElmValueToString(ElmList elmValues) =>
-        elmValues.Elements.Select(TryMapElmValueToChar).ListCombine()
-        .Map(chars => string.Join("", chars.Select(char.ConvertFromUtf32)));
-
-    public static Maybe<int> TryMapElmValueToChar(ElmValue elmValue) =>
-        elmValue switch
-        {
-            ElmChar elmChar =>
-            elmChar.Value,
-
-            _ =>
-            Maybe<int>.nothing()
-        };
-
-    public static (string expressionString, bool needsParens) ElmValueAsExpression(ElmValue elmValue)
-    {
-        return
-            elmValue switch
-            {
-                ElmInteger integer =>
-                (integer.Value.ToString(), needsParens: false),
-
-                ElmChar charValue =>
-                ("'" + char.ConvertFromUtf32(charValue.Value) + "'", needsParens: false),
-
-                ElmList list =>
-                ElmListItemsLookLikeTupleItems(list.Elements).WithDefault(false)
-                ?
-                ("(" + string.Join(",", list.Elements.Select(item => ElmValueAsExpression(item).expressionString)) + ")",
-                needsParens: false)
-                :
-                ("[" + string.Join(",", list.Elements.Select(item => ElmValueAsExpression(item).expressionString)) + "]",
-                needsParens: false),
-
-                ElmString stringValue =>
-                ("\"" + stringValue.Value.Replace("\\", "\\\\").Replace("\"", "\\\"") + "\"", needsParens: false),
-
-                ElmRecord record =>
-                (record.Fields.Count < 1)
-                ?
-                ("{}", needsParens: false)
-                :
-                ("{ " + string.Join(", ", record.Fields.Select(field =>
-                field.FieldName + " = " + ElmValueAsExpression(field.Value).expressionString)) + " }",
-                needsParens: false),
-
-                ElmTag tag =>
-                ElmTagAsExpression(tag),
-
-                ElmInternal internalValue =>
-                ("<" + internalValue.Value + ">", needsParens: false),
-
-                _ =>
-                throw new NotImplementedException(
-                    "Not implemented for value type: " + elmValue.GetType().FullName)
-            };
     }
 
     public static (string expressionString, bool needsParens) ElmTagAsExpression(ElmTag elmTag)

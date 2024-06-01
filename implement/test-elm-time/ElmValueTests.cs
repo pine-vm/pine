@@ -1,5 +1,6 @@
 ﻿using ElmTime.ElmInteractive;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
+using Pine.ElmInteractive;
 using System.Collections.Generic;
 
 namespace TestElmTime;
@@ -25,14 +26,17 @@ public class ElmValueTests
             ]),
 
             new ElmValue.ElmString("Hello, world 👋"),
+
+            new ElmValue.ElmTag("True", []),
+            new ElmValue.ElmTag("False", []),
         ];
 
         foreach (var testCase in testCases)
         {
-            var pineValue = ElmValue.ElmValueAsPineValue(testCase);
+            var pineValue = ElmValueEncoding.ElmValueAsPineValue(testCase);
 
             var roundtrip =
-                ElmValue.PineValueAsElmValue(pineValue)
+                ElmValueEncoding.PineValueAsElmValue(pineValue)
                 .Extract(err => throw new System.Exception(err));
 
             Assert.AreEqual(testCase, roundtrip);

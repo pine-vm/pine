@@ -417,7 +417,7 @@ public partial class CompileToCSharp
                                 SyntaxKind.SimpleMemberAccessExpression,
                                 SyntaxFactory.IdentifierName("Pine"),
                                 SyntaxFactory.IdentifierName("PineVM")),
-                            SyntaxFactory.IdentifierName("PineVM")),
+                            SyntaxFactory.IdentifierName("PineVMValues")),
                         SyntaxFactory.IdentifierName("TrueValue"))),
 
                     ("value_false",
@@ -430,7 +430,7 @@ public partial class CompileToCSharp
                                 SyntaxKind.SimpleMemberAccessExpression,
                                 SyntaxFactory.IdentifierName("Pine"),
                                 SyntaxFactory.IdentifierName("PineVM")),
-                            SyntaxFactory.IdentifierName("PineVM")),
+                            SyntaxFactory.IdentifierName("PineVMValues")),
                         SyntaxFactory.IdentifierName("FalseValue"))),
                 }
                 .Concat(valuesStaticMembers)

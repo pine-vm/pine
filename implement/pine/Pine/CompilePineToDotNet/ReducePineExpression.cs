@@ -130,7 +130,7 @@ public class ReducePineExpression
                                 AttemptReduceViaEval(),
 
                                 fromOk: conditionValue =>
-                                conditionValue == PineVM.PineVM.TrueValue
+                                conditionValue == PineVMValues.TrueValue
                                 ?
                                 conditional.ifTrue
                                 :

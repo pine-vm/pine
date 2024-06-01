@@ -1,8 +1,7 @@
-using Pine;
 using System;
 using System.Linq;
 
-namespace ElmTime.ElmInteractive;
+namespace Pine.ElmInteractive;
 
 public class ElmValueInterop
 {
@@ -39,13 +38,15 @@ public class ElmValueInterop
                 ResultExtension.ListCombine(firstArgument.Elements.Select(elmValue =>
                 elmValue switch
                 {
-                    ElmValue.ElmInteger integer => Result<string, byte>.ok((byte)integer.Value),
-                    _ => Result<string, byte>.err("Invalid element in BlobValue tag")
+                    ElmValue.ElmInteger integer =>
+                    (Result<string, byte>)(byte)integer.Value,
+                    _ =>
+                    "Invalid element in BlobValue tag"
                 }))
                 .Map(bytes => PineValue.Blob([.. bytes])),
 
                     _ =>
-                    Result<string, PineValue>.err("Invalid arguments for BlobValue tag")
+                    "Invalid arguments for BlobValue tag"
                 },
 
                 "ListValue" =>
@@ -56,13 +57,14 @@ public class ElmValueInterop
                 .Map(elements => (PineValue)new PineValue.ListValue(elements)),
 
                     _ =>
-                    Result<string, PineValue>.err("Invalid arguments for ListValue tag")
+                    "Invalid arguments for ListValue tag"
                 },
 
-                _ => Result<string, PineValue>.err("Unsupported tag: " + tag.TagName)
+                _ =>
+                "Unsupported tag: " + tag.TagName
             },
 
             _ =>
-            Result<string, PineValue>.err("Unsupported ElmValue: " + elmValue.GetType().FullName)
+            "Unsupported ElmValue: " + elmValue.GetType().FullName
         };
 }

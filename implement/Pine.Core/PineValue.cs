@@ -1,3 +1,4 @@
+using Pine.ElmInteractive;
 using System;
 using System.Collections.Frozen;
 using System.Collections.Generic;
@@ -35,7 +36,7 @@ public abstract record PineValue : IEquatable<PineValue>
         :
         bytes.Length is 2
         ?
-        InternedBlobDouble[bytes.Span[0] * 256 + bytes.Span[1]]
+        InternedBlobTuple[bytes.Span[0] * 256 + bytes.Span[1]]
         :
         new BlobValue(bytes);
 
@@ -46,7 +47,7 @@ public abstract record PineValue : IEquatable<PineValue>
 
         var newInstance = new ListValue(elements);
 
-        if (InternedLists?.TryGetValue(newInstance, out var interned) ?? false)
+        if (InternedListsDict?.TryGetValue(newInstance, out var interned) ?? false)
             return interned;
 
         return newInstance;
@@ -57,28 +58,68 @@ public abstract record PineValue : IEquatable<PineValue>
     public static readonly PineValue EmptyBlob = new BlobValue(ReadOnlyMemory<byte>.Empty);
 
     private static readonly PineValue[] InternedBlobSingle =
-        Enumerable.Range(0, 256)
-        .Select(i => new BlobValue(new byte[] { (byte)i }))
-        .ToArray();
+        [..Enumerable.Range(0, 256)
+        .Select(i => new BlobValue(new byte[] { (byte)i }))];
 
-    private static readonly PineValue[] InternedBlobDouble =
-        Enumerable.Range(0, 256)
-        .SelectMany(i => Enumerable.Range(0, 256).Select(j => new BlobValue(new byte[] { (byte)i, (byte)j })))
-        .ToArray();
+    private static readonly PineValue[] InternedBlobTuple =
+        [..Enumerable.Range(0, 256)
+        .SelectMany(i => Enumerable.Range(0, 256).Select(j => new BlobValue(new byte[] { (byte)i, (byte)j })))];
+
+    private static readonly ListValue Interned_Pine_string_String = (ListValue)PineValueAsString.ValueFromString("String");
 
     private static readonly IEnumerable<string> InternedStrings =
         [
-        "String",
-        "Nothing",
-        "Just",
+        "Bool",
+        "True",
+        "False",
 
         "EQ",
         "LT",
         "GT",
 
-        "list_head",
-        "skip",
-        "equal",
+        "Nothing",
+        "Just",
+        "Err",
+        "Ok",
+
+        "Basics",
+        "List",
+        "Maybe",
+        "Result",
+        "Tuple",
+        "Char",
+        "String",
+        "Platform",
+        "Array",
+        "Dict",
+        "Set",
+        "Json",
+        "Regex",
+        "Time",
+        "Debug",
+        "Process",
+
+
+        // From the Elm core Dict module
+        "Red",
+        "Black",
+        "RBNode_elm_builtin",
+        "RBEmpty_elm_builtin",
+
+        // From the Pine module
+        "Pine",
+        "Value",
+        "ListValue",
+        "BlobValue",
+
+        "Expression",
+        "LiteralExpression",
+        "ListExpression",
+        "ParseAndEvalExpression",
+        "ConditionalExpression",
+        "FunctionExpression",
+        "KernelApplicationExpression",
+        "StringTagExpression",
 
         "Literal",
         "List",
@@ -87,6 +128,28 @@ public abstract record PineValue : IEquatable<PineValue>
         "Environment",
         "Function",
         "KernelApplication",
+        "StringTag",
+
+        "equal",
+        "length",
+        "list_head",
+        "skip",
+        "take",
+        "reverse",
+        "negate",
+        "concat",
+        "add_int",
+        "mul_int",
+        "is_sorted_ascending_int",
+
+        "Literal",
+        "List",
+        "ParseAndEval",
+        "Conditional",
+        "Environment",
+        "Function",
+        "KernelApplication",
+        "StringTag",
 
         "functionName",
         "argument",
@@ -95,18 +158,71 @@ public abstract record PineValue : IEquatable<PineValue>
         "ifFalse",
         "environment",
         "function",
-        "expression"
+        "expression",
 
+        // From the FirCompiler module
+        "FirCompiler",
+        "FunctionApplicationExpression",
+        "ReferenceExpression",
+        "DeclarationBlockExpression",
+        "PineFunctionApplicationExpression",
+
+        "Deconstruction",
+        "ListItemDeconstruction",
+        "SkipItemsDeconstruction",
+        "PineFunctionApplicationDeconstruction",
+
+        "FunctionEnvironment",
+        "LocalEnvironment",
+        "ImportedEnvironment",
+        "IndependentEnvironment",
+
+
+        // From the Elm syntax library
+        "Module",
+        "File",
+        "Import",
+
+        "Declaration",
+        "FunctionDeclaration",
+        "AliasDeclaration",
+        "CustomTypeDeclaration",
+        "PortDeclaration",
+        "InfixDeclaration",
+        "Destructuring",
 
         ];
 
-    private static IEnumerable<ListValue> BuildInternedLists() =>
+    private static readonly IReadOnlyList<ListValue> InternedStringsLists =
+        [..InternedStrings
+        .Distinct()
+        .Select(s => new ListValue(PineValueAsString.ListValueFromString(s)))];
+
+    private static readonly IReadOnlyList<ListValue> InternedElmStringsLists =
+        [..InternedStringsLists
+        .Distinct()
+        .Select(s => new ListValue([Interned_Pine_string_String, s]))];
+
+    private static readonly IReadOnlyList<ListValue> InternedStringsInCompiler =
+        [..InternedStringsLists
+        .Distinct()
+        .Select(selector: s =>
+        (ListValue)
+        ElmValueEncoding.ElmValueAsPineValue(
+            ElmValueInterop.PineValueEncodedAsInElmCompiler(s)))];
+
+    private static readonly IReadOnlyList<ListValue> InternedLists =
         [
-        ..InternedStrings.Select(s => new ListValue(PineValueAsString.ListValueFromString(s)))
+        Interned_Pine_string_String,
+        ..InternedStringsLists,
+        ..InternedElmStringsLists,
+        ..InternedStringsInCompiler
         ];
 
-    private static readonly FrozenDictionary<ListValue, ListValue> InternedLists =
-        BuildInternedLists().ToFrozenDictionary(
+    private static readonly FrozenDictionary<ListValue, ListValue> InternedListsDict =
+        InternedLists
+        .Distinct()
+        .ToFrozenDictionary(
             keySelector: value => value,
             elementSelector: value => value);
 

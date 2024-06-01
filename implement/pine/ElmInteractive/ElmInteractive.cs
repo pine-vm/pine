@@ -1,6 +1,7 @@
 using ElmTime.Elm019;
 using ElmTime.JavaScript;
 using Pine;
+using Pine.ElmInteractive;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -418,7 +419,7 @@ public class ElmInteractive
 
     public static Result<string, EvaluatedStruct> SubmissionResponseFromResponsePineValue(
         PineValue response) =>
-        ElmValue.PineValueAsElmValue(response)
+        ElmValueEncoding.PineValueAsElmValue(response)
         .MapError(err => "Failed to convert Pine value to Elm value: " + err)
         .Map(elmValue => new EvaluatedStruct(ElmValue.ElmValueAsExpression(elmValue).expressionString));
 

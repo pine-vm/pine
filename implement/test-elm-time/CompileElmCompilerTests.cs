@@ -1,6 +1,7 @@
 using ElmTime.ElmInteractive;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Pine;
+using Pine.ElmInteractive;
 using Pine.PineVM;
 using System;
 using System.Collections.Generic;
@@ -157,7 +158,7 @@ public class CompileElmCompilerTests
             .Extract(err => throw new Exception(err));
 
         var responseAsElmValue =
-            ElmValue.PineValueAsElmValue(parsedModulePineValue)
+            ElmValueEncoding.PineValueAsElmValue(parsedModulePineValue)
             .Extract(err => throw new Exception(err));
 
         var responseAsExpression =
@@ -344,11 +345,11 @@ public class CompileElmCompilerTests
                 pineVM,
                 stringSplitFunction,
                 arguments:
-                [ElmValue.ElmValueAsPineValue(new ElmValue.ElmString(",")),
-                    ElmValue.ElmValueAsPineValue(new ElmValue.ElmString("pizza,risotto,focaccia"))]);
+                [ElmValueEncoding.ElmValueAsPineValue(new ElmValue.ElmString(",")),
+                    ElmValueEncoding.ElmValueAsPineValue(new ElmValue.ElmString("pizza,risotto,focaccia"))]);
 
         var stringSplitResultElmValue =
-            ElmValue.PineValueAsElmValue(stringSplitApplicationResult.Extract(err => throw new Exception(err)))
+            ElmValueEncoding.PineValueAsElmValue(stringSplitApplicationResult.Extract(err => throw new Exception(err)))
             .Extract(err => throw new Exception(err));
 
         Assert.AreEqual(
@@ -470,7 +471,7 @@ public class CompileElmCompilerTests
                 .Extract(err => throw new Exception(err));
 
             var declarationValueAsElmValue =
-                ElmValue.PineValueAsElmValue(declarationValueResult)
+                ElmValueEncoding.PineValueAsElmValue(declarationValueResult)
                 .Extract(err => throw new Exception(err));
 
             var (declarationValueAsElmValueAsExpr, _) =
@@ -539,9 +540,9 @@ public class CompileElmCompilerTests
         static PineValue ParsedElmFileRecordValue(
             string fileText,
             PineValue parsedModuleValue) =>
-            ElmValue.ElmRecordAsPineValue(
+            ElmValueEncoding.ElmRecordAsPineValue(
                 [
-                ("fileText", ElmValue.ElmValueAsPineValue(new ElmValue.ElmString(fileText))),
+                ("fileText", ElmValueEncoding.ElmValueAsPineValue(new ElmValue.ElmString(fileText))),
                 ("parsedModule", parsedModuleValue)
                 ]);
 
@@ -557,7 +558,7 @@ public class CompileElmCompilerTests
             ElmValueInterop.PineValueEncodedAsInElmCompiler(PineValue.EmptyList);
 
         var pineValueEmptyListInCompiler =
-            ElmValue.ElmValueAsPineValue(pineValueEmptyListElmValue);
+            ElmValueEncoding.ElmValueAsPineValue(pineValueEmptyListElmValue);
 
         // var (optimizingPineVM, pineVMCache) = InteractiveSessionPine.BuildPineVM(caching: true, autoPGO: pgoShare);
         var (optimizingPineVM, pineVMCache) = InteractiveSessionPine.BuildPineVM(caching: true, autoPGO: null);
@@ -581,7 +582,7 @@ public class CompileElmCompilerTests
                 .Extract(err => throw new Exception(err));
 
             var compilerResponseElm =
-                ElmValue.PineValueAsElmValue(compilerResponseValue)
+                ElmValueEncoding.PineValueAsElmValue(compilerResponseValue)
                 .Extract(err => throw new Exception(err));
 
             var compilerResponseValueString =
@@ -621,13 +622,13 @@ public class CompileElmCompilerTests
                             -> Result String { addedModules : List ( List String, Pine.Value ), environment : Pine.Value }
                      * */
                     [
-                        ElmValue.ElmValueAsPineValue(prevEnvValue),
+                        ElmValueEncoding.ElmValueAsPineValue(prevEnvValue),
                         PineValue.List([ParsedElmFileRecordValue(moduleText, parsedModuleValue)])
                     ]
                     )
                 .MapError(err => "Failed to apply function: " + err)
                 .AndThen(compilerResponseValue =>
-                    ElmValue.PineValueAsElmValue(compilerResponseValue)
+                    ElmValueEncoding.PineValueAsElmValue(compilerResponseValue)
                     .AndThen(compilerResponseElm =>
                     compilerResponseElm switch
                     {
