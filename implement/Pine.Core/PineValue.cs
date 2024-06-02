@@ -65,6 +65,9 @@ public abstract record PineValue : IEquatable<PineValue>
         [..Enumerable.Range(0, 256)
         .SelectMany(i => Enumerable.Range(0, 256).Select(j => new BlobValue(new byte[] { (byte)i, (byte)j })))];
 
+    private static readonly PineValue[] InternedBlobs =
+        [EmptyBlob, .. InternedBlobSingle, .. InternedBlobTuple];
+
     private static readonly ListValue Interned_Pine_string_String = (ListValue)PineValueAsString.ValueFromString("String");
 
     private static readonly IEnumerable<string> InternedStrings =
@@ -203,8 +206,16 @@ public abstract record PineValue : IEquatable<PineValue>
         .Distinct()
         .Select(s => new ListValue([Interned_Pine_string_String, s]))];
 
-    private static readonly IReadOnlyList<ListValue> InternedStringsInCompiler =
-        [..InternedStringsLists
+    private static readonly IReadOnlyList<ListValue> InternedBlobsInCompiler =
+        [..InternedBlobs
+        .Select(selector: b =>
+        (ListValue)
+        ElmValueEncoding.ElmValueAsPineValue(
+            ElmValueInterop.PineValueEncodedAsInElmCompiler(b)))
+        ];
+
+    private static readonly IReadOnlyList<ListValue> InternedListsInCompiler =
+        [..InternedStringsLists.Prepend(EmptyList)
         .Distinct()
         .Select(selector: s =>
         (ListValue)
@@ -216,7 +227,8 @@ public abstract record PineValue : IEquatable<PineValue>
         Interned_Pine_string_String,
         ..InternedStringsLists,
         ..InternedElmStringsLists,
-        ..InternedStringsInCompiler
+        ..InternedBlobsInCompiler,
+        ..InternedListsInCompiler
         ];
 
     private static readonly FrozenDictionary<ListValue, ListValue> InternedListsDict =
