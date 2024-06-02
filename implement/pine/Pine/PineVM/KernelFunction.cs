@@ -76,13 +76,33 @@ public static class KernelFunction
             });
 
     public static PineValue skip(PineValue value) =>
-        KernelFunctionExpectingExactlyTwoArguments(
-            PineValueAsInteger.SignedIntegerFromValueRelaxed,
-            Result<string, PineValue>.ok,
-            compose: skip,
-            value);
+        value switch
+        {
+            PineValue.ListValue listValue =>
+            listValue.Elements.Count is 2 ?
+            PineValueAsInteger.SignedIntegerFromValueRelaxed(listValue.Elements[0]) switch
+            {
+                Result<string, BigInteger>.Ok count =>
+                skip(count.Value, listValue.Elements[1]),
+
+                _ =>
+                PineValue.EmptyList
+            }
+            :
+            PineValue.EmptyList,
+
+            PineValue.BlobValue blobValue =>
+            PineValue.EmptyList,
+
+            _ =>
+            throw new NotImplementedException()
+        };
 
     public static PineValue skip(BigInteger count, PineValue value) =>
+        count <= 0
+        ?
+        value
+        :
         value switch
         {
             PineValue.BlobValue blobValue =>
@@ -102,11 +122,27 @@ public static class KernelFunction
         };
 
     public static PineValue take(PineValue value) =>
-        KernelFunctionExpectingExactlyTwoArguments(
-            PineValueAsInteger.SignedIntegerFromValueRelaxed,
-            Result<string, PineValue>.ok,
-            compose: take,
-            value);
+        value switch
+        {
+            PineValue.ListValue listValue =>
+            listValue.Elements.Count is 2 ?
+            PineValueAsInteger.SignedIntegerFromValueRelaxed(listValue.Elements[0]) switch
+            {
+                Result<string, BigInteger>.Ok count =>
+                take(count.Value, listValue.Elements[1]),
+
+                _ =>
+                PineValue.EmptyList
+            }
+            :
+            PineValue.EmptyList,
+
+            PineValue.BlobValue =>
+            PineValue.EmptyList,
+
+            _ =>
+            throw new NotImplementedException()
+        };
 
     public static PineValue take(BigInteger count, PineValue value) =>
         value switch
@@ -243,7 +279,7 @@ public static class KernelFunction
 
         if (value is PineValue.ListValue listValue)
         {
-            if (listValue.Elements.Count == 0)
+            if (listValue.Elements.Count is 0)
                 return PineVM.ValueFromBool(true);
 
             if (PineValueAsInteger.SignedIntegerFromValueRelaxed(listValue.Elements[0]) is not Result<string, BigInteger>.Ok firstInt)
@@ -265,7 +301,7 @@ public static class KernelFunction
             return PineVM.ValueFromBool(true);
         }
 
-        throw new Exception("Unexpected value type: " + value.GetType().FullName);
+        throw new NotImplementedException("Unexpected value type: " + value.GetType().FullName);
     }
 
     private static PineValue KernelFunctionExpectingListOfBigIntAndProducingBigInt(
