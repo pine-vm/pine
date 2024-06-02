@@ -66,8 +66,12 @@ public static class KernelFunction
         PineValueAsInteger.ValueFromSignedInteger(
             value switch
             {
-                PineValue.BlobValue blobValue => blobValue.Bytes.Length,
-                PineValue.ListValue listValue => listValue.Elements.Count,
+                PineValue.BlobValue blobValue =>
+                blobValue.Bytes.Length,
+
+                PineValue.ListValue listValue =>
+                listValue.Elements.Count,
+
                 _ => throw new NotImplementedException()
             });
 
@@ -126,8 +130,12 @@ public static class KernelFunction
     public static PineValue reverse(PineValue value) =>
         value switch
         {
-            PineValue.BlobValue blobValue => PineValue.Blob([.. blobValue.Bytes.ToArray().Reverse()]),
-            PineValue.ListValue listValue => PineValue.List([.. listValue.Elements.Reverse()]),
+            PineValue.BlobValue blobValue =>
+            PineValue.Blob([.. blobValue.Bytes.ToArray().Reverse()]),
+
+            PineValue.ListValue listValue =>
+            PineValue.List([.. listValue.Elements.Reverse()]),
+
             _ => throw new NotImplementedException()
         };
 
@@ -214,7 +222,7 @@ public static class KernelFunction
         {
             var isSorted = true;
 
-            if(blobValue.Bytes.Length > 0)
+            if (blobValue.Bytes.Length > 0)
             {
                 var previous = blobValue.Bytes.Span[0];
 
@@ -274,9 +282,19 @@ public static class KernelFunction
         KernelFunctionExpectingList(
             value,
             list =>
-            PineVM.ResultListMapCombine(list, PineValueAsInteger.SignedIntegerFromValueRelaxed)
-            .Map(ints => aggregate(ints))
-            .WithDefault(PineValue.EmptyList));
+            {
+                var asIntegers = new BigInteger[list.Count];
+
+                for (var i = 0; i < list.Count; ++i)
+                {
+                    if (PineValueAsInteger.SignedIntegerFromValueRelaxed(list[i]) is not Result<string, BigInteger>.Ok intResult)
+                        return PineValue.EmptyList;
+
+                    asIntegers[i] = intResult.Value;
+                }
+
+                return aggregate(asIntegers);
+            });
 
     private static PineValue KernelFunctionExpectingExactlyTwoArguments<ArgA, ArgB>(
         Func<PineValue, Result<string, ArgA>> decodeArgA,
@@ -289,11 +307,21 @@ public static class KernelFunction
             list switch
             {
             [var first, var second] =>
-            decodeArgA(first)
-            .AndThen(argA =>
-            decodeArgB(second)
-            .Map(argB => compose(argA, argB)))
-            .WithDefault(PineValue.EmptyList),
+                decodeArgA(first) switch
+                {
+                    Result<string, ArgA>.Ok argA =>
+                    decodeArgB(second) switch
+                    {
+                        Result<string, ArgB>.Ok argB =>
+                        compose(argA.Value, argB.Value),
+
+                        _ =>
+                        PineValue.EmptyList
+                    },
+
+                    _ =>
+                    PineValue.EmptyList
+                },
 
                 _ =>
                 PineValue.EmptyList

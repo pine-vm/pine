@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Frozen;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
@@ -36,7 +37,7 @@ public class PineVM : IPineVM
     {
         var parseExpressionOverridesDict =
             parseExpressionOverrides
-            ?.ToImmutableDictionary(
+            ?.ToFrozenDictionary(
                 keySelector: encodedExprAndDelegate => encodedExprAndDelegate.Key,
                 elementSelector: encodedExprAndDelegate => new Expression.DelegatingExpression(encodedExprAndDelegate.Value));
 
@@ -77,23 +78,33 @@ public class PineVM : IPineVM
 
         if (expression is Expression.ListExpression listExpression)
         {
-            return
-                EvaluateListExpression(listExpression, environment)
-                .MapError(err => "Failed to evaluate list: " + err);
+            return EvaluateListExpression(listExpression, environment);
         }
 
         if (expression is Expression.ParseAndEvalExpression applicationExpression)
         {
             return
-                EvaluateParseAndEvalExpression(applicationExpression, environment)
-                .MapError(err => "Failed to evaluate parse and evaluate: " + err);
+                EvaluateParseAndEvalExpression(applicationExpression, environment) switch
+                {
+                    Result<string, PineValue>.Err err =>
+                    "Failed to evaluate parse and evaluate: " + err,
+
+                    var other =>
+                    other
+                };
         }
 
         if (expression is Expression.KernelApplicationExpression kernelApplicationExpression)
         {
             return
-                EvaluateKernelApplicationExpression(environment, kernelApplicationExpression)
-                .MapError(err => "Failed to evaluate kernel function application: " + err);
+                EvaluateKernelApplicationExpression(environment, kernelApplicationExpression) switch
+                {
+                    Result<string, PineValue>.Err err =>
+                    "Failed to evaluate kernel function application: " + err,
+
+                    var other =>
+                    other
+                };
         }
 
         if (expression is Expression.ConditionalExpression conditionalExpression)
@@ -123,9 +134,9 @@ public class PineVM : IPineVM
         Expression.ListExpression listExpression,
         PineValue environment)
     {
-        var listItems = new List<PineValue>(listExpression.List.Length);
+        var listItems = new List<PineValue>(listExpression.List.Count);
 
-        for (var i = 0; i < listExpression.List.Length; i++)
+        for (var i = 0; i < listExpression.List.Count; i++)
         {
             var item = listExpression.List[i];
 
@@ -257,9 +268,18 @@ public class PineVM : IPineVM
     public Result<string, PineValue> EvaluateKernelApplicationExpression(
         PineValue environment,
         Expression.KernelApplicationExpression application) =>
-        EvaluateExpression(application.argument, environment)
-        .MapError(error => "Failed to evaluate argument: " + error)
-        .Map(argument => application.function(argument));
+        EvaluateExpression(application.argument, environment) switch
+        {
+            Result<string, PineValue>.Ok argument =>
+            application.function(argument.Value),
+
+            Result<string, PineValue>.Err error =>
+            "Failed to evaluate argument: " + error,
+
+            var otherResult =>
+            throw new NotImplementedException("Unexpected result type: " + otherResult.GetType().FullName)
+        };
+
 
     public Result<string, PineValue> EvaluateConditionalExpression(
         PineValue environment,
@@ -352,56 +372,123 @@ public class PineVM : IPineVM
             return delegatingExpression;
 
         return
-            ParseChoiceFromPineValue(
-                generalParser: value => ParseExpressionFromValue(value, parseExpressionOverrides),
-                ExpressionParsers,
-                value);
+            ParseExpressionFromValueDefault(
+                value,
+                generalParser: value => ParseExpressionFromValue(value, parseExpressionOverrides));
     }
 
     public Result<string, Expression> ParseExpressionFromValue(PineValue value) =>
         parseExpressionDelegate(value);
 
-    public static Result<string, Expression> ParseExpressionFromValueDefault(PineValue value) =>
-        ParseChoiceFromPineValue(
-            generalParser: ParseExpressionFromValueDefault,
-            ExpressionParsers,
-            value);
+    public static Result<string, Expression> ParseExpressionFromValueDefault(
+        PineValue value) =>
+        ParseExpressionFromValueDefault(
+            value,
+            generalParser: ParseExpressionFromValueDefault);
 
-    private static readonly IImmutableDictionary<PineValue, Func<Func<PineValue, Result<string, Expression>>, PineValue, Result<string, Expression>>> ExpressionParsers =
-        ImmutableDictionary<string, Func<Func<PineValue, Result<string, Expression>>, PineValue, Result<string, Expression>>>.Empty
-        .SetItem(
-            "Literal",
-            (_, literal) => new Expression.LiteralExpression(literal))
-        .SetItem(
-            "List",
-            (generalParser, listValue) =>
-            ParsePineListValue(listValue)
-            .AndThen(list => ResultListMapCombine(list, generalParser))
-            .Map(expressionList => (Expression)new Expression.ListExpression([.. expressionList])))
-        .SetItem(
-            "ParseAndEval",
-            (generalParser, value) => ParseParseAndEvalExpression(generalParser, value)
-            .Map(application => (Expression)application))
-        .SetItem(
-            "KernelApplication",
-            (generalParser, value) => ParseKernelApplicationExpression(generalParser, value)
-            .Map(application => (Expression)application))
-        .SetItem(
-            "Conditional",
-            (generalParser, value) => ParseConditionalExpression(generalParser, value)
-            .Map(conditional => (Expression)conditional))
-        .SetItem(
-            "Environment",
-            (_, _) => new Expression.EnvironmentExpression())
-        .SetItem(
-            "StringTag",
-            (generalParser, value) => ParseStringTagExpression(generalParser, value)
-            .Map(stringTag => (Expression)stringTag))
-        .ToImmutableDictionary(
-            keySelector:
-            stringTagAndParser => PineValueAsString.ValueFromString(stringTagAndParser.Key),
-            elementSelector:
-            stringTagAndParser => stringTagAndParser.Value);
+    public static Result<string, Expression> ParseExpressionFromValueDefault(
+        PineValue value,
+        Func<PineValue, Result<string, Expression>> generalParser) =>
+        value switch
+        {
+            PineValue.ListValue rootList =>
+            rootList.Elements.Count is not 2
+            ?
+            "Unexpected number of items in list: Not 2 but " + rootList.Elements.Count
+            :
+            PineValueAsString.StringFromValue(rootList.Elements[0]) switch
+            {
+                Result<string, string>.Err err =>
+                err.Value,
+
+                Result<string, string>.Ok tag =>
+                tag.Value switch
+                {
+                    "Literal" =>
+                    new Expression.LiteralExpression(rootList.Elements[1]),
+
+                    "List" =>
+                    ParsePineListValue(rootList.Elements[1]) switch
+                    {
+                        Result<string, IReadOnlyList<PineValue>>.Err err =>
+                        (Result<string, Expression>)err.Value,
+
+                        Result<string, IReadOnlyList<PineValue>>.Ok list =>
+                        ResultListMapCombine(list.Value, generalParser) switch
+                        {
+                            Result<string, IReadOnlyList<Expression>>.Err err =>
+                            (Result<string, Expression>)err.Value,
+
+                            Result<string, IReadOnlyList<Expression>>.Ok expressionList =>
+                            Result<string, Expression>.ok(new Expression.ListExpression(expressionList.Value)),
+
+                            var other =>
+                            throw new NotImplementedException("Unexpected result type: " + other.GetType().FullName)
+                        },
+
+                        var other =>
+                        throw new NotImplementedException("Unexpected result type: " + other.GetType().FullName)
+                    },
+
+                    "ParseAndEval" =>
+                    ParseParseAndEvalExpression(generalParser, rootList.Elements[1]) switch
+                    {
+                        Result<string, Expression.ParseAndEvalExpression>.Err err =>
+                        (Result<string, Expression>)err.Value,
+
+                        Result<string, Expression.ParseAndEvalExpression>.Ok parseAndEval =>
+                        (Result<string, Expression>)parseAndEval.Value,
+
+                        var other =>
+                        throw new NotImplementedException("Unexpected result type: " + other.GetType().FullName)
+                    },
+
+                    "KernelApplication" =>
+                    ParseKernelApplicationExpression(generalParser, rootList.Elements[1]) switch
+                    {
+                        Result<string, Expression.KernelApplicationExpression>.Err err =>
+                        (Result<string, Expression>)err.Value,
+
+                        Result<string, Expression.KernelApplicationExpression>.Ok kernelApplication =>
+                        (Result<string, Expression>)kernelApplication.Value,
+
+                        var other =>
+                        throw new NotImplementedException("Unexpected result type: " + other.GetType().FullName)
+                    },
+
+                    "Conditional" =>
+                    ParseConditionalExpression(generalParser, rootList.Elements[1]) switch
+                    {
+                        Result<string, Expression.ConditionalExpression>.Err err =>
+                        (Result<string, Expression>)err.Value,
+
+                        Result<string, Expression.ConditionalExpression>.Ok conditional =>
+                        (Result<string, Expression>)conditional.Value,
+
+                        var other =>
+                        throw new NotImplementedException("Unexpected result type: " + other.GetType().FullName)
+                    },
+
+                    "Environment" =>
+                    environmentExpr,
+
+                    "StringTag" =>
+                    ParseStringTagExpression(generalParser, rootList.Elements[1])
+                    .Map(stringTag => (Expression)stringTag),
+
+                    var otherTag =>
+                    "Tag name does not match any known expression variant: " + otherTag
+                },
+
+                var other =>
+                "Unexpected result type: " + other.GetType().FullName
+            },
+
+            var other =>
+            "Unexpected value type, not a list: " + other.GetType().FullName
+        };
+
+    private static readonly Expression environmentExpr = new Expression.EnvironmentExpression();
 
     public static Result<string, PineValue> EncodeParseAndEvalExpression(Expression.ParseAndEvalExpression parseAndEval) =>
         EncodeExpressionAsValue(parseAndEval.expression)
@@ -435,11 +522,20 @@ public class PineVM : IPineVM
         PineValue value) =>
         DecodeRecord2FromPineValue(
             value,
-            (nameof(Expression.KernelApplicationExpression.functionName), StringFromComponent: PineValueAsString.StringFromValue),
-            (nameof(Expression.KernelApplicationExpression.argument), generalParser),
+            (nameof(Expression.KernelApplicationExpression.functionName), decode: PineValueAsString.StringFromValue),
+            (nameof(Expression.KernelApplicationExpression.argument), decode: generalParser),
             (functionName, argument) => (functionName, argument))
-        .AndThen(functionNameAndArgument =>
-        ParseKernelApplicationExpression(functionNameAndArgument.functionName, functionNameAndArgument.argument));
+        switch
+        {
+            Result<string, (string functionName, Expression argument)>.Err err =>
+            err.Value,
+
+            Result<string, (string functionName, Expression argument)>.Ok functionNameAndArgument =>
+            ParseKernelApplicationExpression(functionNameAndArgument.Value.functionName, functionNameAndArgument.Value.argument),
+
+            var other =>
+            throw new NotImplementedException("Unexpected result type: " + other.GetType().FullName)
+        };
 
     public static Expression.KernelApplicationExpression ParseKernelApplicationExpressionThrowOnUnknownName(
         string functionName,
@@ -489,12 +585,47 @@ public class PineVM : IPineVM
     public static Result<string, Expression.StringTagExpression> ParseStringTagExpression(
         Func<PineValue, Result<string, Expression>> generalParser,
         PineValue value) =>
-        ParsePineListValue(value)
-        .AndThen(ParseListWithExactlyTwoElements)
-        .AndThen(tagValueAndTaggedValue =>
-            PineValueAsString.StringFromValue(tagValueAndTaggedValue.Item1).MapError(err => "Failed to parse tag: " + err)
-        .AndThen(tag => generalParser(tagValueAndTaggedValue.Item2).MapError(err => "Failed to parse tagged expression: " + err)
-        .Map(tagged => new Expression.StringTagExpression(tag: tag, tagged: tagged))));
+        ParsePineListValue(value) switch
+        {
+            Result<string, IReadOnlyList<PineValue>>.Err err =>
+            err.Value,
+
+            Result<string, IReadOnlyList<PineValue>>.Ok list =>
+            ParseListWithExactlyTwoElements(list.Value) switch
+            {
+                Result<string, (PineValue, PineValue)>.Err err =>
+                err.Value,
+
+                Result<string, (PineValue, PineValue)>.Ok tagValueAndTaggedValue =>
+                PineValueAsString.StringFromValue(tagValueAndTaggedValue.Value.Item1) switch
+                {
+                    Result<string, string>.Err err =>
+                    err.Value,
+
+                    Result<string, string>.Ok tag =>
+                    generalParser(tagValueAndTaggedValue.Value.Item2) switch
+                    {
+                        Result<string, Expression>.Err err =>
+                        err.Value,
+
+                        Result<string, Expression>.Ok tagged =>
+                        new Expression.StringTagExpression(tag: tag.Value, tagged: tagged.Value),
+
+                        var other =>
+                        throw new NotImplementedException("Unexpected result type: " + other.GetType().FullName)
+                    },
+
+                    var other =>
+                    throw new NotImplementedException("Unexpected result type: " + other.GetType().FullName)
+                },
+
+                var other =>
+                throw new NotImplementedException("Unexpected result type: " + other.GetType().FullName)
+            },
+
+            var other =>
+            throw new NotImplementedException("Unexpected result type: " + other.GetType().FullName)
+        };
 
     public static Result<ErrT, IReadOnlyList<MappedOkT>> ResultListMapCombine<ErrT, OkT, MappedOkT>(
         IReadOnlyList<OkT> list,
@@ -507,68 +638,152 @@ public class PineVM : IPineVM
         (string name, Func<PineValue, Result<string, FieldB>> decode) fieldB,
         (string name, Func<PineValue, Result<string, FieldC>> decode) fieldC,
         Func<FieldA, FieldB, FieldC, Record> compose) =>
-        ParseRecordFromPineValue(value)
-        .AndThen(record =>
+        ParseRecordFromPineValue(value) switch
         {
-            if (!record.TryGetValue(fieldA.name, out var fieldAValue))
-                return "Did not find field " + fieldA.name;
+            Result<string, IReadOnlyDictionary<string, PineValue>>.Err err =>
+            (Result<string, Record>)("Failed to decode as record: " + err.Value),
 
-            if (!record.TryGetValue(fieldB.name, out var fieldBValue))
-                return "Did not find field " + fieldB.name;
+            Result<string, IReadOnlyDictionary<string, PineValue>>.Ok record =>
+            record.Value.TryGetValue(fieldA.name, out var fieldAValue) switch
+            {
+                false =>
+                "Did not find field " + fieldA.name,
 
-            if (!record.TryGetValue(fieldC.name, out var fieldCValue))
-                return "Did not find field " + fieldC.name;
+                true =>
+                record.Value.TryGetValue(fieldB.name, out var fieldBValue) switch
+                {
+                    false =>
+                    "Did not find field " + fieldB.name,
 
-            return
-            fieldA.decode(fieldAValue)
-            .AndThen(fieldADecoded =>
-            fieldB.decode(fieldBValue)
-            .AndThen(fieldBDecoded =>
-            fieldC.decode(fieldCValue)
-            .Map(fieldCDecoded => compose(fieldADecoded, fieldBDecoded, fieldCDecoded))));
-        });
+                    true =>
+                    record.Value.TryGetValue(fieldC.name, out var fieldCValue) switch
+                    {
+                        false =>
+                        "Did not find field " + fieldC.name,
+
+                        true =>
+                        fieldA.decode(fieldAValue) switch
+                        {
+                            Result<string, FieldA>.Err err =>
+                            (Result<string, Record>)err.Value,
+
+                            Result<string, FieldA>.Ok fieldADecoded =>
+                            fieldB.decode(fieldBValue) switch
+                            {
+                                Result<string, FieldB>.Err err =>
+                                (Result<string, Record>)err.Value,
+
+                                Result<string, FieldB>.Ok fieldBDecoded =>
+                                fieldC.decode(fieldCValue) switch
+                                {
+                                    Result<string, FieldC>.Err err =>
+                                    (Result<string, Record>)err.Value,
+
+                                    Result<string, FieldC>.Ok fieldCDecoded =>
+                                    Result<string, Record>.ok(compose(fieldADecoded.Value, fieldBDecoded.Value, fieldCDecoded.Value)),
+
+                                    var other =>
+                                    throw new NotImplementedException("Unexpected result type: " + other.GetType().FullName)
+                                },
+
+                                var other =>
+                                throw new NotImplementedException("Unexpected result type: " + other.GetType().FullName)
+                            },
+
+                            var other =>
+                            throw new NotImplementedException("Unexpected result type: " + other.GetType().FullName)
+                        }
+                    }
+                }
+            },
+
+            var other =>
+            throw new NotImplementedException("Unexpected result type: " + other.GetType().FullName)
+        };
 
     public static Result<string, Record> DecodeRecord2FromPineValue<FieldA, FieldB, Record>(
         PineValue value,
         (string name, Func<PineValue, Result<string, FieldA>> decode) fieldA,
         (string name, Func<PineValue, Result<string, FieldB>> decode) fieldB,
         Func<FieldA, FieldB, Record> compose) =>
-        ParseRecordFromPineValue(value)
-        .AndThen(record =>
+        ParseRecordFromPineValue(value) switch
         {
-            if (!record.TryGetValue(fieldA.name, out var fieldAValue))
-                return "Did not find field " + fieldA.name;
+            Result<string, IReadOnlyDictionary<string, PineValue>>.Err err =>
+            (Result<string, Record>)("Failed to decode as record: " + err.Value),
 
-            if (!record.TryGetValue(fieldB.name, out var fieldBValue))
-                return "Did not find field " + fieldB.name;
+            Result<string, IReadOnlyDictionary<string, PineValue>>.Ok record =>
+            record.Value.TryGetValue(fieldA.name, out var fieldAValue) switch
+            {
+                false =>
+                "Did not find field " + fieldA.name,
 
-            return
-            fieldA.decode(fieldAValue)
-            .AndThen(fieldADecoded =>
-            fieldB.decode(fieldBValue)
-            .Map(fieldBDecoded => compose(fieldADecoded, fieldBDecoded)));
-        });
+                true =>
+                record.Value.TryGetValue(fieldB.name, out var fieldBValue) switch
+                {
+                    false =>
+                    "Did not find field " + fieldB.name,
+
+                    true =>
+                    fieldA.decode(fieldAValue) switch
+                    {
+                        Result<string, FieldA>.Err err =>
+                        (Result<string, Record>)err.Value,
+
+                        Result<string, FieldA>.Ok fieldADecoded =>
+                        fieldB.decode(fieldBValue) switch
+                        {
+                            Result<string, FieldB>.Err err =>
+                            (Result<string, Record>)err.Value,
+
+                            Result<string, FieldB>.Ok fieldBDecoded =>
+                            Result<string, Record>.ok(compose(fieldADecoded.Value, fieldBDecoded.Value)),
+
+                            var other =>
+                            throw new NotImplementedException("Unexpected result type: " + other.GetType().FullName)
+                        },
+
+                        var other =>
+                        throw new NotImplementedException("Unexpected result type: " + other.GetType().FullName)
+                    }
+                }
+            },
+
+            var other =>
+            throw new NotImplementedException("Unexpected result type: " + other.GetType().FullName)
+        };
 
     public static PineValue EncodeRecordToPineValue(params (string fieldName, PineValue fieldValue)[] fields) =>
         PineValue.List(
-            fields.Select(field => PineValue.List(
+            [..fields.Select(field => PineValue.List(
                 [
                     PineValueAsString.ValueFromString(field.fieldName),
                     field.fieldValue
-                ])).ToArray());
+                ]))]);
 
 
-    public static Result<string, ImmutableDictionary<string, PineValue>> ParseRecordFromPineValue(PineValue value) =>
-        ParsePineListValue(value)
-        .AndThen(list =>
-        list
-        .Aggregate(
-            seed: (Result<string, ImmutableDictionary<string, PineValue>>)ImmutableDictionary<string, PineValue>.Empty,
-            func: (aggregate, listElement) => aggregate.AndThen(recordFields =>
-            ParsePineListValue(listElement)
-            .AndThen(ParseListWithExactlyTwoElements)
-            .AndThen(fieldNameValueAndValue => PineValueAsString.StringFromValue(fieldNameValueAndValue.Item1)
-            .Map(fieldName => recordFields.SetItem(fieldName, fieldNameValueAndValue.Item2))))));
+    public static Result<string, IReadOnlyDictionary<string, PineValue>> ParseRecordFromPineValue(PineValue value)
+    {
+        if (ParsePineListValue(value) is not Result<string, IReadOnlyList<PineValue>>.Ok listResult)
+            return "Failed to parse as list";
+
+        var recordFields = new Dictionary<string, PineValue>(listResult.Value.Count);
+
+        foreach (var listElement in listResult.Value)
+        {
+            if (ParsePineListValue(listElement) is not Result<string, IReadOnlyList<PineValue>>.Ok listElementResult)
+                return "Failed to parse list element as list";
+
+            if (ParseListWithExactlyTwoElements(listElementResult.Value) is not Result<string, (PineValue, PineValue)>.Ok fieldNameValueAndValue)
+                return "Failed to parse list element as list with exactly two elements";
+
+            if (PineValueAsString.StringFromValue(fieldNameValueAndValue.Value.Item1) is not Result<string, string>.Ok fieldName)
+                return "Failed to parse field name as string";
+
+            recordFields[fieldName.Value] = fieldNameValueAndValue.Value.Item2;
+        }
+
+        return recordFields;
+    }
 
     public static PineValue EncodeChoiceTypeVariantAsPineValue(string tagName, PineValue tagArguments) =>
         PineValue.List(
@@ -579,35 +794,60 @@ public class PineVM : IPineVM
 
     public static Result<string, T> ParseChoiceFromPineValue<T>(
         Func<PineValue, Result<string, T>> generalParser,
-        IImmutableDictionary<PineValue, Func<Func<PineValue, Result<string, T>>, PineValue, Result<string, T>>> variants,
+        IReadOnlyDictionary<PineValue, Func<Func<PineValue, Result<string, T>>, PineValue, Result<string, T>>> variants,
         PineValue value) =>
-        ParsePineListValue(value)
-        .AndThen(ParseListWithExactlyTwoElements)
-        .AndThen(tagNameValueAndValue =>
+        ParsePineListValue(value) switch
         {
-            if (!variants.TryGetValue(tagNameValueAndValue.Item1, out var variant))
-                return (Result<string, T>)
-                    "Unexpected tag name: " +
-                    PineValueAsString.StringFromValue(tagNameValueAndValue.Item1)
-                    .Extract(err => "Failed to parse as string: " + err);
+            Result<string, IReadOnlyList<PineValue>>.Err err =>
+            err.Value,
 
-            return variant(generalParser, tagNameValueAndValue.Item2)!;
-        });
+            Result<string, IReadOnlyList<PineValue>>.Ok list =>
+            ParseListWithExactlyTwoElements(list.Value) switch
+            {
+                Result<string, (PineValue, PineValue)>.Err err =>
+                err.Value,
 
-    public static Result<string, IImmutableList<PineValue>> ParsePineListValue(PineValue value)
+                Result<string, (PineValue, PineValue)>.Ok tagNameValueAndValue =>
+                PineValueAsString.StringFromValue(tagNameValueAndValue.Value.Item1) switch
+                {
+                    Result<string, string>.Err err =>
+                    err.Value,
+
+                    Result<string, string>.Ok tagName =>
+                    variants.TryGetValue(tagNameValueAndValue.Value.Item1, out var variant) switch
+                    {
+                        false =>
+                        "Unexpected tag name: " + tagName,
+
+                        true =>
+                        variant(generalParser, tagNameValueAndValue.Value.Item2)
+                    },
+
+                    var other =>
+                    throw new NotImplementedException("Unexpected result type: " + other.GetType().FullName)
+                },
+
+                var other =>
+                throw new NotImplementedException("Unexpected result type: " + other.GetType().FullName)
+            },
+
+            var other =>
+            throw new NotImplementedException("Unexpected result type: " + other.GetType().FullName)
+        };
+
+    public static Result<string, IReadOnlyList<PineValue>> ParsePineListValue(PineValue value)
     {
         if (value is not PineValue.ListValue listValue)
             return "Not a list";
 
         return
-            Result<string, IImmutableList<PineValue>>.ok(
-                listValue.Elements as IImmutableList<PineValue> ?? listValue.Elements.ToImmutableList());
+            Result<string, IReadOnlyList<PineValue>>.ok(listValue.Elements);
     }
 
-    public static Result<string, (T, T)> ParseListWithExactlyTwoElements<T>(IImmutableList<T> list)
+    public static Result<string, (T, T)> ParseListWithExactlyTwoElements<T>(IReadOnlyList<T> list)
     {
         if (list.Count is not 2)
-            return "Unexpected number of elements in list: Not 2 but " + list.Count;
+            return "Unexpected number of items in list: Not 2 but " + list.Count;
 
         return (list[0], list[1]);
     }

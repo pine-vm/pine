@@ -109,7 +109,7 @@ public class PineKernelFunctionsInline
         if (kernelApp.argument is not Expression.ListExpression takeArgumentList)
             return null;
 
-        if (takeArgumentList.List.Length is not 2)
+        if (takeArgumentList.List.Count is not 2)
             return null;
 
         if (takeArgumentList.List[0] != new Expression.LiteralExpression(PineValueAsInteger.ValueFromSignedInteger(0)))

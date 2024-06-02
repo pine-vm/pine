@@ -268,7 +268,7 @@ public abstract record ExpressionEnvClass
         if (currentIndex < 0)
             return null;
 
-        if (currentIndex >= listExpr.List.Length)
+        if (currentIndex >= listExpr.List.Count)
             return null;
 
         return TryMapPathToParentEnvironment(listExpr.List[currentIndex], [.. path.Skip(1)]);
@@ -772,7 +772,7 @@ public class CodeAnalysis
             if (argumentKernelApplication.argument is not Expression.ListExpression skipArgumentList)
                 return null;
 
-            if (skipArgumentList.List.Length is not 2)
+            if (skipArgumentList.List.Count is not 2)
                 return null;
 
             if (skipArgumentList.List[0] is not Expression.LiteralExpression skipCountLiteral)

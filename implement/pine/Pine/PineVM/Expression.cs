@@ -16,7 +16,7 @@ public abstract record Expression
         : Expression;
 
     public record ListExpression(
-        ImmutableArray<Expression> List)
+        IReadOnlyList<Expression> List)
         : Expression
     {
         public virtual bool Equals(ListExpression? other)
@@ -26,7 +26,7 @@ public abstract record Expression
 
             return
                 ReferenceEquals(this, notNull) ||
-                List.Length == notNull.List.Length &&
+                List.Count == notNull.List.Count &&
                 List.SequenceEqual(notNull.List);
         }
 

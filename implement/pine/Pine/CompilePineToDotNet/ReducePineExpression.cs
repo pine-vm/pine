@@ -97,7 +97,7 @@ public class ReducePineExpression
 
                     case "skip":
                         {
-                            if (rootKernelApp.argument is Expression.ListExpression argumentList && argumentList.List.Length is 2)
+                            if (rootKernelApp.argument is Expression.ListExpression argumentList && argumentList.List.Count is 2)
                             {
                                 if (TryEvaluateExpressionIndependent(argumentList.List[0]) is Result<string, PineValue>.Ok okSkipCountValue)
                                 {
