@@ -110,11 +110,11 @@ public class DynamicPGOShare : IDisposable
 
             Task.Run(() =>
             {
-                var exprUsageSamples = profilingEvalTask.ProfilingPineVM.DequeueAllSamples();
+                var exprUsageSamples = profilingEvalTask.ProfilingPineVM.ExprEnvUsagesFlat;
 
                 var expressionUsages =
                 exprUsageSamples
-                .Select(sample => sample.Analysis.Value.ToMaybe())
+                .Select(sample => sample.Value.Analysis.Value.ToMaybe())
                 .WhereNotNothing()
                 .SelectMany(usage => usage)
                 .ToImmutableList();

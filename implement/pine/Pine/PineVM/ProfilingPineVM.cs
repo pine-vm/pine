@@ -3,7 +3,16 @@ using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 
+using ExpressionUsageRecord = System.Collections.Generic.Dictionary<Pine.PineValue, Pine.PineVM.ExpressionEnvUsageRecord>;
+
 namespace Pine.PineVM;
+
+public record ExpressionEnvUsageRecord(
+    PineValue Environment,
+    List<System.TimeSpan> OrigEvalDurations,
+    System.Lazy<Result<string, IReadOnlyList<ExpressionUsageAnalysis>>> Analysis);
+
+public record ExpressionUsageProfile(int UsageCount);
 
 
 public record ExpressionUsageAnalysis
@@ -44,26 +53,26 @@ public record ExpressionUsageAnalysis
     }
 }
 
-public record ExpressionUsageSample(
-    Expression.ParseAndEvalExpression ParseAndEvalExpr,
-    PineValue Environment,
-    System.TimeSpan OrigEvalDuration,
-    System.Lazy<Result<string, IReadOnlyList<ExpressionUsageAnalysis>>> Analysis);
-
-public record ExpressionUsageProfile(int UsageCount);
-
 public class ProfilingPineVM
 {
     public readonly ConcurrentQueue<System.TimeSpan> computeExpressionUsageTimes = new();
 
     public IPineVM PineVM { init; get; }
 
-    private readonly ConcurrentQueue<ExpressionUsageSample> expressionUsages = new();
+    private readonly PineVMCache parseExprCache = new();
 
-    public IReadOnlyList<ExpressionUsageSample> DequeueAllSamples()
-    {
-        return [.. expressionUsages.DequeueAllEnumerable()];
-    }
+    private readonly Dictionary<Expression.ParseAndEvalExpression, ExpressionUsageRecord> expressionUsages = [];
+
+    public IReadOnlyDictionary<(Expression.ParseAndEvalExpression, PineValue), ExpressionEnvUsageRecord> ExprEnvUsagesFlat =>
+        expressionUsages
+        .SelectMany(
+            exprUsageRecord =>
+            exprUsageRecord.Value
+            .Select(
+                envUsageRecord =>
+                new KeyValuePair<(Expression.ParseAndEvalExpression, PineValue), ExpressionEnvUsageRecord>
+                ((exprUsageRecord.Key, envUsageRecord.Key), envUsageRecord.Value)))
+        .ToImmutableDictionary();
 
     public ProfilingPineVM(
         PineVM.OverrideParseExprDelegate? overrideParseExpression = null,
@@ -81,13 +90,15 @@ public class ProfilingPineVM
                 overrideEvaluateExpression:
                 defaultHandler => new PineVM.EvalExprDelegate((expression, environment) =>
                 {
-                    var origEvalDuration = System.Diagnostics.Stopwatch.StartNew();
+                    var origEvalStartTime = System.Diagnostics.Stopwatch.GetTimestamp();
 
                     var evalResult =
                         (overrideEvaluateExpression?.Invoke(defaultHandler) ?? defaultHandler)
                         .Invoke(expression, environment);
 
-                    origEvalDuration.Stop();
+                    var origEvalDuration =
+                        System.Diagnostics.Stopwatch.GetElapsedTime(
+                            startingTimestamp: origEvalStartTime);
 
                     // if (DynamicPGOShare.ShouldIncludeExpressionInCompilation(expression))
                     if (expression is Expression.ParseAndEvalExpression parseAndEval)
@@ -100,7 +111,7 @@ public class ProfilingPineVM
                             .AndThen(parsedInnerExpr => defaultHandler(parseAndEval.environment, environment)
                             .Map(innerEnvValue =>
                             {
-                                var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+                                var analysisInnerStartTime = System.Diagnostics.Stopwatch.GetTimestamp();
 
                                 try
                                 {
@@ -114,19 +125,40 @@ public class ProfilingPineVM
                                 }
                                 finally
                                 {
-                                    stopwatch.Stop();
-                                    computeExpressionUsageTimes.Enqueue(stopwatch.Elapsed);
+                                    computeExpressionUsageTimes.Enqueue(
+                                        System.Diagnostics.Stopwatch.GetElapsedTime(startingTimestamp: analysisInnerStartTime));
                                 }
                             }));
                         }
 
-                        expressionUsages.Enqueue(
-                            new ExpressionUsageSample(
-                                ParseAndEvalExpr: parseAndEval,
-                                Environment: environment,
-                                OrigEvalDuration: origEvalDuration.Elapsed,
-                                Analysis: new System.Lazy<Result<string, IReadOnlyList<ExpressionUsageAnalysis>>>(
-                                    valueFactory: runAnalysis)));
+                        var exprUsageAlreadyInDict =
+                        expressionUsages.TryGetValue(
+                            key: parseAndEval,
+                            out var exprUsageRecord);
+
+                        exprUsageRecord ??= [];
+
+                        var envUsageAlreadyInDict =
+                            exprUsageRecord.TryGetValue(
+                                key: environment,
+                                out var envContainer);
+
+                        envContainer ??= new ExpressionEnvUsageRecord(
+                            Environment: environment,
+                            OrigEvalDurations: [],
+                            Analysis: new System.Lazy<Result<string, IReadOnlyList<ExpressionUsageAnalysis>>>(runAnalysis));
+
+                        envContainer.OrigEvalDurations.Add(origEvalDuration);
+
+                        if (!envUsageAlreadyInDict)
+                        {
+                            exprUsageRecord[environment] = envContainer;
+                        }
+
+                        if (!exprUsageAlreadyInDict)
+                        {
+                            expressionUsages[parseAndEval] = exprUsageRecord;
+                        }
                     }
 
                     return evalResult;

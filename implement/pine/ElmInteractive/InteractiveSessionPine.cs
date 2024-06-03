@@ -330,11 +330,11 @@ public class InteractiveSessionPine : IInteractiveSession
         foreach (var step in scenario.Steps)
             profilingSession.Submit(step.step.Submission);
 
-        var exprUsageSamples = profilingVM.DequeueAllSamples();
+        var exprUsageSamples = profilingVM.ExprEnvUsagesFlat;
 
         var expressionUsages =
             exprUsageSamples
-            .Select(sample => sample.Analysis.Value.ToMaybe())
+            .Select(sample => sample.Value.Analysis.Value.ToMaybe())
             .WhereNotNothing()
             .SelectMany(analysis => analysis)
             .ToImmutableList();
