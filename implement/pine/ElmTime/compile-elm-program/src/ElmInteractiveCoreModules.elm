@@ -2350,7 +2350,7 @@ to the first dictionary.
 -}
 union : Dict comparable v -> Dict comparable v -> Dict comparable v
 union t1 t2 =
-  foldl insert t2 t1
+    foldl (\\k v t -> insert k v t) t2 t1
 
 
 {-| Keep a key-value pair when its key appears in the second dictionary.

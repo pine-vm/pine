@@ -179,14 +179,15 @@ evaluateExpression context expression =
                     Err (DescribePathNode "Failed to evaluate condition" error)
 
                 Ok conditionValue ->
-                    if conditionValue == trueValue then
-                        evaluateExpression context conditional.ifTrue
+                    case conditionValue of
+                        BlobValue [ 4 ] ->
+                            evaluateExpression context conditional.ifTrue
 
-                    else if conditionValue == falseValue then
-                        evaluateExpression context conditional.ifFalse
+                        BlobValue [ 2 ] ->
+                            evaluateExpression context conditional.ifFalse
 
-                    else
-                        Ok listValue_Empty
+                        _ ->
+                            Ok listValue_Empty
 
         EnvironmentExpression ->
             Ok context.environment
@@ -977,9 +978,16 @@ encodeExpressionAsValue expression =
                 literal
 
         ListExpression listExpr ->
+            let
+                encodedItems =
+                    List.foldr
+                        (\listItem aggregate -> encodeExpressionAsValue listItem :: aggregate)
+                        []
+                        listExpr
+            in
             encodeUnionToPineValue
                 stringAsValue_List
-                (ListValue (List.map encodeExpressionAsValue listExpr))
+                (ListValue encodedItems)
 
         ParseAndEvalExpression parseAndEval ->
             encodeUnionToPineValue

@@ -823,12 +823,12 @@ compilationAndEmitStackFromModulesInCompilation availableModules { moduleAliases
                         ElmModuleChoiceTypeDeclaration choiceTypeDeclaration ->
                             { aggregate
                                 | choiceTypeTagDeclarations =
-                                    Dict.union
-                                        (Dict.map
-                                            (\_ tag -> { argumentsCount = tag.argumentsCount })
-                                            choiceTypeDeclaration.tags
+                                    Dict.foldl
+                                        (\tagName tag innerAggregate ->
+                                            Dict.insert tagName { argumentsCount = tag.argumentsCount } innerAggregate
                                         )
                                         aggregate.choiceTypeTagDeclarations
+                                        choiceTypeDeclaration.tags
                             }
 
                         ElmModuleRecordTypeDeclaration fields ->
@@ -1128,10 +1128,12 @@ moduleImportsFromCompilationStack explicitImports compilation =
 
         importedModules : Dict.Dict (List String) ElmModuleInCompilation
         importedModules =
-            parsedExplicitImports
-                |> List.map (Tuple.mapSecond Tuple.first)
-                |> Dict.fromList
-                |> Dict.union importedModulesImplicit
+            List.foldl
+                (\( moduleName, ( moduleInCompilation, _ ) ) aggregate ->
+                    Dict.insert moduleName moduleInCompilation aggregate
+                )
+                importedModulesImplicit
+                parsedExplicitImports
 
         importedTypes : Dict.Dict String ElmModuleTypeDeclaration
         importedTypes =
@@ -2912,9 +2914,10 @@ emitModuleValue parsedModule =
         emittedFunctions =
             Dict.toList parsedModule.functionDeclarations
     in
-    List.concat [ emittedFunctions, typeDescriptions ]
-        |> List.map Pine.valueFromContextExpansionWithName
-        |> Pine.ListValue
+    Pine.ListValue
+        (List.map Pine.valueFromContextExpansionWithName
+            (List.concat [ emittedFunctions, typeDescriptions ])
+        )
 
 
 emitTypeDeclarationValue : ElmModuleTypeDeclaration -> Pine.Value
