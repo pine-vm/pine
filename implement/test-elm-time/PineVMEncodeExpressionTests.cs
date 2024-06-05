@@ -45,11 +45,11 @@ public class PineVMEncodeExpressionTests
         foreach (var testCase in testCases)
         {
             var encoded =
-                PineVM.EncodeExpressionAsValue(testCase)
+                ExpressionEncoding.EncodeExpressionAsValue(testCase)
                 .Extract(err => throw new System.Exception("Failed to encode expression: " + err));
 
             var decoded =
-                PineVM.ParseExpressionFromValueDefault(encoded)
+                ExpressionEncoding.ParseExpressionFromValueDefault(encoded)
                 .Extract(err => throw new System.Exception("Failed to decode expression: " + err));
 
             Assert.AreEqual(testCase, decoded);

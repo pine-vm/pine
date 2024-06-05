@@ -1,5 +1,4 @@
-﻿using ElmTime.ElmInteractive;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
+﻿using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Pine.ElmInteractive;
 using System.Collections.Generic;
 
@@ -29,6 +28,16 @@ public class ElmValueTests
 
             new ElmValue.ElmTag("True", []),
             new ElmValue.ElmTag("False", []),
+
+            new ElmValue.ElmList([
+                new ElmValue.ElmList([
+                    new ElmValue.ElmInteger(7),
+                    new ElmValue.ElmInteger(13)]),
+                new ElmValue.ElmList([
+                    new ElmValue.ElmInteger(41),
+                    new ElmValue.ElmInteger(43),
+                    new ElmValue.ElmInteger(47)]),
+            ]),
         ];
 
         foreach (var testCase in testCases)

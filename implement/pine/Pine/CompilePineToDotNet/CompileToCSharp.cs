@@ -358,12 +358,12 @@ public partial class CompileToCSharp
 
                 var dictionaryValueTypeSyntax =
                 CompileTypeSyntax.TypeSyntaxFromType(
-                    typeof(Func<PineVM.PineVM.EvalExprDelegate, PineValue, PineValue>),
+                    typeof(Func<EvalExprDelegate, PineValue, PineValue>),
                     usingDirectives);
 
                 var dictionaryMemberType =
                 CompileTypeSyntax.TypeSyntaxFromType(
-                    typeof(IReadOnlyDictionary<PineValue, Func<PineVM.PineVM.EvalExprDelegate, PineValue, PineValue>>),
+                    typeof(IReadOnlyDictionary<PineValue, Func<EvalExprDelegate, PineValue, PineValue>>),
                     usingDirectives);
 
                 var dictionaryEntries =
@@ -687,7 +687,7 @@ public partial class CompileToCSharp
                         fromOk: compileOk =>
                         {
                             var subexpressionValue =
-                            PineVM.PineVM.EncodeExpressionAsValue(subexpression)
+                            ExpressionEncoding.EncodeExpressionAsValue(subexpression)
                             .Extract(err => throw new Exception(err));
 
                             var expressionHash = CommonConversion.StringBase16(compilerCache.ComputeHash(subexpressionValue));
@@ -1039,7 +1039,7 @@ public partial class CompileToCSharp
         ExpressionCompilationEnvironment environment)
     {
         var parseAndEvalExprValue =
-            PineVM.PineVM.EncodeExpressionAsValue(parseAndEvalExpr)
+            ExpressionEncoding.EncodeExpressionAsValue(parseAndEvalExpr)
             .Extract(err => throw new Exception(err));
 
         var parseAndEvalExprHash =
@@ -1396,7 +1396,7 @@ public partial class CompileToCSharp
     }
 
     public static Result<string, CompiledExpressionId> CompiledExpressionId(Expression expression) =>
-        PineVM.PineVM.EncodeExpressionAsValue(expression)
+        ExpressionEncoding.EncodeExpressionAsValue(expression)
         .Map(CompiledExpressionId);
 
     public static CompiledExpressionId CompiledExpressionId(PineValue expressionValue)

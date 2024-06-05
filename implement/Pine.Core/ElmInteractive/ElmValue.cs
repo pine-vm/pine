@@ -32,8 +32,13 @@ public abstract record ElmValue
 
     public const string ElmRecordTypeTagName = "Elm_Record";
 
+    public const string ElmStringTypeTagName = "String";
+
     public static readonly PineValue ElmRecordTypeTagNameAsValue =
         PineValueAsString.ValueFromString(ElmRecordTypeTagName);
+
+    public static readonly PineValue ElmStringTypeTagNameAsValue =
+        PineValueAsString.ValueFromString(ElmStringTypeTagName);
 
     public record ElmInteger(System.Numerics.BigInteger Value)
         : ElmValue;
@@ -195,48 +200,10 @@ public abstract record ElmValue
 
     public static Result<string, ElmRecord> ElmValueAsElmRecord(ElmValue elmValue)
     {
-        static Result<string, (string fieldName, ElmValue fieldValue)> tryMapToRecordField(ElmValue fieldElmValue)
-        {
-            if (fieldElmValue is ElmList fieldListItems)
-            {
-                if (fieldListItems.Elements.Count is 2)
-                {
-                    var fieldNameValue = fieldListItems.Elements[0];
-                    var fieldValue = fieldListItems.Elements[1];
-
-                    Result<string, (string, ElmValue)> continueWithFieldName(string fieldName) =>
-                        (0 < fieldName.Length && !char.IsUpper(fieldName[0]))
-                        ?
-                        (fieldName, fieldValue)
-                        :
-                        "Field name does start with uppercase: '" + fieldName + "'";
-
-                    return fieldNameValue switch
-                    {
-                        ElmList fieldNameValueList =>
-                        TryMapElmValueToString(fieldNameValueList)
-                        .Map(continueWithFieldName)
-                        .WithDefault((Result<string, (string, ElmValue)>)
-                            "Failed parsing field name value."),
-
-                        ElmString fieldName =>
-                        continueWithFieldName(fieldName.Value),
-
-                        _ =>
-                        "Unexpected type in field name value."
-                    };
-                }
-                else
-                    return "Unexpected number of list items: " + fieldListItems.Elements.Count;
-            }
-            else
-                return "Not a list.";
-        }
-
         return elmValue switch
         {
             ElmList recordFieldList =>
-            recordFieldList.Elements.Select(tryMapToRecordField).ListCombine()
+            recordFieldList.Elements.Select(TryMapToRecordField).ListCombine()
             .AndThen(recordFields =>
             {
                 var recordFieldsNames = recordFields.Select(field => field.fieldName).ToImmutableArray();
@@ -255,6 +222,44 @@ public abstract record ElmValue
             _ =>
             "Value is not a list."
         };
+    }
+
+    private static Result<string, (string fieldName, ElmValue fieldValue)> TryMapToRecordField(ElmValue fieldElmValue)
+    {
+        if (fieldElmValue is ElmList fieldListItems)
+        {
+            if (fieldListItems.Elements.Count is 2)
+            {
+                var fieldNameValue = fieldListItems.Elements[0];
+                var fieldValue = fieldListItems.Elements[1];
+
+                Result<string, (string, ElmValue)> continueWithFieldName(string fieldName) =>
+                    (0 < fieldName.Length && !char.IsUpper(fieldName[0]))
+                    ?
+                    (fieldName, fieldValue)
+                    :
+                    "Field name does start with uppercase: '" + fieldName + "'";
+
+                return fieldNameValue switch
+                {
+                    ElmList fieldNameValueList =>
+                    TryMapElmValueToString(fieldNameValueList)
+                    .Map(continueWithFieldName)
+                    .WithDefault((Result<string, (string, ElmValue)>)
+                        "Failed parsing field name value."),
+
+                    ElmString fieldName =>
+                    continueWithFieldName(fieldName.Value),
+
+                    _ =>
+                    "Unexpected type in field name value."
+                };
+            }
+            else
+                return "Unexpected number of list items: " + fieldListItems.Elements.Count;
+        }
+        else
+            return "Not a list.";
     }
 
     public static (string expressionString, bool needsParens) ElmTagAsExpression(ElmTag elmTag)

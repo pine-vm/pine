@@ -12,7 +12,7 @@ namespace Pine.PineVM;
 /// </summary>
 public partial class PineVMConfiguration
 {
-    public static IReadOnlyDictionary<PineValue, Func<PineVM.EvalExprDelegate, PineValue, Result<string, PineValue>>>?
+    public static IReadOnlyDictionary<PineValue, Func<EvalExprDelegate, PineValue, Result<string, PineValue>>>?
         DecodeExpressionOverrides = null;
 
     static PineVMConfiguration()

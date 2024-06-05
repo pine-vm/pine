@@ -1,18 +1,31 @@
 using System;
+using System.Collections.Frozen;
 using System.Collections.Generic;
-using System.Collections.Immutable;
-using System.Linq;
 
 namespace Pine;
 
 public static class PineValueAsString
 {
+    private static readonly FrozenDictionary<string, PineValue> InternedStrings =
+        PopularValues.PopularStrings
+        .ToFrozenDictionary(
+            keySelector: s => s,
+            elementSelector: ValueFromString);
+
     /// <summary>
     /// Converts a .NET string to a Pine list value containing one element for each character in the input string.
     /// </summary>
     /// <returns>Pine list value containing one element for each character in the input string.</returns>
-    public static PineValue ValueFromString(string str) =>
-        PineValue.List(ListValueFromString(str));
+    public static PineValue ValueFromString(string str)
+    {
+        if (str.Length is 0)
+            return PineValue.EmptyList;
+
+        if (InternedStrings?.TryGetValue(str, out var internedStringValue) ?? false && internedStringValue is not null)
+            return internedStringValue;
+
+        return PineValue.List(ListValueFromString(str));
+    }
 
     public static IReadOnlyList<PineValue> ListValueFromString(string str)
     {
@@ -47,8 +60,15 @@ public static class PineValueAsString
         if (pineValue is not PineValue.ListValue list)
             return Result<string, string>.err("Only a ListValue can represent a string.");
 
+        return StringFromListValue(list);
+    }
+
+    private static readonly Result<string, string> emptyStringOk = Result<string, string>.ok("");
+
+    public static Result<string, string> StringFromListValue(PineValue.ListValue list)
+    {
         if (list.Elements.Count is 0)
-            return Result<string, string>.ok("");
+            return emptyStringOk;
 
         var stringBuilder = new System.Text.StringBuilder(capacity: list.Elements.Count * 2);
 

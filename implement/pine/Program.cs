@@ -1009,7 +1009,7 @@ public class Program
 
                         var saveCompiledCSharp = saveCompiledCSharpOption.Value();
 
-                        IReadOnlyDictionary<PineValue, Func<PineVM.EvalExprDelegate, PineValue, Result<string, PineValue>>>?
+                        IReadOnlyDictionary<PineValue, Func<EvalExprDelegate, PineValue, Result<string, PineValue>>>?
                         compiledDecodeExpressionOverrides = null;
 
                         if (compileOption.HasValue() || saveCompiledCSharp is not null)

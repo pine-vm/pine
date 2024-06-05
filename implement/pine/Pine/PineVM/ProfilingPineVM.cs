@@ -75,20 +75,20 @@ public class ProfilingPineVM
         .ToImmutableDictionary();
 
     public ProfilingPineVM(
-        PineVM.OverrideParseExprDelegate? overrideParseExpression = null,
-        PineVM.OverrideEvalExprDelegate? overrideEvaluateExpression = null)
+        OverrideParseExprDelegate? overrideParseExpression = null,
+        OverrideEvalExprDelegate? overrideEvaluateExpression = null)
     {
         ConcurrentDictionary<Expression, CodeAnalysis.ExprAnalysis> exprAnalysisMutatedCache = new();
 
-        PineVM.ParseExprDelegate parseExpressionFromValue =
-            overrideParseExpression?.Invoke(Pine.PineVM.PineVM.ParseExpressionFromValueDefault) ??
-            Pine.PineVM.PineVM.ParseExpressionFromValueDefault;
+        ParseExprDelegate parseExpressionFromValue =
+            overrideParseExpression?.Invoke(ExpressionEncoding.ParseExpressionFromValueDefault) ??
+            ExpressionEncoding.ParseExpressionFromValueDefault;
 
         PineVM =
             new PineVM(
                 overrideParseExpression: overrideParseExpression,
                 overrideEvaluateExpression:
-                defaultHandler => new PineVM.EvalExprDelegate((expression, environment) =>
+                defaultHandler => new EvalExprDelegate((expression, environment) =>
                 {
                     var origEvalStartTime = System.Diagnostics.Stopwatch.GetTimestamp();
 
@@ -169,7 +169,7 @@ public class ProfilingPineVM
         Expression expression,
         PineValue environment,
         ConcurrentDictionary<Expression, CodeAnalysis.ExprAnalysis> exprAnalysisMutatedCache,
-        PineVM.ParseExprDelegate parseExpression)
+        ParseExprDelegate parseExpression)
     {
         var analysisResult =
             CodeAnalysis.AnalyzeExpressionUsageRecursive(

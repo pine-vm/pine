@@ -54,11 +54,11 @@ public class CompilePineToDotNetTests
     {
         var syntax =
             Pine.CompilePineToDotNet.CompileTypeSyntax.TypeSyntaxFromType(
-                typeof(Pine.PineVM.PineVM.EvalExprDelegate),
+                typeof(Pine.PineVM.EvalExprDelegate),
                 usings: []);
 
         Assert.AreEqual(
-            "Pine.PineVM.PineVM.EvalExprDelegate",
+            "Pine.PineVM.EvalExprDelegate",
             syntax.ToFullString());
     }
 

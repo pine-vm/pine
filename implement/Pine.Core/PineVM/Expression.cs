@@ -1,16 +1,25 @@
 using Pine.Json;
 using System;
 using System.Collections.Generic;
-using System.Collections.Immutable;
 using System.Linq;
 using System.Text.Json.Serialization;
 
 namespace Pine.PineVM;
 
+public delegate Result<string, PineValue> EvalExprDelegate(Expression expression, PineValue environment);
+
+public delegate EvalExprDelegate OverrideEvalExprDelegate(EvalExprDelegate evalExprDelegate);
+
+public delegate Result<string, Expression> ParseExprDelegate(PineValue value);
+
+public delegate ParseExprDelegate OverrideParseExprDelegate(ParseExprDelegate parseExprDelegate);
+
 
 [JsonConverter(typeof(JsonConverterForChoiceType))]
 public abstract record Expression
 {
+    public static readonly Expression Environment = new EnvironmentExpression();
+
     public record LiteralExpression(
         PineValue Value)
         : Expression;
@@ -90,7 +99,7 @@ public abstract record Expression
         Expression tagged)
         : Expression;
 
-    public record DelegatingExpression(Func<PineVM.EvalExprDelegate, PineValue, Result<string, PineValue>> Delegate)
+    public record DelegatingExpression(Func<EvalExprDelegate, PineValue, Result<string, PineValue>> Delegate)
         : Expression;
 
     /// <summary>

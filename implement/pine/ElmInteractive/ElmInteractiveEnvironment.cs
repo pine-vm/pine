@@ -158,7 +158,7 @@ public static class ElmInteractiveEnvironment
                 PineValue.ListValue functionRecordListItems =>
                 functionRecordListItems.Elements.Count is 4
                 ?
-                (pineVM ?? new PineVM()).ParseExpressionFromValue(functionRecordListItems.Elements[0])
+                ExpressionEncoding.ParseExpressionFromValueDefault(functionRecordListItems.Elements[0])
                 .AndThen(innerFunction =>
                 PineValueAsInteger.SignedIntegerFromValueStrict(functionRecordListItems.Elements[1])
                 .MapError(err => "Failed to decode function parameter count: " + err)

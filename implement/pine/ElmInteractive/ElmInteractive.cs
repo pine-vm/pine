@@ -20,8 +20,8 @@ public class ElmInteractive
         new FileStoreFromSystemIOFile(
             Path.Combine(Filesystem.CacheDirectory, "elm-interactive-compiled-modules", Program.AppVersionId));
 
-    public static Pine.ElmInteractive.ICompiledModulesCache CompiledModulesCacheDefault =>
-        new Pine.ElmInteractive.CompiledModulesFileCache(CompiledModulesCacheFileStoreDefault);
+    public static ICompiledModulesCache CompiledModulesCacheDefault =>
+        new CompiledModulesFileCache(CompiledModulesCacheFileStoreDefault);
 
     public static readonly ConcurrentDictionary<TreeNodeWithStringPath, System.Threading.Tasks.Task<string>>
         JavaScriptToEvaluateElmFromCompilerTask = new();

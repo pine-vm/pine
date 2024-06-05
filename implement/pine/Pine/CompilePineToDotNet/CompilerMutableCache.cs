@@ -48,7 +48,7 @@ public class CompilerMutableCache
     public Result<string, PineVM.Expression> ParseExpressionFromValue(PineValue pineValue) =>
         parseExpressionFromValueCache.GetOrAdd(
             pineValue,
-            valueFactory: PineVM.PineVM.ParseExpressionFromValueDefault);
+            valueFactory: PineVM.ExpressionEncoding.ParseExpressionFromValueDefault);
 
     public ReadOnlyMemory<byte> ComputeHash(PineValue pineValue) =>
         valueHashCache

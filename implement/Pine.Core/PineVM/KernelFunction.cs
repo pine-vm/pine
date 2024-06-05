@@ -10,7 +10,7 @@ namespace Pine.PineVM;
 public static class KernelFunction
 {
     public static PineValue equal(PineValue value) =>
-        PineVM.ValueFromBool(
+        ValueFromBool(
             value switch
             {
                 PineValue.ListValue list =>
@@ -39,7 +39,7 @@ public static class KernelFunction
         !readOnlyMemory.Span.ContainsAnyExcept(readOnlyMemory.Span[0]);
 
     public static PineValue equal(PineValue valueA, PineValue valueB) =>
-        PineVM.ValueFromBool(valueA.Equals(valueB));
+        ValueFromBool(valueA.Equals(valueB));
 
     public static PineValue negate(PineValue value) =>
         value switch
@@ -274,13 +274,13 @@ public static class KernelFunction
                 }
             }
 
-            return PineVM.ValueFromBool(isSorted);
+            return ValueFromBool(isSorted);
         }
 
         if (value is PineValue.ListValue listValue)
         {
             if (listValue.Elements.Count is 0)
-                return PineVM.ValueFromBool(true);
+                return ValueFromBool(true);
 
             if (PineValueAsInteger.SignedIntegerFromValueRelaxed(listValue.Elements[0]) is not Result<string, BigInteger>.Ok firstInt)
                 return PineValue.EmptyList;
@@ -293,12 +293,12 @@ public static class KernelFunction
                     return PineValue.EmptyList;
 
                 if (nextInt.Value < previous)
-                    return PineVM.ValueFromBool(false);
+                    return ValueFromBool(false);
 
                 previous = nextInt.Value;
             }
 
-            return PineVM.ValueFromBool(true);
+            return ValueFromBool(true);
         }
 
         throw new NotImplementedException("Unexpected value type: " + value.GetType().FullName);
@@ -368,9 +368,9 @@ public static class KernelFunction
         PineValue value) =>
         KernelFunctionExpectingList(
             value,
-            list => PineVM.ResultListMapCombine(list, PineVM.ParseBoolFromValue)
+            list => ResultListMapCombine(list, ParseBoolFromValue)
             .Map(compose)
-            .Map(PineVM.ValueFromBool)
+            .Map(ValueFromBool)
             .WithDefault(PineValue.EmptyList));
 
 
@@ -385,4 +385,26 @@ public static class KernelFunction
             _ =>
             PineValue.EmptyList
         };
+
+    public static Result<string, bool> ParseBoolFromValue(PineValue value) =>
+        value == PineVMValues.TrueValue
+        ?
+        true
+        :
+        value == PineVMValues.FalseValue
+        ?
+        false
+        :
+        "Value is neither True nor False";
+
+    public static PineValue ValueFromBool(bool b) =>
+        b ?
+        PineVMValues.TrueValue :
+        PineVMValues.FalseValue;
+
+    public static Result<ErrT, IReadOnlyList<MappedOkT>> ResultListMapCombine<ErrT, OkT, MappedOkT>(
+        IReadOnlyList<OkT> list,
+        Func<OkT, Result<ErrT, MappedOkT>> mapElement) =>
+        list.Select(mapElement).ListCombine();
+
 }

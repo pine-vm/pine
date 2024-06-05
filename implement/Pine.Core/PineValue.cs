@@ -14,7 +14,7 @@ namespace Pine;
 /// For conversion between the generic value type and common data types, see <see cref="PineValueAsInteger"/>, <see cref="PineValueAsString"/>, and <see cref="PineValueComposition"/>.
 /// <para/>
 /// There is also a standard representation of program code and expressions as Pine values, 
-/// and you can see a reference implementation of this encoding at <see cref="PineVM.PineVM.ParseExpressionFromValue"/>.
+/// and you can see a reference implementation of this encoding at <see cref="PineVM.ExpressionEncoding.ParseExpressionFromValue"/>.
 /// </summary>
 public abstract record PineValue : IEquatable<PineValue>
 {
@@ -47,8 +47,18 @@ public abstract record PineValue : IEquatable<PineValue>
 
         var newInstance = new ListValue(elements);
 
-        if (InternedListsDict?.TryGetValue(newInstance, out var interned) ?? false)
-            return interned;
+        if (InternedListsDict is not null)
+        {
+            InternedListsDict.TryGetValue(newInstance, out var existing);
+
+            if (existing is not null)
+                return existing;
+        }
+        else
+        {
+            if (InternedListsDictInConstruction?.TryGetValue(newInstance, out var existing) ?? false && existing is not null)
+                return existing;
+        }
 
         return newInstance;
     }
@@ -65,140 +75,13 @@ public abstract record PineValue : IEquatable<PineValue>
         [..Enumerable.Range(0, 256)
         .SelectMany(i => Enumerable.Range(0, 256).Select(j => new BlobValue(new byte[] { (byte)i, (byte)j })))];
 
-    private static readonly PineValue[] InternedBlobs =
+    public static readonly IReadOnlyList<PineValue> InternedBlobs =
         [EmptyBlob, .. InternedBlobSingle, .. InternedBlobTuple];
 
     private static readonly ListValue Interned_Pine_string_String = (ListValue)PineValueAsString.ValueFromString("String");
 
-    private static readonly IEnumerable<string> InternedStrings =
-        [
-        "Bool",
-        "True",
-        "False",
-
-        "EQ",
-        "LT",
-        "GT",
-
-        "Nothing",
-        "Just",
-        "Err",
-        "Ok",
-
-        "Basics",
-        "List",
-        "Maybe",
-        "Result",
-        "Tuple",
-        "Char",
-        "String",
-        "Platform",
-        "Array",
-        "Dict",
-        "Set",
-        "Json",
-        "Regex",
-        "Time",
-        "Debug",
-        "Process",
-
-
-        // From the Elm core Dict module
-        "Red",
-        "Black",
-        "RBNode_elm_builtin",
-        "RBEmpty_elm_builtin",
-
-        // From the Pine module
-        "Pine",
-        "Value",
-        "ListValue",
-        "BlobValue",
-
-        "Expression",
-        "LiteralExpression",
-        "ListExpression",
-        "ParseAndEvalExpression",
-        "ConditionalExpression",
-        "FunctionExpression",
-        "KernelApplicationExpression",
-        "StringTagExpression",
-
-        "Literal",
-        "List",
-        "ParseAndEval",
-        "Conditional",
-        "Environment",
-        "Function",
-        "KernelApplication",
-        "StringTag",
-
-        "equal",
-        "length",
-        "list_head",
-        "skip",
-        "take",
-        "reverse",
-        "negate",
-        "concat",
-        "add_int",
-        "mul_int",
-        "is_sorted_ascending_int",
-
-        "Literal",
-        "List",
-        "ParseAndEval",
-        "Conditional",
-        "Environment",
-        "Function",
-        "KernelApplication",
-        "StringTag",
-
-        "functionName",
-        "argument",
-        "condition",
-        "ifTrue",
-        "ifFalse",
-        "environment",
-        "function",
-        "expression",
-
-        // From the FirCompiler module
-        "FirCompiler",
-        "FunctionApplicationExpression",
-        "ReferenceExpression",
-        "DeclarationBlockExpression",
-        "PineFunctionApplicationExpression",
-
-        "Deconstruction",
-        "ListItemDeconstruction",
-        "SkipItemsDeconstruction",
-        "PineFunctionApplicationDeconstruction",
-
-        "FunctionEnvironment",
-        "LocalEnvironment",
-        "ImportedEnvironment",
-        "IndependentEnvironment",
-
-
-        // From the Elm syntax library
-        "Module",
-        "File",
-        "Import",
-
-        "Declaration",
-        "FunctionDeclaration",
-        "AliasDeclaration",
-        "CustomTypeDeclaration",
-        "PortDeclaration",
-        "InfixDeclaration",
-        "Destructuring",
-
-        ];
-
     private static readonly IReadOnlyList<ListValue> InternedStringsLists =
-        [..InternedStrings
-        .Distinct()
+        [..PopularValues.PopularStrings
         .Select(s => new ListValue(PineValueAsString.ListValueFromString(s)))];
 
     private static readonly IReadOnlyList<ListValue> InternedElmStringsLists =
@@ -222,21 +105,45 @@ public abstract record PineValue : IEquatable<PineValue>
         ElmValueEncoding.ElmValueAsPineValue(
             ElmValueInterop.PineValueEncodedAsInElmCompiler(s)))];
 
-    private static readonly IReadOnlyList<ListValue> InternedLists =
+    private static readonly IReadOnlyList<ListValue> PopularPineExpressions =
+        [.. PineVM.ExpressionEncoding.PopularPineExpressionsEncoded.Values.Cast<ListValue>()];
+
+    private static IEnumerable<ListValue> InternedListsSource =>
         [
         Interned_Pine_string_String,
         ..InternedStringsLists,
         ..InternedElmStringsLists,
         ..InternedBlobsInCompiler,
-        ..InternedListsInCompiler
+        ..InternedListsInCompiler,
+        ..PopularPineExpressions
         ];
 
-    private static readonly FrozenDictionary<ListValue, ListValue> InternedListsDict =
-        InternedLists
-        .Distinct()
-        .ToFrozenDictionary(
-            keySelector: value => value,
-            elementSelector: value => value);
+    private static readonly HashSet<ListValue> InternedListsDictInConstruction = [];
+
+    private static readonly FrozenSet<ListValue> InternedListsDict = BuildInternedListsDict();
+
+    private static FrozenSet<ListValue> BuildInternedListsDict()
+    {
+        /*
+         * Build the final collection for lookup in a way that prevents the creation of duplicate values in the construction process:
+         * To ensure that composite values will reuse the same instances for the same values,
+         * maintain a registry of the values that are being constructed.
+         * */
+
+        var sourceSortedBySize =
+            InternedListsSource
+            .OrderBy(CountListElementsTransitive)
+            .ToList();
+
+        foreach (var item in sourceSortedBySize)
+        {
+            InternedListsDictInConstruction.Add(item);
+        }
+
+        return
+            InternedListsDictInConstruction
+            .ToFrozenSet();
+    }
 
     /// <summary>
     /// A <see cref="PineValue"/> that is a list of <see cref="PineValue"/>s.
@@ -344,6 +251,18 @@ public abstract record PineValue : IEquatable<PineValue>
 
             ListValue list =>
             list.Elements.Any(e => e.Equals(pineValue) || e.ContainsInListTransitive(pineValue)),
+
+            _ =>
+            throw new NotImplementedException()
+        };
+
+    private static int CountListElementsTransitive(PineValue pineValue) =>
+        pineValue switch
+        {
+            BlobValue => 0,
+
+            ListValue list =>
+            1 + list.Elements.Sum(CountListElementsTransitive),
 
             _ =>
             throw new NotImplementedException()

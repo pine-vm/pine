@@ -64,8 +64,8 @@ public class DynamicPGOShare : IDisposable
     }
 
     public IPineVM GetVMAutoUpdating(
-        PineVM.OverrideParseExprDelegate? overrideParseExpression = null,
-        PineVM.OverrideEvalExprDelegate? overrideEvaluateExpression = null)
+        OverrideParseExprDelegate? overrideParseExpression = null,
+        OverrideEvalExprDelegate? overrideEvaluateExpression = null)
     {
         return new RedirectingVM(
             (expression, environment) =>
@@ -86,8 +86,8 @@ public class DynamicPGOShare : IDisposable
         Expression expression,
         PineValue environment,
         TimeSpan initialProfileAggregationDelay,
-        PineVM.OverrideParseExprDelegate? overrideParseExpression = null,
-        PineVM.OverrideEvalExprDelegate? overrideEvaluateExpression = null)
+        OverrideParseExprDelegate? overrideParseExpression = null,
+        OverrideEvalExprDelegate? overrideEvaluateExpression = null)
     {
         var profileContainer =
             new SubmissionProfileMutableContainer(
@@ -166,8 +166,8 @@ public class DynamicPGOShare : IDisposable
         Expression expression,
         PineValue environment,
         CancellationTokenSource cancellationTokenSource,
-        PineVM.OverrideParseExprDelegate? overrideParseExpression = null,
-        PineVM.OverrideEvalExprDelegate? overrideEvaluateExpression = null)
+        OverrideParseExprDelegate? overrideParseExpression = null,
+        OverrideEvalExprDelegate? overrideEvaluateExpression = null)
     {
         var compiledParseExpressionOverrides =
             completedCompilations
@@ -185,7 +185,7 @@ public class DynamicPGOShare : IDisposable
                 keySelector: encodedExprAndDelegate => encodedExprAndDelegate.Key,
                 elementSelector: encodedExprAndDelegate => new Expression.DelegatingExpression(encodedExprAndDelegate.Value));
 
-        PineVM.OverrideParseExprDelegate overrideParseExpressionBeforeAddCompiled =
+        OverrideParseExprDelegate overrideParseExpressionBeforeAddCompiled =
             overrideParseExpression ?? (originalHandler => originalHandler);
 
         var overrideParseExprIncludeCompiled =
@@ -195,7 +195,7 @@ public class DynamicPGOShare : IDisposable
                 overrideParseExpressionBeforeAddCompiled,
 
                 not null =>
-                new PineVM.OverrideParseExprDelegate(
+                new OverrideParseExprDelegate(
                 originalHandler => value =>
                 {
                     if (parseExpressionOverridesDict.TryGetValue(value, out var delegatingExpression))
@@ -215,7 +215,7 @@ public class DynamicPGOShare : IDisposable
                 disposedCancellationTokenSource.Token,
                 newCancellationTokenSource.Token);
 
-        PineVM.EvalExprDelegate OverrideEvalExprDelegate(PineVM.EvalExprDelegate evalExprDelegate)
+        EvalExprDelegate OverrideEvalExprDelegate(EvalExprDelegate evalExprDelegate)
         {
             return (Expression expression, PineValue environment) =>
             {
@@ -296,7 +296,7 @@ public class DynamicPGOShare : IDisposable
             compileToAssemblyResult
             .Unpack(
                 fromErr: err =>
-                Result<string, IReadOnlyDictionary<PineValue, Func<PineVM.EvalExprDelegate, PineValue, Result<string, PineValue>>>>
+                Result<string, IReadOnlyDictionary<PineValue, Func<EvalExprDelegate, PineValue, Result<string, PineValue>>>>
                 .err("Failed to compile to assembly: " + err),
                 fromOk:
                 ok => ok.BuildCompiledExpressionsDictionary());
@@ -339,7 +339,7 @@ public class DynamicPGOShare : IDisposable
         disposedCancellationTokenSource.Cancel();
     }
 
-    private record RedirectingVM(PineVM.EvalExprDelegate Delegate)
+    private record RedirectingVM(EvalExprDelegate Delegate)
         : IPineVM
     {
         public Result<string, PineValue> EvaluateExpression(Expression expression, PineValue environment) =>
@@ -350,7 +350,7 @@ public class DynamicPGOShare : IDisposable
         IReadOnlyList<IReadOnlyDictionary<ExpressionUsageAnalysis, ExpressionUsageProfile>> InputProfiles,
         ImmutableHashSet<ExpressionUsageAnalysis> CompiledExpressions,
         Result<string, CompilePineToDotNet.CompileToAssemblyResult> CompileToAssemblyResult,
-        Result<string, IReadOnlyDictionary<PineValue, Func<PineVM.EvalExprDelegate, PineValue, Result<string, PineValue>>>>
+        Result<string, IReadOnlyDictionary<PineValue, Func<EvalExprDelegate, PineValue, Result<string, PineValue>>>>
         DictionaryResult,
         TimeSpan TotalDuration,
         TimeSpan SelectExpressionsDuration,

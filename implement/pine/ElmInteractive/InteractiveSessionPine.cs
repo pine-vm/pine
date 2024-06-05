@@ -95,14 +95,14 @@ public class InteractiveSessionPine : IInteractiveSession
             ?
             null
             :
-            (PineVM.OverrideParseExprDelegate?)cache.BuildParseExprDelegate;
+            (OverrideParseExprDelegate?)cache.BuildParseExprDelegate;
 
         var overrideEvaluateExpression =
             cache is null
             ?
             null
             :
-            (PineVM.OverrideEvalExprDelegate?)cache.BuildEvalExprDelegate;
+            (OverrideEvalExprDelegate?)cache.BuildEvalExprDelegate;
 
         if (autoPGO is not null)
         {
@@ -214,7 +214,7 @@ public class InteractiveSessionPine : IInteractiveSession
                         lastCompilationCache = compileSubmissionOk.cache;
 
                         return
-                        PineVM.ParseExpressionFromValueDefault(compileSubmissionOk.compiledValue)
+                        ExpressionEncoding.ParseExpressionFromValueDefault(compileSubmissionOk.compiledValue)
                         .MapError(error => "Failed to decode expression: " + error)
                         .AndThen(decodeExpressionOk =>
                         {

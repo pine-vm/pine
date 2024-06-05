@@ -264,7 +264,7 @@ public static class PineCSharpSyntaxFactory
                 ]))
         .WithParameterList(
             SyntaxFactory.ParameterList(
-                SyntaxFactory.SingletonSeparatedList<ParameterSyntax>(
+                SyntaxFactory.SingletonSeparatedList(
                     SyntaxFactory.Parameter(
                         SyntaxFactory.Identifier("pineValue"))
                     .WithType(
@@ -293,7 +293,7 @@ public static class PineCSharpSyntaxFactory
                 ]))
         .WithParameterList(
             SyntaxFactory.ParameterList(
-                SyntaxFactory.SingletonSeparatedList<ParameterSyntax>(
+                SyntaxFactory.SingletonSeparatedList(
                     SyntaxFactory.Parameter(
                         SyntaxFactory.Identifier("pineValue"))
                     .WithType(
@@ -506,7 +506,7 @@ public static class PineCSharpSyntaxFactory
     }
 
     public static ExpressionSyntax PineValueFromBoolExpression(ExpressionSyntax expressionSyntax) =>
-        InvocationExpressionOnPineVMClass(nameof(PineVM.PineVM.ValueFromBool))
+        InvocationExpressionOnPineVMKernelFunctionClass(nameof(PineVM.KernelFunction.ValueFromBool))
         .WithArgumentList(
             SyntaxFactory.ArgumentList(
                 SyntaxFactory.SingletonSeparatedList(
@@ -534,15 +534,31 @@ public static class PineCSharpSyntaxFactory
                     SyntaxFactory.IdentifierName("PineVM")),
                 SyntaxFactory.IdentifierName(memberIdentifierName)));
 
-    public static QualifiedNameSyntax EvalExprDelegateTypeSyntax =>
-        SyntaxFactory.QualifiedName(
-            PineVmClassQualifiedNameSyntax,
-            SyntaxFactory.IdentifierName(nameof(PineVM.PineVM.EvalExprDelegate)));
+    public static InvocationExpressionSyntax InvocationExpressionOnPineVMKernelFunctionClass(
+        string memberIdentifierName) =>
+        SyntaxFactory.InvocationExpression(
+            SyntaxFactory.MemberAccessExpression(
+                SyntaxKind.SimpleMemberAccessExpression,
+                SyntaxFactory.MemberAccessExpression(
+                    SyntaxKind.SimpleMemberAccessExpression,
+                    SyntaxFactory.MemberAccessExpression(
+                        SyntaxKind.SimpleMemberAccessExpression,
+                        SyntaxFactory.IdentifierName("Pine"),
+                        SyntaxFactory.IdentifierName("PineVM")),
+                    SyntaxFactory.IdentifierName(nameof(PineVM.KernelFunction))),
+                SyntaxFactory.IdentifierName(memberIdentifierName)));
 
-    public static QualifiedNameSyntax PineVmClassQualifiedNameSyntax =>
+    public static QualifiedNameSyntax EvalExprDelegateTypeSyntax =>
         SyntaxFactory.QualifiedName(
             SyntaxFactory.QualifiedName(
                 SyntaxFactory.IdentifierName("Pine"),
                 SyntaxFactory.IdentifierName("PineVM")),
-            SyntaxFactory.IdentifierName("PineVM"));
+            SyntaxFactory.IdentifierName(nameof(PineVM.EvalExprDelegate)));
+
+    public static QualifiedNameSyntax ExpressionEncodingClassQualifiedNameSyntax =>
+        SyntaxFactory.QualifiedName(
+            SyntaxFactory.QualifiedName(
+                SyntaxFactory.IdentifierName("Pine"),
+                SyntaxFactory.IdentifierName("PineVM")),
+            SyntaxFactory.IdentifierName(nameof(PineVM.ExpressionEncoding)));
 }

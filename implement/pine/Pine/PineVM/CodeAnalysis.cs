@@ -311,7 +311,7 @@ public class CodeAnalysis
         Expression expression,
         PineValue environment,
         ConcurrentDictionary<Expression, ExprAnalysis> mutatedCache,
-        PineVM.ParseExprDelegate parseExpression)
+        ParseExprDelegate parseExpression)
     {
         var expressionId =
             CompilePineToDotNet.CompileToCSharp.CompiledExpressionId(expression)
@@ -480,7 +480,7 @@ public class CodeAnalysis
                 new PineVM(
                     overrideParseExpression: _ => parseExpression,
                     overrideEvaluateExpression: defaultHandler =>
-                    new PineVM.EvalExprDelegate((expr, env) =>
+                    new EvalExprDelegate((expr, env) =>
                     {
                         if (expr is Expression.ParseAndEvalExpression)
                         {

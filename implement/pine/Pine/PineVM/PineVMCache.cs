@@ -28,9 +28,9 @@ public class PineVMCache
         functionApplicationCache.ToImmutableDictionary();
 
 
-    public PineVM.ParseExprDelegate BuildParseExprDelegate(PineVM.ParseExprDelegate evalExprDelegate)
+    public ParseExprDelegate BuildParseExprDelegate(ParseExprDelegate evalExprDelegate)
     {
-        return new PineVM.ParseExprDelegate(exprValue =>
+        return new ParseExprDelegate(exprValue =>
         {
             return parseExprCache.GetOrAdd(
                 key: exprValue,
@@ -38,9 +38,9 @@ public class PineVMCache
         });
     }
 
-    public PineVM.EvalExprDelegate BuildEvalExprDelegate(PineVM.EvalExprDelegate evalExprDelegate)
+    public EvalExprDelegate BuildEvalExprDelegate(EvalExprDelegate evalExprDelegate)
     {
-        return new PineVM.EvalExprDelegate((expression, environment) =>
+        return new EvalExprDelegate((expression, environment) =>
         {
             if (expression is Expression.DelegatingExpression)
             {

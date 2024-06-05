@@ -12,7 +12,7 @@ using static Pine.CompilePineToDotNet.CompileToCSharp;
 namespace Pine.CompilePineToDotNet;
 
 using CompileDictionaryResult =
-    IReadOnlyDictionary<PineValue, Func<PineVM.PineVM.EvalExprDelegate, PineValue, Result<string, PineValue>>>;
+    IReadOnlyDictionary<PineValue, Func<PineVM.EvalExprDelegate, PineValue, Result<string, PineValue>>>;
 
 public record CompileToAssemblyResult(
     GenerateCSharpFileResult GenerateCSharpFileResult,
@@ -97,14 +97,14 @@ public class CompileToAssembly
                     "Did not find method " + csharpFile.SyntaxContainerConfig.dictionaryMemberName + " in type " + compiledType.FullName);
 
             var originalDictionary =
-                (IReadOnlyDictionary<PineValue, Func<PineVM.PineVM.EvalExprDelegate, PineValue, PineValue>>)
+                (IReadOnlyDictionary<PineValue, Func<PineVM.EvalExprDelegate, PineValue, PineValue>>)
                 dictionaryMember.Invoke(null, null)!;
 
             var dictionaryWithEvalReturnTypeResult =
                 originalDictionary
                 .ToImmutableDictionary(
                     keySelector: kv => kv.Key,
-                    elementSelector: kv => new Func<PineVM.PineVM.EvalExprDelegate, PineValue, Result<string, PineValue>>(
+                    elementSelector: kv => new Func<PineVM.EvalExprDelegate, PineValue, Result<string, PineValue>>(
                         (evalDelegate, envValue) => Result<string, PineValue>.ok(kv.Value(evalDelegate, envValue))));
 
             return
