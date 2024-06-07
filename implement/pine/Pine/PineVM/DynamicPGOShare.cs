@@ -65,7 +65,7 @@ public class DynamicPGOShare : IDisposable
 
     public IPineVM GetVMAutoUpdating(
         OverrideParseExprDelegate? overrideParseExpression = null,
-        IDictionary<(Expression, PineValue), PineValue>? evalCache = null)
+        IDictionary<EvalCacheEntryKey, PineValue>? evalCache = null)
     {
         return new RedirectingVM(
             (expression, environment) =>
@@ -87,7 +87,7 @@ public class DynamicPGOShare : IDisposable
         PineValue environment,
         TimeSpan initialProfileAggregationDelay,
         OverrideParseExprDelegate? overrideParseExpression = null,
-        IDictionary<(Expression, PineValue), PineValue>? evalCache = null)
+        IDictionary<EvalCacheEntryKey, PineValue>? evalCache = null)
     {
         var profileContainer =
             new SubmissionProfileMutableContainer(
@@ -168,7 +168,7 @@ public class DynamicPGOShare : IDisposable
         PineValue environment,
         CancellationTokenSource cancellationTokenSource,
         OverrideParseExprDelegate? overrideParseExpression = null,
-        IDictionary<(Expression, PineValue), PineValue>? evalCache = null)
+        IDictionary<EvalCacheEntryKey, PineValue>? evalCache = null)
     {
         var compiledParseExpressionOverrides =
             completedCompilations

@@ -16,7 +16,7 @@ public class PineVMCache
 {
     private readonly ConcurrentDictionary<PineValue, Result<string, Expression>> parseExprCache = new();
 
-    public Dictionary<(Expression, PineValue), PineValue> EvalCache { init; get; } = [];
+    public Dictionary<EvalCacheEntryKey, PineValue> EvalCache { init; get; } = [];
 
     public long FunctionApplicationCacheSize => EvalCache.Count;
 

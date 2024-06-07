@@ -76,7 +76,7 @@ public class ProfilingPineVM
 
     public ProfilingPineVM(
         OverrideParseExprDelegate? overrideParseExpression = null,
-        IDictionary<(Expression, PineValue), PineValue>? evalCache = null,
+        IDictionary<EvalCacheEntryKey, PineValue>? evalCache = null,
         PineVMCache? analysisEvalCache = null)
     {
         ConcurrentDictionary<Expression, CodeAnalysis.ExprAnalysis> exprAnalysisMutatedCache = new();

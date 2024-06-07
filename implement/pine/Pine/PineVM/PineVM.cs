@@ -13,6 +13,10 @@ public interface IPineVM
         PineValue environment);
 }
 
+public record struct EvalCacheEntryKey(
+    PineValue ExprValue,
+    PineValue EnvValue);
+
 public class PineVM : IPineVM
 {
     public long EvaluateExpressionCount { private set; get; }
@@ -21,13 +25,13 @@ public class PineVM : IPineVM
 
     private readonly ParseExprDelegate parseExpressionDelegate;
 
-    private IDictionary<(Expression, PineValue), PineValue>? EvalCache { init; get; }
+    private IDictionary<EvalCacheEntryKey, PineValue>? EvalCache { init; get; }
 
-    private Action<Expression, PineValue, TimeSpan, PineValue>? reportFunctionApplication;
+    private readonly Action<Expression, PineValue, TimeSpan, PineValue>? reportFunctionApplication;
 
     public static PineVM Construct(
         IReadOnlyDictionary<PineValue, Func<EvalExprDelegate, PineValue, Result<string, PineValue>>>? parseExpressionOverrides = null,
-        IDictionary<(Expression, PineValue), PineValue>? evalCache = null)
+        IDictionary<EvalCacheEntryKey, PineValue>? evalCache = null)
     {
         var parseExpressionOverridesDict =
             parseExpressionOverrides
@@ -50,7 +54,7 @@ public class PineVM : IPineVM
 
     public PineVM(
         OverrideParseExprDelegate? overrideParseExpression = null,
-        IDictionary<(Expression, PineValue), PineValue>? evalCache = null,
+        IDictionary<EvalCacheEntryKey, PineValue>? evalCache = null,
         Action<Expression, PineValue, TimeSpan, PineValue>? reportFunctionApplication = null)
     {
         parseExpressionDelegate =
@@ -95,6 +99,7 @@ public class PineVM : IPineVM
     }
 
     record StackFrame(
+        PineValue? ExpressionValue,
         Expression Expression,
         StackFrameInstructions Instructions,
         PineValue EnvironmentValue,
@@ -107,12 +112,14 @@ public class PineVM : IPineVM
     readonly Dictionary<Expression, StackFrameInstructions> stackFrameDict = new();
 
     StackFrame StackFrameFromExpression(
+        PineValue? expressionValue,
         Expression expression,
         PineValue environment)
     {
         var instructions = InstructionsFromExpression(expression);
 
         return new StackFrame(
+            expressionValue,
             expression,
             instructions,
             EnvironmentValue: environment,
@@ -335,7 +342,11 @@ public class PineVM : IPineVM
     {
         var stack = new Stack<StackFrame>();
 
-        stack.Push(StackFrameFromExpression(rootExpression, rootEnvironment));
+        stack.Push(
+            StackFrameFromExpression(
+                expressionValue: null,
+                rootExpression,
+                rootEnvironment));
 
         /*
         void returnFromFrame(PineValue frameReturnValue)
@@ -359,24 +370,6 @@ public class PineVM : IPineVM
         {
             var currentFrame = stack.Peek();
 
-            if (EvalCache?.TryGetValue((currentFrame.Expression, currentFrame.EnvironmentValue), out var cachedValue) ?? false &&
-                cachedValue is not null)
-            {
-                stack.Pop();
-
-                if (stack.Count is 0)
-                {
-                    return cachedValue;
-                }
-
-                var previousFrame = stack.Peek();
-
-                previousFrame.InstructionsResultValues.Span[previousFrame.InstructionPointer] = cachedValue;
-
-                previousFrame.InstructionPointer++;
-                continue;
-            }
-
             if (currentFrame.Instructions.Expressions.Count <= currentFrame.InstructionPointer)
             {
                 return
@@ -395,20 +388,23 @@ public class PineVM : IPineVM
                     return "Return instruction at beginning of frame";
                 }
 
-                var frameElapsedTime = System.Diagnostics.Stopwatch.GetElapsedTime(currentFrame.BeginTimestamp);
-
                 var frameReturnValue = currentFrame.InstructionsResultValues.Span[currentFrame.InstructionPointer - 1];
 
-                if (frameElapsedTime.TotalMilliseconds > 3 && EvalCache is not null)
+                if (currentFrame.ExpressionValue is { } currentFrameExprValue && EvalCache is { } evalCache)
                 {
-                    EvalCache?.TryAdd((currentFrame.Expression, currentFrame.EnvironmentValue), frameReturnValue);
-                }
+                    var frameElapsedTime = System.Diagnostics.Stopwatch.GetElapsedTime(currentFrame.BeginTimestamp);
 
-                reportFunctionApplication?.Invoke(
-                    currentFrame.Expression,
-                    currentFrame.EnvironmentValue,
-                    frameElapsedTime,
-                    frameReturnValue);
+                    if (frameElapsedTime.TotalMilliseconds > 3 && EvalCache is not null)
+                    {
+                        evalCache.TryAdd(new EvalCacheEntryKey(currentFrameExprValue, currentFrame.EnvironmentValue), frameReturnValue);
+                    }
+
+                    reportFunctionApplication?.Invoke(
+                        currentFrame.Expression,
+                        currentFrame.EnvironmentValue,
+                        frameElapsedTime,
+                        frameReturnValue);
+                }
 
                 stack.Pop();
 
@@ -446,21 +442,6 @@ public class PineVM : IPineVM
                             "Unexpected result type: " + evalExprValueResult.GetType().FullName);
                     }
 
-                    var parseResult = parseExpressionDelegate(evalExprValueOk.Value);
-
-                    if (parseResult is Result<string, Expression>.Err parseErr)
-                    {
-                        return
-                            "Failed to parse expression from value: " + parseErr.Value +
-                            " - expressionValue is " + DescribeValueForErrorMessage(evalExprValueOk.Value) +
-                            " - environmentValue is " + DescribeValueForErrorMessage(evalExprValueOk.Value);
-                    }
-
-                    if (parseResult is not Result<string, Expression>.Ok parseOk)
-                    {
-                        throw new NotImplementedException("Unexpected result type: " + parseResult.GetType().FullName);
-                    }
-
                     var evalEnvResult =
                         EvaluateExpressionDefaultLessStack(
                             parseAndEval.environment,
@@ -478,7 +459,34 @@ public class PineVM : IPineVM
                             "Unexpected result type: " + evalEnvResult.GetType().FullName);
                     }
 
-                    stack.Push(StackFrameFromExpression(parseOk.Value, evalEnvOk.Value));
+                    if (EvalCache is { } evalCache)
+                    {
+                        var evalCacheKey = new EvalCacheEntryKey(evalExprValueOk.Value, evalEnvOk.Value);
+
+                        if (evalCache.TryGetValue(evalCacheKey, out var cachedValue) && cachedValue is not null)
+                        {
+                            currentFrame.InstructionsResultValues.Span[currentFrame.InstructionPointer] = cachedValue;
+                            currentFrame.InstructionPointer++;
+                            continue;
+                        }
+                    }
+
+                    var parseResult = parseExpressionDelegate(evalExprValueOk.Value);
+
+                    if (parseResult is Result<string, Expression>.Err parseErr)
+                    {
+                        return
+                            "Failed to parse expression from value: " + parseErr.Value +
+                            " - expressionValue is " + DescribeValueForErrorMessage(evalExprValueOk.Value) +
+                            " - environmentValue is " + DescribeValueForErrorMessage(evalExprValueOk.Value);
+                    }
+
+                    if (parseResult is not Result<string, Expression>.Ok parseOk)
+                    {
+                        throw new NotImplementedException("Unexpected result type: " + parseResult.GetType().FullName);
+                    }
+
+                    stack.Push(StackFrameFromExpression(expressionValue: evalExprValueOk.Value, parseOk.Value, evalEnvOk.Value));
 
                     continue;
                 }
@@ -515,13 +523,14 @@ public class PineVM : IPineVM
 
                     if (expressionToContinueWith is not null)
                     {
-                        var containsAnyInvocation =
-                            Expression.EnumerateSelfAndDescendants(expressionToContinueWith)
-                            .Any(expr => expr is Expression.ParseAndEvalExpression);
-
-                        if (containsAnyInvocation)
+                        if (ExpressionShouldGetNewStackFrame(expressionToContinueWith))
                         {
-                            stack.Push(StackFrameFromExpression(expressionToContinueWith, currentFrame.EnvironmentValue));
+                            stack.Push(
+                                StackFrameFromExpression(
+                                    expressionValue: null,
+                                    expressionToContinueWith,
+                                    currentFrame.EnvironmentValue));
+
                             continue;
                         }
 
@@ -605,6 +614,56 @@ public class PineVM : IPineVM
 
             return "Unexpected instruction type: " + currentInstruction.GetType().FullName;
         }
+    }
+
+    private static bool ExpressionShouldGetNewStackFrame(Expression expression)
+    {
+        if (expression is Expression.LiteralExpression)
+            return false;
+
+        if (expression is Expression.EnvironmentExpression)
+            return false;
+
+        if (expression is Expression.ParseAndEvalExpression)
+            return true;
+
+        if (expression is Expression.KernelApplicationExpression kernelApp)
+        {
+            return ExpressionShouldGetNewStackFrame(kernelApp.argument);
+        }
+
+        if (expression is Expression.ConditionalExpression conditional)
+        {
+            return
+                (ExpressionShouldGetNewStackFrame(conditional.condition) ||
+                ExpressionShouldGetNewStackFrame(conditional.ifTrue) ||
+                ExpressionShouldGetNewStackFrame(conditional.ifFalse));
+        }
+
+        if (expression is Expression.ListExpression list)
+        {
+            foreach (var item in list.List)
+            {
+                if (ExpressionShouldGetNewStackFrame(item))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        if (expression is Expression.StringTagExpression stringTag)
+            return ExpressionShouldGetNewStackFrame(stringTag.tagged);
+
+        if (expression is Expression.DelegatingExpression)
+            return false;
+
+        if (expression is Expression.StackReferenceExpression)
+            return false;
+
+        throw new NotImplementedException(
+            "Unexpected shape of expression: " + expression.GetType().FullName);
     }
 
     private Result<string, PineValue> EvaluateExpressionDefaultLessStack(
