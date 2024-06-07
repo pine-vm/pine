@@ -498,26 +498,60 @@ public class PineVM : IPineVM
 
                     if (evalConditionResult is not Result<string, PineValue>.Ok evalConditionOk)
                     {
-                        throw new NotImplementedException("Unexpected result type: " + evalConditionResult.GetType().FullName);
+                        throw new NotImplementedException(
+                            "Unexpected result type: " + evalConditionResult.GetType().FullName);
                     }
 
-                    if (evalConditionOk.Value == PineVMValues.TrueValue)
-                    {
-                        stack.Push(StackFrameFromExpression(conditionalExpr.ifTrue, currentFrame.EnvironmentValue));
+                    var expressionToContinueWith =
+                        evalConditionOk.Value == PineVMValues.TrueValue
+                        ?
+                        conditionalExpr.ifTrue
+                        :
+                        evalConditionOk.Value == PineVMValues.FalseValue
+                        ?
+                        conditionalExpr.ifFalse
+                        :
+                        null;
 
+                    if (expressionToContinueWith is not null)
+                    {
+                        var containsAnyInvocation =
+                            Expression.EnumerateSelfAndDescendants(expressionToContinueWith)
+                            .Any(expr => expr is Expression.ParseAndEvalExpression);
+
+                        if (containsAnyInvocation)
+                        {
+                            stack.Push(StackFrameFromExpression(expressionToContinueWith, currentFrame.EnvironmentValue));
+                            continue;
+                        }
+
+                        var evalBranchResult =
+                            EvaluateExpressionDefaultLessStack(
+                                expressionToContinueWith,
+                                currentFrame.EnvironmentValue,
+                                stackPrevValues: stackPrevValues);
+
+                        if (evalBranchResult is Result<string, PineValue>.Err evalBranchError)
+                        {
+                            return "Failed to evaluate conditional branch: " + evalBranchError;
+                        }
+
+                        if (evalBranchResult is not Result<string, PineValue>.Ok evalBranchOk)
+                        {
+                            throw new NotImplementedException(
+                                "Unexpected result type: " + evalBranchResult.GetType().FullName);
+                        }
+
+                        currentFrame.InstructionsResultValues.Span[currentFrame.InstructionPointer] = evalBranchOk.Value;
+                        currentFrame.InstructionPointer++;
                         continue;
                     }
-
-                    if (evalConditionOk.Value == PineVMValues.FalseValue)
+                    else
                     {
-                        stack.Push(StackFrameFromExpression(conditionalExpr.ifFalse, currentFrame.EnvironmentValue));
-
+                        currentFrame.InstructionsResultValues.Span[currentFrame.InstructionPointer] = PineValue.EmptyList;
+                        currentFrame.InstructionPointer++;
                         continue;
                     }
-
-                    currentFrame.InstructionsResultValues.Span[currentFrame.InstructionPointer] = PineValue.EmptyList;
-                    currentFrame.InstructionPointer++;
-                    continue;
                 }
 
                 var evalResult =
