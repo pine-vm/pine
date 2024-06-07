@@ -24,23 +24,17 @@ public abstract record Expression
         PineValue Value)
         : Expression;
 
-    public record ListExpression(
-        IReadOnlyList<Expression> List)
+    public record ListExpression
         : Expression
     {
-        public virtual bool Equals(ListExpression? other)
-        {
-            if (other is not { } notNull)
-                return false;
+        private readonly int slimHashCode;
 
-            return
-                ReferenceEquals(this, notNull) ||
-                List.Count == notNull.List.Count &&
-                List.SequenceEqual(notNull.List);
-        }
+        public IReadOnlyList<Expression> List { get; }
 
-        public override int GetHashCode()
+        public ListExpression(IReadOnlyList<Expression> List)
         {
+            this.List = List;
+
             var hashCode = new HashCode();
 
             foreach (var item in List)
@@ -48,8 +42,23 @@ public abstract record Expression
                 hashCode.Add(item.GetHashCode());
             }
 
-            return hashCode.ToHashCode();
+            slimHashCode = hashCode.ToHashCode();
         }
+
+        public virtual bool Equals(ListExpression? other)
+        {
+            if (other is not { } notNull)
+                return false;
+
+            return
+                ReferenceEquals(this, notNull) ||
+                slimHashCode == notNull.slimHashCode &&
+                List.Count == notNull.List.Count &&
+                List.SequenceEqual(notNull.List);
+        }
+
+        public override int GetHashCode() =>
+            slimHashCode;
     }
 
     public record ParseAndEvalExpression(
