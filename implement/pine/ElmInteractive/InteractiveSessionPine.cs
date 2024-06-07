@@ -26,8 +26,6 @@ public class InteractiveSessionPine : IInteractiveSession
 
     private static readonly ConcurrentDictionary<ElmInteractive.CompileInteractiveEnvironmentResult, ElmInteractive.CompileInteractiveEnvironmentResult> compiledEnvironmentCache = new();
 
-    public long? FunctionApplicationCacheLookupCount => pineVMCache?.FunctionApplicationCacheLookupCount;
-
     public InteractiveSessionPine(
         TreeNodeWithStringPath compileElmProgramCodeFiles,
         PineValue? initialState,
@@ -97,25 +95,18 @@ public class InteractiveSessionPine : IInteractiveSession
             :
             (OverrideParseExprDelegate?)cache.BuildParseExprDelegate;
 
-        var overrideEvaluateExpression =
-            cache is null
-            ?
-            null
-            :
-            (OverrideEvalExprDelegate?)cache.BuildEvalExprDelegate;
-
         if (autoPGO is not null)
         {
             return
                 autoPGO.GetVMAutoUpdating(
                     overrideParseExpression: overrideParseExpression,
-                    overrideEvaluateExpression: overrideEvaluateExpression);
+                    evalCache: cache?.EvalCache);
         }
 
         return
             new PineVM(
                 overrideParseExpression: overrideParseExpression,
-                overrideEvaluateExpression: overrideEvaluateExpression);
+                evalCache: cache?.EvalCache);
     }
 
     private static readonly ConcurrentDictionary<string, Result<string, PineValue>> compileEvalContextCache = new();
@@ -319,7 +310,7 @@ public class InteractiveSessionPine : IInteractiveSession
         var profilingVM =
             new ProfilingPineVM(
                 overrideParseExpression: cache.BuildParseExprDelegate,
-                overrideEvaluateExpression: enableEvalExprCache ? cache.BuildEvalExprDelegate : null);
+                evalCache: cache.EvalCache);
 
         var profilingSession = new InteractiveSessionPine(
             compileElmProgramCodeFiles: compileElmProgramCodeFiles,

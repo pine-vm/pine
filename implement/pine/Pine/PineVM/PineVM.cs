@@ -21,11 +21,13 @@ public class PineVM : IPineVM
 
     private readonly ParseExprDelegate parseExpressionDelegate;
 
-    private readonly EvalExprDelegate evalExprDelegate;
+    private IDictionary<(Expression, PineValue), PineValue>? EvalCache { init; get; }
+
+    private Action<Expression, PineValue, TimeSpan, PineValue>? reportFunctionApplication;
 
     public static PineVM Construct(
         IReadOnlyDictionary<PineValue, Func<EvalExprDelegate, PineValue, Result<string, PineValue>>>? parseExpressionOverrides = null,
-        OverrideEvalExprDelegate? overrideEvaluateExpression = null)
+        IDictionary<(Expression, PineValue), PineValue>? evalCache = null)
     {
         var parseExpressionOverridesDict =
             parseExpressionOverrides
@@ -43,42 +45,555 @@ public class PineVM : IPineVM
                 not null =>
                 _ => value => ExpressionEncoding.ParseExpressionFromValue(value, parseExpressionOverridesDict)
             },
-            overrideEvaluateExpression);
+            evalCache: evalCache);
     }
 
     public PineVM(
         OverrideParseExprDelegate? overrideParseExpression = null,
-        OverrideEvalExprDelegate? overrideEvaluateExpression = null)
+        IDictionary<(Expression, PineValue), PineValue>? evalCache = null,
+        Action<Expression, PineValue, TimeSpan, PineValue>? reportFunctionApplication = null)
     {
         parseExpressionDelegate =
             overrideParseExpression
             ?.Invoke(ExpressionEncoding.ParseExpressionFromValueDefault) ??
             ExpressionEncoding.ParseExpressionFromValueDefault;
 
-        evalExprDelegate =
-            overrideEvaluateExpression?.Invoke(EvaluateExpressionDefault) ?? EvaluateExpressionDefault;
+        EvalCache = evalCache;
+
+        this.reportFunctionApplication = reportFunctionApplication;
     }
 
     public Result<string, PineValue> EvaluateExpression(
         Expression expression,
-        PineValue environment) => evalExprDelegate(expression, environment);
+        PineValue environment) => EvaluateExpressionDefault(expression, environment);
 
-    public Result<string, PineValue> EvaluateExpressionDefault(
+    public record StackFrameInstructions(
+        IReadOnlyList<StackInstruction> Expressions)
+    {
+        public virtual bool Equals(StackFrameInstructions? other)
+        {
+            if (other is not { } notNull)
+                return false;
+
+            return
+                ReferenceEquals(this, notNull) ||
+                Expressions.Count == notNull.Expressions.Count &&
+                Expressions.SequenceEqual(notNull.Expressions);
+        }
+
+        public override int GetHashCode()
+        {
+            var hashCode = new HashCode();
+
+            foreach (var item in Expressions)
+            {
+                hashCode.Add(item.GetHashCode());
+            }
+
+            return hashCode.ToHashCode();
+        }
+    }
+
+    record StackFrame(
+        Expression Expression,
+        StackFrameInstructions Instructions,
+        PineValue EnvironmentValue,
+        Memory<PineValue> InstructionsResultValues,
+        long BeginTimestamp)
+    {
+        public int InstructionPointer { get; set; } = 0;
+    }
+
+    readonly Dictionary<Expression, StackFrameInstructions> stackFrameDict = new();
+
+    StackFrame StackFrameFromExpression(
         Expression expression,
         PineValue environment)
+    {
+        var instructions = InstructionsFromExpression(expression);
+
+        return new StackFrame(
+            expression,
+            instructions,
+            EnvironmentValue: environment,
+            new PineValue[instructions.Expressions.Count],
+            BeginTimestamp: System.Diagnostics.Stopwatch.GetTimestamp());
+    }
+
+    public StackFrameInstructions InstructionsFromExpression(Expression rootExpression)
+    {
+        if (stackFrameDict.TryGetValue(rootExpression, out var cachedInstructions))
+        {
+            return cachedInstructions;
+        }
+
+        var instructions = InstructionsFromExpressionLessCache(rootExpression);
+
+        stackFrameDict[rootExpression] = instructions;
+
+        return instructions;
+    }
+
+    public static StackFrameInstructions InstructionsFromExpressionLessCache(Expression rootExpression)
+    {
+        var separatedExprs = InstructionsFromExpressionCore(rootExpression);
+
+        if (separatedExprs.Count is 0)
+        {
+            return
+                new StackFrameInstructions(
+                    Expressions:
+                    [StackInstruction.Eval(rootExpression), StackInstruction.Return]);
+        }
+
+        IReadOnlyList<StackInstruction> appendedForRoot =
+            rootExpression switch
+            {
+                Expression.ConditionalExpression =>
+                [],
+
+                _ =>
+                [StackInstruction.Eval(rootExpression),
+                StackInstruction.Return]
+            };
+
+        var separatedExprsValuesBeforeFilter =
+            separatedExprs
+            .SelectMany(pair => pair.Value)
+            .Concat(appendedForRoot)
+            .ToImmutableArray();
+
+        static IEnumerable<StackInstruction> InstructionsFiltered(IEnumerable<StackInstruction> instructions)
+        {
+            var coveredLaterExprs = new HashSet<Expression>();
+
+            IEnumerable<StackInstruction> ExprsFilteredReverse()
+            {
+                foreach (var inst in instructions.Reverse())
+                {
+                    var instExpr =
+                        inst switch
+                        {
+                            /*
+                            StackInstruction.ReturnInstruction retInst =>
+                            retInst.Returned,
+                            */
+
+                            StackInstruction.EvalInstruction evalInst =>
+                            evalInst.Expression,
+
+                            _ => null
+                        };
+
+                    if (instExpr is not null)
+                    {
+                        if (coveredLaterExprs.Contains(instExpr))
+                            continue;
+
+                        coveredLaterExprs.Add(instExpr);
+                    }
+
+                    yield return inst;
+                }
+            }
+
+            return ExprsFilteredReverse().Reverse();
+        }
+
+        var separatedExprsValues =
+            InstructionsFiltered(separatedExprsValuesBeforeFilter)
+            .ToImmutableArray();
+
+        var map = new Dictionary<StackInstruction, int>();
+
+        for (var i = 0; i < separatedExprsValues.Length; i++)
+        {
+            map[separatedExprsValues[i]] = i;
+        }
+
+        StackInstruction MapInstruction(
+            StackInstruction originalInst,
+            int selfIndex)
+        {
+            if (originalInst is StackInstruction.ConditionalJumpRefInstruction conditionalJumpRef)
+            {
+                var ifTrueExprEntry =
+                    map
+                    .FirstOrDefault(c =>
+                    c.Key is StackInstruction.EvalInstruction evalInst && evalInst.Expression == conditionalJumpRef.IfTrueExpr);
+
+                if (ifTrueExprEntry.Key is null)
+                {
+                    throw new InvalidOperationException("Expected to find ifTrueExpr in map.");
+                }
+
+                return
+                    new StackInstruction.ConditionalJumpInstruction(
+                        Condition: conditionalJumpRef.Condition,
+                        IfTrueOffset: ifTrueExprEntry.Value - selfIndex);
+            }
+
+            return
+                StackInstruction.TransformExpressionWithOptionalReplacement(
+                    findReplacement:
+                    descendant =>
+                    {
+                        if (originalInst is StackInstruction.EvalInstruction origEval && origEval.Expression == descendant)
+                        {
+                            return null;
+                        }
+
+                        if (
+                        map.FirstOrDefault(c => c.Key is StackInstruction.EvalInstruction evalInst && evalInst.Expression == descendant)
+                        is { } pair && pair.Key is not null)
+                        {
+                            return new Expression.StackReferenceExpression(offset: pair.Value - selfIndex);
+                        }
+
+                        return null;
+                    },
+                    instruction: originalInst);
+        }
+
+        var componentExprMapped =
+            separatedExprsValues
+            .Select(MapInstruction)
+            .ToImmutableArray();
+
+        return
+            new StackFrameInstructions(
+                Expressions: [.. componentExprMapped]);
+    }
+
+    static IReadOnlyList<KeyValuePair<Expression, IReadOnlyList<StackInstruction>>>
+        InstructionsFromExpressionCore(Expression rootExpression)
+    {
+        var allExprs =
+            Expression.EnumerateSelfAndDescendants(
+                rootExpression,
+                /*
+                 * For now, we create a new stack frame for each conditional expression.
+                 * */
+                skipDescendants: expr => expr is Expression.ConditionalExpression)
+            .ToImmutableArray();
+
+        var allExprsReverse =
+            allExprs
+            .Reverse()
+            .ToImmutableArray();
+
+        static IReadOnlyList<StackInstruction>? mappingForExpr(Expression expression)
+        {
+            if (expression is Expression.ParseAndEvalExpression parseAndEval)
+            {
+                return [StackInstruction.Eval(expression)];
+            }
+
+            /*
+             * At the moment we add a new stack frame to evaluate a conditional expression.
+             * 
+            if (expression is Expression.ConditionalExpression conditional)
+            {
+                return
+                [
+                    new StackInstruction.ConditionalJumpRefInstruction(
+                        Condition: conditional.condition,
+                        IfTrueExpr:conditional.ifTrue),
+                    StackInstruction.Eval(conditional.ifFalse),
+                    StackInstruction.Return,
+                    StackInstruction.Eval(conditional.ifTrue),
+                    StackInstruction.Return
+                ];
+            }
+            */
+
+            return null;
+        }
+
+        var separatedExprs =
+            allExprsReverse
+            .Distinct()
+            .SelectMany(e =>
+            {
+                if (mappingForExpr(e) is { } mappedExprs)
+                {
+                    return
+                    (KeyValuePair<Expression, IReadOnlyList<StackInstruction>>[])
+                    [new KeyValuePair<Expression, IReadOnlyList<StackInstruction>>(e, mappedExprs)];
+                }
+
+                return [];
+            })
+            .ToImmutableArray();
+
+        return separatedExprs;
+    }
+
+    public Result<string, PineValue> EvaluateExpressionDefault(
+        Expression rootExpression,
+        PineValue rootEnvironment)
+    {
+        var stack = new Stack<StackFrame>();
+
+        stack.Push(StackFrameFromExpression(rootExpression, rootEnvironment));
+
+        /*
+        void returnFromFrame(PineValue frameReturnValue)
+        {
+            stack.Pop();
+
+            if (stack.Count is 0)
+            {
+                return frameReturnValue;
+            }
+
+            var previousFrame = stack.Peek();
+
+            previousFrame.Values.Span[previousFrame.InstructionPointer] = frameReturnValue;
+
+            previousFrame.InstructionPointer++;
+        }
+        */
+
+        while (true)
+        {
+            var currentFrame = stack.Peek();
+
+            if (EvalCache?.TryGetValue((currentFrame.Expression, currentFrame.EnvironmentValue), out var cachedValue) ?? false &&
+                cachedValue is not null)
+            {
+                stack.Pop();
+
+                if (stack.Count is 0)
+                {
+                    return cachedValue;
+                }
+
+                var previousFrame = stack.Peek();
+
+                previousFrame.InstructionsResultValues.Span[previousFrame.InstructionPointer] = cachedValue;
+
+                previousFrame.InstructionPointer++;
+                continue;
+            }
+
+            if (currentFrame.Instructions.Expressions.Count <= currentFrame.InstructionPointer)
+            {
+                return
+                    "Instruction pointer out of bounds. Missing explicit return instruction.";
+            }
+
+            ReadOnlyMemory<PineValue> stackPrevValues =
+                currentFrame.InstructionsResultValues[..currentFrame.InstructionPointer];
+
+            var currentInstruction = currentFrame.Instructions.Expressions[currentFrame.InstructionPointer];
+
+            if (currentInstruction is StackInstruction.ReturnInstruction)
+            {
+                if (currentFrame.InstructionPointer is 0)
+                {
+                    return "Return instruction at beginning of frame";
+                }
+
+                var frameElapsedTime = System.Diagnostics.Stopwatch.GetElapsedTime(currentFrame.BeginTimestamp);
+
+                var frameReturnValue = currentFrame.InstructionsResultValues.Span[currentFrame.InstructionPointer - 1];
+
+                if (frameElapsedTime.TotalMilliseconds > 3 && EvalCache is not null)
+                {
+                    EvalCache?.TryAdd((currentFrame.Expression, currentFrame.EnvironmentValue), frameReturnValue);
+                }
+
+                reportFunctionApplication?.Invoke(
+                    currentFrame.Expression,
+                    currentFrame.EnvironmentValue,
+                    frameElapsedTime,
+                    frameReturnValue);
+
+                stack.Pop();
+
+                if (stack.Count is 0)
+                {
+                    return frameReturnValue;
+                }
+
+                var previousFrame = stack.Peek();
+
+                previousFrame.InstructionsResultValues.Span[previousFrame.InstructionPointer] = frameReturnValue;
+
+                previousFrame.InstructionPointer++;
+                continue;
+            }
+
+            if (currentInstruction is StackInstruction.EvalInstruction evalInstr)
+            {
+                if (evalInstr.Expression is Expression.ParseAndEvalExpression parseAndEval)
+                {
+                    var evalExprValueResult =
+                        EvaluateExpressionDefaultLessStack(
+                            parseAndEval.expression,
+                            currentFrame.EnvironmentValue,
+                            stackPrevValues: stackPrevValues);
+
+                    if (evalExprValueResult is Result<string, PineValue>.Err parseFunctionError)
+                    {
+                        return "Failed to evaluate expr value for parse and eval: " + parseFunctionError;
+                    }
+
+                    if (evalExprValueResult is not Result<string, PineValue>.Ok evalExprValueOk)
+                    {
+                        throw new NotImplementedException(
+                            "Unexpected result type: " + evalExprValueResult.GetType().FullName);
+                    }
+
+                    var parseResult = parseExpressionDelegate(evalExprValueOk.Value);
+
+                    if (parseResult is Result<string, Expression>.Err parseErr)
+                    {
+                        return
+                            "Failed to parse expression from value: " + parseErr.Value +
+                            " - expressionValue is " + DescribeValueForErrorMessage(evalExprValueOk.Value) +
+                            " - environmentValue is " + DescribeValueForErrorMessage(evalExprValueOk.Value);
+                    }
+
+                    if (parseResult is not Result<string, Expression>.Ok parseOk)
+                    {
+                        throw new NotImplementedException("Unexpected result type: " + parseResult.GetType().FullName);
+                    }
+
+                    var evalEnvResult =
+                        EvaluateExpressionDefaultLessStack(
+                            parseAndEval.environment,
+                            currentFrame.EnvironmentValue,
+                            stackPrevValues: stackPrevValues);
+
+                    if (evalEnvResult is Result<string, PineValue>.Err evalEnvError)
+                    {
+                        return "Failed to evaluate environment: " + evalEnvError;
+                    }
+
+                    if (evalEnvResult is not Result<string, PineValue>.Ok evalEnvOk)
+                    {
+                        throw new NotImplementedException(
+                            "Unexpected result type: " + evalEnvResult.GetType().FullName);
+                    }
+
+                    stack.Push(StackFrameFromExpression(parseOk.Value, evalEnvOk.Value));
+
+                    continue;
+                }
+
+                if (evalInstr.Expression is Expression.ConditionalExpression conditionalExpr)
+                {
+                    var evalConditionResult =
+                        EvaluateExpressionDefaultLessStack(
+                            conditionalExpr.condition,
+                            currentFrame.EnvironmentValue,
+                            stackPrevValues: stackPrevValues);
+
+                    if (evalConditionResult is Result<string, PineValue>.Err evalConditionError)
+                    {
+                        return "Failed to evaluate condition: " + evalConditionError;
+                    }
+
+                    if (evalConditionResult is not Result<string, PineValue>.Ok evalConditionOk)
+                    {
+                        throw new NotImplementedException("Unexpected result type: " + evalConditionResult.GetType().FullName);
+                    }
+
+                    if (evalConditionOk.Value == PineVMValues.TrueValue)
+                    {
+                        stack.Push(StackFrameFromExpression(conditionalExpr.ifTrue, currentFrame.EnvironmentValue));
+
+                        continue;
+                    }
+
+                    if (evalConditionOk.Value == PineVMValues.FalseValue)
+                    {
+                        stack.Push(StackFrameFromExpression(conditionalExpr.ifFalse, currentFrame.EnvironmentValue));
+
+                        continue;
+                    }
+
+                    currentFrame.InstructionsResultValues.Span[currentFrame.InstructionPointer] = PineValue.EmptyList;
+                    currentFrame.InstructionPointer++;
+                    continue;
+                }
+
+                var evalResult =
+                    EvaluateExpressionDefaultLessStack(
+                        evalInstr.Expression,
+                        currentFrame.EnvironmentValue,
+                        stackPrevValues: stackPrevValues);
+
+                if (evalResult is Result<string, PineValue>.Err evalError)
+                {
+                    return "Failed to evaluate expression: " + evalError;
+                }
+
+                if (evalResult is not Result<string, PineValue>.Ok evalOk)
+                {
+                    throw new NotImplementedException("Unexpected result type: " + evalResult.GetType().FullName);
+                }
+
+                currentFrame.InstructionsResultValues.Span[currentFrame.InstructionPointer] = evalOk.Value;
+                currentFrame.InstructionPointer++;
+                continue;
+            }
+
+            if (currentInstruction is StackInstruction.ConditionalJumpInstruction conditionalStatement)
+            {
+                var evalConditionResult =
+                    EvaluateExpressionDefaultLessStack(
+                        conditionalStatement.Condition,
+                        currentFrame.EnvironmentValue,
+                        stackPrevValues: stackPrevValues);
+
+                if (evalConditionResult is Result<string, PineValue>.Err evalConditionError)
+                {
+                    return "Failed to evaluate condition: " + evalConditionError;
+                }
+
+                if (evalConditionResult is not Result<string, PineValue>.Ok evalConditionOk)
+                {
+                    throw new NotImplementedException("Unexpected result type: " + evalConditionResult.GetType().FullName);
+                }
+
+                if (evalConditionOk.Value == PineVMValues.TrueValue)
+                {
+                    currentFrame.InstructionPointer += conditionalStatement.IfTrueOffset;
+                    continue;
+                }
+
+                currentFrame.InstructionPointer++;
+                continue;
+            }
+
+            return "Unexpected instruction type: " + currentInstruction.GetType().FullName;
+        }
+    }
+
+    private Result<string, PineValue> EvaluateExpressionDefaultLessStack(
+        Expression expression,
+        PineValue environment,
+        ReadOnlyMemory<PineValue> stackPrevValues)
     {
         if (expression is Expression.LiteralExpression literalExpression)
             return literalExpression.Value;
 
         if (expression is Expression.ListExpression listExpression)
         {
-            return EvaluateListExpression(listExpression, environment);
+            return EvaluateListExpression(listExpression, environment, stackPrevValues: stackPrevValues);
         }
 
         if (expression is Expression.ParseAndEvalExpression applicationExpression)
         {
             return
-                EvaluateParseAndEvalExpression(applicationExpression, environment) switch
+                EvaluateParseAndEvalExpression(
+                    applicationExpression,
+                    environment,
+                    stackPrevValues: stackPrevValues)
+                switch
                 {
                     Result<string, PineValue>.Err err =>
                     "Failed to evaluate parse and evaluate: " + err,
@@ -91,7 +606,10 @@ public class PineVM : IPineVM
         if (expression is Expression.KernelApplicationExpression kernelApplicationExpression)
         {
             return
-                EvaluateKernelApplicationExpression(environment, kernelApplicationExpression) switch
+                EvaluateKernelApplicationExpression(
+                    environment,
+                    kernelApplicationExpression,
+                    stackPrevValues: stackPrevValues) switch
                 {
                     Result<string, PineValue>.Err err =>
                     "Failed to evaluate kernel function application: " + err,
@@ -103,7 +621,10 @@ public class PineVM : IPineVM
 
         if (expression is Expression.ConditionalExpression conditionalExpression)
         {
-            return EvaluateConditionalExpression(environment, conditionalExpression);
+            return EvaluateConditionalExpression(
+                environment,
+                conditionalExpression,
+                stackPrevValues: stackPrevValues);
         }
 
         if (expression is Expression.EnvironmentExpression)
@@ -113,12 +634,27 @@ public class PineVM : IPineVM
 
         if (expression is Expression.StringTagExpression stringTagExpression)
         {
-            return EvaluateExpression(stringTagExpression.tagged, environment);
+            return EvaluateExpressionDefaultLessStack(
+                stringTagExpression.tagged,
+                environment,
+                stackPrevValues: stackPrevValues);
         }
 
         if (expression is Expression.DelegatingExpression delegatingExpr)
         {
-            return delegatingExpr.Delegate.Invoke(evalExprDelegate, environment);
+            return delegatingExpr.Delegate.Invoke(EvaluateExpressionDefault, environment);
+        }
+
+        if (expression is Expression.StackReferenceExpression stackRef)
+        {
+            var index = stackPrevValues.Length + stackRef.offset;
+
+            if (index < 0 || index >= stackPrevValues.Length)
+            {
+                return "Invalid stack reference: " + stackRef.offset;
+            }
+
+            return stackPrevValues.Span[index];
         }
 
         throw new NotImplementedException("Unexpected shape of expression: " + expression.GetType().FullName);
@@ -126,7 +662,8 @@ public class PineVM : IPineVM
 
     public Result<string, PineValue> EvaluateListExpression(
         Expression.ListExpression listExpression,
-        PineValue environment)
+        PineValue environment,
+        ReadOnlyMemory<PineValue> stackPrevValues)
     {
         var listItems = new List<PineValue>(listExpression.List.Count);
 
@@ -134,7 +671,10 @@ public class PineVM : IPineVM
         {
             var item = listExpression.List[i];
 
-            var itemResult = EvaluateExpression(item, environment);
+            var itemResult = EvaluateExpressionDefaultLessStack(
+                item,
+                environment,
+                stackPrevValues: stackPrevValues);
 
             if (itemResult is Result<string, PineValue>.Err itemErr)
                 return "Failed to evaluate list element [" + i + "]: " + itemErr.Value;
@@ -151,11 +691,10 @@ public class PineVM : IPineVM
         return PineValue.List(listItems);
     }
 
-    private static readonly System.Threading.AsyncLocal<int> evalDepth = new();
-
     public Result<string, PineValue> EvaluateParseAndEvalExpression(
         Expression.ParseAndEvalExpression parseAndEval,
-        PineValue environment)
+        PineValue environment,
+        ReadOnlyMemory<PineValue> stackPrevValues)
     {
         Result<string, PineValue> continueWithEnvValueAndFunction(
             PineValue environmentValue,
@@ -167,65 +706,23 @@ public class PineVM : IPineVM
                 FunctionApplicationMaxEnvSize < list.Elements.Count ? list.Elements.Count : FunctionApplicationMaxEnvSize;
             }
 
-            /*
-             * 2024-05-19 work around for stack overflow:
-             * After seeing some apps crash with stack overflow, reduce stack sizes by offloading to another thread.
-             * 
-
-            var evalResult = EvaluateExpression(environment: environmentValue, expression: functionExpression);
-
-            return evalResult;
-            */
-
-            var evalDelegate =
-                new Func<Result<string, PineValue>>(
-                    () => EvaluateExpression(environment: environmentValue, expression: functionExpression));
-
-            evalDepth.Value++;
-
-            try
-            {
-                if (evalDepth.Value < 16)
-                {
-                    /*
-                     * As long as we don't risk the stack becoming too large, reuse the same thread/stack.
-                     * */
-                    return evalDelegate();
-                }
-
-                /*
-                 * Specify a cancellation token to prevent the Task framework from attempting synchronous execution.
-                 * From the documentation on Task:
-                 * > We will attempt inline execution only if an infinite wait was requested
-                 * > [...]
-                 * Source: https://github.com/dotnet/runtime/blob/087e15321bb712ef6fe8b0ba6f8bd12facf92629/src/libraries/System.Private.CoreLib/src/System/Threading/Tasks/Task.cs#L2997-L3008
-                 * */
-
-                var cancellationTokenSource = new System.Threading.CancellationTokenSource();
-
-                var task =
-                    System.Threading.Tasks.Task.Run(
-                        function: evalDelegate,
-                        cancellationToken: cancellationTokenSource.Token);
-
-                task.Wait(cancellationToken: cancellationTokenSource.Token);
-
-                return task.Result;
-            }
-            finally
-            {
-                evalDepth.Value--;
-            }
+            return EvaluateExpression(environment: environmentValue, expression: functionExpression);
         }
 
         return
-            EvaluateExpression(parseAndEval.environment, environment) switch
+            EvaluateExpressionDefaultLessStack(
+                parseAndEval.environment,
+                environment,
+                stackPrevValues: stackPrevValues) switch
             {
                 Result<string, PineValue>.Err envErr =>
                 "Failed to evaluate argument: " + envErr.Value,
 
                 Result<string, PineValue>.Ok environmentValue =>
-                EvaluateExpression(parseAndEval.expression, environment) switch
+                EvaluateExpressionDefaultLessStack(
+                    parseAndEval.expression,
+                    environment,
+                    stackPrevValues: stackPrevValues) switch
                 {
                     Result<string, PineValue>.Err exprErr =>
                     "Failed to evaluate expression: " + exprErr.Value,
@@ -261,8 +758,9 @@ public class PineVM : IPineVM
 
     public Result<string, PineValue> EvaluateKernelApplicationExpression(
         PineValue environment,
-        Expression.KernelApplicationExpression application) =>
-        EvaluateExpression(application.argument, environment) switch
+        Expression.KernelApplicationExpression application,
+        ReadOnlyMemory<PineValue> stackPrevValues) =>
+        EvaluateExpressionDefaultLessStack(application.argument, environment, stackPrevValues) switch
         {
             Result<string, PineValue>.Ok argument =>
             application.function(argument.Value),
@@ -277,17 +775,28 @@ public class PineVM : IPineVM
 
     public Result<string, PineValue> EvaluateConditionalExpression(
         PineValue environment,
-        Expression.ConditionalExpression conditional) =>
-        EvaluateExpression(conditional.condition, environment) switch
+        Expression.ConditionalExpression conditional,
+        ReadOnlyMemory<PineValue> stackPrevValues) =>
+        EvaluateExpressionDefaultLessStack(
+            conditional.condition,
+            environment,
+            stackPrevValues: stackPrevValues)
+        switch
         {
             Result<string, PineValue>.Ok conditionValue =>
             conditionValue == PineVMValues.TrueValue
             ?
-            EvaluateExpression(conditional.ifTrue, environment)
+            EvaluateExpressionDefaultLessStack(
+                conditional.ifTrue,
+                environment,
+                stackPrevValues: stackPrevValues)
             :
             conditionValue == PineVMValues.FalseValue
             ?
-            EvaluateExpression(conditional.ifFalse, environment)
+            EvaluateExpressionDefaultLessStack(
+                conditional.ifFalse,
+                environment,
+                stackPrevValues: stackPrevValues)
             :
             PineValue.EmptyList,
 

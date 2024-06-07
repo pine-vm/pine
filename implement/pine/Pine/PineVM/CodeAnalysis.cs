@@ -311,7 +311,9 @@ public class CodeAnalysis
         Expression expression,
         PineValue environment,
         ConcurrentDictionary<Expression, ExprAnalysis> mutatedCache,
-        ParseExprDelegate parseExpression)
+        ParseExprDelegate parseExpressionForAnalysis,
+        ParseExprDelegate parseExpressionForEval,
+        PineVMCache? evalCache)
     {
         var expressionId =
             CompilePineToDotNet.CompileToCSharp.CompiledExpressionId(expression)
@@ -357,7 +359,7 @@ public class CodeAnalysis
                     ?
                     null
                     :
-                    parseExpression(expressionValue)
+                    parseExpressionForAnalysis(expressionValue)
                     .WithDefault(null);
 
                 return
@@ -478,22 +480,8 @@ public class CodeAnalysis
 
                 childEnvValue =
                 new PineVM(
-                    overrideParseExpression: _ => parseExpression,
-                    overrideEvaluateExpression: defaultHandler =>
-                    new EvalExprDelegate((expr, env) =>
-                    {
-                        if (expr is Expression.ParseAndEvalExpression)
-                        {
-                            ++parseCount;
-                        }
-
-                        if (100 < parseCount)
-                        {
-                            throw new TooManyParsingStepsException("Too many parsing steps: " + parseCount);
-                        }
-
-                        return defaultHandler.Invoke(expr, env);
-                    }))
+                    overrideParseExpression: _ => parseExpressionForEval,
+                    evalCache: evalCache?.EvalCache)
                 /*
                  * Evaluation of the environment expression can fail here, since we are looking into all branches,
                  * including ones that are not reachable in the actual execution.
@@ -526,7 +514,9 @@ public class CodeAnalysis
                     parsedChildExpr,
                     childEnvValue,
                     mutatedCache: mutatedCache,
-                    parseExpression: parseExpression);
+                    parseExpressionForAnalysis: parseExpressionForAnalysis,
+                    parseExpressionForEval: parseExpressionForEval,
+                    evalCache: evalCache);
 
             if (childEnvBeforeMapping.RootEnvClass is not ExpressionEnvClass.ConstrainedEnv childConstrainedEnv)
             {

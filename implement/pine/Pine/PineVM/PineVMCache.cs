@@ -1,5 +1,5 @@
 using System.Collections.Concurrent;
-using System.Collections.Immutable;
+using System.Collections.Generic;
 
 namespace Pine.PineVM;
 
@@ -14,18 +14,11 @@ namespace Pine.PineVM;
 /// </summary>
 public class PineVMCache
 {
-    public record FunctionApplicationCacheEntryKey(Expression.ParseAndEvalExpression Expression, PineValue Environment);
-
     private readonly ConcurrentDictionary<PineValue, Result<string, Expression>> parseExprCache = new();
 
-    private readonly ConcurrentDictionary<FunctionApplicationCacheEntryKey, PineValue> functionApplicationCache = new();
+    public Dictionary<(Expression, PineValue), PineValue> EvalCache { init; get; } = [];
 
-    public long FunctionApplicationCacheSize => functionApplicationCache.Count;
-
-    public long FunctionApplicationCacheLookupCount { private set; get; }
-
-    public IImmutableDictionary<FunctionApplicationCacheEntryKey, PineValue> CopyFunctionApplicationCache() =>
-        functionApplicationCache.ToImmutableDictionary();
+    public long FunctionApplicationCacheSize => EvalCache.Count;
 
 
     public ParseExprDelegate BuildParseExprDelegate(ParseExprDelegate evalExprDelegate)
@@ -35,41 +28,6 @@ public class PineVMCache
             return parseExprCache.GetOrAdd(
                 key: exprValue,
                 valueFactory: exprValue => evalExprDelegate(exprValue));
-        });
-    }
-
-    public EvalExprDelegate BuildEvalExprDelegate(EvalExprDelegate evalExprDelegate)
-    {
-        return new EvalExprDelegate((expression, environment) =>
-        {
-            if (expression is Expression.DelegatingExpression)
-            {
-                // Dictionary lookup is not implemented for DelegatingExpression.
-                return evalExprDelegate(expression, environment);
-            }
-
-            if (expression is Expression.ParseAndEvalExpression parseAndEvalExpr)
-            {
-                ++FunctionApplicationCacheLookupCount;
-
-                var cacheKey = new FunctionApplicationCacheEntryKey(Expression: parseAndEvalExpr, Environment: environment);
-
-                if (functionApplicationCache.TryGetValue(cacheKey, out var cachedResult))
-                    return Result<string, PineValue>.ok(cachedResult);
-
-                var evalStopwatch = System.Diagnostics.Stopwatch.StartNew();
-
-                var evalResult = evalExprDelegate(expression, environment);
-
-                if (4 <= evalStopwatch.ElapsedMilliseconds && evalResult is Result<string, PineValue>.Ok evalOk)
-                {
-                    functionApplicationCache[cacheKey] = evalOk.Value;
-                }
-
-                return evalResult;
-            }
-
-            return evalExprDelegate(expression, environment);
         });
     }
 }

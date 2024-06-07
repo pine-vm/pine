@@ -8,7 +8,7 @@ namespace Pine.PineVM;
 
 public delegate Result<string, PineValue> EvalExprDelegate(Expression expression, PineValue environment);
 
-public delegate EvalExprDelegate OverrideEvalExprDelegate(EvalExprDelegate evalExprDelegate);
+public delegate EvalExprDelegate? OverrideEvalExprDelegate(EvalExprDelegate evalExprDelegate);
 
 public delegate Result<string, Expression> ParseExprDelegate(PineValue value);
 
@@ -100,6 +100,9 @@ public abstract record Expression
         : Expression;
 
     public record DelegatingExpression(Func<EvalExprDelegate, PineValue, Result<string, PineValue>> Delegate)
+        : Expression;
+
+    public record StackReferenceExpression(int offset)
         : Expression;
 
     /// <summary>

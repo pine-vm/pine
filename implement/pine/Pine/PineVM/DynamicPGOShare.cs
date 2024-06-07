@@ -65,7 +65,7 @@ public class DynamicPGOShare : IDisposable
 
     public IPineVM GetVMAutoUpdating(
         OverrideParseExprDelegate? overrideParseExpression = null,
-        OverrideEvalExprDelegate? overrideEvaluateExpression = null)
+        IDictionary<(Expression, PineValue), PineValue>? evalCache = null)
     {
         return new RedirectingVM(
             (expression, environment) =>
@@ -74,10 +74,10 @@ public class DynamicPGOShare : IDisposable
                 environment,
                 initialProfileAggregationDelay: TimeSpan.FromSeconds(8),
                 overrideParseExpression,
-                overrideEvaluateExpression));
+                evalCache: evalCache));
     }
 
-    record EvaluateExpressionProfilingTask(
+    public record EvaluateExpressionProfilingTask(
         ProfilingPineVM ProfilingPineVM,
         CancellationTokenSource EvalTaskCancellationTokenSource,
         Task<Result<string, PineValue>> EvalTask);
@@ -87,7 +87,7 @@ public class DynamicPGOShare : IDisposable
         PineValue environment,
         TimeSpan initialProfileAggregationDelay,
         OverrideParseExprDelegate? overrideParseExpression = null,
-        OverrideEvalExprDelegate? overrideEvaluateExpression = null)
+        IDictionary<(Expression, PineValue), PineValue>? evalCache = null)
     {
         var profileContainer =
             new SubmissionProfileMutableContainer(
@@ -99,12 +99,13 @@ public class DynamicPGOShare : IDisposable
         {
             var profileAggregationDelay = initialProfileAggregationDelay * Math.Pow(1.5, iterationIndex);
 
-            var profilingEvalTask = StartEvaluateExpressionTaskBasedOnLastCompilation(
-                expression,
-                environment: environment,
-                cancellationTokenSource: new CancellationTokenSource(),
-                overrideParseExpression: overrideParseExpression,
-                overrideEvaluateExpression: overrideEvaluateExpression);
+            var profilingEvalTask =
+                StartEvaluateExpressionTaskBasedOnLastCompilation(
+                    expression,
+                    environment: environment,
+                    cancellationTokenSource: new CancellationTokenSource(),
+                    overrideParseExpression: overrideParseExpression,
+                    evalCache: evalCache);
 
             profilingEvalTask.EvalTask.Wait(profileAggregationDelay, disposedCancellationTokenSource.Token);
 
@@ -167,7 +168,7 @@ public class DynamicPGOShare : IDisposable
         PineValue environment,
         CancellationTokenSource cancellationTokenSource,
         OverrideParseExprDelegate? overrideParseExpression = null,
-        OverrideEvalExprDelegate? overrideEvaluateExpression = null)
+        IDictionary<(Expression, PineValue), PineValue>? evalCache = null)
     {
         var compiledParseExpressionOverrides =
             completedCompilations
@@ -212,24 +213,15 @@ public class DynamicPGOShare : IDisposable
         var combinedCancellationTokenSource =
             CancellationTokenSource.CreateLinkedTokenSource(
                 cancellationTokenSource.Token,
-                disposedCancellationTokenSource.Token,
                 newCancellationTokenSource.Token);
 
-        EvalExprDelegate OverrideEvalExprDelegate(EvalExprDelegate evalExprDelegate)
-        {
-            return (Expression expression, PineValue environment) =>
-            {
-                combinedCancellationTokenSource.Token.ThrowIfCancellationRequested();
-
-                return
-                (overrideEvaluateExpression?.Invoke(evalExprDelegate) ?? evalExprDelegate).Invoke(expression, environment);
-            };
-        }
+        var analysisEvalCache = new PineVMCache();
 
         var profilingVM =
             new ProfilingPineVM(
                 overrideParseExpression: overrideParseExprIncludeCompiled,
-                overrideEvaluateExpression: OverrideEvalExprDelegate);
+                evalCache: evalCache,
+                analysisEvalCache: analysisEvalCache);
 
         var evalTask =
             Task.Run(() => profilingVM.PineVM.EvaluateExpression(expression, environment));
