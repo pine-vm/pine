@@ -80,10 +80,10 @@ public static class KernelFunction
         {
             PineValue.ListValue listValue =>
             listValue.Elements.Count is 2 ?
-            PineValueAsInteger.SignedIntegerFromValueRelaxed(listValue.Elements[0]) switch
+            SignedIntegerFromValueRelaxed(listValue.Elements[0]) switch
             {
-                Result<string, BigInteger>.Ok count =>
-                skip(count.Value, listValue.Elements[1]),
+                { } count =>
+                skip(count, listValue.Elements[1]),
 
                 _ =>
                 PineValue.EmptyList
@@ -91,7 +91,7 @@ public static class KernelFunction
             :
             PineValue.EmptyList,
 
-            PineValue.BlobValue blobValue =>
+            PineValue.BlobValue =>
             PineValue.EmptyList,
 
             _ =>
@@ -126,10 +126,10 @@ public static class KernelFunction
         {
             PineValue.ListValue listValue =>
             listValue.Elements.Count is 2 ?
-            PineValueAsInteger.SignedIntegerFromValueRelaxed(listValue.Elements[0]) switch
+            SignedIntegerFromValueRelaxed(listValue.Elements[0]) switch
             {
-                Result<string, BigInteger>.Ok count =>
-                take(count.Value, listValue.Elements[1]),
+                { } count =>
+                take(count, listValue.Elements[1]),
 
                 _ =>
                 PineValue.EmptyList
@@ -220,13 +220,13 @@ public static class KernelFunction
 
     public static PineValue add_int(PineValue summandA, PineValue summandB)
     {
-        if (PineValueAsInteger.SignedIntegerFromValueRelaxed(summandA) is not Result<string, BigInteger>.Ok intA)
+        if (SignedIntegerFromValueRelaxed(summandA) is not { } intA)
             return PineValue.EmptyList;
 
-        if (PineValueAsInteger.SignedIntegerFromValueRelaxed(summandB) is not Result<string, BigInteger>.Ok intB)
+        if (SignedIntegerFromValueRelaxed(summandB) is not { } intB)
             return PineValue.EmptyList;
 
-        return add_int(intA.Value, intB.Value);
+        return add_int(intA, intB);
     }
 
     public static PineValue add_int(BigInteger summandA, BigInteger summandB) =>
@@ -240,13 +240,13 @@ public static class KernelFunction
 
     public static PineValue mul_int(PineValue factorA, PineValue factorB)
     {
-        if (PineValueAsInteger.SignedIntegerFromValueRelaxed(factorA) is not Result<string, BigInteger>.Ok intA)
+        if (SignedIntegerFromValueRelaxed(factorA) is not { } intA)
             return PineValue.EmptyList;
 
-        if (PineValueAsInteger.SignedIntegerFromValueRelaxed(factorB) is not Result<string, BigInteger>.Ok intB)
+        if (SignedIntegerFromValueRelaxed(factorB) is not { } intB)
             return PineValue.EmptyList;
 
-        return mul_int(intA.Value, intB.Value);
+        return mul_int(intA, intB);
     }
 
     public static PineValue mul_int(BigInteger factorA, BigInteger factorB) =>
@@ -282,20 +282,20 @@ public static class KernelFunction
             if (listValue.Elements.Count is 0)
                 return ValueFromBool(true);
 
-            if (PineValueAsInteger.SignedIntegerFromValueRelaxed(listValue.Elements[0]) is not Result<string, BigInteger>.Ok firstInt)
+            if (SignedIntegerFromValueRelaxed(listValue.Elements[0]) is not { } firstInt)
                 return PineValue.EmptyList;
 
-            var previous = firstInt.Value;
+            var previous = firstInt;
 
             foreach (var next in listValue.Elements)
             {
-                if (PineValueAsInteger.SignedIntegerFromValueRelaxed(next) is not Result<string, BigInteger>.Ok nextInt)
+                if (SignedIntegerFromValueRelaxed(next) is not { } nextInt)
                     return PineValue.EmptyList;
 
-                if (nextInt.Value < previous)
+                if (nextInt < previous)
                     return ValueFromBool(false);
 
-                previous = nextInt.Value;
+                previous = nextInt;
             }
 
             return ValueFromBool(true);
@@ -323,14 +323,33 @@ public static class KernelFunction
 
                 for (var i = 0; i < list.Count; ++i)
                 {
-                    if (PineValueAsInteger.SignedIntegerFromValueRelaxed(list[i]) is not Result<string, BigInteger>.Ok intResult)
+                    if (SignedIntegerFromValueRelaxed(list[i]) is not { } intResult)
                         return PineValue.EmptyList;
 
-                    asIntegers[i] = intResult.Value;
+                    asIntegers[i] = intResult;
                 }
 
                 return aggregate(asIntegers);
             });
+
+    static BigInteger? SignedIntegerFromValueRelaxed(PineValue value)
+    {
+        if (value is not PineValue.BlobValue blobValue)
+            return null;
+
+        if (blobValue.Bytes.Length is < 2)
+            return null;
+
+        var abs = new BigInteger(blobValue.Bytes.Span[1..], isUnsigned: true, isBigEndian: true);
+
+        return
+            blobValue.Bytes.Span[0] switch
+            {
+                4 => abs,
+                2 => -abs,
+                _ => null
+            };
+    }
 
     private static PineValue KernelFunctionExpectingExactlyTwoArguments<ArgA, ArgB>(
         Func<PineValue, Result<string, ArgA>> decodeArgA,
