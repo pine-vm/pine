@@ -164,10 +164,7 @@ public class PineVM : IPineVM
 
             foreach (var item in sequence)
             {
-                if (
-                    item is StackInstruction.EvalInstruction currentEvalInst &&
-                    prevInstruction is StackInstruction.EvalInstruction prevEvalInst &&
-                    currentEvalInst.Expression == prevEvalInst.Expression)
+                if (item is StackInstruction.EvalInstruction && item == prevInstruction)
                 {
                     continue;
                 }
@@ -277,7 +274,9 @@ public class PineVM : IPineVM
         InstructionsFromExpressionTransitive(Expression rootExpression)
     {
         var allExpressions =
-            EnumerateComponentsOrderedForCompilation(rootExpression)
+            EnumerateComponentsOrderedForCompilation(
+                rootExpression,
+                skipDescendants: null)
             .ToImmutableArray();
 
         var allExpressionsCount = new Dictionary<Expression, int>();
@@ -291,6 +290,26 @@ public class PineVM : IPineVM
             else
             {
                 allExpressionsCount[expression] = 1;
+            }
+        }
+
+        var allExpressionsExceptUnderDuplicate =
+            EnumerateComponentsOrderedForCompilation(
+                rootExpression,
+                skipDescendants: node => 1 < allExpressionsCount[node])
+            .ToImmutableArray();
+
+        var allExpressionsExceptUnderDuplicateCount = new Dictionary<Expression, int>();
+
+        foreach (var expression in allExpressionsExceptUnderDuplicate)
+        {
+            if (allExpressionsExceptUnderDuplicateCount.TryGetValue(expression, out var count))
+            {
+                allExpressionsExceptUnderDuplicateCount[expression] = count + 1;
+            }
+            else
+            {
+                allExpressionsExceptUnderDuplicateCount[expression] = 1;
             }
         }
 
@@ -333,7 +352,8 @@ public class PineVM : IPineVM
                     [new KeyValuePair<Expression, IReadOnlyList<StackInstruction>>(expression, instructions)];
                 }
 
-                if (ExpressionLargeEnoughForCSE(expression) && allExpressionsCount[expression] > 1)
+                if (ExpressionLargeEnoughForCSE(expression) &&
+                allExpressionsExceptUnderDuplicateCount.TryGetValue(expression, out var exprInstCount) && 1 < exprInstCount)
                 {
                     return
                     (KeyValuePair<Expression, IReadOnlyList<StackInstruction>>[])
@@ -347,13 +367,21 @@ public class PineVM : IPineVM
         return separatedInstructions;
     }
 
-    public static IEnumerable<Expression> EnumerateComponentsOrderedForCompilation(Expression expression)
+    public static IEnumerable<Expression> EnumerateComponentsOrderedForCompilation(
+        Expression expression,
+        Func<Expression, bool>? skipDescendants)
     {
+        if (skipDescendants?.Invoke(expression) ?? false)
+        {
+            yield return expression;
+            yield break;
+        }
+
         if (expression is Expression.ListExpression list)
         {
             foreach (var item in list.List)
             {
-                foreach (var descendant in EnumerateComponentsOrderedForCompilation(item))
+                foreach (var descendant in EnumerateComponentsOrderedForCompilation(item, skipDescendants))
                 {
                     yield return descendant;
                 }
@@ -362,12 +390,12 @@ public class PineVM : IPineVM
 
         if (expression is Expression.ParseAndEvalExpression parseAndEval)
         {
-            foreach (var descendant in EnumerateComponentsOrderedForCompilation(parseAndEval.expression))
+            foreach (var descendant in EnumerateComponentsOrderedForCompilation(parseAndEval.expression, skipDescendants))
             {
                 yield return descendant;
             }
 
-            foreach (var descendant in EnumerateComponentsOrderedForCompilation(parseAndEval.environment))
+            foreach (var descendant in EnumerateComponentsOrderedForCompilation(parseAndEval.environment, skipDescendants))
             {
                 yield return descendant;
             }
@@ -375,7 +403,7 @@ public class PineVM : IPineVM
 
         if (expression is Expression.KernelApplicationExpression kernelApp)
         {
-            foreach (var descendant in EnumerateComponentsOrderedForCompilation(kernelApp.argument))
+            foreach (var descendant in EnumerateComponentsOrderedForCompilation(kernelApp.argument, skipDescendants))
             {
                 yield return descendant;
             }
@@ -385,7 +413,7 @@ public class PineVM : IPineVM
         {
             /*
              * 
-            foreach (var descendant in EnumerateSelfAndDescendantsOrderedForCompilation(conditional.condition))
+            foreach (var descendant in EnumerateSelfAndDescendantsOrderedForCompilation(conditional.condition, skipDescendants))
             {
                 yield return descendant;
             }
@@ -396,12 +424,12 @@ public class PineVM : IPineVM
              * For now, we create a new stack frame for each conditional expression.
              * Therefore do not descend into the branches of the conditional expression.
 
-            foreach (var descendant in EnumerateSelfAndDescendantsOrderedForCompilation(conditional.ifTrue))
+            foreach (var descendant in EnumerateSelfAndDescendantsOrderedForCompilation(conditional.ifTrue, skipDescendants))
             {
                 yield return descendant;
             }
 
-            foreach (var descendant in EnumerateSelfAndDescendantsOrderedForCompilation(conditional.ifFalse))
+            foreach (var descendant in EnumerateSelfAndDescendantsOrderedForCompilation(conditional.ifFalse, skipDescendants))
             {
                 yield return descendant;
             }
@@ -410,7 +438,7 @@ public class PineVM : IPineVM
 
         if (expression is Expression.StringTagExpression stringTag)
         {
-            foreach (var descendant in EnumerateComponentsOrderedForCompilation(stringTag.tagged))
+            foreach (var descendant in EnumerateComponentsOrderedForCompilation(stringTag.tagged, skipDescendants))
             {
                 yield return descendant;
             }

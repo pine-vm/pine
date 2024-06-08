@@ -223,6 +223,82 @@ public class PineVMTests
             {
                 expression =
                 (Expression)
+                new Expression.ListExpression(
+                    [
+                        new Expression.LiteralExpression(PineValue.EmptyList),
+                        ExpressionEncoding.ParseKernelApplicationExpression
+                        (
+                            functionName: "concat",
+                            argument:
+                            ExpressionEncoding.ParseKernelApplicationExpression
+                            (
+                                functionName: "skip",
+                                argument:
+                                new Expression.ListExpression(
+                                    [
+                                    new Expression.LiteralExpression(PineValueAsInteger.ValueFromSignedInteger(13)),
+                                    Expression.Environment,
+                                    ])
+                            ).Extract(fromErr: err => throw new Exception(err))
+                        ).Extract(fromErr: err => throw new Exception(err)),
+                        
+                        new Expression.LiteralExpression(PineValue.EmptyBlob),
+
+                        ExpressionEncoding.ParseKernelApplicationExpression
+                        (
+                            functionName: "concat",
+                            argument:
+                            ExpressionEncoding.ParseKernelApplicationExpression
+                            (
+                                functionName: "skip",
+                                argument:
+                                new Expression.ListExpression(
+                                    [
+                                    new Expression.LiteralExpression(PineValueAsInteger.ValueFromSignedInteger(13)),
+                                    Expression.Environment,
+                                    ])
+                            ).Extract(fromErr: err => throw new Exception(err))
+                        ).Extract(fromErr: err => throw new Exception(err)),
+                    ]),
+
+                /*
+                 * Expect CSE does not separate subexpressions for which all parents are already in separate instructions.
+                 * */
+                expected =
+                new PineVM.StackFrameInstructions(
+                    [
+                        StackInstruction.Eval(
+                            ExpressionEncoding.ParseKernelApplicationExpression
+                            (
+                                functionName: "concat",
+                                argument:
+                                ExpressionEncoding.ParseKernelApplicationExpression
+                                (
+                                    functionName: "skip",
+                                    argument:
+                                    new Expression.ListExpression(
+                                        [
+                                        new Expression.LiteralExpression(PineValueAsInteger.ValueFromSignedInteger(13)),
+                                        Expression.Environment,
+                                        ])
+                                ).Extract(fromErr: err => throw new Exception(err))
+                            ).Extract(fromErr: err => throw new Exception(err))),
+                        StackInstruction.Eval(
+                            new Expression.ListExpression(
+                            [
+                                new Expression.LiteralExpression(PineValue.EmptyList),
+                                new Expression.StackReferenceExpression(offset: -1),
+                                new Expression.LiteralExpression(PineValue.EmptyBlob),
+                                new Expression.StackReferenceExpression(offset: -1),
+                            ])),
+                        StackInstruction.Return
+                    ])
+            },
+
+            new
+            {
+                expression =
+                (Expression)
                 new Expression.ParseAndEvalExpression(
                     expression: Expression.Environment,
                     environment: Expression.Environment),
