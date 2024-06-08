@@ -164,6 +164,60 @@ public class PineVMTests
 
             new
             {
+                expression = (Expression)new Expression.ListExpression(
+                    [
+                        new Expression.LiteralExpression(PineValue.EmptyList),
+                        ExpressionEncoding.ParseKernelApplicationExpression
+                        (
+                            functionName: "skip",
+                            argument: new Expression.ListExpression(
+                                [
+                                new Expression.LiteralExpression(PineValueAsInteger.ValueFromSignedInteger(1)),
+                                Expression.Environment,
+                                ])
+                        ).Extract(fromErr: err => throw new Exception(err)),
+                        new Expression.LiteralExpression(PineValue.EmptyBlob),
+                        ExpressionEncoding.ParseKernelApplicationExpression
+                        (
+                            functionName: "skip",
+                            argument: new Expression.ListExpression(
+                                [
+                                new Expression.LiteralExpression(PineValueAsInteger.ValueFromSignedInteger(1)),
+                                Expression.Environment,
+                                ])
+                        ).Extract(fromErr: err => throw new Exception(err)),
+                    ]),
+
+                /*
+                 * Expect CSE, reusing the result of the kernel application.
+                 * */
+                expected =
+                new PineVM.StackFrameInstructions(
+                    [
+                        StackInstruction.Eval(
+                            ExpressionEncoding.ParseKernelApplicationExpression
+                            (
+                                functionName: "skip",
+                                argument: new Expression.ListExpression(
+                                    [
+                                    new Expression.LiteralExpression(PineValueAsInteger.ValueFromSignedInteger(1)),
+                                    Expression.Environment,
+                                    ])
+                            ).Extract(fromErr: err => throw new Exception(err))),
+                        StackInstruction.Eval(
+                            new Expression.ListExpression(
+                            [
+                                new Expression.LiteralExpression(PineValue.EmptyList),
+                                new Expression.StackReferenceExpression(offset: -1),
+                                new Expression.LiteralExpression(PineValue.EmptyBlob),
+                                new Expression.StackReferenceExpression(offset: -1),
+                            ])),
+                        StackInstruction.Return
+                    ])
+            },
+
+            new
+            {
                 expression =
                 (Expression)
                 new Expression.ParseAndEvalExpression(
@@ -403,6 +457,19 @@ public class PineVMTests
         foreach (var testCase in testCases)
         {
             var compiled = PineVM.InstructionsFromExpressionLessCache(testCase.expression);
+
+            Assert.AreEqual(
+                testCase.expected.Instructions.Count,
+                compiled.Instructions.Count,
+                "Instructions count");
+
+            for (var i = 0; i < testCase.expected.Instructions.Count; i++)
+            {
+                Assert.AreEqual(
+                    testCase.expected.Instructions[i],
+                    compiled.Instructions[i],
+                    $"Instruction at index {i}");
+            }
 
             Assert.AreEqual(testCase.expected, compiled);
         }

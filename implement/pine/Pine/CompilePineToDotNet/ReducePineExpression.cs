@@ -225,24 +225,31 @@ public class ReducePineExpression
                             ifFalseTransform.referencesOriginalEnv);
                 }
 
-            case Expression.EnvironmentExpression _:
+            case Expression.EnvironmentExpression:
                 return (expression, true);
 
             case Expression.StringTagExpression stringTagExpr:
                 {
-                    var taggedTransform = TransformPineExpressionWithOptionalReplacement(findReplacement, stringTagExpr.tagged);
+                    var taggedTransform =
+                        TransformPineExpressionWithOptionalReplacement(
+                            findReplacement,
+                            stringTagExpr.tagged);
 
-                    return (
-                        new Expression.StringTagExpression
+                    return
+                        (new Expression.StringTagExpression
                         (
                             stringTagExpr.tag,
                             taggedTransform.expr
                         ),
                         taggedTransform.referencesOriginalEnv);
                 }
+
+            case Expression.StackReferenceExpression:
+                return (expression, true);
         }
 
-        throw new NotImplementedException("Expression type not implemented: " + expression.GetType().FullName);
+        throw new NotImplementedException(
+            "Expression type not implemented: " + expression.GetType().FullName);
     }
 
     public static Expression SearchForExpressionReductionRecursive(int maxDepth, Expression expression)

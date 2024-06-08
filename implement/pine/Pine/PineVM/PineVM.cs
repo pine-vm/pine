@@ -72,7 +72,7 @@ public class PineVM : IPineVM
         PineValue environment) => EvaluateExpressionDefault(expression, environment);
 
     public record StackFrameInstructions(
-        IReadOnlyList<StackInstruction> Expressions)
+        IReadOnlyList<StackInstruction> Instructions)
     {
         public virtual bool Equals(StackFrameInstructions? other)
         {
@@ -81,15 +81,15 @@ public class PineVM : IPineVM
 
             return
                 ReferenceEquals(this, notNull) ||
-                Expressions.Count == notNull.Expressions.Count &&
-                Expressions.SequenceEqual(notNull.Expressions);
+                Instructions.Count == notNull.Instructions.Count &&
+                Instructions.SequenceEqual(notNull.Instructions);
         }
 
         public override int GetHashCode()
         {
             var hashCode = new HashCode();
 
-            foreach (var item in Expressions)
+            foreach (var item in Instructions)
             {
                 hashCode.Add(item.GetHashCode());
             }
@@ -123,7 +123,7 @@ public class PineVM : IPineVM
             expression,
             instructions,
             EnvironmentValue: environment,
-            new PineValue[instructions.Expressions.Count],
+            new PineValue[instructions.Instructions.Count],
             BeginTimestamp: System.Diagnostics.Stopwatch.GetTimestamp());
     }
 
@@ -143,13 +143,13 @@ public class PineVM : IPineVM
 
     public static StackFrameInstructions InstructionsFromExpressionLessCache(Expression rootExpression)
     {
-        var separatedExprs = InstructionsFromExpressionCore(rootExpression);
+        var separatedExprs = InstructionsFromExpressionTransitive(rootExpression);
 
         if (separatedExprs.Count is 0)
         {
             return
                 new StackFrameInstructions(
-                    Expressions:
+                    Instructions:
                     [StackInstruction.Eval(rootExpression), StackInstruction.Return]);
         }
 
@@ -170,53 +170,50 @@ public class PineVM : IPineVM
             .Concat(appendedForRoot)
             .ToImmutableArray();
 
-        static IEnumerable<StackInstruction> InstructionsFiltered(IEnumerable<StackInstruction> instructions)
+        static IEnumerable<StackInstruction> SkipConsecutiveDuplicates(IEnumerable<StackInstruction> sequence)
         {
-            var coveredLaterExprs = new HashSet<Expression>();
+            StackInstruction? prevInstruction = null;
 
-            IEnumerable<StackInstruction> ExprsFilteredReverse()
+            foreach (var item in sequence)
             {
-                foreach (var inst in instructions.Reverse())
+                if (
+                    item is StackInstruction.EvalInstruction currentEvalInst &&
+                    prevInstruction is StackInstruction.EvalInstruction prevEvalInst &&
+                    currentEvalInst.Expression == prevEvalInst.Expression)
                 {
-                    var instExpr =
-                        inst switch
-                        {
-                            /*
-                            StackInstruction.ReturnInstruction retInst =>
-                            retInst.Returned,
-                            */
-
-                            StackInstruction.EvalInstruction evalInst =>
-                            evalInst.Expression,
-
-                            _ => null
-                        };
-
-                    if (instExpr is not null)
-                    {
-                        if (coveredLaterExprs.Contains(instExpr))
-                            continue;
-
-                        coveredLaterExprs.Add(instExpr);
-                    }
-
-                    yield return inst;
+                    continue;
                 }
-            }
 
-            return ExprsFilteredReverse().Reverse();
+                prevInstruction = item;
+
+                yield return item;
+            }
         }
 
-        var separatedExprsValues =
-            InstructionsFiltered(separatedExprsValuesBeforeFilter)
+        var filteredInstructions =
+            SkipConsecutiveDuplicates(separatedExprsValuesBeforeFilter)
             .ToImmutableArray();
 
-        var map = new Dictionary<StackInstruction, int>();
+        var instructionIndexFromExpr = new Dictionary<Expression, int>();
 
-        for (var i = 0; i < separatedExprsValues.Length; i++)
-        {
-            map[separatedExprsValues[i]] = i;
-        }
+        var separatedExprsValues =
+            filteredInstructions
+            .Select((instruction, instructionIndex) =>
+            {
+                if (instruction is StackInstruction.EvalInstruction evalInst)
+                {
+                    if (instructionIndexFromExpr.TryGetValue(evalInst.Expression, out var earlierIndex))
+                    {
+                        return StackInstruction.Eval(
+                            new Expression.StackReferenceExpression(earlierIndex - instructionIndex));
+                    }
+
+                    instructionIndexFromExpr.Add(evalInst.Expression, instructionIndex);
+                }
+
+                return instruction;
+            })
+            .ToImmutableArray();
 
         StackInstruction MapInstruction(
             StackInstruction originalInst,
@@ -224,12 +221,7 @@ public class PineVM : IPineVM
         {
             if (originalInst is StackInstruction.ConditionalJumpRefInstruction conditionalJumpRef)
             {
-                var ifTrueExprEntry =
-                    map
-                    .FirstOrDefault(c =>
-                    c.Key is StackInstruction.EvalInstruction evalInst && evalInst.Expression == conditionalJumpRef.IfTrueExpr);
-
-                if (ifTrueExprEntry.Key is null)
+                if (!instructionIndexFromExpr.TryGetValue(conditionalJumpRef.IfTrueExpr, out var ifTrueExprIndex))
                 {
                     throw new InvalidOperationException("Expected to find ifTrueExpr in map.");
                 }
@@ -237,7 +229,7 @@ public class PineVM : IPineVM
                 return
                     new StackInstruction.ConditionalJumpInstruction(
                         Condition: conditionalJumpRef.Condition,
-                        IfTrueOffset: ifTrueExprEntry.Value - selfIndex);
+                        IfTrueOffset: ifTrueExprIndex - selfIndex);
             }
 
             return
@@ -250,11 +242,31 @@ public class PineVM : IPineVM
                             return null;
                         }
 
-                        if (
-                        map.FirstOrDefault(c => c.Key is StackInstruction.EvalInstruction evalInst && evalInst.Expression == descendant)
-                        is { } pair && pair.Key is not null)
+                        if (instructionIndexFromExpr.TryGetValue(descendant, out var instructionIndex))
                         {
-                            return new Expression.StackReferenceExpression(offset: pair.Value - selfIndex);
+                            var offset = instructionIndex - selfIndex;
+
+                            if (offset >= 0)
+                            {
+                                throw new Exception(
+                                    "Found non-negative offset for stack ref expr: " + offset +
+                                    " (selfIndex is " + selfIndex + ")");
+                            }
+
+                            return new Expression.StackReferenceExpression(offset: offset);
+                        }
+
+                        {
+                            /*
+                             * Skip over all expressions that we do not descend into when enumerating the components.
+                             * (EnumerateComponentsOrderedForCompilation)
+                             * */
+
+                            if (descendant is Expression.ConditionalExpression)
+                            {
+                                // Return non-null value to stop descend.
+                                return descendant;
+                            }
                         }
 
                         return null;
@@ -267,29 +279,31 @@ public class PineVM : IPineVM
             .Select(MapInstruction)
             .ToImmutableArray();
 
-        return
-            new StackFrameInstructions(
-                Expressions: [.. componentExprMapped]);
+        return new StackFrameInstructions(Instructions: componentExprMapped);
     }
 
     static IReadOnlyList<KeyValuePair<Expression, IReadOnlyList<StackInstruction>>>
-        InstructionsFromExpressionCore(Expression rootExpression)
+        InstructionsFromExpressionTransitive(Expression rootExpression)
     {
-        var allExprs =
-            Expression.EnumerateSelfAndDescendants(
-                rootExpression,
-                /*
-                 * For now, we create a new stack frame for each conditional expression.
-                 * */
-                skipDescendants: expr => expr is Expression.ConditionalExpression)
+        var allExpressions =
+            EnumerateComponentsOrderedForCompilation(rootExpression)
             .ToImmutableArray();
 
-        var allExprsReverse =
-            allExprs
-            .Reverse()
-            .ToImmutableArray();
+        var allExpressionsCount = new Dictionary<Expression, int>();
 
-        static IReadOnlyList<StackInstruction>? mappingForExpr(Expression expression)
+        foreach (var expression in allExpressions)
+        {
+            if (allExpressionsCount.TryGetValue(expression, out var count))
+            {
+                allExpressionsCount[expression] = count + 1;
+            }
+            else
+            {
+                allExpressionsCount[expression] = 1;
+            }
+        }
+
+        static IReadOnlyList<StackInstruction>? instructionsFromExpression(Expression expression)
         {
             if (expression is Expression.ParseAndEvalExpression parseAndEval)
             {
@@ -317,23 +331,122 @@ public class PineVM : IPineVM
             return null;
         }
 
-        var separatedExprs =
-            allExprsReverse
-            .Distinct()
-            .SelectMany(e =>
+        var separatedInstructions =
+            allExpressions
+            .SelectMany(expression =>
             {
-                if (mappingForExpr(e) is { } mappedExprs)
+                if (instructionsFromExpression(expression) is { } instructions)
                 {
                     return
                     (KeyValuePair<Expression, IReadOnlyList<StackInstruction>>[])
-                    [new KeyValuePair<Expression, IReadOnlyList<StackInstruction>>(e, mappedExprs)];
+                    [new KeyValuePair<Expression, IReadOnlyList<StackInstruction>>(expression, instructions)];
+                }
+
+                if (ExpressionLargeEnoughForCSE(expression) && allExpressionsCount[expression] > 1)
+                {
+                    return
+                    (KeyValuePair<Expression, IReadOnlyList<StackInstruction>>[])
+                    [new KeyValuePair<Expression, IReadOnlyList<StackInstruction>>(expression, [StackInstruction.Eval(expression)])];
                 }
 
                 return [];
             })
             .ToImmutableArray();
 
-        return separatedExprs;
+        return separatedInstructions;
+    }
+
+    public static IEnumerable<Expression> EnumerateComponentsOrderedForCompilation(Expression expression)
+    {
+        if (expression is Expression.ListExpression list)
+        {
+            foreach (var item in list.List)
+            {
+                foreach (var descendant in EnumerateComponentsOrderedForCompilation(item))
+                {
+                    yield return descendant;
+                }
+            }
+        }
+
+        if (expression is Expression.ParseAndEvalExpression parseAndEval)
+        {
+            foreach (var descendant in EnumerateComponentsOrderedForCompilation(parseAndEval.expression))
+            {
+                yield return descendant;
+            }
+
+            foreach (var descendant in EnumerateComponentsOrderedForCompilation(parseAndEval.environment))
+            {
+                yield return descendant;
+            }
+        }
+
+        if (expression is Expression.KernelApplicationExpression kernelApp)
+        {
+            foreach (var descendant in EnumerateComponentsOrderedForCompilation(kernelApp.argument))
+            {
+                yield return descendant;
+            }
+        }
+
+        if (expression is Expression.ConditionalExpression conditional)
+        {
+            /*
+             * 
+            foreach (var descendant in EnumerateSelfAndDescendantsOrderedForCompilation(conditional.condition))
+            {
+                yield return descendant;
+            }
+            */
+
+            /*
+             *
+             * For now, we create a new stack frame for each conditional expression.
+             * Therefore do not descend into the branches of the conditional expression.
+
+            foreach (var descendant in EnumerateSelfAndDescendantsOrderedForCompilation(conditional.ifTrue))
+            {
+                yield return descendant;
+            }
+
+            foreach (var descendant in EnumerateSelfAndDescendantsOrderedForCompilation(conditional.ifFalse))
+            {
+                yield return descendant;
+            }
+            */
+        }
+
+        if (expression is Expression.StringTagExpression stringTag)
+        {
+            foreach (var descendant in EnumerateComponentsOrderedForCompilation(stringTag.tagged))
+            {
+                yield return descendant;
+            }
+        }
+
+        yield return expression;
+    }
+
+    static bool ExpressionLargeEnoughForCSE(Expression expression)
+    {
+        if (expression is Expression.KernelApplicationExpression)
+            return true;
+
+        if (expression is Expression.ListExpression list)
+        {
+            foreach (var item in list.List)
+            {
+                if (ExpressionLargeEnoughForCSE(item))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        return false;
     }
 
     public Result<string, PineValue> EvaluateExpressionDefault(
@@ -348,29 +461,11 @@ public class PineVM : IPineVM
                 rootExpression,
                 rootEnvironment));
 
-        /*
-        void returnFromFrame(PineValue frameReturnValue)
-        {
-            stack.Pop();
-
-            if (stack.Count is 0)
-            {
-                return frameReturnValue;
-            }
-
-            var previousFrame = stack.Peek();
-
-            previousFrame.Values.Span[previousFrame.InstructionPointer] = frameReturnValue;
-
-            previousFrame.InstructionPointer++;
-        }
-        */
-
         while (true)
         {
             var currentFrame = stack.Peek();
 
-            if (currentFrame.Instructions.Expressions.Count <= currentFrame.InstructionPointer)
+            if (currentFrame.Instructions.Instructions.Count <= currentFrame.InstructionPointer)
             {
                 return
                     "Instruction pointer out of bounds. Missing explicit return instruction.";
@@ -379,7 +474,7 @@ public class PineVM : IPineVM
             ReadOnlyMemory<PineValue> stackPrevValues =
                 currentFrame.InstructionsResultValues[..currentFrame.InstructionPointer];
 
-            var currentInstruction = currentFrame.Instructions.Expressions[currentFrame.InstructionPointer];
+            var currentInstruction = currentFrame.Instructions.Instructions[currentFrame.InstructionPointer];
 
             if (currentInstruction is StackInstruction.ReturnInstruction)
             {
@@ -599,7 +694,8 @@ public class PineVM : IPineVM
 
                 if (evalConditionResult is not Result<string, PineValue>.Ok evalConditionOk)
                 {
-                    throw new NotImplementedException("Unexpected result type: " + evalConditionResult.GetType().FullName);
+                    throw new NotImplementedException(
+                        "Unexpected result type: " + evalConditionResult.GetType().FullName);
                 }
 
                 if (evalConditionOk.Value == PineVMValues.TrueValue)
@@ -744,13 +840,17 @@ public class PineVM : IPineVM
 
             if (index < 0 || index >= stackPrevValues.Length)
             {
-                return "Invalid stack reference: " + stackRef.offset;
+                return
+                    "Invalid stack reference: offset " + stackRef.offset +
+                    " from " + stackPrevValues.Length +
+                    " results in index " + index;
             }
 
             return stackPrevValues.Span[index];
         }
 
-        throw new NotImplementedException("Unexpected shape of expression: " + expression.GetType().FullName);
+        throw new NotImplementedException(
+            "Unexpected shape of expression: " + expression.GetType().FullName);
     }
 
     public Result<string, PineValue> EvaluateListExpression(
