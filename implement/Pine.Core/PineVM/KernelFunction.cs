@@ -332,7 +332,7 @@ public static class KernelFunction
                 return aggregate(asIntegers);
             });
 
-    static BigInteger? SignedIntegerFromValueRelaxed(PineValue value)
+    public static BigInteger? SignedIntegerFromValueRelaxed(PineValue value)
     {
         if (value is not PineValue.BlobValue blobValue)
             return null;

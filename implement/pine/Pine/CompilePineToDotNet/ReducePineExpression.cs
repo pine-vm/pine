@@ -246,6 +246,9 @@ public class ReducePineExpression
 
             case Expression.StackReferenceExpression:
                 return (expression, true);
+
+            case Expression.KernelApplications_Skip_ListHead_Expression:
+                return (expression, true);
         }
 
         throw new NotImplementedException(

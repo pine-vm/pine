@@ -104,7 +104,7 @@ public class PineVM : IPineVM
         StackFrameInstructions Instructions,
         PineValue EnvironmentValue,
         Memory<PineValue> InstructionsResultValues,
-        long BeginTimestamp)
+        long? BeginTimestamp)
     {
         public int InstructionPointer { get; set; } = 0;
     }
@@ -118,13 +118,20 @@ public class PineVM : IPineVM
     {
         var instructions = InstructionsFromExpression(expression);
 
+        var beginTimestamp =
+            expressionValue is null
+            ?
+            (long?)null
+            :
+            System.Diagnostics.Stopwatch.GetTimestamp();
+
         return new StackFrame(
             expressionValue,
             expression,
             instructions,
             EnvironmentValue: environment,
             new PineValue[instructions.Instructions.Count],
-            BeginTimestamp: System.Diagnostics.Stopwatch.GetTimestamp());
+            BeginTimestamp: beginTimestamp);
     }
 
     public StackFrameInstructions InstructionsFromExpression(Expression rootExpression)
@@ -145,29 +152,10 @@ public class PineVM : IPineVM
     {
         var separatedExprs = InstructionsFromExpressionTransitive(rootExpression);
 
-        if (separatedExprs.Count is 0)
-        {
-            return
-                new StackFrameInstructions(
-                    Instructions:
-                    [StackInstruction.Eval(rootExpression), StackInstruction.Return]);
-        }
-
-        IReadOnlyList<StackInstruction> appendedForRoot =
-            rootExpression switch
-            {
-                Expression.ConditionalExpression =>
-                [],
-
-                _ =>
-                [StackInstruction.Eval(rootExpression),
-                StackInstruction.Return]
-            };
-
         var separatedExprsValuesBeforeFilter =
             separatedExprs
             .SelectMany(pair => pair.Value)
-            .Concat(appendedForRoot)
+            .Concat([StackInstruction.Eval(rootExpression), StackInstruction.Return])
             .ToImmutableArray();
 
         static IEnumerable<StackInstruction> SkipConsecutiveDuplicates(IEnumerable<StackInstruction> sequence)
@@ -237,23 +225,21 @@ public class PineVM : IPineVM
                     findReplacement:
                     descendant =>
                     {
-                        if (originalInst is StackInstruction.EvalInstruction origEval && origEval.Expression == descendant)
-                        {
-                            return null;
-                        }
-
                         if (instructionIndexFromExpr.TryGetValue(descendant, out var instructionIndex))
                         {
                             var offset = instructionIndex - selfIndex;
 
-                            if (offset >= 0)
+                            if (offset != 0)
                             {
-                                throw new Exception(
-                                    "Found non-negative offset for stack ref expr: " + offset +
-                                    " (selfIndex is " + selfIndex + ")");
-                            }
+                                if (offset >= 0)
+                                {
+                                    throw new Exception(
+                                        "Found non-negative offset for stack ref expr: " + offset +
+                                        " (selfIndex is " + selfIndex + ")");
+                                }
 
-                            return new Expression.StackReferenceExpression(offset: offset);
+                                return new Expression.StackReferenceExpression(offset: offset);
+                            }
                         }
 
                         {
@@ -267,6 +253,11 @@ public class PineVM : IPineVM
                                 // Return non-null value to stop descend.
                                 return descendant;
                             }
+                        }
+
+                        if (TryFuseTransitive(descendant) is { } fused)
+                        {
+                            return fused;
                         }
 
                         return null;
@@ -449,6 +440,60 @@ public class PineVM : IPineVM
         return false;
     }
 
+    public static Expression? TryFuseTransitive(Expression expression)
+    {
+        if (TryMapToKernelApplications_Skip_ListHead_Expression(expression) is not { } fused)
+        {
+            return null;
+        }
+
+        var fusedArgument =
+            CompilePineToDotNet.ReducePineExpression.TransformPineExpressionWithOptionalReplacement(
+                findReplacement: TryFuseTransitive,
+                expression: fused.argument).expr;
+
+        return
+            fused with { argument = fusedArgument };
+    }
+
+    public static Expression.KernelApplications_Skip_ListHead_Expression?
+        TryMapToKernelApplications_Skip_ListHead_Expression(Expression expression)
+    {
+        if (expression is not Expression.KernelApplicationExpression kernelApp)
+            return null;
+
+        if (kernelApp.functionName is not nameof(KernelFunction.list_head))
+            return null;
+
+        if (kernelApp.argument is not Expression.KernelApplicationExpression innerKernelApp)
+            return null;
+
+        if (innerKernelApp.functionName is not nameof(KernelFunction.skip))
+            return null;
+
+        if (innerKernelApp.argument is not Expression.ListExpression skipListExpr)
+            return null;
+
+        if (skipListExpr.List.Count is not 2)
+            return null;
+
+        var skipCountValueExpr = skipListExpr.List[0];
+
+        if (!Expression.IsIndependent(skipCountValueExpr))
+            return null;
+
+        if (CompilePineToDotNet.ReducePineExpression.TryEvaluateExpressionIndependent(skipCountValueExpr)
+            is not Result<string, PineValue>.Ok skipCountEvalOk)
+            return null;
+
+        if (KernelFunction.SignedIntegerFromValueRelaxed(skipCountEvalOk.Value) is not { } skipCount)
+            return null;
+
+        return new Expression.KernelApplications_Skip_ListHead_Expression(
+            skipCount: (int)skipCount,
+            argument: skipListExpr.List[1]);
+    }
+
     public Result<string, PineValue> EvaluateExpressionDefault(
         Expression rootExpression,
         PineValue rootEnvironment)
@@ -485,11 +530,12 @@ public class PineVM : IPineVM
 
                 var frameReturnValue = currentFrame.InstructionsResultValues.Span[currentFrame.InstructionPointer - 1];
 
-                if (currentFrame.ExpressionValue is { } currentFrameExprValue && EvalCache is { } evalCache)
+                if (currentFrame.ExpressionValue is { } currentFrameExprValue && EvalCache is { } evalCache &&
+                    currentFrame.BeginTimestamp is { } beginTimestamp)
                 {
-                    var frameElapsedTime = System.Diagnostics.Stopwatch.GetElapsedTime(currentFrame.BeginTimestamp);
+                    var frameElapsedTime = System.Diagnostics.Stopwatch.GetElapsedTime(beginTimestamp);
 
-                    if (frameElapsedTime.TotalMilliseconds > 3 && EvalCache is not null)
+                    if (frameElapsedTime.TotalMilliseconds > 3)
                     {
                         evalCache.TryAdd(new EvalCacheEntryKey(currentFrameExprValue, currentFrame.EnvironmentValue), frameReturnValue);
                     }
@@ -758,6 +804,9 @@ public class PineVM : IPineVM
         if (expression is Expression.StackReferenceExpression)
             return false;
 
+        if (expression is Expression.KernelApplications_Skip_ListHead_Expression)
+            return false;
+
         throw new NotImplementedException(
             "Unexpected shape of expression: " + expression.GetType().FullName);
     }
@@ -847,6 +896,15 @@ public class PineVM : IPineVM
             }
 
             return stackPrevValues.Span[index];
+        }
+
+        if (expression is Expression.KernelApplications_Skip_ListHead_Expression kernelApplicationsSkipListHead)
+        {
+            return
+                EvaluateKernelApplications_Skip_ListHead_Expression(
+                    environment: environment,
+                    kernelApplicationsSkipListHead,
+                    stackPrevValues: stackPrevValues);
         }
 
         throw new NotImplementedException(
@@ -948,8 +1006,57 @@ public class PineVM : IPineVM
         PineValueAsString.StringFromValue(pineValue)
         .Unpack(fromErr: _ => "not a string", fromOk: asString => "string \'" + asString + "\'");
 
-
     public Result<string, PineValue> EvaluateKernelApplicationExpression(
+        PineValue environment,
+        Expression.KernelApplicationExpression application,
+        ReadOnlyMemory<PineValue> stackPrevValues)
+    {
+        if (application.functionName is nameof(KernelFunction.list_head) &&
+            application.argument is Expression.KernelApplicationExpression innerKernelApplication)
+        {
+            if (innerKernelApplication.functionName == nameof(KernelFunction.skip) &&
+                innerKernelApplication.argument is Expression.ListExpression skipListExpr &&
+                skipListExpr.List.Count is 2)
+            {
+                if (EvaluateExpressionDefaultLessStack(
+                    skipListExpr.List[0],
+                    environment,
+                    stackPrevValues) is Result<string, PineValue>.Ok skipCountEvalOk)
+                {
+                    if (KernelFunction.SignedIntegerFromValueRelaxed(skipCountEvalOk.Value) is { } skipCount)
+                    {
+                        if (EvaluateExpressionDefaultLessStack(
+                            skipListExpr.List[1],
+                            environment,
+                            stackPrevValues) is Result<string, PineValue>.Ok sourceListEvalOk)
+                        {
+                            if (sourceListEvalOk.Value is PineValue.ListValue list)
+                            {
+                                if (list.Elements.Count < 1 || list.Elements.Count <= skipCount)
+                                {
+                                    return PineValue.EmptyList;
+                                }
+
+                                return list.Elements[skipCount < 0 ? 0 : (int)skipCount];
+                            }
+                            else
+                            {
+                                return PineValue.EmptyList;
+                            }
+                        }
+                        else
+                        {
+                            return PineValue.EmptyList;
+                        }
+                    }
+                }
+            }
+        }
+
+        return EvaluateKernelApplicationExpressionGeneric(environment, application, stackPrevValues);
+    }
+
+    public Result<string, PineValue> EvaluateKernelApplicationExpressionGeneric(
         PineValue environment,
         Expression.KernelApplicationExpression application,
         ReadOnlyMemory<PineValue> stackPrevValues) =>
@@ -962,9 +1069,40 @@ public class PineVM : IPineVM
             "Failed to evaluate argument: " + error,
 
             var otherResult =>
-            throw new NotImplementedException("Unexpected result type: " + otherResult.GetType().FullName)
+            throw new NotImplementedException(
+                "Unexpected result type: " + otherResult.GetType().FullName)
         };
 
+    public Result<string, PineValue> EvaluateKernelApplications_Skip_ListHead_Expression(
+        PineValue environment,
+        Expression.KernelApplications_Skip_ListHead_Expression application,
+        ReadOnlyMemory<PineValue> stackPrevValues) =>
+        EvaluateExpressionDefaultLessStack(
+            application.argument,
+            environment,
+            stackPrevValues: stackPrevValues) switch
+        {
+            Result<string, PineValue>.Ok argument =>
+            argument.Value switch
+            {
+                PineValue.ListValue list =>
+                list.Elements.Count < 1 || list.Elements.Count <= application.skipCount
+                ?
+                PineValue.EmptyList
+                :
+                list.Elements[application.skipCount < 0 ? 0 : application.skipCount],
+
+                _ =>
+                PineValue.EmptyList,
+            },
+
+            Result<string, PineValue>.Err error =>
+            "Failed to evaluate argument: " + error,
+
+            var otherResult =>
+            throw new NotImplementedException(
+                "Unexpected result type: " + otherResult.GetType().FullName)
+        };
 
     public Result<string, PineValue> EvaluateConditionalExpression(
         PineValue environment,
@@ -997,6 +1135,7 @@ public class PineVM : IPineVM
             "Failed to evaluate condition: " + error,
 
             var otherResult =>
-            throw new NotImplementedException("Unexpected result type: " + otherResult.GetType().FullName)
+            throw new NotImplementedException(
+                "Unexpected result type: " + otherResult.GetType().FullName)
         };
 }

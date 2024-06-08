@@ -115,6 +115,15 @@ public abstract record Expression
         : Expression;
 
     /// <summary>
+    /// Fusion of the two applications of the kernel functions 'skip' and 'list_head',
+    /// as an implementation detail of the interpreter.
+    /// </summary>
+    public record KernelApplications_Skip_ListHead_Expression(
+        int skipCount,
+        Expression argument)
+        : Expression;
+
+    /// <summary>
     /// Returns true if the expression is independent of the environment, that is none of the expressions in the tree contain an <see cref="EnvironmentExpression"/>.
     /// </summary>
     public static bool IsIndependent(Expression expression) =>
@@ -143,6 +152,12 @@ public abstract record Expression
 
             DelegatingExpression =>
             false,
+
+            StackReferenceExpression =>
+            false,
+
+            KernelApplications_Skip_ListHead_Expression fused =>
+            IsIndependent(fused.argument),
 
             _ =>
             throw new NotImplementedException(),

@@ -131,7 +131,8 @@ public class PineVMTests
         {
             new
             {
-                expression = (Expression)new Expression.LiteralExpression(PineValue.EmptyBlob),
+                expression =
+                (Expression)new Expression.LiteralExpression(PineValue.EmptyBlob),
 
                 expected =
                 new PineVM.StackFrameInstructions(
@@ -143,7 +144,8 @@ public class PineVMTests
 
             new
             {
-                expression = (Expression)new Expression.ListExpression(
+                expression =
+                (Expression)new Expression.ListExpression(
                     [
                         new Expression.LiteralExpression(PineValue.EmptyList),
                         new Expression.LiteralExpression(PineValue.EmptyBlob),
@@ -164,7 +166,8 @@ public class PineVMTests
 
             new
             {
-                expression = (Expression)new Expression.ListExpression(
+                expression =
+                (Expression)new Expression.ListExpression(
                     [
                         new Expression.LiteralExpression(PineValue.EmptyList),
                         ExpressionEncoding.ParseKernelApplicationExpression
@@ -450,6 +453,97 @@ public class PineVMTests
                                     ifFalse:
                                     new Expression.LiteralExpression(PineValueAsInteger.ValueFromSignedInteger(27))))),
                         StackInstruction.Return,
+                    ])
+            },
+
+            new
+            {
+                /*
+                 * Fusion of kernel functions skip and list_head.
+                 * */
+                expression =
+                (Expression)
+                ExpressionEncoding.ParseKernelApplicationExpression
+                (
+                    functionName: "list_head",
+                    argument:
+                    ExpressionEncoding.ParseKernelApplicationExpression
+                    (
+                        functionName: "skip",
+                        argument: new Expression.ListExpression(
+                            [
+                            new Expression.LiteralExpression(PineValueAsInteger.ValueFromSignedInteger(17)),
+                            Expression.Environment,
+                            ])
+                    ).Extract(fromErr: err => throw new Exception(err))
+                ).Extract(fromErr: err => throw new Exception(err)),
+
+                expected =
+                new PineVM.StackFrameInstructions(
+                    [
+                        StackInstruction.Eval(
+                            new Expression.KernelApplications_Skip_ListHead_Expression(
+                                skipCount: 17,
+                                argument:Expression.Environment)),
+                        StackInstruction.Return
+                    ])
+            },
+
+
+            new
+            {
+                /*
+                 * Fusion of nested kernel functions skip and list_head.
+                 * */
+                expression =
+                (Expression)
+                ExpressionEncoding.ParseKernelApplicationExpression
+                (
+                    functionName: "list_head",
+                    argument:
+                    ExpressionEncoding.ParseKernelApplicationExpression
+                    (
+                        functionName: "skip",
+                        argument: new Expression.ListExpression(
+                            [
+                            new Expression.LiteralExpression(PineValueAsInteger.ValueFromSignedInteger(17)),
+                            new Expression.ListExpression(
+                                [
+                                new Expression.LiteralExpression(PineValueAsInteger.ValueFromSignedInteger(21)),
+                                ExpressionEncoding.ParseKernelApplicationExpression
+                                (
+                                    functionName: "list_head",
+                                    argument:
+                                    ExpressionEncoding.ParseKernelApplicationExpression
+                                    (
+                                        functionName: "skip",
+                                        argument: new Expression.ListExpression(
+                                            [
+                                            new Expression.LiteralExpression(PineValueAsInteger.ValueFromSignedInteger(23)),
+                                            Expression.Environment,
+                                            ])
+                                    ).Extract(fromErr: err => throw new Exception(err))
+                                ).Extract(fromErr: err => throw new Exception(err))
+                                ]),
+                            ])
+                    ).Extract(fromErr: err => throw new Exception(err))
+                ).Extract(fromErr: err => throw new Exception(err)),
+
+                expected =
+                new PineVM.StackFrameInstructions(
+                    [
+                        StackInstruction.Eval(
+                            new Expression.KernelApplications_Skip_ListHead_Expression(
+                                skipCount: 17,
+                                argument:
+                                new Expression.ListExpression(
+                                [
+                                    new Expression.LiteralExpression(PineValueAsInteger.ValueFromSignedInteger(21)),
+                                    new Expression.KernelApplications_Skip_ListHead_Expression(
+                                        skipCount: 23,
+                                        argument:Expression.Environment)
+                                ]))),
+                        StackInstruction.Return
                     ])
             },
         };

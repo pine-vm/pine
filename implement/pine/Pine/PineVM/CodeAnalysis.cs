@@ -741,16 +741,26 @@ public class CodeAnalysis
     /// </summary>
     public static ExprMappedToParentEnv? TryParseExpressionAsIndexPathFromEnv(Expression expression)
     {
-        if (expression is Expression.EnvironmentExpression)
+        return
+            TryParseExpressionAsIndexPath(
+                pathExpression: expression,
+                rootExpression: Expression.Environment);
+    }
+
+    public static ExprMappedToParentEnv? TryParseExpressionAsIndexPath(
+        Expression pathExpression,
+        Expression rootExpression)
+    {
+        if (pathExpression == rootExpression)
             return new ExprMappedToParentEnv.PathInParentEnv([]);
 
-        if (expression is Expression.LiteralExpression literal)
+        if (pathExpression is Expression.LiteralExpression literal)
             return new ExprMappedToParentEnv.LiteralInParentEnv(literal.Value);
 
-        if (expression is Expression.StringTagExpression stringTagExpr)
+        if (pathExpression is Expression.StringTagExpression stringTagExpr)
             return TryParseExpressionAsIndexPathFromEnv(stringTagExpr.tagged);
 
-        if (expression is not Expression.KernelApplicationExpression kernelApplication)
+        if (pathExpression is not Expression.KernelApplicationExpression kernelApplication)
             return null;
 
         if (kernelApplication.functionName is not nameof(KernelFunction.list_head))
@@ -772,10 +782,11 @@ public class CodeAnalysis
                 return null;
 
             return
-                PineValueAsInteger.SignedIntegerFromValueRelaxed(skipCountLiteral.Value)
-                    .Unpack<ExprMappedToParentEnv?>(
-                        fromErr: _ => null,
-                        fromOk: skipValue => new ExprMappedToParentEnv.PathInParentEnv([.. pathPrefix.Path, (int)skipValue]));
+                KernelFunction.SignedIntegerFromValueRelaxed(skipCountLiteral.Value) is { } skipValue
+                ?
+                new ExprMappedToParentEnv.PathInParentEnv([.. pathPrefix.Path, (int)skipValue])
+                :
+                null;
         }
 
         {
