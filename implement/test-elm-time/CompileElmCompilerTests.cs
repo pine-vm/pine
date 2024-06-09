@@ -364,7 +364,13 @@ public class CompileElmCompilerTests
     [TestMethod]
     public void Elm_compiler_compiles_Elm_compiler()
     {
-        using var pgoShare = new DynamicPGOShare();
+        /*
+         * 2024-06-08: Switching from auto-PGO to manual PGO to improve readability of the test output.
+         * 
+        using var pgoShare = new DynamicPGOShare(
+            compiledExpressionsCountLimit: 160,
+            limitSampleCountPerSubmissionDefault: 100);
+        */
 
         var compilerProgram = IInteractiveSession.CompileElmProgramCodeFilesDefault.Value;
 
@@ -432,7 +438,7 @@ public class CompileElmCompilerTests
             initialState: null,
             appCodeTree: compilerWithPackagesTree,
             caching: true,
-            autoPGO: pgoShare);
+            autoPGO: null);
 
         var interactiveInitialState = compilerInteractiveSession.CurrentEnvironmentValue();
 
@@ -607,11 +613,12 @@ public class CompileElmCompilerTests
         Result<string, ElmValue> CompileOneElmModule(
             ElmValue prevEnvValue,
             string moduleText,
-            PineValue parsedModuleValue)
+            PineValue parsedModuleValue,
+            IPineVM pineVM)
         {
             return
                 ElmInteractiveEnvironment.ApplyFunction(
-                    optimizingPineVM,
+                    pineVM,
                     declExpandInteractiveEnv,
                     arguments:
                     /*
@@ -650,6 +657,8 @@ public class CompileElmCompilerTests
         }
 
         {
+            Console.WriteLine("Compiling simple module...");
+
             // Before attempting to compile the normal Basics module, test compiling a simple module.
 
             const string simpleElmModuleText =
@@ -681,7 +690,7 @@ public class CompileElmCompilerTests
                     initialState: null,
                     appCodeTree: simpleElmModuleAppCodeTree,
                     caching: true,
-                    autoPGO: pgoShare);
+                    autoPGO: null);
 
             var jsSessionState = newCompilerInteractiveSession.CurrentEnvironmentValue();
 
@@ -697,7 +706,8 @@ public class CompileElmCompilerTests
                 CompileOneElmModule(
                     prevEnvValue: pineValueEmptyListElmValue,
                     simpleElmModuleParsed.Value.moduleText,
-                    simpleElmModuleParsed.Value.parsed)
+                    simpleElmModuleParsed.Value.parsed,
+                    pineVM: optimizingPineVM)
                 .Extract(err => throw new Exception("Failed compiling simple module: " + err));
 
             var pineSessionState =
@@ -734,8 +744,9 @@ public class CompileElmCompilerTests
                 "Compiled simple module value");
         }
 
+        /*
         {
-            // Compile a slightly more complex module.
+            Console.WriteLine("Compile a slightly more complex module...");
 
             const string simpleElmModuleText =
                 """
@@ -806,7 +817,7 @@ public class CompileElmCompilerTests
                     initialState: null,
                     appCodeTree: simpleElmModuleAppCodeTree,
                     caching: true,
-                    autoPGO: pgoShare);
+                    autoPGO: null);
 
             var jsSessionState = newCompilerInteractiveSession.CurrentEnvironmentValue();
 
@@ -822,7 +833,8 @@ public class CompileElmCompilerTests
                 CompileOneElmModule(
                     prevEnvValue: pineValueEmptyListElmValue,
                     simpleElmModuleParsed.Value.moduleText,
-                    simpleElmModuleParsed.Value.parsed)
+                    simpleElmModuleParsed.Value.parsed,
+                    pineVM: optimizingPineVM)
                 .Extract(err => throw new Exception("Failed compiling simple module: " + err));
 
             var pineSessionState =
@@ -858,6 +870,26 @@ public class CompileElmCompilerTests
                 pineSimpleModuleCompiled.moduleValue,
                 "Compiled simple module value");
         }
+        */
+
+        /*
+         * Begin a dedicated training phase, compiling a small Elm module and then doing code-analysis
+         * and PGO for the entirety based on that simple scenario.
+         * */
+
+        /*
+         
+        Console.WriteLine("Begin training with Elm compiler...");
+
+        var analysisEvalCache = new PineVMCache();
+
+        var profilingVM =
+            new ProfilingPineVM(
+                overrideParseExpression: analysisEvalCache.BuildParseExprDelegate,
+                evalCache: analysisEvalCache.EvalCache,
+                analysisEvalCache: analysisEvalCache);
+
+        var trainingProfilingStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
         {
             // Compile reduced version of 'Basics' module
@@ -865,40 +897,18 @@ public class CompileElmCompilerTests
             const string simpleElmModuleText =
                 """
                 module ReducedBasics exposing
-                  ( Int, Float
-                  , (+), (-), (*), (/), (//), (^)
-                  , toFloat, round, floor, ceiling, truncate
-                  , (==), (/=)
-                  , (<), (>), (<=), (>=), max, min, compare, Order(..)
-                  , Bool(..), not, (&&), (||), xor
+                  ( Int
+                  , (+), (-), (*), (/), (//)
+                  , Bool(..), not
                   , (++)
-                  , modBy, remainderBy, negate, abs, clamp, sqrt, logBase, e
-                  , pi, cos, sin, tan, acos, asin, atan, atan2
-                  , degrees, radians, turns
-                  , toPolar, fromPolar
-                  , isNaN, isInfinite
-                  , identity, always, (<|), (|>), (<<), (>>), Never, never
                   )
 
 
-                infix right 0 (<|) = apL
-                infix left  0 (|>) = apR
-                infix right 2 (||) = or
-                infix right 3 (&&) = and
-                infix non   4 (==) = eq
-                infix non   4 (/=) = neq
-                infix non   4 (<)  = lt
-                infix non   4 (>)  = gt
-                infix non   4 (<=) = le
-                infix non   4 (>=) = ge
                 infix right 5 (++) = append
                 infix left  6 (+)  = add
                 infix left  6 (-)  = sub
                 infix left  7 (*)  = mul
                 infix left  7 (//) = idiv
-                infix right 8 (^)  = pow
-                infix left  9 (<<) = composeL
-                infix right 9 (>>) = composeR
 
 
                 type Bool = True | False
@@ -911,84 +921,13 @@ public class CompileElmCompilerTests
                     | AnyOtherKind
 
 
-                {-| Represents the relative ordering of two things.
-                The relations are less than, equal to, and greater than.
-                -}
-                type Order = LT | EQ | GT
-
-
-                eq : a -> a -> Bool
-                eq a b =
-                    if isPineBlob a then
-                        Pine_kernel.equal [ a, b ]
-
-                    else
-                        if Pine_kernel.equal [ Pine_kernel.length a, Pine_kernel.length b ] then
-                            case a of
-                                String _ ->
-                                    Pine_kernel.equal [ a, b ]
-
-                                RBNode_elm_builtin _ _ _ _ _ ->
-                                    Pine_kernel.equal [ dictToList a, dictToList b ]
-
-                                Set_elm_builtin _ ->
-                                    Pine_kernel.equal [ setToList a, setToList b ]
-
-                                _ ->
-                                    let
-                                        itemsEqualRecursive listA listB =
-                                            if Pine_kernel.equal [ Pine_kernel.length listA, 0 ] then
-                                                True
-
-                                            else
-                                                if eq (Pine_kernel.list_head listA) (Pine_kernel.list_head listB) then
-                                                    itemsEqualRecursive
-                                                        (Pine_kernel.skip [ 1, listA ])
-                                                        (Pine_kernel.skip [ 1, listB ])
-
-                                                else
-                                                    False
-                                    in
-                                    itemsEqualRecursive a b
-
-                        else
-                            False
-
-
-                setToList : Set a -> List a
-                setToList (Set_elm_builtin dict) =
-                    dictKeys dict
-
-
-                dictToList : Dict k v -> List (k,v)
-                dictToList dict =
-                    dictFoldr (\key value list -> Pine_kernel.concat [ [(key, value)], list ]) [] dict
-
-
-                dictKeys : Dict k v -> List k
-                dictKeys dict =
-                  dictFoldr (\key value keyList -> Pine_kernel.concat [ [ key ], keyList ]) [] dict
-
-
-                dictFoldr : (k -> v -> b -> b) -> b -> Dict k v -> b
-                dictFoldr func acc t =
-                  case t of
-                    RBEmpty_elm_builtin ->
-                      acc
-
-                    RBNode_elm_builtin _ key value left right ->
-                      dictFoldr func (func key value (dictFoldr func acc right)) left
-
-
-
-
-                isPineList a =
-                    Pine_kernel.equal [ Pine_kernel.take [ 0, a ], [] ]
-
-
-                isPineBlob a =
-                    Pine_kernel.equal [ Pine_kernel.take [ 0, a ], Pine_kernel.take [ 0, 0 ] ]
-
+                append : appendable -> appendable -> appendable
+                append a b =
+                    case (a, b) of
+                    (String stringA, String stringB) ->
+                        String (Pine_kernel.concat [ stringA, stringB ])
+                    _ -> Pine_kernel.concat [ a, b ]
+                
 
                 """;
 
@@ -1010,7 +949,7 @@ public class CompileElmCompilerTests
                     initialState: null,
                     appCodeTree: simpleElmModuleAppCodeTree,
                     caching: true,
-                    autoPGO: pgoShare);
+                    autoPGO: null);
 
             var jsSessionState = newCompilerInteractiveSession.CurrentEnvironmentValue();
 
@@ -1026,7 +965,8 @@ public class CompileElmCompilerTests
                 CompileOneElmModule(
                     prevEnvValue: pineValueEmptyListElmValue,
                     simpleElmModuleParsed.Value.moduleText,
-                    simpleElmModuleParsed.Value.parsed)
+                    simpleElmModuleParsed.Value.parsed,
+                    pineVM: profilingVM.PineVM)
                 .Extract(err => throw new Exception("Failed compiling simple module: " + err));
 
             var pineSessionState =
@@ -1063,6 +1003,74 @@ public class CompileElmCompilerTests
                 "Compiled reduced Basics module value");
         }
 
+        trainingProfilingStopwatch.Stop();
+
+        var exprUsageCombinations = profilingVM.ExprEnvUsagesFlat;
+
+        var totalSampleCount = exprUsageCombinations.Sum(sample => sample.Value.OrigEvalDurations.Count);
+
+        Console.WriteLine(
+            "Ran training scenario on profiling VM in " +
+            trainingProfilingStopwatch.Elapsed.TotalSeconds.ToString("0.00") + " seconds and collected " +
+            exprUsageCombinations.Count + " unique combinations from " + totalSampleCount + " execution samples.");
+
+        var limitSampleCount = 100;
+
+        var samplesUniqueExpressions =
+            exprUsageCombinations
+            .Select(sample => sample.Key)
+            .Distinct()
+            .ToImmutableArray();
+
+        var exprUsageCombinationsAfterFilter =
+            exprUsageCombinations
+            .Where(report => report.Value.ParseAndEvalCountMax < 100)
+            .ToImmutableArray();
+
+        var includedSamples =
+            DynamicPGOShare.SubsequenceWithEvenDistribution(
+                [.. exprUsageCombinationsAfterFilter], limitSampleCount);
+
+        var trainingAnalysisStopwatch = System.Diagnostics.Stopwatch.StartNew();
+
+        IReadOnlyList<ExpressionUsageAnalysis> expressionUsages =
+            [..includedSamples
+            .Select(sample => sample.Value.Analysis.Value.ToMaybe())
+            .WhereNotNothing()
+            .SelectMany(usage => usage)];
+
+        trainingAnalysisStopwatch.Stop();
+
+        Console.WriteLine(
+            "Completed analysis in " +
+            trainingAnalysisStopwatch.Elapsed.TotalSeconds.ToString("0.00") + " seconds and collected " +
+            expressionUsages.Count + " usages");
+
+        var usageProfiles = ProfilingPineVM.UsageProfileDictionaryFromListOfUsages(expressionUsages);
+
+        var compilation =
+            DynamicPGOShare.GetOrCreateCompilationForProfiles(
+                inputProfiles: [usageProfiles],
+                limitCompiledExpressionsCount: 160,
+                previousCompilations: []);
+
+        var compiledParseExpressionOverrides =
+            compilation.DictionaryResult
+            .Extract(err => throw new Exception("Failed compilation: " + err));
+
+        Console.WriteLine(
+            "Compiled dictionary contains " + compiledParseExpressionOverrides.Count + " entries");
+
+
+        var compiledPineVMCache = new PineVMCache();
+
+        var compiledPineVM = PineVM.Construct(
+            parseExpressionOverrides: compiledParseExpressionOverrides,
+            evalCache: compiledPineVMCache.EvalCache);
+
+        */
+
+        if (false)
         {
             // Focus on test compiling the first module.
 
@@ -1074,7 +1082,8 @@ public class CompileElmCompilerTests
                 CompileOneElmModule(
                     prevEnvValue: pineValueEmptyListElmValue,
                     parsedModuleBasics.Value.moduleText,
-                    parsedModuleBasics.Value.parsed)
+                    parsedModuleBasics.Value.parsed,
+                    pineVM: optimizingPineVM)
                 .Extract(err => throw new Exception("Failed compiling module Basics: " + err));
 
             var newInteractiveEnv =
@@ -1100,41 +1109,247 @@ public class CompileElmCompilerTests
                 "Compiled module Basics value");
         }
 
-        // Reduce scope of test for now.
-        return;
+        {
+            ElmValue compiledNewEnvElm = pineValueEmptyListElmValue;
 
-        var compilationResult =
-            parsedCompilerModules
-            .Aggregate(
-                seed: (Result<string, ElmValue>)pineValueEmptyListElmValue,
-                func: (prevResult, parsedModule) =>
-                prevResult.AndThen(prevEnvValue =>
-                CompileOneElmModule(
-                    prevEnvValue,
-                    parsedModule.Value.moduleText,
-                    parsedModule.Value.parsed)
-                .MapError(err => "Failed compiling module " + string.Join(".", parsedModule.Key) + ": " + err)));
-
-        var compiledNewEnvElm =
-            compilationResult
-            .Extract(err => throw new Exception(err));
-
-        var compiledNewEnvValue =
-            ElmValueInterop.ElmValueDecodedAsInElmCompiler(compiledNewEnvElm)
-            .Extract(err => throw new Exception(err));
-
-        Console.WriteLine(
-            "Compiled environment is " +
-            compiledNewEnvValue switch
+            foreach (var parsedModule in parsedCompilerModules)
             {
-                PineValue.ListValue listValue =>
-                "List with " + listValue.Elements.Count + " elements",
+                var parsedModuleNameFlat = string.Join(".", parsedModule.Key);
 
-                _ => "not a list"
-            });
+                Console.WriteLine("\nBegin compile module " + parsedModuleNameFlat);
 
-        Assert.AreEqual(
-            interactiveInitialState,
-            compiledNewEnvValue);
+                var compileModuleStopwatch = System.Diagnostics.Stopwatch.StartNew();
+
+                var compileModuleResult =
+                    CompileOneElmModule(
+                        compiledNewEnvElm,
+                        parsedModule.Value.moduleText,
+                        parsedModule.Value.parsed,
+                        // pineVM: compiledPineVM
+                        pineVM: optimizingPineVM
+                        );
+
+                if (compileModuleResult is not Result<string, ElmValue>.Ok compileModuleOk)
+                {
+                    throw new Exception(
+                        "Compiling module " + parsedModuleNameFlat + " failed: " +
+                        compileModuleResult.Unpack(fromErr: err => err, fromOk: _ => "no err"));
+                }
+
+                Console.WriteLine(
+                    "Compiled module " + parsedModuleNameFlat + " in " +
+                    compileModuleStopwatch.Elapsed.TotalSeconds.ToString("0.00") + " seconds");
+
+                compiledNewEnvElm = compileModuleOk.Value;
+
+                var compiledNewEnv =
+                    ElmValueInterop.ElmValueDecodedAsInElmCompiler(compiledNewEnvElm)
+                    .Extract(err => throw new Exception(err));
+
+                var pineCompiledInteractiveParsedEnv =
+                    ElmInteractiveEnvironment.ParseInteractiveEnvironment(compiledNewEnv)
+                    .Extract(err => throw new Exception("Failed parsing env after compiling module Basics: " + err));
+
+
+                var javascriptCompiledModule =
+                    interactiveParsedEnv
+                    .Modules.Single(m => m.moduleName == parsedModuleNameFlat);
+
+                var pineCompiledModule =
+                    pineCompiledInteractiveParsedEnv
+                    .Modules.Single(m => m.moduleName == parsedModuleNameFlat);
+
+                /*
+                 
+                Assert.AreEqual(
+                    javascriptCompiledModule.moduleContent.TypeDeclarations.Count,
+                    pineCompiledModule.moduleContent.TypeDeclarations.Count,
+                    "Compiled module " + parsedModuleNameFlat + " type declarations count");
+
+                foreach (var typeName in javascriptCompiledModule.moduleContent.TypeDeclarations.Keys)
+                {
+                    var javascriptTypeValue = javascriptCompiledModule.moduleContent.TypeDeclarations[typeName];
+                    var pineTypeValue = pineCompiledModule.moduleContent.TypeDeclarations[typeName];
+
+                    var javascriptTypeSize = ElmInteractive.EstimatePineValueMemoryUsage(javascriptTypeValue);
+                    var pineTypeSize = ElmInteractive.EstimatePineValueMemoryUsage(pineTypeValue);
+
+                    Assert.AreEqual(
+                        javascriptTypeValue,
+                        pineTypeValue,
+                        "Compiled module " + parsedModuleNameFlat + " type declaration " + typeName +
+                        " (js size: " + javascriptTypeSize + ", pine size: " + pineTypeSize + ")");
+                }
+
+                Assert.AreEqual(
+                    javascriptCompiledModule.moduleContent.FunctionDeclarations.Count,
+                    pineCompiledModule.moduleContent.FunctionDeclarations.Count,
+                    "Compiled module " + parsedModuleNameFlat + " function declarations count");
+
+                foreach (var declName in javascriptCompiledModule.moduleContent.FunctionDeclarations.Keys)
+                {
+                    var javascriptDeclValue = javascriptCompiledModule.moduleContent.FunctionDeclarations[declName];
+                    var pineDeclValue = pineCompiledModule.moduleContent.FunctionDeclarations[declName];
+
+                    var javascriptDeclSize = ElmInteractive.EstimatePineValueMemoryUsage(javascriptDeclValue);
+                    var pineDeclSize = ElmInteractive.EstimatePineValueMemoryUsage(pineDeclValue);
+
+                    Assert.AreEqual(
+                        javascriptDeclValue,
+                        pineDeclValue,
+                        "Compiled module " + parsedModuleNameFlat + " function declaration " + declName +
+                        " (js size: " + javascriptDeclSize + ", pine size: " + pineDeclSize + ")");
+                }
+                */
+
+                Console.WriteLine(
+                    string.Join(
+                        "\n",
+                        ["\nCompiled module " + parsedModuleNameFlat + " comparison:",
+                        ..ReportOnCompiledModule(
+                            javascriptCompiledModule.moduleContent,
+                            pineCompiledModule.moduleContent)]));
+
+                Assert.AreEqual(
+                    javascriptCompiledModule.moduleValue,
+                    pineCompiledModule.moduleValue,
+                    "Compiled module " + parsedModuleNameFlat + " value");
+            }
+
+            var compiledNewEnvValue =
+                ElmValueInterop.ElmValueDecodedAsInElmCompiler(compiledNewEnvElm)
+                .Extract(err => throw new Exception(err));
+
+            Console.WriteLine(
+                "Compiled environment is " +
+                compiledNewEnvValue switch
+                {
+                    PineValue.ListValue listValue =>
+                    "List with " + listValue.Elements.Count + " elements",
+
+                    _ => "not a list"
+                });
+
+            Assert.AreEqual(
+                interactiveInitialState,
+                compiledNewEnvValue);
+
+            /*
+             * 2024-06-09:
+             * Compiling the Elm compiler failed at module Pine.elm, with the following report:
+             * [...]
+                Begin compile module Pine
+                Compiled module Pine in 362,08 seconds
+
+                Compiled module Pine comparison:
+                Type declarations
+                Declarations count: 7 Ok
+                Ok ConditionalExpressionStructure (4539): 
+                Ok EvalContext (3228): 
+                Ok Expression (17665): 
+                Ok KernelApplicationExpressionStructure (4237): 
+                Ok ParseAndEvalExpressionStructure (4338): 
+                Ok PathDescription (5045): 
+                Ok Value (3732): 
+                Function declarations
+                Declarations count: 28 Ok
+                Ok addToEnvironment (3540405): 
+                Ok bigIntFromBlobValue (6776144): 
+                Ok bigIntFromUnsignedBlobValue (1711150): 
+                Ok bigIntFromValue (6949676): 
+                Ok blobValueFromBigInt (26539276): 
+                Ok displayStringFromPineError (12148394): 
+                Ok emptyEvalContext (4030): 
+                Ok encodeExpressionAsValue (30475235): 
+                Ok environmentExpr (2421): 
+                Ok environmentFromDeclarations (21261930): 
+                Mismatch evaluateExpression (256719285): Mismatch (size: 256719284)
+                Ok falseValue (1411): 
+                Mismatch intFromValue (8049669): Mismatch (size: 8049668)
+                Ok kernelFunction_Negate (800270): 
+                Ok mapFromListValueOrBlobValue (1734568): 
+                Mismatch parseExpressionFromValue (189146957): Mismatch (size: 189146956)
+                Ok stringAsValue_Function (12597): 
+                Ok stringAsValue_List (6953): 
+                Ok stringAsValue_Literal (11186): 
+                Ok stringFromListValue (6741901): 
+                Ok stringFromValue (24832074): 
+                Ok trueValue (1411): 
+                Ok valueFromBigInt (26693747): 
+                Ok valueFromBool (72786): 
+                Ok valueFromChar (10122039): 
+                Ok valueFromContextExpansionWithName (19133523): 
+                Ok valueFromInt (11974609): 
+                Ok valueFromString (18581662): 
+                dotnet : Unhandled exception. Microsoft.VisualStudio.TestTools.UnitTesting.AssertFailedException: Assert.AreEqual failed. Expected:<ListValue { Elements = 
+                <>z__ReadOnlyList`1[Pine.PineValue] }>. Actual:<ListValue { Elements = System.Collections.Generic.List`1[Pine.PineValue] }>. Compiled module Pine value
+                At line:1 char:1
+
+             * */
+        }
+    }
+
+    public static IEnumerable<string> ReportOnCompiledModule(
+        ElmInteractiveEnvironment.ElmModule expectedModule,
+        ElmInteractiveEnvironment.ElmModule actualModule) =>
+        [ "Type declarations",
+            ..ReportComparingDeclarations(
+                expectedModule.TypeDeclarations,
+                actualModule.TypeDeclarations),
+
+            "Function declarations",
+            ..ReportComparingDeclarations(
+                expectedModule.FunctionDeclarations,
+                actualModule.FunctionDeclarations),
+            ];
+
+    public static IEnumerable<string> ReportComparingDeclarations(
+        IReadOnlyDictionary<string, PineValue> expectedDecls,
+        IReadOnlyDictionary<string, PineValue> actualDecls)
+    {
+        yield return
+            "Declarations count: " +
+            expectedDecls.Count +
+            " " +
+            (expectedDecls.Count == actualDecls.Count ? "Ok" : "Mismatch (" + actualDecls.Count + ")");
+
+        var expectedNames =
+            expectedDecls.Keys.Order().ToImmutableArray();
+
+        static (bool isOk, string description) CompareDecl(
+            PineValue expected,
+            PineValue? actual)
+        {
+            if (actual is null)
+            {
+                return (false, "Missing declaration");
+            }
+
+            var actualSize = ElmInteractive.EstimatePineValueMemoryUsage(actual);
+
+            return
+                expected == actual
+                ? (true, "")
+                : (false, "Mismatch (size: " + actualSize + ")");
+        }
+
+        foreach (var declName in expectedNames)
+        {
+            var expectedDeclValue = expectedDecls[declName];
+
+            var expectedDeclSize =
+                ElmInteractive.EstimatePineValueMemoryUsage(expectedDeclValue);
+
+            actualDecls.TryGetValue(declName, out var actualDeclValue);
+
+            var declActualReport = CompareDecl(expectedDeclValue, actualDeclValue);
+
+            var passedIndicationSymbol =
+                declActualReport.isOk ? "Ok" : "Mismatch";
+
+            yield return
+                passedIndicationSymbol + " " + declName + " (" + expectedDeclSize + "): " +
+                declActualReport.description;
+        }
     }
 }

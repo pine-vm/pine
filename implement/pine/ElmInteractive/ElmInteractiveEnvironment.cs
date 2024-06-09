@@ -110,7 +110,8 @@ public static class ElmInteractiveEnvironment
     }
 
     public record ElmModule(
-        IReadOnlyDictionary<string, PineValue> FunctionDeclarations);
+        IReadOnlyDictionary<string, PineValue> FunctionDeclarations,
+        IReadOnlyDictionary<string, PineValue> TypeDeclarations);
 
     public record FunctionRecord(
         Expression innerFunction,
@@ -269,11 +270,15 @@ public static class ElmInteractiveEnvironment
                 var typeDeclarations =
                     declarations
                     .Where(declaration => char.IsUpper(declaration.name[0]))
-                    .ToImmutableArray();
+                    .ToImmutableDictionary(
+                        keySelector: declaration => declaration.name,
+                        elementSelector: declaration => declaration.value);
 
                 return
                     (Result<string, ElmModule>)
-                    new ElmModule(FunctionDeclarations: functionDeclarations);
+                    new ElmModule(
+                        FunctionDeclarations: functionDeclarations,
+                        TypeDeclarations: typeDeclarations);
             });
     }
 

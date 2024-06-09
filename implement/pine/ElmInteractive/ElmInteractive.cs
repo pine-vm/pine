@@ -272,7 +272,7 @@ public class ElmInteractive
             });
     }
 
-    static long EstimatePineValueMemoryUsage(PineValue pineValue) =>
+    public static long EstimatePineValueMemoryUsage(PineValue pineValue) =>
         pineValue switch
         {
             PineValue.BlobValue blobValue =>
