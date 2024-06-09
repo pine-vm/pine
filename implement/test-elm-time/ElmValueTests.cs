@@ -1,4 +1,5 @@
-﻿using Microsoft.VisualStudio.TestTools.UnitTesting;
+using Microsoft.VisualStudio.TestTools.UnitTesting;
+using Pine;
 using Pine.ElmInteractive;
 using System.Collections.Generic;
 
@@ -11,17 +12,17 @@ public class ElmValueTests
     public void Test_ElmValue_as_pine_value_roundtrips()
     {
         var testCases = (IReadOnlyList<ElmValue>)[
-            new ElmValue.ElmChar('a'),
-            new ElmValue.ElmInteger(42),
-            new ElmValue.ElmString("Hello, world!"),
+            ElmValue.Char('a'),
+            ElmValue.Integer(42),
+            ElmValue.String("Hello, world!"),
             new ElmValue.ElmList([
-                new ElmValue.ElmInteger(31),
-                new ElmValue.ElmInteger(37),
-                new ElmValue.ElmInteger(39)]),
+                ElmValue.Integer(31),
+                ElmValue.Integer(37),
+                ElmValue.Integer(39)]),
             new ElmValue.ElmRecord([
-                ("alfa", new ElmValue.ElmInteger(1)),
-                ("beta", new ElmValue.ElmInteger(2)),
-                ("gamma", new ElmValue.ElmInteger(3)),
+                ("alfa", ElmValue.Integer(1)),
+                ("beta", ElmValue.Integer(2)),
+                ("gamma", ElmValue.Integer(3)),
             ]),
 
             new ElmValue.ElmString("Hello, world 👋"),
@@ -31,12 +32,12 @@ public class ElmValueTests
 
             new ElmValue.ElmList([
                 new ElmValue.ElmList([
-                    new ElmValue.ElmInteger(7),
-                    new ElmValue.ElmInteger(13)]),
+                    ElmValue.Integer(7),
+                    ElmValue.Integer(13)]),
                 new ElmValue.ElmList([
-                    new ElmValue.ElmInteger(41),
-                    new ElmValue.ElmInteger(43),
-                    new ElmValue.ElmInteger(47)]),
+                    ElmValue.Integer(41),
+                    ElmValue.Integer(43),
+                    ElmValue.Integer(47)]),
             ]),
         ];
 
@@ -58,25 +59,25 @@ public class ElmValueTests
         var testCases =
             (IReadOnlyList<(ElmValue, string)>)
             [
-                (new ElmValue.ElmInteger(42), "42"),
+                (ElmValue.Integer(42), "42"),
 
-                (new ElmValue.ElmChar('a'), "'a'"),
+                (ElmValue.Char('a'), "'a'"),
 
-                (new ElmValue.ElmString("Hello, world!"), "\"Hello, world!\""),
+                (ElmValue.String("Hello, world!"), "\"Hello, world!\""),
 
                 (new ElmValue.ElmList([
-                new ElmValue.ElmInteger(31),
-                    new ElmValue.ElmInteger(37),
-                    new ElmValue.ElmInteger(39)]),
+                ElmValue.Integer(31),
+                    ElmValue.Integer(37),
+                    ElmValue.Integer(39)]),
                     "[31,37,39]"),
 
                 (new ElmValue.ElmRecord([
-                ("alfa", new ElmValue.ElmInteger(1)),
-                    ("beta", new ElmValue.ElmInteger(2)),
-                    ("gamma", new ElmValue.ElmInteger(3))]),
+                ("alfa", ElmValue.Integer(1)),
+                    ("beta", ElmValue.Integer(2)),
+                    ("gamma", ElmValue.Integer(3))]),
                 "{ alfa = 1, beta = 2, gamma = 3 }"),
 
-                (new ElmValue.ElmTag("Just", [new ElmValue.ElmInteger(43)]),
+                (new ElmValue.ElmTag("Just", [ElmValue.Integer(43)]),
                 "Just 43"),
 
                 (new ElmValue.ElmTag("Nothing", []),
@@ -85,7 +86,7 @@ public class ElmValueTests
                 (new ElmValue.ElmTag("Just", [new ElmValue.ElmTag("Nothing", [])]),
                 "Just Nothing"),
 
-                (new ElmValue.ElmTag("Just", [new ElmValue.ElmTag("Just", [new ElmValue.ElmInteger(47)])]),
+                (new ElmValue.ElmTag("Just", [new ElmValue.ElmTag("Just", [ElmValue.Integer(47)])]),
                 "Just (Just 47)"),
             ];
 

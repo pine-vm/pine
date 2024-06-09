@@ -45,22 +45,22 @@ public abstract record PineValue : IEquatable<PineValue>
         if (elements.Count is 0)
             return EmptyList;
 
-        var newInstance = new ListValue(elements);
+        var asStruct = new ListValue.ListValueStruct(elements);
 
         if (InternedListsDict is not null)
         {
-            InternedListsDict.TryGetValue(newInstance, out var existing);
+            InternedListsDict.TryGetValue(asStruct, out var existing);
 
             if (existing is not null)
                 return existing;
         }
         else
         {
-            if (InternedListsDictInConstruction?.TryGetValue(newInstance, out var existing) ?? false && existing is not null)
+            if (InternedListsDictInConstruction?.TryGetValue(asStruct, out var existing) ?? false && existing is not null)
                 return existing;
         }
 
-        return newInstance;
+        return new ListValue(elements);
     }
 
     public static readonly PineValue EmptyList = new ListValue([]);
@@ -79,6 +79,14 @@ public abstract record PineValue : IEquatable<PineValue>
         [EmptyBlob, .. InternedBlobSingle, .. InternedBlobTuple];
 
     private static readonly ListValue Interned_Pine_string_String = (ListValue)PineValueAsString.ValueFromString("String");
+
+    private static readonly IReadOnlyList<ListValue> InternedBlobsSingletonLists =
+        [..InternedBlobs
+        .Select(b => new ListValue([b]))];
+
+    private static readonly IReadOnlyList<ListValue> InternedBlobsSingletonSingletonLists =
+        [..InternedBlobsSingletonLists
+        .Select(b => new ListValue([b]))];
 
     private static readonly IReadOnlyList<ListValue> InternedStringsLists =
         [..PopularValues.PopularStrings
@@ -105,24 +113,44 @@ public abstract record PineValue : IEquatable<PineValue>
         ElmValueEncoding.ElmValueAsPineValue(
             ElmValueInterop.PineValueEncodedAsInElmCompiler(s)))];
 
+    private static IEnumerable<ElmValue> ReusedPopularElmValues =>
+        PopularValues.PopularStrings
+        .Where(s => s.Length is not 0 && char.IsUpper(s[0]))
+        .SelectMany(tagName =>
+        (IEnumerable<ElmValue>)
+        [new ElmValue.ElmTag(tagName, []),
+            new ElmValue.ElmList([new ElmValue.ElmTag(tagName, [])])])
+        .Concat(PopularValues.PopularElmValuesSource());
+
+    private static IEnumerable<ListValue> ReusedPopularElmValuesEncoded =>
+        ReusedPopularElmValues
+        .Select(elmValue => (ListValue)ElmValueEncoding.ElmValueAsPineValue(elmValue));
+
+
     private static readonly IReadOnlyList<ListValue> PopularPineExpressions =
         [.. PineVM.ExpressionEncoding.PopularPineExpressionsEncoded.Values.Cast<ListValue>()];
 
     private static IEnumerable<ListValue> InternedListsSource =>
         [
+        (ListValue)EmptyList,
+        (ListValue)List([EmptyList]),
+        (ListValue)List([EmptyList,EmptyList]),
         Interned_Pine_string_String,
+        ..InternedBlobsSingletonLists,
+        ..InternedBlobsSingletonSingletonLists,
         ..InternedStringsLists,
         ..InternedElmStringsLists,
+        ..ReusedPopularElmValuesEncoded,
         ..InternedBlobsInCompiler,
         ..InternedListsInCompiler,
         ..PopularPineExpressions
         ];
 
-    private static readonly HashSet<ListValue> InternedListsDictInConstruction = [];
+    private static readonly Dictionary<ListValue.ListValueStruct, ListValue> InternedListsDictInConstruction = [];
 
-    private static readonly FrozenSet<ListValue> InternedListsDict = BuildInternedListsDict();
+    public static readonly FrozenDictionary<ListValue.ListValueStruct, ListValue> InternedListsDict = BuildInternedListsDict();
 
-    private static FrozenSet<ListValue> BuildInternedListsDict()
+    private static FrozenDictionary<ListValue.ListValueStruct, ListValue> BuildInternedListsDict()
     {
         /*
          * Build the final collection for lookup in a way that prevents the creation of duplicate values in the construction process:
@@ -137,12 +165,17 @@ public abstract record PineValue : IEquatable<PineValue>
 
         foreach (var item in sourceSortedBySize)
         {
-            InternedListsDictInConstruction.Add(item);
+            var asStruct = new ListValue.ListValueStruct(item.Elements);
+
+            if (InternedListsDictInConstruction.ContainsKey(asStruct))
+                continue;
+
+            InternedListsDictInConstruction[asStruct] = item;
         }
 
         return
             InternedListsDictInConstruction
-            .ToFrozenSet();
+            .ToFrozenDictionary();
     }
 
     /// <summary>
@@ -158,6 +191,11 @@ public abstract record PineValue : IEquatable<PineValue>
         {
             Elements = elements;
 
+            slimHashCode = ComputeSlimHashCode(elements);
+        }
+
+        private static int ComputeSlimHashCode(IReadOnlyList<PineValue> elements)
+        {
             var hash = new HashCode();
 
             foreach (var item in elements)
@@ -165,7 +203,7 @@ public abstract record PineValue : IEquatable<PineValue>
                 hash.Add(item.GetHashCode());
             }
 
-            slimHashCode = hash.ToHashCode();
+            return hash.ToHashCode();
         }
 
         public virtual bool Equals(ListValue? other)
@@ -200,6 +238,60 @@ public abstract record PineValue : IEquatable<PineValue>
         }
 
         public override int GetHashCode() => slimHashCode;
+
+
+        public record struct ListValueStruct
+        {
+            private readonly int slimHashCode;
+
+            public IReadOnlyList<PineValue> Elements { get; }
+
+            public ListValueStruct(IReadOnlyList<PineValue> elements)
+            {
+                Elements = elements;
+
+                slimHashCode = ComputeSlimHashCode(elements);
+            }
+
+            public bool Equals(ListValueStruct other)
+            {
+                if (slimHashCode != other.slimHashCode || Elements.Count != other.Elements.Count)
+                    return false;
+
+                for (int i = 0; i < Elements.Count; i++)
+                {
+                    var selfElement = Elements[i];
+                    var otherElement = other.Elements[i];
+
+                    if (selfElement is ListValue selfList && otherElement is ListValue otherList)
+                    {
+                        if (!selfList.Equals(otherList))
+                            return false;
+                    }
+                    else
+                    {
+                        if (!selfElement.Equals(otherElement))
+                            return false;
+                    }
+                }
+
+                return true;
+            }
+
+            public override int GetHashCode() => slimHashCode;
+        }
+
+        public int ComputeDepth() =>
+            Elements.Count == 0
+            ?
+            1
+            :
+            Elements.Max(
+                e => e switch
+                {
+                    ListValue list => 1 + list.ComputeDepth(),
+                    _ => 1
+                });
     }
 
     /// <summary>

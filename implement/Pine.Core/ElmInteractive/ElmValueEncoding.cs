@@ -48,13 +48,14 @@ public static class ElmValueEncoding
         [..PopularValues.PopularStrings
         .Select(s => (PineValue.ListValue) PineValueAsString.ValueFromString(s)),
         ..PineValue.InternedBlobs
-        .Select(b => (PineValue.ListValue)ElmValueAsPineValue( ElmValueInterop.PineValueEncodedAsInElmCompiler(b)))
+        .Select(b => (PineValue.ListValue)ElmValueAsPineValue(ElmValueInterop.PineValueEncodedAsInElmCompiler(b)))
         ];
 
     private static readonly FrozenDictionary<PineValue.ListValue, Result<string, ElmValue>> InternedListElmValues =
         InternedListPineValues
         .ToFrozenDictionary(
-            keySelector: list => list, PineListValueAsElmValue);
+            keySelector: list => list,
+            elementSelector: PineListValueAsElmValue);
 
     public static Result<string, ElmValue> PineBlobValueAsElmValue(
         PineValue.BlobValue blobValue) =>
@@ -85,7 +86,7 @@ public static class ElmValueEncoding
             new ElmValue.ElmInternal("___error_skipped_large_blob___")
             :
             PineValueAsInteger.UnsignedIntegerFromValue(blobValue)
-            .Map(bigInt => (ElmValue)new ElmValue.ElmChar((int)bigInt))
+            .Map(bigInt => ElmValue.Char((int)bigInt))
         });
 
     public static Result<string, ElmValue> PineListValueAsElmValue(PineValue.ListValue listValue)
@@ -117,7 +118,7 @@ public static class ElmValueEncoding
                         var mapToStringResult = PineValueAsString.StringFromValue(charsList);
 
                         if (mapToStringResult is Result<string, string>.Ok ok)
-                            return new ElmValue.ElmString(ok.Value);
+                            return ElmValue.String(ok.Value);
 
                         if (mapToStringResult is Result<string, string>.Err err)
                             return "Failed to convert value under String tag: Failed mapping char " + err.Value;
@@ -308,7 +309,7 @@ public static class ElmValueEncoding
                 ElmValue.ElmList elmList =>
                 PineValue.List([.. elmList.Elements.Select(ElmValueAsPineValue)]),
 
-                ElmValue.ElmChar elmChar =>
+                ElmValue.CharObject elmChar =>
                 PineValueAsInteger.ValueFromUnsignedInteger(elmChar.Value)
                 .Extract(err => throw new Exception(err)),
 
@@ -317,7 +318,7 @@ public static class ElmValueEncoding
 
                 ElmValue.ElmString elmString =>
                 PineValue.List(
-                    [PineValueAsString.ValueFromString("String"),
+                    [ElmValue.ElmStringTypeTagNameAsValue,
                         PineValue.List([PineValueAsString.ValueFromString(elmString.Value)])]),
 
                 ElmValue.ElmTag elmTag =>

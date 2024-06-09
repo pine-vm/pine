@@ -14,7 +14,7 @@ public class ElmValueInterop
             PineValue.BlobValue blobValue =>
             new ElmValue.ElmTag(
                 "BlobValue",
-                [new ElmValue.ElmList([.. blobValue.Bytes.ToArray().Select(byteInt => new ElmValue.ElmInteger(byteInt))])]),
+                [new ElmValue.ElmList([.. blobValue.Bytes.ToArray().Select(byteInt => ElmValue.Integer(byteInt))])]),
 
             PineValue.ListValue listValue =>
             new ElmValue.ElmTag(

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Frozen;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
@@ -39,6 +40,40 @@ public abstract record ElmValue
 
     public static readonly PineValue ElmStringTypeTagNameAsValue =
         PineValueAsString.ValueFromString(ElmStringTypeTagName);
+
+    public static ElmValue Integer(System.Numerics.BigInteger Value) =>
+        ReusedIntegerInstances?.TryGetValue(Value, out var reusedInstance) ?? false && reusedInstance is not null ?
+        reusedInstance
+        :
+        new ElmInteger(Value);
+
+    public static ElmValue String(string Value) =>
+        ReusedStringInstances?.TryGetValue(Value, out var reusedInstance) ?? false && reusedInstance is not null ?
+        reusedInstance
+        :
+        new ElmString(Value);
+
+    public static ElmValue Char(int Value) =>
+        Value < ReusedCharInstances?.Count && 0 <= Value ?
+        ReusedCharInstances[Value]
+        :
+        new CharObject(Value);
+
+    private static readonly FrozenDictionary<System.Numerics.BigInteger, ElmValue> ReusedIntegerInstances =
+        Enumerable.Range(-100, 400)
+        .ToFrozenDictionary(
+            keySelector: i => (System.Numerics.BigInteger)i,
+            elementSelector: i => Integer(i));
+
+    private static readonly FrozenDictionary<string, ElmValue> ReusedStringInstances =
+        PopularValues.PopularStrings
+        .ToFrozenDictionary(
+            keySelector: s => s,
+            elementSelector: String);
+
+    private static readonly IReadOnlyList<ElmValue> ReusedCharInstances =
+        [..Enumerable.Range(0, 4000)
+        .Select(Char)];
 
     public record ElmInteger(System.Numerics.BigInteger Value)
         : ElmValue;
@@ -101,7 +136,7 @@ public abstract record ElmValue
     public record ElmString(string Value)
         : ElmValue;
 
-    public record ElmChar(int Value)
+    public record CharObject(int Value)
         : ElmValue;
 
     public record ElmRecord(IReadOnlyList<(string FieldName, ElmValue Value)> Fields)
@@ -147,7 +182,7 @@ public abstract record ElmValue
     public static Maybe<int> TryMapElmValueToChar(ElmValue elmValue) =>
         elmValue switch
         {
-            ElmChar elmChar =>
+            CharObject elmChar =>
             elmChar.Value,
 
             _ =>
@@ -162,7 +197,7 @@ public abstract record ElmValue
                 ElmInteger integer =>
                 (integer.Value.ToString(), needsParens: false),
 
-                ElmChar charValue =>
+                CharObject charValue =>
                 ("'" + char.ConvertFromUtf32(charValue.Value) + "'", needsParens: false),
 
                 ElmList list =>
@@ -376,7 +411,7 @@ public abstract record ElmValue
         if (valueA is ElmInteger && valueB is ElmInteger)
             return true;
 
-        if (valueA is ElmChar && valueB is ElmChar)
+        if (valueA is Char && valueB is Char)
             return true;
 
         if (valueA is ElmString && valueB is ElmString)
