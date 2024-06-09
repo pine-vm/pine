@@ -1,4 +1,4 @@
-using Microsoft.VisualStudio.TestTools.UnitTesting;
+﻿using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Pine;
 using Pine.ElmInteractive;
 using System.Collections.Generic;
@@ -96,5 +96,43 @@ public class ElmValueTests
 
             Assert.AreEqual(expectedExpression, expressionString);
         }
+    }
+
+    [TestMethod]
+    public void Shallow_parsing_as_record()
+    {
+        var elmRecord = new ElmValue.ElmRecord(
+            [("alfa", ElmValue.Integer(11)),
+             ("beta", ElmValue.Integer(13)),
+             ("gamma", ElmValue.Integer(17))
+             ]);
+
+        var asPineValue = ElmValueEncoding.ElmValueAsPineValue(elmRecord);
+
+        var parseResult = ElmValueEncoding.ParsePineValueAsRecordTagged(asPineValue);
+
+        if (parseResult is Result<string, IReadOnlyList<(string fieldName, PineValue fieldValue)>>.Err parseAsRecordErr)
+        {
+            Assert.Fail("Failed parsing as record: " + parseAsRecordErr.Value);
+        }
+
+        if (parseResult is not Result<string, IReadOnlyList<(string fieldName, PineValue fieldValue)>>.Ok parseAsRecordOk)
+        {
+            throw new System.Exception(
+                "Unexpected parse result type: " + parseResult.GetType().FullName);
+        }
+
+        var parsedFields = parseAsRecordOk.Value;
+
+        Assert.AreEqual(3, parsedFields.Count);
+
+        Assert.AreEqual("alfa", parsedFields[0].fieldName);
+        Assert.AreEqual(PineValueAsInteger.ValueFromSignedInteger(11), parsedFields[0].fieldValue);
+
+        Assert.AreEqual("beta", parsedFields[1].fieldName);
+        Assert.AreEqual(PineValueAsInteger.ValueFromSignedInteger(13), parsedFields[1].fieldValue);
+
+        Assert.AreEqual("gamma", parsedFields[2].fieldName);
+        Assert.AreEqual(PineValueAsInteger.ValueFromSignedInteger(17), parsedFields[2].fieldValue);
     }
 }

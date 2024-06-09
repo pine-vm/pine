@@ -256,6 +256,33 @@ public static class ElmValueEncoding
         return new ElmValue.ElmList(itemsAsElmValues);
     }
 
+    public static Result<string, (string, IReadOnlyList<PineValue>)> ParseAsTag(PineValue pineValue)
+    {
+        if (pineValue is not PineValue.ListValue list)
+            return "Value is not a list.";
+
+        if (list.Elements.Count is not 2)
+            return "List does not have 2 elements.";
+
+        var tagNameValue = list.Elements[0];
+
+        var parseTagNameResult = PineValueAsString.StringFromValue(tagNameValue);
+
+        if (parseTagNameResult is Result<string, string>.Err tagNameErr)
+            return "First element is not a string: " + tagNameErr.Value;
+
+        if (parseTagNameResult is not Result<string, string>.Ok tagNameOk)
+            throw new NotImplementedException(
+                "Unexpected result type: " + parseTagNameResult.GetType().FullName);
+
+        var tagArgumentsValue = list.Elements[1];
+
+        if (tagArgumentsValue is not PineValue.ListValue tagArgumentsList)
+            return "Second element is not a list.";
+
+        return (tagNameOk.Value, tagArgumentsList.Elements);
+    }
+
 
     public static Result<string, ElmValue.ElmRecord> PineValueAsElmRecord(PineValue pineValue)
     {
@@ -299,6 +326,70 @@ public static class ElmValueEncoding
         }
 
         return new ElmValue.ElmRecord(recordFields);
+    }
+
+    public static Result<string, IReadOnlyList<(string fieldName, PineValue fieldValue)>> ParsePineValueAsRecordTagged(
+        PineValue pineValue)
+    {
+        if (pineValue is not PineValue.ListValue taggedRecordList)
+            return "Value is not a list.";
+
+        if (taggedRecordList.Elements.Count is not 2)
+            return "List does not have 2 elements.";
+
+        var tagNameValue = taggedRecordList.Elements[0];
+
+        if (tagNameValue != ElmValue.ElmRecordTypeTagNameAsValue)
+            return "First element is not the record tag name.";
+
+        var recordFieldsListList = taggedRecordList.Elements[1];
+
+        if (recordFieldsListList is not PineValue.ListValue recordFieldsList)
+            return "Second element is not a list.";
+
+        if (recordFieldsList.Elements.Count is not 1)
+            return "Record fields list does not have 1 element.";
+
+        return ParsePineValueAsRecord(recordFieldsList.Elements[0]);
+    }
+
+    public static Result<string, IReadOnlyList<(string fieldName, PineValue fieldValue)>> ParsePineValueAsRecord(
+        PineValue pineValue)
+    {
+        if (pineValue is not PineValue.ListValue recordFieldsList)
+            return "Value is not a list.";
+
+        var recordFields = new (string fieldName, PineValue fieldValue)[recordFieldsList.Elements.Count];
+
+        for (var i = 0; i < recordFieldsList.Elements.Count; i++)
+        {
+            var element = recordFieldsList.Elements[i];
+
+            if (element is not PineValue.ListValue fieldList)
+                return "Field is not a list.";
+
+            if (fieldList.Elements.Count is not 2)
+                return "Field list does not have 2 elements.";
+
+            var fieldNameValue = fieldList.Elements[0];
+            var fieldValue = fieldList.Elements[1];
+
+            var fieldNameResult = PineValueAsString.StringFromValue(fieldNameValue);
+
+            if (fieldNameResult is Result<string, string>.Ok fieldName)
+            {
+                recordFields[i] = (fieldName.Value, fieldValue);
+                continue;
+            }
+
+            if (fieldNameResult is Result<string, string>.Err error)
+                return "Failed decoding field name: " + error.Value;
+
+            throw new NotImplementedException(
+                "Unexpected result type: " + fieldNameResult.GetType().FullName);
+        }
+
+        return recordFields;
     }
 
     public static PineValue ElmValueAsPineValue(ElmValue elmValue)

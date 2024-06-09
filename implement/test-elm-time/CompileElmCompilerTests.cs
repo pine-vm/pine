@@ -610,13 +610,13 @@ public class CompileElmCompilerTests
          * Compile incrementally, one module at a time, like we did when using the JavaScript-based engine.
          * */
 
-        Result<string, ElmValue> CompileOneElmModule(
-            ElmValue prevEnvValue,
+        Result<string, PineValue> CompileOneElmModule(
+            PineValue prevEnvValue,
             string moduleText,
             PineValue parsedModuleValue,
             IPineVM pineVM)
         {
-            return
+            var applyFunctionResult =
                 ElmInteractiveEnvironment.ApplyFunction(
                     pineVM,
                     declExpandInteractiveEnv,
@@ -629,31 +629,53 @@ public class CompileElmCompilerTests
                             -> Result String { addedModules : List ( List String, Pine.Value ), environment : Pine.Value }
                      * */
                     [
-                        ElmValueEncoding.ElmValueAsPineValue(prevEnvValue),
+                        prevEnvValue,
                         PineValue.List([ParsedElmFileRecordValue(moduleText, parsedModuleValue)])
                     ]
-                    )
-                .MapError(err => "Failed to apply function: " + err)
-                .AndThen(compilerResponseValue =>
-                    ElmValueEncoding.PineValueAsElmValue(compilerResponseValue)
-                    .AndThen(compilerResponseElm =>
-                    compilerResponseElm switch
-                    {
-                        ElmValue.ElmTag compilerResponseTag =>
-                        compilerResponseTag.TagName is "Ok" ?
-                        compilerResponseTag.Arguments[0] is ElmValue.ElmRecord compilerResponseRecord
-                        ?
-                        compilerResponseRecord.Fields.First(f => f.FieldName is "environment").Value
-                        :
-                        (Result<string, ElmValue>)
-                        ("Failed to extract environment: not a record: " + compilerResponseTag.Arguments[0])
-                        :
-                        "Failed to extract environment: Tag not 'Ok': " +
-                        ElmValue.ElmValueAsExpression(compilerResponseTag).expressionString,
+                    );
 
-                        _ =>
-                        "Failed to extract environment: not a tag: " + compilerResponseElm
-                    }));
+            if (applyFunctionResult is Result<string, PineValue>.Err err)
+                return "Failed to apply function: " + err.Value;
+
+            if (applyFunctionResult is not Result<string, PineValue>.Ok applyFunctionOk)
+                throw new Exception("Unexpected result type: " + applyFunctionResult.GetType().FullName);
+
+            var parseAsTagResult = ElmValueEncoding.ParseAsTag(applyFunctionOk.Value);
+
+            if (parseAsTagResult is Result<string, (string, IReadOnlyList<PineValue>)>.Err parseAsTagErr)
+                return "Failed to parse result as tag: " + parseAsTagErr.Value;
+
+            if (parseAsTagResult is not Result<string, (string, IReadOnlyList<PineValue>)>.Ok parseAsTagOk)
+                throw new Exception("Unexpected result type: " + parseAsTagResult.GetType().FullName);
+
+            if (parseAsTagOk.Value.Item1 is not "Ok")
+                return
+                    "Failed to extract environment: Tag not 'Ok': " +
+                    ElmValueEncoding.PineValueAsElmValue(applyFunctionOk.Value)
+                    .Unpack(
+                        fromErr: err => "Failed to parse as Elm value: " + err,
+                        fromOk: elmValue => ElmValue.ElmValueAsExpression(elmValue).expressionString);
+
+            if (parseAsTagOk.Value.Item2.Count is not 1)
+                return "Failed to extract environment: Expected one element in the list, got " + parseAsTagOk.Value.Item2.Count;
+
+            var parseAsRecordResult = ElmValueEncoding.ParsePineValueAsRecordTagged(parseAsTagOk.Value.Item2[0]);
+
+            if (parseAsRecordResult is Result<string, IReadOnlyList<(string fieldName, PineValue fieldValue)>>.Err parseAsRecordErr)
+                return "Failed to parse as record: " + parseAsRecordErr.Value;
+
+            if (parseAsRecordResult is not Result<string, IReadOnlyList<(string fieldName, PineValue fieldValue)>>.Ok parseAsRecordOk)
+                throw new Exception("Unexpected result type: " + parseAsRecordResult.GetType().FullName);
+
+            var environmentValueField =
+                parseAsRecordOk.Value
+                .SingleOrDefault(f => f.fieldName == "environment")
+                .fieldValue;
+
+            if (environmentValueField is not PineValue environmentValue)
+                return "Failed to extract environment: not a Pine value: " + environmentValueField;
+
+            return environmentValue;
         }
 
         {
@@ -704,14 +726,18 @@ public class CompileElmCompilerTests
 
             var pineSessionStateWrapped =
                 CompileOneElmModule(
-                    prevEnvValue: pineValueEmptyListElmValue,
+                    prevEnvValue: ElmValueEncoding.ElmValueAsPineValue(pineValueEmptyListElmValue),
                     simpleElmModuleParsed.Value.moduleText,
                     simpleElmModuleParsed.Value.parsed,
                     pineVM: optimizingPineVM)
                 .Extract(err => throw new Exception("Failed compiling simple module: " + err));
 
+            var pineSessionStateWrappedElm =
+                ElmValueEncoding.PineValueAsElmValue(pineSessionStateWrapped)
+                .Extract(err => throw new Exception("Failed unwrapping pine session state: " + err));
+
             var pineSessionState =
-                ElmValueInterop.ElmValueDecodedAsInElmCompiler(pineSessionStateWrapped)
+                ElmValueInterop.ElmValueDecodedAsInElmCompiler(pineSessionStateWrappedElm)
                 .Extract(err => throw new Exception("Failed unwrapping pine session state: " + err));
 
             var pineSessionParsedEnv =
@@ -1070,6 +1096,7 @@ public class CompileElmCompilerTests
 
         */
 
+        /*
         if (false)
         {
             // Focus on test compiling the first module.
@@ -1108,9 +1135,11 @@ public class CompileElmCompilerTests
                 newModuleBasics.moduleValue,
                 "Compiled module Basics value");
         }
+        */
 
         {
-            ElmValue compiledNewEnvElm = pineValueEmptyListElmValue;
+            PineValue compiledNewEnvInCompiler =
+                ElmValueEncoding.ElmValueAsPineValue(pineValueEmptyListElmValue);
 
             foreach (var parsedModule in parsedCompilerModules)
             {
@@ -1122,14 +1151,14 @@ public class CompileElmCompilerTests
 
                 var compileModuleResult =
                     CompileOneElmModule(
-                        compiledNewEnvElm,
+                        compiledNewEnvInCompiler,
                         parsedModule.Value.moduleText,
                         parsedModule.Value.parsed,
                         // pineVM: compiledPineVM
                         pineVM: optimizingPineVM
                         );
 
-                if (compileModuleResult is not Result<string, ElmValue>.Ok compileModuleOk)
+                if (compileModuleResult is not Result<string, PineValue>.Ok compileModuleOk)
                 {
                     throw new Exception(
                         "Compiling module " + parsedModuleNameFlat + " failed: " +
@@ -1140,14 +1169,18 @@ public class CompileElmCompilerTests
                     "Compiled module " + parsedModuleNameFlat + " in " +
                     compileModuleStopwatch.Elapsed.TotalSeconds.ToString("0.00") + " seconds");
 
-                compiledNewEnvElm = compileModuleOk.Value;
+                compiledNewEnvInCompiler = compileModuleOk.Value;
 
-                var compiledNewEnv =
-                    ElmValueInterop.ElmValueDecodedAsInElmCompiler(compiledNewEnvElm)
+                var compiledNewEnvInCompilerElm =
+                    ElmValueEncoding.PineValueAsElmValue(compileModuleOk.Value)
+                    .Extract(err => throw new Exception(err));
+
+                var compiledNewEnvElm =
+                    ElmValueInterop.ElmValueDecodedAsInElmCompiler(compiledNewEnvInCompilerElm)
                     .Extract(err => throw new Exception(err));
 
                 var pineCompiledInteractiveParsedEnv =
-                    ElmInteractiveEnvironment.ParseInteractiveEnvironment(compiledNewEnv)
+                    ElmInteractiveEnvironment.ParseInteractiveEnvironment(compiledNewEnvElm)
                     .Extract(err => throw new Exception("Failed parsing env after compiling module Basics: " + err));
 
 
@@ -1216,23 +1249,29 @@ public class CompileElmCompilerTests
                     "Compiled module " + parsedModuleNameFlat + " value");
             }
 
-            var compiledNewEnvValue =
-                ElmValueInterop.ElmValueDecodedAsInElmCompiler(compiledNewEnvElm)
-                .Extract(err => throw new Exception(err));
+            {
+                var compiledNewEnvInCompilerElm =
+                    ElmValueEncoding.PineValueAsElmValue(compiledNewEnvInCompiler)
+                    .Extract(err => throw new Exception(err));
 
-            Console.WriteLine(
-                "Compiled environment is " +
-                compiledNewEnvValue switch
-                {
-                    PineValue.ListValue listValue =>
-                    "List with " + listValue.Elements.Count + " elements",
+                var compiledNewEnvValue =
+                    ElmValueInterop.ElmValueDecodedAsInElmCompiler(compiledNewEnvInCompilerElm)
+                    .Extract(err => throw new Exception(err));
 
-                    _ => "not a list"
-                });
+                Console.WriteLine(
+                    "Compiled environment is " +
+                    compiledNewEnvValue switch
+                    {
+                        PineValue.ListValue listValue =>
+                        "List with " + listValue.Elements.Count + " elements",
 
-            Assert.AreEqual(
-                interactiveInitialState,
-                compiledNewEnvValue);
+                        _ => "not a list"
+                    });
+
+                Assert.AreEqual(
+                    interactiveInitialState,
+                    compiledNewEnvValue);
+            }
 
             /*
              * 2024-06-09:
