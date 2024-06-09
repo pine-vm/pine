@@ -879,50 +879,29 @@ intFromValue value =
 
         BlobValue blobBytes ->
             case blobBytes of
-                [] ->
-                    Err "Empty blob does not encode an integer."
-
-                sign :: intValueBytes ->
+                sign :: firstUnsigned :: followingUnsigned ->
                     case sign of
                         4 ->
-                            intFromUnsignedBlobValue intValueBytes
+                            Ok (intFromUnsignedBlobValue followingUnsigned firstUnsigned)
 
                         2 ->
-                            Result.map negate (intFromUnsignedBlobValue intValueBytes)
+                            Ok -(intFromUnsignedBlobValue followingUnsigned firstUnsigned)
 
                         _ ->
                             Err ("Unexpected value for sign byte: " ++ String.fromInt sign)
 
+                _ ->
+                    Err "Blob needs at least two bytes to encode an integer."
 
-intFromUnsignedBlobValue : List Int -> Result String Int
-intFromUnsignedBlobValue intValueBytes =
+
+intFromUnsignedBlobValue : List Int -> Int -> Int
+intFromUnsignedBlobValue intValueBytes upper =
     case intValueBytes of
         [] ->
-            Err "Empty blob does not encode an integer."
+            upper
 
-        [ b1 ] ->
-            Ok b1
-
-        [ b1, b2 ] ->
-            Ok ((b1 * 256) + b2)
-
-        [ b1, b2, b3 ] ->
-            Ok ((b1 * 65536) + (b2 * 256) + b3)
-
-        [ b1, b2, b3, b4 ] ->
-            Ok ((b1 * 16777216) + (b2 * 65536) + (b3 * 256) + b4)
-
-        [ b1, b2, b3, b4, b5 ] ->
-            Ok ((b1 * 4294967296) + (b2 * 16777216) + (b3 * 65536) + (b4 * 256) + b5)
-
-        [ b1, b2, b3, b4, b5, b6 ] ->
-            Ok ((b1 * 1099511627776) + (b2 * 4294967296) + (b3 * 16777216) + (b4 * 65536) + (b5 * 256) + b6)
-
-        _ ->
-            Err
-                ("Failed to map to int - unsupported number of bytes: "
-                    ++ String.fromInt (List.length intValueBytes)
-                )
+        b :: rest ->
+            intFromUnsignedBlobValue rest (upper * 256 + b)
 
 
 bigIntFromValue : Value -> Result String BigInt.BigInt
@@ -1215,9 +1194,7 @@ parseKernelApplicationExpression expressionValue =
                             of
                                 Nothing ->
                                     Err
-                                        ("Unexpected value for field 'functionName': "
-                                            ++ Result.withDefault "not a string" (stringFromValue functionNameValue)
-                                        )
+                                        "Unexpected value for field 'functionName'"
 
                                 Just ( functionName, _ ) ->
                                     case
@@ -1369,7 +1346,10 @@ parseListWithExactlyTwoElements value =
                     Ok ( a, b )
 
                 _ ->
-                    Err ("Unexpected number of elements in list: Not 2 but " ++ String.fromInt (List.length list))
+                    Err
+                        ("Unexpected number of elements in list: Not 2 but "
+                            ++ String.fromInt (List.length list)
+                        )
 
 
 environmentExpr : Expression

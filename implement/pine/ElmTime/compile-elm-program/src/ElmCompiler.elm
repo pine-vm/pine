@@ -1211,12 +1211,15 @@ compileElmSyntaxExpression stackBefore elmExpression =
             compileElmFunctionOrValueLookup ( moduleName, localName ) stack
 
         Elm.Syntax.Expression.Application application ->
-            case List.map Elm.Syntax.Node.value application of
+            case application of
                 [] ->
                     Err "Invalid shape of application: Zero elements in the list"
 
-                appliedFunctionElmSyntax :: argumentsElmSyntax ->
-                    compileElmSyntaxApplication stack appliedFunctionElmSyntax argumentsElmSyntax
+                (Elm.Syntax.Node.Node _ appliedFunctionElmSyntax) :: argumentsElmSyntax ->
+                    compileElmSyntaxApplication
+                        stack
+                        appliedFunctionElmSyntax
+                        (List.map Elm.Syntax.Node.value argumentsElmSyntax)
 
         Elm.Syntax.Expression.OperatorApplication operator _ (Elm.Syntax.Node.Node _ leftExpr) (Elm.Syntax.Node.Node _ rightExpr) ->
             case searchCompileElmSyntaxOperatorOptimized stack operator leftExpr rightExpr of
@@ -2431,6 +2434,34 @@ searchCompileElmSyntaxOperatorOptimized stack operator leftExpr rightExpr =
                                 )
                             )
 
+        "::" ->
+            {-
+               The Basics.(::) operator is a simple case, because it only works on lists.
+               Therefore, we can emit a direct usage of the 'concat' kernel function.
+            -}
+            case compileElmSyntaxExpression stack leftExpr of
+                Err err ->
+                    Just (Err err)
+
+                Ok leftExprCompiled ->
+                    case compileElmSyntaxExpression stack rightExpr of
+                        Err err ->
+                            Just (Err err)
+
+                        Ok rightExprCompiled ->
+                            Just
+                                (Ok
+                                    (KernelApplicationExpression
+                                        { functionName = "concat"
+                                        , argument =
+                                            ListExpression
+                                                [ ListExpression [ leftExprCompiled ]
+                                                , rightExprCompiled
+                                                ]
+                                        }
+                                    )
+                                )
+
         _ ->
             Nothing
 
@@ -3534,6 +3565,14 @@ shouldInlineDeclaration name expression =
         True
 
     else
+        {-
+           let
+               log =
+                   Debug.log "shouldInlineDeclaration (estimatePineValueSize)"
+                       { name = name
+                       }
+           in
+        -}
         case expression of
             LiteralExpression value ->
                 estimatePineValueSize value < 50 * 1000
@@ -3584,8 +3623,11 @@ listModuleTransitiveDependenciesExcludingModules excluded allFiles file =
                     case
                         Common.listFind
                             (\candidate ->
-                                Elm.Syntax.Module.moduleName (Elm.Syntax.Node.value candidate.moduleDefinition)
-                                    == currentDependency
+                                let
+                                    (Elm.Syntax.Node.Node _ candidateModuleDefinition) =
+                                        candidate.moduleDefinition
+                                in
+                                Elm.Syntax.Module.moduleName candidateModuleDefinition == currentDependency
                             )
                             allFiles
                     of
@@ -3604,7 +3646,7 @@ listModuleTransitiveDependenciesExcludingModules excluded allFiles file =
                 Err ( currentName :: moduleNames, err )
 
             Ok ok ->
-                Ok (Common.listUnique (List.concat ok ++ [ currentName ]))
+                Ok (Common.listUnique (List.concat [ List.concat ok, [ currentName ] ]))
 
 
 getDirectDependenciesFromModule : Elm.Syntax.File.File -> Set.Set Elm.Syntax.ModuleName.ModuleName
@@ -3612,7 +3654,9 @@ getDirectDependenciesFromModule file =
     let
         explicit =
             List.map
-                (\(Elm.Syntax.Node.Node _ importSyntax) -> Elm.Syntax.Node.value importSyntax.moduleName)
+                (\(Elm.Syntax.Node.Node _ importSyntax) ->
+                    Elm.Syntax.Node.value importSyntax.moduleName
+                )
                 file.imports
 
         (Elm.Syntax.Node.Node _ moduleDefinition) =
@@ -3629,7 +3673,7 @@ getDirectDependenciesFromModule file =
                 autoImportedModulesNames
     in
     Set.fromList
-        (explicit ++ implicit)
+        (List.concat [ explicit, implicit ])
 
 
 valueFromString : String -> Pine.Value

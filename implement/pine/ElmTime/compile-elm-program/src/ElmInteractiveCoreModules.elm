@@ -59,14 +59,17 @@ type Order = LT | EQ | GT
 
 eq : a -> a -> Bool
 eq a b =
-    if isPineBlob a then
-        Pine_kernel.equal [ a, b ]
+    if Pine_kernel.equal [ a, b ] then
+        True
+
+    else if isPineBlob a then
+        False
 
     else
         if Pine_kernel.equal [ Pine_kernel.length a, Pine_kernel.length b ] then
             case a of
                 String _ ->
-                    Pine_kernel.equal [ a, b ]
+                    False
 
                 RBNode_elm_builtin _ _ _ _ _ ->
                     Pine_kernel.equal [ dictToList a, dictToList b ]
@@ -817,7 +820,7 @@ maximum list =
 
 sum : List number -> number
 sum numbers =
-    foldl (+) 0 numbers
+    foldl (\\x acc -> x + acc) 0 numbers
 
 
 append : List a -> List a -> List a
@@ -936,16 +939,16 @@ partition pred list =
 
 sort : List comparable -> List comparable
 sort list =
-    sortWith Basics.compare list
+    sortWith
+        (\\x y -> Basics.compare x y)
+        list
 
 
 sortBy : (a -> comparable) -> List a -> List a
 sortBy toComparable list =
-    let
-        compareFunc x y =
-            Basics.compare (toComparable x) (toComparable y)
-    in
-    sortWith compareFunc list
+    sortWith
+        (\\x y -> Basics.compare (toComparable x) (toComparable y))
+        list
 
 
 sortWith : (a -> a -> Order) -> List a -> List a
@@ -962,7 +965,10 @@ sortWith compareFunc list =
                 ( left, right ) =
                     sortWithSplit list
             in
-            sortWithMerge (sortWith compareFunc left) (sortWith compareFunc right) compareFunc
+            sortWithMerge
+                (sortWith compareFunc left)
+                (sortWith compareFunc right)
+                compareFunc
 
 
 sortWithSplit : List a -> ( List a, List a )
@@ -979,7 +985,7 @@ sortWithSplit list =
                 ( left, right ) =
                     sortWithSplit rest
             in
-            ( cons x left, cons y right )
+            (Pine_kernel.concat [ [ x ], left], Pine_kernel.concat [ [ y ], right])
 
 
 sortWithMerge : List a -> List a -> (a -> a -> Order) -> List a
@@ -994,10 +1000,10 @@ sortWithMerge left right compareFunc =
         ( x :: xs, y :: ys ) ->
             case compareFunc x y of
                 LT ->
-                    cons x (sortWithMerge xs right compareFunc)
+                    Pine_kernel.concat [ [ x ], sortWithMerge xs right compareFunc ]
 
                 _ ->
-                    cons y (sortWithMerge left ys compareFunc)
+                    Pine_kernel.concat [ [ y ], sortWithMerge left ys compareFunc ]
 
 """
     , """
