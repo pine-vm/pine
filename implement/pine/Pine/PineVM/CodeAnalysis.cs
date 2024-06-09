@@ -487,7 +487,10 @@ public class CodeAnalysis
                  * including ones that are not reachable in the actual execution.
                  * In this case, classify the environment as unconstrained.
                  * */
-                .EvaluateExpressionDefault(parseSubExpr.ParseAndEvalExpr.environment, environment)
+                .EvaluateExpressionDefault(
+                    parseSubExpr.ParseAndEvalExpr.environment,
+                    environment,
+                    config: new PineVM.EvaluationConfig(ParseAndEvalCountLimit: 100))
                 .WithDefault(null);
             }
             catch

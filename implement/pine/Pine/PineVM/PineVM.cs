@@ -27,7 +27,15 @@ public class PineVM : IPineVM
 
     private IDictionary<EvalCacheEntryKey, PineValue>? EvalCache { init; get; }
 
-    private readonly Action<Expression, PineValue, TimeSpan, PineValue>? reportFunctionApplication;
+    private readonly Action<EvaluationReport>? reportFunctionApplication;
+
+    public record EvaluationReport(
+        PineValue ExpressionValue,
+        Expression Expression,
+        PineValue Environment,
+        long ParseAndEvalCount,
+        TimeSpan ElapsedTime,
+        PineValue ReturnValue);
 
     public static PineVM Construct(
         IReadOnlyDictionary<PineValue, Func<EvalExprDelegate, PineValue, Result<string, PineValue>>>? parseExpressionOverrides = null,
@@ -55,7 +63,7 @@ public class PineVM : IPineVM
     public PineVM(
         OverrideParseExprDelegate? overrideParseExpression = null,
         IDictionary<EvalCacheEntryKey, PineValue>? evalCache = null,
-        Action<Expression, PineValue, TimeSpan, PineValue>? reportFunctionApplication = null)
+        Action<EvaluationReport>? reportFunctionApplication = null)
     {
         parseExpressionDelegate =
             overrideParseExpression
@@ -69,7 +77,11 @@ public class PineVM : IPineVM
 
     public Result<string, PineValue> EvaluateExpression(
         Expression expression,
-        PineValue environment) => EvaluateExpressionDefault(expression, environment);
+        PineValue environment) =>
+        EvaluateExpressionDefault(
+            expression,
+            environment,
+            config: new EvaluationConfig(ParseAndEvalCountLimit: null));
 
     public record StackFrameInstructions(
         IReadOnlyList<StackInstruction> Instructions)
@@ -104,6 +116,7 @@ public class PineVM : IPineVM
         StackFrameInstructions Instructions,
         PineValue EnvironmentValue,
         Memory<PineValue> InstructionsResultValues,
+        long BeginParseAndEvalCount,
         long? BeginTimestamp)
     {
         public int InstructionPointer { get; set; } = 0;
@@ -114,7 +127,8 @@ public class PineVM : IPineVM
     StackFrame StackFrameFromExpression(
         PineValue? expressionValue,
         Expression expression,
-        PineValue environment)
+        PineValue environment,
+        long BeginParseAndEvalCount)
     {
         var instructions = InstructionsFromExpression(expression);
 
@@ -131,6 +145,7 @@ public class PineVM : IPineVM
             instructions,
             EnvironmentValue: environment,
             new PineValue[instructions.Instructions.Count],
+            BeginParseAndEvalCount: BeginParseAndEvalCount,
             BeginTimestamp: beginTimestamp);
     }
 
@@ -522,17 +537,24 @@ public class PineVM : IPineVM
             argument: skipListExpr.List[1]);
     }
 
+    public record EvaluationConfig(
+        int? ParseAndEvalCountLimit);
+
     public Result<string, PineValue> EvaluateExpressionDefault(
         Expression rootExpression,
-        PineValue rootEnvironment)
+        PineValue rootEnvironment,
+        EvaluationConfig config)
     {
+        int parseAndEvalCount = 0;
+
         var stack = new Stack<StackFrame>();
 
         stack.Push(
             StackFrameFromExpression(
                 expressionValue: null,
                 rootExpression,
-                rootEnvironment));
+                rootEnvironment,
+                BeginParseAndEvalCount: parseAndEvalCount));
 
         while (true)
         {
@@ -556,7 +578,8 @@ public class PineVM : IPineVM
                     return "Return instruction at beginning of frame";
                 }
 
-                var frameReturnValue = currentFrame.InstructionsResultValues.Span[currentFrame.InstructionPointer - 1];
+                var frameReturnValue =
+                    currentFrame.InstructionsResultValues.Span[currentFrame.InstructionPointer - 1];
 
                 if (currentFrame.ExpressionValue is { } currentFrameExprValue && EvalCache is { } evalCache &&
                     currentFrame.BeginTimestamp is { } beginTimestamp)
@@ -565,14 +588,19 @@ public class PineVM : IPineVM
 
                     if (frameElapsedTime.TotalMilliseconds > 3)
                     {
-                        evalCache.TryAdd(new EvalCacheEntryKey(currentFrameExprValue, currentFrame.EnvironmentValue), frameReturnValue);
+                        evalCache.TryAdd(
+                            new EvalCacheEntryKey(currentFrameExprValue, currentFrame.EnvironmentValue),
+                            frameReturnValue);
                     }
 
                     reportFunctionApplication?.Invoke(
-                        currentFrame.Expression,
-                        currentFrame.EnvironmentValue,
-                        frameElapsedTime,
-                        frameReturnValue);
+                        new EvaluationReport(
+                            ExpressionValue: currentFrameExprValue,
+                            currentFrame.Expression,
+                            currentFrame.EnvironmentValue,
+                            ParseAndEvalCount: parseAndEvalCount - currentFrame.BeginParseAndEvalCount,
+                            frameElapsedTime,
+                            frameReturnValue));
                 }
 
                 stack.Pop();
@@ -594,6 +622,15 @@ public class PineVM : IPineVM
             {
                 if (evalInstr.Expression is Expression.ParseAndEvalExpression parseAndEval)
                 {
+                    {
+                        ++parseAndEvalCount;
+
+                        if (config.ParseAndEvalCountLimit is { } limit && parseAndEvalCount > limit)
+                        {
+                            return "Parse and eval count limit exceeded: " + limit;
+                        }
+                    }
+
                     var evalExprValueResult =
                         EvaluateExpressionDefaultLessStack(
                             parseAndEval.expression,
@@ -655,7 +692,12 @@ public class PineVM : IPineVM
                         throw new NotImplementedException("Unexpected result type: " + parseResult.GetType().FullName);
                     }
 
-                    stack.Push(StackFrameFromExpression(expressionValue: evalExprValueOk.Value, parseOk.Value, evalEnvOk.Value));
+                    stack.Push(
+                        StackFrameFromExpression(
+                            expressionValue: evalExprValueOk.Value,
+                            parseOk.Value,
+                            evalEnvOk.Value,
+                            BeginParseAndEvalCount: parseAndEvalCount));
 
                     continue;
                 }
@@ -698,7 +740,8 @@ public class PineVM : IPineVM
                                 StackFrameFromExpression(
                                     expressionValue: null,
                                     expressionToContinueWith,
-                                    currentFrame.EnvironmentValue));
+                                    currentFrame.EnvironmentValue,
+                                    BeginParseAndEvalCount: parseAndEvalCount));
 
                             continue;
                         }
@@ -908,7 +951,13 @@ public class PineVM : IPineVM
 
         if (expression is Expression.DelegatingExpression delegatingExpr)
         {
-            return delegatingExpr.Delegate.Invoke(EvaluateExpressionDefault, environment);
+            return delegatingExpr.Delegate.Invoke(
+                (expr, envValue) =>
+                EvaluateExpressionDefault(
+                    expression,
+                    envValue,
+                    config: new EvaluationConfig(ParseAndEvalCountLimit: null)),
+                environment);
         }
 
         if (expression is Expression.StackReferenceExpression stackRef)

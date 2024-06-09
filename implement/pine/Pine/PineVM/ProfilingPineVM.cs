@@ -10,7 +10,10 @@ namespace Pine.PineVM;
 public record ExpressionEnvUsageRecord(
     PineValue Environment,
     List<System.TimeSpan> OrigEvalDurations,
-    System.Lazy<Result<string, IReadOnlyList<ExpressionUsageAnalysis>>> Analysis);
+    System.Lazy<Result<string, IReadOnlyList<ExpressionUsageAnalysis>>> Analysis)
+{
+    public long ParseAndEvalCountMax { get; set; }
+}
 
 public record ExpressionUsageProfile(int UsageCount);
 
@@ -93,8 +96,12 @@ public class ProfilingPineVM
                 overrideParseExpression: overrideParseExpression,
                 evalCache: evalCache,
                 reportFunctionApplication:
-                (expression, envValue, elapsedTime, _) =>
+                funcApplReport =>
                 {
+                    var originalExpression =
+                    ExpressionEncoding.ParseExpressionFromValueDefault(funcApplReport.ExpressionValue)
+                    .Extract(err => throw new System.Exception(err));
+
                     // if (DynamicPGOShare.ShouldIncludeExpressionInCompilation(expression))
                     // if (expression is Expression.ParseAndEvalExpression parseAndEval)
                     {
@@ -103,19 +110,17 @@ public class ProfilingPineVM
                             var analysisOuterStartTime = System.Diagnostics.Stopwatch.GetTimestamp();
 
                             {
-                                var analysisInnerStartTime = System.Diagnostics.Stopwatch.GetTimestamp();
-
                                 try
                                 {
                                     return
-                                        (Result<string, IReadOnlyList<ExpressionUsageAnalysis>>)
-                                        AnalyzeExpressionUsage(
-                                            expression,
-                                            envValue,
-                                            exprAnalysisMutatedCache,
-                                            parseExpressionForAnalysis: parseExpressionForAnalysis,
-                                            parseExpressionForEval: parseExpressionForEval,
-                                            evalCache: analysisEvalCache);
+                                        Result<string, IReadOnlyList<ExpressionUsageAnalysis>>.ok(
+                                            AnalyzeExpressionUsage(
+                                                originalExpression,
+                                                funcApplReport.Environment,
+                                                exprAnalysisMutatedCache,
+                                                parseExpressionForAnalysis: parseExpressionForAnalysis,
+                                                parseExpressionForEval: parseExpressionForEval,
+                                                evalCache: analysisEvalCache));
                                 }
                                 finally
                                 {
@@ -127,31 +132,35 @@ public class ProfilingPineVM
 
                         var exprUsageAlreadyInDict =
                         expressionUsages.TryGetValue(
-                            key: expression,
+                            key: originalExpression,
                             out var exprUsageRecord);
 
                         exprUsageRecord ??= [];
 
                         var envUsageAlreadyInDict =
                             exprUsageRecord.TryGetValue(
-                                key: envValue,
+                                key: funcApplReport.Environment,
                                 out var envContainer);
 
                         envContainer ??= new ExpressionEnvUsageRecord(
-                            Environment: envValue,
+                            Environment: funcApplReport.Environment,
                             OrigEvalDurations: [],
                             Analysis: new System.Lazy<Result<string, IReadOnlyList<ExpressionUsageAnalysis>>>(runAnalysis));
 
-                        envContainer.OrigEvalDurations.Add(elapsedTime);
+                        envContainer.OrigEvalDurations.Add(funcApplReport.ElapsedTime);
+
+                        envContainer.ParseAndEvalCountMax = System.Math.Max(
+                            envContainer.ParseAndEvalCountMax,
+                            funcApplReport.ParseAndEvalCount);
 
                         if (!envUsageAlreadyInDict)
                         {
-                            exprUsageRecord[envValue] = envContainer;
+                            exprUsageRecord[funcApplReport.Environment] = envContainer;
                         }
 
                         if (!exprUsageAlreadyInDict)
                         {
-                            expressionUsages[expression] = exprUsageRecord;
+                            expressionUsages[originalExpression] = exprUsageRecord;
                         }
                     }
                 });

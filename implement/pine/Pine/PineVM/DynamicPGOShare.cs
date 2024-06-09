@@ -17,6 +17,8 @@ namespace Pine.PineVM;
 /// </summary>
 public class DynamicPGOShare : IDisposable
 {
+    public int LimitSampleCountPerSubmissionDefault { init; get; }
+
     public int CompiledExpressionsCountLimit { init; get; }
 
     private record SubmissionProfileMutableContainer(
@@ -43,14 +45,18 @@ public class DynamicPGOShare : IDisposable
 
     public DynamicPGOShare()
         :
-        this(compiledExpressionsCountLimit: 100)
+        this(
+            compiledExpressionsCountLimit: 100,
+            limitSampleCountPerSubmissionDefault: 100)
     {
     }
 
     public DynamicPGOShare(
-        int compiledExpressionsCountLimit)
+        int compiledExpressionsCountLimit,
+        int limitSampleCountPerSubmissionDefault)
     {
         CompiledExpressionsCountLimit = compiledExpressionsCountLimit;
+        LimitSampleCountPerSubmissionDefault = limitSampleCountPerSubmissionDefault;
 
         dynamicCompilationTask = Task.Run(() =>
         {
@@ -73,6 +79,7 @@ public class DynamicPGOShare : IDisposable
                 expression,
                 environment,
                 initialProfileAggregationDelay: TimeSpan.FromSeconds(8),
+                overrideLimitSampleCountPerSubmission: null,
                 overrideParseExpression,
                 evalCache: evalCache));
     }
@@ -86,9 +93,12 @@ public class DynamicPGOShare : IDisposable
         Expression expression,
         PineValue environment,
         TimeSpan initialProfileAggregationDelay,
+        int? overrideLimitSampleCountPerSubmission,
         OverrideParseExprDelegate? overrideParseExpression = null,
         IDictionary<EvalCacheEntryKey, PineValue>? evalCache = null)
     {
+        var limitSampleCount = overrideLimitSampleCountPerSubmission ?? LimitSampleCountPerSubmissionDefault;
+
         var profileContainer =
             new SubmissionProfileMutableContainer(
                 Iterations: new ConcurrentQueue<IReadOnlyDictionary<ExpressionUsageAnalysis, ExpressionUsageProfile>>());
@@ -113,8 +123,13 @@ public class DynamicPGOShare : IDisposable
             {
                 var exprUsageSamples = profilingEvalTask.ProfilingPineVM.ExprEnvUsagesFlat;
 
+                var exprUsageSamplesIncluded =
+                SubsequenceWithEvenDistribution(
+                    [.. exprUsageSamples],
+                    limitSampleCount);
+
                 var expressionUsages =
-                exprUsageSamples
+                exprUsageSamplesIncluded
                 .Select(sample => sample.Value.Analysis.Value.ToMaybe())
                 .WhereNotNothing()
                 .SelectMany(usage => usage)
@@ -150,6 +165,18 @@ public class DynamicPGOShare : IDisposable
         }
     }
 
+    public static IReadOnlyList<T> SubsequenceWithEvenDistribution<T>(
+        IReadOnlyList<T> source,
+        int limitSampleCount) =>
+        source.Count <= limitSampleCount
+        ?
+        [.. source]
+        :
+        [..source
+        .Chunk(source.Count / limitSampleCount)
+        .Select(chunk => chunk.First())
+        .Take(limitSampleCount)];
+
     private Task WaitForNextCompletedCompilation(CancellationToken cancellationToken) =>
         Task.Run(() =>
         {
@@ -176,6 +203,27 @@ public class DynamicPGOShare : IDisposable
             .SelectWhereNotNull(compilation => compilation.DictionaryResult.WithDefault(null))
             .FirstOrDefault();
 
+        return
+            StartEvaluateExpressionTask(
+                expression,
+                environment,
+                CancellationTokenSource.CreateLinkedTokenSource(
+                    cancellationTokenSource.Token,
+                    disposedCancellationTokenSource.Token),
+                overrideParseExpression,
+                evalCache,
+                compiledParseExpressionOverrides);
+    }
+
+    public static EvaluateExpressionProfilingTask StartEvaluateExpressionTask(
+        Expression expression,
+        PineValue environment,
+        CancellationTokenSource cancellationTokenSource,
+        OverrideParseExprDelegate? overrideParseExpression = null,
+        IDictionary<EvalCacheEntryKey, PineValue>? evalCache = null,
+        IReadOnlyDictionary<PineValue, Func<EvalExprDelegate, PineValue, Result<string, PineValue>>>?
+        compiledParseExpressionOverrides = null)
+    {
         var parseExpressionOverridesDict =
             !(0 < compiledParseExpressionOverrides?.Count)
             ?
@@ -242,16 +290,16 @@ public class DynamicPGOShare : IDisposable
         var compilation =
             GetOrCreateCompilationForProfiles(
                 inputProfiles,
-                limitNumber: CompiledExpressionsCountLimit,
+                limitCompiledExpressionsCount: CompiledExpressionsCountLimit,
                 previousCompilations: [.. completedCompilations]);
 
         if (!completedCompilations.Contains(compilation))
             completedCompilations.Enqueue(compilation);
     }
 
-    private static Compilation GetOrCreateCompilationForProfiles(
+    public static Compilation GetOrCreateCompilationForProfiles(
         IReadOnlyList<IReadOnlyDictionary<ExpressionUsageAnalysis, ExpressionUsageProfile>> inputProfiles,
-        int limitNumber,
+        int limitCompiledExpressionsCount,
         IReadOnlyList<Compilation> previousCompilations)
     {
         var totalStopwatch = System.Diagnostics.Stopwatch.StartNew();
@@ -261,7 +309,7 @@ public class DynamicPGOShare : IDisposable
 
         var expressionsToCompile =
             FilterAndRankExpressionProfilesForCompilation(aggregateExpressionsProfiles)
-            .Take(limitNumber)
+            .Take(limitCompiledExpressionsCount)
             .Select(expressionAndProfile => expressionAndProfile.Key)
             .ToImmutableHashSet();
 
