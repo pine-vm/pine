@@ -377,9 +377,7 @@ public class PineVM : IPineVM
                 if (ExpressionLargeEnoughForCSE(expression) &&
                 allExpressionsExceptUnderDuplicateCount.TryGetValue(expression, out var exprInstCount) && 1 < exprInstCount)
                 {
-                    return
-                    (IReadOnlyList<StackInstruction>)
-                    [StackInstruction.Eval(expression)];
+                    return [StackInstruction.Eval(expression)];
                 }
 
                 return [];
@@ -390,80 +388,67 @@ public class PineVM : IPineVM
     }
 
     public static IEnumerable<Expression> EnumerateComponentsOrderedForCompilation(
-        Expression expression,
+        Expression rootExpression,
         Func<Expression, bool>? skipDescendants)
     {
-        if (skipDescendants?.Invoke(expression) ?? false)
-        {
-            yield return expression;
-            yield break;
-        }
+        var stack = new Stack<Expression>();
+        var deepestDescendants = new Stack<Expression>();
 
-        if (expression is Expression.ListExpression list)
+        stack.Push(rootExpression);
+
+        while (stack.TryPop(out var expression))
         {
-            foreach (var item in list.List)
+            if (skipDescendants?.Invoke(expression) ?? false)
             {
-                foreach (var descendant in EnumerateComponentsOrderedForCompilation(item, skipDescendants))
+                deepestDescendants.Push(expression);
+                continue;
+            }
+
+            if (expression is Expression.ListExpression list)
+            {
+                foreach (var item in list.List)
                 {
-                    yield return descendant;
+                    stack.Push(item);
                 }
             }
+
+            if (expression is Expression.ParseAndEvalExpression parseAndEval)
+            {
+                stack.Push(parseAndEval.expression);
+                stack.Push(parseAndEval.environment);
+            }
+
+            if (expression is Expression.KernelApplicationExpression kernelApp)
+            {
+                stack.Push(kernelApp.argument);
+            }
+
+            if (expression is Expression.ConditionalExpression conditional)
+            {
+                stack.Push(conditional.condition);
+
+                /*
+                 *
+                 * For now, we create a new stack frame for each conditional expression.
+                 * Therefore do not descend into the branches of the conditional expression.
+
+                stack.Push(conditional.ifTrue);
+                stack.Push(conditional.ifFalse);
+                */
+            }
+
+            if (expression is Expression.StringTagExpression stringTag)
+            {
+                stack.Push(stringTag.tagged);
+            }
+
+            deepestDescendants.Push(expression);
         }
 
-        if (expression is Expression.ParseAndEvalExpression parseAndEval)
+        while (deepestDescendants.Count > 0)
         {
-            foreach (var descendant in EnumerateComponentsOrderedForCompilation(parseAndEval.expression, skipDescendants))
-            {
-                yield return descendant;
-            }
-
-            foreach (var descendant in EnumerateComponentsOrderedForCompilation(parseAndEval.environment, skipDescendants))
-            {
-                yield return descendant;
-            }
+            yield return deepestDescendants.Pop();
         }
-
-        if (expression is Expression.KernelApplicationExpression kernelApp)
-        {
-            foreach (var descendant in EnumerateComponentsOrderedForCompilation(kernelApp.argument, skipDescendants))
-            {
-                yield return descendant;
-            }
-        }
-
-        if (expression is Expression.ConditionalExpression conditional)
-        {
-            foreach (var descendant in EnumerateComponentsOrderedForCompilation(conditional.condition, skipDescendants))
-            {
-                yield return descendant;
-            }
-
-            /*
-             *
-             * For now, we create a new stack frame for each conditional expression.
-             * Therefore do not descend into the branches of the conditional expression.
-
-            foreach (var descendant in EnumerateComponentsOrderedForCompilation(conditional.ifTrue, skipDescendants))
-            {
-                yield return descendant;
-            }
-
-            foreach (var descendant in EnumerateComponentsOrderedForCompilation(conditional.ifFalse, skipDescendants))
-            {
-                yield return descendant;
-            }
-            */
-        }
-
-        if (expression is Expression.StringTagExpression stringTag)
-        {
-            foreach (var descendant in EnumerateComponentsOrderedForCompilation(stringTag.tagged, skipDescendants))
-            {
-                yield return descendant;
-            }
-        }
-
-        yield return expression;
     }
 
     static bool ExpressionLargeEnoughForCSE(Expression expression)
