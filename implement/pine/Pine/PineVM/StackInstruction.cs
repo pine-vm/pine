@@ -17,13 +17,9 @@ public abstract record StackInstruction
         Expression Expression)
         : StackInstruction;
 
-    public record ConditionalJumpRefInstruction(
-        Expression Condition,
-        Expression IfTrueExpr)
-        : StackInstruction;
-
     public record ConditionalJumpInstruction(
         Expression Condition,
+        int IfFalseOffset,
         int IfTrueOffset)
         : StackInstruction;
 
@@ -44,21 +40,6 @@ public abstract record StackInstruction
 
                 return new EvalInstruction(newExpression);
 
-            case ConditionalJumpRefInstruction conditionalJumpRef:
-                {
-                    var newCondition =
-                        CompilePineToDotNet.ReducePineExpression.TransformPineExpressionWithOptionalReplacement(
-                            findReplacement,
-                            conditionalJumpRef.Condition).expr;
-
-                    var newIfTrueExpr =
-                        CompilePineToDotNet.ReducePineExpression.TransformPineExpressionWithOptionalReplacement(
-                            findReplacement,
-                            conditionalJumpRef.IfTrueExpr).expr;
-
-                    return new ConditionalJumpRefInstruction(newCondition, newIfTrueExpr);
-                }
-
             case ConditionalJumpInstruction conditionalJump:
                 {
                     var newCondition =
@@ -66,10 +47,13 @@ public abstract record StackInstruction
                             findReplacement,
                             conditionalJump.Condition).expr;
 
-                    return new ConditionalJumpInstruction(newCondition, conditionalJump.IfTrueOffset);
+                    return new ConditionalJumpInstruction(
+                        newCondition,
+                        IfFalseOffset: conditionalJump.IfFalseOffset,
+                        IfTrueOffset: conditionalJump.IfTrueOffset);
                 }
 
-            case ReturnInstruction returnInstruction:
+            case ReturnInstruction:
                 return Return;
 
             default:
