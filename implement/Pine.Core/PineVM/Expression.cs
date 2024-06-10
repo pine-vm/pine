@@ -168,73 +168,62 @@ public abstract record Expression
         EnumerateSelfAndDescendants(expression, skipDescendants: null);
 
     public static IEnumerable<Expression> EnumerateSelfAndDescendants(
-        Expression expression,
+        Expression rootExpression,
         Func<Expression, bool>? skipDescendants)
     {
-        yield return expression;
+        var stack = new Stack<Expression>([rootExpression]);
 
-        if (skipDescendants?.Invoke(expression) == true)
-            yield break;
-
-        switch (expression)
+        while (stack.TryPop(out var expression))
         {
-            case EnvironmentExpression:
-            case LiteralExpression:
-            case DelegatingExpression:
-                break;
+            yield return expression;
 
-            case ListExpression list:
-                foreach (var item in list.List)
-                {
-                    foreach (var descendant in EnumerateSelfAndDescendants(item, skipDescendants))
+            if (skipDescendants?.Invoke(expression) ?? false)
+                continue;
+
+            switch (expression)
+            {
+                case EnvironmentExpression:
+                case LiteralExpression:
+                case DelegatingExpression:
+                    break;
+
+                case ListExpression list:
+                    foreach (var item in list.List)
                     {
-                        yield return descendant;
+                        stack.Push(item);
                     }
-                }
-                break;
+                    break;
 
-            case ParseAndEvalExpression decodeAndEvaluate:
-                foreach (var descendant in EnumerateSelfAndDescendants(decodeAndEvaluate.expression, skipDescendants))
-                {
-                    yield return descendant;
-                }
-                foreach (var descendant in EnumerateSelfAndDescendants(decodeAndEvaluate.environment, skipDescendants))
-                {
-                    yield return descendant;
-                }
-                break;
+                case ParseAndEvalExpression parseAndEvaluate:
 
-            case KernelApplicationExpression kernelApplication:
-                foreach (var descendant in EnumerateSelfAndDescendants(kernelApplication.argument, skipDescendants))
-                {
-                    yield return descendant;
-                }
-                break;
+                    stack.Push(parseAndEvaluate.expression);
+                    stack.Push(parseAndEvaluate.environment);
 
-            case ConditionalExpression conditional:
-                foreach (var descendant in EnumerateSelfAndDescendants(conditional.condition, skipDescendants))
-                {
-                    yield return descendant;
-                }
-                foreach (var descendant in EnumerateSelfAndDescendants(conditional.ifTrue, skipDescendants))
-                {
-                    yield return descendant;
-                }
-                foreach (var descendant in EnumerateSelfAndDescendants(conditional.ifFalse, skipDescendants))
-                {
-                    yield return descendant;
-                }
-                break;
+                    break;
 
-            case StringTagExpression stringTag:
-                foreach (var descendant in EnumerateSelfAndDescendants(stringTag.tagged, skipDescendants))
-                {
-                    yield return descendant;
-                }
-                break;
+                case KernelApplicationExpression kernelApplication:
 
-            default:
-                throw new NotImplementedException();
+                    stack.Push(kernelApplication.argument);
+
+                    break;
+
+                case ConditionalExpression conditional:
+
+                    stack.Push(conditional.condition);
+                    stack.Push(conditional.ifFalse);
+                    stack.Push(conditional.ifTrue);
+
+                    break;
+
+                case StringTagExpression stringTag:
+
+                    stack.Push(stringTag.tagged);
+
+                    break;
+
+                default:
+                    throw new NotImplementedException("Unknown expression type: " + expression.GetType().FullName);
+            }
         }
     }
 }
