@@ -11,6 +11,8 @@ public static class ElmValueEncoding
     public static Result<string, ElmValue> PineValueAsElmValue(
         PineValue pineValue)
     {
+        ArgumentNullException.ThrowIfNull(pineValue);
+
         if (pineValue == PineVMValues.TrueValue)
             return ElmValue.TrueValue;
 

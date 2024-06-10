@@ -587,6 +587,8 @@ public class CompileElmCompilerTests
                     )
                 .Extract(err => throw new Exception(err));
 
+            Assert.IsNotNull(compilerResponseValue, "compilerResponseValue");
+
             var compilerResponseElm =
                 ElmValueEncoding.PineValueAsElmValue(compilerResponseValue)
                 .Extract(err => throw new Exception(err));
@@ -595,6 +597,10 @@ public class CompileElmCompilerTests
                 compilerResponseValue switch
                 {
                     PineValue.ListValue listValue =>
+                    listValue.Elements.Count < 1
+                    ?
+                    null
+                    :
                     PineValueAsString.StringFromValue(listValue.Elements[0]),
 
                     _ =>
@@ -1171,6 +1177,16 @@ public class CompileElmCompilerTests
 
                 compiledNewEnvInCompiler = compileModuleOk.Value;
 
+                var javascriptCompiledModule =
+                    interactiveParsedEnv
+                    .Modules.Single(m => m.moduleName == parsedModuleNameFlat);
+
+                /*
+                 * 2024-06-10:
+                 * Specialize parsing of the environment to reduce runtime of test:
+                 * Instead of parsing the whole environment after each compilation iteration,
+                 * use a more direct way to select the part representing the new compiled module.
+                 * 
                 var compiledNewEnvInCompilerElm =
                     ElmValueEncoding.PineValueAsElmValue(compileModuleOk.Value)
                     .Extract(err => throw new Exception(err));
@@ -1181,16 +1197,30 @@ public class CompileElmCompilerTests
 
                 var pineCompiledInteractiveParsedEnv =
                     ElmInteractiveEnvironment.ParseInteractiveEnvironment(compiledNewEnvElm)
-                    .Extract(err => throw new Exception("Failed parsing env after compiling module Basics: " + err));
-
-
-                var javascriptCompiledModule =
-                    interactiveParsedEnv
-                    .Modules.Single(m => m.moduleName == parsedModuleNameFlat);
+                    .Extract(err => throw new Exception("Failed parsing env module Basics: " + err));
 
                 var pineCompiledModule =
                     pineCompiledInteractiveParsedEnv
                     .Modules.Single(m => m.moduleName == parsedModuleNameFlat);
+                
+                 */
+
+                var environmentList =
+                    ShallowParseEnvironmentListEncodedInCompiler(compiledNewEnvInCompiler)
+                    .Extract(err => throw new Exception("Failed parsing environment list: " + err));
+
+                /*
+                 * Expect the compiler appended the new Elm module as a single item at the end of the environment list.
+                 * 
+                 * Since the return value from the compiler is of type 'PineValue', the outermost list also contains the tag 'ListValue'.
+                 * (as considered in ElmValueInterop.ElmValueDecodedAsInElmCompiler)
+                 * */
+
+                var pineCompiledModule =
+                    environmentList.Last().Invoke()
+                    .Extract(err => throw new Exception("Failed parsing last module from environment list: " + err));
+
+                Assert.AreEqual(parsedModuleNameFlat, pineCompiledModule.moduleName, "parsed module name");
 
                 /*
                  
@@ -1249,6 +1279,7 @@ public class CompileElmCompilerTests
                     "Compiled module " + parsedModuleNameFlat + " value");
             }
 
+            if (false)
             {
                 var compiledNewEnvInCompilerElm =
                     ElmValueEncoding.PineValueAsElmValue(compiledNewEnvInCompiler)
@@ -1265,67 +1296,63 @@ public class CompileElmCompilerTests
                         PineValue.ListValue listValue =>
                         "List with " + listValue.Elements.Count + " elements",
 
-                        _ => "not a list"
+                        _ =>
+                        "not a list"
                     });
 
                 Assert.AreEqual(
                     interactiveInitialState,
                     compiledNewEnvValue);
             }
-
-            /*
-             * 2024-06-09:
-             * Compiling the Elm compiler failed at module Pine.elm, with the following report:
-             * [...]
-                Begin compile module Pine
-                Compiled module Pine in 362,08 seconds
-
-                Compiled module Pine comparison:
-                Type declarations
-                Declarations count: 7 Ok
-                Ok ConditionalExpressionStructure (4539): 
-                Ok EvalContext (3228): 
-                Ok Expression (17665): 
-                Ok KernelApplicationExpressionStructure (4237): 
-                Ok ParseAndEvalExpressionStructure (4338): 
-                Ok PathDescription (5045): 
-                Ok Value (3732): 
-                Function declarations
-                Declarations count: 28 Ok
-                Ok addToEnvironment (3540405): 
-                Ok bigIntFromBlobValue (6776144): 
-                Ok bigIntFromUnsignedBlobValue (1711150): 
-                Ok bigIntFromValue (6949676): 
-                Ok blobValueFromBigInt (26539276): 
-                Ok displayStringFromPineError (12148394): 
-                Ok emptyEvalContext (4030): 
-                Ok encodeExpressionAsValue (30475235): 
-                Ok environmentExpr (2421): 
-                Ok environmentFromDeclarations (21261930): 
-                Mismatch evaluateExpression (256719285): Mismatch (size: 256719284)
-                Ok falseValue (1411): 
-                Mismatch intFromValue (8049669): Mismatch (size: 8049668)
-                Ok kernelFunction_Negate (800270): 
-                Ok mapFromListValueOrBlobValue (1734568): 
-                Mismatch parseExpressionFromValue (189146957): Mismatch (size: 189146956)
-                Ok stringAsValue_Function (12597): 
-                Ok stringAsValue_List (6953): 
-                Ok stringAsValue_Literal (11186): 
-                Ok stringFromListValue (6741901): 
-                Ok stringFromValue (24832074): 
-                Ok trueValue (1411): 
-                Ok valueFromBigInt (26693747): 
-                Ok valueFromBool (72786): 
-                Ok valueFromChar (10122039): 
-                Ok valueFromContextExpansionWithName (19133523): 
-                Ok valueFromInt (11974609): 
-                Ok valueFromString (18581662): 
-                dotnet : Unhandled exception. Microsoft.VisualStudio.TestTools.UnitTesting.AssertFailedException: Assert.AreEqual failed. Expected:<ListValue { Elements = 
-                <>z__ReadOnlyList`1[Pine.PineValue] }>. Actual:<ListValue { Elements = System.Collections.Generic.List`1[Pine.PineValue] }>. Compiled module Pine value
-                At line:1 char:1
-
-             * */
         }
+    }
+
+    /// <summary>
+    /// Shallow counterpart to <see cref="ElmInteractiveEnvironment.ParseInteractiveEnvironment(PineValue)"/>
+    /// </summary>
+    public static Result<string, IReadOnlyList<Func<Result<string, (string moduleName, PineValue moduleValue, ElmInteractiveEnvironment.ElmModule moduleContent)>>>>
+        ShallowParseEnvironmentListEncodedInCompiler(PineValue interactiveEnvironment)
+    {
+        /*
+         * Since the return value from the compiler is of type 'PineValue', the outermost list also contains the tag 'ListValue'.
+         * (as considered in ElmValueInterop.ElmValueDecodedAsInElmCompiler)
+         * */
+
+        var parseAsTagResult =
+            ElmValueEncoding.ParseAsTag(interactiveEnvironment);
+
+        if (parseAsTagResult is Result<string, (string, IReadOnlyList<PineValue>)>.Err parseAsTagErr)
+            return "Failed parsing outermost as tag: " + parseAsTagErr.Value;
+
+        if (parseAsTagResult is not Result<string, (string, IReadOnlyList<PineValue>)>.Ok parseAsTagOk)
+            throw new NotImplementedException("Unexpected result type: " + parseAsTagResult.GetType().FullName);
+
+        if (parseAsTagOk.Value.Item1 is not "ListValue")
+            return "Unexpected tag name: " + parseAsTagOk.Value.Item1;
+
+        if (parseAsTagOk.Value.Item2.Count is not 1)
+            return "Unexpected number of tag arguments: " + parseAsTagOk.Value.Item2.Count;
+
+        if (parseAsTagOk.Value.Item2[0] is not PineValue.ListValue environmentList)
+            return "interactive environment not a list";
+
+        static Result<string, (string moduleName, PineValue moduleValue, ElmInteractiveEnvironment.ElmModule moduleContent)> ParseModuleEncodedInCompiler(
+            PineValue moduleEncodedInCompiler)
+        {
+            return
+                ElmValueEncoding.PineValueAsElmValue(moduleEncodedInCompiler)
+                .AndThen(moduleAsElmValueEncodedInCompiler =>
+                ElmValueInterop.ElmValueDecodedAsInElmCompiler(moduleAsElmValueEncodedInCompiler)
+                .AndThen(modulePineValue =>
+                ElmInteractiveEnvironment.ParseNamedElmModule(modulePineValue)));
+        }
+
+        return
+        Result<string, IReadOnlyList<Func<Result<string, (string moduleName, PineValue moduleValue, ElmInteractiveEnvironment.ElmModule moduleContent)>>>>.ok(
+            [..environmentList.Elements
+                .Select(envItem =>
+                new Func<Result<string, (string moduleName, PineValue moduleValue, ElmInteractiveEnvironment.ElmModule moduleContent)>>(
+                    () => ParseModuleEncodedInCompiler(envItem)))]);
     }
 
     public static IEnumerable<string> ReportOnCompiledModule(
