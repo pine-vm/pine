@@ -631,43 +631,21 @@ public class PineVM : IPineVM
                         }
                     }
 
-                    var evalExprValueResult =
+                    var expressionValue =
                         EvaluateExpressionDefaultLessStack(
                             parseAndEval.expression,
                             currentFrame.EnvironmentValue,
                             stackPrevValues: stackPrevValues);
 
-                    if (evalExprValueResult is Result<string, PineValue>.Err parseFunctionError)
-                    {
-                        return "Failed to evaluate expr value for parse and eval: " + parseFunctionError;
-                    }
-
-                    if (evalExprValueResult is not Result<string, PineValue>.Ok evalExprValueOk)
-                    {
-                        throw new NotImplementedException(
-                            "Unexpected result type: " + evalExprValueResult.GetType().FullName);
-                    }
-
-                    var evalEnvResult =
+                    var environmentValue =
                         EvaluateExpressionDefaultLessStack(
                             parseAndEval.environment,
                             currentFrame.EnvironmentValue,
                             stackPrevValues: stackPrevValues);
 
-                    if (evalEnvResult is Result<string, PineValue>.Err evalEnvError)
-                    {
-                        return "Failed to evaluate environment: " + evalEnvError;
-                    }
-
-                    if (evalEnvResult is not Result<string, PineValue>.Ok evalEnvOk)
-                    {
-                        throw new NotImplementedException(
-                            "Unexpected result type: " + evalEnvResult.GetType().FullName);
-                    }
-
                     if (EvalCache is { } evalCache)
                     {
-                        var evalCacheKey = new EvalCacheEntryKey(evalExprValueOk.Value, evalEnvOk.Value);
+                        var evalCacheKey = new EvalCacheEntryKey(expressionValue, environmentValue);
 
                         if (evalCache.TryGetValue(evalCacheKey, out var cachedValue) && cachedValue is not null)
                         {
@@ -677,14 +655,14 @@ public class PineVM : IPineVM
                         }
                     }
 
-                    var parseResult = parseExpressionDelegate(evalExprValueOk.Value);
+                    var parseResult = parseExpressionDelegate(expressionValue);
 
                     if (parseResult is Result<string, Expression>.Err parseErr)
                     {
                         return
                             "Failed to parse expression from value: " + parseErr.Value +
-                            " - expressionValue is " + DescribeValueForErrorMessage(evalExprValueOk.Value) +
-                            " - environmentValue is " + DescribeValueForErrorMessage(evalExprValueOk.Value);
+                            " - expressionValue is " + DescribeValueForErrorMessage(expressionValue) +
+                            " - environmentValue is " + DescribeValueForErrorMessage(expressionValue);
                     }
 
                     if (parseResult is not Result<string, Expression>.Ok parseOk)
@@ -694,9 +672,9 @@ public class PineVM : IPineVM
 
                     stack.Push(
                         StackFrameFromExpression(
-                            expressionValue: evalExprValueOk.Value,
+                            expressionValue: expressionValue,
                             parseOk.Value,
-                            evalEnvOk.Value,
+                            environmentValue,
                             BeginParseAndEvalCount: parseAndEvalCount));
 
                     continue;
@@ -704,29 +682,18 @@ public class PineVM : IPineVM
 
                 if (evalInstr.Expression is Expression.ConditionalExpression conditionalExpr)
                 {
-                    var evalConditionResult =
+                    var conditionValue =
                         EvaluateExpressionDefaultLessStack(
                             conditionalExpr.condition,
                             currentFrame.EnvironmentValue,
                             stackPrevValues: stackPrevValues);
 
-                    if (evalConditionResult is Result<string, PineValue>.Err evalConditionError)
-                    {
-                        return "Failed to evaluate condition: " + evalConditionError;
-                    }
-
-                    if (evalConditionResult is not Result<string, PineValue>.Ok evalConditionOk)
-                    {
-                        throw new NotImplementedException(
-                            "Unexpected result type: " + evalConditionResult.GetType().FullName);
-                    }
-
                     var expressionToContinueWith =
-                        evalConditionOk.Value == PineVMValues.TrueValue
+                        conditionValue == PineVMValues.TrueValue
                         ?
                         conditionalExpr.ifTrue
                         :
-                        evalConditionOk.Value == PineVMValues.FalseValue
+                        conditionValue == PineVMValues.FalseValue
                         ?
                         conditionalExpr.ifFalse
                         :
@@ -752,18 +719,7 @@ public class PineVM : IPineVM
                                 currentFrame.EnvironmentValue,
                                 stackPrevValues: stackPrevValues);
 
-                        if (evalBranchResult is Result<string, PineValue>.Err evalBranchError)
-                        {
-                            return "Failed to evaluate conditional branch: " + evalBranchError;
-                        }
-
-                        if (evalBranchResult is not Result<string, PineValue>.Ok evalBranchOk)
-                        {
-                            throw new NotImplementedException(
-                                "Unexpected result type: " + evalBranchResult.GetType().FullName);
-                        }
-
-                        currentFrame.InstructionsResultValues.Span[currentFrame.InstructionPointer] = evalBranchOk.Value;
+                        currentFrame.InstructionsResultValues.Span[currentFrame.InstructionPointer] = evalBranchResult;
                         currentFrame.InstructionPointer++;
                         continue;
                     }
@@ -781,49 +737,28 @@ public class PineVM : IPineVM
                         currentFrame.EnvironmentValue,
                         stackPrevValues: stackPrevValues);
 
-                if (evalResult is Result<string, PineValue>.Err evalError)
-                {
-                    return "Failed to evaluate expression: " + evalError;
-                }
-
-                if (evalResult is not Result<string, PineValue>.Ok evalOk)
-                {
-                    throw new NotImplementedException("Unexpected result type: " + evalResult.GetType().FullName);
-                }
-
-                currentFrame.InstructionsResultValues.Span[currentFrame.InstructionPointer] = evalOk.Value;
+                currentFrame.InstructionsResultValues.Span[currentFrame.InstructionPointer] = evalResult;
                 currentFrame.InstructionPointer++;
                 continue;
             }
 
             if (currentInstruction is StackInstruction.ConditionalJumpInstruction conditionalStatement)
             {
-                var evalConditionResult =
+                var conditionValue =
                     EvaluateExpressionDefaultLessStack(
                         conditionalStatement.Condition,
                         currentFrame.EnvironmentValue,
                         stackPrevValues: stackPrevValues);
 
-                if (evalConditionResult is Result<string, PineValue>.Err evalConditionError)
-                {
-                    return "Failed to evaluate condition: " + evalConditionError;
-                }
-
-                if (evalConditionResult is not Result<string, PineValue>.Ok evalConditionOk)
-                {
-                    throw new NotImplementedException(
-                        "Unexpected result type: " + evalConditionResult.GetType().FullName);
-                }
-
                 currentFrame.InstructionPointer++;
 
-                if (evalConditionOk.Value == PineVMValues.FalseValue)
+                if (conditionValue == PineVMValues.FalseValue)
                 {
                     currentFrame.InstructionPointer += conditionalStatement.IfFalseOffset;
                     continue;
                 }
 
-                if (evalConditionOk.Value == PineVMValues.TrueValue)
+                if (conditionValue == PineVMValues.TrueValue)
                 {
                     currentFrame.InstructionPointer += conditionalStatement.IfTrueOffset;
                     continue;
@@ -889,7 +824,7 @@ public class PineVM : IPineVM
             "Unexpected shape of expression: " + expression.GetType().FullName);
     }
 
-    private Result<string, PineValue> EvaluateExpressionDefaultLessStack(
+    private PineValue EvaluateExpressionDefaultLessStack(
         Expression expression,
         PineValue environment,
         ReadOnlyMemory<PineValue> stackPrevValues)
@@ -908,15 +843,7 @@ public class PineVM : IPineVM
                 EvaluateParseAndEvalExpression(
                     applicationExpression,
                     environment,
-                    stackPrevValues: stackPrevValues)
-                switch
-                {
-                    Result<string, PineValue>.Err err =>
-                    "Failed to evaluate parse and evaluate: " + err,
-
-                    var other =>
-                    other
-                };
+                    stackPrevValues: stackPrevValues);
         }
 
         if (expression is Expression.KernelApplicationExpression kernelApplicationExpression)
@@ -925,14 +852,7 @@ public class PineVM : IPineVM
                 EvaluateKernelApplicationExpression(
                     environment,
                     kernelApplicationExpression,
-                    stackPrevValues: stackPrevValues) switch
-                {
-                    Result<string, PineValue>.Err err =>
-                    "Failed to evaluate kernel function application: " + err,
-
-                    var other =>
-                    other
-                };
+                    stackPrevValues: stackPrevValues);
         }
 
         if (expression is Expression.ConditionalExpression conditionalExpression)
@@ -958,13 +878,15 @@ public class PineVM : IPineVM
 
         if (expression is Expression.DelegatingExpression delegatingExpr)
         {
-            return delegatingExpr.Delegate.Invoke(
-                (expr, envValue) =>
-                EvaluateExpressionDefault(
-                    expression,
-                    envValue,
-                    config: new EvaluationConfig(ParseAndEvalCountLimit: null)),
-                environment);
+            return
+                delegatingExpr.Delegate.Invoke(
+                    (expr, envValue) =>
+                    EvaluateExpressionDefault(
+                        expression,
+                        envValue,
+                        config: new EvaluationConfig(ParseAndEvalCountLimit: null)),
+                    environment)
+                .Extract(err => throw new GenericEvalException("Error from delegate: " + err));
         }
 
         if (expression is Expression.StackReferenceExpression stackRef)
@@ -973,10 +895,10 @@ public class PineVM : IPineVM
 
             if (index < 0 || index >= stackPrevValues.Length)
             {
-                return
+                throw new InvalidExpressionException(
                     "Invalid stack reference: offset " + stackRef.offset +
                     " from " + stackPrevValues.Length +
-                    " results in index " + index;
+                    " results in index " + index);
             }
 
             return stackPrevValues.Span[index];
@@ -995,7 +917,7 @@ public class PineVM : IPineVM
             "Unexpected shape of expression: " + expression.GetType().FullName);
     }
 
-    public Result<string, PineValue> EvaluateListExpression(
+    public PineValue EvaluateListExpression(
         Expression.ListExpression listExpression,
         PineValue environment,
         ReadOnlyMemory<PineValue> stackPrevValues)
@@ -1010,87 +932,62 @@ public class PineVM : IPineVM
                 item,
                 environment,
                 stackPrevValues: stackPrevValues);
-
-            if (itemResult is Result<string, PineValue>.Err itemErr)
-                return "Failed to evaluate list element [" + i + "]: " + itemErr.Value;
-
-            if (itemResult is Result<string, PineValue>.Ok itemOk)
-            {
-                listItems.Add(itemOk.Value);
-                continue;
-            }
-
-            throw new NotImplementedException("Unexpected result type: " + itemResult.GetType().FullName);
+            listItems.Add(itemResult);
         }
 
         return PineValue.List(listItems);
     }
 
-    public Result<string, PineValue> EvaluateParseAndEvalExpression(
+    public PineValue EvaluateParseAndEvalExpression(
         Expression.ParseAndEvalExpression parseAndEval,
         PineValue environment,
         ReadOnlyMemory<PineValue> stackPrevValues)
     {
-        Result<string, PineValue> continueWithEnvValueAndFunction(
-            PineValue environmentValue,
-            Expression functionExpression)
-        {
-            if (environmentValue is PineValue.ListValue list)
-            {
-                FunctionApplicationMaxEnvSize =
-                FunctionApplicationMaxEnvSize < list.Elements.Count ? list.Elements.Count : FunctionApplicationMaxEnvSize;
-            }
-
-            return EvaluateExpression(environment: environmentValue, expression: functionExpression);
-        }
-
-        return
+        var environmentValue =
             EvaluateExpressionDefaultLessStack(
                 parseAndEval.environment,
                 environment,
-                stackPrevValues: stackPrevValues) switch
-            {
-                Result<string, PineValue>.Err envErr =>
-                "Failed to evaluate argument: " + envErr.Value,
+                stackPrevValues: stackPrevValues);
 
-                Result<string, PineValue>.Ok environmentValue =>
-                EvaluateExpressionDefaultLessStack(
-                    parseAndEval.expression,
-                    environment,
-                    stackPrevValues: stackPrevValues) switch
-                {
-                    Result<string, PineValue>.Err exprErr =>
-                    "Failed to evaluate expression: " + exprErr.Value,
+        var expressionValue =
+            EvaluateExpressionDefaultLessStack(
+                parseAndEval.expression,
+                environment,
+                stackPrevValues: stackPrevValues);
 
-                    Result<string, PineValue>.Ok expressionValue =>
-                    parseExpressionDelegate(expressionValue.Value) switch
-                    {
-                        Result<string, Expression>.Err parseErr =>
-                        "Failed to parse expression from value: " + parseErr.Value +
-                        " - expressionValue is " + DescribeValueForErrorMessage(expressionValue.Value) +
-                        " - environmentValue is " + DescribeValueForErrorMessage(expressionValue.Value),
+        var parseResult = parseExpressionDelegate(expressionValue);
 
-                        Result<string, Expression>.Ok functionExpression =>
-                        continueWithEnvValueAndFunction(environmentValue.Value, functionExpression.Value),
+        if (parseResult is Result<string, Expression>.Err parseErr)
+        {
+            var message =
+                "Failed to parse expression from value: " + parseErr.Value +
+                " - expressionValue is " + DescribeValueForErrorMessage(expressionValue) +
+                " - environmentValue is " + DescribeValueForErrorMessage(expressionValue);
 
-                        var otherResult =>
-                        throw new NotImplementedException("Unexpected result type for parse: " + otherResult.GetType().FullName)
-                    },
+            throw new ParseExpressionException(message);
+        }
 
-                    var otherResult =>
-                    throw new NotImplementedException("Unexpected result type for expr: " + otherResult.GetType().FullName)
-                },
+        if (parseResult is not Result<string, Expression>.Ok parseOk)
+        {
+            throw new NotImplementedException("Unexpected result type: " + parseResult.GetType().FullName);
+        }
 
-                var otherResult =>
-                throw new NotImplementedException("Unexpected result type for env: " + otherResult.GetType().FullName)
-            };
+        if (environmentValue is PineValue.ListValue list)
+        {
+            FunctionApplicationMaxEnvSize =
+            FunctionApplicationMaxEnvSize < list.Elements.Count ? list.Elements.Count : FunctionApplicationMaxEnvSize;
+        }
+
+        return
+            EvaluateExpression(environment: environmentValue, expression: parseOk.Value)
+            .Extract(err => throw new Exception("Failed continuing parse and eval: " + err));
     }
 
     public static string DescribeValueForErrorMessage(PineValue pineValue) =>
         PineValueAsString.StringFromValue(pineValue)
         .Unpack(fromErr: _ => "not a string", fromOk: asString => "string \'" + asString + "\'");
 
-    public Result<string, PineValue> EvaluateKernelApplicationExpression(
+    public PineValue EvaluateKernelApplicationExpression(
         PineValue environment,
         Expression.KernelApplicationExpression application,
         ReadOnlyMemory<PineValue> stackPrevValues)
@@ -1102,36 +999,29 @@ public class PineVM : IPineVM
                 innerKernelApplication.argument is Expression.ListExpression skipListExpr &&
                 skipListExpr.List.Count is 2)
             {
-                if (EvaluateExpressionDefaultLessStack(
-                    skipListExpr.List[0],
-                    environment,
-                    stackPrevValues) is Result<string, PineValue>.Ok skipCountEvalOk)
-                {
-                    if (KernelFunction.SignedIntegerFromValueRelaxed(skipCountEvalOk.Value) is { } skipCount)
-                    {
-                        if (EvaluateExpressionDefaultLessStack(
-                            skipListExpr.List[1],
-                            environment,
-                            stackPrevValues) is Result<string, PineValue>.Ok sourceListEvalOk)
-                        {
-                            if (sourceListEvalOk.Value is PineValue.ListValue list)
-                            {
-                                if (list.Elements.Count < 1 || list.Elements.Count <= skipCount)
-                                {
-                                    return PineValue.EmptyList;
-                                }
+                var skipValue =
+                    EvaluateExpressionDefaultLessStack(
+                        skipListExpr.List[0],
+                        environment,
+                        stackPrevValues);
 
-                                return list.Elements[skipCount < 0 ? 0 : (int)skipCount];
-                            }
-                            else
-                            {
-                                return PineValue.EmptyList;
-                            }
-                        }
-                        else
+                if (KernelFunction.SignedIntegerFromValueRelaxed(skipValue) is { } skipCount)
+                {
+                    if (EvaluateExpressionDefaultLessStack(
+                        skipListExpr.List[1],
+                        environment,
+                        stackPrevValues) is PineValue.ListValue list)
+                    {
+                        if (list.Elements.Count < 1 || list.Elements.Count <= skipCount)
                         {
                             return PineValue.EmptyList;
                         }
+
+                        return list.Elements[skipCount < 0 ? 0 : (int)skipCount];
+                    }
+                    else
+                    {
+                        return PineValue.EmptyList;
                     }
                 }
             }
@@ -1140,24 +1030,17 @@ public class PineVM : IPineVM
         return EvaluateKernelApplicationExpressionGeneric(environment, application, stackPrevValues);
     }
 
-    public Result<string, PineValue> EvaluateKernelApplicationExpressionGeneric(
+    public PineValue EvaluateKernelApplicationExpressionGeneric(
         PineValue environment,
         Expression.KernelApplicationExpression application,
-        ReadOnlyMemory<PineValue> stackPrevValues) =>
-        EvaluateExpressionDefaultLessStack(application.argument, environment, stackPrevValues) switch
-        {
-            Result<string, PineValue>.Ok argument =>
-            application.function(argument.Value),
+        ReadOnlyMemory<PineValue> stackPrevValues)
+    {
+        var argumentValue = EvaluateExpressionDefaultLessStack(application.argument, environment, stackPrevValues);
 
-            Result<string, PineValue>.Err error =>
-            "Failed to evaluate argument: " + error,
+        return application.function(argumentValue);
+    }
 
-            var otherResult =>
-            throw new NotImplementedException(
-                "Unexpected result type: " + otherResult.GetType().FullName)
-        };
-
-    public Result<string, PineValue> EvaluateKernelApplications_Skip_ListHead_Expression(
+    public PineValue EvaluateKernelApplications_Skip_ListHead_Expression(
         PineValue environment,
         Expression.KernelApplications_Skip_ListHead_Expression application,
         ReadOnlyMemory<PineValue> stackPrevValues) =>
@@ -1166,39 +1049,29 @@ public class PineVM : IPineVM
             environment,
             stackPrevValues: stackPrevValues) switch
         {
-            Result<string, PineValue>.Ok argument =>
-            argument.Value switch
-            {
-                PineValue.ListValue list =>
-                list.Elements.Count < 1 || list.Elements.Count <= application.skipCount
-                ?
-                PineValue.EmptyList
-                :
-                list.Elements[application.skipCount < 0 ? 0 : application.skipCount],
+            PineValue.ListValue list =>
+            list.Elements.Count < 1 || list.Elements.Count <= application.skipCount
+            ?
+            PineValue.EmptyList
+            :
+            list.Elements[application.skipCount < 0 ? 0 : application.skipCount],
 
-                _ =>
-                PineValue.EmptyList,
-            },
-
-            Result<string, PineValue>.Err error =>
-            "Failed to evaluate argument: " + error,
-
-            var otherResult =>
-            throw new NotImplementedException(
-                "Unexpected result type: " + otherResult.GetType().FullName)
+            _ =>
+            PineValue.EmptyList,
         };
 
-    public Result<string, PineValue> EvaluateConditionalExpression(
+    public PineValue EvaluateConditionalExpression(
         PineValue environment,
         Expression.ConditionalExpression conditional,
-        ReadOnlyMemory<PineValue> stackPrevValues) =>
-        EvaluateExpressionDefaultLessStack(
-            conditional.condition,
-            environment,
-            stackPrevValues: stackPrevValues)
-        switch
-        {
-            Result<string, PineValue>.Ok conditionValue =>
+        ReadOnlyMemory<PineValue> stackPrevValues)
+    {
+        var conditionValue =
+            EvaluateExpressionDefaultLessStack(
+                conditional.condition,
+                environment,
+                stackPrevValues: stackPrevValues);
+
+        return
             conditionValue == PineVMValues.TrueValue
             ?
             EvaluateExpressionDefaultLessStack(
@@ -1213,13 +1086,6 @@ public class PineVM : IPineVM
                 environment,
                 stackPrevValues: stackPrevValues)
             :
-            PineValue.EmptyList,
-
-            Result<string, PineValue>.Err error =>
-            "Failed to evaluate condition: " + error,
-
-            var otherResult =>
-            throw new NotImplementedException(
-                "Unexpected result type: " + otherResult.GetType().FullName)
-        };
+            PineValue.EmptyList;
+    }
 }
