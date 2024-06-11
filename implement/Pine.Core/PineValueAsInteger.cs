@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 
 namespace Pine;
 
@@ -9,17 +11,24 @@ public static class PineValueAsInteger
     /// Returns an error if the input integer is less than zero.
     /// </summary>
     public static Result<string, PineValue> ValueFromUnsignedInteger(System.Numerics.BigInteger integer) =>
+        ReusedValueFromUnsignedInteger is { } reused && integer < reused.Count && 0 <= integer ?
+        reused[(int)integer]
+        :
         BlobValueFromUnsignedInteger(integer)
         .Map(PineValue.Blob);
 
+    private static readonly IReadOnlyList<PineValue> ReusedValueFromUnsignedInteger =
+        [..Enumerable.Range(0, 10_000)
+        .Select(Range => ValueFromUnsignedInteger(Range).Extract(err => throw new Exception(err)))];
+
     public static Result<string, ReadOnlyMemory<byte>> BlobValueFromUnsignedInteger(System.Numerics.BigInteger integer)
     {
-        var signedBlobValue = BlobValueFromSignedInteger(integer);
-
-        if (signedBlobValue.Span[0] != 4)
+        if (integer < 0)
             return "Argument is a negative integer.";
 
-        return signedBlobValue[1..];
+        var array = integer.ToByteArray(isUnsigned: true, isBigEndian: true);
+
+        return Result<string, ReadOnlyMemory<byte>>.ok(array);
     }
 
     public static PineValue ValueFromSignedInteger(System.Numerics.BigInteger integer) =>

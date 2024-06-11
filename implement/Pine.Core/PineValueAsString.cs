@@ -31,9 +31,9 @@ public static class PineValueAsString
     {
         var codePoints = ToCodePoints(str);
 
-        var pineValues = new PineValue[codePoints.Length];
+        var pineValues = new PineValue[codePoints.Count];
 
-        for (var index = 0; index < codePoints.Length; index++)
+        for (var index = 0; index < codePoints.Count; index++)
         {
             var charAsInteger = new System.Numerics.BigInteger(codePoints[index]);
 
@@ -94,7 +94,7 @@ public static class PineValueAsString
     }
 
     // https://stackoverflow.com/questions/687359/how-would-you-get-an-array-of-unicode-code-points-from-a-net-string/28155130#28155130
-    public static int[] ToCodePoints(string str)
+    public static IReadOnlyList<int> ToCodePoints(string str)
     {
         var codePoints = new List<int>(str.Length);
         for (var i = 0; i < str.Length; i++)
@@ -104,6 +104,6 @@ public static class PineValueAsString
                 i += 1;
         }
 
-        return [.. codePoints];
+        return codePoints;
     }
 }
