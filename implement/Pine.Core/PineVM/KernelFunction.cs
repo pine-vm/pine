@@ -9,30 +9,42 @@ namespace Pine.PineVM;
 
 public static class KernelFunction
 {
-    public static PineValue equal(PineValue value) =>
-        ValueFromBool(
-            value switch
+    public static PineValue equal(PineValue value)
+    {
+        if (value is PineValue.ListValue listValue)
+        {
+            /*
+            * :: rest pattern seems not implemented yet:
+            * https://github.com/dotnet/csharplang/issues/6574
+            * */
+
+            if (listValue.Elements.Count < 1)
+                return PineVMValues.TrueValue;
+
+            var firstItem = listValue.Elements[0];
+
+            for (var i = 1; i < listValue.Elements.Count; ++i)
             {
-                PineValue.ListValue list =>
-                list.Elements switch
-                {
-                [] => true,
-
-                [var first, ..] =>
-                /*
-                    * :: rest pattern seems not implemented yet:
-                    * https://github.com/dotnet/csharplang/issues/6574
-                    * */
-                list.Elements.All(e => e.Equals(first)),
-                },
-
-                PineValue.BlobValue blob =>
-                BlobAllBytesEqual(blob.Bytes),
-
-                _ =>
-                throw new NotImplementedException()
+                if (!listValue.Elements[i].Equals(firstItem))
+                    return PineVMValues.FalseValue;
             }
-        );
+
+            return PineVMValues.TrueValue;
+        }
+
+        if (value is PineValue.BlobValue blobValue)
+        {
+            return
+                BlobAllBytesEqual(blobValue.Bytes)
+                ?
+                PineVMValues.TrueValue
+                :
+                PineVMValues.FalseValue;
+        }
+
+        throw new NotImplementedException(
+            "Unexpected value type: " + value.GetType().FullName);
+    }
 
     private static bool BlobAllBytesEqual(ReadOnlyMemory<byte> readOnlyMemory) =>
         readOnlyMemory.IsEmpty ||

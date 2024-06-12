@@ -159,23 +159,22 @@ public class ReducePineExpression
 
             case Expression.ListExpression list:
                 {
-                    var itemsResults =
-                        list.List
-                        .Select(item =>
-                        TransformPineExpressionWithOptionalReplacement(findReplacement, item))
-                        .Aggregate(
-                            seed: new { refsOrig = false, items = (IImmutableList<Expression>)[] },
-                            (aggregate, itemResult) =>
-                            {
-                                return
-                                new
-                                {
-                                    refsOrig = aggregate.refsOrig || itemResult.referencesOriginalEnv,
-                                    items = aggregate.items.Add(itemResult.expr)
-                                };
-                            });
+                    var referencesOriginalEnv = false;
 
-                    return (new Expression.ListExpression([.. itemsResults.items]), itemsResults.refsOrig);
+                    var mappedItems = new Expression[list.List.Count];
+
+                    for (var i = 0; i < list.List.Count; i++)
+                    {
+                        var (mappedItem, itemReferencesOriginalEnv) =
+                            TransformPineExpressionWithOptionalReplacement(
+                                findReplacement: findReplacement,
+                                expression: list.List[i]);
+
+                        mappedItems[i] = mappedItem;
+                        referencesOriginalEnv = referencesOriginalEnv || itemReferencesOriginalEnv;
+                    }
+
+                    return (new Expression.ListExpression(mappedItems), referencesOriginalEnv);
                 }
 
             case Expression.ParseAndEvalExpression parseAndEval:

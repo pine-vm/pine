@@ -198,9 +198,9 @@ public abstract record PineValue : IEquatable<PineValue>
         {
             var hash = new HashCode();
 
-            foreach (var item in elements)
+            for (var i = 0; i < elements.Count; ++i)
             {
-                hash.Add(item.GetHashCode());
+                hash.Add(elements[i].GetHashCode());
             }
 
             return hash.ToHashCode();

@@ -272,18 +272,25 @@ public class ElmInteractive
             });
     }
 
-    public static long EstimatePineValueMemoryUsage(PineValue pineValue) =>
-        pineValue switch
+    public static long EstimatePineValueMemoryUsage(PineValue pineValue)
+    {
+        if (pineValue is PineValue.BlobValue blobValue)
+            return blobValue.Bytes.Length + 100;
+
+        if (pineValue is PineValue.ListValue listValue)
         {
-            PineValue.BlobValue blobValue =>
-            blobValue.Bytes.Length + 100,
+            long sum = 100;
 
-            PineValue.ListValue listValue =>
-            listValue.Elements.Sum(EstimatePineValueMemoryUsage) + 100,
+            foreach (var item in listValue.Elements)
+            {
+                sum += EstimatePineValueMemoryUsage(item);
+            }
 
-            _ =>
-            throw new NotImplementedException("Not implemented for value type: " + pineValue.GetType().FullName)
-        };
+            return sum;
+        }
+
+        throw new NotImplementedException("Not implemented for value type: " + pineValue.GetType().FullName);
+    }
 
     public record CompileInteractiveEnvironmentResult(
         IReadOnlyList<string> lastIncrementModulesTexts,
