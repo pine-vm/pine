@@ -880,10 +880,10 @@ public class PineVM : IPineVM
         {
             return
                 delegatingExpr.Delegate.Invoke(
-                    (expr, envValue) =>
+                    (expression, environment) =>
                     EvaluateExpressionDefault(
                         expression,
-                        envValue,
+                        environment,
                         config: new EvaluationConfig(ParseAndEvalCountLimit: null)),
                     environment)
                 .Extract(err => throw new GenericEvalException("Error from delegate: " + err));
