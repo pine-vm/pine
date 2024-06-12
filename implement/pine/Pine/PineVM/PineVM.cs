@@ -474,18 +474,33 @@ public class PineVM : IPineVM
 
     public static Expression? TryFuseTransitive(Expression expression)
     {
-        if (TryMapToKernelApplications_Skip_ListHead_Expression(expression) is not { } fused)
+        if (TryMapToKernelApplications_Skip_ListHead_Expression(expression) is { } fused)
         {
-            return null;
+
+            var fusedArgument =
+                CompilePineToDotNet.ReducePineExpression.TransformPineExpressionWithOptionalReplacement(
+                    findReplacement: TryFuseTransitive,
+                    expression: fused.argument).expr;
+
+            return fused with { argument = fusedArgument };
         }
 
-        var fusedArgument =
-            CompilePineToDotNet.ReducePineExpression.TransformPineExpressionWithOptionalReplacement(
-                findReplacement: TryFuseTransitive,
-                expression: fused.argument).expr;
+        if (TryMapToKernelApplication_Equal_Two(expression) is { } fusedEqualTwo)
+        {
+            var fusedLeft =
+                CompilePineToDotNet.ReducePineExpression.TransformPineExpressionWithOptionalReplacement(
+                    findReplacement: TryFuseTransitive,
+                    expression: fusedEqualTwo.left).expr;
 
-        return
-            fused with { argument = fusedArgument };
+            var fusedRight =
+                CompilePineToDotNet.ReducePineExpression.TransformPineExpressionWithOptionalReplacement(
+                    findReplacement: TryFuseTransitive,
+                    expression: fusedEqualTwo.right).expr;
+
+            return fusedEqualTwo with { left = fusedLeft, right = fusedRight };
+        }
+
+        return null;
     }
 
     public static Expression.KernelApplications_Skip_ListHead_Expression?
@@ -535,6 +550,25 @@ public class PineVM : IPineVM
         return new Expression.KernelApplications_Skip_ListHead_Expression(
             skipCount: (int)skipCount,
             argument: skipListExpr.List[1]);
+    }
+
+    public static Expression.KernelApplication_Equal_Two? TryMapToKernelApplication_Equal_Two(Expression expression)
+    {
+        if (expression is not Expression.KernelApplicationExpression kernelApp)
+            return null;
+
+        if (kernelApp.functionName is not nameof(KernelFunction.equal))
+            return null;
+
+        if (kernelApp.argument is not Expression.ListExpression listExpr)
+            return null;
+
+        if (listExpr.List.Count is not 2)
+            return null;
+
+        return new Expression.KernelApplication_Equal_Two(
+            left: listExpr.List[0],
+            right: listExpr.List[1]);
     }
 
     public record EvaluationConfig(
@@ -820,6 +854,9 @@ public class PineVM : IPineVM
         if (expression is Expression.KernelApplications_Skip_ListHead_Expression)
             return false;
 
+        if (expression is Expression.KernelApplication_Equal_Two)
+            return false;
+
         throw new NotImplementedException(
             "Unexpected shape of expression: " + expression.GetType().FullName);
     }
@@ -911,6 +948,21 @@ public class PineVM : IPineVM
                     environment: environment,
                     kernelApplicationsSkipListHead,
                     stackPrevValues: stackPrevValues);
+        }
+
+        if (expression is Expression.KernelApplication_Equal_Two kernelApplicationEqualTwo)
+        {
+            var leftValue = EvaluateExpressionDefaultLessStack(
+                kernelApplicationEqualTwo.left,
+                environment,
+                stackPrevValues: stackPrevValues);
+
+            var rightValue = EvaluateExpressionDefaultLessStack(
+                kernelApplicationEqualTwo.right,
+                environment,
+                stackPrevValues: stackPrevValues);
+
+            return KernelFunction.equal(leftValue, rightValue);
         }
 
         throw new NotImplementedException(

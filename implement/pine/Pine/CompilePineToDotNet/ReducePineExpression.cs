@@ -246,8 +246,33 @@ public class ReducePineExpression
             case Expression.StackReferenceExpression:
                 return (expression, true);
 
-            case Expression.KernelApplications_Skip_ListHead_Expression:
-                return (expression, true);
+            case Expression.KernelApplications_Skip_ListHead_Expression skipListHead:
+                {
+                    var argumentTransform = TransformPineExpressionWithOptionalReplacement(findReplacement, skipListHead.argument);
+
+                    return
+                        (
+                        new Expression.KernelApplications_Skip_ListHead_Expression
+                        (
+                            skipCount: skipListHead.skipCount,
+                            argument: argumentTransform.expr
+                        ),
+                        argumentTransform.referencesOriginalEnv);
+                }
+
+            case Expression.KernelApplication_Equal_Two equalTwo:
+                {
+                    var leftTransform = TransformPineExpressionWithOptionalReplacement(findReplacement, equalTwo.left);
+                    var rightTransform = TransformPineExpressionWithOptionalReplacement(findReplacement, equalTwo.right);
+
+                    return (
+                        new Expression.KernelApplication_Equal_Two
+                        (
+                            left: leftTransform.expr,
+                            right: rightTransform.expr
+                        ),
+                        leftTransform.referencesOriginalEnv || rightTransform.referencesOriginalEnv);
+                }
 
             case Expression.DelegatingExpression:
                 return (expression, true);

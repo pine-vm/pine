@@ -124,6 +124,15 @@ public abstract record Expression
         : Expression;
 
     /// <summary>
+    /// Fusion of the special case of an application of the kernel function 'equal',
+    /// with a list expression of length two as the argument.
+    /// </summary>
+    public record KernelApplication_Equal_Two(
+        Expression left,
+        Expression right)
+        : Expression;
+
+    /// <summary>
     /// Returns true if the expression is independent of the environment, that is none of the expressions in the tree contain an <see cref="EnvironmentExpression"/>.
     /// </summary>
     public static bool IsIndependent(Expression expression) =>
@@ -158,6 +167,9 @@ public abstract record Expression
 
             KernelApplications_Skip_ListHead_Expression fused =>
             IsIndependent(fused.argument),
+
+            KernelApplication_Equal_Two fused =>
+            IsIndependent(fused.left) && IsIndependent(fused.right),
 
             _ =>
             throw new NotImplementedException(),
