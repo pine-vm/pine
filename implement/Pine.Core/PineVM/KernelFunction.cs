@@ -110,28 +110,35 @@ public static class KernelFunction
             throw new NotImplementedException()
         };
 
-    public static PineValue skip(BigInteger count, PineValue value) =>
-        count <= 0
-        ?
-        value
-        :
-        value switch
+    public static PineValue skip(BigInteger count, PineValue value)
+    {
+        if (count <= 0)
+            return value;
+
+        if (value is PineValue.BlobValue blobValue)
         {
-            PineValue.BlobValue blobValue =>
-            blobValue.Bytes.Length <= count ?
-            PineValue.EmptyBlob
-            :
-            PineValue.Blob(blobValue.Bytes[(int)count..]),
+            if (blobValue.Bytes.Length <= count)
+                return PineValue.EmptyBlob;
 
-            PineValue.ListValue listValue =>
-            listValue.Elements.Count <= count ?
-            PineValue.EmptyList
-            :
-            PineValue.List([.. listValue.Elements.Skip((int)count)]),
+            return PineValue.Blob(blobValue.Bytes[(int)count..]);
+        }
 
-            _ =>
-            throw new NotImplementedException()
-        };
+        if (value is PineValue.ListValue listValue)
+        {
+            if (listValue.Elements.Count <= count)
+                return PineValue.EmptyList;
+
+            var skipped = new PineValue[listValue.Elements.Count - (int)count];
+
+            for (var i = 0; i < skipped.Length; ++i)
+                skipped[i] = listValue.Elements[i + (int)count];
+
+            return PineValue.List(skipped);
+        }
+
+        throw new NotImplementedException(
+            "Unexpected value type: " + value.GetType().FullName);
+    }
 
     public static PineValue take(PineValue value) =>
         value switch
@@ -156,59 +163,112 @@ public static class KernelFunction
             throw new NotImplementedException()
         };
 
-    public static PineValue take(BigInteger count, PineValue value) =>
-        value switch
+    public static PineValue take(BigInteger count, PineValue value)
+    {
+        if (value is PineValue.ListValue listValue)
         {
-            PineValue.BlobValue blobValue =>
-            blobValue.Bytes.Length <= count ?
-            value
-            :
-            PineValue.Blob(blobValue.Bytes[..(int)count]),
+            if (listValue.Elements.Count <= count)
+                return value;
 
-            PineValue.ListValue listValue =>
-            listValue.Elements.Count <= count ?
-            value
-            :
-            PineValue.List([.. listValue.Elements.Take((int)count)]),
+            if (count <= 0)
+                return PineValue.EmptyList;
 
-            _ =>
-            throw new NotImplementedException()
-        };
+            var resultingCount = count <= listValue.Elements.Count ? (int)count : listValue.Elements.Count;
 
-    public static PineValue reverse(PineValue value) =>
-        value switch
-        {
-            PineValue.BlobValue blobValue =>
-            PineValue.Blob([.. blobValue.Bytes.ToArray().Reverse()]),
+            var taken = new PineValue[resultingCount];
 
-            PineValue.ListValue listValue =>
-            PineValue.List([.. listValue.Elements.Reverse()]),
-
-            _ => throw new NotImplementedException()
-        };
-
-    public static PineValue concat(PineValue value) =>
-        KernelFunctionExpectingList(
-            value,
-            list =>
-            list switch
+            for (var i = 0; i < taken.Length; ++i)
             {
-            [] =>
-            PineValue.EmptyList,
+                taken[i] = listValue.Elements[i];
+            }
 
-            [var head, ..] =>
-                head switch
+            return PineValue.List(taken);
+        }
+
+        if (value is PineValue.BlobValue blobValue)
+        {
+            if (blobValue.Bytes.Length <= count)
+                return value;
+
+            if (count <= 0)
+                return PineValue.EmptyBlob;
+
+            return PineValue.Blob(blobValue.Bytes[..(int)count]);
+        }
+
+        throw new NotImplementedException(
+            "Unexpected value type: " + value.GetType().FullName);
+    }
+
+    public static PineValue reverse(PineValue value)
+    {
+        if (value is PineValue.ListValue listValue)
+        {
+            if (listValue.Elements.Count <= 1)
+                return value;
+
+            var reversed = listValue.Elements.ToArray();
+
+            Array.Reverse(reversed);
+
+            return PineValue.List(reversed);
+        }
+
+        if (value is PineValue.BlobValue blobValue)
+        {
+            if (blobValue.Bytes.Length <= 1)
+                return value;
+
+            var reversed = blobValue.Bytes.ToArray();
+
+            MemoryExtensions.Reverse(reversed.AsMemory().Span);
+
+            return PineValue.Blob(reversed);
+        }
+
+        throw new NotImplementedException(
+            "Unexpected value type: " + value.GetType().FullName);
+    }
+
+    public static PineValue concat(PineValue value)
+    {
+        if (value is not PineValue.ListValue listValue)
+        {
+            return PineValue.EmptyList;
+        }
+
+        if (listValue.Elements.Count is 0)
+        {
+            return PineValue.EmptyList;
+        }
+
+        var head = listValue.Elements[0];
+
+        if (head is PineValue.ListValue)
+        {
+            var aggregated = new List<PineValue>(capacity: 40);
+
+            for (var i = 0; i < listValue.Elements.Count; ++i)
+            {
+                if (listValue.Elements[i] is PineValue.ListValue listValueElement)
                 {
-                    PineValue.BlobValue =>
-                    PineValue.Blob(CommonConversion.Concat([.. list.OfType<PineValue.BlobValue>().Select(b => b.Bytes)])),
-
-                    PineValue.ListValue =>
-                    PineValue.List([.. list.OfType<PineValue.ListValue>().SelectMany(l => l.Elements)]),
-
-                    _ =>
-                    throw new NotImplementedException()
+                    aggregated.AddRange(listValueElement.Elements);
                 }
-            });
+            }
+
+            return PineValue.List(aggregated);
+        }
+
+        if (head is PineValue.BlobValue)
+        {
+            var blobs = listValue.Elements.OfType<PineValue.BlobValue>().Select(b => b.Bytes).ToArray();
+
+            return PineValue.Blob(CommonConversion.Concat(blobs));
+        }
+
+        throw new NotImplementedException(
+            "Unexpected value type: " + head.GetType().FullName);
+    }
 
     public static PineValue list_head(PineValue value) =>
         value switch

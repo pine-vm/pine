@@ -831,9 +831,9 @@ public class PineVM : IPineVM
 
         if (expression is Expression.ListExpression list)
         {
-            foreach (var item in list.List)
+            for (var i = 0; i < list.List.Count; i++)
             {
-                if (ExpressionShouldGetNewStackFrame(item))
+                if (ExpressionShouldGetNewStackFrame(list.List[i]))
                 {
                     return true;
                 }

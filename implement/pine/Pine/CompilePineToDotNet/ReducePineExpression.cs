@@ -179,8 +179,15 @@ public class ReducePineExpression
 
             case Expression.ParseAndEvalExpression parseAndEval:
                 {
-                    var exprTransform = TransformPineExpressionWithOptionalReplacement(findReplacement, parseAndEval.expression);
-                    var envTransform = TransformPineExpressionWithOptionalReplacement(findReplacement, parseAndEval.environment);
+                    var exprTransform =
+                        TransformPineExpressionWithOptionalReplacement(
+                            findReplacement,
+                            parseAndEval.expression);
+
+                    var envTransform =
+                        TransformPineExpressionWithOptionalReplacement(
+                            findReplacement,
+                            parseAndEval.environment);
 
                     return
                         (
@@ -194,7 +201,10 @@ public class ReducePineExpression
 
             case Expression.KernelApplicationExpression kernelApp:
                 {
-                    var argumentTransform = TransformPineExpressionWithOptionalReplacement(findReplacement, kernelApp.argument);
+                    var argumentTransform =
+                        TransformPineExpressionWithOptionalReplacement(
+                            findReplacement,
+                            kernelApp.argument);
 
                     return
                         (
@@ -208,9 +218,20 @@ public class ReducePineExpression
 
             case Expression.ConditionalExpression conditional:
                 {
-                    var conditionTransform = TransformPineExpressionWithOptionalReplacement(findReplacement, conditional.condition);
-                    var ifTrueTransform = TransformPineExpressionWithOptionalReplacement(findReplacement, conditional.ifTrue);
-                    var ifFalseTransform = TransformPineExpressionWithOptionalReplacement(findReplacement, conditional.ifFalse);
+                    var conditionTransform =
+                        TransformPineExpressionWithOptionalReplacement(
+                            findReplacement,
+                            conditional.condition);
+
+                    var ifTrueTransform =
+                        TransformPineExpressionWithOptionalReplacement(
+                            findReplacement,
+                            conditional.ifTrue);
+
+                    var ifFalseTransform =
+                        TransformPineExpressionWithOptionalReplacement(
+                            findReplacement,
+                            conditional.ifFalse);
 
                     return (
                         new Expression.ConditionalExpression
@@ -248,7 +269,10 @@ public class ReducePineExpression
 
             case Expression.KernelApplications_Skip_ListHead_Expression skipListHead:
                 {
-                    var argumentTransform = TransformPineExpressionWithOptionalReplacement(findReplacement, skipListHead.argument);
+                    var argumentTransform =
+                        TransformPineExpressionWithOptionalReplacement(
+                            findReplacement,
+                            skipListHead.argument);
 
                     return
                         (
@@ -262,8 +286,15 @@ public class ReducePineExpression
 
             case Expression.KernelApplication_Equal_Two equalTwo:
                 {
-                    var leftTransform = TransformPineExpressionWithOptionalReplacement(findReplacement, equalTwo.left);
-                    var rightTransform = TransformPineExpressionWithOptionalReplacement(findReplacement, equalTwo.right);
+                    var leftTransform =
+                        TransformPineExpressionWithOptionalReplacement(
+                            findReplacement,
+                            equalTwo.left);
+
+                    var rightTransform =
+                        TransformPineExpressionWithOptionalReplacement(
+                            findReplacement,
+                            equalTwo.right);
 
                     return (
                         new Expression.KernelApplication_Equal_Two

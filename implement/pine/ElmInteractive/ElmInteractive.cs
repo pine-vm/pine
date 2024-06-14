@@ -279,14 +279,14 @@ public class ElmInteractive
 
         if (pineValue is PineValue.ListValue listValue)
         {
-            long sum = 100;
+            long sum = 0;
 
-            foreach (var item in listValue.Elements)
+            for (int i = 0; i < listValue.Elements.Count; i++)
             {
-                sum += EstimatePineValueMemoryUsage(item);
+                sum += EstimatePineValueMemoryUsage(listValue.Elements[i]);
             }
 
-            return sum;
+            return sum + 100;
         }
 
         throw new NotImplementedException("Not implemented for value type: " + pineValue.GetType().FullName);
