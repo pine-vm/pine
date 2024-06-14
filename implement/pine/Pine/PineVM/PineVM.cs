@@ -120,6 +120,15 @@ public class PineVM : IPineVM
         long? BeginTimestamp)
     {
         public int InstructionPointer { get; set; } = 0;
+
+        public int LastEvalResultIndex { get; set; } = -1;
+
+        public void PushInstructionResult(PineValue value)
+        {
+            InstructionsResultValues.Span[InstructionPointer] = value;
+            LastEvalResultIndex = InstructionPointer;
+            ++InstructionPointer;
+        }
     }
 
     readonly Dictionary<Expression, StackFrameInstructions> stackFrameDict = [];
@@ -164,9 +173,13 @@ public class PineVM : IPineVM
     }
 
     public static StackFrameInstructions InstructionsFromExpressionLessCache(Expression rootExpression) =>
-        new(InstructionsFromExpressionTransitive(rootExpression));
+        new(InstructionsFromExpressionTransitive(
+            rootExpression,
+            appendReturnInstruction: true));
 
-    public static IReadOnlyList<StackInstruction> InstructionsFromExpressionTransitive(Expression rootExpression)
+    public static IReadOnlyList<StackInstruction> InstructionsFromExpressionTransitive(
+        Expression rootExpression,
+        bool appendReturnInstruction)
     {
         var conditionalToSplit =
             Expression.EnumerateSelfAndDescendants(rootExpression)
@@ -177,40 +190,101 @@ public class PineVM : IPineVM
 
         if (conditionalToSplit is not null)
         {
-            var ifFalseRootExpr =
-                CompilePineToDotNet.ReducePineExpression.TransformPineExpressionWithOptionalReplacement(
-                    findReplacement:
-                    expr => expr == conditionalToSplit ? conditionalToSplit.ifFalse : null,
-                    rootExpression).expr;
+            var ifInvalidInstructions =
+                InstructionsFromExpressionTransitive(
+                    new Expression.LiteralExpression(PineValue.EmptyList),
+                    appendReturnInstruction: false);
 
-            var ifTrueRootExpr =
-                CompilePineToDotNet.ReducePineExpression.TransformPineExpressionWithOptionalReplacement(
-                    findReplacement:
-                    expr => expr == conditionalToSplit ? conditionalToSplit.ifTrue : null,
-                    rootExpression).expr;
+            var ifFalseInstructions =
+                InstructionsFromExpressionTransitive(
+                    conditionalToSplit.ifFalse,
+                    appendReturnInstruction: false);
 
-            var ifInvalidRootExpr =
-                CompilePineToDotNet.ReducePineExpression.TransformPineExpressionWithOptionalReplacement(
-                    findReplacement:
-                    expr => expr == conditionalToSplit ? new Expression.LiteralExpression(PineValue.EmptyList) : null,
-                    rootExpression).expr;
+            var ifTrueInstructions =
+                InstructionsFromExpressionTransitive(
+                    conditionalToSplit.ifTrue,
+                    appendReturnInstruction: false);
 
-            var ifInvalidInstructionsFlat = InstructionsFromExpressionTransitive(ifInvalidRootExpr);
-            var ifFalseInstructionsFlat = InstructionsFromExpressionTransitive(ifFalseRootExpr);
-            var ifTrueInstructionsFlat = InstructionsFromExpressionTransitive(ifTrueRootExpr);
+            IReadOnlyList<StackInstruction> ifInvalidInstructionsAndJump =
+                [.. ifInvalidInstructions,
+                StackInstruction.Jump(ifFalseInstructions.Count + 1 + ifTrueInstructions.Count + 1)];
+
+            IReadOnlyList<StackInstruction> ifFalseInstructionsAndJump =
+                [.. ifFalseInstructions,
+                StackInstruction.Jump(ifTrueInstructions.Count + 1)];
 
             var branchInstruction =
                 new StackInstruction.ConditionalJumpInstruction(
                     Condition: conditionalToSplit.condition,
-                    IfFalseOffset: ifInvalidInstructionsFlat.Count,
-                    IfTrueOffset: ifInvalidInstructionsFlat.Count + ifFalseInstructionsFlat.Count);
+                    IfFalseOffset: ifInvalidInstructionsAndJump.Count,
+                    IfTrueOffset: ifInvalidInstructionsAndJump.Count + ifFalseInstructionsAndJump.Count);
+
+            var placeholderExpr =
+                new Expression.KernelApplicationExpression(
+                    functionName: "placeholder-expr",
+                    argument:
+                    new Expression.ListExpression([
+                        new Expression.LiteralExpression(
+                            PineValueAsInteger.ValueFromSignedInteger(conditionalToSplit.condition.GetHashCode())),
+
+                        new Expression.LiteralExpression(
+                            PineValueAsInteger.ValueFromSignedInteger(conditionalToSplit.ifFalse.GetHashCode())),
+
+                        new Expression.LiteralExpression(
+                            PineValueAsInteger.ValueFromSignedInteger(conditionalToSplit.ifTrue.GetHashCode())),
+                        ]),
+                    function: _ => PineValue.EmptyList);
+
+            var rootExpressionWithPlaceholder =
+                CompilePineToDotNet.ReducePineExpression.TransformPineExpressionWithOptionalReplacement(
+                    findReplacement:
+                    descendant =>
+                    {
+                        if (descendant == conditionalToSplit)
+                        {
+                            return placeholderExpr;
+                        }
+
+                        return null;
+                    },
+                    rootExpression).expr;
+
+            var rootInstructionsBeforeLink =
+                InstructionsFromExpressionTransitive(
+                    rootExpressionWithPlaceholder,
+                    appendReturnInstruction: appendReturnInstruction);
+
+            var rootInstructions =
+                rootInstructionsBeforeLink
+                .Select((instruction, instructionSelfIndex) =>
+                {
+                    return
+                    StackInstruction.TransformExpressionWithOptionalReplacement(
+                        findReplacement:
+                        descendant =>
+                        {
+                            if (descendant == placeholderExpr)
+                            {
+                                var offset = -1 - instructionSelfIndex;
+
+                                return new Expression.StackReferenceExpression(
+                                    offset: offset);
+                            }
+
+                            return null;
+                        },
+                        instruction: instruction);
+                })
+                .ToImmutableArray();
 
             var mergedInstructions =
                 (IReadOnlyList<StackInstruction>)
                 [branchInstruction,
-                ..ifInvalidInstructionsFlat,
-                ..ifFalseInstructionsFlat,
-                ..ifTrueInstructionsFlat];
+                ..ifInvalidInstructionsAndJump,
+                ..ifFalseInstructionsAndJump,
+                ..ifTrueInstructions,
+                new StackInstruction.CopyLastAssignedInstruction(),
+                ..rootInstructions];
 
             return mergedInstructions;
         }
@@ -218,11 +292,16 @@ public class PineVM : IPineVM
         var expressionsToSeparate =
             ExpressionsToSeparateSkippingConditional(rootExpression)
             .Select(StackInstruction.Eval)
-            .Concat([StackInstruction.Eval(rootExpression), StackInstruction.Return])
+            .Concat([StackInstruction.Eval(rootExpression)])
+            .ToImmutableArray();
+
+        var instructionsBeforeFilter =
+            expressionsToSeparate
+            .Concat(appendReturnInstruction ? [StackInstruction.Return] : [])
             .ToImmutableArray();
 
         var instructionsFiltered =
-            SkipConsecutiveDuplicateInstructions(expressionsToSeparate)
+            SkipConsecutiveDuplicateInstructions(instructionsBeforeFilter)
             .ToImmutableArray();
 
         var localInstructionIndexFromExpr = new Dictionary<Expression, int>();
@@ -598,13 +677,15 @@ public class PineVM : IPineVM
 
             if (currentInstruction is StackInstruction.ReturnInstruction)
             {
-                if (currentFrame.InstructionPointer is 0)
+                var lastAssignedIndex = currentFrame.LastEvalResultIndex;
+
+                if (lastAssignedIndex < 0)
                 {
-                    return "Return instruction at beginning of frame";
+                    return "Return instruction before assignment";
                 }
 
                 var frameReturnValue =
-                    currentFrame.InstructionsResultValues.Span[currentFrame.InstructionPointer - 1];
+                    currentFrame.InstructionsResultValues.Span[lastAssignedIndex];
 
                 if (currentFrame.ExpressionValue is { } currentFrameExprValue && EvalCache is { } evalCache &&
                     currentFrame.BeginTimestamp is { } beginTimestamp)
@@ -637,9 +718,24 @@ public class PineVM : IPineVM
 
                 var previousFrame = stack.Peek();
 
-                previousFrame.InstructionsResultValues.Span[previousFrame.InstructionPointer] = frameReturnValue;
+                previousFrame.PushInstructionResult(frameReturnValue);
 
-                previousFrame.InstructionPointer++;
+                continue;
+            }
+
+            if (currentInstruction is StackInstruction.CopyLastAssignedInstruction)
+            {
+                var lastAssignedIndex = currentFrame.LastEvalResultIndex;
+
+                if (lastAssignedIndex < 0)
+                {
+                    return "CopyLastAssignedInstruction before assignment";
+                }
+
+                var lastAssignedValue = currentFrame.InstructionsResultValues.Span[lastAssignedIndex];
+
+                currentFrame.PushInstructionResult(lastAssignedValue);
+
                 continue;
             }
 
@@ -674,8 +770,8 @@ public class PineVM : IPineVM
 
                         if (evalCache.TryGetValue(evalCacheKey, out var cachedValue) && cachedValue is not null)
                         {
-                            currentFrame.InstructionsResultValues.Span[currentFrame.InstructionPointer] = cachedValue;
-                            currentFrame.InstructionPointer++;
+                            currentFrame.PushInstructionResult(cachedValue);
+
                             continue;
                         }
                     }
@@ -744,14 +840,14 @@ public class PineVM : IPineVM
                                 currentFrame.EnvironmentValue,
                                 stackPrevValues: stackPrevValues);
 
-                        currentFrame.InstructionsResultValues.Span[currentFrame.InstructionPointer] = evalBranchResult;
-                        currentFrame.InstructionPointer++;
+                        currentFrame.PushInstructionResult(evalBranchResult); ;
+
                         continue;
                     }
                     else
                     {
-                        currentFrame.InstructionsResultValues.Span[currentFrame.InstructionPointer] = PineValue.EmptyList;
-                        currentFrame.InstructionPointer++;
+                        currentFrame.PushInstructionResult(PineValue.EmptyList);
+
                         continue;
                     }
                 }
@@ -762,8 +858,14 @@ public class PineVM : IPineVM
                         currentFrame.EnvironmentValue,
                         stackPrevValues: stackPrevValues);
 
-                currentFrame.InstructionsResultValues.Span[currentFrame.InstructionPointer] = evalResult;
-                currentFrame.InstructionPointer++;
+                currentFrame.PushInstructionResult(evalResult);
+
+                continue;
+            }
+
+            if (currentInstruction is StackInstruction.JumpInstruction jumpInstruction)
+            {
+                currentFrame.InstructionPointer += jumpInstruction.Offset;
                 continue;
             }
 
@@ -929,7 +1031,17 @@ public class PineVM : IPineVM
                     " results in index " + index);
             }
 
-            return stackPrevValues.Span[index];
+            var content = stackPrevValues.Span[index];
+
+            if (content is null)
+            {
+                throw new InvalidExpressionException(
+                    "Null value in stack reference: offset " + stackRef.offset +
+                    " from " + stackPrevValues.Length +
+                    " results in index " + index);
+            }
+
+            return content;
         }
 
         if (expression is Expression.KernelApplications_Skip_ListHead_Expression kernelApplicationsSkipListHead)

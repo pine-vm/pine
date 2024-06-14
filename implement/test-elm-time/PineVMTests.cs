@@ -110,6 +110,117 @@ public class PineVMTests
 
                 expected = Result<string, PineValue>.ok(PineValueAsInteger.ValueFromSignedInteger(13))
             },
+
+            new
+            {
+                expression=
+                (Expression)
+                new Expression.ConditionalExpression(
+                    condition:
+                    new Expression.LiteralExpression(PineValue.Blob([2])),
+                    ifTrue:
+                    new Expression.LiteralExpression(PineValueAsInteger.ValueFromSignedInteger(17)),
+                    ifFalse:
+                    new Expression.ParseAndEvalExpression(
+                        expression:
+                        ExpressionEncoding.ParseKernelApplicationExpression
+                            (
+                                functionName: "list_head",
+                                argument:
+                                ExpressionEncoding.ParseKernelApplicationExpression
+                                (
+                                    functionName: "skip",
+                                    argument: new Expression.ListExpression(
+                                        [
+                                        new Expression.LiteralExpression(PineValueAsInteger.ValueFromSignedInteger(1)),
+                                        Expression.Environment,
+                                        ])
+                                ).Extract(fromErr: err => throw new Exception(err))
+                            ).Extract(fromErr: err => throw new Exception(err)),
+                        Expression.Environment)),
+
+                environment =
+                PineValue.List(
+                    [
+                        PineValueAsInteger.ValueFromSignedInteger(43),
+                        ExpressionEncoding.EncodeExpressionAsValue(
+                            ExpressionEncoding.ParseKernelApplicationExpression
+                            (
+                                functionName: "list_head",
+                                argument: Expression.Environment
+                            ).Extract(fromErr: err => throw new Exception(err)))
+                        .Extract(fromErr: err => throw new Exception(err))
+                    ]),
+
+                expected = Result<string, PineValue>.ok(PineValueAsInteger.ValueFromSignedInteger(43))
+            },
+
+            new
+            {
+                expression=
+                (Expression)
+                new Expression.ConditionalExpression(
+                    condition:
+                    new Expression.LiteralExpression(PineValue.Blob([4])),
+                    ifTrue:
+                    new Expression.LiteralExpression(PineValueAsInteger.ValueFromSignedInteger(17)),
+                    ifFalse:
+                    new Expression.ParseAndEvalExpression(
+                        expression:
+                        ExpressionEncoding.ParseKernelApplicationExpression
+                            (
+                                functionName: "list_head",
+                                argument: Expression.Environment
+                            ).Extract(fromErr: err => throw new Exception(err)),
+                        Expression.Environment)),
+
+                environment = PineValue.EmptyList,
+
+                expected = Result<string, PineValue>.ok(PineValueAsInteger.ValueFromSignedInteger(17))
+            },
+
+            new
+            {
+                expression=
+                (Expression)
+                new Expression.ConditionalExpression(
+                    condition:
+                    new Expression.LiteralExpression(PineValue.Blob([4])),
+                    ifTrue:
+                    new Expression.ParseAndEvalExpression(
+                        expression:
+                        ExpressionEncoding.ParseKernelApplicationExpression
+                            (
+                                functionName: "list_head",
+                                argument:
+                                ExpressionEncoding.ParseKernelApplicationExpression
+                                (
+                                    functionName: "skip",
+                                    argument: new Expression.ListExpression(
+                                        [
+                                        new Expression.LiteralExpression(PineValueAsInteger.ValueFromSignedInteger(1)),
+                                        Expression.Environment,
+                                        ])
+                                ).Extract(fromErr: err => throw new Exception(err))
+                            ).Extract(fromErr: err => throw new Exception(err)),
+                        Expression.Environment),
+                    ifFalse:
+                    new Expression.LiteralExpression(PineValueAsInteger.ValueFromSignedInteger(17))),
+                environment =
+                PineValue.List(
+                    [
+                        PineValueAsInteger.ValueFromSignedInteger(41),
+                        ExpressionEncoding.EncodeExpressionAsValue(
+                            ExpressionEncoding.ParseKernelApplicationExpression
+                            (
+                                functionName: "list_head",
+                                argument: Expression.Environment
+                            ).Extract(fromErr: err => throw new Exception(err)))
+                        .Extract(fromErr: err => throw new Exception(err))
+                    ]),
+
+                expected = Result<string, PineValue>.ok(PineValueAsInteger.ValueFromSignedInteger(41))
+            },
         };
 
         foreach (var testCase in testCases)
@@ -241,7 +352,7 @@ public class PineVMTests
                                     ])
                             ).Extract(fromErr: err => throw new Exception(err))
                         ).Extract(fromErr: err => throw new Exception(err)),
-                        
+
                         new Expression.LiteralExpression(PineValue.EmptyBlob),
 
                         ExpressionEncoding.ParseKernelApplicationExpression
@@ -426,6 +537,208 @@ public class PineVMTests
                                 new Expression.LiteralExpression(PineValueAsInteger.ValueFromSignedInteger(13)),
                                 ifFalse:
                                 new Expression.LiteralExpression(PineValueAsInteger.ValueFromSignedInteger(17)))),
+                        StackInstruction.Return,
+                    ])
+            },
+
+            new
+            {
+                expression =
+                (Expression)
+                new Expression.ConditionalExpression(
+                    condition:
+                    new Expression.LiteralExpression(PineValueAsInteger.ValueFromSignedInteger(11)),
+                    ifTrue:
+                    new Expression.ParseAndEvalExpression(
+                        expression:
+                        ExpressionEncoding.ParseKernelApplicationExpression
+                            (
+                                functionName: "skip",
+                                argument: new Expression.ListExpression(
+                                    [
+                                    new Expression.LiteralExpression(PineValueAsInteger.ValueFromSignedInteger(13)),
+                                    Expression.Environment,
+                                    ])
+                            ).Extract(fromErr: err => throw new Exception(err)),
+                        Expression.Environment),
+                    ifFalse:
+                    new Expression.LiteralExpression(PineValueAsInteger.ValueFromSignedInteger(17))),
+
+                expected =
+                new PineVM.StackFrameInstructions(
+                    [
+                        new StackInstruction.ConditionalJumpInstruction(
+                            Condition:
+                            new Expression.LiteralExpression(PineValueAsInteger.ValueFromSignedInteger(11)),
+                            IfFalseOffset:2,
+                            IfTrueOffset:4),
+                        StackInstruction.Eval(
+                            new Expression.LiteralExpression(PineValue.EmptyList)),
+                        StackInstruction.Jump(offset: 4),
+                        StackInstruction.Eval(
+                            new Expression.LiteralExpression(PineValueAsInteger.ValueFromSignedInteger(17))),
+                        StackInstruction.Jump(offset: 2),
+                        StackInstruction.Eval(
+                            new Expression.ParseAndEvalExpression(
+                            expression:
+                            ExpressionEncoding.ParseKernelApplicationExpression
+                            (
+                                functionName: "skip",
+                                argument: new Expression.ListExpression(
+                                    [
+                                    new Expression.LiteralExpression(PineValueAsInteger.ValueFromSignedInteger(13)),
+                                    Expression.Environment,
+                                    ])
+                            ).Extract(fromErr: err => throw new Exception(err)),
+                            Expression.Environment)),
+                        new StackInstruction.CopyLastAssignedInstruction(),
+                        StackInstruction.Eval(new Expression.StackReferenceExpression(offset: -1)),
+                        StackInstruction.Return,
+                    ])
+            },
+
+
+            new
+            {
+                expression =
+                (Expression)
+                new Expression.ListExpression(
+                    [
+                        new Expression.LiteralExpression(PineValueAsInteger.ValueFromSignedInteger(47)),
+                        new Expression.ConditionalExpression(
+                            condition:
+                            new Expression.LiteralExpression(PineValueAsInteger.ValueFromSignedInteger(11)),
+                            ifTrue:
+                            new Expression.ParseAndEvalExpression(
+                                expression:
+                                ExpressionEncoding.ParseKernelApplicationExpression
+                                    (
+                                        functionName: "skip",
+                                        argument: new Expression.ListExpression(
+                                            [
+                                            new Expression.LiteralExpression(PineValueAsInteger.ValueFromSignedInteger(13)),
+                                            Expression.Environment,
+                                            ])
+                                    ).Extract(fromErr: err => throw new Exception(err)),
+                                Expression.Environment),
+                            ifFalse:
+                            new Expression.LiteralExpression(PineValueAsInteger.ValueFromSignedInteger(17)))
+                ]),
+
+                expected =
+                new PineVM.StackFrameInstructions(
+                    [
+                        new StackInstruction.ConditionalJumpInstruction(
+                            Condition:
+                            new Expression.LiteralExpression(PineValueAsInteger.ValueFromSignedInteger(11)),
+                            IfFalseOffset:2,
+                            IfTrueOffset:4),
+
+                        StackInstruction.Eval(
+                            new Expression.LiteralExpression(PineValue.EmptyList)),
+                        StackInstruction.Jump(offset: 4),
+
+                        StackInstruction.Eval(
+                            new Expression.LiteralExpression(PineValueAsInteger.ValueFromSignedInteger(17))),
+                        StackInstruction.Jump(offset: 2),
+
+                        StackInstruction.Eval(
+                            new Expression.ParseAndEvalExpression(
+                            expression:
+                            ExpressionEncoding.ParseKernelApplicationExpression
+                            (
+                                functionName: "skip",
+                                argument: new Expression.ListExpression(
+                                    [
+                                    new Expression.LiteralExpression(PineValueAsInteger.ValueFromSignedInteger(13)),
+                                    Expression.Environment,
+                                    ])
+                            ).Extract(fromErr: err => throw new Exception(err)),
+                            Expression.Environment)),
+
+                        new StackInstruction.CopyLastAssignedInstruction(),
+                        StackInstruction.Eval(new Expression.ListExpression(
+                            [
+                                new Expression.LiteralExpression(PineValueAsInteger.ValueFromSignedInteger(47)),
+                                new Expression.StackReferenceExpression(offset: -1),
+                            ])),
+                        StackInstruction.Return,
+                    ])
+            },
+
+            new
+            {
+                expression =
+                (Expression)
+                new Expression.ConditionalExpression(
+                    condition:
+                    new Expression.LiteralExpression(PineValueAsInteger.ValueFromSignedInteger(11)),
+                    ifFalse:
+                    new Expression.ConditionalExpression(
+                        condition:
+                        new Expression.LiteralExpression(PineValueAsInteger.ValueFromSignedInteger(13)),
+                        ifFalse:
+                        new Expression.ParseAndEvalExpression(
+                            expression: Expression.Environment,
+                            environment:Expression.Environment),
+                        ifTrue:
+                        new Expression.LiteralExpression(PineValueAsInteger.ValueFromSignedInteger(21))),
+                    ifTrue:
+                    new Expression.LiteralExpression(PineValueAsInteger.ValueFromSignedInteger(23))),
+
+                expected =
+                new PineVM.StackFrameInstructions(
+                    [
+                        new StackInstruction.ConditionalJumpInstruction(
+                            Condition:
+                            new Expression.LiteralExpression(PineValueAsInteger.ValueFromSignedInteger(11)),
+                            IfFalseOffset: 2,
+                            IfTrueOffset: 11),
+
+                        // Outer if-invalid
+                        StackInstruction.Eval(
+                            new Expression.LiteralExpression(PineValue.EmptyList)),
+                        StackInstruction.Jump(offset: 11),
+
+                        // Outer if-false:
+                        new StackInstruction.ConditionalJumpInstruction(
+                            Condition:
+                            new Expression.LiteralExpression(PineValueAsInteger.ValueFromSignedInteger(13)),
+                            IfFalseOffset: 2,
+                            IfTrueOffset: 4),
+
+                        // Inner if-invalid
+                        StackInstruction.Eval(
+                            new Expression.LiteralExpression(PineValue.EmptyList)),
+                        StackInstruction.Jump(offset: 4),
+
+                        // Inner if-false:
+                        StackInstruction.Eval(
+                            new Expression.ParseAndEvalExpression(
+                            expression: Expression.Environment,
+                            environment:Expression.Environment)),
+                        StackInstruction.Jump(offset: 2),
+
+                        // Inner if-true
+                        StackInstruction.Eval(
+                            new Expression.LiteralExpression(PineValueAsInteger.ValueFromSignedInteger(21))),
+
+                        // Copy from inner result to outer conditional
+                        new StackInstruction.CopyLastAssignedInstruction(),
+
+                        StackInstruction.Eval(new Expression.StackReferenceExpression(offset: -1)),
+
+                        // End outer if-false
+                        StackInstruction.Jump(offset: 2),
+
+                        // Outer if-true
+                        StackInstruction.Eval(
+                            new Expression.LiteralExpression(PineValueAsInteger.ValueFromSignedInteger(23))),
+
+                        new StackInstruction.CopyLastAssignedInstruction(),
+
+                        StackInstruction.Eval(new Expression.StackReferenceExpression(offset: -1)),
+
                         StackInstruction.Return,
                     ])
             },

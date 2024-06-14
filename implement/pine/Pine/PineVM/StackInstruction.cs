@@ -11,10 +11,17 @@ public abstract record StackInstruction
     public static StackInstruction Eval(Expression expression) =>
         new EvalInstruction(expression);
 
+    public static StackInstruction Jump(int offset) =>
+        new JumpInstruction(offset);
+
     public static readonly StackInstruction Return = new ReturnInstruction();
 
     public record EvalInstruction(
         Expression Expression)
+        : StackInstruction;
+
+    public record JumpInstruction(
+        int Offset)
         : StackInstruction;
 
     public record ConditionalJumpInstruction(
@@ -25,6 +32,9 @@ public abstract record StackInstruction
 
     public record ReturnInstruction
         : StackInstruction;
+
+    public record CopyLastAssignedInstruction :
+        StackInstruction;
 
     public static StackInstruction TransformExpressionWithOptionalReplacement(
         Func<Expression, Expression?> findReplacement,
@@ -39,6 +49,9 @@ public abstract record StackInstruction
                             evalInstruction.Expression);
 
                 return new EvalInstruction(newExpression);
+
+            case JumpInstruction:
+                return instruction;
 
             case ConditionalJumpInstruction conditionalJump:
                 {
@@ -55,6 +68,9 @@ public abstract record StackInstruction
 
             case ReturnInstruction:
                 return Return;
+
+            case CopyLastAssignedInstruction:
+                return instruction;
 
             default:
                 throw new NotImplementedException(
