@@ -215,13 +215,14 @@ public class PineVM : IPineVM
             return mergedInstructions;
         }
 
-        var instructionsBeforeFilter =
-            InstructionsFromExpressionSkippingConditional(rootExpression)
+        var expressionsToSeparate =
+            ExpressionsToSeparateSkippingConditional(rootExpression)
+            .Select(StackInstruction.Eval)
             .Concat([StackInstruction.Eval(rootExpression), StackInstruction.Return])
             .ToImmutableArray();
 
         var instructionsFiltered =
-            SkipConsecutiveDuplicateInstructions(instructionsBeforeFilter)
+            SkipConsecutiveDuplicateInstructions(expressionsToSeparate)
             .ToImmutableArray();
 
         var localInstructionIndexFromExpr = new Dictionary<Expression, int>();
@@ -313,7 +314,7 @@ public class PineVM : IPineVM
         }
     }
 
-    static IReadOnlyList<StackInstruction> InstructionsFromExpressionSkippingConditional(Expression rootExpression)
+    static IReadOnlyList<Expression> ExpressionsToSeparateSkippingConditional(Expression rootExpression)
     {
         var allExpressions =
             EnumerateComponentsOrderedForCompilation(
@@ -355,29 +356,19 @@ public class PineVM : IPineVM
             }
         }
 
-        static IReadOnlyList<StackInstruction>? instructionsFromExpression(Expression expression)
-        {
-            if (expression is Expression.ParseAndEvalExpression parseAndEval)
-            {
-                return [StackInstruction.Eval(expression)];
-            }
-
-            return null;
-        }
-
         var separatedInstructions =
             allExpressions
             .SelectMany(expression =>
             {
-                if (instructionsFromExpression(expression) is { } instructions)
+                if (expression is Expression.ParseAndEvalExpression parseAndEval)
                 {
-                    return instructions;
+                    return (IReadOnlyList<Expression>)[expression];
                 }
 
                 if (ExpressionLargeEnoughForCSE(expression) &&
                 allExpressionsExceptUnderDuplicateCount.TryGetValue(expression, out var exprInstCount) && 1 < exprInstCount)
                 {
-                    return [StackInstruction.Eval(expression)];
+                    return [expression];
                 }
 
                 return [];
