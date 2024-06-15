@@ -73,11 +73,11 @@ public class Program
         var applyFunctionCommand = AddApplyFunctionCommand(app);
         var truncateProcessHistoryCommand = AddTruncateProcessHistoryCommand(app);
 
-        var compileCommand = AddCompileCommand(app);
         var interactiveCommand = AddInteractiveCommand(app, dynamicPGOShare);
-        var describeCommand = AddDescribeCommand(app);
+        var compileCommand = AddCompileCommand(app);
         var elmTestRsCommand = AddElmTestRsCommand(app);
         var makeCommand = AddMakeCommand(app);
+        var describeCommand = AddDescribeCommand(app);
 
         var runCacheServerCmd = AddRunCacheServerCmd(app);
 
@@ -139,11 +139,11 @@ public class Program
                     title = "Develop and learn:",
                     commands = new[]
                     {
-                        makeCommand,
-                        compileCommand,
                         interactiveCommand,
-                        describeCommand,
+                        compileCommand,
                         elmTestRsCommand,
+                        makeCommand,
+                        describeCommand,
                     }
                 },
                 new
@@ -831,7 +831,7 @@ public class Program
         {
             interactiveCommand.AddName("repl");
 
-            interactiveCommand.Description = "Enter an environment for interactive exploration and composition of Elm programs.";
+            interactiveCommand.Description = "Enter environment for interactive exploration and composition of Elm programs.";
 
             var contextAppOption =
                 interactiveCommand
@@ -1418,7 +1418,7 @@ public class Program
     private static CommandLineApplication AddMakeCommand(CommandLineApplication app) =>
         app.Command("make", makeCommand =>
         {
-            makeCommand.Description = "The `make` command compiles Elm code into JavaScript, HTML, or other files.";
+            makeCommand.Description = "Compile Elm code into JavaScript, HTML, or other files.";
             makeCommand.UnrecognizedArgumentHandling = UnrecognizedArgumentHandling.Throw;
 
             var pathToElmFileArgument =
