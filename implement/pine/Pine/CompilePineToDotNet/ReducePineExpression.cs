@@ -51,7 +51,7 @@ public class ReducePineExpression
         {
             return
                 new PineVM.PineVM().EvaluateExpression(parseAndEvalExpr, PineValue.EmptyList)
-                .MapError(err => "Got independent environment, but failed to evaluated: " + err);
+                .MapError(err => "Got independent environment, but failed to evaluate: " + err);
         }
 
         return
@@ -89,7 +89,14 @@ public class ReducePineExpression
                     case "list_head":
                         {
                             if (rootKernelApp.argument is Expression.ListExpression argumentList)
-                                return argumentList.List.FirstOrDefault();
+                            {
+                                return
+                                    argumentList.List.FirstOrDefault() ??
+                                    new Expression.LiteralExpression(PineValue.EmptyList);
+                            }
+
+                            if (rootKernelApp.argument is Expression.LiteralExpression literal)
+                                return new Expression.LiteralExpression(KernelFunction.list_head(literal.Value));
 
                             return AttemptReduceViaEval();
                         }
@@ -105,6 +112,10 @@ public class ReducePineExpression
                                         if (argumentList.List[1] is Expression.ListExpression partiallySkippedList)
                                             return new Expression.ListExpression(
                                                 [.. partiallySkippedList.List.Skip((int)okSkipCount.Value)]);
+
+                                        if (argumentList.List[1] is Expression.LiteralExpression literal)
+                                            return new Expression.LiteralExpression(
+                                                KernelFunction.skip((int)okSkipCount.Value, literal.Value));
                                     }
                                 }
 
@@ -133,7 +144,11 @@ public class ReducePineExpression
                                 ?
                                 conditional.ifTrue
                                 :
-                                conditional.ifFalse);
+                                conditionValue == PineVMValues.FalseValue
+                                ?
+                                conditional.ifFalse
+                                :
+                                new Expression.LiteralExpression(PineValue.EmptyList));
                     }
 
                     return AttemptReduceViaEval();
@@ -312,18 +327,32 @@ public class ReducePineExpression
             "Expression type not implemented: " + expression.GetType().FullName);
     }
 
-    public static Expression SearchForExpressionReductionRecursive(int maxDepth, Expression expression)
+    public static Expression SearchForExpressionReductionRecursive(
+        int maxDepth,
+        Expression expression,
+        Func<Expression, bool>? dontReduceExpression = null)
     {
         if (maxDepth < 1)
             return expression;
 
         var transformed =
-            TransformPineExpressionWithOptionalReplacement(SearchForExpressionReduction, expression).expr;
+            TransformPineExpressionWithOptionalReplacement(
+                expr =>
+                {
+                    if (dontReduceExpression?.Invoke(expr) ?? false)
+                        return null;
+
+                    return SearchForExpressionReduction(expr);
+                }, expression).expr;
 
         if (transformed == expression)
             return transformed;
 
-        return SearchForExpressionReductionRecursive(maxDepth - 1, transformed);
+        return
+            SearchForExpressionReductionRecursive(
+                maxDepth - 1,
+                transformed,
+                dontReduceExpression);
     }
 }
 
