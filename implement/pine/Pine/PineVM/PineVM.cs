@@ -190,6 +190,12 @@ public class PineVM : IPineVM
 
         if (conditionalToSplit is not null)
         {
+            var optimizedConditionalExpression =
+                OptimizeExpressionTransitive(
+                    conditionalToSplit.condition,
+                    instructionIndex: 0,
+                    reusableEvalResultOffset: _ => null);
+
             var ifInvalidInstructions =
                 InstructionsFromExpressionTransitive(
                     new Expression.LiteralExpression(PineValue.EmptyList),
@@ -215,7 +221,7 @@ public class PineVM : IPineVM
 
             var branchInstruction =
                 new StackInstruction.ConditionalJumpInstruction(
-                    Condition: conditionalToSplit.condition,
+                    Condition: optimizedConditionalExpression,
                     IfFalseOffset: ifInvalidInstructionsAndJump.Count,
                     IfTrueOffset: ifInvalidInstructionsAndJump.Count + ifFalseInstructionsAndJump.Count);
 
@@ -260,19 +266,22 @@ public class PineVM : IPineVM
                 {
                     return
                     StackInstruction.TransformExpressionWithOptionalReplacement(
-                        findReplacement:
-                        descendant =>
-                        {
-                            if (descendant == placeholderExpr)
+                        transformExpression:
+                        expression =>
+                        CompilePineToDotNet.ReducePineExpression.TransformPineExpressionWithOptionalReplacement(
+                            findReplacement: descendant =>
                             {
-                                var offset = -1 - instructionSelfIndex;
+                                if (descendant == placeholderExpr)
+                                {
+                                    var offset = -1 - instructionSelfIndex;
 
-                                return new Expression.StackReferenceExpression(
-                                    offset: offset);
-                            }
+                                    return new Expression.StackReferenceExpression(
+                                        offset: offset);
+                                }
 
-                            return null;
-                        },
+                                return null;
+                            },
+                            expression: expression).expr,
                         instruction: instruction);
                 })
                 .ToImmutableArray();
@@ -306,51 +315,14 @@ public class PineVM : IPineVM
 
         var localInstructionIndexFromExpr = new Dictionary<Expression, int>();
 
-        StackInstruction OptimizeInstruction(StackInstruction instruction, int selfIndex)
+        int? reusableEvalResult(Expression expr)
         {
-            return
-                 StackInstruction.TransformExpressionWithOptionalReplacement(
-                    findReplacement:
-                    descendant =>
-                    {
-                        if (localInstructionIndexFromExpr.TryGetValue(descendant, out var instructionIndex))
-                        {
-                            var offset = instructionIndex - selfIndex;
+            if (localInstructionIndexFromExpr.TryGetValue(expr, out var earlierIndex))
+            {
+                return earlierIndex;
+            }
 
-                            if (offset != 0)
-                            {
-                                if (offset >= 0)
-                                {
-                                    throw new Exception(
-                                        "Found non-negative offset for stack ref expr: " + offset +
-                                        " (selfIndex is " + selfIndex + ")");
-                                }
-
-                                return new Expression.StackReferenceExpression(offset: offset);
-                            }
-                        }
-
-                        {
-                            /*
-                             * Skip over all expressions that we do not descend into when enumerating the components.
-                             * (EnumerateComponentsOrderedForCompilation)
-                             * */
-
-                            if (descendant is Expression.ConditionalExpression)
-                            {
-                                // Return non-null value to stop descend.
-                                return descendant;
-                            }
-                        }
-
-                        if (TryFuseTransitive(descendant) is { } fused)
-                        {
-                            return fused;
-                        }
-
-                        return null;
-                    },
-                    instruction: instruction);
+            return null;
         }
 
         var instructionsOptimized =
@@ -370,10 +342,83 @@ public class PineVM : IPineVM
 
                 return instruction;
             })
-            .Select(OptimizeInstruction)
+            .Select((instruction, instructionIndex) =>
+            OptimizeInstruction(instruction, instructionIndex, reusableEvalResult))
             .ToImmutableArray();
 
         return instructionsOptimized;
+    }
+
+    static StackInstruction OptimizeInstruction(
+        StackInstruction instruction,
+        int instructionIndex,
+        Func<Expression, int?> reusableEvalResultOffset)
+    {
+        return
+             StackInstruction.TransformExpressionWithOptionalReplacement(
+                transformExpression:
+                expression => OptimizeExpressionTransitive(
+                    expression,
+                    instructionIndex,
+                    reusableEvalResultOffset),
+                instruction: instruction);
+    }
+
+    static Expression OptimizeExpressionTransitive(
+        Expression expression,
+        int instructionIndex,
+        Func<Expression, int?> reusableEvalResultOffset)
+    {
+        return
+            CompilePineToDotNet.ReducePineExpression.TransformPineExpressionWithOptionalReplacement(
+                findReplacement: expr => OptimizeExpressionStep(expr, instructionIndex, reusableEvalResultOffset),
+                expression).expr;
+    }
+
+    static Expression? OptimizeExpressionStep(
+        Expression expression,
+        int instructionIndex,
+        Func<Expression, int?> reusableEvalResultOffset)
+    {
+        if (expression is Expression.EnvironmentExpression)
+            return null;
+
+        if (reusableEvalResultOffset.Invoke(expression) is { } reusableOffset)
+        {
+            var offset = reusableOffset - instructionIndex;
+
+            if (offset != 0)
+            {
+                if (offset >= 0)
+                {
+                    throw new Exception(
+                        "Found non-negative offset for stack ref expr: " + offset +
+                        " (selfIndex is " + instructionIndex + ")");
+                }
+
+                return new Expression.StackReferenceExpression(offset: offset);
+            }
+        }
+
+        {
+            /*
+             * Skip over all expressions that we do not descend into when enumerating the components.
+             * (EnumerateComponentsOrderedForCompilation)
+             * */
+
+            if (expression is Expression.ConditionalExpression)
+            {
+                // Return non-null value to stop descend.
+                return expression;
+            }
+        }
+
+        if (TryFuseTransitive(expression) is { } fused)
+        {
+            return fused;
+        }
+
+        return null;
     }
 
     static IEnumerable<StackInstruction> SkipConsecutiveDuplicateInstructions(IEnumerable<StackInstruction> sequence)

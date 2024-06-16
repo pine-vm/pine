@@ -37,16 +37,14 @@ public abstract record StackInstruction
         StackInstruction;
 
     public static StackInstruction TransformExpressionWithOptionalReplacement(
-        Func<Expression, Expression?> findReplacement,
+        Func<Expression, Expression> transformExpression,
         StackInstruction instruction)
     {
         switch (instruction)
         {
             case EvalInstruction evalInstruction:
-                var (newExpression, _) =
-                        CompilePineToDotNet.ReducePineExpression.TransformPineExpressionWithOptionalReplacement(
-                            findReplacement,
-                            evalInstruction.Expression);
+
+                var newExpression = transformExpression(evalInstruction.Expression);
 
                 return new EvalInstruction(newExpression);
 
@@ -55,10 +53,7 @@ public abstract record StackInstruction
 
             case ConditionalJumpInstruction conditionalJump:
                 {
-                    var newCondition =
-                        CompilePineToDotNet.ReducePineExpression.TransformPineExpressionWithOptionalReplacement(
-                            findReplacement,
-                            conditionalJump.Condition).expr;
+                    var newCondition = transformExpression(conditionalJump.Condition);
 
                     return new ConditionalJumpInstruction(
                         newCondition,
