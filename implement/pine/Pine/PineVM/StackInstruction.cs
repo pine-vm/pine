@@ -25,7 +25,6 @@ public abstract record StackInstruction
         : StackInstruction;
 
     public record ConditionalJumpInstruction(
-        Expression Condition,
         int IfFalseOffset,
         int IfTrueOffset)
         : StackInstruction;
@@ -51,15 +50,8 @@ public abstract record StackInstruction
             case JumpInstruction:
                 return instruction;
 
-            case ConditionalJumpInstruction conditionalJump:
-                {
-                    var newCondition = transformExpression(conditionalJump.Condition);
-
-                    return new ConditionalJumpInstruction(
-                        newCondition,
-                        IfFalseOffset: conditionalJump.IfFalseOffset,
-                        IfTrueOffset: conditionalJump.IfTrueOffset);
-                }
+            case ConditionalJumpInstruction:
+                return instruction;
 
             case ReturnInstruction:
                 return Return;

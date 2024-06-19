@@ -517,18 +517,6 @@ public class PineVMTests
                 expected =
                 new PineVM.StackFrameInstructions(
                     [
-                        /*
-                        new StackInstruction.ConditionalJumpInstruction(
-                            Condition:
-                            new Expression.LiteralExpression(PineValueAsInteger.ValueFromSignedInteger(11)),
-                            IfTrueOffset:3),
-                        StackInstruction.Eval(
-                            new Expression.LiteralExpression(PineValueAsInteger.ValueFromSignedInteger(17))),
-                        StackInstruction.Return,
-                        StackInstruction.Eval(
-                            new Expression.LiteralExpression(PineValueAsInteger.ValueFromSignedInteger(13))),
-                        StackInstruction.Return
-                        */
                         StackInstruction.Eval(
                             new Expression.ConditionalExpression(
                                 condition:
@@ -567,9 +555,9 @@ public class PineVMTests
                 expected =
                 new PineVM.StackFrameInstructions(
                     [
+                        StackInstruction.Eval(new Expression.LiteralExpression(PineValueAsInteger.ValueFromSignedInteger(11))),
+
                         new StackInstruction.ConditionalJumpInstruction(
-                            Condition:
-                            new Expression.LiteralExpression(PineValueAsInteger.ValueFromSignedInteger(11)),
                             IfFalseOffset:2,
                             IfTrueOffset:4),
                         StackInstruction.Eval(
@@ -628,9 +616,9 @@ public class PineVMTests
                 expected =
                 new PineVM.StackFrameInstructions(
                     [
+                        StackInstruction.Eval(new Expression.LiteralExpression(PineValueAsInteger.ValueFromSignedInteger(11))),
+
                         new StackInstruction.ConditionalJumpInstruction(
-                            Condition:
-                            new Expression.LiteralExpression(PineValueAsInteger.ValueFromSignedInteger(11)),
                             IfFalseOffset:2,
                             IfTrueOffset:4),
 
@@ -689,21 +677,21 @@ public class PineVMTests
                 expected =
                 new PineVM.StackFrameInstructions(
                     [
+                        StackInstruction.Eval(new Expression.LiteralExpression(PineValueAsInteger.ValueFromSignedInteger(11))),
+
                         new StackInstruction.ConditionalJumpInstruction(
-                            Condition:
-                            new Expression.LiteralExpression(PineValueAsInteger.ValueFromSignedInteger(11)),
                             IfFalseOffset: 2,
-                            IfTrueOffset: 11),
+                            IfTrueOffset: 12),
 
                         // Outer if-invalid
                         StackInstruction.Eval(
                             new Expression.LiteralExpression(PineValue.EmptyList)),
-                        StackInstruction.Jump(offset: 11),
+                        StackInstruction.Jump(offset: 12),
 
                         // Outer if-false:
+                        StackInstruction.Eval(new Expression.LiteralExpression(PineValueAsInteger.ValueFromSignedInteger(13))),
+
                         new StackInstruction.ConditionalJumpInstruction(
-                            Condition:
-                            new Expression.LiteralExpression(PineValueAsInteger.ValueFromSignedInteger(13)),
                             IfFalseOffset: 2,
                             IfTrueOffset: 4),
 
@@ -809,24 +797,6 @@ public class PineVMTests
                 expected =
                 new PineVM.StackFrameInstructions(
                     [
-                        /*
-                        new StackInstruction.ConditionalJumpInstruction(
-                            Condition:
-                            new Expression.LiteralExpression(PineValueAsInteger.ValueFromSignedInteger(11)),
-                            IfTrueOffset:3),
-                        StackInstruction.Eval(
-                            new Expression.ConditionalExpression(
-                                condition:
-                                new Expression.LiteralExpression(PineValueAsInteger.ValueFromSignedInteger(21)),
-                                ifTrue:
-                                new Expression.LiteralExpression(PineValueAsInteger.ValueFromSignedInteger(23)),
-                                ifFalse:
-                                new Expression.LiteralExpression(PineValueAsInteger.ValueFromSignedInteger(27)))),
-                        StackInstruction.Return,
-                        StackInstruction.Eval(
-                            new Expression.LiteralExpression(PineValueAsInteger.ValueFromSignedInteger(13))),
-                        StackInstruction.Return
-                        */
                         StackInstruction.Eval(
                             new Expression.ConditionalExpression(
                                 condition:

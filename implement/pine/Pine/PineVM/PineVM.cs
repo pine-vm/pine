@@ -129,6 +129,14 @@ public class PineVM : IPineVM
             LastEvalResultIndex = InstructionPointer;
             ++InstructionPointer;
         }
+
+        public PineValue LastEvalResult()
+        {
+            if (LastEvalResultIndex < 0)
+                throw new InvalidOperationException("Reference to last eval result before first eval");
+
+            return InstructionsResultValues.Span[LastEvalResultIndex];
+        }
     }
 
     readonly Dictionary<Expression, StackFrameInstructions> stackFrameDict = [];
@@ -182,19 +190,23 @@ public class PineVM : IPineVM
         bool appendReturnInstruction)
     {
         var conditionalToSplit =
-            Expression.EnumerateSelfAndDescendants(rootExpression)
+            ListComponentsOrderedForCompilation(rootExpression, skipDescendants: null)
             .OfType<Expression.ConditionalExpression>()
             .FirstOrDefault(conditional =>
+            ExpressionShouldGetNewStackFrame(conditional.condition) ||
             ExpressionShouldGetNewStackFrame(conditional.ifFalse) ||
             ExpressionShouldGetNewStackFrame(conditional.ifTrue));
 
         if (conditionalToSplit is not null)
         {
-            var optimizedConditionalExpression =
-                OptimizeExpressionTransitive(
+            var conditionSeparated =
+                ExpressionsToSeparateSkippingConditional(conditionalToSplit.condition)
+                .Append(conditionalToSplit.condition);
+
+            var conditionInstructions =
+                InstructionsFromExpressionTransitive(
                     conditionalToSplit.condition,
-                    instructionIndex: 0,
-                    reusableEvalResultOffset: _ => null);
+                    appendReturnInstruction: false);
 
             var ifInvalidInstructions =
                 InstructionsFromExpressionTransitive(
@@ -221,7 +233,6 @@ public class PineVM : IPineVM
 
             var branchInstruction =
                 new StackInstruction.ConditionalJumpInstruction(
-                    Condition: optimizedConditionalExpression,
                     IfFalseOffset: ifInvalidInstructionsAndJump.Count,
                     IfTrueOffset: ifInvalidInstructionsAndJump.Count + ifFalseInstructionsAndJump.Count);
 
@@ -288,7 +299,8 @@ public class PineVM : IPineVM
 
             var mergedInstructions =
                 (IReadOnlyList<StackInstruction>)
-                [branchInstruction,
+                [..conditionInstructions,
+                branchInstruction,
                 ..ifInvalidInstructionsAndJump,
                 ..ifFalseInstructionsAndJump,
                 ..ifTrueInstructions,
@@ -441,7 +453,7 @@ public class PineVM : IPineVM
     static IReadOnlyList<Expression> ExpressionsToSeparateSkippingConditional(Expression rootExpression)
     {
         var allExpressions =
-            EnumerateComponentsOrderedForCompilation(
+            ListComponentsOrderedForCompilation(
                 rootExpression,
                 skipDescendants: null)
             .ToImmutableArray();
@@ -461,7 +473,7 @@ public class PineVM : IPineVM
         }
 
         var allExpressionsExceptUnderDuplicate =
-            EnumerateComponentsOrderedForCompilation(
+            ListComponentsOrderedForCompilation(
                 rootExpression,
                 skipDescendants: node => 1 < allExpressionsCount[node])
             .ToImmutableArray();
@@ -502,7 +514,7 @@ public class PineVM : IPineVM
         return separatedInstructions;
     }
 
-    public static IEnumerable<Expression> EnumerateComponentsOrderedForCompilation(
+    public static IEnumerable<Expression> ListComponentsOrderedForCompilation(
         Expression rootExpression,
         Func<Expression, bool>? skipDescendants)
     {
@@ -916,11 +928,7 @@ public class PineVM : IPineVM
 
             if (currentInstruction is StackInstruction.ConditionalJumpInstruction conditionalStatement)
             {
-                var conditionValue =
-                    EvaluateExpressionDefaultLessStack(
-                        conditionalStatement.Condition,
-                        currentFrame.EnvironmentValue,
-                        stackPrevValues: stackPrevValues);
+                var conditionValue = currentFrame.LastEvalResult();
 
                 currentFrame.InstructionPointer++;
 
