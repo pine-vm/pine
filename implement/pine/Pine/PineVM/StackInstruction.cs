@@ -32,8 +32,8 @@ public abstract record StackInstruction
     public record ReturnInstruction
         : StackInstruction;
 
-    public record CopyLastAssignedInstruction :
-        StackInstruction;
+    public record CopyLastAssignedInstruction
+        : StackInstruction;
 
     public static StackInstruction TransformExpressionWithOptionalReplacement(
         Func<Expression, Expression> transformExpression,

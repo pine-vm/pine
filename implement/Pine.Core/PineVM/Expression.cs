@@ -233,6 +233,22 @@ public abstract record Expression
 
                     break;
 
+                case StackReferenceExpression:
+                    break;
+
+                case KernelApplication_Equal_Two equalTwo:
+
+                    stack.Push(equalTwo.left);
+                    stack.Push(equalTwo.right);
+
+                    break;
+
+                case KernelApplications_Skip_ListHead_Expression skipListHead:
+
+                    stack.Push(skipListHead.argument);
+
+                    break;
+
                 default:
                     throw new NotImplementedException("Unknown expression type: " + expression.GetType().FullName);
             }

@@ -731,6 +731,94 @@ public class PineVMTests
                     ])
             },
 
+            new
+            {
+                expression =
+                (Expression)
+                new Expression.ListExpression(
+                    [
+                        new Expression.ConditionalExpression(
+                            condition:
+                            new Expression.LiteralExpression(PineValueAsInteger.ValueFromSignedInteger(11)),
+                            ifTrue:
+                            new Expression.ParseAndEvalExpression(
+                                expression:
+                                new Expression.LiteralExpression(PineValueAsInteger.ValueFromSignedInteger(41)),
+                                environment:
+                                Expression.Environment),
+                            ifFalse:
+                            new Expression.LiteralExpression(PineValueAsInteger.ValueFromSignedInteger(17))),
+
+                        new Expression.ConditionalExpression(
+                            condition:
+                            new Expression.LiteralExpression(PineValueAsInteger.ValueFromSignedInteger(13)),
+                            ifTrue:
+                            new Expression.ParseAndEvalExpression(
+                                expression:
+                                new Expression.LiteralExpression(PineValueAsInteger.ValueFromSignedInteger(43)),
+                                environment:
+                                Expression.Environment),
+                            ifFalse:
+                            new Expression.LiteralExpression(PineValueAsInteger.ValueFromSignedInteger(19))),
+                ]),
+
+                expected =
+                new PineVM.StackFrameInstructions(
+                    [
+                        StackInstruction.Eval(new Expression.LiteralExpression(PineValueAsInteger.ValueFromSignedInteger(11))),
+
+                        new StackInstruction.ConditionalJumpInstruction(
+                            IfFalseOffset:2,
+                            IfTrueOffset:4),
+
+                        StackInstruction.Eval(
+                            new Expression.LiteralExpression(PineValue.EmptyList)),
+                        StackInstruction.Jump(offset: 4),
+
+                        StackInstruction.Eval(
+                            new Expression.LiteralExpression(PineValueAsInteger.ValueFromSignedInteger(17))),
+                        StackInstruction.Jump(offset: 2),
+
+                        StackInstruction.Eval(
+                            new Expression.ParseAndEvalExpression(
+                            expression:
+                            new Expression.LiteralExpression(PineValueAsInteger.ValueFromSignedInteger(41)),
+                            Expression.Environment)),
+
+                        new StackInstruction.CopyLastAssignedInstruction(),
+
+                        StackInstruction.Eval(new Expression.LiteralExpression(PineValueAsInteger.ValueFromSignedInteger(13))),
+
+                        new StackInstruction.ConditionalJumpInstruction(
+                            IfFalseOffset:2,
+                            IfTrueOffset:4),
+
+                        StackInstruction.Eval(
+                            new Expression.LiteralExpression(PineValue.EmptyList)),
+                        StackInstruction.Jump(offset: 4),
+
+                        StackInstruction.Eval(
+                            new Expression.LiteralExpression(PineValueAsInteger.ValueFromSignedInteger(19))),
+                        StackInstruction.Jump(offset: 2),
+
+                        StackInstruction.Eval(
+                            new Expression.ParseAndEvalExpression(
+                            expression:
+                            new Expression.LiteralExpression(PineValueAsInteger.ValueFromSignedInteger(43)),
+                            Expression.Environment)),
+
+                        new StackInstruction.CopyLastAssignedInstruction(),
+
+                        StackInstruction.Eval(new Expression.ListExpression(
+                            [
+                                new Expression.StackReferenceExpression(offset: -9),
+                                new Expression.StackReferenceExpression(offset: -1),
+                            ])),
+
+                        StackInstruction.Return,
+                    ])
+            },
+
             /*
              * 
              * 2024-06-07
