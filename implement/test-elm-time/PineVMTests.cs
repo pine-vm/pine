@@ -518,13 +518,26 @@ public class PineVMTests
                 new PineVM.StackFrameInstructions(
                     [
                         StackInstruction.Eval(
-                            new Expression.ConditionalExpression(
-                                condition:
-                                new Expression.LiteralExpression(PineValueAsInteger.ValueFromSignedInteger(11)),
-                                ifTrue:
-                                new Expression.LiteralExpression(PineValueAsInteger.ValueFromSignedInteger(13)),
-                                ifFalse:
-                                new Expression.LiteralExpression(PineValueAsInteger.ValueFromSignedInteger(17)))),
+                            new Expression.LiteralExpression(PineValueAsInteger.ValueFromSignedInteger(11))),
+
+                        new StackInstruction.ConditionalJumpInstruction(
+                            IfFalseOffset: 2,
+                            IfTrueOffset: 4),
+
+                        StackInstruction.Eval(
+                            new Expression.LiteralExpression(PineValue.EmptyList)),
+                        StackInstruction.Jump(offset: 4),
+
+                        StackInstruction.Eval(
+                            new Expression.LiteralExpression(PineValueAsInteger.ValueFromSignedInteger(17))),
+                        StackInstruction.Jump(offset: 2),
+
+                        StackInstruction.Eval(
+                            new Expression.LiteralExpression(PineValueAsInteger.ValueFromSignedInteger(13))),
+                        new StackInstruction.CopyLastAssignedInstruction(),
+
+                        StackInstruction.Eval(new Expression.StackReferenceExpression(offset: -1)),
+
                         StackInstruction.Return,
                     ])
             },
@@ -886,19 +899,45 @@ public class PineVMTests
                 new PineVM.StackFrameInstructions(
                     [
                         StackInstruction.Eval(
-                            new Expression.ConditionalExpression(
-                                condition:
-                                new Expression.LiteralExpression(PineValueAsInteger.ValueFromSignedInteger(11)),
-                                ifTrue:
-                                new Expression.LiteralExpression(PineValueAsInteger.ValueFromSignedInteger(13)),
-                                ifFalse:
-                                new Expression.ConditionalExpression(
-                                    condition:
-                                    new Expression.LiteralExpression(PineValueAsInteger.ValueFromSignedInteger(21)),
-                                    ifTrue:
-                                    new Expression.LiteralExpression(PineValueAsInteger.ValueFromSignedInteger(23)),
-                                    ifFalse:
-                                    new Expression.LiteralExpression(PineValueAsInteger.ValueFromSignedInteger(27))))),
+                            new Expression.LiteralExpression(PineValueAsInteger.ValueFromSignedInteger(11))),
+
+                        new StackInstruction.ConditionalJumpInstruction(
+                            IfFalseOffset: 2,
+                            IfTrueOffset: 12),
+
+                        StackInstruction.Eval(
+                            new Expression.LiteralExpression(PineValue.EmptyList)),
+                        StackInstruction.Jump(offset: 12),
+
+                        StackInstruction.Eval(
+                            new Expression.LiteralExpression(PineValueAsInteger.ValueFromSignedInteger(21))),
+
+                        new StackInstruction.ConditionalJumpInstruction(
+                            IfFalseOffset: 2,
+                            IfTrueOffset: 4),
+
+                        StackInstruction.Eval(
+                            new Expression.LiteralExpression(PineValue.EmptyList)),
+                        StackInstruction.Jump(offset: 4),
+
+                        StackInstruction.Eval(
+                            new Expression.LiteralExpression(PineValueAsInteger.ValueFromSignedInteger(27))),
+                        StackInstruction.Jump(offset: 2),
+
+                        StackInstruction.Eval(
+                            new Expression.LiteralExpression(PineValueAsInteger.ValueFromSignedInteger(23))),
+
+                        new StackInstruction.CopyLastAssignedInstruction(),
+                        StackInstruction.Eval(new Expression.StackReferenceExpression(offset: -1)),
+
+                        StackInstruction.Jump(offset: 2),
+
+                        StackInstruction.Eval(
+                            new Expression.LiteralExpression(PineValueAsInteger.ValueFromSignedInteger(13))),
+                        new StackInstruction.CopyLastAssignedInstruction(),
+
+                        StackInstruction.Eval(new Expression.StackReferenceExpression(offset: -1)),
+
                         StackInstruction.Return,
                     ])
             },
@@ -1009,7 +1048,7 @@ public class PineVMTests
                 Assert.AreEqual(
                     testCase.expected.Instructions[i],
                     compiled.Instructions[i],
-                    $"Instruction at index {i}");
+                    $"Instruction at index {i} of " + compiled.Instructions.Count);
             }
 
             Assert.AreEqual(testCase.expected, compiled);

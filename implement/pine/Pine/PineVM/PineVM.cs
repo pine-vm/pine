@@ -188,48 +188,44 @@ public class PineVM : IPineVM
     {
         var node = NodeFromExpressionTransitive(
             rootExpression,
-            skipSplitConditional: _ => false);
+            conditionalsToSkip: []);
 
-        return InstructionsFromNode(node);
+        return InstructionsFromNode(
+            node,
+            reusableConditionalResultOffset: _ => null);
     }
 
     public static ImperativeNode NodeFromExpressionTransitive(
         Expression rootExpression,
-        Func<Expression.ConditionalExpression, bool> skipSplitConditional)
+        ImmutableHashSet<Expression.ConditionalExpression> conditionalsToSkip)
     {
         var conditionalToSplit =
             ListComponentsOrderedForCompilation(rootExpression, skipDescendants: null)
             .OfType<Expression.ConditionalExpression>()
-            .Where(c => !skipSplitConditional(c))
-            .FirstOrDefault(conditional =>
-            ExpressionShouldGetNewStackFrame(conditional.condition) ||
-            ExpressionShouldGetNewStackFrame(conditional.ifFalse) ||
-            ExpressionShouldGetNewStackFrame(conditional.ifTrue));
+            .Where(c => !conditionalsToSkip.Contains(c))
+            .FirstOrDefault();
 
         if (conditionalToSplit is not null)
         {
             var conditionNode =
                 NodeFromExpressionTransitive(
                     conditionalToSplit.condition,
-                    skipSplitConditional: skipSplitConditional);
+                    conditionalsToSkip: []);
 
             var falseNode =
                 NodeFromExpressionTransitive(
                     conditionalToSplit.ifFalse,
-                    skipSplitConditional: skipSplitConditional);
+                    conditionalsToSkip: []);
 
             var trueNode =
                 NodeFromExpressionTransitive(
                     conditionalToSplit.ifTrue,
-                    skipSplitConditional: skipSplitConditional);
-
-            bool skipSplitConditionalNew(Expression.ConditionalExpression other) =>
-                other == conditionalToSplit || skipSplitConditional(other);
+                    conditionalsToSkip: []);
 
             var continuationNode =
                 NodeFromExpressionTransitive(
                     rootExpression,
-                    skipSplitConditional: skipSplitConditionalNew);
+                    conditionalsToSkip: conditionalsToSkip.Add(conditionalToSplit));
 
             return
                 new ImperativeNode.ConditionalNode(
@@ -244,48 +240,55 @@ public class PineVM : IPineVM
     }
 
     public static IReadOnlyList<StackInstruction> InstructionsFromNode(
-        ImperativeNode imperativeNode)
+        ImperativeNode imperativeNode,
+        Func<Expression.ConditionalExpression, int?> reusableConditionalResultOffset)
     {
         if (imperativeNode is ImperativeNode.LeafNode leaf)
         {
-            var instructionsFiltered =
+            var instructionExprsFiltered =
                 ExpressionsToSeparateSkippingConditional(leaf.Expression)
                 .Append(leaf.Expression)
                 .Distinct()
-                .Select(StackInstruction.Eval)
                 .ToImmutableArray();
 
             var localInstructionIndexFromExpr = new Dictionary<Expression, int>();
 
             int? reusableEvalResult(Expression expr)
             {
-                if (localInstructionIndexFromExpr.TryGetValue(expr, out var earlierIndex))
+                if (expr is Expression.ConditionalExpression conditionalExpr)
                 {
-                    return earlierIndex;
+                    if (reusableConditionalResultOffset.Invoke(conditionalExpr) is { } reusableIndex)
+                    {
+                        return reusableIndex;
+                    }
+                }
+
+                {
+                    if (localInstructionIndexFromExpr.TryGetValue(expr, out var earlierIndex))
+                    {
+                        return earlierIndex;
+                    }
                 }
 
                 return null;
             }
 
             var instructionsOptimized =
-                instructionsFiltered
-                .Select((instruction, instructionIndex) =>
+                instructionExprsFiltered
+                .Select((expression, instructionIndex) =>
                 {
-                    if (instruction is StackInstruction.EvalInstruction evalInst)
+                    if (reusableEvalResult(expression) is { } reusableIndex)
                     {
-                        if (localInstructionIndexFromExpr.TryGetValue(evalInst.Expression, out var earlierIndex))
-                        {
-                            return StackInstruction.Eval(
-                                new Expression.StackReferenceExpression(earlierIndex - instructionIndex));
-                        }
-
-                        localInstructionIndexFromExpr.Add(evalInst.Expression, instructionIndex);
+                        return new Expression.StackReferenceExpression(reusableIndex - instructionIndex);
                     }
 
-                    return instruction;
+                    localInstructionIndexFromExpr.Add(expression, instructionIndex);
+
+                    return expression;
                 })
                 .Select((instruction, instructionIndex) =>
-                OptimizeInstruction(instruction, instructionIndex, reusableEvalResult))
+                OptimizeExpressionTransitive(instruction, instructionIndex, reusableEvalResult))
+                .Select(StackInstruction.Eval)
                 .ToImmutableArray();
 
             return instructionsOptimized;
@@ -294,16 +297,16 @@ public class PineVM : IPineVM
         if (imperativeNode is ImperativeNode.ConditionalNode conditional)
         {
             IReadOnlyList<StackInstruction> conditionInstructions =
-                [.. InstructionsFromNode(conditional.Condition)];
+                [.. InstructionsFromNode(conditional.Condition, reusableConditionalResultOffset)];
 
             IReadOnlyList<StackInstruction> ifInvalidInstructions =
                 [StackInstruction.Eval(new Expression.LiteralExpression(PineValue.EmptyList))];
 
             IReadOnlyList<StackInstruction> ifFalseInstructions =
-                [.. InstructionsFromNode(conditional.FalseBranch)];
+                [.. InstructionsFromNode(conditional.FalseBranch, reusableConditionalResultOffset)];
 
             IReadOnlyList<StackInstruction> ifTrueInstructions =
-                [.. InstructionsFromNode(conditional.TrueBranch)];
+                [.. InstructionsFromNode(conditional.TrueBranch, reusableConditionalResultOffset)];
 
             IReadOnlyList<StackInstruction> ifInvalidInstructionsAndJump =
                 [.. ifInvalidInstructions,
@@ -318,42 +321,29 @@ public class PineVM : IPineVM
                     IfFalseOffset: ifInvalidInstructionsAndJump.Count,
                     IfTrueOffset: ifInvalidInstructionsAndJump.Count + ifFalseInstructionsAndJump.Count);
 
-            IReadOnlyList<StackInstruction> continuationInstructionsBeforeLink =
-                [.. InstructionsFromNode(conditional.Continuation)];
-
-            var continuationInstructions =
-                continuationInstructionsBeforeLink
-                .Select((instruction, instructionSelfIndex) =>
-                {
-                    return
-                    StackInstruction.TransformExpressionWithOptionalReplacement(
-                        transformExpression:
-                        expression =>
-                        CompilePineToDotNet.ReducePineExpression.TransformPineExpressionWithOptionalReplacement(
-                            findReplacement: descendant =>
-                            {
-                                if (descendant == conditional.Origin)
-                                {
-                                    var offset = -1 - instructionSelfIndex;
-
-                                    return new Expression.StackReferenceExpression(offset: offset);
-                                }
-
-                                return null;
-                            },
-                            expression: expression).expr,
-                        instruction: instruction);
-                })
-                .ToImmutableArray();
-
-            var mergedInstructions =
-                (IReadOnlyList<StackInstruction>)
+            IReadOnlyList<StackInstruction> instructionsBeforeContinuation =
                 [..conditionInstructions,
                 branchInstruction,
                 ..ifInvalidInstructionsAndJump,
                 ..ifFalseInstructionsAndJump,
                 ..ifTrueInstructions,
-                new StackInstruction.CopyLastAssignedInstruction(),
+                new StackInstruction.CopyLastAssignedInstruction()];
+
+            int? reusableConditionalResultOffsetNew(Expression.ConditionalExpression conditionalExpression)
+            {
+                if (conditionalExpression == conditional.Origin)
+                {
+                    return -1;
+                }
+
+                return reusableConditionalResultOffset(conditionalExpression) - instructionsBeforeContinuation.Count;
+            }
+
+            IReadOnlyList<StackInstruction> continuationInstructions =
+                [.. InstructionsFromNode(conditional.Continuation, reusableConditionalResultOffsetNew)];
+
+            IReadOnlyList<StackInstruction> mergedInstructions =
+                [..instructionsBeforeContinuation,
                 ..continuationInstructions];
 
             return mergedInstructions;
@@ -363,21 +353,6 @@ public class PineVM : IPineVM
             "Unexpected node type: " + imperativeNode.GetType().FullName);
     }
 
-    static StackInstruction OptimizeInstruction(
-        StackInstruction instruction,
-        int instructionIndex,
-        Func<Expression, int?> reusableEvalResultOffset)
-    {
-        return
-             StackInstruction.TransformExpressionWithOptionalReplacement(
-                transformExpression:
-                expression => OptimizeExpressionTransitive(
-                    expression,
-                    instructionIndex,
-                    reusableEvalResultOffset),
-                instruction: instruction);
-    }
-
     static Expression OptimizeExpressionTransitive(
         Expression expression,
         int instructionIndex,
@@ -385,7 +360,11 @@ public class PineVM : IPineVM
     {
         return
             CompilePineToDotNet.ReducePineExpression.TransformPineExpressionWithOptionalReplacement(
-                findReplacement: expr => OptimizeExpressionStep(expr, instructionIndex, reusableEvalResultOffset),
+                findReplacement:
+                expr => OptimizeExpressionStep(
+                    expr,
+                    instructionIndex,
+                    reusableEvalResultOffset),
                 expression).expr;
     }
 
@@ -427,7 +406,7 @@ public class PineVM : IPineVM
             }
         }
 
-        if (TryFuseTransitive(expression) is { } fused)
+        if (TryFuseStep(expression) is { } fused)
         {
             return
                 OptimizeExpressionTransitive(
@@ -588,32 +567,16 @@ public class PineVM : IPineVM
         return false;
     }
 
-    public static Expression? TryFuseTransitive(Expression expression)
+    public static Expression? TryFuseStep(Expression expression)
     {
         if (TryMapToKernelApplications_Skip_ListHead_Expression(expression) is { } fused)
         {
-
-            var fusedArgument =
-                CompilePineToDotNet.ReducePineExpression.TransformPineExpressionWithOptionalReplacement(
-                    findReplacement: TryFuseTransitive,
-                    expression: fused.argument).expr;
-
-            return fused with { argument = fusedArgument };
+            return fused;
         }
 
         if (TryMapToKernelApplication_Equal_Two(expression) is { } fusedEqualTwo)
         {
-            var fusedLeft =
-                CompilePineToDotNet.ReducePineExpression.TransformPineExpressionWithOptionalReplacement(
-                    findReplacement: TryFuseTransitive,
-                    expression: fusedEqualTwo.left).expr;
-
-            var fusedRight =
-                CompilePineToDotNet.ReducePineExpression.TransformPineExpressionWithOptionalReplacement(
-                    findReplacement: TryFuseTransitive,
-                    expression: fusedEqualTwo.right).expr;
-
-            return fusedEqualTwo with { left = fusedLeft, right = fusedRight };
+            return fusedEqualTwo;
         }
 
         return null;
