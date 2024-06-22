@@ -192,7 +192,8 @@ public class PineVM : IPineVM
 
         return InstructionsFromNode(
             node,
-            reusableConditionalResultOffset: _ => null);
+            reusableExpressionResultOffset: _ => null,
+            shouldSeparate: _ => false);
     }
 
     public static ImperativeNode NodeFromExpressionTransitive(
@@ -241,12 +242,16 @@ public class PineVM : IPineVM
 
     public static IReadOnlyList<StackInstruction> InstructionsFromNode(
         ImperativeNode imperativeNode,
-        Func<Expression.ConditionalExpression, int?> reusableConditionalResultOffset)
+        Func<Expression, int?> reusableExpressionResultOffset,
+        Func<Expression, bool> shouldSeparate)
     {
         if (imperativeNode is ImperativeNode.LeafNode leaf)
         {
             var instructionExprsFiltered =
-                ExpressionsToSeparateSkippingConditional(leaf.Expression)
+                ExpressionsToSeparateSkippingConditional(
+                    leaf.Expression,
+                    expressionAlreadyCovered: expr => reusableExpressionResultOffset(expr).HasValue,
+                    shouldSeparate: shouldSeparate)
                 .Append(leaf.Expression)
                 .Distinct()
                 .ToImmutableArray();
@@ -255,9 +260,8 @@ public class PineVM : IPineVM
 
             int? reusableEvalResult(Expression expr)
             {
-                if (expr is Expression.ConditionalExpression conditionalExpr)
                 {
-                    if (reusableConditionalResultOffset.Invoke(conditionalExpr) is { } reusableIndex)
+                    if (reusableExpressionResultOffset.Invoke(expr) is { } reusableIndex)
                     {
                         return reusableIndex;
                     }
@@ -296,17 +300,115 @@ public class PineVM : IPineVM
 
         if (imperativeNode is ImperativeNode.ConditionalNode conditional)
         {
-            IReadOnlyList<StackInstruction> conditionInstructions =
-                [.. InstructionsFromNode(conditional.Condition, reusableConditionalResultOffset)];
+            var unconditionalNodesUnderCondition =
+                ImperativeNode.EnumerateSelfAndDescendants(
+                    conditional.Condition,
+                    skipBranches: true)
+                .ToImmutableArray();
+
+            var unconditionalExprUnderCondition = new HashSet<Expression>();
+
+            foreach (var nodeUnderCondition in unconditionalNodesUnderCondition)
+            {
+                if (nodeUnderCondition is not ImperativeNode.LeafNode leafNode)
+                    continue;
+
+                foreach (var expression in
+                    Expression.EnumerateSelfAndDescendants(
+                        leafNode.Expression,
+                        skipDescendants:
+                        expr => reusableExpressionResultOffset(expr).HasValue))
+                {
+                    unconditionalExprUnderCondition.Add(expression);
+                }
+            }
+
+            var otherNodes =
+                new[] { conditional.FalseBranch, conditional.TrueBranch, conditional.Continuation }
+                .SelectMany(otherRoot =>
+                ImperativeNode.EnumerateSelfAndDescendants(
+                    otherRoot,
+                    skipBranches: false))
+                .ToImmutableArray();
+
+            var candidatesForCSE = new HashSet<Expression>();
+
+            foreach (var otherNode in otherNodes)
+            {
+                if (otherNode is not ImperativeNode.LeafNode otherLeafNode)
+                    continue;
+
+                foreach (var otherExpr in Expression.EnumerateSelfAndDescendants(
+                    otherLeafNode.Expression,
+                    skipDescendants: candidatesForCSE.Contains))
+                {
+                    if (!ExpressionLargeEnoughForCSE(otherExpr))
+                        continue;
+
+                    if (reusableExpressionResultOffset(otherExpr).HasValue)
+                        continue;
+
+                    if (unconditionalExprUnderCondition.Contains(otherExpr))
+                    {
+                        candidatesForCSE.Add(otherExpr);
+                    }
+                }
+            }
+
+            var conditionInstructions =
+                InstructionsFromNode(
+                    conditional.Condition,
+                    reusableExpressionResultOffset,
+                    shouldSeparate: candidatesForCSE.Contains);
+
+            var reusableFromCondition = new Dictionary<Expression, int>();
+
+            for (int i = 0; i < conditionInstructions.Count; i++)
+            {
+                var instruction = conditionInstructions[i];
+
+                if (instruction is not StackInstruction.EvalInstruction evalInstruction)
+                {
+                    // Only include the range of instructions that will be executed unconditionally.
+                    break;
+                }
+
+                reusableFromCondition[evalInstruction.Expression] = i;
+            }
 
             IReadOnlyList<StackInstruction> ifInvalidInstructions =
                 [StackInstruction.Eval(new Expression.LiteralExpression(PineValue.EmptyList))];
 
+            var instructionsBeforeBranchFalseCount =
+                conditionInstructions.Count + 1 + ifInvalidInstructions.Count + 1;
+
+            int? reusableResultOffsetForBranchFalse(Expression expression)
+            {
+                if (reusableExpressionResultOffset(expression) is { } earlierOffset)
+                {
+                    return earlierOffset - instructionsBeforeBranchFalseCount;
+                }
+
+                if (reusableFromCondition.TryGetValue(expression, out var offsetFromCondition))
+                {
+                    return offsetFromCondition - conditionInstructions.Count;
+                }
+
+                return null;
+            }
+
             IReadOnlyList<StackInstruction> ifFalseInstructions =
-                [.. InstructionsFromNode(conditional.FalseBranch, reusableConditionalResultOffset)];
+                [.. InstructionsFromNode(
+                    conditional.FalseBranch,
+                    reusableResultOffsetForBranchFalse,
+                    shouldSeparate: _ => false)];
 
             IReadOnlyList<StackInstruction> ifTrueInstructions =
-                [.. InstructionsFromNode(conditional.TrueBranch, reusableConditionalResultOffset)];
+                [.. InstructionsFromNode(
+                    conditional.TrueBranch,
+                    reusableExpressionResultOffset:
+                    expr => reusableResultOffsetForBranchFalse(expr) - (ifFalseInstructions.Count + 1),
+                    shouldSeparate: _ => false)];
 
             IReadOnlyList<StackInstruction> ifInvalidInstructionsAndJump =
                 [.. ifInvalidInstructions,
@@ -329,18 +431,23 @@ public class PineVM : IPineVM
                 ..ifTrueInstructions,
                 new StackInstruction.CopyLastAssignedInstruction()];
 
-            int? reusableConditionalResultOffsetNew(Expression.ConditionalExpression conditionalExpression)
+            int? reusableResultOffsetForContinuation(Expression expression)
             {
-                if (conditionalExpression == conditional.Origin)
+                if (expression == conditional.Origin)
                 {
                     return -1;
                 }
 
-                return reusableConditionalResultOffset(conditionalExpression) - instructionsBeforeContinuation.Count;
+                return
+                    reusableResultOffsetForBranchFalse(expression) -
+                    (instructionsBeforeContinuation.Count - instructionsBeforeBranchFalseCount);
             }
 
             IReadOnlyList<StackInstruction> continuationInstructions =
-                [.. InstructionsFromNode(conditional.Continuation, reusableConditionalResultOffsetNew)];
+                [.. InstructionsFromNode(
+                    conditional.Continuation,
+                    reusableResultOffsetForContinuation,
+                    shouldSeparate: _ => false)];
 
             IReadOnlyList<StackInstruction> mergedInstructions =
                 [..instructionsBeforeContinuation,
@@ -376,7 +483,7 @@ public class PineVM : IPineVM
         if (expression is Expression.EnvironmentExpression)
             return null;
 
-        if (reusableEvalResultOffset.Invoke(expression) is { } reusableOffset)
+        if (reusableEvalResultOffset(expression) is { } reusableOffset)
         {
             var offset = reusableOffset - instructionIndex;
 
@@ -418,7 +525,10 @@ public class PineVM : IPineVM
         return null;
     }
 
-    static IReadOnlyList<Expression> ExpressionsToSeparateSkippingConditional(Expression rootExpression)
+    static IReadOnlyList<Expression> ExpressionsToSeparateSkippingConditional(
+        Expression rootExpression,
+        Func<Expression, bool> expressionAlreadyCovered,
+        Func<Expression, bool> shouldSeparate)
     {
         var allExpressions =
             ListComponentsOrderedForCompilation(
@@ -464,6 +574,12 @@ public class PineVM : IPineVM
             allExpressions
             .SelectMany(expression =>
             {
+                if (expressionAlreadyCovered(expression))
+                    return [];
+
+                if (shouldSeparate(expression))
+                    return [expression];
+
                 if (expression is Expression.ParseAndEvalExpression parseAndEval)
                 {
                     return (IReadOnlyList<Expression>)[expression];
@@ -553,12 +669,10 @@ public class PineVM : IPineVM
 
         if (expression is Expression.ListExpression list)
         {
-            foreach (var item in list.List)
+            for (int i = 0; i < list.List.Count; ++i)
             {
-                if (ExpressionLargeEnoughForCSE(item))
-                {
+                if (ExpressionLargeEnoughForCSE(list.List[i]))
                     return true;
-                }
             }
 
             return false;
