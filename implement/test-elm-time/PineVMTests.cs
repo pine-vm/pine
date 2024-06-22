@@ -1,4 +1,4 @@
-﻿using Microsoft.VisualStudio.TestTools.UnitTesting;
+using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Pine;
 using Pine.PineVM;
 using System;
@@ -968,9 +968,9 @@ public class PineVMTests
                 new PineVM.StackFrameInstructions(
                     [
                         StackInstruction.Eval(
-                            new Expression.KernelApplications_Skip_ListHead_Expression(
-                                skipCount: 17,
-                                argument:Expression.Environment)),
+                            new Expression.KernelApplications_Skip_ListHead_Path_Expression(
+                                SkipCounts: (int[]) [17],
+                                Argument:Expression.Environment)),
                         StackInstruction.Return
                     ])
             },
@@ -1019,15 +1019,15 @@ public class PineVMTests
                 new PineVM.StackFrameInstructions(
                     [
                         StackInstruction.Eval(
-                            new Expression.KernelApplications_Skip_ListHead_Expression(
-                                skipCount: 17,
-                                argument:
+                            new Expression.KernelApplications_Skip_ListHead_Path_Expression(
+                                SkipCounts: (int[])[17],
+                                Argument:
                                 new Expression.ListExpression(
                                 [
                                     new Expression.LiteralExpression(PineValueAsInteger.ValueFromSignedInteger(21)),
-                                    new Expression.KernelApplications_Skip_ListHead_Expression(
-                                        skipCount: 23,
-                                        argument:Expression.Environment)
+                                    new Expression.KernelApplications_Skip_ListHead_Path_Expression(
+                                        SkipCounts: (int[]) [23],
+                                        Argument: Expression.Environment)
                                 ]))),
                         StackInstruction.Return
                     ])

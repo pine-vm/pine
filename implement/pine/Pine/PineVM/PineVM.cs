@@ -569,7 +569,7 @@ public class PineVM : IPineVM
 
     public static Expression? TryFuseStep(Expression expression)
     {
-        if (TryMapToKernelApplications_Skip_ListHead_Expression(expression) is { } fused)
+        if (TryMapToKernelApplications_Skip_ListHead_Path_Expression(expression) is { } fused)
         {
             return fused;
         }
@@ -582,8 +582,8 @@ public class PineVM : IPineVM
         return null;
     }
 
-    public static Expression.KernelApplications_Skip_ListHead_Expression?
-        TryMapToKernelApplications_Skip_ListHead_Expression(Expression expression)
+    public static Expression.KernelApplications_Skip_ListHead_Path_Expression?
+        TryMapToKernelApplications_Skip_ListHead_Path_Expression(Expression expression)
     {
         if (expression is not Expression.KernelApplicationExpression kernelApp)
             return null;
@@ -592,7 +592,9 @@ public class PineVM : IPineVM
             return null;
 
         if (kernelApp.argument is not Expression.KernelApplicationExpression innerKernelApp)
-            return null;
+        {
+            return continueWithSkipCount(skipCount: 0, kernelApp.argument);
+        }
 
         if (innerKernelApp.functionName is not nameof(KernelFunction.skip))
             return null;
@@ -626,9 +628,28 @@ public class PineVM : IPineVM
         if (KernelFunction.SignedIntegerFromValueRelaxed(skipCountEvalOk.Value) is not { } skipCount)
             return null;
 
-        return new Expression.KernelApplications_Skip_ListHead_Expression(
-            skipCount: (int)skipCount,
-            argument: skipListExpr.List[1]);
+        var currentArg = skipListExpr.List[1];
+
+        return continueWithSkipCount((int)skipCount, currentArg);
+
+        static Expression.KernelApplications_Skip_ListHead_Path_Expression continueWithSkipCount(
+            int skipCount,
+            Expression currentArg)
+        {
+            if (TryMapToKernelApplications_Skip_ListHead_Path_Expression(currentArg) is { } pathContinued)
+            {
+                return
+                    pathContinued
+                    with
+                    {
+                        SkipCounts = (int[])[.. pathContinued.SkipCounts.Span, skipCount]
+                    };
+            }
+
+            return new Expression.KernelApplications_Skip_ListHead_Path_Expression(
+                SkipCounts: (int[])[skipCount],
+                Argument: currentArg);
+        }
     }
 
     public static Expression.KernelApplication_Equal_Two? TryMapToKernelApplication_Equal_Two(Expression expression)
@@ -949,7 +970,7 @@ public class PineVM : IPineVM
         if (expression is Expression.StackReferenceExpression)
             return false;
 
-        if (expression is Expression.KernelApplications_Skip_ListHead_Expression)
+        if (expression is Expression.KernelApplications_Skip_ListHead_Path_Expression)
             return false;
 
         if (expression is Expression.KernelApplication_Equal_Two)
@@ -1049,7 +1070,7 @@ public class PineVM : IPineVM
             return content;
         }
 
-        if (expression is Expression.KernelApplications_Skip_ListHead_Expression kernelApplicationsSkipListHead)
+        if (expression is Expression.KernelApplications_Skip_ListHead_Path_Expression kernelApplicationsSkipListHead)
         {
             return
                 EvaluateKernelApplications_Skip_ListHead_Expression(
@@ -1202,23 +1223,38 @@ public class PineVM : IPineVM
 
     public PineValue EvaluateKernelApplications_Skip_ListHead_Expression(
         PineValue environment,
-        Expression.KernelApplications_Skip_ListHead_Expression application,
-        ReadOnlyMemory<PineValue> stackPrevValues) =>
-        EvaluateExpressionDefaultLessStack(
-            application.argument,
-            environment,
-            stackPrevValues: stackPrevValues) switch
-        {
-            PineValue.ListValue list =>
-            list.Elements.Count < 1 || list.Elements.Count <= application.skipCount
-            ?
-            PineValue.EmptyList
-            :
-            list.Elements[application.skipCount < 0 ? 0 : application.skipCount],
+        Expression.KernelApplications_Skip_ListHead_Path_Expression application,
+        ReadOnlyMemory<PineValue> stackPrevValues)
+    {
+        var argumentValue =
+            EvaluateExpressionDefaultLessStack(
+                application.Argument,
+                environment,
+                stackPrevValues: stackPrevValues);
 
-            _ =>
-            PineValue.EmptyList,
-        };
+        return ValueFromPathInValueOrEmptyList(argumentValue, application.SkipCounts.Span);
+    }
+
+    public static PineValue ValueFromPathInValueOrEmptyList(
+        PineValue environment,
+        ReadOnlySpan<int> path)
+    {
+        if (path.Length is 0)
+            return environment;
+
+        if (environment is not PineValue.ListValue listValue)
+            return PineValue.EmptyList;
+
+        var skipCount = path[0];
+
+        if (path[0] >= listValue.Elements.Count)
+            return PineValue.EmptyList;
+
+        return
+            ValueFromPathInValueOrEmptyList(
+                listValue.Elements[skipCount < 0 ? 0 : skipCount],
+                path[1..]);
+    }
 
     public PineValue EvaluateConditionalExpression(
         PineValue environment,

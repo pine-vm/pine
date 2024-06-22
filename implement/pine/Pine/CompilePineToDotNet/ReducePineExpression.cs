@@ -281,20 +281,20 @@ public class ReducePineExpression
             case Expression.StackReferenceExpression:
                 return (expression, true);
 
-            case Expression.KernelApplications_Skip_ListHead_Expression skipListHead:
+            case Expression.KernelApplications_Skip_ListHead_Path_Expression skipListHead:
                 {
                     var argumentTransform =
                         TransformPineExpressionWithOptionalReplacement(
                             findReplacement,
-                            skipListHead.argument);
+                            skipListHead.Argument);
 
                     return
                         (
-                        new Expression.KernelApplications_Skip_ListHead_Expression
-                        (
-                            skipCount: skipListHead.skipCount,
-                            argument: argumentTransform.expr
-                        ),
+                        skipListHead
+                        with
+                        {
+                            Argument = argumentTransform.expr
+                        },
                         argumentTransform.referencesOriginalEnv);
                 }
 

@@ -118,10 +118,26 @@ public abstract record Expression
     /// Fusion of the two applications of the kernel functions 'skip' and 'list_head',
     /// as an implementation detail of the interpreter.
     /// </summary>
-    public record KernelApplications_Skip_ListHead_Expression(
-        int skipCount,
-        Expression argument)
-        : Expression;
+    public record KernelApplications_Skip_ListHead_Path_Expression(
+        ReadOnlyMemory<int> SkipCounts,
+        Expression Argument)
+        : Expression
+    {
+        public virtual bool Equals(KernelApplications_Skip_ListHead_Path_Expression? other)
+        {
+            if (other is null)
+                return false;
+
+            return
+                other.SkipCounts.Span.SequenceEqual(SkipCounts.Span) &&
+                Argument.Equals(Argument);
+        }
+
+        public override int GetHashCode()
+        {
+            return HashCode.Combine(SkipCounts.GetHashCode(), Argument.GetHashCode());
+        }
+    }
 
     /// <summary>
     /// Fusion of the special case of an application of the kernel function 'equal',
@@ -165,8 +181,8 @@ public abstract record Expression
             StackReferenceExpression =>
             false,
 
-            KernelApplications_Skip_ListHead_Expression fused =>
-            IsIndependent(fused.argument),
+            KernelApplications_Skip_ListHead_Path_Expression fused =>
+            IsIndependent(fused.Argument),
 
             KernelApplication_Equal_Two fused =>
             IsIndependent(fused.left) && IsIndependent(fused.right),
@@ -243,9 +259,9 @@ public abstract record Expression
 
                     break;
 
-                case KernelApplications_Skip_ListHead_Expression skipListHead:
+                case KernelApplications_Skip_ListHead_Path_Expression skipListHead:
 
-                    stack.Push(skipListHead.argument);
+                    stack.Push(skipListHead.Argument);
 
                     break;
 
