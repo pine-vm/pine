@@ -29,6 +29,8 @@ public class PineVM : IPineVM
 
     private readonly Action<EvaluationReport>? reportFunctionApplication;
 
+    private readonly PineVMCache parseCache = new();
+
     public record EvaluationReport(
         PineValue ExpressionValue,
         Expression Expression,
@@ -47,6 +49,8 @@ public class PineVM : IPineVM
                 keySelector: encodedExprAndDelegate => encodedExprAndDelegate.Key,
                 elementSelector: encodedExprAndDelegate => new Expression.DelegatingExpression(encodedExprAndDelegate.Value));
 
+        var parseCache = new Dictionary<PineValue, Result<string, Expression>>();
+
         return new PineVM(
             overrideParseExpression:
             parseExpressionOverridesDict switch
@@ -55,7 +59,22 @@ public class PineVM : IPineVM
                 originalHandler => originalHandler,
 
                 not null =>
-                _ => value => ExpressionEncoding.ParseExpressionFromValue(value, parseExpressionOverridesDict)
+                _ => value =>
+                {
+                    if (parseExpressionOverridesDict.TryGetValue(value, out var delegatingExpr))
+                        return delegatingExpr;
+
+                    if (parseCache.TryGetValue(value, out var fromCache))
+                    {
+                        return fromCache;
+                    }
+
+                    var parseResult = ExpressionEncoding.ParseExpressionFromValue(value, parseExpressionOverridesDict);
+
+                    parseCache[value] = parseResult;
+
+                    return parseResult;
+                }
             },
             evalCache: evalCache);
     }
@@ -1249,6 +1268,16 @@ public class PineVM : IPineVM
                 parseAndEval.expression,
                 environment,
                 stackPrevValues: stackPrevValues);
+
+        if (EvalCache is { } evalCache)
+        {
+            var cacheKey = new EvalCacheEntryKey(ExprValue: expressionValue, EnvValue: environmentValue);
+
+            if (evalCache.TryGetValue(cacheKey, out var fromCache))
+            {
+                return fromCache;
+            }
+        }
 
         var parseResult = parseExpressionDelegate(expressionValue);
 
