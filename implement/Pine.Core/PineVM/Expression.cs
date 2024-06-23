@@ -95,11 +95,42 @@ public abstract record Expression
         }
     }
 
-    public record ConditionalExpression(
-        Expression condition,
-        Expression ifTrue,
-        Expression ifFalse)
-        : Expression;
+    public record ConditionalExpression
+        : Expression
+    {
+        private readonly int slimHashCode;
+
+        public Expression condition { get; }
+
+        public Expression ifTrue { get; }
+
+        public Expression ifFalse { get; }
+
+        public ConditionalExpression(Expression condition, Expression ifTrue, Expression ifFalse)
+        {
+            this.condition = condition;
+            this.ifTrue = ifTrue;
+            this.ifFalse = ifFalse;
+
+            slimHashCode = HashCode.Combine(condition, ifTrue, ifFalse);
+        }
+
+        public virtual bool Equals(ConditionalExpression? other)
+        {
+            if (other is not { } notNull)
+                return false;
+
+            return
+                ReferenceEquals(this, notNull) ||
+                slimHashCode == notNull.slimHashCode &&
+                condition.Equals(notNull.condition) &&
+                ifTrue.Equals(notNull.ifTrue) &&
+                ifFalse.Equals(notNull.ifFalse);
+        }
+
+        public override int GetHashCode() =>
+            slimHashCode;
+    }
 
     public record EnvironmentExpression : Expression;
 
