@@ -9,7 +9,7 @@ namespace Pine.PineVM;
 
 public record ExpressionEnvUsageRecord(
     PineValue Environment,
-    List<System.TimeSpan> OrigEvalDurations,
+    List<long> OrigEvalInstructionCounts,
     System.Lazy<Result<string, IReadOnlyList<ExpressionUsageAnalysis>>> Analysis)
 {
     public long ParseAndEvalCountMax { get; set; }
@@ -144,10 +144,10 @@ public class ProfilingPineVM
 
                         envContainer ??= new ExpressionEnvUsageRecord(
                             Environment: funcApplReport.Environment,
-                            OrigEvalDurations: [],
+                            OrigEvalInstructionCounts: [],
                             Analysis: new System.Lazy<Result<string, IReadOnlyList<ExpressionUsageAnalysis>>>(runAnalysis));
 
-                        envContainer.OrigEvalDurations.Add(funcApplReport.ElapsedTime);
+                        envContainer.OrigEvalInstructionCounts.Add(funcApplReport.InstructionCount);
 
                         envContainer.ParseAndEvalCountMax = System.Math.Max(
                             envContainer.ParseAndEvalCountMax,

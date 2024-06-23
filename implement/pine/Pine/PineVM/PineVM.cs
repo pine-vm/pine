@@ -35,8 +35,8 @@ public class PineVM : IPineVM
         PineValue ExpressionValue,
         Expression Expression,
         PineValue Environment,
+        long InstructionCount,
         long ParseAndEvalCount,
-        TimeSpan ElapsedTime,
         PineValue ReturnValue);
 
     public static PineVM Construct(
@@ -135,8 +135,8 @@ public class PineVM : IPineVM
         StackFrameInstructions Instructions,
         PineValue EnvironmentValue,
         Memory<PineValue> InstructionsResultValues,
-        long BeginParseAndEvalCount,
-        long? BeginTimestamp)
+        long BeginInstructionCount,
+        long BeginParseAndEvalCount)
     {
         public int InstructionPointer { get; set; } = 0;
 
@@ -164,7 +164,8 @@ public class PineVM : IPineVM
         PineValue? expressionValue,
         Expression expression,
         PineValue environment,
-        long BeginParseAndEvalCount)
+        long beginInstructionCount,
+        long beginParseAndEvalCount)
     {
         var instructions = InstructionsFromExpression(expression);
 
@@ -181,8 +182,8 @@ public class PineVM : IPineVM
             instructions,
             EnvironmentValue: environment,
             new PineValue[instructions.Instructions.Count],
-            BeginParseAndEvalCount: BeginParseAndEvalCount,
-            BeginTimestamp: beginTimestamp);
+            BeginInstructionCount: beginInstructionCount,
+            BeginParseAndEvalCount: beginParseAndEvalCount);
     }
 
     public StackFrameInstructions InstructionsFromExpression(Expression rootExpression)
@@ -812,6 +813,8 @@ public class PineVM : IPineVM
         PineValue rootEnvironment,
         EvaluationConfig config)
     {
+        long instructionCount = 0;
+
         int parseAndEvalCount = 0;
 
         var stack = new Stack<StackFrame>();
@@ -821,11 +824,14 @@ public class PineVM : IPineVM
                 expressionValue: null,
                 rootExpression,
                 rootEnvironment,
-                BeginParseAndEvalCount: parseAndEvalCount));
+                beginInstructionCount: instructionCount,
+                beginParseAndEvalCount: parseAndEvalCount));
 
         while (true)
         {
             var currentFrame = stack.Peek();
+
+            ++instructionCount;
 
             if (currentFrame.Instructions.Instructions.Count <= currentFrame.InstructionPointer)
             {
@@ -850,12 +856,11 @@ public class PineVM : IPineVM
                 var frameReturnValue =
                     currentFrame.InstructionsResultValues.Span[lastAssignedIndex];
 
-                if (currentFrame.ExpressionValue is { } currentFrameExprValue && EvalCache is { } evalCache &&
-                    currentFrame.BeginTimestamp is { } beginTimestamp)
+                if (currentFrame.ExpressionValue is { } currentFrameExprValue)
                 {
-                    var frameElapsedTime = System.Diagnostics.Stopwatch.GetElapsedTime(beginTimestamp);
+                    var frameInstructionCount = instructionCount - currentFrame.BeginInstructionCount;
 
-                    if (frameElapsedTime.TotalMilliseconds > 3)
+                    if (frameInstructionCount > 3_000 && EvalCache is { } evalCache)
                     {
                         evalCache.TryAdd(
                             new EvalCacheEntryKey(currentFrameExprValue, currentFrame.EnvironmentValue),
@@ -867,8 +872,8 @@ public class PineVM : IPineVM
                             ExpressionValue: currentFrameExprValue,
                             currentFrame.Expression,
                             currentFrame.EnvironmentValue,
+                            InstructionCount: frameInstructionCount,
                             ParseAndEvalCount: parseAndEvalCount - currentFrame.BeginParseAndEvalCount,
-                            frameElapsedTime,
                             frameReturnValue));
                 }
 
@@ -954,12 +959,15 @@ public class PineVM : IPineVM
                         throw new NotImplementedException("Unexpected result type: " + parseResult.GetType().FullName);
                     }
 
-                    stack.Push(
+                    var newFrame =
                         StackFrameFromExpression(
                             expressionValue: expressionValue,
                             parseOk.Value,
                             environmentValue,
-                            BeginParseAndEvalCount: parseAndEvalCount));
+                            beginInstructionCount: instructionCount,
+                            beginParseAndEvalCount: parseAndEvalCount);
+
+                    stack.Push(newFrame);
 
                     continue;
                 }
@@ -992,7 +1000,8 @@ public class PineVM : IPineVM
                                     expressionValue: null,
                                     expressionToContinueWith,
                                     currentFrame.EnvironmentValue,
-                                    BeginParseAndEvalCount: parseAndEvalCount));
+                                    beginInstructionCount: instructionCount,
+                                    beginParseAndEvalCount: parseAndEvalCount));
 
                             continue;
                         }
