@@ -274,22 +274,18 @@ public class ElmInteractive
 
     public static long EstimatePineValueMemoryUsage(PineValue pineValue)
     {
-        if (pineValue is PineValue.BlobValue blobValue)
-            return blobValue.Bytes.Length + 100;
-
         if (pineValue is PineValue.ListValue listValue)
         {
-            long sum = 0;
-
-            for (int i = 0; i < listValue.Elements.Count; i++)
-            {
-                sum += EstimatePineValueMemoryUsage(listValue.Elements[i]);
-            }
-
-            return sum + 100;
+            return 100 + listValue.NodesCount * 100 + listValue.BlobsBytesCount;
         }
 
-        throw new NotImplementedException("Not implemented for value type: " + pineValue.GetType().FullName);
+        if (pineValue is PineValue.BlobValue blobValue)
+        {
+            return blobValue.Bytes.Length + 100;
+        }
+
+        throw new NotImplementedException(
+            "Unexpected value type: " + pineValue.GetType().FullName);
     }
 
     public record CompileInteractiveEnvironmentResult(

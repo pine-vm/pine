@@ -60,7 +60,7 @@ public abstract record PineValue : IEquatable<PineValue>
                 return existing;
         }
 
-        return new ListValue(elements);
+        return new ListValue(asStruct);
     }
 
     public static readonly PineValue EmptyList = new ListValue([]);
@@ -187,11 +187,42 @@ public abstract record PineValue : IEquatable<PineValue>
 
         public IReadOnlyList<PineValue> Elements { get; }
 
-        public ListValue(IReadOnlyList<PineValue> elements)
-        {
-            Elements = elements;
+        public readonly int NodesCount;
 
-            slimHashCode = ComputeSlimHashCode(elements);
+        public readonly long BlobsBytesCount;
+
+        public ListValue(IReadOnlyList<PineValue> elements)
+            : this(new ListValueStruct(elements))
+        {
+        }
+
+        internal ListValue(ListValueStruct listValueStruct)
+        {
+            Elements = listValueStruct.Elements;
+
+            NodesCount = 0;
+            BlobsBytesCount = 0;
+
+            for (int i = 0; i < Elements.Count; i++)
+            {
+                var element = Elements[i];
+
+                switch (element)
+                {
+                    case ListValue listItem:
+                        NodesCount += listItem.NodesCount;
+                        BlobsBytesCount += listItem.BlobsBytesCount;
+                        break;
+
+                    case BlobValue blobItem:
+                        BlobsBytesCount += blobItem.Bytes.Length;
+                        break;
+                }
+            }
+
+            NodesCount += Elements.Count;
+
+            slimHashCode = listValueStruct.slimHashCode;
         }
 
         private static int ComputeSlimHashCode(IReadOnlyList<PineValue> elements)
@@ -240,9 +271,9 @@ public abstract record PineValue : IEquatable<PineValue>
         public override int GetHashCode() => slimHashCode;
 
 
-        public record struct ListValueStruct
+        public readonly record struct ListValueStruct
         {
-            private readonly int slimHashCode;
+            internal readonly int slimHashCode;
 
             public IReadOnlyList<PineValue> Elements { get; }
 
