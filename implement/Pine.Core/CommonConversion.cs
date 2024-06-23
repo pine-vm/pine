@@ -79,19 +79,25 @@ public class CommonConversion
 
     public static ReadOnlyMemory<T> Concat<T>(IReadOnlyList<ReadOnlyMemory<T>> list)
     {
-        var aggregateLength = list.Sum(segment => segment.Length);
+        var aggregateLength = 0;
 
-        var array = new T[aggregateLength];
+        for (int i = 0; i < list.Count; ++i)
+            aggregateLength += list[i].Length;
+
+        var destArray = new T[aggregateLength];
+
+        var destMemory = destArray.AsMemory();
 
         var offset = 0;
 
-        foreach (var segment in list)
+        for (int i = 0; i < list.Count; ++i)
         {
-            segment.CopyTo(array.AsMemory()[offset..]);
+            var segment = list[i];
+            segment.CopyTo(destMemory[offset..]);
             offset += segment.Length;
         }
 
-        return array;
+        return destArray;
     }
 
     public static Result<ExceptionT, OkT> CatchExceptionAsResultErr<ExceptionT, OkT>(Func<OkT> func)

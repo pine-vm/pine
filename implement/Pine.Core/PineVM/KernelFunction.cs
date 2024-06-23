@@ -244,6 +244,11 @@ public static class KernelFunction
 
         var head = listValue.Elements[0];
 
+        if (listValue.Elements.Count is 1)
+        {
+            return head;
+        }
+
         if (head is PineValue.ListValue)
         {
             var aggregated = new List<PineValue>(capacity: 40);
@@ -261,7 +266,15 @@ public static class KernelFunction
 
         if (head is PineValue.BlobValue)
         {
-            var blobs = listValue.Elements.OfType<PineValue.BlobValue>().Select(b => b.Bytes).ToArray();
+            var blobs = new List<ReadOnlyMemory<byte>>(capacity: listValue.Elements.Count);
+
+            for (int i = 0; i < listValue.Elements.Count; ++i)
+            {
+                if (listValue.Elements[i] is not PineValue.BlobValue blobValue)
+                    continue;
+
+                blobs.Add(blobValue.Bytes);
+            }
 
             return PineValue.Blob(CommonConversion.Concat(blobs));
         }
