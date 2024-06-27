@@ -187,7 +187,7 @@ public abstract record PineValue : IEquatable<PineValue>
 
         public IReadOnlyList<PineValue> Elements { get; }
 
-        public readonly int NodesCount;
+        public readonly long NodesCount;
 
         public readonly long BlobsBytesCount;
 
