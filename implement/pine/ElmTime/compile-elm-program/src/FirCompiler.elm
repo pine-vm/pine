@@ -867,9 +867,12 @@ recursionDomainsFromDeclarationDependencies declarationDependencies =
                                 allDependenciesOfNext =
                                     Set.foldl
                                         (\nextDeclName aggregate ->
-                                            Set.union
-                                                aggregate
-                                                (Maybe.withDefault Set.empty (Dict.get nextDeclName declarationDependencies))
+                                            case Dict.get nextDeclName declarationDependencies of
+                                                Nothing ->
+                                                    aggregate
+
+                                                Just nextDeclDependencies ->
+                                                    Set.union nextDeclDependencies aggregate
                                         )
                                         Set.empty
                                         next
@@ -1429,9 +1432,11 @@ emitApplyFunctionFromCurrentEnvironment compilation { functionName } arguments =
 
                 LocalEnvironment localEnv ->
                     let
+                        currentEnv : List String
                         currentEnv =
                             List.map .functionName compilation.environmentFunctions
 
+                        currentEnvCoversExpected : Bool
                         currentEnvCoversExpected =
                             List.take (List.length localEnv.expectedDecls) currentEnv
                                 == localEnv.expectedDecls

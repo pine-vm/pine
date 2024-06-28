@@ -817,7 +817,12 @@ blobValueFromBigInt bigint =
                                     Just lowerByte ->
                                         Just (upperBytes ++ [ lowerByte ])
     in
-    signByte :: Maybe.withDefault [] (unsignedBytesFromIntValue value)
+    case unsignedBytesFromIntValue value of
+        Nothing ->
+            [ signByte ]
+
+        Just unsignedBytes ->
+            signByte :: unsignedBytes
 
 
 valueFromInt : Int -> Value

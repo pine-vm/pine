@@ -304,7 +304,7 @@ expandElmInteractiveEnvironmentWithModules environmentBefore newParsedElmModules
             in
             expandEnvWithModulesOrdered
                 environmentBefore
-                (List.map Tuple.first modulesOrderedByDeps)
+                (List.map (\( file, _ ) -> file) modulesOrderedByDeps)
 
 
 expandEnvWithModulesOrdered :
@@ -863,7 +863,12 @@ compilationAndEmitStackFromModulesInCompilation availableModules { moduleAliases
                 (\tagName { argumentsCount } ->
                     compileElmChoiceTypeTagConstructor
                         { tagName =
-                            Maybe.withDefault tagName (List.head (List.reverse (String.split "." tagName)))
+                            case List.reverse (String.split "." tagName) of
+                                [] ->
+                                    tagName
+
+                                head :: _ ->
+                                    head
                         , argumentsCount = argumentsCount
                         }
                 )
@@ -1750,7 +1755,7 @@ compileElmSyntaxRecordUpdate stack setters recordName =
                                         , fieldExpr
                                         ]
                                 )
-                                (List.sortBy Tuple.first settersExpressions)
+                                (List.sortBy (\( fieldName, _ ) -> fieldName) settersExpressions)
                             )
                         ]
                     )
@@ -1965,7 +1970,11 @@ compileElmSyntaxPattern compilation elmPattern =
                                     (listItemFromIndexExpression itemIndex mapped)
                         , declarations =
                             List.map
-                                (Tuple.mapSecond ((::) (ListItemDeconstruction itemIndex)))
+                                (\( declName, deconsExpr ) ->
+                                    ( declName
+                                    , ListItemDeconstruction itemIndex :: deconsExpr
+                                    )
+                                )
                                 listElementResult.declarations
                         }
 
@@ -2079,9 +2088,15 @@ compileElmSyntaxPattern compilation elmPattern =
 
                                 declarations =
                                     List.concat
-                                        [ List.map (Tuple.mapSecond ((::) (ListItemDeconstruction 0)))
+                                        [ List.map
+                                            (\( declName, deconstruction ) ->
+                                                ( declName, ListItemDeconstruction 0 :: deconstruction )
+                                            )
                                             leftSide.declarations
-                                        , List.map (Tuple.mapSecond ((::) (SkipItemsDeconstruction 1)))
+                                        , List.map
+                                            (\( declName, deconstruction ) ->
+                                                ( declName, SkipItemsDeconstruction 1 :: deconstruction )
+                                            )
                                             rightSide.declarations
                                         ]
                             in
@@ -3489,21 +3504,29 @@ compileElmChoiceTypeTagConstructorValue { tagName, argumentsCount } =
                 |> Pine.encodeExpressionAsValue
 
         _ ->
-            Pine.ListExpression
-                [ Pine.LiteralExpression (Pine.valueFromString tagName)
-                , List.range 0 (argumentsCount - 1)
-                    |> List.map
-                        (\paramIndex ->
-                            Pine.environmentExpr
-                                |> listItemFromIndexExpression_Pine 1
-                                |> listItemFromIndexExpression_Pine paramIndex
+            case
+                evaluateAsIndependentExpression
+                    (emitWrapperForPartialApplication (Pine.ListExpression [])
+                        argumentsCount
+                        (Pine.ListExpression
+                            [ Pine.LiteralExpression (Pine.valueFromString tagName)
+                            , List.range 0 (argumentsCount - 1)
+                                |> List.map
+                                    (\paramIndex ->
+                                        Pine.environmentExpr
+                                            |> listItemFromIndexExpression_Pine 1
+                                            |> listItemFromIndexExpression_Pine paramIndex
+                                    )
+                                |> Pine.ListExpression
+                            ]
                         )
-                    |> Pine.ListExpression
-                ]
-                |> emitWrapperForPartialApplication (Pine.ListExpression []) argumentsCount
-                |> evaluateAsIndependentExpression
-                |> Result.withDefault
-                    (Pine.valueFromString "Failed to compile choice type tag constructor")
+                    )
+            of
+                Err err ->
+                    Pine.valueFromString "Failed to compile choice type tag constructor"
+
+                Ok wrappedForExpose ->
+                    wrappedForExpose
     )
 
 
