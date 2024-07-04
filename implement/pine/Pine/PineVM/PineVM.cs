@@ -169,13 +169,6 @@ public class PineVM : IPineVM
     {
         var instructions = InstructionsFromExpression(expression);
 
-        var beginTimestamp =
-            expressionValue is null
-            ?
-            (long?)null
-            :
-            System.Diagnostics.Stopwatch.GetTimestamp();
-
         return new StackFrame(
             expressionValue,
             expression,
