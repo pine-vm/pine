@@ -1,5 +1,6 @@
 module FirCompiler exposing
     ( Deconstruction(..)
+    , EmitDeclarationBlockResult
     , EmitStack
     , EnvironmentDeconstructionEntry
     , EnvironmentFunctionEntry(..)
@@ -75,6 +76,7 @@ type Deconstruction
 
 type alias EmitStack =
     { importedFunctions : List ( String, ( EnvironmentFunctionEntry, Pine.Value ) )
+    , importedFunctionsToInline : List ( String, Pine.Value )
     , declarationsDependencies : Dict.Dict String (Set.Set String)
 
     -- The functions in the first item in the environment list
@@ -615,6 +617,7 @@ emitDeclarationBlock stackBefore blockDeclarations config =
 
                 -}
                 []
+            , importedFunctionsToInline = stackBefore.importedFunctionsToInline
             , declarationsDependencies = stackBefore.declarationsDependencies
             , environmentFunctions = environmentFunctions
             , environmentDeconstructions = []
@@ -907,33 +910,38 @@ emitReferenceExpression name compilation =
                 )
 
         Nothing ->
-            case
-                emitApplyFunctionFromCurrentEnvironment
-                    compilation
-                    { functionName = name }
-                    []
-            of
+            case Common.assocListGet name compilation.importedFunctionsToInline of
+                Just importedFunction ->
+                    Ok (Pine.LiteralExpression importedFunction)
+
                 Nothing ->
-                    Err
-                        (String.join ""
-                            [ "Failed referencing '"
-                            , name
-                            , "'. "
-                            , String.fromInt (List.length compilation.environmentDeconstructions)
-                            , " deconstructions in scope: "
-                            , String.join ", " (List.map Tuple.first compilation.environmentDeconstructions)
-                            , ". "
-                            , String.fromInt (List.length compilation.environmentFunctions)
-                            , " functions in scope: "
-                            , String.join ", " (List.map Tuple.first compilation.environmentFunctions)
-                            ]
-                        )
+                    case
+                        emitApplyFunctionFromCurrentEnvironment
+                            compilation
+                            { functionName = name }
+                            []
+                    of
+                        Nothing ->
+                            Err
+                                (String.join ""
+                                    [ "Failed referencing '"
+                                    , name
+                                    , "'. "
+                                    , String.fromInt (List.length compilation.environmentDeconstructions)
+                                    , " deconstructions in scope: "
+                                    , String.join ", " (List.map Tuple.first compilation.environmentDeconstructions)
+                                    , ". "
+                                    , String.fromInt (List.length compilation.environmentFunctions)
+                                    , " functions in scope: "
+                                    , String.join ", " (List.map Tuple.first compilation.environmentFunctions)
+                                    ]
+                                )
 
-                Just (Err err) ->
-                    Err ("Failed emitting reference as function application: " ++ err)
+                        Just (Err err) ->
+                            Err ("Failed emitting reference as function application: " ++ err)
 
-                Just (Ok functionApplicationOk) ->
-                    Ok functionApplicationOk
+                        Just (Ok functionApplicationOk) ->
+                            Ok functionApplicationOk
 
 
 listTransitiveDependenciesOfExpression : EmitStack -> Expression -> Set.Set String

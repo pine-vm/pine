@@ -1036,6 +1036,7 @@ emitClosureExpressionTests =
 
                             emptyEmitStack =
                                 { importedFunctions = []
+                                , importedFunctionsToInline = []
                                 , declarationsDependencies = Dict.empty
                                 , environmentFunctions = []
                                 , environmentDeconstructions = []

@@ -905,6 +905,7 @@ compilationAndEmitStackFromModulesInCompilation availableModules { moduleAliases
 
         emitStack =
             { importedFunctions = importedFunctions
+            , importedFunctionsToInline = []
             , declarationsDependencies = Dict.empty
             , environmentFunctions = []
             , environmentDeconstructions = []
@@ -2964,7 +2965,8 @@ emitRecordConstructorValue fields =
 
 
 type alias EmittedRecursionDomain =
-    { emittedDeclarations : List ( String, ( FirCompiler.EnvironmentFunctionEntry, ( Pine.Expression, Pine.Value ) ) )
+    { emittedDeclarationsToShare : List ( String, ( FirCompiler.EnvironmentFunctionEntry, Pine.Value ) )
+    , emittedDeclarationsToInline : List ( String, Pine.Value )
     , exposedDeclarations : List ( String, Pine.Value )
     }
 
@@ -3028,9 +3030,8 @@ emitModuleFunctionDeclarations stackBefore declarations =
                 Dict.empty
                 declarationsDirectDependencies
 
-        usedImportsAvailableEmittedFunctions : List ( String, ( FirCompiler.EnvironmentFunctionEntry, Pine.Value ) )
-        usedImportsAvailableEmittedFunctions =
-            importedFunctionsNotShadowed
+        ( importedFunctionsToShare, importedFunctionsToInline ) =
+            splitEmittedFunctionsToInline importedFunctionsNotShadowed
 
         recursionDomains : List (Set.Set String)
         recursionDomains =
@@ -3059,7 +3060,8 @@ emitModuleFunctionDeclarations stackBefore declarations =
                         emitRecursionDomain
                             { exposedDeclarationsNames = exposedDeclarationsNames
                             , allModuleDeclarations = allModuleDeclarations
-                            , usedImportsAvailableEmittedFunctions = usedImportsAvailableEmittedFunctions
+                            , importedFunctionsToShare = importedFunctionsToShare
+                            , importedFunctionsToInline = importedFunctionsToInline
                             , declarationsDirectDependencies = declarationsDirectDependencies
                             , emitStack = emitStack
                             }
@@ -3085,14 +3087,15 @@ emitModuleFunctionDeclarations stackBefore declarations =
 emitRecursionDomain :
     { exposedDeclarationsNames : Set.Set String
     , allModuleDeclarations : Dict.Dict String Expression
-    , usedImportsAvailableEmittedFunctions : List ( String, ( FirCompiler.EnvironmentFunctionEntry, Pine.Value ) )
+    , importedFunctionsToShare : List ( String, ( FirCompiler.EnvironmentFunctionEntry, Pine.Value ) )
+    , importedFunctionsToInline : List ( String, Pine.Value )
     , declarationsDirectDependencies : Dict.Dict String (Set.Set String)
     , emitStack : EmitStack
     }
     -> Set.Set String
     -> List EmittedRecursionDomain
     -> Result String EmittedRecursionDomain
-emitRecursionDomain { exposedDeclarationsNames, allModuleDeclarations, usedImportsAvailableEmittedFunctions, declarationsDirectDependencies, emitStack } currentRecursionDomain alreadyEmitted =
+emitRecursionDomain { exposedDeclarationsNames, allModuleDeclarations, importedFunctionsToShare, importedFunctionsToInline, declarationsDirectDependencies, emitStack } currentRecursionDomain alreadyEmitted =
     let
         recursionDomainExposedNames : Set.Set String
         recursionDomainExposedNames =
@@ -3111,19 +3114,17 @@ emitRecursionDomain { exposedDeclarationsNames, allModuleDeclarations, usedImpor
                 []
                 allModuleDeclarations
 
-        availableFunctionsValues : List ( String, ( FirCompiler.EnvironmentFunctionEntry, Pine.Value ) )
-        availableFunctionsValues =
+        prevEmittedDeclarationsToShare : List ( String, ( FirCompiler.EnvironmentFunctionEntry, Pine.Value ) )
+        prevEmittedDeclarationsToShare =
             List.concatMap
-                (\emittedDomain ->
-                    List.map (\( declName, ( entryRecord, ( _, emittedValue ) ) ) -> ( declName, ( entryRecord, emittedValue ) ))
-                        emittedDomain.emittedDeclarations
-                )
+                (\emittedDomain -> emittedDomain.emittedDeclarationsToShare)
                 alreadyEmitted
 
-        availableEmittedFunctionsIncludingImports : List ( String, ( FirCompiler.EnvironmentFunctionEntry, Pine.Value ) )
-        availableEmittedFunctionsIncludingImports =
-            List.concat
-                [ usedImportsAvailableEmittedFunctions, availableFunctionsValues ]
+        prevEmittedDeclarationsToInline : List ( String, Pine.Value )
+        prevEmittedDeclarationsToInline =
+            List.concatMap
+                (\emittedDomain -> emittedDomain.emittedDeclarationsToInline)
+                alreadyEmitted
 
         recursionDomainDeclarationsToIncludeInBlock : Set.Set String
         recursionDomainDeclarationsToIncludeInBlock =
@@ -3147,7 +3148,10 @@ emitRecursionDomain { exposedDeclarationsNames, allModuleDeclarations, usedImpor
     in
     case
         FirCompiler.emitDeclarationBlock
-            { emitStack | importedFunctions = availableEmittedFunctionsIncludingImports }
+            { emitStack
+                | importedFunctions = importedFunctionsToShare ++ prevEmittedDeclarationsToShare
+                , importedFunctionsToInline = importedFunctionsToInline ++ prevEmittedDeclarationsToInline
+            }
             recursionDomainDeclarationsInBlock
             { closureCaptures = []
             , additionalDeps = List.map Tuple.second recursionDomainDeclarations
@@ -3260,7 +3264,7 @@ emitRecursionDomain { exposedDeclarationsNames, allModuleDeclarations, usedImpor
                                                 ( declarationName
                                                 , ( wrappedForExpose
                                                   , ( declMatch.parameterCount
-                                                    , ( declMatch.innerExpression, declMatch.innerExpressionValue )
+                                                    , declMatch.innerExpressionValue
                                                     )
                                                   )
                                                 )
@@ -3274,7 +3278,7 @@ emitRecursionDomain { exposedDeclarationsNames, allModuleDeclarations, usedImpor
                             ++ err
                             ++ "\navailableFunctionsValues:\n"
                             ++ String.join "\n"
-                                (reportEmittedDeclarationsForErrorMsg availableFunctionsValues)
+                                (reportEmittedDeclarationsForErrorMsg prevEmittedDeclarationsToShare)
                         )
 
                 Ok emittedForExposeOrReuse ->
@@ -3283,40 +3287,50 @@ emitRecursionDomain { exposedDeclarationsNames, allModuleDeclarations, usedImpor
                         expectedEnvironmentFunctions =
                             List.map Tuple.first blockEmitStack.environmentFunctions
 
-                        emittedDeclarationsFromBlock : List ( String, ( FirCompiler.EnvironmentFunctionEntry, ( Pine.Expression, Pine.Value ) ) )
+                        emittedDeclarationsFromBlock : List ( String, ( FirCompiler.EnvironmentFunctionEntry, Pine.Value ) )
                         emittedDeclarationsFromBlock =
-                            blockDeclarationsEmitted.newEnvFunctionsValues
+                            List.map
+                                (\( functionName, ( funcEntry, ( _, funcValue ) ) ) ->
+                                    ( functionName, ( funcEntry, funcValue ) )
+                                )
+                                blockDeclarationsEmitted.newEnvFunctionsValues
 
-                        emittedDeclarationsFromBlockNames : Set.Set String
+                        emittedDeclarationsFromBlockNames : List String
                         emittedDeclarationsFromBlockNames =
-                            List.foldl (\( functionName, _ ) -> Set.insert functionName)
-                                Set.empty
-                                emittedDeclarationsFromBlock
+                            List.map Tuple.first emittedDeclarationsFromBlock
 
-                        emittedDeclarationsFromExposed : List ( String, ( FirCompiler.EnvironmentFunctionEntry, ( Pine.Expression, Pine.Value ) ) )
+                        emittedDeclarationsFromExposed : List ( String, ( FirCompiler.EnvironmentFunctionEntry, Pine.Value ) )
                         emittedDeclarationsFromExposed =
                             List.map
-                                (\( functionName, ( _, ( parameterCount, innerExpression ) ) ) ->
+                                (\( functionName, ( _, ( parameterCount, funcValue ) ) ) ->
                                     ( functionName
                                     , ( FirCompiler.EnvironmentFunctionEntry
                                             parameterCount
                                             (FirCompiler.LocalEnvironment { expectedDecls = expectedEnvironmentFunctions })
-                                      , innerExpression
+                                      , funcValue
                                       )
                                     )
                                 )
                                 emittedForExposeOrReuse
 
-                        emittedDeclarations : List ( String, ( FirCompiler.EnvironmentFunctionEntry, ( Pine.Expression, Pine.Value ) ) )
-                        emittedDeclarations =
+                        emittedDeclarationsBeforeReduce : List ( String, ( FirCompiler.EnvironmentFunctionEntry, Pine.Value ) )
+                        emittedDeclarationsBeforeReduce =
                             List.concat
                                 [ emittedDeclarationsFromBlock
                                 , List.filter
                                     (\( functionName, _ ) ->
-                                        not (Set.member functionName emittedDeclarationsFromBlockNames)
+                                        not (List.member functionName emittedDeclarationsFromBlockNames)
                                     )
                                     emittedDeclarationsFromExposed
                                 ]
+
+                        emittedDeclarations : List ( String, ( FirCompiler.EnvironmentFunctionEntry, Pine.Value ) )
+                        emittedDeclarations =
+                            List.map (Tuple.mapSecond (attemptReduceBlockDecl blockDeclarationsEmitted))
+                                emittedDeclarationsBeforeReduce
+
+                        ( emittedDeclarationsToShare, emittedDeclarationsToInline ) =
+                            splitEmittedFunctionsToInline emittedDeclarations
 
                         exposedDeclarations : List ( String, Pine.Value )
                         exposedDeclarations =
@@ -3332,37 +3346,153 @@ emitRecursionDomain { exposedDeclarationsNames, allModuleDeclarations, usedImpor
                                 emittedForExposeOrReuse
                     in
                     Ok
-                        { emittedDeclarations = emittedDeclarations
+                        { emittedDeclarationsToShare = emittedDeclarationsToShare
+                        , emittedDeclarationsToInline = emittedDeclarationsToInline
                         , exposedDeclarations = exposedDeclarations
                         }
+
+
+attemptReduceBlockDecl :
+    FirCompiler.EmitDeclarationBlockResult
+    -> ( FirCompiler.EnvironmentFunctionEntry, Pine.Value )
+    -> ( FirCompiler.EnvironmentFunctionEntry, Pine.Value )
+attemptReduceBlockDecl blockDeclarationsEmitted blockDecl =
+    let
+        ( FirCompiler.EnvironmentFunctionEntry funcParamCount _, funcValue ) =
+            blockDecl
+    in
+    if funcParamCount /= 0 then
+        blockDecl
+
+    else
+        let
+            evaluatableExpr =
+                FirCompiler.emitWrapperForPartialApplicationZero
+                    { getFunctionInnerExpression = Pine.LiteralExpression funcValue
+                    , getEnvFunctionsExpression = blockDeclarationsEmitted.envFunctionsExpression
+                    }
+        in
+        case evaluateAsIndependentExpression evaluatableExpr of
+            Ok reducedValue ->
+                let
+                    reducedExpr =
+                        Pine.LiteralExpression reducedValue
+                in
+                if estimatePineValueSize reducedValue > estimatePineValueSize funcValue then
+                    blockDecl
+
+                else
+                    ( FirCompiler.EnvironmentFunctionEntry 0 (FirCompiler.LocalEnvironment { expectedDecls = [] })
+                    , Pine.encodeExpressionAsValue reducedExpr
+                    )
+
+            Err err ->
+                blockDecl
+
+
+splitEmittedFunctionsToInline :
+    List ( String, ( FirCompiler.EnvironmentFunctionEntry, Pine.Value ) )
+    -> ( List ( String, ( FirCompiler.EnvironmentFunctionEntry, Pine.Value ) ), List ( String, Pine.Value ) )
+splitEmittedFunctionsToInline emittedFunctions =
+    List.foldr
+        (\emittedFunction ( toShare, toInline ) ->
+            let
+                ( declName, ( FirCompiler.EnvironmentFunctionEntry paramCount expectedEnv, declValue ) ) =
+                    emittedFunction
+
+                originalSize =
+                    estimatePineValueSize declValue
+
+                continueSharing :
+                    ( List ( String, ( FirCompiler.EnvironmentFunctionEntry, Pine.Value ) )
+                    , List ( String, Pine.Value )
+                    )
+                continueSharing =
+                    ( emittedFunction :: toShare, toInline )
+
+                continueWithReduction :
+                    ()
+                    ->
+                        ( List ( String, ( FirCompiler.EnvironmentFunctionEntry, Pine.Value ) )
+                        , List ( String, Pine.Value )
+                        )
+                continueWithReduction () =
+                    case Pine.parseExpressionFromValue declValue of
+                        Err err ->
+                            {- This happened for an imported declaration 'Dict.empty'.
+                               Maybe this happens for all declarations imported from parsed modules?
+                               Just using the original value when parsing fails seemed to work and not cause any problems.
+                            -}
+                            if originalSize < 30 * 1000 then
+                                ( toShare, ( declName, declValue ) :: toInline )
+
+                            else
+                                continueSharing
+
+                        Ok parsedExpr ->
+                            case evaluateAsIndependentExpression parsedExpr of
+                                Err err ->
+                                    continueSharing
+
+                                Ok evaluatedValue ->
+                                    let
+                                        reducedSize =
+                                            estimatePineValueSize evaluatedValue
+                                    in
+                                    if reducedSize < 30 * 1000 then
+                                        ( toShare, ( declName, evaluatedValue ) :: toInline )
+
+                                    else
+                                        continueSharing
+            in
+            if paramCount /= 0 then
+                continueSharing
+
+            else
+                case expectedEnv of
+                    FirCompiler.IndependentEnvironment ->
+                        continueWithReduction ()
+
+                    FirCompiler.LocalEnvironment localEnv ->
+                        if localEnv.expectedDecls == [] then
+                            continueWithReduction ()
+
+                        else
+                            continueSharing
+
+                    _ ->
+                        continueSharing
+        )
+        ( [], [] )
+        emittedFunctions
 
 
 reportEmittedDeclarationsForErrorMsg :
     List ( String, ( FirCompiler.EnvironmentFunctionEntry, Pine.Value ) )
     -> List String
 reportEmittedDeclarationsForErrorMsg emittedDeclarations =
-    emittedDeclarations
-        |> List.map
-            (\( functionName, ( FirCompiler.EnvironmentFunctionEntry funcParamCount funcExpectedEnv, _ ) ) ->
-                functionName
-                    ++ " ("
-                    ++ String.fromInt funcParamCount
-                    ++ ") env = "
-                    ++ (case funcExpectedEnv of
-                            FirCompiler.LocalEnvironment { expectedDecls } ->
-                                "local: "
-                                    ++ String.fromInt (List.length expectedDecls)
-                                    ++ " ("
-                                    ++ String.join ", " expectedDecls
-                                    ++ ")"
+    List.map
+        (\( functionName, ( FirCompiler.EnvironmentFunctionEntry funcParamCount funcExpectedEnv, _ ) ) ->
+            functionName
+                ++ " ("
+                ++ String.fromInt funcParamCount
+                ++ ") env = "
+                ++ (case funcExpectedEnv of
+                        FirCompiler.LocalEnvironment { expectedDecls } ->
+                            "local: "
+                                ++ String.fromInt (List.length expectedDecls)
+                                ++ " ("
+                                ++ String.join ", " expectedDecls
+                                ++ ")"
 
-                            FirCompiler.ImportedEnvironment _ ->
-                                "imported"
+                        FirCompiler.ImportedEnvironment _ ->
+                            "imported"
 
-                            FirCompiler.IndependentEnvironment ->
-                                "independent"
-                       )
-            )
+                        FirCompiler.IndependentEnvironment ->
+                            "independent"
+                   )
+        )
+        emittedDeclarations
 
 
 compileElmChoiceTypeTagConstructor : { tagName : String, argumentsCount : Int } -> (List Expression -> Expression)
