@@ -6,7 +6,6 @@ import ElmCompiler
 import ElmInteractive exposing (ElmCoreModulesExtent(..), InteractiveContext(..))
 import ElmInteractiveParser
 import Expect
-import FirCompiler
 import Json.Encode
 import Pine
 import Test
@@ -424,9 +423,8 @@ evolutionStagesToMakeElmFunction =
                 |> Expect.equal
                     (Ok
                         (Pine.KernelApplicationExpression
-                            { functionName = "equal"
-                            , argument = Pine.ListExpression []
-                            }
+                            (Pine.ListExpression [])
+                            "equal"
                         )
                     )
     , Test.test "Kernel application concat" <|
@@ -458,15 +456,14 @@ evolutionStagesToMakeElmFunction =
                 |> Expect.equal
                     (Ok
                         (Pine.KernelApplicationExpression
-                            { functionName = "concat"
-                            , argument =
-                                Pine.LiteralExpression
-                                    (Pine.ListValue
-                                        [ Pine.valueFromContextExpansionWithName
-                                            ( "alfa", Pine.valueFromInt 123 )
-                                        ]
-                                    )
-                            }
+                            (Pine.LiteralExpression
+                                (Pine.ListValue
+                                    [ Pine.valueFromContextExpansionWithName
+                                        ( "alfa", Pine.valueFromInt 123 )
+                                    ]
+                                )
+                            )
+                            "concat"
                         )
                     )
     , Test.test "Kernel application concat with context" <|
@@ -507,18 +504,17 @@ evolutionStagesToMakeElmFunction =
                 |> Expect.equal
                     (Ok
                         (Pine.KernelApplicationExpression
-                            { functionName = "concat"
-                            , argument =
-                                Pine.ListExpression
-                                    [ Pine.LiteralExpression
-                                        (Pine.ListValue
-                                            [ Pine.valueFromContextExpansionWithName
-                                                ( "beta", Pine.valueFromInt 345 )
-                                            ]
-                                        )
-                                    , Pine.EnvironmentExpression
-                                    ]
-                            }
+                            (Pine.ListExpression
+                                [ Pine.LiteralExpression
+                                    (Pine.ListValue
+                                        [ Pine.valueFromContextExpansionWithName
+                                            ( "beta", Pine.valueFromInt 345 )
+                                        ]
+                                    )
+                                , Pine.EnvironmentExpression
+                                ]
+                            )
+                            "concat"
                         )
                     )
     ]

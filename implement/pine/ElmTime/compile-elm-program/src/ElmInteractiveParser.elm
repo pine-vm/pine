@@ -208,7 +208,7 @@ compileInteractiveSubmission environment submission =
                                                 (\functionDeclarationCompilation ->
                                                     emitExpressionInDeclarationBlock
                                                         emitStack
-                                                        (Dict.singleton declarationName functionDeclarationCompilation)
+                                                        [ ( declarationName, functionDeclarationCompilation ) ]
                                                         functionDeclarationCompilation
                                                 )
                                             |> Result.andThen FirCompiler.evaluateAsIndependentExpression
@@ -221,20 +221,19 @@ compileInteractiveSubmission environment submission =
                                                 (buildExpressionForNewStateAndResponse
                                                     { newStateExpression =
                                                         Pine.KernelApplicationExpression
-                                                            { functionName = "concat"
-                                                            , argument =
-                                                                Pine.ListExpression
-                                                                    [ Pine.ListExpression
-                                                                        [ Pine.LiteralExpression
-                                                                            (Pine.valueFromContextExpansionWithName
-                                                                                ( declarationName
-                                                                                , declarationValue
-                                                                                )
+                                                            (Pine.ListExpression
+                                                                [ Pine.ListExpression
+                                                                    [ Pine.LiteralExpression
+                                                                        (Pine.valueFromContextExpansionWithName
+                                                                            ( declarationName
+                                                                            , declarationValue
                                                                             )
-                                                                        ]
-                                                                    , Pine.EnvironmentExpression
+                                                                        )
                                                                     ]
-                                                            }
+                                                                , Pine.EnvironmentExpression
+                                                                ]
+                                                            )
+                                                            "concat"
                                                     , responseExpression =
                                                         Pine.LiteralExpression (Pine.valueFromString ("Declared " ++ declarationName))
                                                     }
@@ -261,7 +260,7 @@ compileInteractiveSubmission environment submission =
                                     |> Result.andThen
                                         (emitExpressionInDeclarationBlock
                                             emitStack
-                                            Dict.empty
+                                            []
                                         )
                             of
                                 Err error ->

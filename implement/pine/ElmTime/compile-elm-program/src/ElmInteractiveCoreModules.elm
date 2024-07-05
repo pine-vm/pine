@@ -100,27 +100,27 @@ eq a b =
 
 setToList : Set a -> List a
 setToList (Set_elm_builtin dict) =
-    dictKeys dict
+  dictKeys dict
 
 
 dictToList : Dict k v -> List (k,v)
 dictToList dict =
-    dictFoldr (\\key value list -> Pine_kernel.concat [ [(key, value)], list ]) [] dict
+  case dict of
+    RBEmpty_elm_builtin ->
+      []
+
+    RBNode_elm_builtin _ key value left right ->
+      Pine_kernel.concat [ dictToList left, [ (key, value) ], dictToList right ]
 
 
 dictKeys : Dict k v -> List k
 dictKeys dict =
-  dictFoldr (\\key value keyList -> Pine_kernel.concat [ [ key ], keyList ]) [] dict
-
-
-dictFoldr : (k -> v -> b -> b) -> b -> Dict k v -> b
-dictFoldr func acc t =
-  case t of
+  case dict of
     RBEmpty_elm_builtin ->
-      acc
+      []
 
     RBNode_elm_builtin _ key value left right ->
-      dictFoldr func (func key value (dictFoldr func acc right)) left
+      Pine_kernel.concat [ dictKeys left, [ key ], dictKeys right ]
 
 
 neq : a -> a -> Bool
@@ -1143,8 +1143,8 @@ toList string =
 
 
 fromList : List Char -> String
-fromList =
-    String
+fromList chars =
+    String chars
 
 
 fromChar : Char -> String
@@ -1364,71 +1364,72 @@ toIntFromList stringAsList =
                         _ ->
                             ( stringAsList, 1 )
             in
-            case toUnsignedIntFromList valueString of
-                Just unsigned ->
-                    Just (signMultiplier * unsigned)
+            if valueString == []
+            then
+                Nothing
+            else
+                case toUnsignedIntFromList 0 valueString of
+                    Just unsigned ->
+                        Just (Pine_kernel.mul_int [ signMultiplier, unsigned ])
 
-                Nothing ->
-                    Nothing
+                    Nothing ->
+                        Nothing
 
 
-toUnsignedIntFromList : List Char -> Maybe Int
-toUnsignedIntFromList string =
-    let
-        digitValueFromCharacter char =
-            case char of
-                '0' ->
-                    Just 0
-
-                '1' ->
-                    Just 1
-                
-                '2' ->
-                    Just 2
-                
-                '3' ->
-                    Just 3
-                
-                '4' ->
-                    Just 4
-
-                '5' ->
-                    Just 5
-
-                '6' ->
-                    Just 6
-
-                '7' ->
-                    Just 7
-
-                '8' ->
-                    Just 8
-
-                '9' ->
-                    Just 9
-
-                _ ->
-                    Nothing
-
-    in
+toUnsignedIntFromList : Int -> List Char -> Maybe Int
+toUnsignedIntFromList upper string =
     case string of
-        [] ->
+    [] ->
+        Just upper
+    
+    char :: following ->
+        case digitValueFromChar char of
+            Nothing ->
+                Nothing
+
+            Just digitValue ->
+                toUnsignedIntFromList
+                    (Pine_kernel.add_int [ digitValue, Pine_kernel.mul_int [ upper, 10 ] ])
+                    following
+
+
+digitValueFromChar : Char -> Maybe Int
+digitValueFromChar char =
+    case char of
+        '0' ->
+            Just 0
+
+        '1' ->
+            Just 1
+        
+        '2' ->
+            Just 2
+        
+        '3' ->
+            Just 3
+        
+        '4' ->
+            Just 4
+
+        '5' ->
+            Just 5
+
+        '6' ->
+            Just 6
+
+        '7' ->
+            Just 7
+
+        '8' ->
+            Just 8
+
+        '9' ->
+            Just 9
+
+        _ ->
             Nothing
 
-        digits ->
-            List.foldl
-                (\\maybeDigitValue maybeAggregate ->
-                    case (maybeDigitValue, maybeAggregate) of
-                        (Just digitValue, Just aggregate) ->
-                            Just (aggregate * 10 + digitValue)
-                        
-                        _ ->
-                            Nothing
-                )
-                (Just 0)
-                (List.map digitValueFromCharacter digits)
-
-
+            
 fromIntAsList : Int -> List Char
 fromIntAsList int =
     if Pine_kernel.is_sorted_ascending_int [ 0, int ] then
@@ -2466,7 +2467,12 @@ partition isGood dict =
 -}
 keys : Dict k v -> List k
 keys dict =
-  foldr (\\key value keyList -> key :: keyList) [] dict
+  case dict of
+    RBEmpty_elm_builtin ->
+      []
+
+    RBNode_elm_builtin _ key value left right ->
+      Pine_kernel.concat [ keys left, [ key ], keys right ]
 
 
 {-| Get all of the values in a dictionary, in the order of their keys.
@@ -2475,19 +2481,40 @@ keys dict =
 -}
 values : Dict k v -> List v
 values dict =
-  foldr (\\key value valueList -> value :: valueList) [] dict
+  case dict of
+    RBEmpty_elm_builtin ->
+      []
+
+    RBNode_elm_builtin _ key value left right ->
+      Pine_kernel.concat [ values left, [ value ], values right ]
 
 
 {-| Convert a dictionary into an association list of key-value pairs, sorted by keys. -}
 toList : Dict k v -> List (k,v)
 toList dict =
-  foldr (\\key value list -> (key,value) :: list) [] dict
+  case dict of
+    RBEmpty_elm_builtin ->
+      []
+
+    RBNode_elm_builtin _ key value left right ->
+      Pine_kernel.concat [ toList left, [ (key, value) ], toList right ]
 
 
 {-| Convert an association list into a dictionary. -}
-fromList : List (comparable,v) -> Dict comparable v
+fromList : List (comparable, v) -> Dict comparable v
 fromList assocs =
-  List.foldl (\\(key,value) dict -> insert key value dict) empty assocs
+    insertFromList assocs empty
+
+
+insertFromList : List (comparable, v) -> Dict comparable v -> Dict comparable v
+insertFromList assocs dict =
+    case assocs of
+    [] ->
+        dict
+
+    (key, value) :: remaining ->
+        insertFromList remaining (insert key value dict)
+
 
 """
     , """
@@ -2621,7 +2648,19 @@ toList (Set_elm_builtin dict) =
 -}
 fromList : List comparable -> Set comparable
 fromList list =
-  List.foldl insert empty list
+    insertFromList list empty
+
+
+insertFromList : List comparable -> Set comparable -> Set comparable
+insertFromList list (Set_elm_builtin dict) =
+    case list of
+    next :: following ->
+        insertFromList
+            following
+            (Set_elm_builtin (Dict.insert next () dict))
+
+    [] ->
+        (Set_elm_builtin dict)
 
 
 {-| Fold over the values in a set, in order from lowest to highest.

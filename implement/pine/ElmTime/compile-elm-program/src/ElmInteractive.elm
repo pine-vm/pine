@@ -603,22 +603,16 @@ transformExpressionWithOptionalReplacement findReplacement expression =
                 ListExpression list ->
                     ListExpression (List.map (transformExpressionWithOptionalReplacement findReplacement) list)
 
-                KernelApplicationExpression kernelApplication ->
+                KernelApplicationExpression argument functionName ->
                     KernelApplicationExpression
-                        { kernelApplication
-                            | argument =
-                                transformExpressionWithOptionalReplacement findReplacement kernelApplication.argument
-                        }
+                        (transformExpressionWithOptionalReplacement findReplacement argument)
+                        functionName
 
-                ConditionalExpression conditional ->
+                ConditionalExpression condition ifFalse ifTrue ->
                     ConditionalExpression
-                        { condition =
-                            transformExpressionWithOptionalReplacement findReplacement conditional.condition
-                        , ifTrue =
-                            transformExpressionWithOptionalReplacement findReplacement conditional.ifTrue
-                        , ifFalse =
-                            transformExpressionWithOptionalReplacement findReplacement conditional.ifFalse
-                        }
+                        (transformExpressionWithOptionalReplacement findReplacement condition)
+                        (transformExpressionWithOptionalReplacement findReplacement ifFalse)
+                        (transformExpressionWithOptionalReplacement findReplacement ifTrue)
 
                 ReferenceExpression _ ->
                     expression
@@ -642,8 +636,11 @@ transformExpressionWithOptionalReplacement findReplacement expression =
 
                 DeclarationBlockExpression declarations innerExpression ->
                     DeclarationBlockExpression
-                        (declarations
-                            |> Dict.map (always (transformExpressionWithOptionalReplacement findReplacement))
+                        (List.map
+                            (\( declName, declExpr ) ->
+                                ( declName, transformExpressionWithOptionalReplacement findReplacement declExpr )
+                            )
+                            declarations
                         )
                         (transformExpressionWithOptionalReplacement findReplacement innerExpression)
 
@@ -679,7 +676,7 @@ compilationAndEmitStackFromInteractiveEnvironment environmentDeclarations =
                 environmentDeclarations.modules
                 { moduleAliases = Dict.empty
                 , parsedImports = interactiveImplicitImportStatements
-                , localTypeDeclarations = Dict.empty
+                , localTypeDeclarations = []
                 }
 
         compilationStack =
@@ -1157,23 +1154,22 @@ expressionAsJson expression =
               )
             ]
 
-        KernelApplicationExpression kernelApplication ->
+        KernelApplicationExpression argument functionName ->
             [ ( "KernelApplication"
               , Json.Encode.object
-                    [ ( "argument", expressionAsJson kernelApplication.argument )
-                    , ( "functionName", Json.Encode.string kernelApplication.functionName )
+                    [ ( "argument", expressionAsJson argument )
+                    , ( "functionName", Json.Encode.string functionName )
                     ]
               )
             ]
 
-        ConditionalExpression conditional ->
+        ConditionalExpression condition falseBranch trueBranch ->
             [ ( "Conditional"
-              , [ ( "condition", .condition )
-                , ( "ifFalse", .ifFalse )
-                , ( "ifTrue", .ifTrue )
-                ]
-                    |> List.map (Tuple.mapSecond ((|>) conditional >> expressionAsJson))
-                    |> Json.Encode.object
+              , Json.Encode.object
+                    [ ( "condition", expressionAsJson condition )
+                    , ( "ifFalse", expressionAsJson falseBranch )
+                    , ( "ifTrue", expressionAsJson trueBranch )
+                    ]
               )
             ]
 

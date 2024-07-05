@@ -338,43 +338,38 @@ emitClosureExpressionTests =
             [ ( "repeat_help"
               , { functionInnerExpr =
                     FirCompiler.ConditionalExpression
-                        { condition =
-                            FirCompiler.KernelApplicationExpression
-                                { functionName = "is_sorted_ascending_int"
-                                , argument =
-                                    FirCompiler.ListExpression
-                                        [ FirCompiler.ReferenceExpression "remainingCount"
-                                        , FirCompiler.LiteralExpression (Pine.valueFromInt 0)
-                                        ]
-                                }
-                        , ifTrue =
-                            FirCompiler.ReferenceExpression "result"
-                        , ifFalse =
-                            FirCompiler.FunctionApplicationExpression
-                                (FirCompiler.ReferenceExpression "repeat_help")
-                                [ FirCompiler.ListExpression
-                                    [ FirCompiler.KernelApplicationExpression
-                                        { functionName = "concat"
-                                        , argument =
-                                            FirCompiler.ListExpression
-                                                [ FirCompiler.ListExpression
-                                                    [ FirCompiler.ReferenceExpression "value"
-                                                    ]
-                                                , FirCompiler.ReferenceExpression "result"
-                                                ]
-                                        }
-                                    , FirCompiler.KernelApplicationExpression
-                                        { functionName = "add_int"
-                                        , argument =
-                                            FirCompiler.ListExpression
-                                                [ FirCompiler.ReferenceExpression "remainingCount"
-                                                , FirCompiler.LiteralExpression (Pine.valueFromInt -1)
-                                                ]
-                                        }
-                                    , FirCompiler.ReferenceExpression "value"
-                                    ]
+                        (FirCompiler.KernelApplicationExpression
+                            (FirCompiler.ListExpression
+                                [ FirCompiler.ReferenceExpression "remainingCount"
+                                , FirCompiler.LiteralExpression (Pine.valueFromInt 0)
                                 ]
-                        }
+                            )
+                            "is_sorted_ascending_int"
+                        )
+                        (FirCompiler.FunctionApplicationExpression
+                            (FirCompiler.ReferenceExpression "repeat_help")
+                            [ FirCompiler.ListExpression
+                                [ FirCompiler.KernelApplicationExpression
+                                    (FirCompiler.ListExpression
+                                        [ FirCompiler.ListExpression
+                                            [ FirCompiler.ReferenceExpression "value"
+                                            ]
+                                        , FirCompiler.ReferenceExpression "result"
+                                        ]
+                                    )
+                                    "concat"
+                                , FirCompiler.KernelApplicationExpression
+                                    (FirCompiler.ListExpression
+                                        [ FirCompiler.ReferenceExpression "remainingCount"
+                                        , FirCompiler.LiteralExpression (Pine.valueFromInt -1)
+                                        ]
+                                    )
+                                    "add_int"
+                                , FirCompiler.ReferenceExpression "value"
+                                ]
+                            ]
+                        )
+                        (FirCompiler.ReferenceExpression "result")
                 , functionParams =
                     [ [ ( "result"
                         , [ FirCompiler.ListItemDeconstruction 0 ]
@@ -425,13 +420,12 @@ emitClosureExpressionTests =
             [ ( "is_less_than_or_equal_to_zero"
               , { functionInnerExpr =
                     FirCompiler.KernelApplicationExpression
-                        { functionName = "is_sorted_ascending_int"
-                        , argument =
-                            FirCompiler.ListExpression
-                                [ FirCompiler.ReferenceExpression "num"
-                                , FirCompiler.LiteralExpression (Pine.valueFromInt 0)
-                                ]
-                        }
+                        (FirCompiler.ListExpression
+                            [ FirCompiler.ReferenceExpression "num"
+                            , FirCompiler.LiteralExpression (Pine.valueFromInt 0)
+                            ]
+                        )
+                        "is_sorted_ascending_int"
                 , functionParams =
                     [ [ ( "num", [] )
                       ]
@@ -441,39 +435,35 @@ emitClosureExpressionTests =
             , ( "repeat_help"
               , { functionInnerExpr =
                     FirCompiler.ConditionalExpression
-                        { condition =
-                            FirCompiler.FunctionApplicationExpression
-                                (FirCompiler.ReferenceExpression "is_less_than_or_equal_to_zero")
-                                [ FirCompiler.ReferenceExpression "remainingCount"
+                        (FirCompiler.FunctionApplicationExpression
+                            (FirCompiler.ReferenceExpression "is_less_than_or_equal_to_zero")
+                            [ FirCompiler.ReferenceExpression "remainingCount"
+                            ]
+                        )
+                        (FirCompiler.FunctionApplicationExpression
+                            (FirCompiler.ReferenceExpression "repeat_help")
+                            [ FirCompiler.ListExpression
+                                [ FirCompiler.KernelApplicationExpression
+                                    (FirCompiler.ListExpression
+                                        [ FirCompiler.ListExpression
+                                            [ FirCompiler.ReferenceExpression "value"
+                                            ]
+                                        , FirCompiler.ReferenceExpression "result"
+                                        ]
+                                    )
+                                    "concat"
+                                , FirCompiler.KernelApplicationExpression
+                                    (FirCompiler.ListExpression
+                                        [ FirCompiler.ReferenceExpression "remainingCount"
+                                        , FirCompiler.LiteralExpression (Pine.valueFromInt -1)
+                                        ]
+                                    )
+                                    "add_int"
+                                , FirCompiler.ReferenceExpression "value"
                                 ]
-                        , ifTrue =
-                            FirCompiler.ReferenceExpression "result"
-                        , ifFalse =
-                            FirCompiler.FunctionApplicationExpression
-                                (FirCompiler.ReferenceExpression "repeat_help")
-                                [ FirCompiler.ListExpression
-                                    [ FirCompiler.KernelApplicationExpression
-                                        { functionName = "concat"
-                                        , argument =
-                                            FirCompiler.ListExpression
-                                                [ FirCompiler.ListExpression
-                                                    [ FirCompiler.ReferenceExpression "value"
-                                                    ]
-                                                , FirCompiler.ReferenceExpression "result"
-                                                ]
-                                        }
-                                    , FirCompiler.KernelApplicationExpression
-                                        { functionName = "add_int"
-                                        , argument =
-                                            FirCompiler.ListExpression
-                                                [ FirCompiler.ReferenceExpression "remainingCount"
-                                                , FirCompiler.LiteralExpression (Pine.valueFromInt -1)
-                                                ]
-                                        }
-                                    , FirCompiler.ReferenceExpression "value"
-                                    ]
-                                ]
-                        }
+                            ]
+                        )
+                        (FirCompiler.ReferenceExpression "result")
                 , functionParams =
                     [ [ ( "result"
                         , [ FirCompiler.ListItemDeconstruction 0 ]
@@ -718,42 +708,38 @@ emitClosureExpressionTests =
             [ ( "repeat_help"
               , { functionInnerExpr =
                     FirCompiler.ConditionalExpression
-                        { condition =
-                            FirCompiler.KernelApplicationExpression
-                                { functionName = "is_sorted_ascending_int"
-                                , argument =
-                                    FirCompiler.ListExpression
-                                        [ FirCompiler.ReferenceExpression "remainingCount"
-                                        , FirCompiler.LiteralExpression (Pine.valueFromInt 0)
-                                        ]
-                                }
-                        , ifTrue = FirCompiler.ReferenceExpression "result"
-                        , ifFalse =
-                            FirCompiler.FunctionApplicationExpression
-                                (FirCompiler.ReferenceExpression "repeat_help")
-                                [ FirCompiler.KernelApplicationExpression
-                                    { functionName = "concat"
-                                    , argument =
-                                        FirCompiler.ListExpression
-                                            [ FirCompiler.ListExpression
-                                                [ FirCompiler.ReferenceExpression "value"
-                                                ]
-                                            , FirCompiler.ReferenceExpression "result"
-                                            ]
-                                    }
-                                , FirCompiler.ListExpression
-                                    [ FirCompiler.KernelApplicationExpression
-                                        { functionName = "add_int"
-                                        , argument =
-                                            FirCompiler.ListExpression
-                                                [ FirCompiler.ReferenceExpression "remainingCount"
-                                                , FirCompiler.LiteralExpression (Pine.valueFromInt -1)
-                                                ]
-                                        }
-                                    , FirCompiler.ReferenceExpression "value"
-                                    ]
+                        (FirCompiler.KernelApplicationExpression
+                            (FirCompiler.ListExpression
+                                [ FirCompiler.ReferenceExpression "remainingCount"
+                                , FirCompiler.LiteralExpression (Pine.valueFromInt 0)
                                 ]
-                        }
+                            )
+                            "is_sorted_ascending_int"
+                        )
+                        (FirCompiler.FunctionApplicationExpression
+                            (FirCompiler.ReferenceExpression "repeat_help")
+                            [ FirCompiler.KernelApplicationExpression
+                                (FirCompiler.ListExpression
+                                    [ FirCompiler.ListExpression
+                                        [ FirCompiler.ReferenceExpression "value"
+                                        ]
+                                    , FirCompiler.ReferenceExpression "result"
+                                    ]
+                                )
+                                "concat"
+                            , FirCompiler.ListExpression
+                                [ FirCompiler.KernelApplicationExpression
+                                    (FirCompiler.ListExpression
+                                        [ FirCompiler.ReferenceExpression "remainingCount"
+                                        , FirCompiler.LiteralExpression (Pine.valueFromInt -1)
+                                        ]
+                                    )
+                                    "add_int"
+                                , FirCompiler.ReferenceExpression "value"
+                                ]
+                            ]
+                        )
+                        (FirCompiler.ReferenceExpression "result")
                 , functionParams =
                     [ [ ( "result", [] )
                       ]
@@ -790,41 +776,36 @@ emitClosureExpressionTests =
             [ ( "repeat_help"
               , { functionInnerExpr =
                     FirCompiler.ConditionalExpression
-                        { condition =
-                            FirCompiler.KernelApplicationExpression
-                                { functionName = "is_sorted_ascending_int"
-                                , argument =
-                                    FirCompiler.ListExpression
-                                        [ FirCompiler.ReferenceExpression "remainingCount"
-                                        , FirCompiler.LiteralExpression (Pine.valueFromInt 0)
-                                        ]
-                                }
-                        , ifTrue =
-                            FirCompiler.ReferenceExpression "result"
-                        , ifFalse =
-                            FirCompiler.FunctionApplicationExpression
-                                (FirCompiler.ReferenceExpression "repeat_help")
-                                [ FirCompiler.KernelApplicationExpression
-                                    { functionName = "concat"
-                                    , argument =
-                                        FirCompiler.ListExpression
-                                            [ FirCompiler.ListExpression
-                                                [ FirCompiler.ReferenceExpression "value"
-                                                ]
-                                            , FirCompiler.ReferenceExpression "result"
-                                            ]
-                                    }
-                                , FirCompiler.KernelApplicationExpression
-                                    { functionName = "add_int"
-                                    , argument =
-                                        FirCompiler.ListExpression
-                                            [ FirCompiler.ReferenceExpression "remainingCount"
-                                            , FirCompiler.LiteralExpression (Pine.valueFromInt -1)
-                                            ]
-                                    }
-                                , FirCompiler.ReferenceExpression "value"
+                        (FirCompiler.KernelApplicationExpression
+                            (FirCompiler.ListExpression
+                                [ FirCompiler.ReferenceExpression "remainingCount"
+                                , FirCompiler.LiteralExpression (Pine.valueFromInt 0)
                                 ]
-                        }
+                            )
+                            "is_sorted_ascending_int"
+                        )
+                        (FirCompiler.FunctionApplicationExpression
+                            (FirCompiler.ReferenceExpression "repeat_help")
+                            [ FirCompiler.KernelApplicationExpression
+                                (FirCompiler.ListExpression
+                                    [ FirCompiler.ListExpression
+                                        [ FirCompiler.ReferenceExpression "value"
+                                        ]
+                                    , FirCompiler.ReferenceExpression "result"
+                                    ]
+                                )
+                                "concat"
+                            , FirCompiler.KernelApplicationExpression
+                                (FirCompiler.ListExpression
+                                    [ FirCompiler.ReferenceExpression "remainingCount"
+                                    , FirCompiler.LiteralExpression (Pine.valueFromInt -1)
+                                    ]
+                                )
+                                "add_int"
+                            , FirCompiler.ReferenceExpression "value"
+                            ]
+                        )
+                        (FirCompiler.ReferenceExpression "result")
                 , functionParams =
                     [ [ ( "result", [] )
                       ]
@@ -845,12 +826,10 @@ emitClosureExpressionTests =
     , ( "let block returning literal"
       , { functionInnerExpr =
             FirCompiler.DeclarationBlockExpression
-                ([ ( "decl_from_let"
-                   , FirCompiler.LiteralExpression (Pine.valueFromString "constant_in_let")
-                   )
-                 ]
-                    |> Dict.fromList
-                )
+                [ ( "decl_from_let"
+                  , FirCompiler.LiteralExpression (Pine.valueFromString "constant_in_let")
+                  )
+                ]
                 (FirCompiler.ReferenceExpression "decl_from_let")
         , functionParams = []
         , arguments = []
@@ -861,15 +840,13 @@ emitClosureExpressionTests =
     , ( "let block returning from other decl in same block"
       , { functionInnerExpr =
             FirCompiler.DeclarationBlockExpression
-                ([ ( "decl_from_let"
-                   , FirCompiler.ReferenceExpression "other_decl_from_let"
-                   )
-                 , ( "other_decl_from_let"
-                   , FirCompiler.LiteralExpression (Pine.valueFromString "constant_in_let")
-                   )
-                 ]
-                    |> Dict.fromList
-                )
+                [ ( "decl_from_let"
+                  , FirCompiler.ReferenceExpression "other_decl_from_let"
+                  )
+                , ( "other_decl_from_let"
+                  , FirCompiler.LiteralExpression (Pine.valueFromString "constant_in_let")
+                  )
+                ]
                 (FirCompiler.ReferenceExpression "decl_from_let")
         , functionParams = []
         , arguments = []
@@ -880,12 +857,10 @@ emitClosureExpressionTests =
     , ( "let block returning only parent function arg"
       , { functionInnerExpr =
             FirCompiler.DeclarationBlockExpression
-                ([ ( "decl_from_let"
-                   , FirCompiler.ReferenceExpression "param_0"
-                   )
-                 ]
-                    |> Dict.fromList
-                )
+                [ ( "decl_from_let"
+                  , FirCompiler.ReferenceExpression "param_0"
+                  )
+                ]
                 (FirCompiler.ReferenceExpression "decl_from_let")
         , functionParams =
             [ [ ( "param_0", [] ) ]
@@ -898,19 +873,15 @@ emitClosureExpressionTests =
     , ( "let block in let block returning only parent function arg"
       , { functionInnerExpr =
             FirCompiler.DeclarationBlockExpression
-                ([ ( "decl_from_let"
-                   , FirCompiler.ReferenceExpression "param_0"
-                   )
-                 ]
-                    |> Dict.fromList
-                )
+                [ ( "decl_from_let"
+                  , FirCompiler.ReferenceExpression "param_0"
+                  )
+                ]
                 (FirCompiler.DeclarationBlockExpression
-                    ([ ( "decl_from_let_inner"
-                       , FirCompiler.ReferenceExpression "decl_from_let"
-                       )
-                     ]
-                        |> Dict.fromList
-                    )
+                    [ ( "decl_from_let_inner"
+                      , FirCompiler.ReferenceExpression "decl_from_let"
+                      )
+                    ]
                     (FirCompiler.ReferenceExpression "decl_from_let_inner")
                 )
         , functionParams =
@@ -924,12 +895,10 @@ emitClosureExpressionTests =
     , ( "let block returning second parent function arg"
       , { functionInnerExpr =
             FirCompiler.DeclarationBlockExpression
-                ([ ( "decl_from_let"
-                   , FirCompiler.ReferenceExpression "param_1"
-                   )
-                 ]
-                    |> Dict.fromList
-                )
+                [ ( "decl_from_let"
+                  , FirCompiler.ReferenceExpression "param_1"
+                  )
+                ]
                 (FirCompiler.ReferenceExpression "decl_from_let")
         , functionParams =
             [ [ ( "param_0", [] ) ]
@@ -946,8 +915,8 @@ emitClosureExpressionTests =
     , ( "partial application only for closure - one original param"
       , { functionInnerExpr =
             FirCompiler.DeclarationBlockExpression
-                ([ ( "decl_from_let"
-                   , FirCompiler.FunctionExpression
+                [ ( "decl_from_let"
+                  , FirCompiler.FunctionExpression
                         [ [ ( "final_func_param_0"
                             , []
                             )
@@ -958,9 +927,9 @@ emitClosureExpressionTests =
                             [ FirCompiler.LiteralExpression (Pine.valueFromString "literal_0")
                             ]
                         )
-                   )
-                 , ( "closure_func"
-                   , FirCompiler.FunctionExpression
+                  )
+                , ( "closure_func"
+                  , FirCompiler.FunctionExpression
                         [ [ ( "closure_func_param_0"
                             , []
                             )
@@ -971,10 +940,8 @@ emitClosureExpressionTests =
                             , FirCompiler.ReferenceExpression "param_0"
                             ]
                         )
-                   )
-                 ]
-                    |> Dict.fromList
-                )
+                  )
+                ]
                 (FirCompiler.FunctionApplicationExpression
                     (FirCompiler.ReferenceExpression "decl_from_let")
                     [ FirCompiler.ReferenceExpression "closure_func"
@@ -998,12 +965,10 @@ emitClosureExpressionTests =
     , ( "let block returning from other outside decl"
       , { functionInnerExpr =
             FirCompiler.DeclarationBlockExpression
-                ([ ( "decl_from_let"
-                   , FirCompiler.ReferenceExpression "env_func"
-                   )
-                 ]
-                    |> Dict.fromList
-                )
+                [ ( "decl_from_let"
+                  , FirCompiler.ReferenceExpression "env_func"
+                  )
+                ]
                 (FirCompiler.ReferenceExpression "decl_from_let")
         , functionParams =
             [ [ ( "param_0", [] ) ]
@@ -1070,10 +1035,10 @@ emitClosureExpressionTests =
                                         )
 
                             emptyEmitStack =
-                                { importedFunctions = Dict.empty
+                                { importedFunctions = []
                                 , declarationsDependencies = Dict.empty
                                 , environmentFunctions = []
-                                , environmentDeconstructions = Dict.empty
+                                , environmentDeconstructions = []
                                 }
 
                             rootAsExpression =
@@ -1084,7 +1049,7 @@ emitClosureExpressionTests =
                             emitClosureResult =
                                 FirCompiler.emitExpressionInDeclarationBlock
                                     emptyEmitStack
-                                    (Dict.fromList environmentFunctions)
+                                    environmentFunctions
                                     rootAsExpression
                         in
                         emitClosureResult

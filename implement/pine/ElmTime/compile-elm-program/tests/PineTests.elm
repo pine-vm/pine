@@ -18,9 +18,8 @@ pineExpressionEncodeDecodeRoundtrip =
       )
     , ( "kernel application one arg"
       , Pine.KernelApplicationExpression
-            { functionName = "equal"
-            , argument = Pine.LiteralExpression (Pine.BlobValue [ 6, 7, 8 ])
-            }
+            (Pine.LiteralExpression (Pine.BlobValue [ 6, 7, 8 ]))
+            "equal"
       )
     , ( "if block"
       , Pine.ConditionalExpression

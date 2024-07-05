@@ -27,6 +27,20 @@ listFind predicate list =
                 listFind predicate rest
 
 
+assocListGet : key -> List ( key, value ) -> Maybe value
+assocListGet key list =
+    case list of
+        [] ->
+            Nothing
+
+        ( firstKey, firstValue ) :: rest ->
+            if firstKey == key then
+                Just firstValue
+
+            else
+                assocListGet key rest
+
+
 listMapFind : (a -> Maybe b) -> List a -> Maybe b
 listMapFind mapItem list =
     case list of
@@ -42,23 +56,23 @@ listMapFind mapItem list =
                     listMapFind mapItem rest
 
 
-listFindWithIndex : (a -> Bool) -> List a -> Maybe ( Int, a )
-listFindWithIndex predicate list =
-    listFindWithIndexHelper 0 predicate list
+assocListGetWithIndex : key -> List ( key, value ) -> Maybe ( Int, value )
+assocListGetWithIndex key list =
+    assocListGetWithIndexHelper 0 key list
 
 
-listFindWithIndexHelper : Int -> (a -> Bool) -> List a -> Maybe ( Int, a )
-listFindWithIndexHelper index predicate list =
+assocListGetWithIndexHelper : Int -> key -> List ( key, value ) -> Maybe ( Int, value )
+assocListGetWithIndexHelper index key list =
     case list of
         [] ->
             Nothing
 
-        a :: tail ->
-            if predicate a then
-                Just ( index, a )
+        ( nextKey, nextValue ) :: tail ->
+            if nextKey == key then
+                Just ( index, nextValue )
 
             else
-                listFindWithIndexHelper (index + 1) predicate tail
+                assocListGetWithIndexHelper (index + 1) key tail
 
 
 resultListMapCombine :
@@ -92,7 +106,7 @@ resultListMapCombineHelper completeList mapItem sourceList =
 
 
 resultDictMapCombine :
-    (comparable -> value -> Result err valueOk)
+    (( comparable, value ) -> Result err valueOk)
     -> Dict.Dict comparable value
     -> Result err (Dict.Dict comparable valueOk)
 resultDictMapCombine mapItem dict =
@@ -100,7 +114,7 @@ resultDictMapCombine mapItem dict =
         (\key value result ->
             case result of
                 Ok resultDict ->
-                    case mapItem key value of
+                    case mapItem ( key, value ) of
                         Ok valueOk ->
                             Ok (Dict.insert key valueOk resultDict)
 
@@ -115,7 +129,7 @@ resultDictMapCombine mapItem dict =
 
 
 resultListIndexedMapCombine :
-    (Int -> item -> Result err itemOk)
+    (( Int, item ) -> Result err itemOk)
     -> List item
     -> Result err (List itemOk)
 resultListIndexedMapCombine mapItem list =
@@ -125,7 +139,7 @@ resultListIndexedMapCombine mapItem list =
 resultListIndexedMapCombineHelper :
     Int
     -> List itemOk
-    -> (Int -> item -> Result err itemOk)
+    -> (( Int, item ) -> Result err itemOk)
     -> List item
     -> Result err (List itemOk)
 resultListIndexedMapCombineHelper index completeList mapItem sourceList =
@@ -134,7 +148,7 @@ resultListIndexedMapCombineHelper index completeList mapItem sourceList =
             Ok (List.reverse completeList)
 
         item :: tail ->
-            case mapItem index item of
+            case mapItem ( index, item ) of
                 Ok itemOk ->
                     resultListIndexedMapCombineHelper
                         (index + 1)
@@ -173,22 +187,18 @@ commonPrefixLength listA listB =
 -}
 listUnique : List a -> List a
 listUnique list =
-    listUniqueHelp identity [] list []
+    listUniqueHelp list []
 
 
-listUniqueHelp : (a -> b) -> List b -> List a -> List a -> List a
-listUniqueHelp f existing remaining accumulator =
+listUniqueHelp : List a -> List a -> List a
+listUniqueHelp remaining accumulator =
     case remaining of
         [] ->
             List.reverse accumulator
 
         first :: rest ->
-            let
-                computedFirst =
-                    f first
-            in
-            if List.member computedFirst existing then
-                listUniqueHelp f existing rest accumulator
+            if List.member first accumulator then
+                listUniqueHelp rest accumulator
 
             else
-                listUniqueHelp f (computedFirst :: existing) rest (first :: accumulator)
+                listUniqueHelp rest (first :: accumulator)

@@ -49,12 +49,12 @@ generateTemplateEvaluatingToExpression expression =
                     ]
                 )
 
-        Pine.KernelApplicationExpression kernelApp ->
+        Pine.KernelApplicationExpression argument functionName ->
             buildFromTagAndArgument
                 "KernelApplication"
                 (buildRecordExpression
-                    [ ( "argument", generateTemplateEvaluatingToExpression kernelApp.argument )
-                    , ( "functionName", Pine.LiteralExpression (Pine.valueFromString kernelApp.functionName) )
+                    [ ( "argument", generateTemplateEvaluatingToExpression argument )
+                    , ( "functionName", Pine.LiteralExpression (Pine.valueFromString functionName) )
                     ]
                 )
 
@@ -248,16 +248,16 @@ buildPineExpressionSyntax config expression =
                             |> String.join "\n"
                         ]
 
-                Pine.KernelApplicationExpression kernelApplication ->
+                Pine.KernelApplicationExpression argument functionName ->
                     buildFromTagNameAndArguments
                         "Pine.KernelApplicationExpression"
                         [ buildRecordSyntax
                             [ ( "argument"
-                              , buildPineExpressionSyntax config kernelApplication.argument
+                              , buildPineExpressionSyntax config argument
                                     |> String.join "\n"
                               )
                             , ( "functionName"
-                              , "\"" ++ kernelApplication.functionName ++ "\""
+                              , "\"" ++ functionName ++ "\""
                               )
                             ]
                             |> String.join "\n"

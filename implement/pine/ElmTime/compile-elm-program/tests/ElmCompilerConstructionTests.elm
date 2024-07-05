@@ -32,9 +32,8 @@ generateTemplateEvaluatingToExpressionTests =
       )
     , ( "KernelApplicationExpression"
       , Pine.KernelApplicationExpression
-            { functionName = "equal"
-            , argument = Pine.LiteralExpression (Pine.valueFromString "argument-placeholder")
-            }
+            (Pine.LiteralExpression (Pine.valueFromString "argument-placeholder"))
+            "equal"
       )
     , ( "ConditionalExpression"
       , Pine.ConditionalExpression

@@ -2,7 +2,6 @@ module Pine exposing
     ( ConditionalExpressionStructure
     , EvalContext
     , Expression(..)
-    , KernelApplicationExpressionStructure
     , KernelFunction
     , ParseAndEvalExpressionStructure
     , PathDescription(..)
@@ -20,8 +19,7 @@ module Pine exposing
     , evaluateExpression
     , falseValue
     , intFromValue
-    , kernelFunction_Negate
-    , mapFromListValueOrBlobValue
+    , kernelFunction_negate
     , parseExpressionFromValue
     , stringAsValue_Function
     , stringAsValue_List
@@ -47,7 +45,7 @@ type Expression
     = LiteralExpression Value
     | ListExpression (List Expression)
     | ParseAndEvalExpression ParseAndEvalExpressionStructure
-    | KernelApplicationExpression KernelApplicationExpressionStructure
+    | KernelApplicationExpression Expression String
     | ConditionalExpression ConditionalExpressionStructure
     | EnvironmentExpression
     | StringTagExpression String Expression
@@ -56,12 +54,6 @@ type Expression
 type alias ParseAndEvalExpressionStructure =
     { expression : Expression
     , environment : Expression
-    }
-
-
-type alias KernelApplicationExpressionStructure =
-    { functionName : String
-    , argument : Expression
     }
 
 
@@ -122,27 +114,7 @@ evaluateExpression context expression =
             Ok value
 
         ListExpression listElements ->
-            case
-                Common.resultListIndexedMapCombine
-                    (\listElementIndex listElement ->
-                        case evaluateExpression context listElement of
-                            Err err ->
-                                Err
-                                    (DescribePathNode
-                                        ("Failed to evaluate list item " ++ String.fromInt listElementIndex ++ ": ")
-                                        err
-                                    )
-
-                            Ok ok ->
-                                Ok ok
-                    )
-                    listElements
-            of
-                Err error ->
-                    Err error
-
-                Ok listItemsValues ->
-                    Ok (ListValue listItemsValues)
+            evaluateListExpression [] context listElements
 
         ParseAndEvalExpression parseAndEval ->
             case evaluateParseAndEval context parseAndEval of
@@ -156,17 +128,17 @@ evaluateExpression context expression =
                 Ok value ->
                     Ok value
 
-        KernelApplicationExpression application ->
-            case evaluateExpression context application.argument of
+        KernelApplicationExpression argumentExpr functionName ->
+            case evaluateExpression context argumentExpr of
                 Err error ->
                     Err
                         (DescribePathNode
-                            ("Failed to evaluate argument for kernel function " ++ application.functionName ++ ": ")
+                            ("Failed to evaluate argument for kernel function " ++ functionName ++ ": ")
                             error
                         )
 
                 Ok argument ->
-                    case parseKernelFunctionFromName application.functionName of
+                    case parseKernelFunctionFromName functionName of
                         Err error ->
                             Err (DescribePathEnd error)
 
@@ -210,6 +182,28 @@ evaluateExpression context expression =
                     Ok ok
 
 
+evaluateListExpression : List Value -> EvalContext -> List Expression -> Result (PathDescription String) Value
+evaluateListExpression completedItems context remainingItems =
+    case remainingItems of
+        [] ->
+            Ok (ListValue (List.reverse completedItems))
+
+        currentItem :: followingItems ->
+            case evaluateExpression context currentItem of
+                Err err ->
+                    Err
+                        (DescribePathNode
+                            ("Failed to evaluate list item " ++ String.fromInt (List.length completedItems) ++ ": ")
+                            err
+                        )
+
+                Ok itemValue ->
+                    evaluateListExpression
+                        (itemValue :: completedItems)
+                        context
+                        followingItems
+
+
 valueFromContextExpansionWithName : ( String, Value ) -> Value
 valueFromContextExpansionWithName ( declName, declValue ) =
     ListValue [ valueFromString declName, declValue ]
@@ -219,84 +213,73 @@ kernelFunctions : Dict.Dict String KernelFunction
 kernelFunctions =
     Dict.fromList
         [ ( "equal"
-          , \arg ->
-                valueFromBool
-                    (mapFromListValueOrBlobValue { fromList = list_all_same, fromBlob = list_all_same } arg)
+          , kernelFunction_equal
           )
         , ( "negate"
-          , kernelFunction_Negate
+          , kernelFunction_negate
           )
         , ( "length"
-          , \arg ->
-                valueFromInt
-                    (mapFromListValueOrBlobValue { fromList = List.length, fromBlob = List.length } arg)
+          , kernelFunction_length
           )
         , ( "skip"
-          , kernelFunctionExpectingExactlyTwoArguments
-                { mapArg0 = intFromValue
-                , mapArg1 = Ok
-                , apply =
-                    \count sequence ->
-                        mapFromListValueOrBlobValue
-                            { fromList = \list -> ListValue (List.drop count list)
-                            , fromBlob = \bytes -> BlobValue (List.drop count bytes)
-                            }
-                            sequence
-                }
+          , kernelFunction_skip
           )
         , ( "take"
-          , kernelFunctionExpectingExactlyTwoArguments
-                { mapArg0 = intFromValue
-                , mapArg1 = Ok
-                , apply =
-                    \count sequence ->
-                        mapFromListValueOrBlobValue
-                            { fromList = \list -> ListValue (List.take count list)
-                            , fromBlob = \bytes -> BlobValue (List.take count bytes)
-                            }
-                            sequence
-                }
+          , kernelFunction_take
           )
         , ( "reverse"
-          , mapFromListValueOrBlobValue
-                { fromList = \list -> ListValue (List.reverse list)
-                , fromBlob = \bytes -> BlobValue (List.reverse bytes)
-                }
+          , kernelFunction_reverse
           )
         , ( "concat"
-          , kernel_function_concat
+          , kernelFunction_concat
           )
         , ( "list_head"
-          , kernelFunctionExpectingList
-                (\list ->
-                    case list of
-                        head :: _ ->
-                            head
-
-                        [] ->
-                            listValue_Empty
-                )
+          , kernelFunction_list_head
           )
         , ( "add_int"
-          , kernelFunctionExpectingListOfBigIntAndProducingBigInt BigInt.add (BigInt.fromInt 0)
+          , kernelFunction_add_int
           )
         , ( "mul_int"
-          , kernelFunctionExpectingListOfBigIntAndProducingBigInt BigInt.mul (BigInt.fromInt 1)
+          , kernelFunction_mul_int
           )
         , ( "is_sorted_ascending_int"
-          , kernel_function_is_sorted_ascending_int
+          , kernelFunction_is_sorted_ascending_int
           )
         ]
 
 
-kernelFunctionsNames : List ( String, Value )
+kernelFunctionsNames : List ( Value, String )
 kernelFunctionsNames =
-    List.map (\name -> ( name, valueFromString name ))
-        (Dict.keys kernelFunctions)
+    Dict.foldl
+        (\name _ aggregate -> ( valueFromString name, name ) :: aggregate)
+        []
+        kernelFunctions
 
 
-kernelFunction_Negate : KernelFunction
-kernelFunction_Negate value =
+kernelFunction_equal : KernelFunction
+kernelFunction_equal arg =
+    valueFromBool
+        (case arg of
+            ListValue list ->
+                case list of
+                    [] ->
+                        True
+
+                    first :: rest ->
+                        list_all_same first rest
+
+            BlobValue bytes ->
+                case bytes of
+                    [] ->
+                        True
+
+                    first :: rest ->
+                        list_all_same first rest
+        )
+
+
+kernelFunction_negate : KernelFunction
+kernelFunction_negate value =
     case value of
         BlobValue blob ->
             case blob of
@@ -313,8 +296,70 @@ kernelFunction_Negate value =
             listValue_Empty
 
 
-kernel_function_concat : Value -> Value
-kernel_function_concat value =
+kernelFunction_length : KernelFunction
+kernelFunction_length arg =
+    valueFromInt
+        (case arg of
+            ListValue list ->
+                List.length list
+
+            BlobValue bytes ->
+                List.length bytes
+        )
+
+
+kernelFunction_skip : KernelFunction
+kernelFunction_skip arg =
+    case arg of
+        ListValue [ skipValue, sequence ] ->
+            case intFromValue skipValue of
+                Ok count ->
+                    case sequence of
+                        ListValue list ->
+                            ListValue (List.drop count list)
+
+                        BlobValue bytes ->
+                            BlobValue (List.drop count bytes)
+
+                Err _ ->
+                    listValue_Empty
+
+        _ ->
+            listValue_Empty
+
+
+kernelFunction_take : KernelFunction
+kernelFunction_take arg =
+    case arg of
+        ListValue [ skipValue, sequence ] ->
+            case intFromValue skipValue of
+                Ok count ->
+                    case sequence of
+                        ListValue list ->
+                            ListValue (List.take count list)
+
+                        BlobValue bytes ->
+                            BlobValue (List.take count bytes)
+
+                Err _ ->
+                    listValue_Empty
+
+        _ ->
+            listValue_Empty
+
+
+kernelFunction_reverse : KernelFunction
+kernelFunction_reverse arg =
+    case arg of
+        ListValue list ->
+            ListValue (List.reverse list)
+
+        BlobValue bytes ->
+            BlobValue (List.reverse bytes)
+
+
+kernelFunction_concat : Value -> Value
+kernelFunction_concat value =
     case value of
         ListValue list ->
             case list of
@@ -322,49 +367,103 @@ kernel_function_concat value =
                     listValue_Empty
 
                 (BlobValue _) :: _ ->
-                    BlobValue
-                        (List.concatMap
-                            (\item ->
-                                case item of
-                                    BlobValue blob ->
-                                        blob
-
-                                    _ ->
-                                        []
-                            )
-                            list
-                        )
+                    kernelFunction_concat_blob [] list
 
                 (ListValue _) :: _ ->
-                    ListValue
-                        (List.concatMap
-                            (\item ->
-                                case item of
-                                    ListValue innerList ->
-                                        innerList
-
-                                    _ ->
-                                        []
-                            )
-                            list
-                        )
+                    kernelFunction_concat_list [] list
 
         _ ->
             listValue_Empty
 
 
-list_all_same : List a -> Bool
-list_all_same list =
+kernelFunction_concat_blob : List Int -> List Value -> Value
+kernelFunction_concat_blob bytes remainingItems =
+    case remainingItems of
+        (BlobValue currentBytes) :: followingItems ->
+            kernelFunction_concat_blob (List.concat [ bytes, currentBytes ]) followingItems
+
+        (ListValue _) :: followingItems ->
+            kernelFunction_concat_blob bytes followingItems
+
+        [] ->
+            BlobValue bytes
+
+
+kernelFunction_concat_list : List Value -> List Value -> Value
+kernelFunction_concat_list flattenedItems remainingItems =
+    case remainingItems of
+        (ListValue currentItems) :: followingItems ->
+            kernelFunction_concat_list (List.concat [ flattenedItems, currentItems ]) followingItems
+
+        (BlobValue _) :: followingItems ->
+            kernelFunction_concat_list flattenedItems followingItems
+
+        [] ->
+            ListValue flattenedItems
+
+
+kernelFunction_list_head : Value -> Value
+kernelFunction_list_head value =
+    case value of
+        ListValue (head :: _) ->
+            head
+
+        _ ->
+            listValue_Empty
+
+
+kernelFunction_add_int : Value -> Value
+kernelFunction_add_int value =
+    case value of
+        ListValue list ->
+            kernelFunction_add_int_list (BigInt.fromInt 0) list
+
+        _ ->
+            listValue_Empty
+
+
+kernelFunction_add_int_list : BigInt.BigInt -> List Value -> Value
+kernelFunction_add_int_list aggregate list =
     case list of
         [] ->
-            True
+            valueFromBigInt aggregate
 
-        first :: rest ->
-            List.all ((==) first) rest
+        nextValue :: rest ->
+            case bigIntFromValue nextValue of
+                Ok nextInt ->
+                    kernelFunction_add_int_list (BigInt.add aggregate nextInt) rest
+
+                Err _ ->
+                    listValue_Empty
 
 
-kernel_function_is_sorted_ascending_int : Value -> Value
-kernel_function_is_sorted_ascending_int value =
+kernelFunction_mul_int : Value -> Value
+kernelFunction_mul_int value =
+    case value of
+        ListValue list ->
+            kernelFunction_mul_int_list (BigInt.fromInt 1) list
+
+        _ ->
+            listValue_Empty
+
+
+kernelFunction_mul_int_list : BigInt.BigInt -> List Value -> Value
+kernelFunction_mul_int_list aggregate list =
+    case list of
+        [] ->
+            valueFromBigInt aggregate
+
+        nextValue :: rest ->
+            case bigIntFromValue nextValue of
+                Ok nextInt ->
+                    kernelFunction_mul_int_list (BigInt.mul aggregate nextInt) rest
+
+                Err _ ->
+                    listValue_Empty
+
+
+kernelFunction_is_sorted_ascending_int : Value -> Value
+kernelFunction_is_sorted_ascending_int value =
     case value of
         BlobValue bytes ->
             valueFromBool (List.sort bytes == bytes)
@@ -381,6 +480,20 @@ kernel_function_is_sorted_ascending_int value =
 
                         Ok firstInt ->
                             is_sorted_ascending_int_recursive rest firstInt
+
+
+list_all_same : a -> List a -> Bool
+list_all_same item list =
+    case list of
+        [] ->
+            True
+
+        first :: rest ->
+            if first == item then
+                list_all_same item rest
+
+            else
+                False
 
 
 is_sorted_ascending_int_recursive : List Value -> Int -> Value
@@ -400,16 +513,6 @@ is_sorted_ascending_int_recursive remaining previous =
 
                     else
                         is_sorted_ascending_int_recursive rest nextInt
-
-
-mapFromListValueOrBlobValue : { fromList : List Value -> a, fromBlob : List Int -> a } -> Value -> a
-mapFromListValueOrBlobValue { fromList, fromBlob } value =
-    case value of
-        ListValue list ->
-            fromList list
-
-        BlobValue blob ->
-            fromBlob blob
 
 
 evaluateParseAndEval : EvalContext -> ParseAndEvalExpressionStructure -> Result (PathDescription String) Value
@@ -451,68 +554,6 @@ evaluateParseAndEval context parseAndEval =
 
                         Ok functionExpression ->
                             evaluateExpression { environment = environmentValue } functionExpression
-
-
-kernelFunctionExpectingListOfBigIntAndProducingBigInt :
-    (BigInt.BigInt -> BigInt.BigInt -> BigInt.BigInt)
-    -> BigInt.BigInt
-    -> KernelFunction
-kernelFunctionExpectingListOfBigIntAndProducingBigInt combine seed =
-    let
-        combineRecursive : List Value -> BigInt.BigInt -> Value
-        combineRecursive remainingList aggregate =
-            case remainingList of
-                [] ->
-                    valueFromBigInt aggregate
-
-                itemValue :: following ->
-                    case bigIntFromValue itemValue of
-                        Err _ ->
-                            listValue_Empty
-
-                        Ok itemInt ->
-                            combineRecursive following (combine aggregate itemInt)
-    in
-    kernelFunctionExpectingList
-        (\list -> combineRecursive list seed)
-
-
-kernelFunctionExpectingExactlyTwoArguments :
-    { mapArg0 : Value -> Result String arg0
-    , mapArg1 : Value -> Result String arg1
-    , apply : arg0 -> arg1 -> Value
-    }
-    -> KernelFunction
-kernelFunctionExpectingExactlyTwoArguments configuration =
-    kernelFunctionExpectingList
-        (\list ->
-            case list of
-                [ arg0Value, arg1Value ] ->
-                    case configuration.mapArg0 arg0Value of
-                        Err _ ->
-                            listValue_Empty
-
-                        Ok arg0 ->
-                            case configuration.mapArg1 arg1Value of
-                                Err _ ->
-                                    listValue_Empty
-
-                                Ok arg1 ->
-                                    configuration.apply arg0 arg1
-
-                _ ->
-                    listValue_Empty
-        )
-
-
-kernelFunctionExpectingList : (List Value -> Value) -> KernelFunction
-kernelFunctionExpectingList continueWithList value =
-    case value of
-        ListValue list ->
-            continueWithList list
-
-        _ ->
-            listValue_Empty
 
 
 valueFromBool : Bool -> Value
@@ -562,9 +603,9 @@ describeExpression depthLimit expression =
                             ++ ")"
                    )
 
-        KernelApplicationExpression application ->
+        KernelApplicationExpression _ functionName ->
             "kernel-application("
-                ++ application.functionName
+                ++ functionName
                 ++ ")"
 
         ConditionalExpression _ ->
@@ -623,10 +664,10 @@ displayStringFromPineError error =
 
 prependAllLines : String -> String -> String
 prependAllLines prefix text =
-    text
-        |> String.lines
-        |> List.map ((++) prefix)
-        |> String.join "\n"
+    String.join "\n"
+        (List.map (\line -> "" ++ prefix ++ line)
+            (String.lines text)
+        )
 
 
 valueFromString : String -> Value
@@ -939,12 +980,21 @@ bigIntFromBlobValue blobValue =
 
 bigIntFromUnsignedBlobValue : List Int -> BigInt.BigInt
 bigIntFromUnsignedBlobValue intValueBytes =
-    List.foldl
-        (\nextByte aggregate ->
-            BigInt.add (BigInt.fromInt nextByte) (BigInt.mul (BigInt.fromInt 0x0100) aggregate)
-        )
+    bigIntFromUnsignedBlobValueContinue
         (BigInt.fromInt 0)
         intValueBytes
+
+
+bigIntFromUnsignedBlobValueContinue : BigInt.BigInt -> List Int -> BigInt.BigInt
+bigIntFromUnsignedBlobValueContinue aggregate intValueBytes =
+    case intValueBytes of
+        nextByte :: followingBytes ->
+            bigIntFromUnsignedBlobValueContinue
+                (BigInt.add (BigInt.fromInt nextByte) (BigInt.mul (BigInt.fromInt 0x0100) aggregate))
+                followingBytes
+
+        [] ->
+            aggregate
 
 
 hexadecimalRepresentationFromBlobValue : List Int -> String
@@ -962,16 +1012,7 @@ encodeExpressionAsValue expression =
                 literal
 
         ListExpression listExpr ->
-            let
-                encodedItems =
-                    List.foldr
-                        (\listItem aggregate -> encodeExpressionAsValue listItem :: aggregate)
-                        []
-                        listExpr
-            in
-            encodeUnionToPineValue
-                stringAsValue_List
-                (ListValue encodedItems)
+            encodeListExpressionAsValueReversed [] (List.reverse listExpr)
 
         ParseAndEvalExpression parseAndEval ->
             encodeUnionToPineValue
@@ -982,12 +1023,12 @@ encodeExpressionAsValue expression =
                     ]
                 )
 
-        KernelApplicationExpression app ->
+        KernelApplicationExpression argument functionName ->
             encodeUnionToPineValue
                 stringAsValue_KernelApplication
                 (ListValue
-                    [ ListValue [ stringAsValue_argument, encodeExpressionAsValue app.argument ]
-                    , ListValue [ stringAsValue_functionName, valueFromString app.functionName ]
+                    [ ListValue [ stringAsValue_argument, encodeExpressionAsValue argument ]
+                    , ListValue [ stringAsValue_functionName, valueFromString functionName ]
                     ]
                 )
 
@@ -1012,6 +1053,20 @@ encodeExpressionAsValue expression =
                     , encodeExpressionAsValue tagged
                     ]
                 )
+
+
+encodeListExpressionAsValueReversed : List Value -> List Expression -> Value
+encodeListExpressionAsValueReversed encodedItems list =
+    case list of
+        [] ->
+            encodeUnionToPineValue
+                stringAsValue_List
+                (ListValue encodedItems)
+
+        itemExpr :: remaining ->
+            encodeListExpressionAsValueReversed
+                (encodeExpressionAsValue itemExpr :: encodedItems)
+                remaining
 
 
 environmentExpressionAsValue : Value
@@ -1050,8 +1105,8 @@ parseExpressionFromValue exprValue =
 
                         "KernelApplication" ->
                             case parseKernelApplicationExpression unionTagValue of
-                                Ok kernelApplication ->
-                                    Ok (KernelApplicationExpression kernelApplication)
+                                Ok ( argument, functionName ) ->
+                                    Ok (KernelApplicationExpression argument functionName)
 
                                 Err err ->
                                     Err err
@@ -1131,33 +1186,21 @@ parseParseAndEvalExpression value =
                     Err ("Failed to parse kernel application expression: " ++ err)
 
                 Ok pairs ->
-                    case
-                        Common.listFind
-                            (\( fieldNameValue, _ ) ->
-                                fieldNameValue == stringAsValue_expression
-                            )
-                            pairs
-                    of
+                    case Common.assocListGet stringAsValue_expression pairs of
                         Nothing ->
                             Err "Did not find field 'expression'"
 
-                        Just ( _, expressionValue ) ->
+                        Just expressionValue ->
                             case parseExpressionFromValue expressionValue of
                                 Err error ->
                                     Err ("Failed to parse field 'expression': " ++ error)
 
                                 Ok expression ->
-                                    case
-                                        Common.listFind
-                                            (\( fieldNameValue, _ ) ->
-                                                fieldNameValue == stringAsValue_environment
-                                            )
-                                            pairs
-                                    of
+                                    case Common.assocListGet stringAsValue_environment pairs of
                                         Nothing ->
                                             Err "Did not find field 'environment'"
 
-                                        Just ( _, environmentValue ) ->
+                                        Just environmentValue ->
                                             case parseExpressionFromValue environmentValue of
                                                 Err error ->
                                                     Err ("Failed to parse field 'environment': " ++ error)
@@ -1169,7 +1212,7 @@ parseParseAndEvalExpression value =
                                                         }
 
 
-parseKernelApplicationExpression : Value -> Result String KernelApplicationExpressionStructure
+parseKernelApplicationExpression : Value -> Result String ( Expression, String )
 parseKernelApplicationExpression expressionValue =
     case expressionValue of
         BlobValue _ ->
@@ -1181,47 +1224,27 @@ parseKernelApplicationExpression expressionValue =
                     Err ("Failed to parse kernel application expression: " ++ err)
 
                 Ok pairs ->
-                    case
-                        Common.listFind
-                            (\( fieldNameValue, _ ) ->
-                                fieldNameValue == stringAsValue_functionName
-                            )
-                            pairs
-                    of
+                    case Common.assocListGet stringAsValue_functionName pairs of
                         Nothing ->
                             Err "Did not find field 'functionName'"
 
-                        Just ( _, functionNameValue ) ->
-                            case
-                                Common.listFind
-                                    (\( _, cvalue ) -> cvalue == functionNameValue)
-                                    kernelFunctionsNames
-                            of
+                        Just functionNameValue ->
+                            case Common.assocListGet functionNameValue kernelFunctionsNames of
                                 Nothing ->
-                                    Err
-                                        "Unexpected value for field 'functionName'"
+                                    Err "Unexpected 'functionName'"
 
-                                Just ( functionName, _ ) ->
-                                    case
-                                        Common.listFind
-                                            (\( fieldNameValue, _ ) ->
-                                                fieldNameValue == stringAsValue_argument
-                                            )
-                                            pairs
-                                    of
+                                Just functionName ->
+                                    case Common.assocListGet stringAsValue_argument pairs of
                                         Nothing ->
                                             Err "Did not find field 'argument'"
 
-                                        Just ( _, argumentValue ) ->
+                                        Just argumentValue ->
                                             case parseExpressionFromValue argumentValue of
                                                 Err error ->
                                                     Err ("Failed to parse field 'argument': " ++ error)
 
                                                 Ok argument ->
-                                                    Ok
-                                                        { functionName = functionName
-                                                        , argument = argument
-                                                        }
+                                                    Ok ( argument, functionName )
 
 
 parseKernelFunctionFromName : String -> Result String KernelFunction
@@ -1253,49 +1276,31 @@ parseConditionalExpression expressionValue =
                     Err ("Failed to parse kernel application expression: " ++ err)
 
                 Ok pairs ->
-                    case
-                        Common.listFind
-                            (\( fieldNameValue, _ ) ->
-                                fieldNameValue == stringAsValue_condition
-                            )
-                            pairs
-                    of
+                    case Common.assocListGet stringAsValue_condition pairs of
                         Nothing ->
                             Err "Did not find field 'condition'"
 
-                        Just ( _, conditionValue ) ->
+                        Just conditionValue ->
                             case parseExpressionFromValue conditionValue of
                                 Err error ->
                                     Err ("Failed to parse field 'condition': " ++ error)
 
                                 Ok condition ->
-                                    case
-                                        Common.listFind
-                                            (\( fieldNameValue, _ ) ->
-                                                fieldNameValue == stringAsValue_ifTrue
-                                            )
-                                            pairs
-                                    of
+                                    case Common.assocListGet stringAsValue_ifTrue pairs of
                                         Nothing ->
                                             Err "Did not find field 'ifTrue'"
 
-                                        Just ( _, ifTrueValue ) ->
+                                        Just ifTrueValue ->
                                             case parseExpressionFromValue ifTrueValue of
                                                 Err error ->
                                                     Err ("Failed to parse field 'ifTrue': " ++ error)
 
                                                 Ok ifTrue ->
-                                                    case
-                                                        Common.listFind
-                                                            (\( fieldNameValue, _ ) ->
-                                                                fieldNameValue == stringAsValue_ifFalse
-                                                            )
-                                                            pairs
-                                                    of
+                                                    case Common.assocListGet stringAsValue_ifFalse pairs of
                                                         Nothing ->
                                                             Err "Did not find field 'ifFalse'"
 
-                                                        Just ( _, ifFalseValue ) ->
+                                                        Just ifFalseValue ->
                                                             case parseExpressionFromValue ifFalseValue of
                                                                 Err error ->
                                                                     Err ("Failed to parse field 'ifFalse': " ++ error)

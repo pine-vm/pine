@@ -382,13 +382,16 @@ parseElmExplorerNodeValue nodeCategory nodeValue =
                     (\parsedModule ->
                         { children =
                             parsedModule.functionDeclarations
-                                |> Dict.map
-                                    (\_ declValue ->
-                                        { value = explorerValueCache declValue
-                                        , category = ElmFunctionDeclarationNode
-                                        , parsed = Nothing
-                                        }
+                                |> List.foldl
+                                    (\( declName, declValue ) ->
+                                        Dict.insert
+                                            declName
+                                            { value = explorerValueCache declValue
+                                            , category = ElmFunctionDeclarationNode
+                                            , parsed = Nothing
+                                            }
                                     )
+                                    Dict.empty
                         , otherProperties = []
                         }
                     )
