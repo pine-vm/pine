@@ -176,6 +176,14 @@ compileInteractiveSubmission environment submission =
                                         |> Dict.map (\_ ( _, parsedModule ) -> parsedModule)
                                 , otherDeclarations = environmentDeclarations.otherDeclarations
                                 }
+
+                        responseExpressionFromString str =
+                            Pine.LiteralExpression
+                                (Pine.ListValue
+                                    [ Pine.valueFromString "String"
+                                    , Pine.ListValue [ Pine.valueFromString str ]
+                                    ]
+                                )
                     in
                     case parseInteractiveSubmissionFromString submission of
                         Err error ->
@@ -183,7 +191,7 @@ compileInteractiveSubmission environment submission =
                                 (buildExpressionForNewStateAndResponse
                                     { newStateExpression = Pine.environmentExpr
                                     , responseExpression =
-                                        Pine.LiteralExpression (Pine.valueFromString ("Failed to parse submission: " ++ error))
+                                        responseExpressionFromString ("Failed to parse submission: " ++ error)
                                     }
                                 )
 
@@ -235,7 +243,7 @@ compileInteractiveSubmission environment submission =
                                                             )
                                                             "concat"
                                                     , responseExpression =
-                                                        Pine.LiteralExpression (Pine.valueFromString ("Declared " ++ declarationName))
+                                                        responseExpressionFromString ("Declared '" ++ declarationName ++ "'")
                                                     }
                                                 )
 
