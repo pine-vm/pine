@@ -40,12 +40,12 @@ generateTemplateEvaluatingToExpression expression =
                 "Literal"
                 (Pine.LiteralExpression literal)
 
-        Pine.ParseAndEvalExpression parseAndEval ->
+        Pine.ParseAndEvalExpression envExpr exprExpr ->
             buildFromTagAndArgument
                 "ParseAndEval"
                 (buildRecordExpression
-                    [ ( "environment", generateTemplateEvaluatingToExpression parseAndEval.environment )
-                    , ( "expression", generateTemplateEvaluatingToExpression parseAndEval.expression )
+                    [ ( "environment", generateTemplateEvaluatingToExpression envExpr )
+                    , ( "expression", generateTemplateEvaluatingToExpression exprExpr )
                     ]
                 )
 
@@ -58,18 +58,18 @@ generateTemplateEvaluatingToExpression expression =
                     ]
                 )
 
-        Pine.ConditionalExpression conditional ->
+        Pine.ConditionalExpression condition ifFalse ifTrue ->
             buildFromTagAndArgument
                 "Conditional"
                 (buildRecordExpression
                     [ ( "condition"
-                      , generateTemplateEvaluatingToExpression conditional.condition
+                      , generateTemplateEvaluatingToExpression condition
                       )
                     , ( "ifFalse"
-                      , generateTemplateEvaluatingToExpression conditional.ifFalse
+                      , generateTemplateEvaluatingToExpression ifFalse
                       )
                     , ( "ifTrue"
-                      , generateTemplateEvaluatingToExpression conditional.ifTrue
+                      , generateTemplateEvaluatingToExpression ifTrue
                       )
                     ]
                 )
@@ -97,7 +97,7 @@ buildPineExpressionSyntax config expression =
                 Nothing
 
             else if FirCompiler.pineExpressionIsIndependent expression then
-                case Pine.evaluateExpression Pine.emptyEvalContext expression of
+                case Pine.evaluateExpression Pine.emptyEvalEnvironment expression of
                     Err _ ->
                         Nothing
 
@@ -232,16 +232,16 @@ buildPineExpressionSyntax config expression =
                         "Pine.ListExpression"
                         [ String.join "\n" listSyntax ]
 
-                Pine.ParseAndEvalExpression parseAndEval ->
+                Pine.ParseAndEvalExpression envExpr exprExpr ->
                     buildFromTagNameAndArguments
                         "Pine.ParseAndEvalExpression"
                         [ buildRecordSyntax
                             [ ( "environment"
-                              , buildPineExpressionSyntax config parseAndEval.environment
+                              , buildPineExpressionSyntax config envExpr
                                     |> String.join "\n"
                               )
                             , ( "expression"
-                              , buildPineExpressionSyntax config parseAndEval.expression
+                              , buildPineExpressionSyntax config exprExpr
                                     |> String.join "\n"
                               )
                             ]
@@ -263,20 +263,20 @@ buildPineExpressionSyntax config expression =
                             |> String.join "\n"
                         ]
 
-                Pine.ConditionalExpression conditional ->
+                Pine.ConditionalExpression condition ifFalse ifTrue ->
                     buildFromTagNameAndArguments
                         "Pine.ConditionalExpression"
                         [ buildRecordSyntax
                             [ ( "condition"
-                              , buildPineExpressionSyntax config conditional.condition
+                              , buildPineExpressionSyntax config condition
                                     |> String.join "\n"
                               )
                             , ( "ifFalse"
-                              , buildPineExpressionSyntax config conditional.ifFalse
+                              , buildPineExpressionSyntax config ifFalse
                                     |> String.join "\n"
                               )
                             , ( "ifTrue"
-                              , buildPineExpressionSyntax config conditional.ifTrue
+                              , buildPineExpressionSyntax config ifTrue
                                     |> String.join "\n"
                               )
                             ]

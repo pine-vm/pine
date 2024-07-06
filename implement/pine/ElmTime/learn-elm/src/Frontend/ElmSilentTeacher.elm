@@ -34,7 +34,7 @@ evalDelayFromUserInputMilliseconds =
 
 type alias State =
     { time : Time.Posix
-    , evaluationContextResult : Result String Pine.EvalContext
+    , evaluationContextResult : Result String Pine.EvalEnvironment
     , trainingSession : TrainingSessionState
     }
 
@@ -133,7 +133,7 @@ init =
 
 
 initExerciseWorkspace :
-    { a | evaluationContextResult : Result String Pine.EvalContext, time : Time.Posix }
+    { a | evaluationContextResult : Result String Pine.EvalEnvironment, time : Time.Posix }
     -> Exercise
     -> List ExerciseChallenge
     -> ExerciseWorkspace
@@ -551,7 +551,7 @@ workspaceUserInputEnterInteractive workspace =
 
 
 updateLastEvaluatedExpression :
-    { time : Time.Posix, evaluationContext : Result String Pine.EvalContext }
+    { time : Time.Posix, evaluationContext : Result String Pine.EvalEnvironment }
     -> InteractiveState
     -> InteractiveState
 updateLastEvaluatedExpression config stateBefore =
@@ -1058,7 +1058,7 @@ viewProgressBar { progressMicro } =
             ]
 
 
-computeSolutionFromExerciseInContext : Pine.EvalContext -> ExerciseChallenge -> String
+computeSolutionFromExerciseInContext : Pine.EvalEnvironment -> ExerciseChallenge -> String
 computeSolutionFromExerciseInContext evaluationContext exerciseChallenge =
     case ElmInteractiveParser.submissionInInteractiveInPineContext evaluationContext exerciseChallenge of
         Err error ->

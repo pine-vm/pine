@@ -10,10 +10,14 @@ import Test
 
 
 type alias ReduceParseAndEvalTestCase =
-    { original : Pine.ParseAndEvalExpressionStructure
+    { original : ParseAndEvalExpressionStruct
     , expected : Pine.Expression
     , additionalTestEnvironments : List Pine.Value
     }
+
+
+type alias ParseAndEvalExpressionStruct =
+    ( Pine.Expression, Pine.Expression )
 
 
 standardTestEnvironments : List Pine.Value
@@ -42,24 +46,22 @@ compiler_reduces_decode_and_eval_test_cases : List ( String, ReduceParseAndEvalT
 compiler_reduces_decode_and_eval_test_cases =
     [ ( "simple reducible - literal"
       , { original =
-            { expression =
-                Pine.LiteralExpression (Pine.valueFromString "test")
-                    |> Pine.encodeExpressionAsValue
-                    |> Pine.LiteralExpression
-            , environment = Pine.ListExpression []
-            }
+            ( Pine.ListExpression []
+            , Pine.LiteralExpression (Pine.valueFromString "test")
+                |> Pine.encodeExpressionAsValue
+                |> Pine.LiteralExpression
+            )
         , expected = Pine.LiteralExpression (Pine.valueFromString "test")
         , additionalTestEnvironments = []
         }
       )
     , ( "simple reducible - list head"
       , { original =
-            { expression =
-                Pine.EnvironmentExpression
-                    |> Pine.encodeExpressionAsValue
-                    |> Pine.LiteralExpression
-            , environment = FirCompiler.pineKernel_ListHead_Pine Pine.EnvironmentExpression
-            }
+            ( FirCompiler.pineKernel_ListHead_Pine Pine.EnvironmentExpression
+            , Pine.EnvironmentExpression
+                |> Pine.encodeExpressionAsValue
+                |> Pine.LiteralExpression
+            )
         , expected =
             FirCompiler.pineKernel_ListHead_Pine Pine.EnvironmentExpression
         , additionalTestEnvironments = []
@@ -67,24 +69,22 @@ compiler_reduces_decode_and_eval_test_cases =
       )
     , ( "reducible - skip 2"
       , { original =
-            { expression =
-                Pine.EnvironmentExpression
+            ( Pine.ListExpression
+                [ Pine.EnvironmentExpression
+                    |> FirCompiler.listSkipExpression_Pine 4
+                , Pine.EnvironmentExpression
+                    |> FirCompiler.listSkipExpression_Pine 3
+                , Pine.EnvironmentExpression
+                    |> FirCompiler.listSkipExpression_Pine 3
+                , Pine.EnvironmentExpression
                     |> FirCompiler.listSkipExpression_Pine 2
-                    |> FirCompiler.pineKernel_ListHead_Pine
-                    |> Pine.encodeExpressionAsValue
-                    |> Pine.LiteralExpression
-            , environment =
-                Pine.ListExpression
-                    [ Pine.EnvironmentExpression
-                        |> FirCompiler.listSkipExpression_Pine 4
-                    , Pine.EnvironmentExpression
-                        |> FirCompiler.listSkipExpression_Pine 3
-                    , Pine.EnvironmentExpression
-                        |> FirCompiler.listSkipExpression_Pine 3
-                    , Pine.EnvironmentExpression
-                        |> FirCompiler.listSkipExpression_Pine 2
-                    ]
-            }
+                ]
+            , Pine.EnvironmentExpression
+                |> FirCompiler.listSkipExpression_Pine 2
+                |> FirCompiler.pineKernel_ListHead_Pine
+                |> Pine.encodeExpressionAsValue
+                |> Pine.LiteralExpression
+            )
         , expected =
             Pine.EnvironmentExpression
                 |> FirCompiler.listSkipExpression_Pine 3
@@ -93,38 +93,36 @@ compiler_reduces_decode_and_eval_test_cases =
       )
     , ( "reducible - skip 1 (skip 2)"
       , { original =
-            { expression =
-                Pine.EnvironmentExpression
-                    |> FirCompiler.listSkipExpression_Pine 2
-                    |> FirCompiler.pineKernel_ListHead_Pine
-                    |> FirCompiler.listSkipExpression_Pine 1
-                    |> FirCompiler.pineKernel_ListHead_Pine
-                    |> Pine.encodeExpressionAsValue
-                    |> Pine.LiteralExpression
-            , environment =
-                Pine.ListExpression
-                    [ Pine.ListExpression
-                        [ Pine.ListExpression []
-                        , Pine.EnvironmentExpression
-                            |> FirCompiler.listSkipExpression_Pine 4
-                        ]
-                    , Pine.ListExpression
-                        [ Pine.ListExpression []
-                        , Pine.EnvironmentExpression
-                            |> FirCompiler.listSkipExpression_Pine 3
-                        ]
-                    , Pine.ListExpression
-                        [ Pine.ListExpression []
-                        , Pine.EnvironmentExpression
-                            |> FirCompiler.listSkipExpression_Pine 3
-                        ]
-                    , Pine.ListExpression
-                        [ Pine.ListExpression []
-                        , Pine.EnvironmentExpression
-                            |> FirCompiler.listSkipExpression_Pine 2
-                        ]
+            ( Pine.ListExpression
+                [ Pine.ListExpression
+                    [ Pine.ListExpression []
+                    , Pine.EnvironmentExpression
+                        |> FirCompiler.listSkipExpression_Pine 4
                     ]
-            }
+                , Pine.ListExpression
+                    [ Pine.ListExpression []
+                    , Pine.EnvironmentExpression
+                        |> FirCompiler.listSkipExpression_Pine 3
+                    ]
+                , Pine.ListExpression
+                    [ Pine.ListExpression []
+                    , Pine.EnvironmentExpression
+                        |> FirCompiler.listSkipExpression_Pine 3
+                    ]
+                , Pine.ListExpression
+                    [ Pine.ListExpression []
+                    , Pine.EnvironmentExpression
+                        |> FirCompiler.listSkipExpression_Pine 2
+                    ]
+                ]
+            , Pine.EnvironmentExpression
+                |> FirCompiler.listSkipExpression_Pine 2
+                |> FirCompiler.pineKernel_ListHead_Pine
+                |> FirCompiler.listSkipExpression_Pine 1
+                |> FirCompiler.pineKernel_ListHead_Pine
+                |> Pine.encodeExpressionAsValue
+                |> Pine.LiteralExpression
+            )
         , expected =
             Pine.EnvironmentExpression
                 |> FirCompiler.listSkipExpression_Pine 3
@@ -133,14 +131,13 @@ compiler_reduces_decode_and_eval_test_cases =
       )
     , ( "simple irreducible"
       , { original =
-            { expression = Pine.EnvironmentExpression
-            , environment = Pine.EnvironmentExpression
-            }
+            ( Pine.EnvironmentExpression
+            , Pine.EnvironmentExpression
+            )
         , expected =
-            { expression = Pine.EnvironmentExpression
-            , environment = Pine.EnvironmentExpression
-            }
-                |> Pine.ParseAndEvalExpression
+            Pine.ParseAndEvalExpression
+                Pine.EnvironmentExpression
+                Pine.EnvironmentExpression
         , additionalTestEnvironments = []
         }
       )
@@ -158,15 +155,18 @@ test_compiler_reduces_decode_and_eval_test_cases =
                 in
                 allTestEnvironments
                     |> List.indexedMap
-                        (\envIndex enviroment ->
+                        (\envIndex environment ->
                             Test.test ("Environment " ++ String.fromInt envIndex) <|
                                 \_ ->
-                                    testCase.original
-                                        |> Pine.ParseAndEvalExpression
-                                        |> Pine.evaluateExpression { environment = enviroment }
+                                    let
+                                        ( origEnv, origExpr ) =
+                                            testCase.original
+                                    in
+                                    Pine.ParseAndEvalExpression origEnv origExpr
+                                        |> Pine.evaluateExpression (Pine.EvalEnvironment environment)
                                         |> Expect.equal
                                             (Pine.evaluateExpression
-                                                { environment = enviroment }
+                                                (Pine.EvalEnvironment environment)
                                                 testCase.expected
                                             )
                         )
@@ -1060,7 +1060,7 @@ emitClosureExpressionTests =
                                         (testCase.arguments |> List.map Pine.LiteralExpression)
                                         emptyEmitStack
                                         partialApplicable
-                                        |> Pine.evaluateExpression { environment = Pine.ListValue [] }
+                                        |> Pine.evaluateExpression Pine.emptyEvalEnvironment
                                         |> Result.mapError Pine.displayStringFromPineError
                                  )
                                     >> Result.map (Expect.equal testCase.expectedValue)

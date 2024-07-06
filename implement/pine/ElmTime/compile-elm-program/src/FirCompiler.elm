@@ -99,7 +99,9 @@ type EnvironmentFunctionEntry
 
 
 type FunctionEnvironment
-    = LocalEnvironment { expectedDecls : List String }
+    = LocalEnvironment
+        -- List of expected declarations
+        (List String)
     | ImportedEnvironment
         { -- Path to the tagged function record relative to the entry in the current environment.
           pathToRecordFromEnvEntry : List Deconstruction
@@ -151,10 +153,9 @@ emitExpression stack expression =
                                 Ok ifFalse ->
                                     Ok
                                         (Pine.ConditionalExpression
-                                            { condition = condition
-                                            , ifTrue = ifTrue
-                                            , ifFalse = ifFalse
-                                            }
+                                            condition
+                                            ifFalse
+                                            ifTrue
                                         )
 
         ReferenceExpression localReference ->
@@ -189,11 +190,10 @@ emitExpression stack expression =
                     Ok
                         (attemptReduceParseAndEvalExpressionRecursive
                             { maxDepth = 3 }
-                            { expression =
-                                Pine.LiteralExpression
-                                    (Pine.encodeExpressionAsValue pineFunctionExpression)
-                            , environment = emittedArgument
-                            }
+                            ( emittedArgument
+                            , Pine.LiteralExpression
+                                (Pine.encodeExpressionAsValue pineFunctionExpression)
+                            )
                         )
 
 
@@ -341,10 +341,10 @@ emitDeclarationBlock stackBefore blockDeclarations config =
             List.foldl
                 (\( functionName, ( EnvironmentFunctionEntry _ expectedEnvironment, _ ) ) aggregate ->
                     case expectedEnvironment of
-                        LocalEnvironment localEnv ->
+                        LocalEnvironment localEnvExpectedDecls ->
                             Dict.insert
                                 functionName
-                                (Set.fromList localEnv.expectedDecls)
+                                (Set.fromList localEnvExpectedDecls)
                                 aggregate
 
                         ImportedEnvironment _ ->
@@ -570,9 +570,7 @@ emitDeclarationBlock stackBefore blockDeclarations config =
                     ( functionName
                     , EnvironmentFunctionEntry
                         (List.length functionEntry.parameters)
-                        (LocalEnvironment
-                            { expectedDecls = newEnvironmentFunctionsNames }
-                        )
+                        (LocalEnvironment newEnvironmentFunctionsNames)
                     )
                 )
                 blockDeclarationsAsFunctionsLessClosure
@@ -684,7 +682,7 @@ emitDeclarationBlock stackBefore blockDeclarations config =
                                     ( declName
                                     , ( EnvironmentFunctionEntry
                                             (List.length declAsFunction.parameters)
-                                            (LocalEnvironment { expectedDecls = newEnvironmentFunctionsNames })
+                                            (LocalEnvironment newEnvironmentFunctionsNames)
                                       , ( declExpr
                                         , Pine.encodeExpressionAsValue declExpr
                                         )
@@ -1066,12 +1064,11 @@ pineExpressionForDeconstruction deconstruction =
             \emittedArgument ->
                 attemptReduceParseAndEvalExpressionRecursive
                     { maxDepth = 3 }
-                    { expression =
-                        pineFunctionExpression
-                            |> Pine.encodeExpressionAsValue
-                            |> Pine.LiteralExpression
-                    , environment = emittedArgument
-                    }
+                    ( emittedArgument
+                    , pineFunctionExpression
+                        |> Pine.encodeExpressionAsValue
+                        |> Pine.LiteralExpression
+                    )
 
 
 closureParameterFromParameters : List FunctionParam -> FunctionParam
@@ -1208,15 +1205,14 @@ emitFunctionApplication functionExpression arguments compilation =
                                 Ok funcBodyEmitted ->
                                     Ok
                                         (Pine.ParseAndEvalExpression
-                                            { expression =
-                                                Pine.LiteralExpression
-                                                    (Pine.encodeExpressionAsValue funcBodyEmitted)
-                                            , environment =
-                                                Pine.ListExpression
-                                                    [ envFunctionsExpr
-                                                    , Pine.ListExpression argumentsPine
-                                                    ]
-                                            }
+                                            (Pine.ListExpression
+                                                [ envFunctionsExpr
+                                                , Pine.ListExpression argumentsPine
+                                                ]
+                                            )
+                                            (Pine.LiteralExpression
+                                                (Pine.encodeExpressionAsValue funcBodyEmitted)
+                                            )
                                         )
 
                     ReferenceExpression functionName ->
@@ -1368,35 +1364,33 @@ emitApplyFunctionFromCurrentEnvironment compilation { functionName } arguments =
                         (Ok
                             (if funcParamCount == List.length arguments then
                                 Pine.ParseAndEvalExpression
-                                    { expression = importedGetFunctionExpr
-                                    , environment =
-                                        Pine.ListExpression
-                                            [ importedGetEnvFunctionsExpression
-                                            , Pine.ListExpression arguments
-                                            ]
-                                    }
+                                    (Pine.ListExpression
+                                        [ importedGetEnvFunctionsExpression
+                                        , Pine.ListExpression arguments
+                                        ]
+                                    )
+                                    importedGetFunctionExpr
 
                              else
                                 partialApplicationExpressionFromListOfArguments
                                     arguments
                                     compilation
                                     (Pine.ParseAndEvalExpression
-                                        { expression =
-                                            Pine.ListExpression
-                                                [ Pine.LiteralExpression Pine.stringAsValue_Literal
-                                                , funcRecordLessTag
-                                                ]
-                                        , environment =
-                                            Pine.ListExpression
-                                                [ Pine.ListExpression []
-                                                , Pine.ListExpression arguments
-                                                ]
-                                        }
+                                        (Pine.ListExpression
+                                            [ Pine.ListExpression []
+                                            , Pine.ListExpression arguments
+                                            ]
+                                        )
+                                        (Pine.ListExpression
+                                            [ Pine.LiteralExpression Pine.stringAsValue_Literal
+                                            , funcRecordLessTag
+                                            ]
+                                        )
                                     )
                             )
                         )
 
-                LocalEnvironment localEnv ->
+                LocalEnvironment localEnvExpectedDecls ->
                     let
                         currentEnv : List String
                         currentEnv =
@@ -1404,8 +1398,7 @@ emitApplyFunctionFromCurrentEnvironment compilation { functionName } arguments =
 
                         currentEnvCoversExpected : Bool
                         currentEnvCoversExpected =
-                            List.take (List.length localEnv.expectedDecls) currentEnv
-                                == localEnv.expectedDecls
+                            List.take (List.length localEnvExpectedDecls) currentEnv == localEnvExpectedDecls
 
                         buildEnvironmentRecursive :
                             List Pine.Expression
@@ -1441,14 +1434,14 @@ emitApplyFunctionFromCurrentEnvironment compilation { functionName } arguments =
 
                         buildExpectedEnvironmentResult =
                             if currentEnvCoversExpected then
-                                if localEnv.expectedDecls == [] then
+                                if localEnvExpectedDecls == [] then
                                     Ok (Pine.ListExpression [])
 
                                 else
                                     Ok getEnvFunctionsExpression
 
                             else
-                                buildEnvironmentRecursive [] localEnv.expectedDecls
+                                buildEnvironmentRecursive [] localEnvExpectedDecls
                     in
                     case buildExpectedEnvironmentResult of
                         Err err ->
@@ -1459,13 +1452,12 @@ emitApplyFunctionFromCurrentEnvironment compilation { functionName } arguments =
                                 (Ok
                                     (if funcParamCount == List.length arguments then
                                         Pine.ParseAndEvalExpression
-                                            { expression = getFunctionExpression
-                                            , environment =
-                                                Pine.ListExpression
-                                                    [ expectedEnvironment
-                                                    , Pine.ListExpression arguments
-                                                    ]
-                                            }
+                                            (Pine.ListExpression
+                                                [ expectedEnvironment
+                                                , Pine.ListExpression arguments
+                                                ]
+                                            )
+                                            getFunctionExpression
 
                                      else
                                         partialApplicationExpressionFromListOfArguments
@@ -1473,13 +1465,12 @@ emitApplyFunctionFromCurrentEnvironment compilation { functionName } arguments =
                                             compilation
                                             (if funcParamCount == 0 then
                                                 Pine.ParseAndEvalExpression
-                                                    { expression = getFunctionExpression
-                                                    , environment =
-                                                        Pine.ListExpression
-                                                            [ expectedEnvironment
-                                                            , Pine.ListExpression []
-                                                            ]
-                                                    }
+                                                    (Pine.ListExpression
+                                                        [ expectedEnvironment
+                                                        , Pine.ListExpression []
+                                                        ]
+                                                    )
+                                                    getFunctionExpression
 
                                              else
                                                 buildRecordOfPartiallyAppliedFunction
@@ -1556,13 +1547,12 @@ emitWrapperForPartialApplicationZero :
     -> Pine.Expression
 emitWrapperForPartialApplicationZero { getFunctionInnerExpression, getEnvFunctionsExpression } =
     Pine.ParseAndEvalExpression
-        { expression = getFunctionInnerExpression
-        , environment =
-            Pine.ListExpression
-                [ getEnvFunctionsExpression
-                , Pine.ListExpression []
-                ]
-        }
+        (Pine.ListExpression
+            [ getEnvFunctionsExpression
+            , Pine.ListExpression []
+            ]
+        )
+        getFunctionInnerExpression
 
 
 adaptivePartialApplicationExpression :
@@ -1586,14 +1576,13 @@ adaptivePartialApplicationExpression config =
                         Pine.LiteralExpression (adaptivePartialApplicationRecursiveValue ())
         in
         Pine.ParseAndEvalExpression
-            { expression = applicationFunctionExpr
-            , environment =
-                Pine.ListExpression
-                    [ applicationFunctionExpr
-                    , config.function
-                    , Pine.ListExpression config.arguments
-                    ]
-            }
+            (Pine.ListExpression
+                [ applicationFunctionExpr
+                , config.function
+                , Pine.ListExpression config.arguments
+                ]
+            )
+            applicationFunctionExpr
 
 
 adaptivePartialApplicationRecursiveValue : () -> Pine.Value
@@ -1620,107 +1609,102 @@ adaptivePartialApplicationRecursiveExpression =
 
         applyNextExpression =
             Pine.ConditionalExpression
-                { condition =
-                    {-
-                       If the first element in 'function' equals 'Function',
-                    -}
-                    equalCondition_Pine
-                        [ listItemFromIndexExpression_Pine 0 functionLocalExpression
-                        , Pine.LiteralExpression Pine.stringAsValue_Function
-                        ]
-                , ifTrue =
-                    {-
-                       assume the second list item is a list with the following items:
-                       + 0: inner function
-                       + 1: number of parameters expected by the inner function
-                       + 2: captured environment functions
-                       + 3: the arguments collected so far.
-                    -}
-                    let
-                        partiallyAppliedFunctionRecord =
-                            listItemFromIndexExpression_Pine 1 functionLocalExpression
+                {-
+                   If the first element in 'function' equals 'Function',
+                -}
+                (equalCondition_Pine
+                    [ listItemFromIndexExpression_Pine 0 functionLocalExpression
+                    , Pine.LiteralExpression Pine.stringAsValue_Function
+                    ]
+                )
+                (attemptReduceParseAndEvalExpressionRecursiveWithDefaultDepth
+                    ( nextArgumentLocalExpression
+                    , functionLocalExpression
+                    )
+                )
+                {-
+                   assume the second list item is a list with the following items:
+                   + 0: inner function
+                   + 1: number of parameters expected by the inner function
+                   + 2: captured environment functions
+                   + 3: the arguments collected so far.
+                -}
+                (let
+                    partiallyAppliedFunctionRecord =
+                        listItemFromIndexExpression_Pine 1 functionLocalExpression
 
-                        innerFunction =
-                            listItemFromIndexExpression_Pine 0
-                                partiallyAppliedFunctionRecord
+                    innerFunction =
+                        listItemFromIndexExpression_Pine 0
+                            partiallyAppliedFunctionRecord
 
-                        numberOfParametersExpectedByInnerFunction =
-                            listItemFromIndexExpression_Pine 1
-                                partiallyAppliedFunctionRecord
+                    numberOfParametersExpectedByInnerFunction =
+                        listItemFromIndexExpression_Pine 1
+                            partiallyAppliedFunctionRecord
 
-                        environmentFunctions =
-                            listItemFromIndexExpression_Pine 2
-                                partiallyAppliedFunctionRecord
+                    environmentFunctions =
+                        listItemFromIndexExpression_Pine 2
+                            partiallyAppliedFunctionRecord
 
-                        previouslyCollectedArguments =
-                            listItemFromIndexExpression_Pine 3
-                                partiallyAppliedFunctionRecord
+                    previouslyCollectedArguments =
+                        listItemFromIndexExpression_Pine 3
+                            partiallyAppliedFunctionRecord
 
-                        collectedArguments =
-                            Pine.KernelApplicationExpression
-                                (Pine.ListExpression
-                                    [ previouslyCollectedArguments
-                                    , Pine.ListExpression [ nextArgumentLocalExpression ]
-                                    ]
-                                )
-                                "concat"
-
-                        collectedArgumentsLength =
-                            countListElementsExpression_Pine collectedArguments
-
-                        collectedArgumentsAreComplete =
-                            equalCondition_Pine
-                                [ collectedArgumentsLength
-                                , numberOfParametersExpectedByInnerFunction
+                    collectedArguments =
+                        Pine.KernelApplicationExpression
+                            (Pine.ListExpression
+                                [ previouslyCollectedArguments
+                                , Pine.ListExpression [ nextArgumentLocalExpression ]
                                 ]
-                    in
-                    -- First, check if the argument we collect here is the last one.
-                    Pine.ConditionalExpression
-                        { condition = collectedArgumentsAreComplete
-                        , ifTrue =
-                            -- If it is, we can apply the inner function.
-                            Pine.ParseAndEvalExpression
-                                { expression = innerFunction
-                                , environment =
-                                    Pine.ListExpression
-                                        [ environmentFunctions
-                                        , collectedArguments
-                                        ]
-                                }
-                        , ifFalse =
-                            -- If it is not, we need to collect more arguments.
-                            updateRecordOfPartiallyAppliedFunction
-                                { getFunctionInnerExpression = innerFunction
-                                , parameterCountExpression = numberOfParametersExpectedByInnerFunction
-                                , getEnvFunctionsExpression = environmentFunctions
-                                , argumentsAlreadyCollectedExpression = collectedArguments
-                                }
+                            )
+                            "concat"
+
+                    collectedArgumentsLength =
+                        countListElementsExpression_Pine collectedArguments
+
+                    collectedArgumentsAreComplete =
+                        equalCondition_Pine
+                            [ collectedArgumentsLength
+                            , numberOfParametersExpectedByInnerFunction
+                            ]
+                 in
+                 -- First, check if the argument we collect here is the last one.
+                 Pine.ConditionalExpression
+                    collectedArgumentsAreComplete
+                    -- If it is not, we need to collect more arguments.
+                    (updateRecordOfPartiallyAppliedFunction
+                        { getFunctionInnerExpression = innerFunction
+                        , parameterCountExpression = numberOfParametersExpectedByInnerFunction
+                        , getEnvFunctionsExpression = environmentFunctions
+                        , argumentsAlreadyCollectedExpression = collectedArguments
                         }
-                , ifFalse =
-                    attemptReduceParseAndEvalExpressionRecursiveWithDefaultDepth
-                        { expression = functionLocalExpression
-                        , environment = nextArgumentLocalExpression
-                        }
-                }
+                    )
+                    -- If it is, we can apply the inner function.
+                    (Pine.ParseAndEvalExpression
+                        (Pine.ListExpression
+                            [ environmentFunctions
+                            , collectedArguments
+                            ]
+                        )
+                        innerFunction
+                    )
+                )
     in
     Pine.ConditionalExpression
-        { condition =
-            equalCondition_Pine
-                [ Pine.ListExpression []
-                , remainingArgumentsLocalExpression
+        (equalCondition_Pine
+            [ Pine.ListExpression []
+            , remainingArgumentsLocalExpression
+            ]
+        )
+        (Pine.ParseAndEvalExpression
+            (Pine.ListExpression
+                [ selfFunctionLocalExpression
+                , applyNextExpression
+                , listSkipExpression_Pine 1 remainingArgumentsLocalExpression
                 ]
-        , ifTrue = functionLocalExpression
-        , ifFalse =
-            Pine.ParseAndEvalExpression
-                { expression = selfFunctionLocalExpression
-                , environment =
-                    Pine.ListExpression
-                        [ selfFunctionLocalExpression
-                        , applyNextExpression
-                        , listSkipExpression_Pine 1 remainingArgumentsLocalExpression
-                        ]
-                }
-        }
+            )
+            selfFunctionLocalExpression
+        )
+        functionLocalExpression
 
 
 buildRecordOfPartiallyAppliedFunction :
@@ -1835,13 +1819,13 @@ parseFunctionRecordFromValue value =
 
 
 attemptReduceParseAndEvalExpressionRecursiveWithDefaultDepth :
-    Pine.ParseAndEvalExpressionStructure
+    ( Pine.Expression, Pine.Expression )
     -> Pine.Expression
-attemptReduceParseAndEvalExpressionRecursiveWithDefaultDepth originalExpression =
+attemptReduceParseAndEvalExpressionRecursiveWithDefaultDepth ( origEnvExpr, origExprExpr ) =
     let
         sizeBeforeReduction =
-            countPineExpressionSize estimatePineValueSize originalExpression.expression
-                + countPineExpressionSize estimatePineValueSize originalExpression.environment
+            countPineExpressionSize estimatePineValueSize origEnvExpr
+                + countPineExpressionSize estimatePineValueSize origExprExpr
 
         reductionMaxDepth =
             if sizeBeforeReduction < 10 * 1000 then
@@ -1852,43 +1836,43 @@ attemptReduceParseAndEvalExpressionRecursiveWithDefaultDepth originalExpression 
     in
     attemptReduceParseAndEvalExpressionRecursive
         { maxDepth = reductionMaxDepth }
-        originalExpression
+        ( origEnvExpr, origExprExpr )
 
 
 attemptReduceParseAndEvalExpressionRecursive :
     { maxDepth : Int }
-    -> Pine.ParseAndEvalExpressionStructure
+    -> ( Pine.Expression, Pine.Expression )
     -> Pine.Expression
-attemptReduceParseAndEvalExpressionRecursive { maxDepth } originalExpression =
+attemptReduceParseAndEvalExpressionRecursive { maxDepth } ( origEnvExpr, origExprExpr ) =
     let
         default =
-            Pine.ParseAndEvalExpression originalExpression
+            Pine.ParseAndEvalExpression origEnvExpr origExprExpr
     in
     if maxDepth < 1 then
         default
 
     else
-        case searchReductionForParseAndEvalExpression originalExpression of
+        case searchReductionForParseAndEvalExpression ( origEnvExpr, origExprExpr ) of
             Nothing ->
                 default
 
             Just reduced ->
                 case reduced of
-                    Pine.ParseAndEvalExpression reducedParseAndEval ->
+                    Pine.ParseAndEvalExpression reducedEnvExpr reducedExprExpr ->
                         attemptReduceParseAndEvalExpressionRecursive
                             { maxDepth = maxDepth - 1 }
-                            reducedParseAndEval
+                            ( reducedEnvExpr, reducedExprExpr )
 
                     _ ->
                         reduced
 
 
 searchReductionForParseAndEvalExpression :
-    Pine.ParseAndEvalExpressionStructure
+    ( Pine.Expression, Pine.Expression )
     -> Maybe Pine.Expression
-searchReductionForParseAndEvalExpression originalExpression =
-    if pineExpressionIsIndependent originalExpression.expression then
-        case Pine.evaluateExpression Pine.emptyEvalContext originalExpression.expression of
+searchReductionForParseAndEvalExpression ( origEnvExpr, origExprExpr ) =
+    if pineExpressionIsIndependent origExprExpr then
+        case Pine.evaluateExpression Pine.emptyEvalEnvironment origExprExpr of
             Err _ ->
                 Nothing
 
@@ -1902,7 +1886,7 @@ searchReductionForParseAndEvalExpression originalExpression =
                             findReplacementForExpression expression =
                                 case expression of
                                     Pine.EnvironmentExpression ->
-                                        Just originalExpression.environment
+                                        Just origEnvExpr
 
                                     _ ->
                                         Nothing
@@ -1943,7 +1927,7 @@ searchForExpressionReductionRecursive { maxDepth } expression =
 reduceExpressionToLiteralIfIndependent : Pine.Expression -> Pine.Expression
 reduceExpressionToLiteralIfIndependent expression =
     if pineExpressionIsIndependent expression then
-        case Pine.evaluateExpression Pine.emptyEvalContext expression of
+        case Pine.evaluateExpression Pine.emptyEvalEnvironment expression of
             Err _ ->
                 expression
 
@@ -1959,7 +1943,7 @@ searchForExpressionReduction expression =
     let
         attemptReduceViaEval () =
             if pineExpressionIsIndependent expression then
-                case Pine.evaluateExpression Pine.emptyEvalContext expression of
+                case Pine.evaluateExpression Pine.emptyEvalEnvironment expression of
                     Err _ ->
                         Nothing
 
@@ -2002,18 +1986,21 @@ searchForExpressionReduction expression =
                 _ ->
                     attemptReduceViaEval ()
 
-        Pine.ConditionalExpression conditional ->
-            if pineExpressionIsIndependent conditional.condition then
-                case Pine.evaluateExpression Pine.emptyEvalContext conditional.condition of
+        Pine.ConditionalExpression condition ifFalse ifTrue ->
+            if pineExpressionIsIndependent condition then
+                case Pine.evaluateExpression Pine.emptyEvalEnvironment condition of
                     Err _ ->
                         Nothing
 
                     Ok conditionValue ->
-                        if conditionValue == Pine.trueValue then
-                            Just conditional.ifTrue
+                        if conditionValue == Pine.falseValue then
+                            Just ifFalse
+
+                        else if conditionValue == Pine.trueValue then
+                            Just ifTrue
 
                         else
-                            Just conditional.ifFalse
+                            Just (Pine.LiteralExpression (Pine.ListValue []))
 
             else
                 attemptReduceViaEval ()
@@ -2057,18 +2044,17 @@ transformPineExpressionWithOptionalReplacement findReplacement expression =
                       }
                     )
 
-                Pine.ParseAndEvalExpression parseAndEval ->
+                Pine.ParseAndEvalExpression envExpr exprExpr ->
                     let
-                        ( exprTransform, exprInspect ) =
-                            transformPineExpressionWithOptionalReplacement findReplacement parseAndEval.expression
-
                         ( envTransform, envInspect ) =
-                            transformPineExpressionWithOptionalReplacement findReplacement parseAndEval.environment
+                            transformPineExpressionWithOptionalReplacement findReplacement envExpr
+
+                        ( exprTransform, exprInspect ) =
+                            transformPineExpressionWithOptionalReplacement findReplacement exprExpr
                     in
                     ( Pine.ParseAndEvalExpression
-                        { expression = exprTransform
-                        , environment = envTransform
-                        }
+                        envTransform
+                        exprTransform
                     , { referencesOriginalEnvironment =
                             exprInspect.referencesOriginalEnvironment
                                 || envInspect.referencesOriginalEnvironment
@@ -2084,26 +2070,25 @@ transformPineExpressionWithOptionalReplacement findReplacement expression =
                     , inspect
                     )
 
-                Pine.ConditionalExpression conditional ->
+                Pine.ConditionalExpression condition ifFalse ifTrue ->
                     let
                         ( conditionExpr, conditionInspect ) =
-                            transformPineExpressionWithOptionalReplacement findReplacement conditional.condition
-
-                        ( ifTrueExpr, ifTrueInspect ) =
-                            transformPineExpressionWithOptionalReplacement findReplacement conditional.ifTrue
+                            transformPineExpressionWithOptionalReplacement findReplacement condition
 
                         ( ifFalseExpr, ifFalseInspect ) =
-                            transformPineExpressionWithOptionalReplacement findReplacement conditional.ifFalse
+                            transformPineExpressionWithOptionalReplacement findReplacement ifFalse
+
+                        ( ifTrueExpr, ifTrueInspect ) =
+                            transformPineExpressionWithOptionalReplacement findReplacement ifTrue
                     in
                     ( Pine.ConditionalExpression
-                        { condition = conditionExpr
-                        , ifTrue = ifTrueExpr
-                        , ifFalse = ifFalseExpr
-                        }
+                        conditionExpr
+                        ifFalseExpr
+                        ifTrueExpr
                     , { referencesOriginalEnvironment =
                             conditionInspect.referencesOriginalEnvironment
-                                || ifTrueInspect.referencesOriginalEnvironment
                                 || ifFalseInspect.referencesOriginalEnvironment
+                                || ifTrueInspect.referencesOriginalEnvironment
                       }
                     )
 
@@ -2142,8 +2127,8 @@ listFunctionAppExpressions expr =
         ConditionalExpression condition ifFalse ifTrue ->
             List.concat
                 [ listFunctionAppExpressions condition
-                , listFunctionAppExpressions ifTrue
                 , listFunctionAppExpressions ifFalse
+                , listFunctionAppExpressions ifTrue
                 ]
 
         FunctionExpression _ functionBody ->
@@ -2171,7 +2156,7 @@ evaluateAsIndependentExpression expression =
         Err "Expression is not independent"
 
     else
-        case Pine.evaluateExpression Pine.emptyEvalContext expression of
+        case Pine.evaluateExpression Pine.emptyEvalEnvironment expression of
             Err err ->
                 Err
                     ("Expression seems independent but failed to evaluate: "
@@ -2191,17 +2176,17 @@ pineExpressionIsIndependent expression =
         Pine.ListExpression list ->
             List.all pineExpressionIsIndependent list
 
-        Pine.ParseAndEvalExpression parseAndEval ->
-            pineExpressionIsIndependent parseAndEval.environment
-                && pineExpressionIsIndependent parseAndEval.expression
+        Pine.ParseAndEvalExpression envExpr exprExpr ->
+            pineExpressionIsIndependent envExpr
+                && pineExpressionIsIndependent exprExpr
 
         Pine.KernelApplicationExpression argument _ ->
             pineExpressionIsIndependent argument
 
-        Pine.ConditionalExpression conditional ->
-            pineExpressionIsIndependent conditional.condition
-                && pineExpressionIsIndependent conditional.ifTrue
-                && pineExpressionIsIndependent conditional.ifFalse
+        Pine.ConditionalExpression condition ifFalse ifTrue ->
+            pineExpressionIsIndependent condition
+                && pineExpressionIsIndependent ifFalse
+                && pineExpressionIsIndependent ifTrue
 
         Pine.EnvironmentExpression ->
             False
@@ -2311,17 +2296,17 @@ countPineExpressionSize countValueSize expression =
                 1
                 list
 
-        Pine.ParseAndEvalExpression parseAndEval ->
-            countPineExpressionSize countValueSize parseAndEval.expression
-                + countPineExpressionSize countValueSize parseAndEval.environment
+        Pine.ParseAndEvalExpression envExpr exprExpr ->
+            countPineExpressionSize countValueSize envExpr
+                + countPineExpressionSize countValueSize exprExpr
 
         Pine.KernelApplicationExpression argument _ ->
             2 + countPineExpressionSize countValueSize argument
 
-        Pine.ConditionalExpression conditional ->
-            countPineExpressionSize countValueSize conditional.condition
-                + countPineExpressionSize countValueSize conditional.ifTrue
-                + countPineExpressionSize countValueSize conditional.ifFalse
+        Pine.ConditionalExpression condition ifFalse ifTrue ->
+            countPineExpressionSize countValueSize condition
+                + countPineExpressionSize countValueSize ifFalse
+                + countPineExpressionSize countValueSize ifTrue
 
         Pine.EnvironmentExpression ->
             1

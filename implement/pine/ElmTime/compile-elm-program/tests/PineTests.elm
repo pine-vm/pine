@@ -12,9 +12,8 @@ pineExpressionEncodeDecodeRoundtrip =
     , ( "list empty", Pine.ListExpression [] )
     , ( "application one arg"
       , Pine.ParseAndEvalExpression
-            { expression = Pine.LiteralExpression (Pine.ListValue [])
-            , environment = Pine.LiteralExpression (Pine.BlobValue [ 1, 3, 4 ])
-            }
+            (Pine.LiteralExpression (Pine.BlobValue [ 1, 3, 4 ]))
+            (Pine.LiteralExpression (Pine.ListValue []))
       )
     , ( "kernel application one arg"
       , Pine.KernelApplicationExpression
@@ -23,10 +22,9 @@ pineExpressionEncodeDecodeRoundtrip =
       )
     , ( "if block"
       , Pine.ConditionalExpression
-            { condition = Pine.LiteralExpression (Pine.ListValue [])
-            , ifTrue = Pine.LiteralExpression (Pine.ListValue [])
-            , ifFalse = Pine.LiteralExpression (Pine.ListValue [])
-            }
+            (Pine.LiteralExpression (Pine.ListValue []))
+            (Pine.LiteralExpression (Pine.ListValue []))
+            (Pine.LiteralExpression (Pine.ListValue []))
       )
     , ( "string tag"
       , Pine.StringTagExpression "the tag string" (Pine.ListExpression [])

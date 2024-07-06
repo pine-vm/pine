@@ -33,7 +33,7 @@ import Url
 type alias State =
     { time : Time.Posix
     , expression : String
-    , evaluationContext : Result String Pine.EvalContext
+    , evaluationContext : Result String Pine.EvalEnvironment
     , lastUserInputExpressionTime : Time.Posix
     , lastEvaluatedExpression : Maybe ( String, Result String ElmInteractive.SubmissionResponse )
     , lastAddElmModuleAttempt : Maybe (Result String { compiledModuleSize : Int })
@@ -43,7 +43,7 @@ type alias State =
 
 
 type alias CompilationExplorerState =
-    { compiledContext : Pine.EvalContext
+    { compiledContext : Pine.EvalEnvironment
     , rootNode : CompilationExplorerNode
     , expandedNodes : Set.Set (List String)
     }
@@ -266,13 +266,13 @@ update event stateBefore =
                     )
 
 
-initCompilationExplorer : Pine.EvalContext -> CompilationExplorerState
-initCompilationExplorer evaluationContext =
-    { compiledContext = evaluationContext
+initCompilationExplorer : Pine.EvalEnvironment -> CompilationExplorerState
+initCompilationExplorer (Pine.EvalEnvironment environmentValue) =
+    { compiledContext = Pine.EvalEnvironment environmentValue
     , rootNode =
-        { value = explorerValueCache evaluationContext.environment
+        { value = explorerValueCache environmentValue
         , category = RootNode
-        , parsed = Just (Parsed (parseElmExplorerNodeValue RootNode evaluationContext.environment))
+        , parsed = Just (Parsed (parseElmExplorerNodeValue RootNode environmentValue))
         }
     , expandedNodes = Set.singleton []
     }
@@ -524,11 +524,11 @@ addElmModule elmModuleText stateBefore =
                 Err error ->
                     Err ("Failed to initialize the evaluation context: " ++ error)
 
-                Ok evaluationContext ->
+                Ok (Pine.EvalEnvironment environmentValue) ->
                     parseElmModule elmModuleText
                         |> Result.andThen
                             (\( parsedModule, addModule ) ->
-                                addModule evaluationContext.environment
+                                addModule environmentValue
                                     |> Result.map
                                         (\{ environment, addedModule } ->
                                             { environment = environment
@@ -541,7 +541,7 @@ addElmModule elmModuleText stateBefore =
     , ( { stateBefore
             | evaluationContext =
                 addModuleResult
-                    |> Result.map (\{ environment } -> { environment = environment })
+                    |> Result.map (\{ environment } -> Pine.EvalEnvironment environment)
                     |> Result.Extra.orElse stateBefore.evaluationContext
             , lastAddElmModuleAttempt =
                 addModuleResult

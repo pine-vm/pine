@@ -1,21 +1,19 @@
 module Pine exposing
-    ( ConditionalExpressionStructure
-    , EvalContext
+    ( EvalEnvironment(..)
     , Expression(..)
     , KernelFunction
-    , ParseAndEvalExpressionStructure
     , PathDescription(..)
     , Value(..)
-    , addToEnvironment
     , bigIntFromBlobValue
     , bigIntFromUnsignedBlobValue
     , bigIntFromValue
     , blobValueFromBigInt
     , displayStringFromPineError
-    , emptyEvalContext
+    , emptyEvalEnvironment
     , encodeExpressionAsValue
     , environmentExpr
     , environmentFromDeclarations
+    , evalEnvironmentFromList
     , evaluateExpression
     , falseValue
     , intFromValue
@@ -44,24 +42,21 @@ import Hex
 type Expression
     = LiteralExpression Value
     | ListExpression (List Expression)
-    | ParseAndEvalExpression ParseAndEvalExpressionStructure
+    | ParseAndEvalExpression
+        -- Environment
+        Expression
+        -- Expression
+        Expression
     | KernelApplicationExpression Expression String
-    | ConditionalExpression ConditionalExpressionStructure
+    | ConditionalExpression
+        -- Condition
+        Expression
+        -- False Branch
+        Expression
+        -- True Branch
+        Expression
     | EnvironmentExpression
     | StringTagExpression String Expression
-
-
-type alias ParseAndEvalExpressionStructure =
-    { expression : Expression
-    , environment : Expression
-    }
-
-
-type alias ConditionalExpressionStructure =
-    { condition : Expression
-    , ifTrue : Expression
-    , ifFalse : Expression
-    }
 
 
 type Value
@@ -73,8 +68,8 @@ type alias KernelFunction =
     Value -> Value
 
 
-type alias EvalContext =
-    { environment : Value }
+type EvalEnvironment
+    = EvalEnvironment Value
 
 
 type PathDescription a
@@ -88,26 +83,17 @@ environmentFromDeclarations declarations =
         (List.map valueFromContextExpansionWithName declarations)
 
 
-addToEnvironment : List Value -> EvalContext -> EvalContext
-addToEnvironment names context =
-    let
-        environment =
-            case context.environment of
-                ListValue applicationArgumentList ->
-                    ListValue (names ++ applicationArgumentList)
-
-                _ ->
-                    ListValue names
-    in
-    { context | environment = environment }
+evalEnvironmentFromList : List Value -> EvalEnvironment
+evalEnvironmentFromList list =
+    EvalEnvironment (ListValue list)
 
 
-emptyEvalContext : EvalContext
-emptyEvalContext =
-    { environment = listValue_Empty }
+emptyEvalEnvironment : EvalEnvironment
+emptyEvalEnvironment =
+    EvalEnvironment listValue_Empty
 
 
-evaluateExpression : EvalContext -> Expression -> Result (PathDescription String) Value
+evaluateExpression : EvalEnvironment -> Expression -> Result (PathDescription String) Value
 evaluateExpression context expression =
     case expression of
         LiteralExpression value ->
@@ -116,12 +102,12 @@ evaluateExpression context expression =
         ListExpression listElements ->
             evaluateListExpression [] context listElements
 
-        ParseAndEvalExpression parseAndEval ->
-            case evaluateParseAndEval context parseAndEval of
+        ParseAndEvalExpression envExpr exprExpr ->
+            case evaluateParseAndEval context ( envExpr, exprExpr ) of
                 Err error ->
                     Err
                         (DescribePathNode
-                            ("Failed parse and evaluate of '" ++ describeExpression 1 parseAndEval.expression ++ "'")
+                            ("Failed parse and evaluate of '" ++ describeExpression 1 exprExpr ++ "'")
                             error
                         )
 
@@ -145,24 +131,28 @@ evaluateExpression context expression =
                         Ok kernelFunction ->
                             Ok (kernelFunction argument)
 
-        ConditionalExpression conditional ->
-            case evaluateExpression context conditional.condition of
+        ConditionalExpression condition ifFalse ifTrue ->
+            case evaluateExpression context condition of
                 Err error ->
                     Err (DescribePathNode "Failed to evaluate condition" error)
 
                 Ok conditionValue ->
                     case conditionValue of
-                        BlobValue [ 4 ] ->
-                            evaluateExpression context conditional.ifTrue
-
                         BlobValue [ 2 ] ->
-                            evaluateExpression context conditional.ifFalse
+                            evaluateExpression context ifFalse
+
+                        BlobValue [ 4 ] ->
+                            evaluateExpression context ifTrue
 
                         _ ->
                             Ok listValue_Empty
 
         EnvironmentExpression ->
-            Ok context.environment
+            let
+                (EvalEnvironment environmentValue) =
+                    context
+            in
+            Ok environmentValue
 
         StringTagExpression tag tagged ->
             let
@@ -182,7 +172,7 @@ evaluateExpression context expression =
                     Ok ok
 
 
-evaluateListExpression : List Value -> EvalContext -> List Expression -> Result (PathDescription String) Value
+evaluateListExpression : List Value -> EvalEnvironment -> List Expression -> Result (PathDescription String) Value
 evaluateListExpression completedItems context remainingItems =
     case remainingItems of
         [] ->
@@ -515,26 +505,26 @@ is_sorted_ascending_int_recursive remaining previous =
                         is_sorted_ascending_int_recursive rest nextInt
 
 
-evaluateParseAndEval : EvalContext -> ParseAndEvalExpressionStructure -> Result (PathDescription String) Value
-evaluateParseAndEval context parseAndEval =
-    case evaluateExpression context parseAndEval.environment of
+evaluateParseAndEval : EvalEnvironment -> ( Expression, Expression ) -> Result (PathDescription String) Value
+evaluateParseAndEval context ( envExpr, exprExpr ) =
+    case evaluateExpression context envExpr of
         Err error ->
             Err
                 (DescribePathNode
                     ("Failed to evaluate environment '"
-                        ++ describeExpression 1 parseAndEval.environment
+                        ++ describeExpression 1 envExpr
                         ++ "'"
                     )
                     error
                 )
 
         Ok environmentValue ->
-            case evaluateExpression context parseAndEval.expression of
+            case evaluateExpression context exprExpr of
                 Err error ->
                     Err
                         (DescribePathNode
                             ("Failed to evaluate expression '"
-                                ++ describeExpression 1 parseAndEval.expression
+                                ++ describeExpression 1 exprExpr
                                 ++ "'"
                             )
                             error
@@ -553,7 +543,7 @@ evaluateParseAndEval context parseAndEval =
                                 )
 
                         Ok functionExpression ->
-                            evaluateExpression { environment = environmentValue } functionExpression
+                            evaluateExpression (EvalEnvironment environmentValue) functionExpression
 
 
 valueFromBool : Bool -> Value
@@ -593,13 +583,13 @@ describeExpression depthLimit expression =
                 ++ describeValue (depthLimit - 1) literal
                 ++ ")"
 
-        ParseAndEvalExpression parseAndEval ->
+        ParseAndEvalExpression envExpr exprExpr ->
             "parse-and-eval("
                 ++ (if depthLimit < 1 then
                         "..."
 
                     else
-                        describeExpression (depthLimit - 1) parseAndEval.expression
+                        describeExpression (depthLimit - 1) exprExpr
                             ++ ")"
                    )
 
@@ -608,7 +598,7 @@ describeExpression depthLimit expression =
                 ++ functionName
                 ++ ")"
 
-        ConditionalExpression _ ->
+        ConditionalExpression _ _ _ ->
             "conditional"
 
         EnvironmentExpression ->
@@ -730,8 +720,17 @@ valueFromString string =
 
 computeValueFromString : String -> Value
 computeValueFromString string =
-    ListValue
-        (String.foldr (\char aggregate -> valueFromChar char :: aggregate) [] string)
+    computeValueFromStringRecursive [] (String.toList string)
+
+
+computeValueFromStringRecursive : List Value -> List Char -> Value
+computeValueFromStringRecursive mappedChars string =
+    case string of
+        [] ->
+            ListValue (List.reverse mappedChars)
+
+        nextChar :: restOfChars ->
+            computeValueFromStringRecursive (valueFromChar nextChar :: mappedChars) restOfChars
 
 
 valueFromChar : Char -> Value
@@ -1014,12 +1013,12 @@ encodeExpressionAsValue expression =
         ListExpression listExpr ->
             encodeListExpressionAsValueReversed [] (List.reverse listExpr)
 
-        ParseAndEvalExpression parseAndEval ->
+        ParseAndEvalExpression envExpr exprExpr ->
             encodeUnionToPineValue
                 stringAsValue_ParseAndEval
                 (ListValue
-                    [ ListValue [ stringAsValue_environment, encodeExpressionAsValue parseAndEval.environment ]
-                    , ListValue [ stringAsValue_expression, encodeExpressionAsValue parseAndEval.expression ]
+                    [ ListValue [ stringAsValue_environment, encodeExpressionAsValue envExpr ]
+                    , ListValue [ stringAsValue_expression, encodeExpressionAsValue exprExpr ]
                     ]
                 )
 
@@ -1032,13 +1031,13 @@ encodeExpressionAsValue expression =
                     ]
                 )
 
-        ConditionalExpression conditional ->
+        ConditionalExpression condition ifFalse ifTrue ->
             encodeUnionToPineValue
                 stringAsValue_Conditional
                 (ListValue
-                    [ ListValue [ stringAsValue_condition, encodeExpressionAsValue conditional.condition ]
-                    , ListValue [ stringAsValue_ifFalse, encodeExpressionAsValue conditional.ifFalse ]
-                    , ListValue [ stringAsValue_ifTrue, encodeExpressionAsValue conditional.ifTrue ]
+                    [ ListValue [ stringAsValue_condition, encodeExpressionAsValue condition ]
+                    , ListValue [ stringAsValue_ifFalse, encodeExpressionAsValue ifFalse ]
+                    , ListValue [ stringAsValue_ifTrue, encodeExpressionAsValue ifTrue ]
                     ]
                 )
 
@@ -1097,8 +1096,8 @@ parseExpressionFromValue exprValue =
 
                         "ParseAndEval" ->
                             case parseParseAndEvalExpression unionTagValue of
-                                Ok parseAndEval ->
-                                    Ok (ParseAndEvalExpression parseAndEval)
+                                Ok ( envExpr, exprExpr ) ->
+                                    Ok (ParseAndEvalExpression envExpr exprExpr)
 
                                 Err err ->
                                     Err err
@@ -1113,8 +1112,8 @@ parseExpressionFromValue exprValue =
 
                         "Conditional" ->
                             case parseConditionalExpression unionTagValue of
-                                Ok conditional ->
-                                    Ok (ConditionalExpression conditional)
+                                Ok ( condition, ifFalse, ifTrue ) ->
+                                    Ok (ConditionalExpression condition ifFalse ifTrue)
 
                                 Err err ->
                                     Err err
@@ -1174,7 +1173,7 @@ parseListExpression value =
             parseListRecursively [] list
 
 
-parseParseAndEvalExpression : Value -> Result String ParseAndEvalExpressionStructure
+parseParseAndEvalExpression : Value -> Result String ( Expression, Expression )
 parseParseAndEvalExpression value =
     case value of
         BlobValue _ ->
@@ -1206,10 +1205,7 @@ parseParseAndEvalExpression value =
                                                     Err ("Failed to parse field 'environment': " ++ error)
 
                                                 Ok environment ->
-                                                    Ok
-                                                        { expression = expression
-                                                        , environment = environment
-                                                        }
+                                                    Ok ( environment, expression )
 
 
 parseKernelApplicationExpression : Value -> Result String ( Expression, String )
@@ -1264,7 +1260,7 @@ parseKernelFunctionFromName functionName =
             Ok kernelFunction
 
 
-parseConditionalExpression : Value -> Result String ConditionalExpressionStructure
+parseConditionalExpression : Value -> Result String ( Expression, Expression, Expression )
 parseConditionalExpression expressionValue =
     case expressionValue of
         BlobValue _ ->
@@ -1306,11 +1302,7 @@ parseConditionalExpression expressionValue =
                                                                     Err ("Failed to parse field 'ifFalse': " ++ error)
 
                                                                 Ok ifFalse ->
-                                                                    Ok
-                                                                        { condition = condition
-                                                                        , ifTrue = ifTrue
-                                                                        , ifFalse = ifFalse
-                                                                        }
+                                                                    Ok ( condition, ifFalse, ifTrue )
 
 
 encodeUnionToPineValue : Value -> Value -> Value

@@ -886,7 +886,7 @@ compilationAndEmitStackFromModulesInCompilation availableModules { moduleAliases
                             case FirCompiler.parseFunctionRecordFromValueTagged functionValue of
                                 Err _ ->
                                     ( 0
-                                    , FirCompiler.LocalEnvironment { expectedDecls = [] }
+                                    , FirCompiler.LocalEnvironment []
                                     )
 
                                 Ok functionRecord ->
@@ -1835,9 +1835,8 @@ compileCaseBlockInline stack caseBlockExpr caseBlockCases =
                     (PineFunctionApplicationExpression
                         -- Crash in case none of the branches match.
                         (Pine.ParseAndEvalExpression
-                            { expression = Pine.LiteralExpression stringAsValue_errorNoMatchingBranch
-                            , environment = Pine.EnvironmentExpression
-                            }
+                            Pine.EnvironmentExpression
+                            (Pine.LiteralExpression stringAsValue_errorNoMatchingBranch)
                         )
                         caseBlockExpr
                     )
@@ -2249,13 +2248,12 @@ compileElmSyntaxPattern compilation elmPattern =
                             ( fieldName
                             , [ PineFunctionApplicationDeconstruction
                                     (Pine.ParseAndEvalExpression
-                                        { expression = Pine.LiteralExpression pineFunctionForRecordAccessAsValue
-                                        , environment =
-                                            Pine.ListExpression
-                                                [ Pine.environmentExpr
-                                                , Pine.LiteralExpression (Pine.valueFromString fieldName)
-                                                ]
-                                        }
+                                        (Pine.ListExpression
+                                            [ Pine.environmentExpr
+                                            , Pine.LiteralExpression (Pine.valueFromString fieldName)
+                                            ]
+                                        )
+                                        (Pine.LiteralExpression pineFunctionForRecordAccessAsValue)
                                     )
                               ]
                             )
@@ -2522,35 +2520,32 @@ pineFunctionForRecordUpdate =
             Pine.encodeExpressionAsValue recursiveFunctionToUpdateFieldsInRecord
     in
     Pine.ConditionalExpression
-        { condition =
-            equalCondition_Pine
-                [ Pine.LiteralExpression elmRecordTypeTagNameAsValue
-                , pineKernel_ListHead_Pine recordExpression
+        (equalCondition_Pine
+            [ Pine.LiteralExpression elmRecordTypeTagNameAsValue
+            , pineKernel_ListHead_Pine recordExpression
+            ]
+        )
+        (Pine.ParseAndEvalExpression
+            recordExpression
+            (Pine.LiteralExpression
+                (Pine.valueFromString "invalid record update - not a record")
+            )
+        )
+        (Pine.ListExpression
+            [ Pine.LiteralExpression elmRecordTypeTagNameAsValue
+            , Pine.ListExpression
+                [ Pine.ParseAndEvalExpression
+                    (Pine.ListExpression
+                        [ Pine.LiteralExpression recursiveFunction
+                        , fieldsUpdatesExpression
+                        , Pine.ListExpression []
+                        , recordFieldsExpression
+                        ]
+                    )
+                    (Pine.LiteralExpression recursiveFunction)
                 ]
-        , ifTrue =
-            Pine.ListExpression
-                [ Pine.LiteralExpression elmRecordTypeTagNameAsValue
-                , Pine.ListExpression
-                    [ Pine.ParseAndEvalExpression
-                        { expression = Pine.LiteralExpression recursiveFunction
-                        , environment =
-                            Pine.ListExpression
-                                [ Pine.LiteralExpression recursiveFunction
-                                , fieldsUpdatesExpression
-                                , Pine.ListExpression []
-                                , recordFieldsExpression
-                                ]
-                        }
-                    ]
-                ]
-        , ifFalse =
-            Pine.ParseAndEvalExpression
-                { expression =
-                    Pine.LiteralExpression
-                        (Pine.valueFromString "invalid record update - not a record")
-                , environment = recordExpression
-                }
-        }
+            ]
+        )
 
 
 {-| Recursively scans through the record fields and replaces every field contained in the argument list.
@@ -2596,79 +2591,73 @@ recursiveFunctionToUpdateFieldsInRecord =
             listItemFromIndexExpression_Pine 0 firstFieldPairLocalExpression
     in
     Pine.ConditionalExpression
-        { condition =
-            equalCondition_Pine
+        (equalCondition_Pine
+            [ Pine.ListExpression []
+            , fieldPairsLocalExpression
+            ]
+        )
+        (Pine.ConditionalExpression
+            (equalCondition_Pine
                 [ Pine.ListExpression []
-                , fieldPairsLocalExpression
+                , remainingFieldsLocalExpression
                 ]
-        , ifTrue =
-            Pine.KernelApplicationExpression
-                (Pine.ListExpression
-                    [ processedFieldsLocalExpression
-                    , remainingFieldsLocalExpression
+            )
+            (Pine.ConditionalExpression
+                (equalCondition_Pine
+                    [ listItemFromIndexExpression_Pine 0 remainingFieldsNextLocalExpression
+                    , firstFieldNameLocalExpression
                     ]
                 )
-                "concat"
-        , ifFalse =
-            Pine.ConditionalExpression
-                { condition =
-                    equalCondition_Pine
-                        [ Pine.ListExpression []
-                        , remainingFieldsLocalExpression
-                        ]
-                , ifTrue =
-                    Pine.ParseAndEvalExpression
-                        { expression =
-                            Pine.LiteralExpression
-                                (Pine.valueFromString "invalid record update - field name not found")
-                        , environment = firstFieldNameLocalExpression
-                        }
-                , ifFalse =
-                    Pine.ConditionalExpression
-                        { condition =
-                            equalCondition_Pine
-                                [ listItemFromIndexExpression_Pine 0 remainingFieldsNextLocalExpression
-                                , firstFieldNameLocalExpression
+                (Pine.ParseAndEvalExpression
+                    (Pine.ListExpression
+                        [ functionReferenceLocalExpression
+                        , fieldPairsLocalExpression
+                        , Pine.KernelApplicationExpression
+                            (Pine.ListExpression
+                                [ processedFieldsLocalExpression
+                                , Pine.ListExpression
+                                    [ remainingFieldsNextLocalExpression ]
                                 ]
-                        , ifTrue =
-                            Pine.ParseAndEvalExpression
-                                { expression = functionReferenceLocalExpression
-                                , environment =
-                                    Pine.ListExpression
-                                        [ functionReferenceLocalExpression
-                                        , listSkipExpression_Pine 1 fieldPairsLocalExpression
-                                        , Pine.KernelApplicationExpression
-                                            (Pine.ListExpression
-                                                [ processedFieldsLocalExpression
-                                                , Pine.ListExpression
-                                                    [ firstFieldPairLocalExpression ]
-                                                ]
-                                            )
-                                            "concat"
-                                        , listSkipExpression_Pine 1 remainingFieldsLocalExpression
-                                        ]
-                                }
-                        , ifFalse =
-                            Pine.ParseAndEvalExpression
-                                { expression = functionReferenceLocalExpression
-                                , environment =
-                                    Pine.ListExpression
-                                        [ functionReferenceLocalExpression
-                                        , fieldPairsLocalExpression
-                                        , Pine.KernelApplicationExpression
-                                            (Pine.ListExpression
-                                                [ processedFieldsLocalExpression
-                                                , Pine.ListExpression
-                                                    [ remainingFieldsNextLocalExpression ]
-                                                ]
-                                            )
-                                            "concat"
-                                        , listSkipExpression_Pine 1 remainingFieldsLocalExpression
-                                        ]
-                                }
-                        }
-                }
-        }
+                            )
+                            "concat"
+                        , listSkipExpression_Pine 1 remainingFieldsLocalExpression
+                        ]
+                    )
+                    functionReferenceLocalExpression
+                )
+                (Pine.ParseAndEvalExpression
+                    (Pine.ListExpression
+                        [ functionReferenceLocalExpression
+                        , listSkipExpression_Pine 1 fieldPairsLocalExpression
+                        , Pine.KernelApplicationExpression
+                            (Pine.ListExpression
+                                [ processedFieldsLocalExpression
+                                , Pine.ListExpression
+                                    [ firstFieldPairLocalExpression ]
+                                ]
+                            )
+                            "concat"
+                        , listSkipExpression_Pine 1 remainingFieldsLocalExpression
+                        ]
+                    )
+                    functionReferenceLocalExpression
+                )
+            )
+            (Pine.ParseAndEvalExpression
+                firstFieldNameLocalExpression
+                (Pine.LiteralExpression
+                    (Pine.valueFromString "invalid record update - field name not found")
+                )
+            )
+        )
+        (Pine.KernelApplicationExpression
+            (Pine.ListExpression
+                [ processedFieldsLocalExpression
+                , remainingFieldsLocalExpression
+                ]
+            )
+            "concat"
+        )
 
 
 pineFunctionForRecordAccessAsValue : Pine.Value
@@ -2689,29 +2678,26 @@ pineFunctionForRecordAccess =
             pineKernel_ListHead_Pine (listItemFromIndexExpression_Pine 1 recordExpression)
     in
     Pine.ConditionalExpression
-        { condition =
-            equalCondition_Pine
-                [ Pine.LiteralExpression elmRecordTypeTagNameAsValue
-                , pineKernel_ListHead_Pine recordExpression
+        (equalCondition_Pine
+            [ Pine.LiteralExpression elmRecordTypeTagNameAsValue
+            , pineKernel_ListHead_Pine recordExpression
+            ]
+        )
+        (Pine.ParseAndEvalExpression
+            fieldNameLocalExpression
+            (Pine.LiteralExpression
+                (Pine.valueFromString "invalid record access - not a record")
+            )
+        )
+        (Pine.ParseAndEvalExpression
+            (Pine.ListExpression
+                [ Pine.LiteralExpression recursiveFunctionToLookupFieldInRecordAsValue
+                , fieldNameLocalExpression
+                , recordFieldsExpression
                 ]
-        , ifTrue =
-            Pine.ParseAndEvalExpression
-                { expression = Pine.LiteralExpression recursiveFunctionToLookupFieldInRecordAsValue
-                , environment =
-                    Pine.ListExpression
-                        [ Pine.LiteralExpression recursiveFunctionToLookupFieldInRecordAsValue
-                        , fieldNameLocalExpression
-                        , recordFieldsExpression
-                        ]
-                }
-        , ifFalse =
-            Pine.ParseAndEvalExpression
-                { expression =
-                    Pine.LiteralExpression
-                        (Pine.valueFromString "invalid record access - not a record")
-                , environment = fieldNameLocalExpression
-                }
-        }
+            )
+            (Pine.LiteralExpression recursiveFunctionToLookupFieldInRecordAsValue)
+        )
 
 
 recursiveFunctionToLookupFieldInRecordAsValue : Pine.Value
@@ -2733,44 +2719,40 @@ recursiveFunctionToLookupFieldInRecord =
 
         continueWithRemainingExpression =
             Pine.ParseAndEvalExpression
-                { expression = selfFunctionLocalExpression
-                , environment =
-                    Pine.ListExpression
-                        [ selfFunctionLocalExpression
-                        , fieldNameLocalExpression
-                        , listSkipExpression_Pine 1 remainingFieldsLocalExpression
-                        ]
-                }
+                (Pine.ListExpression
+                    [ selfFunctionLocalExpression
+                    , fieldNameLocalExpression
+                    , listSkipExpression_Pine 1 remainingFieldsLocalExpression
+                    ]
+                )
+                selfFunctionLocalExpression
     in
     Pine.ConditionalExpression
-        { condition =
-            equalCondition_Pine
-                [ Pine.ListExpression []
-                , remainingFieldsLocalExpression
+        (equalCondition_Pine
+            [ Pine.ListExpression []
+            , remainingFieldsLocalExpression
+            ]
+        )
+        (Pine.ConditionalExpression
+            (equalCondition_Pine
+                [ remainingFieldsLocalExpression
+                    |> listItemFromIndexExpression_Pine 0
+                    |> listItemFromIndexExpression_Pine 0
+                , fieldNameLocalExpression
                 ]
-        , ifTrue =
-            Pine.ParseAndEvalExpression
-                { expression =
-                    Pine.LiteralExpression
-                        (Pine.valueFromString "invalid record access - field name not found")
-                , environment = fieldNameLocalExpression
-                }
-        , ifFalse =
-            Pine.ConditionalExpression
-                { condition =
-                    equalCondition_Pine
-                        [ remainingFieldsLocalExpression
-                            |> listItemFromIndexExpression_Pine 0
-                            |> listItemFromIndexExpression_Pine 0
-                        , fieldNameLocalExpression
-                        ]
-                , ifTrue =
-                    remainingFieldsLocalExpression
-                        |> listItemFromIndexExpression_Pine 0
-                        |> listItemFromIndexExpression_Pine 1
-                , ifFalse = continueWithRemainingExpression
-                }
-        }
+            )
+            continueWithRemainingExpression
+            (remainingFieldsLocalExpression
+                |> listItemFromIndexExpression_Pine 0
+                |> listItemFromIndexExpression_Pine 1
+            )
+        )
+        (Pine.ParseAndEvalExpression
+            fieldNameLocalExpression
+            (Pine.LiteralExpression
+                (Pine.valueFromString "invalid record access - field name not found")
+            )
+        )
 
 
 compileElmFunctionOrValueLookup : ( List String, String ) -> CompilationStack -> Result String Expression
@@ -3176,12 +3158,11 @@ emitRecursionDomain { exposedDeclarationsNames, allModuleDeclarations, importedF
                                     Pine.LiteralExpression
                                         (Pine.encodeExpressionAsValue
                                             (Pine.ParseAndEvalExpression
-                                                { expression =
-                                                    FirCompiler.listItemFromIndexExpression_Pine
-                                                        declarationIndex
-                                                        getEnvFunctionsExpression
-                                                , environment = Pine.environmentExpr
-                                                }
+                                                Pine.environmentExpr
+                                                (FirCompiler.listItemFromIndexExpression_Pine
+                                                    declarationIndex
+                                                    getEnvFunctionsExpression
+                                                )
                                             )
                                         )
 
@@ -3306,7 +3287,7 @@ emitRecursionDomain { exposedDeclarationsNames, allModuleDeclarations, importedF
                                     ( functionName
                                     , ( FirCompiler.EnvironmentFunctionEntry
                                             parameterCount
-                                            (FirCompiler.LocalEnvironment { expectedDecls = expectedEnvironmentFunctions })
+                                            (FirCompiler.LocalEnvironment expectedEnvironmentFunctions)
                                       , funcValue
                                       )
                                     )
@@ -3382,7 +3363,7 @@ attemptReduceBlockDecl blockDeclarationsEmitted blockDecl =
                     blockDecl
 
                 else
-                    ( FirCompiler.EnvironmentFunctionEntry 0 (FirCompiler.LocalEnvironment { expectedDecls = [] })
+                    ( FirCompiler.EnvironmentFunctionEntry 0 (FirCompiler.LocalEnvironment [])
                     , Pine.encodeExpressionAsValue reducedExpr
                     )
 
@@ -3453,12 +3434,8 @@ splitEmittedFunctionsToInline emittedFunctions =
                     FirCompiler.IndependentEnvironment ->
                         continueWithReduction ()
 
-                    FirCompiler.LocalEnvironment localEnv ->
-                        if localEnv.expectedDecls == [] then
-                            continueWithReduction ()
-
-                        else
-                            continueSharing
+                    FirCompiler.LocalEnvironment [] ->
+                        continueWithReduction ()
 
                     _ ->
                         continueSharing
@@ -3478,11 +3455,11 @@ reportEmittedDeclarationsForErrorMsg emittedDeclarations =
                 ++ String.fromInt funcParamCount
                 ++ ") env = "
                 ++ (case funcExpectedEnv of
-                        FirCompiler.LocalEnvironment { expectedDecls } ->
+                        FirCompiler.LocalEnvironment localEnvExpectedDecls ->
                             "local: "
-                                ++ String.fromInt (List.length expectedDecls)
+                                ++ String.fromInt (List.length localEnvExpectedDecls)
                                 ++ " ("
-                                ++ String.join ", " expectedDecls
+                                ++ String.join ", " localEnvExpectedDecls
                                 ++ ")"
 
                         FirCompiler.ImportedEnvironment _ ->

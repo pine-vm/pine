@@ -33,7 +33,7 @@ import Pine
 import Result.Extra
 
 
-compileEvalContextForElmInteractive : InteractiveContext -> Result String Pine.EvalContext
+compileEvalContextForElmInteractive : InteractiveContext -> Result String Pine.EvalEnvironment
 compileEvalContextForElmInteractive context =
     let
         contextModulesTextsBatches : List (List String)
@@ -70,8 +70,8 @@ compileEvalContextForElmInteractive context =
                                 )
                     )
             )
-            (Ok Pine.emptyEvalContext.environment)
-        |> Result.map (\environmentValue -> { environment = environmentValue })
+            (Ok (Pine.ListValue []))
+        |> Result.map Pine.EvalEnvironment
 
 
 expandElmInteractiveEnvironmentWithModuleTexts :
@@ -105,7 +105,7 @@ submissionInInteractive context previousSubmissions submission =
             submissionWithHistoryInInteractive initialContext previousSubmissions submission
 
 
-submissionWithHistoryInInteractive : Pine.EvalContext -> List String -> String -> Result String SubmissionResponse
+submissionWithHistoryInInteractive : Pine.EvalEnvironment -> List String -> String -> Result String SubmissionResponse
 submissionWithHistoryInInteractive initialContext previousSubmissions submission =
     case previousSubmissions of
         [] ->
@@ -121,12 +121,12 @@ submissionWithHistoryInInteractive initialContext previousSubmissions submission
                     submissionWithHistoryInInteractive expressionContext remainingPreviousSubmissions submission
 
 
-submissionInInteractiveInPineContext : Pine.EvalContext -> String -> Result String ( Pine.EvalContext, SubmissionResponse )
-submissionInInteractiveInPineContext expressionContext submission =
-    compileInteractiveSubmission expressionContext.environment submission
+submissionInInteractiveInPineContext : Pine.EvalEnvironment -> String -> Result String ( Pine.EvalEnvironment, SubmissionResponse )
+submissionInInteractiveInPineContext (Pine.EvalEnvironment envValue) submission =
+    compileInteractiveSubmission envValue submission
         |> Result.andThen
             (\pineExpression ->
-                case Pine.evaluateExpression expressionContext pineExpression of
+                case Pine.evaluateExpression (Pine.EvalEnvironment envValue) pineExpression of
                     Err error ->
                         Err ("Failed to evaluate expression:\n" ++ Pine.displayStringFromPineError error)
 
@@ -135,7 +135,7 @@ submissionInInteractiveInPineContext expressionContext submission =
 
                     Ok (Pine.ListValue [ newState, responseValue ]) ->
                         submissionResponseFromResponsePineValue responseValue
-                            |> Result.map (Tuple.pair { environment = newState })
+                            |> Result.map (Tuple.pair (Pine.EvalEnvironment newState))
 
                     Ok (Pine.ListValue resultList) ->
                         Err

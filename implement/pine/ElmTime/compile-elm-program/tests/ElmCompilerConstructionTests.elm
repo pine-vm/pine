@@ -26,9 +26,8 @@ generateTemplateEvaluatingToExpressionTests =
       )
     , ( "ParseAndEvalExpression"
       , Pine.ParseAndEvalExpression
-            { expression = Pine.LiteralExpression (Pine.valueFromString "expression-placeholder")
-            , environment = Pine.LiteralExpression (Pine.valueFromString "environment-placeholder")
-            }
+            (Pine.LiteralExpression (Pine.valueFromString "environment-placeholder"))
+            (Pine.LiteralExpression (Pine.valueFromString "expression-placeholder"))
       )
     , ( "KernelApplicationExpression"
       , Pine.KernelApplicationExpression
@@ -37,10 +36,9 @@ generateTemplateEvaluatingToExpressionTests =
       )
     , ( "ConditionalExpression"
       , Pine.ConditionalExpression
-            { condition = Pine.LiteralExpression (Pine.valueFromString "condition-placeholder")
-            , ifTrue = Pine.LiteralExpression (Pine.valueFromString "ifTrue-placeholder")
-            , ifFalse = Pine.LiteralExpression (Pine.valueFromString "ifFalse-placeholder")
-            }
+            (Pine.LiteralExpression (Pine.valueFromString "condition-placeholder"))
+            (Pine.LiteralExpression (Pine.valueFromString "ifFalse-placeholder"))
+            (Pine.LiteralExpression (Pine.valueFromString "ifTrue-placeholder"))
       )
     , ( "EnvironmentExpression"
       , Pine.EnvironmentExpression
@@ -60,7 +58,7 @@ generateTemplateEvaluatingToExpressionTests =
                                 ElmCompilerConstruction.generateTemplateEvaluatingToExpression testedExpression
                         in
                         Pine.evaluateExpression
-                            Pine.emptyEvalContext
+                            Pine.emptyEvalEnvironment
                             template
                             |> Result.mapError (Pine.displayStringFromPineError >> (++) "Failed evaluate template: ")
                             |> Result.andThen
