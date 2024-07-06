@@ -339,15 +339,20 @@ parseInteractiveSubmissionFromString submission =
     let
         looksLikeDeclaration =
             case String.split "=" submission of
-                leftOfEquals :: _ :: _ ->
-                    case String.toList (String.reverse (String.trim leftOfEquals)) of
-                        [] ->
-                            False
+                leftOfEquals :: betweenFirstAndSecondEquals :: _ ->
+                    if betweenFirstAndSecondEquals == "" then
+                        -- Is operator '=='
+                        False
 
-                        lastCharBeforeEquals :: _ ->
-                            (Char.isAlphaNum lastCharBeforeEquals || lastCharBeforeEquals == '_')
-                                && not (String.startsWith "let " (String.trim (String.replace "\n" " " leftOfEquals)))
-                                && not (String.contains "{" leftOfEquals)
+                    else
+                        case String.toList (String.reverse (String.trim leftOfEquals)) of
+                            [] ->
+                                False
+
+                            lastCharBeforeEquals :: _ ->
+                                (Char.isAlphaNum lastCharBeforeEquals || lastCharBeforeEquals == '_')
+                                    && not (String.startsWith "let " (String.trim (String.replace "\n" " " leftOfEquals)))
+                                    && not (String.contains "{" leftOfEquals)
 
                 _ ->
                     False
