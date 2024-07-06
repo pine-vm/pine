@@ -1176,71 +1176,55 @@ parseListExpression value =
 parseParseAndEvalExpression : Value -> Result String ( Expression, Expression )
 parseParseAndEvalExpression value =
     case value of
-        BlobValue _ ->
-            Err "Is not list but blob"
+        ListValue ((ListValue [ _, envValue ]) :: (ListValue [ _, exprValue ]) :: _) ->
+            case parseExpressionFromValue envValue of
+                Err envErr ->
+                    Err ("Failed to parse env field: " ++ envErr)
+
+                Ok envExpr ->
+                    case parseExpressionFromValue exprValue of
+                        Err exprErr ->
+                            Err ("Failed to parse expr field: " ++ exprErr)
+
+                        Ok exprExpr ->
+                            Ok ( envExpr, exprExpr )
 
         ListValue list ->
-            case parseListOfPairs list of
-                Err err ->
-                    Err ("Failed to parse kernel application expression: " ++ err)
+            Err
+                ("Failed to parse parse-and-eval: Too few elements in top list or unexpected shape of fields ("
+                    ++ String.fromInt (List.length list)
+                    ++ ")"
+                )
 
-                Ok pairs ->
-                    case Common.assocListGet stringAsValue_expression pairs of
-                        Nothing ->
-                            Err "Did not find field 'expression'"
-
-                        Just expressionValue ->
-                            case parseExpressionFromValue expressionValue of
-                                Err error ->
-                                    Err ("Failed to parse field 'expression': " ++ error)
-
-                                Ok expression ->
-                                    case Common.assocListGet stringAsValue_environment pairs of
-                                        Nothing ->
-                                            Err "Did not find field 'environment'"
-
-                                        Just environmentValue ->
-                                            case parseExpressionFromValue environmentValue of
-                                                Err error ->
-                                                    Err ("Failed to parse field 'environment': " ++ error)
-
-                                                Ok environment ->
-                                                    Ok ( environment, expression )
+        BlobValue _ ->
+            Err "Failed to parse parse-and-eval: Is not list but blob"
 
 
 parseKernelApplicationExpression : Value -> Result String ( Expression, String )
 parseKernelApplicationExpression expressionValue =
     case expressionValue of
-        BlobValue _ ->
-            Err "Is not list but blob"
+        ListValue ((ListValue [ _, argumentValue ]) :: (ListValue [ _, functionNameValue ]) :: _) ->
+            case parseExpressionFromValue argumentValue of
+                Err error ->
+                    Err ("Failed to parse kernel application argument: " ++ error)
+
+                Ok argument ->
+                    case stringFromValue functionNameValue of
+                        Err error ->
+                            Err ("Failed to parse kernel application function name: " ++ error)
+
+                        Ok functionName ->
+                            Ok ( argument, functionName )
 
         ListValue list ->
-            case parseListOfPairs list of
-                Err err ->
-                    Err ("Failed to parse kernel application expression: " ++ err)
+            Err
+                ("Failed to parse kernel application expression: Too few items in top list or unexpected shape of fields ("
+                    ++ String.fromInt (List.length list)
+                    ++ ")"
+                )
 
-                Ok pairs ->
-                    case Common.assocListGet stringAsValue_functionName pairs of
-                        Nothing ->
-                            Err "Did not find field 'functionName'"
-
-                        Just functionNameValue ->
-                            case Common.assocListGet functionNameValue kernelFunctionsNames of
-                                Nothing ->
-                                    Err "Unexpected 'functionName'"
-
-                                Just functionName ->
-                                    case Common.assocListGet stringAsValue_argument pairs of
-                                        Nothing ->
-                                            Err "Did not find field 'argument'"
-
-                                        Just argumentValue ->
-                                            case parseExpressionFromValue argumentValue of
-                                                Err error ->
-                                                    Err ("Failed to parse field 'argument': " ++ error)
-
-                                                Ok argument ->
-                                                    Ok ( argument, functionName )
+        BlobValue _ ->
+            Err "Failed to parse kernel application: Is not list but blob"
 
 
 parseKernelFunctionFromName : String -> Result String KernelFunction
@@ -1263,77 +1247,38 @@ parseKernelFunctionFromName functionName =
 parseConditionalExpression : Value -> Result String ( Expression, Expression, Expression )
 parseConditionalExpression expressionValue =
     case expressionValue of
-        BlobValue _ ->
-            Err "Is not list but blob"
+        ListValue [ ListValue [ _, conditionValue ], ListValue [ _, ifFalseValue ], ListValue [ _, ifTrueValue ] ] ->
+            case parseExpressionFromValue conditionValue of
+                Err error ->
+                    Err ("Failed to parse condition: " ++ error)
+
+                Ok condition ->
+                    case parseExpressionFromValue ifFalseValue of
+                        Err error ->
+                            Err ("Failed to parse false branch: " ++ error)
+
+                        Ok ifFalse ->
+                            case parseExpressionFromValue ifTrueValue of
+                                Err error ->
+                                    Err ("Failed to parse true branch: " ++ error)
+
+                                Ok ifTrue ->
+                                    Ok ( condition, ifFalse, ifTrue )
 
         ListValue list ->
-            case parseListOfPairs list of
-                Err err ->
-                    Err ("Failed to parse kernel application expression: " ++ err)
+            Err
+                ("Failed to parse conditional: Too few items in top list or unexpected shape of fields ("
+                    ++ String.fromInt (List.length list)
+                    ++ ")"
+                )
 
-                Ok pairs ->
-                    case Common.assocListGet stringAsValue_condition pairs of
-                        Nothing ->
-                            Err "Did not find field 'condition'"
-
-                        Just conditionValue ->
-                            case parseExpressionFromValue conditionValue of
-                                Err error ->
-                                    Err ("Failed to parse field 'condition': " ++ error)
-
-                                Ok condition ->
-                                    case Common.assocListGet stringAsValue_ifTrue pairs of
-                                        Nothing ->
-                                            Err "Did not find field 'ifTrue'"
-
-                                        Just ifTrueValue ->
-                                            case parseExpressionFromValue ifTrueValue of
-                                                Err error ->
-                                                    Err ("Failed to parse field 'ifTrue': " ++ error)
-
-                                                Ok ifTrue ->
-                                                    case Common.assocListGet stringAsValue_ifFalse pairs of
-                                                        Nothing ->
-                                                            Err "Did not find field 'ifFalse'"
-
-                                                        Just ifFalseValue ->
-                                                            case parseExpressionFromValue ifFalseValue of
-                                                                Err error ->
-                                                                    Err ("Failed to parse field 'ifFalse': " ++ error)
-
-                                                                Ok ifFalse ->
-                                                                    Ok ( condition, ifFalse, ifTrue )
+        BlobValue _ ->
+            Err "Failed to parse conditional: Is not list but blob"
 
 
 encodeUnionToPineValue : Value -> Value -> Value
 encodeUnionToPineValue tagNameValue unionTagValue =
     ListValue [ tagNameValue, unionTagValue ]
-
-
-parseListOfPairs : List Value -> Result String (List ( Value, Value ))
-parseListOfPairs list =
-    let
-        continueRecursive : List Value -> List ( Value, Value ) -> Result String (List ( Value, Value ))
-        continueRecursive remaining aggregate =
-            case remaining of
-                [] ->
-                    Ok (List.reverse aggregate)
-
-                itemValue :: rest ->
-                    case itemValue of
-                        BlobValue _ ->
-                            Err "Is not list but blob"
-
-                        ListValue [ first, second ] ->
-                            continueRecursive rest (( first, second ) :: aggregate)
-
-                        ListValue innerList ->
-                            Err
-                                ("Unexpected number of list items for pair: "
-                                    ++ String.fromInt (List.length innerList)
-                                )
-    in
-    continueRecursive list []
 
 
 parseListWithExactlyTwoElements : Value -> Result String ( Value, Value )

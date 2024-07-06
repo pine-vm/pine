@@ -406,15 +406,15 @@ evolutionStagesToMakeElmFunction =
                 [ Pine.LiteralExpression (Pine.valueFromString "KernelApplication")
                 , Pine.ListExpression
                     [ Pine.ListExpression
-                        [ Pine.LiteralExpression (Pine.valueFromString "functionName")
-                        , Pine.LiteralExpression (Pine.valueFromString "equal")
-                        ]
-                    , Pine.ListExpression
                         [ Pine.LiteralExpression (Pine.valueFromString "argument")
                         , Pine.ListExpression
                             [ Pine.LiteralExpression (Pine.valueFromString "List")
                             , Pine.LiteralExpression (Pine.ListValue [])
                             ]
+                        ]
+                    , Pine.ListExpression
+                        [ Pine.LiteralExpression (Pine.valueFromString "functionName")
+                        , Pine.LiteralExpression (Pine.valueFromString "equal")
                         ]
                     ]
                 ]
@@ -433,15 +433,15 @@ evolutionStagesToMakeElmFunction =
                 [ Pine.LiteralExpression (Pine.valueFromString "KernelApplication")
                 , Pine.ListExpression
                     [ Pine.ListExpression
-                        [ Pine.LiteralExpression (Pine.valueFromString "functionName")
-                        , Pine.LiteralExpression (Pine.valueFromString "concat")
-                        ]
-                    , Pine.ListExpression
                         [ Pine.LiteralExpression (Pine.valueFromString "argument")
                         , Pine.ListExpression
                             [ Pine.LiteralExpression (Pine.valueFromString "Literal")
                             , Pine.EnvironmentExpression
                             ]
+                        ]
+                    , Pine.ListExpression
+                        [ Pine.LiteralExpression (Pine.valueFromString "functionName")
+                        , Pine.LiteralExpression (Pine.valueFromString "concat")
                         ]
                     ]
                 ]
@@ -471,10 +471,6 @@ evolutionStagesToMakeElmFunction =
                 [ Pine.LiteralExpression (Pine.valueFromString "KernelApplication")
                 , Pine.ListExpression
                     [ Pine.ListExpression
-                        [ Pine.LiteralExpression (Pine.valueFromString "functionName")
-                        , Pine.LiteralExpression (Pine.valueFromString "concat")
-                        ]
-                    , Pine.ListExpression
                         [ Pine.LiteralExpression (Pine.valueFromString "argument")
                         , Pine.ListExpression
                             [ Pine.LiteralExpression (Pine.valueFromString "List")
@@ -489,6 +485,10 @@ evolutionStagesToMakeElmFunction =
                                     ]
                                 ]
                             ]
+                        ]
+                    , Pine.ListExpression
+                        [ Pine.LiteralExpression (Pine.valueFromString "functionName")
+                        , Pine.LiteralExpression (Pine.valueFromString "concat")
                         ]
                     ]
                 ]
