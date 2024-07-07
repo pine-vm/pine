@@ -3161,106 +3161,42 @@ emitRecursionDomain { exposedDeclarationsNames, allModuleDeclarations, importedF
             case
                 recursionDomainDeclarations
                     |> Common.resultListMapCombine
-                        (\( declarationName, declarationExpression ) ->
-                            let
-                                getFunctionInnerExpressionFromIndex : Int -> Pine.Expression
-                                getFunctionInnerExpressionFromIndex declarationIndex =
-                                    let
-                                        getEnvFunctionsExpression =
-                                            listItemFromIndexExpression_Pine 0
-                                                Pine.environmentExpr
-                                    in
-                                    Pine.LiteralExpression
-                                        (Pine.encodeExpressionAsValue
-                                            (Pine.ParseAndEvalExpression
-                                                Pine.environmentExpr
-                                                (FirCompiler.listItemFromIndexExpression_Pine
-                                                    declarationIndex
-                                                    getEnvFunctionsExpression
-                                                )
-                                            )
-                                        )
-
-                                retrieveOrBuildResult :
-                                    Result
-                                        String
-                                        { getFunctionInnerExpression : Pine.Expression
-                                        , parameterCount : Int
-                                        , innerExpression : Pine.Expression
-                                        , innerExpressionValue : Pine.Value
-                                        }
-                                retrieveOrBuildResult =
-                                    case Common.assocListGetWithIndex declarationName blockEmitStack.environmentFunctions of
-                                        Just ( declarationIndex, FirCompiler.EnvironmentFunctionEntry declParamCount _ ) ->
-                                            case Common.assocListGet declarationName blockDeclarationsEmitted.newEnvFunctionsValues of
-                                                Nothing ->
-                                                    Err ("Compiler error: Missing entry: " ++ declarationName)
-
-                                                Just ( _, ( declEmittedExpr, declEmittedValue ) ) ->
-                                                    Ok
-                                                        { parameterCount = declParamCount
-                                                        , getFunctionInnerExpression = getFunctionInnerExpressionFromIndex declarationIndex
-                                                        , innerExpression = declEmittedExpr
-                                                        , innerExpressionValue = declEmittedValue
-                                                        }
-
+                        (\( declName, declExpression ) ->
+                            case Common.assocListGetWithIndex declName blockEmitStack.environmentFunctions of
+                                Just ( declarationIndex, FirCompiler.EnvironmentFunctionEntry declParamCount _ ) ->
+                                    case Common.assocListGet declName blockDeclarationsEmitted.newEnvFunctionsValues of
                                         Nothing ->
-                                            let
-                                                ( FirCompiler.DeclBlockFunctionEntry parsedDeclarationParams _, emitDeclarationResult ) =
-                                                    blockDeclarationsEmitted.parseAndEmitFunction declarationExpression
-                                            in
-                                            case emitDeclarationResult of
-                                                Err err ->
-                                                    Err err
+                                            Err ("Compiler error: Missing entry: " ++ declName)
 
-                                                Ok declEmittedExpr ->
-                                                    let
-                                                        innerExpressionValue =
-                                                            Pine.encodeExpressionAsValue declEmittedExpr
-                                                    in
-                                                    Ok
-                                                        { parameterCount = List.length parsedDeclarationParams
-                                                        , getFunctionInnerExpression = Pine.LiteralExpression innerExpressionValue
-                                                        , innerExpression = declEmittedExpr
-                                                        , innerExpressionValue = innerExpressionValue
-                                                        }
-                            in
-                            case retrieveOrBuildResult of
-                                Err err ->
-                                    Err err
-
-                                Ok declMatch ->
-                                    case
-                                        evaluateAsIndependentExpression
-                                            (if declMatch.parameterCount < 1 then
-                                                FirCompiler.emitWrapperForPartialApplicationZero
-                                                    { getFunctionInnerExpression = declMatch.getFunctionInnerExpression
-                                                    , getEnvFunctionsExpression = blockDeclarationsEmitted.envFunctionsExpression
-                                                    }
-
-                                             else
-                                                FirCompiler.buildRecordOfPartiallyAppliedFunction
-                                                    { getFunctionInnerExpression = declMatch.getFunctionInnerExpression
-                                                    , parameterCount = declMatch.parameterCount
-                                                    , getEnvFunctionsExpression = blockDeclarationsEmitted.envFunctionsExpression
-                                                    , argumentsAlreadyCollected = []
-                                                    }
-                                            )
-                                    of
-                                        Err err ->
-                                            Err
-                                                ("Failed for declaration '"
-                                                    ++ declarationName
-                                                    ++ "': "
-                                                    ++ err
+                                        Just ( _, ( declEmittedExpr, declEmittedValue ) ) ->
+                                            Ok
+                                                ( declName
+                                                , ( declExpression
+                                                  , ( declParamCount
+                                                    , declEmittedValue
+                                                    )
+                                                  )
                                                 )
 
-                                        Ok wrappedForExpose ->
+                                Nothing ->
+                                    let
+                                        ( FirCompiler.DeclBlockFunctionEntry parsedDeclarationParams _, emitDeclarationResult ) =
+                                            blockDeclarationsEmitted.parseAndEmitFunction declExpression
+                                    in
+                                    case emitDeclarationResult of
+                                        Err err ->
+                                            Err err
+
+                                        Ok declEmittedExpr ->
+                                            let
+                                                innerExpressionValue =
+                                                    Pine.encodeExpressionAsValue declEmittedExpr
+                                            in
                                             Ok
-                                                ( declarationName
-                                                , ( wrappedForExpose
-                                                  , ( declMatch.parameterCount
-                                                    , declMatch.innerExpressionValue
+                                                ( declName
+                                                , ( declExpression
+                                                  , ( List.length parsedDeclarationParams
+                                                    , innerExpressionValue
                                                     )
                                                   )
                                                 )
@@ -3328,24 +3264,88 @@ emitRecursionDomain { exposedDeclarationsNames, allModuleDeclarations, importedF
                         ( emittedDeclarationsToShare, emittedDeclarationsToInline ) =
                             splitEmittedFunctionsToInline emittedDeclarations
 
-                        exposedDeclarations : List ( String, Pine.Value )
-                        exposedDeclarations =
+                        exposedDeclarationsResult : Result String (List ( String, Pine.Value ))
+                        exposedDeclarationsResult =
                             List.foldr
-                                (\( declName, ( wrappedForExpose, _ ) ) aggregate ->
+                                (\( declName, ( declExpression, ( parameterCount, emittedValue ) ) ) aggregateResult ->
                                     if List.member declName recursionDomainExposedNames then
-                                        ( declName, wrappedForExpose ) :: aggregate
+                                        case aggregateResult of
+                                            Err err ->
+                                                Err err
+
+                                            Ok aggregate ->
+                                                let
+                                                    getFunctionInnerExpressionFromIndex : Int -> Pine.Expression
+                                                    getFunctionInnerExpressionFromIndex declarationIndex =
+                                                        let
+                                                            getEnvFunctionsExpression =
+                                                                listItemFromIndexExpression_Pine 0
+                                                                    Pine.environmentExpr
+                                                        in
+                                                        Pine.LiteralExpression
+                                                            (Pine.encodeExpressionAsValue
+                                                                (Pine.ParseAndEvalExpression
+                                                                    Pine.environmentExpr
+                                                                    (FirCompiler.listItemFromIndexExpression_Pine
+                                                                        declarationIndex
+                                                                        getEnvFunctionsExpression
+                                                                    )
+                                                                )
+                                                            )
+
+                                                    getFunctionInnerExpression : Pine.Expression
+                                                    getFunctionInnerExpression =
+                                                        case Common.assocListGetWithIndex declName blockEmitStack.environmentFunctions of
+                                                            Just ( indexInBlock, _ ) ->
+                                                                getFunctionInnerExpressionFromIndex indexInBlock
+
+                                                            Nothing ->
+                                                                Pine.LiteralExpression emittedValue
+                                                in
+                                                case
+                                                    evaluateAsIndependentExpression
+                                                        (if parameterCount < 1 then
+                                                            FirCompiler.emitWrapperForPartialApplicationZero
+                                                                { getFunctionInnerExpression = getFunctionInnerExpression
+                                                                , getEnvFunctionsExpression = blockDeclarationsEmitted.envFunctionsExpression
+                                                                }
+
+                                                         else
+                                                            FirCompiler.buildRecordOfPartiallyAppliedFunction
+                                                                { getFunctionInnerExpression = getFunctionInnerExpression
+                                                                , parameterCount = parameterCount
+                                                                , getEnvFunctionsExpression = blockDeclarationsEmitted.envFunctionsExpression
+                                                                , argumentsAlreadyCollected = []
+                                                                }
+                                                        )
+                                                of
+                                                    Err err ->
+                                                        Err
+                                                            ("Failed for declaration '"
+                                                                ++ declName
+                                                                ++ "': "
+                                                                ++ err
+                                                            )
+
+                                                    Ok wrappedForExpose ->
+                                                        Ok (( declName, wrappedForExpose ) :: aggregate)
 
                                     else
-                                        aggregate
+                                        aggregateResult
                                 )
-                                []
+                                (Ok [])
                                 emittedForExposeOrReuse
                     in
-                    Ok
-                        { emittedDeclarationsToShare = emittedDeclarationsToShare
-                        , emittedDeclarationsToInline = emittedDeclarationsToInline
-                        , exposedDeclarations = exposedDeclarations
-                        }
+                    case exposedDeclarationsResult of
+                        Err err ->
+                            Err err
+
+                        Ok exposedDeclarations ->
+                            Ok
+                                { emittedDeclarationsToShare = emittedDeclarationsToShare
+                                , emittedDeclarationsToInline = emittedDeclarationsToInline
+                                , exposedDeclarations = exposedDeclarations
+                                }
 
 
 attemptReduceBlockDecl :
