@@ -6,6 +6,7 @@ import ElmCompiler
 import ElmInteractive exposing (ElmCoreModulesExtent(..), InteractiveContext(..))
 import ElmInteractiveParser
 import Expect
+import FirCompiler
 import Json.Encode
 import Pine
 import Test
@@ -523,26 +524,23 @@ encodeDecodeChoiceTypeDeclarationTest : Test.Test
 encodeDecodeChoiceTypeDeclarationTest =
     Test.test "Encode and decode Elm module choice type" <|
         \_ ->
-            { tags =
-                Dict.fromList
-                    [ ( "Variant_Alfa", { argumentsCount = 0 } )
-                    , ( "Variant_Beta", { argumentsCount = 1 } )
-                    , ( "Variant_Gamma", { argumentsCount = 2 } )
-                    ]
-            }
+            ElmCompiler.ElmModuleChoiceType
+                [ ( "Variant_Alfa", ElmCompiler.ElmModuleChoiceTypeTag 0 )
+                , ( "Variant_Beta", ElmCompiler.ElmModuleChoiceTypeTag 1 )
+                , ( "Variant_Gamma", ElmCompiler.ElmModuleChoiceTypeTag 2 )
+                ]
                 |> ElmCompiler.ElmModuleChoiceTypeDeclaration
                 |> ElmCompiler.emitTypeDeclarationValue
                 |> ElmCompiler.parseTypeDeclarationFromValueTagged
                 |> Expect.equal
                     (Ok
                         (ElmCompiler.ElmModuleChoiceTypeDeclaration
-                            { tags =
-                                Dict.fromList
-                                    [ ( "Variant_Alfa", { argumentsCount = 0 } )
-                                    , ( "Variant_Beta", { argumentsCount = 1 } )
-                                    , ( "Variant_Gamma", { argumentsCount = 2 } )
-                                    ]
-                            }
+                            (ElmCompiler.ElmModuleChoiceType
+                                [ ( "Variant_Alfa", ElmCompiler.ElmModuleChoiceTypeTag 0 )
+                                , ( "Variant_Beta", ElmCompiler.ElmModuleChoiceTypeTag 1 )
+                                , ( "Variant_Gamma", ElmCompiler.ElmModuleChoiceTypeTag 2 )
+                                ]
+                            )
                         )
                     )
 

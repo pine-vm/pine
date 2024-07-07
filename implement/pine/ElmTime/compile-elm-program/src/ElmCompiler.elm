@@ -1,5 +1,7 @@
 module ElmCompiler exposing
     ( CompilationStack
+    , ElmModuleChoiceType(..)
+    , ElmModuleChoiceTypeTag(..)
     , ElmModuleInCompilation
     , ElmModuleTypeDeclaration(..)
     , ProjectParsedElmFile
@@ -112,7 +114,7 @@ type alias ElmModuleInCompilation =
 
 type alias ModuleImportsMerged =
     { modulesDeclarationsFlat : Dict.Dict String Pine.Value
-    , choiceTypeTagConstructorDeclarations : Dict.Dict String { argumentsCount : Int }
+    , choiceTypeTagConstructorDeclarations : Dict.Dict String Int
     , recordConstructorsFieldsNames : Dict.Dict String (List String)
     }
 
@@ -122,9 +124,12 @@ type ElmModuleTypeDeclaration
     | ElmModuleRecordTypeDeclaration (List String)
 
 
-type alias ElmModuleChoiceType =
-    { tags : Dict.Dict String { argumentsCount : Int }
-    }
+type ElmModuleChoiceType
+    = ElmModuleChoiceType (List ( String, ElmModuleChoiceTypeTag ))
+
+
+type ElmModuleChoiceTypeTag
+    = ElmModuleChoiceTypeTag Int
 
 
 elmStringTypeTagName : String
@@ -461,27 +466,27 @@ compileElmModuleIntoNamedExports availableModules moduleToTranslate =
                             in
                             ( declName
                             , ElmModuleChoiceTypeDeclaration
-                                { tags =
-                                    List.foldl
-                                        (\(Elm.Syntax.Node.Node _ valueConstructor) constructorsDict ->
+                                (ElmModuleChoiceType
+                                    (List.foldl
+                                        (\(Elm.Syntax.Node.Node _ valueConstructor) tagsAggregate ->
                                             let
                                                 (Elm.Syntax.Node.Node _ valueConstructorName) =
                                                     valueConstructor.name
                                             in
                                             case Dict.get valueConstructorName elmDeclarationsOverridesExpressions of
                                                 Nothing ->
-                                                    Dict.insert
-                                                        valueConstructorName
-                                                        { argumentsCount = List.length valueConstructor.arguments
-                                                        }
-                                                        constructorsDict
+                                                    ( valueConstructorName
+                                                    , ElmModuleChoiceTypeTag (List.length valueConstructor.arguments)
+                                                    )
+                                                        :: tagsAggregate
 
                                                 Just _ ->
-                                                    constructorsDict
+                                                    tagsAggregate
                                         )
-                                        Dict.empty
+                                        []
                                         choiceTypeDeclaration.constructors
-                                }
+                                    )
+                                )
                             )
                                 :: aggregate
 
@@ -787,37 +792,42 @@ compilationAndEmitStackFromModulesInCompilation availableModules { moduleAliases
                 }
                 moduleImports.importedModules
 
-        importedChoiceTypeTagConstructorDeclarations : Dict.Dict String { argumentsCount : Int }
+        importedChoiceTypeTagConstructorDeclarations : Dict.Dict String Int
         importedChoiceTypeTagConstructorDeclarations =
             Dict.foldl
-                (\_ typeDeclaration ->
+                (\_ typeDeclaration aggregate ->
                     case typeDeclaration of
-                        ElmModuleChoiceTypeDeclaration choiceTypeDeclaration ->
-                            Dict.union choiceTypeDeclaration.tags
+                        ElmModuleChoiceTypeDeclaration (ElmModuleChoiceType choiceTypeTags) ->
+                            List.foldl
+                                (\( tagName, ElmModuleChoiceTypeTag argumentsCount ) innerAggregate ->
+                                    Dict.insert tagName argumentsCount innerAggregate
+                                )
+                                aggregate
+                                choiceTypeTags
 
                         _ ->
-                            identity
+                            aggregate
                 )
                 mergedImports.choiceTypeTagConstructorDeclarations
                 moduleImports.importedTypes
 
         localTypeDeclarationsSeparate :
-            { choiceTypeTagDeclarations : Dict.Dict String { argumentsCount : Int }
+            { choiceTypeTagDeclarations : Dict.Dict String Int
             , recordTypeDeclarations : Dict.Dict String (List String)
             }
         localTypeDeclarationsSeparate =
             List.foldl
                 (\( typeName, typeDeclaration ) aggregate ->
                     case typeDeclaration of
-                        ElmModuleChoiceTypeDeclaration choiceTypeDeclaration ->
+                        ElmModuleChoiceTypeDeclaration (ElmModuleChoiceType choiceTypeTags) ->
                             { aggregate
                                 | choiceTypeTagDeclarations =
-                                    Dict.foldl
-                                        (\tagName tag innerAggregate ->
-                                            Dict.insert tagName { argumentsCount = tag.argumentsCount } innerAggregate
+                                    List.foldl
+                                        (\( tagName, ElmModuleChoiceTypeTag argumentsCount ) innerAggregate ->
+                                            Dict.insert tagName argumentsCount innerAggregate
                                         )
                                         aggregate.choiceTypeTagDeclarations
-                                        choiceTypeDeclaration.tags
+                                        choiceTypeTags
                             }
 
                         ElmModuleRecordTypeDeclaration fields ->
@@ -836,6 +846,7 @@ compilationAndEmitStackFromModulesInCompilation availableModules { moduleAliases
                 localTypeDeclarationsSeparate.recordTypeDeclarations
                 mergedImports.recordConstructorsFieldsNames
 
+        choiceTypeTagConstructorDeclarations : Dict.Dict String Int
         choiceTypeTagConstructorDeclarations =
             Dict.union
                 localTypeDeclarationsSeparate.choiceTypeTagDeclarations
@@ -849,17 +860,16 @@ compilationAndEmitStackFromModulesInCompilation availableModules { moduleAliases
         declarationsFromChoiceTypes : Dict.Dict String (List Expression -> Expression)
         declarationsFromChoiceTypes =
             Dict.map
-                (\tagName { argumentsCount } ->
+                (\tagName argumentsCount ->
                     compileElmChoiceTypeTagConstructor
-                        { tagName =
-                            case List.reverse (String.split "." tagName) of
-                                [] ->
-                                    tagName
+                        ( case List.reverse (String.split "." tagName) of
+                            [] ->
+                                tagName
 
-                                head :: _ ->
-                                    head
-                        , argumentsCount = argumentsCount
-                        }
+                            head :: _ ->
+                                head
+                        , argumentsCount
+                        )
                 )
                 choiceTypeTagConstructorDeclarations
 
@@ -932,18 +942,18 @@ mergeModuleImports importedModuleName importedModule aggregateImports =
                 importedModule.functionDeclarations
 
         typeDecls :
-            { choiceTypeTags : Dict.Dict String { argumentsCount : Int }
+            { choiceTypeTags : Dict.Dict String Int
             , recordConstructors : Dict.Dict String (List String)
             }
         typeDecls =
             List.foldl
                 (\( typeName, typeDeclaration ) aggregate ->
                     case typeDeclaration of
-                        ElmModuleChoiceTypeDeclaration choiceTypeDeclaration ->
+                        ElmModuleChoiceTypeDeclaration (ElmModuleChoiceType choiceTypeTags) ->
                             { aggregate
                                 | choiceTypeTags =
-                                    Dict.foldl
-                                        (\tagName tag innerAggregate ->
+                                    List.foldl
+                                        (\( tagName, ElmModuleChoiceTypeTag argumentsCount ) innerAggregate ->
                                             let
                                                 qualifiedName =
                                                     String.join "." [ moduleNameFlat, tagName ]
@@ -956,20 +966,20 @@ mergeModuleImports importedModuleName importedModule aggregateImports =
                                                 withQualifiedName =
                                                     Dict.insert
                                                         qualifiedName
-                                                        { argumentsCount = tag.argumentsCount }
+                                                        argumentsCount
                                                         innerAggregate
                                             in
                                             if isAutoImported then
                                                 Dict.insert
                                                     tagName
-                                                    { argumentsCount = tag.argumentsCount }
+                                                    argumentsCount
                                                     withQualifiedName
 
                                             else
                                                 withQualifiedName
                                         )
                                         aggregate.choiceTypeTags
-                                        choiceTypeDeclaration.tags
+                                        choiceTypeTags
                             }
 
                         ElmModuleRecordTypeDeclaration fields ->
@@ -1162,8 +1172,7 @@ mapTypeDeclarationForImport { open } typeDeclaration =
                 typeDeclaration
 
             else
-                ElmModuleChoiceTypeDeclaration
-                    { choiceTypeDeclaration | tags = Dict.empty }
+                ElmModuleChoiceTypeDeclaration (ElmModuleChoiceType [])
 
 
 compileElmSyntaxExpression :
@@ -2154,12 +2163,13 @@ compileElmSyntaxPattern compilation elmPattern =
                                                         Common.listMapFind
                                                             (\( typeName, typeDeclaration ) ->
                                                                 case typeDeclaration of
-                                                                    ElmModuleChoiceTypeDeclaration choiceTypeDeclaration ->
-                                                                        if Dict.member qualifiedName.name choiceTypeDeclaration.tags then
-                                                                            Just ( typeName, choiceTypeDeclaration )
+                                                                    ElmModuleChoiceTypeDeclaration (ElmModuleChoiceType choiceTypeTags) ->
+                                                                        case Common.assocListGet qualifiedName.name choiceTypeTags of
+                                                                            Nothing ->
+                                                                                Nothing
 
-                                                                        else
-                                                                            Nothing
+                                                                            Just choiceTypeDeclaration ->
+                                                                                Just ( typeName, ElmModuleChoiceType choiceTypeTags )
 
                                                                     _ ->
                                                                         Nothing
@@ -2172,8 +2182,8 @@ compileElmSyntaxPattern compilation elmPattern =
                                             Nothing ->
                                                 False
 
-                                            Just ( _, choiceType ) ->
-                                                Dict.size choiceType.tags == 1
+                                            Just ( _, ElmModuleChoiceType choiceTypeTags ) ->
+                                                List.length choiceTypeTags == 1
 
                                     matchingTagConditions =
                                         if tagIsOnlyPossible then
@@ -2842,8 +2852,12 @@ getDeclarationValueFromCompilation ( localModuleName, nameInModule ) compilation
                                                 List.foldl
                                                     (\( typeName, value ) aggregate ->
                                                         case value of
-                                                            ElmModuleChoiceTypeDeclaration choiceType ->
-                                                                List.concat [ [ typeName ], Dict.keys choiceType.tags, aggregate ]
+                                                            ElmModuleChoiceTypeDeclaration (ElmModuleChoiceType choiceTypeTags) ->
+                                                                List.concat
+                                                                    [ [ typeName ]
+                                                                    , List.map Tuple.first choiceTypeTags
+                                                                    , aggregate
+                                                                    ]
 
                                                             ElmModuleRecordTypeDeclaration _ ->
                                                                 typeName :: aggregate
@@ -2919,12 +2933,12 @@ emitTypeDeclarationValue typeDeclaration =
 
 
 emitChoiceTypeValue : ElmModuleChoiceType -> Pine.Value
-emitChoiceTypeValue choiceType =
+emitChoiceTypeValue (ElmModuleChoiceType tags) =
     Pine.valueFromContextExpansionWithName
         ( "ChoiceType"
         , Pine.ListValue
-            (Dict.foldr
-                (\tagName { argumentsCount } aggregate ->
+            (List.foldr
+                (\( tagName, ElmModuleChoiceTypeTag argumentsCount ) aggregate ->
                     Pine.ListValue
                         [ Pine.valueFromString tagName
                         , Pine.valueFromInt argumentsCount
@@ -2932,7 +2946,7 @@ emitChoiceTypeValue choiceType =
                         :: aggregate
                 )
                 []
-                choiceType.tags
+                tags
             )
         )
 
@@ -2962,9 +2976,9 @@ emitModuleFunctionDeclarations :
     -> Result String (List ( String, Pine.Value ))
 emitModuleFunctionDeclarations stackBefore declarations =
     let
-        exposedDeclarationsNames : Set.Set String
+        exposedDeclarationsNames : List String
         exposedDeclarationsNames =
-            Set.fromList (Dict.keys declarations.exposedDeclarations)
+            Dict.keys declarations.exposedDeclarations
 
         allModuleDeclarations : Dict.Dict String Expression
         allModuleDeclarations =
@@ -2991,7 +3005,7 @@ emitModuleFunctionDeclarations stackBefore declarations =
         aggregateTransitiveDependencies =
             FirCompiler.getTransitiveDependencies
                 declarationsDirectDependencies
-                exposedDeclarationsNames
+                (Set.fromList exposedDeclarationsNames)
 
         declarationsTransitiveDependencies : Dict.Dict String (Set.Set String)
         declarationsTransitiveDependencies =
@@ -3067,7 +3081,7 @@ emitModuleFunctionDeclarations stackBefore declarations =
 
 
 emitRecursionDomain :
-    { exposedDeclarationsNames : Set.Set String
+    { exposedDeclarationsNames : List String
     , allModuleDeclarations : Dict.Dict String Expression
     , importedFunctionsToShare : List ( String, ( FirCompiler.EnvironmentFunctionEntry, Pine.Value ) )
     , importedFunctionsToInline : List ( String, Pine.Value )
@@ -3079,9 +3093,11 @@ emitRecursionDomain :
     -> Result String EmittedRecursionDomain
 emitRecursionDomain { exposedDeclarationsNames, allModuleDeclarations, importedFunctionsToShare, importedFunctionsToInline, declarationsDirectDependencies, emitStack } currentRecursionDomain alreadyEmitted =
     let
-        recursionDomainExposedNames : Set.Set String
+        recursionDomainExposedNames : List String
         recursionDomainExposedNames =
-            Set.intersect currentRecursionDomain exposedDeclarationsNames
+            List.filter
+                (\declName -> Set.member declName currentRecursionDomain)
+                exposedDeclarationsNames
 
         recursionDomainDeclarations : List ( String, Expression )
         recursionDomainDeclarations =
@@ -3131,13 +3147,12 @@ emitRecursionDomain { exposedDeclarationsNames, allModuleDeclarations, importedF
     case
         FirCompiler.emitDeclarationBlock
             { emitStack
-                | importedFunctions = importedFunctionsToShare ++ prevEmittedDeclarationsToShare
-                , importedFunctionsToInline = importedFunctionsToInline ++ prevEmittedDeclarationsToInline
+                | importedFunctions = List.concat [ importedFunctionsToShare, prevEmittedDeclarationsToShare ]
+                , importedFunctionsToInline = List.concat [ importedFunctionsToInline, prevEmittedDeclarationsToInline ]
             }
             recursionDomainDeclarationsInBlock
-            { closureCaptures = []
-            , additionalDeps = List.map Tuple.second recursionDomainDeclarations
-            }
+            (FirCompiler.DeclBlockClosureCaptures [])
+            (FirCompiler.DeclBlockAdditionalDeps (List.map Tuple.second recursionDomainDeclarations))
     of
         Err err ->
             Err err
@@ -3191,7 +3206,7 @@ emitRecursionDomain { exposedDeclarationsNames, allModuleDeclarations, importedF
 
                                         Nothing ->
                                             let
-                                                ( parsedDeclaration, emitDeclarationResult ) =
+                                                ( FirCompiler.DeclBlockFunctionEntry parsedDeclarationParams _, emitDeclarationResult ) =
                                                     blockDeclarationsEmitted.parseAndEmitFunction declarationExpression
                                             in
                                             case emitDeclarationResult of
@@ -3204,7 +3219,7 @@ emitRecursionDomain { exposedDeclarationsNames, allModuleDeclarations, importedF
                                                             Pine.encodeExpressionAsValue declEmittedExpr
                                                     in
                                                     Ok
-                                                        { parameterCount = List.length parsedDeclaration.parameters
+                                                        { parameterCount = List.length parsedDeclarationParams
                                                         , getFunctionInnerExpression = Pine.LiteralExpression innerExpressionValue
                                                         , innerExpression = declEmittedExpr
                                                         , innerExpressionValue = innerExpressionValue
@@ -3317,7 +3332,7 @@ emitRecursionDomain { exposedDeclarationsNames, allModuleDeclarations, importedF
                         exposedDeclarations =
                             List.foldr
                                 (\( declName, ( wrappedForExpose, _ ) ) aggregate ->
-                                    if Set.member declName recursionDomainExposedNames then
+                                    if List.member declName recursionDomainExposedNames then
                                         ( declName, wrappedForExpose ) :: aggregate
 
                                     else
@@ -3472,14 +3487,14 @@ reportEmittedDeclarationsForErrorMsg emittedDeclarations =
         emittedDeclarations
 
 
-compileElmChoiceTypeTagConstructor : { tagName : String, argumentsCount : Int } -> (List Expression -> Expression)
-compileElmChoiceTypeTagConstructor { tagName, argumentsCount } =
+compileElmChoiceTypeTagConstructor : ( String, Int ) -> (List Expression -> Expression)
+compileElmChoiceTypeTagConstructor ( tagName, argumentsCount ) =
     let
         tagNameAsValue =
             Pine.valueFromString tagName
 
         ( _, genericContructorValue ) =
-            compileElmChoiceTypeTagConstructorValue { tagName = tagName, argumentsCount = argumentsCount }
+            compileElmChoiceTypeTagConstructorValue ( tagName, argumentsCount )
     in
     \arguments ->
         if List.length arguments == argumentsCount then
@@ -3516,8 +3531,8 @@ inlineElmSyntaxValueConstructor tagNameAsValue arguments =
         ]
 
 
-compileElmChoiceTypeTagConstructorValue : { tagName : String, argumentsCount : Int } -> ( String, Pine.Value )
-compileElmChoiceTypeTagConstructorValue { tagName, argumentsCount } =
+compileElmChoiceTypeTagConstructorValue : ( String, Int ) -> ( String, Pine.Value )
+compileElmChoiceTypeTagConstructorValue ( tagName, argumentsCount ) =
     ( tagName
     , case argumentsCount of
         0 ->
@@ -3965,7 +3980,7 @@ parseChoiceTypeFromValue value =
                                             Ok argumentsCount ->
                                                 Ok
                                                     ( tagName
-                                                    , { argumentsCount = argumentsCount }
+                                                    , ElmModuleChoiceTypeTag argumentsCount
                                                     )
 
                             Pine.ListValue list ->
@@ -3980,7 +3995,7 @@ parseChoiceTypeFromValue value =
                     Err err
 
                 Ok tags ->
-                    Ok { tags = Dict.fromList tags }
+                    Ok (ElmModuleChoiceType tags)
 
         Pine.BlobValue _ ->
             Err "Is not a list but a blob"

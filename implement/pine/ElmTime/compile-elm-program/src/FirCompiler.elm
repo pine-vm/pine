@@ -1,5 +1,8 @@
 module FirCompiler exposing
-    ( Deconstruction(..)
+    ( DeclBlockAdditionalDeps(..)
+    , DeclBlockClosureCaptures(..)
+    , DeclBlockFunctionEntry(..)
+    , Deconstruction(..)
     , EmitDeclarationBlockResult
     , EmitStack
     , EnvironmentDeconstructionEntry
@@ -113,6 +116,28 @@ type alias EnvironmentDeconstructionEntry =
     List Deconstruction
 
 
+type DeclBlockClosureCaptures
+    = DeclBlockClosureCaptures (List ( String, EnvironmentDeconstructionEntry ))
+
+
+type DeclBlockAdditionalDeps
+    = DeclBlockAdditionalDeps (List Expression)
+
+
+type ClosureCapture
+    = DeconstructionCapture EnvironmentDeconstructionEntry
+    | ExpressionCapture Expression
+    | FunctionCapture Pine.Value ParsedFunctionValue
+
+
+type DeclBlockFunctionEntry
+    = DeclBlockFunctionEntry
+        -- parameters
+        (List FunctionParam)
+        -- innerExpression
+        Expression
+
+
 emitExpression : EmitStack -> Expression -> Result String Pine.Expression
 emitExpression stack expression =
     case expression of
@@ -205,16 +230,10 @@ emitFunctionExpression stack functionParams functionBody =
         (FunctionExpression functionParams functionBody)
 
 
-type alias DeclarationBlockFunctionEntry =
-    { parameters : List FunctionParam
-    , innerExpression : Expression
-    }
-
-
 type alias EmitDeclarationBlockResult =
     { newEnvFunctionsValues : List ( String, ( EnvironmentFunctionEntry, ( Pine.Expression, Pine.Value ) ) )
     , prependedEnvFunctionsExpressions : List Pine.Expression
-    , parseAndEmitFunction : Expression -> ( DeclarationBlockFunctionEntry, Result String Pine.Expression )
+    , parseAndEmitFunction : Expression -> ( DeclBlockFunctionEntry, Result String Pine.Expression )
     , envFunctionsExpression : Pine.Expression
     }
 
@@ -270,9 +289,12 @@ emitExpressionInDeclarationBlock stackBeforeAddingDeps blockDeclarations mainExp
                 []
                 remainingOuterDependencies
 
-        mainExpressionAsFunction : DeclarationBlockFunctionEntry
+        mainExpressionAsFunction : DeclBlockFunctionEntry
         mainExpressionAsFunction =
             parseFunctionParameters mainExpression
+
+        (DeclBlockFunctionEntry mainExprParams mainExprInnerExpr) =
+            mainExpressionAsFunction
 
         closureCaptures : List ( String, EnvironmentDeconstructionEntry )
         closureCaptures =
@@ -287,17 +309,16 @@ emitExpressionInDeclarationBlock stackBeforeAddingDeps blockDeclarations mainExp
                 []
                 stackBefore.environmentDeconstructions
     in
-    if mainExpressionAsFunction.parameters == [] && usedBlockDeclarationsAndImports == [] then
-        emitExpression stackBeforeAddingDeps mainExpressionAsFunction.innerExpression
+    if mainExprParams == [] && usedBlockDeclarationsAndImports == [] then
+        emitExpression stackBeforeAddingDeps mainExprInnerExpr
 
     else
         case
             emitDeclarationBlock
                 stackBefore
                 usedBlockDeclarationsAndImports
-                { closureCaptures = closureCaptures
-                , additionalDeps = [ mainExpression ]
-                }
+                (DeclBlockClosureCaptures closureCaptures)
+                (DeclBlockAdditionalDeps [ mainExpression ])
         of
             Err err ->
                 Err err
@@ -315,26 +336,18 @@ emitExpressionInDeclarationBlock stackBeforeAddingDeps blockDeclarations mainExp
                         Ok
                             (emitWrapperForPartialApplication
                                 blockDeclarationsEmitted.envFunctionsExpression
-                                (List.length mainExpressionAsFunction.parameters)
+                                (List.length mainExprParams)
                                 mainExpressionEmitted
                             )
-
-
-type ClosureCapture
-    = DeconstructionCapture EnvironmentDeconstructionEntry
-    | ExpressionCapture Expression
-    | FunctionCapture Pine.Value ParsedFunctionValue
 
 
 emitDeclarationBlock :
     EmitStack
     -> List ( String, Expression )
-    ->
-        { closureCaptures : List ( String, EnvironmentDeconstructionEntry )
-        , additionalDeps : List Expression
-        }
+    -> DeclBlockClosureCaptures
+    -> DeclBlockAdditionalDeps
     -> Result String ( EmitStack, EmitDeclarationBlockResult )
-emitDeclarationBlock stackBefore blockDeclarations config =
+emitDeclarationBlock stackBefore blockDeclarations (DeclBlockClosureCaptures configClosureCaptures) (DeclBlockAdditionalDeps additionalDeps) =
     let
         availableEmittedDependencies : Dict.Dict String (Set.Set String)
         availableEmittedDependencies =
@@ -382,7 +395,7 @@ emitDeclarationBlock stackBefore blockDeclarations config =
                     Set.union aggregate (listTransitiveDependenciesOfExpression stackBefore depExpr)
                 )
                 Set.empty
-                config.additionalDeps
+                additionalDeps
 
         allDependencies : Set.Set String
         allDependencies =
@@ -432,7 +445,7 @@ emitDeclarationBlock stackBefore blockDeclarations config =
                 Set.empty
                 usedAvailableEmitted
 
-        allBlockDeclarationsAsFunctions : List ( String, DeclarationBlockFunctionEntry )
+        allBlockDeclarationsAsFunctions : List ( String, DeclBlockFunctionEntry )
         allBlockDeclarationsAsFunctions =
             List.map
                 (\( declName, declExpression ) ->
@@ -476,9 +489,7 @@ emitDeclarationBlock stackBefore blockDeclarations config =
             List.any
                 (\( _, declExpression ) -> expressionNeedsAdaptiveApplication declExpression)
                 blockDeclarations
-                || List.any
-                    (\depExpr -> expressionNeedsAdaptiveApplication depExpr)
-                    config.additionalDeps
+                || List.any expressionNeedsAdaptiveApplication additionalDeps
 
         closureCapturesForInternals : List ( String, Expression )
         closureCapturesForInternals =
@@ -505,8 +516,8 @@ emitDeclarationBlock stackBefore blockDeclarations config =
                Map them to closure captures list so these are only evaluated once.
             -}
             List.foldl
-                (\( declName, asFunction ) aggregate ->
-                    if asFunction.parameters /= [] then
+                (\( declName, DeclBlockFunctionEntry asFunctionParams asFunctionInnerExpr ) aggregate ->
+                    if asFunctionParams /= [] then
                         aggregate
 
                     else
@@ -523,10 +534,7 @@ emitDeclarationBlock stackBefore blockDeclarations config =
                                         aggregate
 
                                     else
-                                        ( declName
-                                        , asFunction.innerExpression
-                                        )
-                                            :: aggregate
+                                        ( declName, asFunctionInnerExpr ) :: aggregate
 
                                 else
                                     aggregate
@@ -534,7 +542,7 @@ emitDeclarationBlock stackBefore blockDeclarations config =
                 []
                 allBlockDeclarationsAsFunctions
 
-        blockDeclarationsAsFunctionsLessClosure : List ( String, DeclarationBlockFunctionEntry )
+        blockDeclarationsAsFunctionsLessClosure : List ( String, DeclBlockFunctionEntry )
         blockDeclarationsAsFunctionsLessClosure =
             List.filter
                 (\( declName, _ ) ->
@@ -546,7 +554,7 @@ emitDeclarationBlock stackBefore blockDeclarations config =
         closureCaptures =
             List.concat
                 [ List.map (Tuple.mapSecond DeconstructionCapture)
-                    config.closureCaptures
+                    configClosureCaptures
                 , List.map (Tuple.mapSecond ExpressionCapture)
                     (closureCapturesForInternals ++ closureCapturesForBlockDecls)
                 ]
@@ -566,10 +574,10 @@ emitDeclarationBlock stackBefore blockDeclarations config =
         newEnvironmentFunctionsFromDecls : List ( String, EnvironmentFunctionEntry )
         newEnvironmentFunctionsFromDecls =
             List.map
-                (\( functionName, functionEntry ) ->
+                (\( functionName, DeclBlockFunctionEntry functionEntryParams _ ) ->
                     ( functionName
                     , EnvironmentFunctionEntry
-                        (List.length functionEntry.parameters)
+                        (List.length functionEntryParams)
                         (LocalEnvironment newEnvironmentFunctionsNames)
                     )
                 )
@@ -621,17 +629,17 @@ emitDeclarationBlock stackBefore blockDeclarations config =
             , environmentDeconstructions = []
             }
 
-        emitFunction : DeclarationBlockFunctionEntry -> Result String Pine.Expression
-        emitFunction functionEntry =
+        emitFunction : DeclBlockFunctionEntry -> Result String Pine.Expression
+        emitFunction (DeclBlockFunctionEntry functionEntryParams functionEntryInnerExpression) =
             let
                 functionEmitStack =
                     { commonEmitStack
-                        | environmentDeconstructions = closureParameterFromParameters functionEntry.parameters
+                        | environmentDeconstructions = closureParameterFromParameters functionEntryParams
                     }
             in
-            emitExpression functionEmitStack functionEntry.innerExpression
+            emitExpression functionEmitStack functionEntryInnerExpression
 
-        emitBlockDeclarationsResult : Result String (List ( String, ( DeclarationBlockFunctionEntry, Pine.Expression ) ))
+        emitBlockDeclarationsResult : Result String (List ( String, ( DeclBlockFunctionEntry, Pine.Expression ) ))
         emitBlockDeclarationsResult =
             Common.resultListMapCombine
                 (\( functionName, blockDeclAsFunction ) ->
@@ -678,10 +686,10 @@ emitDeclarationBlock stackBefore blockDeclarations config =
                         newEnvFunctionsValues : List ( String, ( EnvironmentFunctionEntry, ( Pine.Expression, Pine.Value ) ) )
                         newEnvFunctionsValues =
                             List.map
-                                (\( declName, ( declAsFunction, declExpr ) ) ->
+                                (\( declName, ( DeclBlockFunctionEntry declAsFunctionParams _, declExpr ) ) ->
                                     ( declName
                                     , ( EnvironmentFunctionEntry
-                                            (List.length declAsFunction.parameters)
+                                            (List.length declAsFunctionParams)
                                             (LocalEnvironment newEnvironmentFunctionsNames)
                                       , ( declExpr
                                         , Pine.encodeExpressionAsValue declExpr
@@ -725,7 +733,7 @@ emitDeclarationBlock stackBefore blockDeclarations config =
                                     ]
                                 )
 
-                        parseAndEmitFunction : Expression -> ( DeclarationBlockFunctionEntry, Result String Pine.Expression )
+                        parseAndEmitFunction : Expression -> ( DeclBlockFunctionEntry, Result String Pine.Expression )
                         parseAndEmitFunction expression =
                             let
                                 functionEntry =
@@ -869,25 +877,23 @@ recursionDomainsFromDeclarationDependencies declarationDependencies =
     Dict.foldl integrateDecl [] declarationDependencies
 
 
-parseFunctionParameters : Expression -> DeclarationBlockFunctionEntry
+parseFunctionParameters : Expression -> DeclBlockFunctionEntry
 parseFunctionParameters expression =
     case expression of
         FunctionExpression functionParams functionBody ->
             let
-                innerParsed =
+                (DeclBlockFunctionEntry innerParsedParams innerParsedBody) =
                     parseFunctionParameters functionBody
             in
-            { parameters = functionParams ++ innerParsed.parameters
-            , innerExpression = innerParsed.innerExpression
-            }
+            DeclBlockFunctionEntry
+                (functionParams ++ innerParsedParams)
+                innerParsedBody
 
         StringTagExpression _ tagged ->
             parseFunctionParameters tagged
 
         _ ->
-            { parameters = []
-            , innerExpression = expression
-            }
+            DeclBlockFunctionEntry [] expression
 
 
 emitReferenceExpression : String -> EmitStack -> Result String Pine.Expression
