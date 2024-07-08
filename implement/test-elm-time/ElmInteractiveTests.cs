@@ -19,7 +19,8 @@ public class ElmInteractiveTests
     [Timeout(1000 * 60 * 50)]
     public void TestElmInteractiveScenarios()
     {
-        using var dynamicPGOShare = new Pine.PineVM.DynamicPGOShare();
+        var (optimizingPineVM, pineVMCache) =
+            ElmTime.ElmInteractive.InteractiveSessionPine.BuildPineVM(caching: true, autoPGO: null);
 
         var console = (IConsole)StaticConsole.Instance;
 
@@ -60,7 +61,7 @@ public class ElmInteractiveTests
                 compileElmProgramCodeFiles: ElmTime.ElmInteractive.IInteractiveSession.CompileElmProgramCodeFilesDefault.Value,
                 initialState: null,
                 appCodeTree: appCodeTree,
-                dynamicPGOShare.GetVMAutoUpdating());
+                optimizingPineVM);
 
         {
             var warmupStopwatch = System.Diagnostics.Stopwatch.StartNew();
