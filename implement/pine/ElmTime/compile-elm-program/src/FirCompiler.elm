@@ -3,12 +3,14 @@ module FirCompiler exposing
     , DeclBlockClosureCaptures(..)
     , DeclBlockFunctionEntry(..)
     , Deconstruction(..)
-    , EmitDeclarationBlockResult
+    , EmitDeclarationBlockResult(..)
     , EmitStack
     , EnvironmentDeconstructionEntry
     , EnvironmentFunctionEntry(..)
     , Expression(..)
     , FunctionEnvironment(..)
+    , ParsedFunctionEnvFunctions(..)
+    , ParsedFunctionValue(..)
     , attemptReduceParseAndEvalExpressionRecursive
     , buildRecordOfPartiallyAppliedFunction
     , countListElementsExpression
@@ -106,9 +108,8 @@ type FunctionEnvironment
         -- List of expected declarations
         (List String)
     | ImportedEnvironment
-        { -- Path to the tagged function record relative to the entry in the current environment.
-          pathToRecordFromEnvEntry : List Deconstruction
-        }
+        -- Path to the tagged function record relative to the entry in the current environment.
+        (List Deconstruction)
     | IndependentEnvironment
 
 
@@ -127,7 +128,6 @@ type DeclBlockAdditionalDeps
 type ClosureCapture
     = DeconstructionCapture EnvironmentDeconstructionEntry
     | ExpressionCapture Expression
-    | FunctionCapture Pine.Value ParsedFunctionValue
 
 
 type DeclBlockFunctionEntry
@@ -136,6 +136,24 @@ type DeclBlockFunctionEntry
         (List FunctionParam)
         -- innerExpression
         Expression
+
+
+type ParsedFunctionValue
+    = ParsedFunctionValue Pine.Value (() -> Result String Pine.Expression) Int ParsedFunctionEnvFunctions (List Pine.Value)
+
+
+type ParsedFunctionEnvFunctions
+    = ParsedFunctionEnvFunctions (List Pine.Value)
+
+
+type EmitDeclarationBlockResult
+    = EmitDeclarationBlockResult
+        -- newEnvFunctionsValues
+        (List ( String, ( EnvironmentFunctionEntry, ( Pine.Expression, Pine.Value ) ) ))
+        -- parseAndEmitFunction
+        (Expression -> ( DeclBlockFunctionEntry, Result String Pine.Expression ))
+        -- envFunctionsExpression
+        Pine.Expression
 
 
 emitExpression : EmitStack -> Expression -> Result String Pine.Expression
@@ -214,7 +232,7 @@ emitExpression stack expression =
                 Ok emittedArgument ->
                     Ok
                         (attemptReduceParseAndEvalExpressionRecursive
-                            { maxDepth = 3 }
+                            3
                             ( emittedArgument
                             , Pine.LiteralExpression
                                 (Pine.encodeExpressionAsValue pineFunctionExpression)
@@ -228,14 +246,6 @@ emitFunctionExpression stack functionParams functionBody =
         stack
         []
         (FunctionExpression functionParams functionBody)
-
-
-type alias EmitDeclarationBlockResult =
-    { newEnvFunctionsValues : List ( String, ( EnvironmentFunctionEntry, ( Pine.Expression, Pine.Value ) ) )
-    , prependedEnvFunctionsExpressions : List Pine.Expression
-    , parseAndEmitFunction : Expression -> ( DeclBlockFunctionEntry, Result String Pine.Expression )
-    , envFunctionsExpression : Pine.Expression
-    }
 
 
 emitExpressionInDeclarationBlock :
@@ -323,10 +333,10 @@ emitExpressionInDeclarationBlock stackBeforeAddingDeps blockDeclarations mainExp
             Err err ->
                 Err err
 
-            Ok ( _, blockDeclarationsEmitted ) ->
+            Ok ( _, EmitDeclarationBlockResult _ parseAndEmitFunction envFunctionsExpression ) ->
                 let
                     ( _, mainExpressionEmitResult ) =
-                        blockDeclarationsEmitted.parseAndEmitFunction mainExpression
+                        parseAndEmitFunction mainExpression
                 in
                 case mainExpressionEmitResult of
                     Err err ->
@@ -335,7 +345,7 @@ emitExpressionInDeclarationBlock stackBeforeAddingDeps blockDeclarations mainExp
                     Ok mainExpressionEmitted ->
                         Ok
                             (emitWrapperForPartialApplication
-                                blockDeclarationsEmitted.envFunctionsExpression
+                                envFunctionsExpression
                                 (List.length mainExprParams)
                                 mainExpressionEmitted
                             )
@@ -589,11 +599,6 @@ emitDeclarationBlock stackBefore blockDeclarations (DeclBlockClosureCaptures con
                 (\( captureName, closureCapture ) ->
                     ( captureName
                     , case closureCapture of
-                        FunctionCapture _ parsedFunction ->
-                            EnvironmentFunctionEntry
-                                parsedFunction.parameterCount
-                                (ImportedEnvironment { pathToRecordFromEnvEntry = [] })
-
                         ExpressionCapture _ ->
                             EnvironmentFunctionEntry 0 IndependentEnvironment
 
@@ -666,9 +671,6 @@ emitDeclarationBlock stackBefore blockDeclarations (DeclBlockClosureCaptures con
 
                         ExpressionCapture expression ->
                             emitExpression stackBefore expression
-
-                        FunctionCapture functionRecordValue _ ->
-                            Ok (Pine.LiteralExpression functionRecordValue)
                 )
                 closureCaptures
     in
@@ -724,6 +726,7 @@ emitDeclarationBlock stackBefore blockDeclarations (DeclBlockClosureCaptures con
                                 )
                                 stackBefore.environmentFunctions
 
+                        envFunctionsExpression : Pine.Expression
                         envFunctionsExpression =
                             Pine.ListExpression
                                 (List.concat
@@ -745,11 +748,7 @@ emitDeclarationBlock stackBefore blockDeclarations (DeclBlockClosureCaptures con
                     in
                     Ok
                         ( commonEmitStack
-                        , { newEnvFunctionsValues = newEnvFunctionsValues
-                          , prependedEnvFunctionsExpressions = prependedEnvFunctionsExpressions
-                          , parseAndEmitFunction = parseAndEmitFunction
-                          , envFunctionsExpression = envFunctionsExpression
-                          }
+                        , EmitDeclarationBlockResult newEnvFunctionsValues parseAndEmitFunction envFunctionsExpression
                         )
 
 
@@ -834,6 +833,7 @@ recursionDomainsFromDeclarationDependencies declarationDependencies =
 
                         next :: rest ->
                             let
+                                allCurrentAndFollowing : Set.Set String
                                 allCurrentAndFollowing =
                                     List.foldl Set.union next rest
 
@@ -919,12 +919,7 @@ emitReferenceExpression name compilation =
                     Ok (Pine.LiteralExpression importedFunction)
 
                 Nothing ->
-                    case
-                        emitApplyFunctionFromCurrentEnvironment
-                            compilation
-                            { functionName = name }
-                            []
-                    of
+                    case emitApplyFunctionFromCurrentEnvironment compilation name [] of
                         Nothing ->
                             Err
                                 (String.join ""
@@ -1069,7 +1064,7 @@ pineExpressionForDeconstruction deconstruction =
         PineFunctionApplicationDeconstruction pineFunctionExpression ->
             \emittedArgument ->
                 attemptReduceParseAndEvalExpressionRecursive
-                    { maxDepth = 3 }
+                    3
                     ( emittedArgument
                     , pineFunctionExpression
                         |> Pine.encodeExpressionAsValue
@@ -1222,12 +1217,7 @@ emitFunctionApplication functionExpression arguments compilation =
                                         )
 
                     ReferenceExpression functionName ->
-                        case
-                            emitApplyFunctionFromCurrentEnvironment
-                                compilation
-                                { functionName = functionName }
-                                argumentsPine
-                        of
+                        case emitApplyFunctionFromCurrentEnvironment compilation functionName argumentsPine of
                             Nothing ->
                                 genericFunctionApplication ()
 
@@ -1263,25 +1253,24 @@ emitFunctionApplicationPine emitStack arguments functionExpressionPine =
             Err err ->
                 Err err
 
-            Ok functionValue ->
-                case parseFunctionRecordFromValueTagged functionValue of
+            Ok functionRecordValue ->
+                case parseFunctionRecordFromValueTagged functionRecordValue of
                     Err _ ->
                         Ok (genericPartialApplication ())
 
-                    Ok functionRecord ->
+                    Ok (ParsedFunctionValue _ parseInnerFunction parameterCount (ParsedFunctionEnvFunctions envFunctions) argumentsAlreadyCollected) ->
                         let
                             combinedArguments =
                                 List.concat
-                                    [ List.map Pine.LiteralExpression
-                                        functionRecord.argumentsAlreadyCollected
+                                    [ List.map Pine.LiteralExpression argumentsAlreadyCollected
                                     , arguments
                                     ]
                         in
-                        if functionRecord.parameterCount /= List.length combinedArguments then
+                        if parameterCount /= List.length combinedArguments then
                             Ok (genericPartialApplication ())
 
                         else
-                            case functionRecord.parseInnerFunction () of
+                            case parseInnerFunction () of
                                 Err err ->
                                     Err ("Failed to parse inner function: " ++ err)
 
@@ -1290,7 +1279,7 @@ emitFunctionApplicationPine emitStack arguments functionExpressionPine =
                                         mappedEnvironment =
                                             Pine.ListExpression
                                                 [ Pine.ListExpression
-                                                    (List.map Pine.LiteralExpression functionRecord.envFunctions)
+                                                    (List.map Pine.LiteralExpression envFunctions)
                                                 , Pine.ListExpression combinedArguments
                                                 ]
 
@@ -1309,17 +1298,17 @@ emitFunctionApplicationPine emitStack arguments functionExpressionPine =
                                     in
                                     Ok
                                         (searchForExpressionReductionRecursive
-                                            { maxDepth = 5 }
+                                            5
                                             afterReplace
                                         )
 
 
 emitApplyFunctionFromCurrentEnvironment :
     EmitStack
-    -> { functionName : String }
+    -> String
     -> List Pine.Expression
     -> Maybe (Result String Pine.Expression)
-emitApplyFunctionFromCurrentEnvironment compilation { functionName } arguments =
+emitApplyFunctionFromCurrentEnvironment compilation functionName arguments =
     let
         currentEnvironmentFunctionEntryFromName : String -> Maybe ( Int, EnvironmentFunctionEntry )
         currentEnvironmentFunctionEntryFromName name =
@@ -1342,11 +1331,11 @@ emitApplyFunctionFromCurrentEnvironment compilation { functionName } arguments =
                         getEnvFunctionsExpression
             in
             case funcExpectedEnv of
-                ImportedEnvironment importedEnv ->
+                ImportedEnvironment pathToRecordFromEnvEntry ->
                     let
                         funcRecordLessTag =
                             pineExpressionForDeconstructions
-                                importedEnv.pathToRecordFromEnvEntry
+                                pathToRecordFromEnvEntry
                                 getFunctionExpression
 
                         {-
@@ -1749,15 +1738,6 @@ updateRecordOfPartiallyAppliedFunction config =
         ]
 
 
-type alias ParsedFunctionValue =
-    { innerFunctionValue : Pine.Value
-    , parseInnerFunction : () -> Result String Pine.Expression
-    , parameterCount : Int
-    , envFunctions : List Pine.Value
-    , argumentsAlreadyCollected : List Pine.Value
-    }
-
-
 parseFunctionRecordFromValueTagged :
     Pine.Value
     -> Result String ParsedFunctionValue
@@ -1800,13 +1780,13 @@ parseFunctionRecordFromValue value =
                                     case argumentsAlreadyCollectedValue of
                                         Pine.ListValue argumentsAlreadyCollected ->
                                             Ok
-                                                { innerFunctionValue = innerFunctionValue
-                                                , parseInnerFunction =
-                                                    \() -> Pine.parseExpressionFromValue innerFunctionValue
-                                                , parameterCount = parameterCount
-                                                , envFunctions = envFunctions
-                                                , argumentsAlreadyCollected = argumentsAlreadyCollected
-                                                }
+                                                (ParsedFunctionValue
+                                                    innerFunctionValue
+                                                    (\() -> Pine.parseExpressionFromValue innerFunctionValue)
+                                                    parameterCount
+                                                    (ParsedFunctionEnvFunctions envFunctions)
+                                                    argumentsAlreadyCollected
+                                                )
 
                                         _ ->
                                             Err "argumentsAlreadyCollectedValue is not a list"
@@ -1841,15 +1821,15 @@ attemptReduceParseAndEvalExpressionRecursiveWithDefaultDepth ( origEnvExpr, orig
                 1
     in
     attemptReduceParseAndEvalExpressionRecursive
-        { maxDepth = reductionMaxDepth }
+        reductionMaxDepth
         ( origEnvExpr, origExprExpr )
 
 
 attemptReduceParseAndEvalExpressionRecursive :
-    { maxDepth : Int }
+    Int
     -> ( Pine.Expression, Pine.Expression )
     -> Pine.Expression
-attemptReduceParseAndEvalExpressionRecursive { maxDepth } ( origEnvExpr, origExprExpr ) =
+attemptReduceParseAndEvalExpressionRecursive maxDepth ( origEnvExpr, origExprExpr ) =
     let
         default =
             Pine.ParseAndEvalExpression origEnvExpr origExprExpr
@@ -1866,7 +1846,7 @@ attemptReduceParseAndEvalExpressionRecursive { maxDepth } ( origEnvExpr, origExp
                 case reduced of
                     Pine.ParseAndEvalExpression reducedEnvExpr reducedExprExpr ->
                         attemptReduceParseAndEvalExpressionRecursive
-                            { maxDepth = maxDepth - 1 }
+                            (maxDepth - 1)
                             ( reducedEnvExpr, reducedExprExpr )
 
                     _ ->
@@ -1907,14 +1887,14 @@ searchReductionForParseAndEvalExpression ( origEnvExpr, origExprExpr ) =
 
                         else
                             Just
-                                (searchForExpressionReductionRecursive { maxDepth = 5 } reducedExpr)
+                                (searchForExpressionReductionRecursive 5 reducedExpr)
 
     else
         Nothing
 
 
-searchForExpressionReductionRecursive : { maxDepth : Int } -> Pine.Expression -> Pine.Expression
-searchForExpressionReductionRecursive { maxDepth } expression =
+searchForExpressionReductionRecursive : Int -> Pine.Expression -> Pine.Expression
+searchForExpressionReductionRecursive maxDepth expression =
     if maxDepth < 1 then
         expression
 
@@ -1927,7 +1907,7 @@ searchForExpressionReductionRecursive { maxDepth } expression =
             transformed
 
         else
-            searchForExpressionReductionRecursive { maxDepth = maxDepth - 1 } transformed
+            searchForExpressionReductionRecursive (maxDepth - 1) transformed
 
 
 reduceExpressionToLiteralIfIndependent : Pine.Expression -> Pine.Expression

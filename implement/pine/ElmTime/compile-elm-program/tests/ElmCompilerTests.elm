@@ -183,7 +183,7 @@ compilerReducesParseAndEvalExpression =
                 Test.test ("Expression " ++ String.fromInt testCaseIndex ++ " - " ++ testCaseName) <|
                     \_ ->
                         testCase.original
-                            |> FirCompiler.attemptReduceParseAndEvalExpressionRecursive { maxDepth = 4 }
+                            |> FirCompiler.attemptReduceParseAndEvalExpressionRecursive 4
                             |> Expect.equal testCase.expected
             )
         |> Test.describe "Compiler reduces decode and eval expression"

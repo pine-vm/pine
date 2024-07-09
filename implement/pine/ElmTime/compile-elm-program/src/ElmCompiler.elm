@@ -93,10 +93,12 @@ type ModuleImportExposing
     | ExposingSelected (List ModuleImportTopLevelExpose)
 
 
-type alias ModuleImportTopLevelExpose =
-    { name : String
-    , open : Bool
-    }
+type ModuleImportTopLevelExpose
+    = ModuleImportTopLevelExpose
+        -- Exposed name
+        String
+        -- Choice type tags exposed
+        Bool
 
 
 type alias ModuleImports =
@@ -717,24 +719,16 @@ parseElmSyntaxImport importSyntax =
         exposedNamesFromTopLevelItem topLevelItem =
             case topLevelItem of
                 Elm.Syntax.Exposing.InfixExpose infixExpose ->
-                    { name = infixExpose
-                    , open = False
-                    }
+                    ModuleImportTopLevelExpose infixExpose False
 
                 Elm.Syntax.Exposing.FunctionExpose functionExpose ->
-                    { name = functionExpose
-                    , open = False
-                    }
+                    ModuleImportTopLevelExpose functionExpose False
 
                 Elm.Syntax.Exposing.TypeOrAliasExpose typeOrAlias ->
-                    { name = typeOrAlias
-                    , open = False
-                    }
+                    ModuleImportTopLevelExpose typeOrAlias False
 
                 Elm.Syntax.Exposing.TypeExpose typeExpose ->
-                    { name = typeExpose.name
-                    , open = typeExpose.open /= Nothing
-                    }
+                    ModuleImportTopLevelExpose typeExpose.name (typeExpose.open /= Nothing)
 
         exposingList =
             case importSyntax.exposingList of
@@ -899,10 +893,9 @@ compilationAndEmitStackFromModulesInCompilation availableModules { moduleAliases
                                     , FirCompiler.LocalEnvironment []
                                     )
 
-                                Ok functionRecord ->
-                                    ( functionRecord.parameterCount
-                                    , FirCompiler.ImportedEnvironment
-                                        { pathToRecordFromEnvEntry = [] }
+                                Ok (FirCompiler.ParsedFunctionValue _ _ parameterCount _ _) ->
+                                    ( parameterCount
+                                    , FirCompiler.ImportedEnvironment []
                                     )
                     in
                     ( declName
@@ -941,65 +934,59 @@ mergeModuleImports importedModuleName importedModule aggregateImports =
                 aggregateImports.modulesDeclarationsFlat
                 importedModule.functionDeclarations
 
-        typeDecls :
-            { choiceTypeTags : Dict.Dict String Int
-            , recordConstructors : Dict.Dict String (List String)
-            }
-        typeDecls =
+        ( typeDeclsChoiceTypeTags, typeDeclsRecordConstructors ) =
             List.foldl
-                (\( typeName, typeDeclaration ) aggregate ->
+                (\( typeName, typeDeclaration ) ( choiceTypeTagsBefore, recordConstructorsBefore ) ->
                     case typeDeclaration of
                         ElmModuleChoiceTypeDeclaration (ElmModuleChoiceType choiceTypeTags) ->
-                            { aggregate
-                                | choiceTypeTags =
-                                    List.foldl
-                                        (\( tagName, ElmModuleChoiceTypeTag argumentsCount ) innerAggregate ->
-                                            let
-                                                qualifiedName =
-                                                    String.join "." [ moduleNameFlat, tagName ]
+                            ( List.foldl
+                                (\( tagName, ElmModuleChoiceTypeTag argumentsCount ) innerAggregate ->
+                                    let
+                                        qualifiedName =
+                                            String.join "." [ moduleNameFlat, tagName ]
 
-                                                isAutoImported =
-                                                    Set.member
-                                                        qualifiedName
-                                                        elmDeclarationsToExposeToGlobalDefaultQualifiedNames
+                                        isAutoImported =
+                                            Set.member
+                                                qualifiedName
+                                                elmDeclarationsToExposeToGlobalDefaultQualifiedNames
 
-                                                withQualifiedName =
-                                                    Dict.insert
-                                                        qualifiedName
-                                                        argumentsCount
-                                                        innerAggregate
-                                            in
-                                            if isAutoImported then
-                                                Dict.insert
-                                                    tagName
-                                                    argumentsCount
-                                                    withQualifiedName
+                                        withQualifiedName =
+                                            Dict.insert
+                                                qualifiedName
+                                                argumentsCount
+                                                innerAggregate
+                                    in
+                                    if isAutoImported then
+                                        Dict.insert
+                                            tagName
+                                            argumentsCount
+                                            withQualifiedName
 
-                                            else
-                                                withQualifiedName
-                                        )
-                                        aggregate.choiceTypeTags
-                                        choiceTypeTags
-                            }
+                                    else
+                                        withQualifiedName
+                                )
+                                choiceTypeTagsBefore
+                                choiceTypeTags
+                            , recordConstructorsBefore
+                            )
 
                         ElmModuleRecordTypeDeclaration fields ->
-                            { aggregate
-                                | recordConstructors =
-                                    Dict.insert
-                                        (String.join "." [ moduleNameFlat, typeName ])
-                                        fields
-                                        aggregate.recordConstructors
-                            }
+                            ( choiceTypeTagsBefore
+                            , Dict.insert
+                                (String.join "." [ moduleNameFlat, typeName ])
+                                fields
+                                recordConstructorsBefore
+                            )
                 )
-                { choiceTypeTags = aggregateImports.choiceTypeTagConstructorDeclarations
-                , recordConstructors = aggregateImports.recordConstructorsFieldsNames
-                }
+                ( aggregateImports.choiceTypeTagConstructorDeclarations
+                , aggregateImports.recordConstructorsFieldsNames
+                )
                 importedModule.typeDeclarations
     in
     { aggregateImports
         | modulesDeclarationsFlat = modulesDeclarationsFlat
-        , choiceTypeTagConstructorDeclarations = typeDecls.choiceTypeTags
-        , recordConstructorsFieldsNames = typeDecls.recordConstructors
+        , choiceTypeTagConstructorDeclarations = typeDeclsChoiceTypeTags
+        , recordConstructorsFieldsNames = typeDeclsRecordConstructors
     }
 
 
@@ -1036,13 +1023,13 @@ moduleImportsFromCompilationStack explicitImports compilation =
 
                                 Just (ExposingSelected exposedNames) ->
                                     List.foldl
-                                        (\exposedName aggregate ->
-                                            case Common.assocListGet exposedName.name availableModule.functionDeclarations of
+                                        (\(ModuleImportTopLevelExpose exposedName _) aggregate ->
+                                            case Common.assocListGet exposedName availableModule.functionDeclarations of
                                                 Nothing ->
                                                     aggregate
 
                                                 Just functionDeclaration ->
-                                                    Dict.insert exposedName.name functionDeclaration aggregate
+                                                    Dict.insert exposedName functionDeclaration aggregate
                                         )
                                         Dict.empty
                                         exposedNames
@@ -1071,15 +1058,15 @@ moduleImportsFromCompilationStack explicitImports compilation =
 
                                 Just (ExposingSelected exposedNames) ->
                                     List.foldl
-                                        (\topLevelExpose aggregate ->
-                                            case Common.assocListGet topLevelExpose.name availableModule.typeDeclarations of
+                                        (\(ModuleImportTopLevelExpose topName isOpen) aggregate ->
+                                            case Common.assocListGet topName availableModule.typeDeclarations of
                                                 Nothing ->
                                                     aggregate
 
                                                 Just typeDeclaration ->
                                                     Dict.insert
-                                                        topLevelExpose.name
-                                                        (mapTypeDeclarationForImport topLevelExpose typeDeclaration)
+                                                        topName
+                                                        (mapTypeDeclarationForImport isOpen typeDeclaration)
                                                         aggregate
                                         )
                                         Dict.empty
@@ -1161,13 +1148,13 @@ moduleImportsFromCompilationStack explicitImports compilation =
     }
 
 
-mapTypeDeclarationForImport : { a | open : Bool } -> ElmModuleTypeDeclaration -> ElmModuleTypeDeclaration
-mapTypeDeclarationForImport { open } typeDeclaration =
+mapTypeDeclarationForImport : Bool -> ElmModuleTypeDeclaration -> ElmModuleTypeDeclaration
+mapTypeDeclarationForImport open typeDeclaration =
     case typeDeclaration of
         ElmModuleRecordTypeDeclaration _ ->
             typeDeclaration
 
-        ElmModuleChoiceTypeDeclaration choiceTypeDeclaration ->
+        ElmModuleChoiceTypeDeclaration _ ->
             if open then
                 typeDeclaration
 
@@ -2168,7 +2155,7 @@ compileElmSyntaxPattern compilation elmPattern =
                                                                             Nothing ->
                                                                                 Nothing
 
-                                                                            Just choiceTypeDeclaration ->
+                                                                            Just _ ->
                                                                                 Just ( typeName, ElmModuleChoiceType choiceTypeTags )
 
                                                                     _ ->
@@ -3059,8 +3046,8 @@ emitModuleFunctionDeclarations stackBefore declarations =
                             , importedFunctionsToShare = importedFunctionsToShare
                             , importedFunctionsToInline = importedFunctionsToInline
                             , declarationsDirectDependencies = declarationsDirectDependencies
-                            , emitStack = emitStack
                             }
+                            emitStack
                             currentRecursionDomain
                             alreadyEmitted
                     of
@@ -3086,12 +3073,12 @@ emitRecursionDomain :
     , importedFunctionsToShare : List ( String, ( FirCompiler.EnvironmentFunctionEntry, Pine.Value ) )
     , importedFunctionsToInline : List ( String, Pine.Value )
     , declarationsDirectDependencies : Dict.Dict String (Set.Set String)
-    , emitStack : EmitStack
     }
+    -> EmitStack
     -> Set.Set String
     -> List EmittedRecursionDomain
     -> Result String EmittedRecursionDomain
-emitRecursionDomain { exposedDeclarationsNames, allModuleDeclarations, importedFunctionsToShare, importedFunctionsToInline, declarationsDirectDependencies, emitStack } currentRecursionDomain alreadyEmitted =
+emitRecursionDomain { exposedDeclarationsNames, allModuleDeclarations, importedFunctionsToShare, importedFunctionsToInline, declarationsDirectDependencies } emitStack currentRecursionDomain alreadyEmitted =
     let
         recursionDomainExposedNames : List String
         recursionDomainExposedNames =
@@ -3146,9 +3133,11 @@ emitRecursionDomain { exposedDeclarationsNames, allModuleDeclarations, importedF
     in
     case
         FirCompiler.emitDeclarationBlock
-            { emitStack
-                | importedFunctions = List.concat [ importedFunctionsToShare, prevEmittedDeclarationsToShare ]
-                , importedFunctionsToInline = List.concat [ importedFunctionsToInline, prevEmittedDeclarationsToInline ]
+            { importedFunctions = List.concat [ importedFunctionsToShare, prevEmittedDeclarationsToShare ]
+            , importedFunctionsToInline = List.concat [ importedFunctionsToInline, prevEmittedDeclarationsToInline ]
+            , declarationsDependencies = emitStack.declarationsDependencies
+            , environmentFunctions = emitStack.environmentFunctions
+            , environmentDeconstructions = emitStack.environmentDeconstructions
             }
             recursionDomainDeclarationsInBlock
             (FirCompiler.DeclBlockClosureCaptures [])
@@ -3157,18 +3146,22 @@ emitRecursionDomain { exposedDeclarationsNames, allModuleDeclarations, importedF
         Err err ->
             Err err
 
-        Ok ( blockEmitStack, blockDeclarationsEmitted ) ->
+        Ok ( blockEmitStack, declBlockResult ) ->
+            let
+                (FirCompiler.EmitDeclarationBlockResult newEnvFunctionsValues parseAndEmitFunction envFunctionsExpression) =
+                    declBlockResult
+            in
             case
                 recursionDomainDeclarations
                     |> Common.resultListMapCombine
                         (\( declName, declExpression ) ->
                             case Common.assocListGetWithIndex declName blockEmitStack.environmentFunctions of
-                                Just ( declarationIndex, FirCompiler.EnvironmentFunctionEntry declParamCount _ ) ->
-                                    case Common.assocListGet declName blockDeclarationsEmitted.newEnvFunctionsValues of
+                                Just ( _, FirCompiler.EnvironmentFunctionEntry declParamCount _ ) ->
+                                    case Common.assocListGet declName newEnvFunctionsValues of
                                         Nothing ->
                                             Err ("Compiler error: Missing entry: " ++ declName)
 
-                                        Just ( _, ( declEmittedExpr, declEmittedValue ) ) ->
+                                        Just ( _, ( _, declEmittedValue ) ) ->
                                             Ok
                                                 ( declName
                                                 , ( declExpression
@@ -3181,7 +3174,7 @@ emitRecursionDomain { exposedDeclarationsNames, allModuleDeclarations, importedF
                                 Nothing ->
                                     let
                                         ( FirCompiler.DeclBlockFunctionEntry parsedDeclarationParams _, emitDeclarationResult ) =
-                                            blockDeclarationsEmitted.parseAndEmitFunction declExpression
+                                            parseAndEmitFunction declExpression
                                     in
                                     case emitDeclarationResult of
                                         Err err ->
@@ -3225,7 +3218,7 @@ emitRecursionDomain { exposedDeclarationsNames, allModuleDeclarations, importedF
                                 (\( functionName, ( funcEntry, ( _, funcValue ) ) ) ->
                                     ( functionName, ( funcEntry, funcValue ) )
                                 )
-                                blockDeclarationsEmitted.newEnvFunctionsValues
+                                newEnvFunctionsValues
 
                         emittedDeclarationsFromBlockNames : List String
                         emittedDeclarationsFromBlockNames =
@@ -3258,7 +3251,7 @@ emitRecursionDomain { exposedDeclarationsNames, allModuleDeclarations, importedF
 
                         emittedDeclarations : List ( String, ( FirCompiler.EnvironmentFunctionEntry, Pine.Value ) )
                         emittedDeclarations =
-                            List.map (Tuple.mapSecond (attemptReduceBlockDecl blockDeclarationsEmitted))
+                            List.map (Tuple.mapSecond (attemptReduceBlockDecl declBlockResult))
                                 emittedDeclarationsBeforeReduce
 
                         ( emittedDeclarationsToShare, emittedDeclarationsToInline ) =
@@ -3267,7 +3260,7 @@ emitRecursionDomain { exposedDeclarationsNames, allModuleDeclarations, importedF
                         exposedDeclarationsResult : Result String (List ( String, Pine.Value ))
                         exposedDeclarationsResult =
                             List.foldr
-                                (\( declName, ( declExpression, ( parameterCount, emittedValue ) ) ) aggregateResult ->
+                                (\( declName, ( _, ( parameterCount, emittedValue ) ) ) aggregateResult ->
                                     if List.member declName recursionDomainExposedNames then
                                         case aggregateResult of
                                             Err err ->
@@ -3312,14 +3305,14 @@ emitRecursionDomain { exposedDeclarationsNames, allModuleDeclarations, importedF
                                                                 (if parameterCount < 1 then
                                                                     FirCompiler.emitWrapperForPartialApplicationZero
                                                                         { getFunctionInnerExpression = getFunctionInnerExpression
-                                                                        , getEnvFunctionsExpression = blockDeclarationsEmitted.envFunctionsExpression
+                                                                        , getEnvFunctionsExpression = envFunctionsExpression
                                                                         }
 
                                                                  else
                                                                     FirCompiler.buildRecordOfPartiallyAppliedFunction
                                                                         { getFunctionInnerExpression = getFunctionInnerExpression
                                                                         , parameterCount = parameterCount
-                                                                        , getEnvFunctionsExpression = blockDeclarationsEmitted.envFunctionsExpression
+                                                                        , getEnvFunctionsExpression = envFunctionsExpression
                                                                         , argumentsAlreadyCollected = []
                                                                         }
                                                                 )
@@ -3357,7 +3350,7 @@ attemptReduceBlockDecl :
     FirCompiler.EmitDeclarationBlockResult
     -> ( FirCompiler.EnvironmentFunctionEntry, Pine.Value )
     -> ( FirCompiler.EnvironmentFunctionEntry, Pine.Value )
-attemptReduceBlockDecl blockDeclarationsEmitted blockDecl =
+attemptReduceBlockDecl (FirCompiler.EmitDeclarationBlockResult _ _ envFunctionsExpression) blockDecl =
     let
         ( FirCompiler.EnvironmentFunctionEntry funcParamCount _, funcValue ) =
             blockDecl
@@ -3370,7 +3363,7 @@ attemptReduceBlockDecl blockDeclarationsEmitted blockDecl =
             evaluatableExpr =
                 FirCompiler.emitWrapperForPartialApplicationZero
                     { getFunctionInnerExpression = Pine.LiteralExpression funcValue
-                    , getEnvFunctionsExpression = blockDeclarationsEmitted.envFunctionsExpression
+                    , getEnvFunctionsExpression = envFunctionsExpression
                     }
         in
         case evaluateAsIndependentExpression evaluatableExpr of
@@ -3387,7 +3380,7 @@ attemptReduceBlockDecl blockDeclarationsEmitted blockDecl =
                     , Pine.encodeExpressionAsValue reducedExpr
                     )
 
-            Err err ->
+            Err _ ->
                 blockDecl
 
 
@@ -3419,7 +3412,7 @@ splitEmittedFunctionsToInline emittedFunctions =
                         )
                 continueWithReduction () =
                     case Pine.parseExpressionFromValue declValue of
-                        Err err ->
+                        Err _ ->
                             {- This happened for an imported declaration 'Dict.empty'.
                                Maybe this happens for all declarations imported from parsed modules?
                                Just using the original value when parsing fails seemed to work and not cause any problems.
@@ -3432,7 +3425,7 @@ splitEmittedFunctionsToInline emittedFunctions =
 
                         Ok parsedExpr ->
                             case evaluateAsIndependentExpression parsedExpr of
-                                Err err ->
+                                Err _ ->
                                     continueSharing
 
                                 Ok evaluatedValue ->
@@ -3596,7 +3589,7 @@ compileElmChoiceTypeTagConstructorValue ( tagName, argumentsCount ) =
                         )
                     )
             of
-                Err err ->
+                Err _ ->
                     Pine.valueFromString "Failed to compile choice type tag constructor"
 
                 Ok wrappedForExpose ->

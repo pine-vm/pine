@@ -476,11 +476,11 @@ parseAsFunctionRecord nodeValue =
                                     ]
                                 }
 
-        Ok functionRecord ->
+        Ok (FirCompiler.ParsedFunctionValue innerFunctionValue _ parameterCount (FirCompiler.ParsedFunctionEnvFunctions envFunctions) argumentsAlreadyCollected) ->
             let
                 envFunctionsChildren : Dict.Dict String CompilationExplorerNode
                 envFunctionsChildren =
-                    functionRecord.envFunctions
+                    envFunctions
                         |> List.indexedMap
                             (\envFunctionIndex envFunctionValue ->
                                 ( "env-decl-" ++ String.fromInt envFunctionIndex
@@ -497,19 +497,19 @@ parseAsFunctionRecord nodeValue =
                     envFunctionsChildren
                         |> Dict.insert
                             "inner-expression"
-                            { value = explorerValueCache functionRecord.innerFunctionValue
+                            { value = explorerValueCache innerFunctionValue
                             , category = FunctionExpressionNode
                             , parsed = Nothing
                             }
                 , otherProperties =
                     [ ( "parameter count"
-                      , String.fromInt functionRecord.parameterCount
+                      , String.fromInt parameterCount
                       )
                     , ( "env functions count"
-                      , String.fromInt (List.length functionRecord.envFunctions)
+                      , String.fromInt (List.length envFunctions)
                       )
                     , ( "arguments already collected"
-                      , String.fromInt (List.length functionRecord.argumentsAlreadyCollected)
+                      , String.fromInt (List.length argumentsAlreadyCollected)
                       )
                     ]
                 }
