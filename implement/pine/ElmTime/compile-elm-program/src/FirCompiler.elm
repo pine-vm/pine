@@ -596,14 +596,9 @@ emitDeclarationBlock stackBefore blockDeclarations (DeclBlockClosureCaptures con
         newEnvironmentFunctionsFromClosureCaptures : List ( String, EnvironmentFunctionEntry )
         newEnvironmentFunctionsFromClosureCaptures =
             List.map
-                (\( captureName, closureCapture ) ->
+                (\( captureName, _ ) ->
                     ( captureName
-                    , case closureCapture of
-                        ExpressionCapture _ ->
-                            EnvironmentFunctionEntry 0 IndependentEnvironment
-
-                        DeconstructionCapture _ ->
-                            EnvironmentFunctionEntry 0 IndependentEnvironment
+                    , EnvironmentFunctionEntry 0 IndependentEnvironment
                     )
                 )
                 closureCaptures
@@ -617,8 +612,8 @@ emitDeclarationBlock stackBefore blockDeclarations (DeclBlockClosureCaptures con
                 , appendedFromClosureCaptures = newEnvironmentFunctionsFromClosureCaptures
                 }
 
-        commonEmitStack : EmitStack
-        commonEmitStack =
+        emitFunctionStack : List ( String, EnvironmentDeconstructionEntry ) -> EmitStack
+        emitFunctionStack environmentDeconstructions =
             { importedFunctions =
                 {-
                    stackBefore.importedFunctions
@@ -631,18 +626,14 @@ emitDeclarationBlock stackBefore blockDeclarations (DeclBlockClosureCaptures con
             , importedFunctionsToInline = stackBefore.importedFunctionsToInline
             , declarationsDependencies = stackBefore.declarationsDependencies
             , environmentFunctions = environmentFunctions
-            , environmentDeconstructions = []
+            , environmentDeconstructions = environmentDeconstructions
             }
 
         emitFunction : DeclBlockFunctionEntry -> Result String Pine.Expression
         emitFunction (DeclBlockFunctionEntry functionEntryParams functionEntryInnerExpression) =
-            let
-                functionEmitStack =
-                    { commonEmitStack
-                        | environmentDeconstructions = closureParameterFromParameters functionEntryParams
-                    }
-            in
-            emitExpression functionEmitStack functionEntryInnerExpression
+            emitExpression
+                (emitFunctionStack (closureParameterFromParameters functionEntryParams))
+                functionEntryInnerExpression
 
         emitBlockDeclarationsResult : Result String (List ( String, ( DeclBlockFunctionEntry, Pine.Expression ) ))
         emitBlockDeclarationsResult =
@@ -747,7 +738,7 @@ emitDeclarationBlock stackBefore blockDeclarations (DeclBlockClosureCaptures con
                             )
                     in
                     Ok
-                        ( commonEmitStack
+                        ( emitFunctionStack []
                         , EmitDeclarationBlockResult newEnvFunctionsValues parseAndEmitFunction envFunctionsExpression
                         )
 
