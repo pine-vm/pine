@@ -1761,6 +1761,10 @@ compileElmSyntaxCaseBlock stack caseBlock =
 
                 Ok inlineVariant ->
                     let
+                        switchedExprFuncApps : List ( Expression, List Expression )
+                        switchedExprFuncApps =
+                            FirCompiler.listFunctionAppExpressions expression
+
                         pseudoParamName =
                             {-
                                Adapt to current limitation in FirCompiler:
@@ -1768,35 +1772,53 @@ compileElmSyntaxCaseBlock stack caseBlock =
                             -}
                             "case-expr-" ++ String.fromInt stack.depth
 
+                        innerExpr : Expression
                         innerExpr =
                             FirCompiler.ReferenceExpression pseudoParamName
-                    in
-                    case
-                        compileCaseBlockInline stack innerExpr caseBlock.cases
-                    of
-                        Err err ->
-                            Err err
 
-                        Ok casesFunction ->
-                            let
-                                inlineVariantFuncApps =
-                                    FirCompiler.listFunctionAppExpressions inlineVariant
-
-                                casesFunctionFuncApps =
-                                    FirCompiler.listFunctionAppExpressions casesFunction
-                            in
-                            if List.length casesFunctionFuncApps < List.length inlineVariantFuncApps then
-                                Ok
-                                    (FunctionApplicationExpression
-                                        (FunctionExpression
-                                            [ [ ( pseudoParamName, [] ) ] ]
-                                            casesFunction
-                                        )
-                                        [ expression ]
-                                    )
+                        casesFunctionToWrap : Maybe Expression
+                        casesFunctionToWrap =
+                            if switchedExprFuncApps == [] then
+                                Nothing
 
                             else
-                                Ok inlineVariant
+                                case compileCaseBlockInline stack innerExpr caseBlock.cases of
+                                    Err _ ->
+                                        Nothing
+
+                                    Ok casesFunction ->
+                                        let
+                                            inlineVariantFuncApps : List ( Expression, List Expression )
+                                            inlineVariantFuncApps =
+                                                FirCompiler.listFunctionAppExpressions inlineVariant
+
+                                            casesFunctionFuncApps : List ( Expression, List Expression )
+                                            casesFunctionFuncApps =
+                                                FirCompiler.listFunctionAppExpressions casesFunction
+
+                                            wrappedVariantFunctionAppsCount : Int
+                                            wrappedVariantFunctionAppsCount =
+                                                List.length switchedExprFuncApps + List.length casesFunctionFuncApps
+                                        in
+                                        if wrappedVariantFunctionAppsCount < List.length inlineVariantFuncApps then
+                                            Just casesFunction
+
+                                        else
+                                            Nothing
+                    in
+                    case casesFunctionToWrap of
+                        Just casesFunction ->
+                            Ok
+                                (FunctionApplicationExpression
+                                    (FunctionExpression
+                                        [ [ ( pseudoParamName, [] ) ] ]
+                                        casesFunction
+                                    )
+                                    [ expression ]
+                                )
+
+                        Nothing ->
+                            Ok inlineVariant
 
 
 compileCaseBlockInline :
