@@ -1034,24 +1034,26 @@ public class PineVMTests
             },
         };
 
+        var parseCache = new PineVMCache();
+
         foreach (var testCase in testCases)
         {
-            var compiled = PineVM.InstructionsFromExpressionLessCache(testCase.expression);
+            var compiled = PineVM.CompileExpression(testCase.expression, specializations: [], parseCache);
 
             Assert.AreEqual(
                 testCase.expected.Instructions.Count,
-                compiled.Instructions.Count,
+                compiled.Generic.Instructions.Count,
                 "Instructions count");
 
             for (var i = 0; i < testCase.expected.Instructions.Count; i++)
             {
                 Assert.AreEqual(
                     testCase.expected.Instructions[i],
-                    compiled.Instructions[i],
-                    $"Instruction at index {i} of " + compiled.Instructions.Count);
+                    compiled.Generic.Instructions[i],
+                    $"Instruction at index {i} of " + compiled.Generic.Instructions.Count);
             }
 
-            Assert.AreEqual(testCase.expected, compiled);
+            Assert.AreEqual(testCase.expected, compiled.Generic);
         }
     }
 }

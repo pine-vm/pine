@@ -13,7 +13,7 @@ public class ReducePineExpression
         expression switch
         {
             Expression.EnvironmentExpression =>
-            Result<string, PineValue>.err("Expression depends on environment"),
+            "Expression depends on environment",
 
             Expression.LiteralExpression literal =>
             Result<string, PineValue>.ok(literal.Value),
@@ -37,11 +37,14 @@ public class ReducePineExpression
                 return ok;
             }),
 
+            Expression.ConditionalExpression conditional =>
+            TryEvaluateExpressionIndependent(conditional),
+
             Expression.StringTagExpression stringTag =>
             TryEvaluateExpressionIndependent(stringTag.tagged),
 
             _ =>
-            Result<string, PineValue>.err("Unsupported expression type: " + expression.GetType().FullName)
+            "Unsupported expression type: " + expression.GetType().FullName
         };
 
     public static Result<string, PineValue> TryEvaluateExpressionIndependent(
@@ -50,8 +53,11 @@ public class ReducePineExpression
         if (TryEvaluateExpressionIndependent(parseAndEvalExpr.environment) is Result<string, PineValue>.Ok envOk)
         {
             return
-                new PineVM.PineVM().EvaluateExpression(parseAndEvalExpr, PineValue.EmptyList)
-                .MapError(err => "Got independent environment, but failed to evaluate: " + err);
+                new PineVM.PineVM()
+                .EvaluateExpressionDefaultLessStack(
+                    parseAndEvalExpr,
+                    PineValue.EmptyList,
+                    stackPrevValues: ReadOnlyMemory<PineValue>.Empty);
         }
 
         return
@@ -60,6 +66,23 @@ public class ReducePineExpression
             .AndThen(compilerCache.ParseExpressionFromValue)
             .AndThen(innerExpr => TryEvaluateExpressionIndependent(innerExpr)
             .MapError(err => "Inner expression is not independent: " + err));
+    }
+
+    public static Result<string, PineValue> TryEvaluateExpressionIndependent(
+        Expression.ConditionalExpression conditionalExpr)
+    {
+        return
+            TryEvaluateExpressionIndependent(conditionalExpr)
+            .AndThen(conditionValue =>
+            {
+                if (conditionValue == PineVMValues.FalseValue)
+                    return TryEvaluateExpressionIndependent(conditionalExpr.ifFalse);
+
+                if (conditionValue == PineVMValues.TrueValue)
+                    return TryEvaluateExpressionIndependent(conditionalExpr.ifTrue);
+
+                return PineValue.EmptyList;
+            });
     }
 
     public static Expression? SearchForExpressionReduction(Expression expression)
@@ -71,11 +94,22 @@ public class ReducePineExpression
         {
             if (Expression.IsIndependent(expression))
             {
-                return
-                    TryEvaluateExpressionIndependent(expression)
-                    .Unpack(
-                        fromErr: _ => null,
-                        fromOk: literalValue => new Expression.LiteralExpression(literalValue));
+                try
+                {
+                    return
+                        TryEvaluateExpressionIndependent(expression)
+                        .Unpack(
+                            fromErr: _ => null,
+                            fromOk: literalValue => new Expression.LiteralExpression(literalValue));
+                }
+                catch (ParseExpressionException)
+                {
+                    /*
+                     * A branch of a conditional expression might always fail to parse.
+                     * This does not mean that the code would crash at runtime, since it is conditional.
+                     * (The Elm compiler uses constructs like this to encoding crashing branches with a custom error message.)
+                     * */
+                }
             }
 
             return null;

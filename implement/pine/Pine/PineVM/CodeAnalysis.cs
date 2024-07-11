@@ -476,18 +476,16 @@ public class CodeAnalysis
 
             try
             {
-                int parseCount = 0;
-
                 childEnvValue =
-                new PineVM(
-                    overrideParseExpression: _ => parseExpressionForEval,
-                    evalCache: evalCache?.EvalCache)
+                    new PineVM(
+                        overrideParseExpression: _ => parseExpressionForEval,
+                        evalCache: evalCache?.EvalCache)
                 /*
                  * Evaluation of the environment expression can fail here, since we are looking into all branches,
                  * including ones that are not reachable in the actual execution.
                  * In this case, classify the environment as unconstrained.
                  * */
-                .EvaluateExpressionDefault(
+                .EvaluateExpressionOnCustomStack(
                     parseSubExpr.ParseAndEvalExpr.environment,
                     environment,
                     config: new PineVM.EvaluationConfig(ParseAndEvalCountLimit: 100))

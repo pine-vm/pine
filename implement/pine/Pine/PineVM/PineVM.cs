@@ -29,6 +29,8 @@ public class PineVM : IPineVM
 
     private readonly Action<EvaluationReport>? reportFunctionApplication;
 
+    private readonly IReadOnlyDictionary<Expression, IReadOnlyList<EnvConstraintId>>? compilationSpecializations;
+
     private readonly PineVMCache parseCache = new();
 
     public record EvaluationReport(
@@ -82,7 +84,8 @@ public class PineVM : IPineVM
     public PineVM(
         OverrideParseExprDelegate? overrideParseExpression = null,
         IDictionary<EvalCacheEntryKey, PineValue>? evalCache = null,
-        Action<EvaluationReport>? reportFunctionApplication = null)
+        Action<EvaluationReport>? reportFunctionApplication = null,
+        IReadOnlyDictionary<Expression, IReadOnlyList<EnvConstraintId>>? compilationSpecializations = null)
     {
         parseExpressionDelegate =
             overrideParseExpression
@@ -92,12 +95,14 @@ public class PineVM : IPineVM
         EvalCache = evalCache;
 
         this.reportFunctionApplication = reportFunctionApplication;
+
+        this.compilationSpecializations = compilationSpecializations;
     }
 
     public Result<string, PineValue> EvaluateExpression(
         Expression expression,
         PineValue environment) =>
-        EvaluateExpressionDefault(
+        EvaluateExpressionOnCustomStack(
             expression,
             environment,
             config: new EvaluationConfig(ParseAndEvalCountLimit: null));
@@ -158,7 +163,50 @@ public class PineVM : IPineVM
         }
     }
 
-    readonly Dictionary<Expression, StackFrameInstructions> stackFrameDict = [];
+    public record ExpressionCompilation(
+        StackFrameInstructions Generic,
+        IReadOnlyList<(IReadOnlyList<EnvConstraintItem> constraint, StackFrameInstructions instructions)> Specialized)
+    {
+        public StackFrameInstructions SelectInstructionsForEnvironment(PineValue environment)
+        {
+            for (var i = 0; i < Specialized.Count; i++)
+            {
+                var specialization = Specialized[i];
+
+                bool foundMismatch = false;
+
+                for (var specializationIndex = 0; specializationIndex < specialization.constraint.Count; specializationIndex++)
+                {
+                    var constraintItem = specialization.constraint[specializationIndex];
+
+                    if (CodeAnalysis.ValueFromPathInValue(environment, constraintItem.Path.Span) is not { } pathValue)
+                    {
+                        foundMismatch = true;
+                        break;
+                    }
+
+                    if (!pathValue.Equals(constraintItem.Value))
+                    {
+                        foundMismatch = true;
+                        break;
+                    }
+                }
+
+                if (!foundMismatch)
+                {
+                    return specialization.instructions;
+                }
+            }
+
+            return Generic;
+        }
+    }
+
+    public record struct EnvConstraintItem(
+        ReadOnlyMemory<int> Path,
+        PineValue Value);
+
+    readonly Dictionary<Expression, ExpressionCompilation> expressionCompilationDict = [];
 
     StackFrame StackFrameFromExpression(
         PineValue? expressionValue,
@@ -167,7 +215,9 @@ public class PineVM : IPineVM
         long beginInstructionCount,
         long beginParseAndEvalCount)
     {
-        var instructions = InstructionsFromExpression(expression);
+        var compilation = GetExpressionCompilation(expression);
+
+        var instructions = compilation.SelectInstructionsForEnvironment(environment);
 
         return new StackFrame(
             expressionValue,
@@ -179,22 +229,270 @@ public class PineVM : IPineVM
             BeginParseAndEvalCount: beginParseAndEvalCount);
     }
 
-    public StackFrameInstructions InstructionsFromExpression(Expression rootExpression)
+    public ExpressionCompilation GetExpressionCompilation(
+        Expression rootExpression)
     {
-        if (stackFrameDict.TryGetValue(rootExpression, out var cachedInstructions))
+        if (expressionCompilationDict.TryGetValue(rootExpression, out var cachedCompilation))
         {
-            return cachedInstructions;
+            return cachedCompilation;
         }
 
-        var instructions = InstructionsFromExpressionLessCache(rootExpression);
+        var compilation = ExpressionCompilationLessCache(rootExpression);
 
-        stackFrameDict[rootExpression] = instructions;
+        expressionCompilationDict[rootExpression] = compilation;
 
-        return instructions;
+        return compilation;
     }
 
-    public static StackFrameInstructions InstructionsFromExpressionLessCache(Expression rootExpression) =>
-        new([.. InstructionsFromExpressionTransitive(rootExpression).Append(StackInstruction.Return)]);
+    public ExpressionCompilation ExpressionCompilationLessCache(Expression rootExpression)
+    {
+        IReadOnlyList<EnvConstraintId>? specializations = null;
+
+        compilationSpecializations?.TryGetValue(rootExpression, out specializations);
+
+        return
+            CompileExpression(
+                rootExpression,
+                specializations ?? [],
+                parseCache: parseCache);
+    }
+
+    public static ExpressionCompilation CompileExpression(
+        Expression rootExpression,
+        IReadOnlyList<EnvConstraintId> specializations,
+        PineVMCache parseCache)
+    {
+        var generic =
+            new StackFrameInstructions(
+                InstructionsFromExpressionTransitive(
+                    rootExpression,
+                    envConstraintId: null,
+                    parseCache: parseCache));
+
+        var specialized =
+            specializations
+            // Order to prefer more specific constraints when selecting at runtime.
+            .OrderByDescending(envId => envId.ParsedEnvItems.Count)
+            .Select(
+                specialization =>
+                ((IReadOnlyList<EnvConstraintItem>)
+                [..specialization.ParsedEnvItems
+                .Select(envItem => new EnvConstraintItem(envItem.Key.ToArray(), envItem.Value))],
+                new StackFrameInstructions(
+                    InstructionsFromExpressionTransitive(
+                        rootExpression,
+                        envConstraintId: specialization,
+                        parseCache: parseCache))))
+            .ToImmutableArray();
+
+        return new ExpressionCompilation(
+            Generic: generic,
+            Specialized: specialized);
+    }
+
+    /*
+     * 
+     * In the older impl to compile to C#, we had CompilationUnitEnvExprEntry to inform which
+     * declarations will be available in the environment to reference.
+     * Here, we dont need that info for the first iteration:
+     * Instead of a global shared representation, we can inline were referenced.
+     * For recursive functions, we can stop inlining which will lead to a lookup in the dictionary for each iteration.
+     * Optimizing for more runtime efficiency follows in later iterations.
+     * 
+     * (In addition to maybe being easier to implement and read, the inlining will also improve runtime efficiency in many cases.)
+     * 
+     * */
+
+    public static IReadOnlyList<StackInstruction> InstructionsFromExpressionTransitive(
+        Expression rootExpression,
+        EnvConstraintId? envConstraintId,
+        PineVMCache parseCache)
+    {
+        var reducedExpression =
+            envConstraintId is null
+            ?
+            rootExpression
+            :
+            ReduceExpressionForEnvironmentRecursive(
+                previousExpression: rootExpression,
+                envConstraintId: envConstraintId,
+                skipInliningExpression: expr => expr == rootExpression,
+                maxDepth: 10,
+                parseCache: parseCache);
+
+        return
+            [.. InstructionsFromExpressionTransitive(rootExpression).Append(StackInstruction.Return)];
+    }
+
+    public static Expression ReduceExpressionForEnvironmentRecursive(
+        Expression previousExpression,
+        EnvConstraintId? envConstraintId,
+        Func<Expression, bool> skipInliningExpression,
+        int maxDepth,
+        PineVMCache parseCache)
+    {
+        if (maxDepth < 1)
+            return previousExpression;
+
+        ParseExprDelegate parseExpression =
+            parseCache.BuildParseExprDelegate(ExpressionEncoding.ParseExpressionFromValueDefault);
+
+        var originalSubexpressions =
+            Expression.EnumerateSelfAndDescendants(previousExpression)
+            .ToImmutableArray();
+
+        var originalParseAndEvalSubexpressions =
+            originalSubexpressions
+            .OfType<Expression.ParseAndEvalExpression>()
+            .ToImmutableArray();
+
+        /*
+         * Transform the expression based on the env constraint id:
+         * 
+         * */
+
+        var expressionWithSubstitutions =
+            envConstraintId is null ?
+            previousExpression
+            :
+            SubstituteSubexpressionsForEnvironmentConstraint(
+                previousExpression,
+                envConstraintId: envConstraintId);
+
+        /*
+         * Inline parse and eval expressions, except ones that call the same expression (recursion).
+         * 
+         * */
+
+        Expression? TryInlineParseAndEval(Expression.ParseAndEvalExpression parseAndEvalExpr)
+        {
+            Expression? ContinueReduceForKnownExprValue(PineValue exprValue)
+            {
+                if (parseExpression(exprValue) is not Result<string, Expression>.Ok parseOk)
+                {
+                    return null;
+                }
+
+                if (skipInliningExpression(parseOk.Value))
+                {
+                    return null;
+                }
+
+                /*
+                 * Expand skipInliningExpression to prevent cases of pathologically large expressions resulting
+                 * from inlining recursive functions.
+                 * */
+
+                bool childSkipInlineExpr(Expression expr) =>
+                    expr == parseOk.Value || skipInliningExpression(expr);
+
+
+                /*
+                 * For inlining, translate instances of EnvironmentExpression to the parent environment.
+                 * */
+
+                var inlinedExpr =
+                    CompilePineToDotNet.ReducePineExpression.TransformPineExpressionWithOptionalReplacement(
+                        findReplacement:
+                        descendant =>
+                        {
+                            if (descendant is Expression.EnvironmentExpression)
+                            {
+                                return parseAndEvalExpr.environment;
+                            }
+
+                            return null;
+                        },
+                        parseOk.Value).expr;
+
+                return
+                    ReduceExpressionForEnvironmentRecursive(
+                        previousExpression: inlinedExpr,
+                        // TODO: Utilize child env constraint
+                        envConstraintId: null,
+                        skipInliningExpression: childSkipInlineExpr,
+                        maxDepth: maxDepth - 1,
+                        parseCache: parseCache);
+            }
+
+            if (Expression.IsIndependent(parseAndEvalExpr.expression))
+            {
+                if (CompilePineToDotNet.ReducePineExpression.TryEvaluateExpressionIndependent(parseAndEvalExpr.expression) is
+                    Result<string, PineValue>.Ok evalExprOk)
+                {
+                    return ContinueReduceForKnownExprValue(evalExprOk.Value);
+                }
+            }
+
+            return null;
+        }
+
+        var expressionInlinedBeforeSubstitution =
+            CompilePineToDotNet.ReducePineExpression.TransformPineExpressionWithOptionalReplacement(
+                findReplacement: expr =>
+                {
+                    if (expr is Expression.ParseAndEvalExpression parseAndEval)
+                    {
+                        if (TryInlineParseAndEval(parseAndEval) is { } inlined)
+                        {
+                            return inlined;
+                        }
+                    }
+
+                    return null;
+                },
+                expressionWithSubstitutions).expr;
+
+        var expressionInlined =
+            envConstraintId is null ?
+            expressionInlinedBeforeSubstitution
+            :
+            SubstituteSubexpressionsForEnvironmentConstraint(
+                expressionInlinedBeforeSubstitution,
+                envConstraintId: envConstraintId);
+
+        var expressionInlinedSubexpressions =
+            Expression.EnumerateSelfAndDescendants(expressionInlined)
+            .ToImmutableArray();
+
+        var expressionReduced =
+            CompilePineToDotNet.ReducePineExpression.SearchForExpressionReductionRecursive(
+                maxDepth: 10,
+                expressionInlined,
+                dontReduceExpression: expr => expr == expressionWithSubstitutions);
+
+        return expressionReduced;
+    }
+
+    public static Expression SubstituteSubexpressionsForEnvironmentConstraint(
+        Expression originalExpression,
+        EnvConstraintId envConstraintId)
+    {
+        return
+            CompilePineToDotNet.ReducePineExpression.TransformPineExpressionWithOptionalReplacement(
+                findReplacement:
+                descendant =>
+                {
+                    if (CodeAnalysis.TryParseExpressionAsIndexPathFromEnv(descendant) is { } indexPath)
+                    {
+                        if (indexPath is ExprMappedToParentEnv.LiteralInParentEnv asLiteral)
+                        {
+                            return new Expression.LiteralExpression(asLiteral.Value);
+                        }
+
+                        if (indexPath is ExprMappedToParentEnv.PathInParentEnv pathInParentEnv)
+                        {
+                            if (envConstraintId?.TryGetValue(pathInParentEnv.Path) is { } value)
+                            {
+                                return new Expression.LiteralExpression(value);
+                            }
+                        }
+                    }
+
+                    return null;
+                },
+                originalExpression).expr;
+    }
 
     public static IReadOnlyList<StackInstruction> InstructionsFromExpressionTransitive(
         Expression rootExpression)
@@ -801,7 +1099,7 @@ public class PineVM : IPineVM
     public record EvaluationConfig(
         int? ParseAndEvalCountLimit);
 
-    public Result<string, PineValue> EvaluateExpressionDefault(
+    public Result<string, PineValue> EvaluateExpressionOnCustomStack(
         Expression rootExpression,
         PineValue rootEnvironment,
         EvaluationConfig config)
@@ -1115,7 +1413,7 @@ public class PineVM : IPineVM
             "Unexpected shape of expression: " + expression.GetType().FullName);
     }
 
-    private PineValue EvaluateExpressionDefaultLessStack(
+    public PineValue EvaluateExpressionDefaultLessStack(
         Expression expression,
         PineValue environment,
         ReadOnlyMemory<PineValue> stackPrevValues)
@@ -1172,7 +1470,7 @@ public class PineVM : IPineVM
             return
                 delegatingExpr.Delegate.Invoke(
                     (expression, environment) =>
-                    EvaluateExpressionDefault(
+                    EvaluateExpressionOnCustomStack(
                         expression,
                         environment,
                         config: new EvaluationConfig(ParseAndEvalCountLimit: null)),
