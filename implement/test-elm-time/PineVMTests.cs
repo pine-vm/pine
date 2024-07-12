@@ -1005,7 +1005,11 @@ public class PineVMTests
 
         foreach (var testCase in testCases)
         {
-            var compiled = PineVM.CompileExpression(testCase.expression, specializations: [], parseCache);
+            var compiled = PineVM.CompileExpression(
+                testCase.expression,
+                specializations: [],
+                parseCache,
+                disableReduction: true);
 
             Assert.AreEqual(
                 testCase.expected.Instructions.Count,

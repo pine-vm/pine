@@ -254,20 +254,23 @@ public class PineVM : IPineVM
             CompileExpression(
                 rootExpression,
                 specializations ?? [],
-                parseCache: parseCache);
+                parseCache: parseCache,
+                disableReduction: false);
     }
 
     public static ExpressionCompilation CompileExpression(
         Expression rootExpression,
         IReadOnlyList<EnvConstraintId> specializations,
-        PineVMCache parseCache)
+        PineVMCache parseCache,
+        bool disableReduction)
     {
         var generic =
             new StackFrameInstructions(
                 InstructionsFromExpressionTransitive(
                     rootExpression,
                     envConstraintId: null,
-                    parseCache: parseCache));
+                    parseCache: parseCache,
+                    disableReduction: disableReduction));
 
         var specialized =
             specializations
@@ -282,7 +285,8 @@ public class PineVM : IPineVM
                     InstructionsFromExpressionTransitive(
                         rootExpression,
                         envConstraintId: specialization,
-                        parseCache: parseCache))))
+                        parseCache: parseCache,
+                        disableReduction: disableReduction))))
             .ToImmutableArray();
 
         return new ExpressionCompilation(
@@ -297,6 +301,10 @@ public class PineVM : IPineVM
      * Here, we dont need that info for the first iteration:
      * Instead of a global shared representation, we can inline were referenced.
      * For recursive functions, we can stop inlining which will lead to a lookup in the dictionary for each iteration.
+     * However, in some cases (like the adaptive partial application emitted by the Elm compiler),
+     * inlining the same expression multiple times can be better.
+     * For that specific case, expanding the environment constraint (collected by CA) to enable erasing conditionals might
+     * improve overall efficiency a lot.
      * Optimizing for more runtime efficiency follows in later iterations.
      * 
      * (In addition to maybe being easier to implement and read, the inlining will also improve runtime efficiency in many cases.)
@@ -306,63 +314,79 @@ public class PineVM : IPineVM
     public static IReadOnlyList<StackInstruction> InstructionsFromExpressionTransitive(
         Expression rootExpression,
         EnvConstraintId? envConstraintId,
-        PineVMCache parseCache)
+        PineVMCache parseCache,
+        bool disableReduction)
     {
-        var reducedExpression =
-            envConstraintId is null
-            ?
+        var expressionWithEnvConstraint =
+            envConstraintId is null ?
             rootExpression
             :
-            ReduceExpressionForEnvironmentRecursive(
-                previousExpression: rootExpression,
-                envConstraintId: envConstraintId,
-                skipInliningExpression: expr => expr == rootExpression,
-                maxDepth: 10,
-                parseCache: parseCache);
-
-        return
-            [.. InstructionsFromExpressionTransitive(rootExpression).Append(StackInstruction.Return)];
-    }
-
-    public static Expression ReduceExpressionForEnvironmentRecursive(
-        Expression previousExpression,
-        EnvConstraintId? envConstraintId,
-        Func<Expression, bool> skipInliningExpression,
-        int maxDepth,
-        PineVMCache parseCache)
-    {
-        if (maxDepth < 1)
-            return previousExpression;
-
-        ParseExprDelegate parseExpression =
-            parseCache.BuildParseExprDelegate(ExpressionEncoding.ParseExpressionFromValueDefault);
-
-        var originalSubexpressions =
-            Expression.EnumerateSelfAndDescendants(previousExpression)
-            .ToImmutableArray();
-
-        var originalParseAndEvalSubexpressions =
-            originalSubexpressions
-            .OfType<Expression.ParseAndEvalExpression>()
-            .ToImmutableArray();
-
-        /*
-         * Transform the expression based on the env constraint id:
-         * 
-         * */
-
-        var expressionWithSubstitutions =
-            envConstraintId is null ?
-            previousExpression
-            :
             SubstituteSubexpressionsForEnvironmentConstraint(
-                previousExpression,
+                rootExpression,
                 envConstraintId: envConstraintId);
 
         /*
-         * Inline parse and eval expressions, except ones that call the same expression (recursion).
-         * 
+         * Substituting subexpressions for the given environment constraint once at the root should be enough.
          * */
+
+        var reducedExpression =
+            disableReduction
+            ?
+            expressionWithEnvConstraint
+            :
+            ReduceExpressionAndInlineRecursive(
+                stack: [expressionWithEnvConstraint],
+                currentExpression: expressionWithEnvConstraint,
+                /*
+                 * Adapt to observation on 2024-07-12:
+                 * Max depth of one resulted in significantly faster overall completion when compiling the whole Elm compiler.
+                 * 
+                 * TODO: Test a new heuristic to decide whether to inline recursively:
+                 * Enable inlining in cases where the parse&eval is unconditional
+                 * (after conditions are resolved for the current environment constraint).
+                 * This might require expanding code analysis to collect the parts of environments that conditions depend on.
+                 * */
+                maxDepth: 1,
+                maxSubexpressionCount: 10_000,
+                parseCache: parseCache);
+
+        return
+            [.. InstructionsFromExpressionTransitive(reducedExpression).Append(StackInstruction.Return)];
+    }
+
+    public static Expression ReduceExpressionAndInlineRecursive(
+        ImmutableStack<Expression> stack,
+        Expression currentExpression,
+        int maxDepth,
+        int maxSubexpressionCount,
+        PineVMCache parseCache)
+    {
+        var expressionReduced =
+            CompilePineToDotNet.ReducePineExpression.SearchForExpressionReductionRecursive(
+                maxDepth: 10,
+                currentExpression);
+
+        if (maxDepth <= stack.Count())
+        {
+            return expressionReduced;
+        }
+
+        var subexprCount = 0;
+
+        foreach (var subexpr in Expression.EnumerateSelfAndDescendants(expressionReduced))
+        {
+            ++subexprCount;
+
+            /*
+             * Install a limit after observing cases with more than a hundred million subexpressions.
+             * */
+
+            if (maxSubexpressionCount < subexprCount)
+                return expressionReduced;
+        }
+
+        ParseExprDelegate parseExpression =
+            parseCache.BuildParseExprDelegate(ExpressionEncoding.ParseExpressionFromValueDefault);
 
         Expression? TryInlineParseAndEval(Expression.ParseAndEvalExpression parseAndEvalExpr)
         {
@@ -372,20 +396,6 @@ public class PineVM : IPineVM
                 {
                     return null;
                 }
-
-                if (skipInliningExpression(parseOk.Value))
-                {
-                    return null;
-                }
-
-                /*
-                 * Expand skipInliningExpression to prevent cases of pathologically large expressions resulting
-                 * from inlining recursive functions.
-                 * */
-
-                bool childSkipInlineExpr(Expression expr) =>
-                    expr == parseOk.Value || skipInliningExpression(expr);
-
 
                 /*
                  * For inlining, translate instances of EnvironmentExpression to the parent environment.
@@ -406,12 +416,11 @@ public class PineVM : IPineVM
                         parseOk.Value).expr;
 
                 return
-                    ReduceExpressionForEnvironmentRecursive(
-                        previousExpression: inlinedExpr,
-                        // TODO: Utilize child env constraint
-                        envConstraintId: null,
-                        skipInliningExpression: childSkipInlineExpr,
-                        maxDepth: maxDepth - 1,
+                    ReduceExpressionAndInlineRecursive(
+                        stack: stack.Push(parseOk.Value),
+                        currentExpression: inlinedExpr,
+                        maxDepth: maxDepth,
+                        maxSubexpressionCount: maxSubexpressionCount,
                         parseCache: parseCache);
             }
 
@@ -427,7 +436,7 @@ public class PineVM : IPineVM
             return null;
         }
 
-        var expressionInlinedBeforeSubstitution =
+        var expressionInlined =
             CompilePineToDotNet.ReducePineExpression.TransformPineExpressionWithOptionalReplacement(
                 findReplacement: expr =>
                 {
@@ -441,27 +450,9 @@ public class PineVM : IPineVM
 
                     return null;
                 },
-                expressionWithSubstitutions).expr;
+                expressionReduced).expr;
 
-        var expressionInlined =
-            envConstraintId is null ?
-            expressionInlinedBeforeSubstitution
-            :
-            SubstituteSubexpressionsForEnvironmentConstraint(
-                expressionInlinedBeforeSubstitution,
-                envConstraintId: envConstraintId);
-
-        var expressionInlinedSubexpressions =
-            Expression.EnumerateSelfAndDescendants(expressionInlined)
-            .ToImmutableArray();
-
-        var expressionReduced =
-            CompilePineToDotNet.ReducePineExpression.SearchForExpressionReductionRecursive(
-                maxDepth: 10,
-                expressionInlined,
-                dontReduceExpression: expr => expr == expressionWithSubstitutions);
-
-        return expressionReduced;
+        return expressionInlined;
     }
 
     public static Expression SubstituteSubexpressionsForEnvironmentConstraint(
