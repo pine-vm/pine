@@ -672,23 +672,8 @@ valueFromString string =
         "equal" ->
             stringAsValue_equal
 
-        "EQ" ->
-            stringAsValue_EQ
-
-        "GT" ->
-            stringAsValue_GT
-
-        "LT" ->
-            stringAsValue_LT
-
         "String" ->
             stringAsValue_String
-
-        "Nothing" ->
-            stringAsValue_Nothing
-
-        "Just" ->
-            stringAsValue_Just
 
         "KernelApplication" ->
             stringAsValue_KernelApplication
@@ -1394,34 +1379,9 @@ stringAsValue_expression =
     computeValueFromString "expression"
 
 
-stringAsValue_EQ : Value
-stringAsValue_EQ =
-    computeValueFromString "EQ"
-
-
-stringAsValue_LT : Value
-stringAsValue_LT =
-    computeValueFromString "LT"
-
-
-stringAsValue_GT : Value
-stringAsValue_GT =
-    computeValueFromString "GT"
-
-
 stringAsValue_String : Value
 stringAsValue_String =
     computeValueFromString "String"
-
-
-stringAsValue_Just : Value
-stringAsValue_Just =
-    computeValueFromString "Just"
-
-
-stringAsValue_Nothing : Value
-stringAsValue_Nothing =
-    computeValueFromString "Nothing"
 
 
 valueFromInt_1 : Value
