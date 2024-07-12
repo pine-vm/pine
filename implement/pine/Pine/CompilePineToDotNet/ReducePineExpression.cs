@@ -1,5 +1,6 @@
 using Pine.PineVM;
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
 
@@ -144,16 +145,92 @@ public class ReducePineExpression
                                     if (PineValueAsInteger.SignedIntegerFromValueRelaxed(okSkipCountValue.Value) is Result<string, BigInteger>.Ok okSkipCount)
                                     {
                                         if (argumentList.List[1] is Expression.ListExpression partiallySkippedList)
+                                        {
                                             return new Expression.ListExpression(
                                                 [.. partiallySkippedList.List.Skip((int)okSkipCount.Value)]);
+                                        }
 
                                         if (argumentList.List[1] is Expression.LiteralExpression literal)
+                                        {
                                             return new Expression.LiteralExpression(
                                                 KernelFunction.skip((int)okSkipCount.Value, literal.Value));
+                                        }
+
+                                        if (argumentList.List[1] is Expression.KernelApplicationExpression innerKernelApp)
+                                        {
+                                            if (innerKernelApp.functionName is "skip"
+                                                && innerKernelApp.argument is Expression.ListExpression innerSkipArgList &&
+                                                innerSkipArgList.List.Count is 2)
+                                            {
+                                                if (TryEvaluateExpressionIndependent(innerSkipArgList.List[0]) is Result<string, PineValue>.Ok okInnerSkipCountValue)
+                                                {
+                                                    if (PineValueAsInteger.SignedIntegerFromValueRelaxed(okInnerSkipCountValue.Value) is Result<string, BigInteger>.Ok okInnerSkipCount)
+                                                    {
+                                                        var outerSkipCountClamped =
+                                                            okSkipCount.Value < 0 ? 0 : okSkipCount.Value;
+
+                                                        var innerSkipCountClamped =
+                                                            okInnerSkipCount.Value < 0 ? 0 : okInnerSkipCount.Value;
+
+                                                        var aggregateSkipCount = outerSkipCountClamped + innerSkipCountClamped;
+
+                                                        return
+                                                            rootKernelApp
+                                                            with
+                                                            {
+                                                                argument = new Expression.ListExpression(
+                                                                    [
+                                                                    new Expression.LiteralExpression(PineValueAsInteger.ValueFromSignedInteger(aggregateSkipCount)),
+                                                                    innerSkipArgList.List[1]
+                                                                    ]
+                                                                )
+                                                            };
+                                                    }
+                                                }
+                                            }
+                                        }
                                     }
                                 }
 
                                 return AttemptReduceViaEval();
+                            }
+
+                            return AttemptReduceViaEval();
+                        }
+
+                    case "concat":
+                        {
+                            if (rootKernelApp.argument is Expression.ListExpression argumentList)
+                            {
+                                if (argumentList.List.Count is 0)
+                                {
+                                    return AttemptReduceViaEval();
+                                }
+
+                                var items = new List<Expression>();
+
+                                foreach (var argument in argumentList.List)
+                                {
+                                    if (argument is not Expression.ListExpression subList)
+                                    {
+                                        if (argument is Expression.LiteralExpression subLiteral &&
+                                            subLiteral.Value is PineValue.ListValue subLiteralList)
+                                        {
+                                            foreach (var literalItem in subLiteralList.Elements)
+                                            {
+                                                items.Add(new Expression.LiteralExpression(literalItem));
+                                            }
+
+                                            continue;
+                                        }
+
+                                        return AttemptReduceViaEval();
+                                    }
+
+                                    items.AddRange(subList.List);
+                                }
+
+                                return new Expression.ListExpression(items);
                             }
 
                             return AttemptReduceViaEval();
