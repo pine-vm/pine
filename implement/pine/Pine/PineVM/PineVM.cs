@@ -721,23 +721,18 @@ public class PineVM : IPineVM
                     expr => reusableResultOffsetForBranchFalse(expr) - (ifFalseInstructions.Count + 1),
                     shouldSeparate: _ => false)];
 
-            IReadOnlyList<StackInstruction> ifInvalidInstructionsAndJump =
-                [.. ifInvalidInstructions,
-                StackInstruction.Jump(ifFalseInstructions.Count + 1 + ifTrueInstructions.Count + 1)];
-
             IReadOnlyList<StackInstruction> ifFalseInstructionsAndJump =
                 [.. ifFalseInstructions,
                 StackInstruction.Jump(ifTrueInstructions.Count + 1)];
 
             var branchInstruction =
                 new StackInstruction.ConditionalJumpInstruction(
-                    IfFalseOffset: ifInvalidInstructionsAndJump.Count,
-                    IfTrueOffset: ifInvalidInstructionsAndJump.Count + ifFalseInstructionsAndJump.Count);
+                    InvalidBranchOffset: ifFalseInstructionsAndJump.Count + ifTrueInstructions.Count,
+                    TrueBranchOffset: ifFalseInstructionsAndJump.Count);
 
             IReadOnlyList<StackInstruction> instructionsBeforeContinuation =
                 [..conditionInstructions,
                 branchInstruction,
-                ..ifInvalidInstructionsAndJump,
                 ..ifFalseInstructionsAndJump,
                 ..ifTrueInstructions,
                 new StackInstruction.CopyLastAssignedInstruction()];
@@ -1340,15 +1335,17 @@ public class PineVM : IPineVM
 
                 if (conditionValue == PineVMValues.FalseValue)
                 {
-                    currentFrame.InstructionPointer += conditionalStatement.IfFalseOffset;
                     continue;
                 }
 
                 if (conditionValue == PineVMValues.TrueValue)
                 {
-                    currentFrame.InstructionPointer += conditionalStatement.IfTrueOffset;
+                    currentFrame.InstructionPointer += conditionalStatement.TrueBranchOffset;
                     continue;
                 }
+
+                currentFrame.PushInstructionResult(PineValue.EmptyList);
+                currentFrame.InstructionPointer += conditionalStatement.InvalidBranchOffset;
 
                 continue;
             }
