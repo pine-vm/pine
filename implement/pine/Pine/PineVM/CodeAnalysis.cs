@@ -759,7 +759,7 @@ public class CodeAnalysis
             return new ExprMappedToParentEnv.LiteralInParentEnv(literal.Value);
 
         if (pathExpression is Expression.StringTagExpression stringTagExpr)
-            return TryParseExpressionAsIndexPathFromEnv(stringTagExpr.tagged);
+            return TryParseExpressionAsIndexPath(stringTagExpr.tagged, rootExpression);
 
         if (pathExpression is not Expression.KernelApplicationExpression kernelApplication)
             return null;
@@ -779,7 +779,7 @@ public class CodeAnalysis
             if (skipArgumentList.List[0] is not Expression.LiteralExpression skipCountLiteral)
                 return null;
 
-            if (TryParseExpressionAsIndexPathFromEnv(skipArgumentList.List[1]) is not ExprMappedToParentEnv.PathInParentEnv pathPrefix)
+            if (TryParseExpressionAsIndexPath(skipArgumentList.List[1], rootExpression) is not ExprMappedToParentEnv.PathInParentEnv pathPrefix)
                 return null;
 
             return
@@ -791,7 +791,7 @@ public class CodeAnalysis
         }
 
         {
-            if (TryParseExpressionAsIndexPathFromEnv(kernelApplication.argument) is not ExprMappedToParentEnv.PathInParentEnv pathPrefix)
+            if (TryParseExpressionAsIndexPath(kernelApplication.argument, rootExpression) is not ExprMappedToParentEnv.PathInParentEnv pathPrefix)
                 return null;
 
             return new ExprMappedToParentEnv.PathInParentEnv([.. pathPrefix.Path, 0]);
