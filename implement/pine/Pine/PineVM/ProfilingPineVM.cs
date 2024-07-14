@@ -91,6 +91,10 @@ public class ProfilingPineVM
             overrideParseExpression?.Invoke(parseExpressionForAnalysis) ??
             parseExpressionForAnalysis;
 
+        var analysisVM = new PineVM(
+            overrideParseExpression: _ => parseExpressionForEval,
+            evalCache: analysisEvalCache?.EvalCache);
+
         PineVM =
             new PineVM(
                 overrideParseExpression: overrideParseExpression,
@@ -119,8 +123,7 @@ public class ProfilingPineVM
                                                 funcApplReport.Environment,
                                                 exprAnalysisMutatedCache,
                                                 parseExpressionForAnalysis: parseExpressionForAnalysis,
-                                                parseExpressionForEval: parseExpressionForEval,
-                                                evalCache: analysisEvalCache));
+                                                evalVM: analysisVM));
                                 }
                                 finally
                                 {
@@ -171,8 +174,7 @@ public class ProfilingPineVM
         PineValue environment,
         ConcurrentDictionary<Expression, CodeAnalysis.ExprAnalysis> exprAnalysisMutatedCache,
         ParseExprDelegate parseExpressionForAnalysis,
-        ParseExprDelegate parseExpressionForEval,
-        PineVMCache? evalCache)
+        PineVM evalVM)
     {
         var analysisResult =
             CodeAnalysis.AnalyzeExpressionUsageRecursive(
@@ -181,8 +183,7 @@ public class ProfilingPineVM
                 environment,
                 mutatedCache: exprAnalysisMutatedCache,
                 parseExpressionForAnalysis: parseExpressionForAnalysis,
-                parseExpressionForEval: parseExpressionForEval,
-                evalCache: evalCache);
+                evalVM: evalVM);
 
         var rootConstraintId =
             analysisResult.RootEnvClass is not ExpressionEnvClass.ConstrainedEnv constrained

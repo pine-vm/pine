@@ -312,8 +312,7 @@ public class CodeAnalysis
         PineValue environment,
         ConcurrentDictionary<Expression, ExprAnalysis> mutatedCache,
         ParseExprDelegate parseExpressionForAnalysis,
-        ParseExprDelegate parseExpressionForEval,
-        PineVMCache? evalCache)
+        PineVM evalVM)
     {
         var expressionId =
             CompilePineToDotNet.CompileToCSharp.CompiledExpressionId(expression)
@@ -336,6 +335,9 @@ public class CodeAnalysis
                     ValueFromPathInValue(environment, [.. pathInParentEnv.Path]),
 
                     null =>
+                    /*
+                     * The parsing is not smart enough to understand this case.
+                     * */
                     null,
 
                     _ =>
@@ -477,9 +479,7 @@ public class CodeAnalysis
             try
             {
                 childEnvValue =
-                    new PineVM(
-                        overrideParseExpression: _ => parseExpressionForEval,
-                        evalCache: evalCache?.EvalCache)
+                evalVM
                 /*
                  * Evaluation of the environment expression can fail here, since we are looking into all branches,
                  * including ones that are not reachable in the actual execution.
@@ -516,8 +516,7 @@ public class CodeAnalysis
                     childEnvValue,
                     mutatedCache: mutatedCache,
                     parseExpressionForAnalysis: parseExpressionForAnalysis,
-                    parseExpressionForEval: parseExpressionForEval,
-                    evalCache: evalCache);
+                    evalVM: evalVM);
 
             if (childEnvBeforeMapping.RootEnvClass is not ExpressionEnvClass.ConstrainedEnv childConstrainedEnv)
             {
