@@ -188,8 +188,13 @@ public partial class CompileToCSharp
                     (Func<Expression, ExpressionCompilationEnvironment, Result<string, CompiledExpression>?>)
                     PineKernelFunctionsInline.TryInlineKernelFunction_Equal,
 
+                    /*
+                     * 2024-05-29:
+                     * Optimize for readability in intermediate C# code: Keep reference to 'length' as a function call.
+                     * 
                     nameof(KernelFunction.length) =>
                     PineKernelFunctionsInline.TryInlineKernelFunction_Length,
+                    */
 
                     /*
                      * 2023-12-01:
