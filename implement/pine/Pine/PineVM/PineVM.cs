@@ -42,8 +42,8 @@ public class PineVM : IPineVM
         PineValue ReturnValue);
 
     public static PineVM Construct(
-        IReadOnlyDictionary<PineValue, Func<EvalExprDelegate, PineValue, Result<string, PineValue>>>? parseExpressionOverrides = null,
-        IDictionary<EvalCacheEntryKey, PineValue>? evalCache = null)
+        IReadOnlyDictionary<PineValue, Func<EvalExprDelegate, PineValue, Result<string, PineValue>>>? parseExpressionOverrides,
+        IDictionary<EvalCacheEntryKey, PineValue>? evalCache)
     {
         var parseExpressionOverridesDict =
             parseExpressionOverrides

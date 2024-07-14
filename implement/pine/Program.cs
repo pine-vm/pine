@@ -1106,9 +1106,12 @@ public class Program
                             {
                                 if (compiledDecodeExpressionOverrides is not null)
                                 {
+                                    var vmCache = new PineVMCache();
+
                                     var pineVMWithCompiledAssembly =
                                     PineVM.Construct(
-                                        parseExpressionOverrides: compiledDecodeExpressionOverrides);
+                                        parseExpressionOverrides: compiledDecodeExpressionOverrides,
+                                        evalCache: vmCache.EvalCache);
 
                                     return new ElmInteractive.InteractiveSessionPine(
                                         compileElmProgramCodeFiles: compileElmProgramCodeFiles,
