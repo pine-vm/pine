@@ -85,6 +85,18 @@ public static class ElmInteractiveEnvironment
         FunctionRecord functionRecord,
         IReadOnlyList<PineValue> arguments)
     {
+        return
+            ApplyFunctionArgumentsForEvalExpr(functionRecord, arguments)
+            .AndThen(composedArgs =>
+            pineVM.EvaluateExpression(
+                composedArgs.expression,
+                composedArgs.environment));
+    }
+
+    public static Result<string, (Expression expression, PineValue environment)> ApplyFunctionArgumentsForEvalExpr(
+        FunctionRecord functionRecord,
+        IReadOnlyList<PineValue> arguments)
+    {
         var combinedArguments =
             functionRecord.argumentsAlreadyCollected
             .Concat(arguments)
@@ -100,13 +112,13 @@ public static class ElmInteractiveEnvironment
         }
 
         var combinedEnvironment =
-        PineValue.List([PineValue.List(functionRecord.envFunctions),
-            PineValue.List(combinedArguments)]);
+            PineValue.List(
+                [
+                PineValue.List(functionRecord.envFunctions),
+                PineValue.List(combinedArguments)
+                ]);
 
-        return
-        pineVM.EvaluateExpression(
-            functionRecord.innerFunction,
-            environment: combinedEnvironment);
+        return (functionRecord.innerFunction, combinedEnvironment);
     }
 
     public record ElmModule(
@@ -120,7 +132,7 @@ public static class ElmInteractiveEnvironment
         IReadOnlyList<PineValue> argumentsAlreadyCollected);
 
     /// <summary>
-    /// Analog to 'parseFunctionRecordFromValueTagged' in the Elm compiler.
+    /// Analog to the 'parseFunctionRecordFromValueTagged' function in FirCompiler.elm
     /// </summary>
     public static Result<string, FunctionRecord> ParseFunctionRecordFromValueTagged(
         PineValue pineValue,
@@ -147,7 +159,7 @@ public static class ElmInteractiveEnvironment
     }
 
     /// <summary>
-    /// Analog to 'parseFunctionRecordFromValue' in the Elm compiler.
+    /// Analog to the 'parseFunctionRecordFromValue' function in FirCompiler.elm
     /// </summary>
     public static Result<string, FunctionRecord> ParseFunctionRecordFromValue(
         PineValue pineValue,

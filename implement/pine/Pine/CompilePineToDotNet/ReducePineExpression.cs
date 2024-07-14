@@ -1,6 +1,7 @@
 using Pine.PineVM;
 using System;
 using System.Collections.Generic;
+using System.Collections.Immutable;
 using System.Linq;
 using System.Numerics;
 
@@ -57,7 +58,7 @@ public class ReducePineExpression
                 new PineVM.PineVM()
                 .EvaluateExpressionDefaultLessStack(
                     parseAndEvalExpr,
-                    PineValue.EmptyList,
+                    envOk.Value,
                     stackPrevValues: ReadOnlyMemory<PineValue>.Empty);
         }
 
@@ -73,7 +74,7 @@ public class ReducePineExpression
         Expression.ConditionalExpression conditionalExpr)
     {
         return
-            TryEvaluateExpressionIndependent(conditionalExpr)
+            TryEvaluateExpressionIndependent(conditionalExpr.condition)
             .AndThen(conditionValue =>
             {
                 if (conditionValue == PineVMValues.FalseValue)
@@ -86,10 +87,28 @@ public class ReducePineExpression
             });
     }
 
-    public static Expression? SearchForExpressionReduction(Expression expression)
+    public static Expression? SearchForExpressionReduction(
+        Expression expression,
+        EnvConstraintId? envConstraintId)
     {
         if (expression is Expression.LiteralExpression)
             return null;
+
+        if (CodeAnalysis.TryParseExpressionAsIndexPathFromEnv(expression) is { } parsedAsPath)
+        {
+            if (parsedAsPath is ExprMappedToParentEnv.LiteralInParentEnv asLiteral)
+            {
+                return new Expression.LiteralExpression(asLiteral.Value);
+            }
+
+            if (parsedAsPath is ExprMappedToParentEnv.PathInParentEnv asPath && envConstraintId is not null)
+            {
+                if (envConstraintId.TryGetValue(asPath.Path) is { } fromEnvConstraint)
+                {
+                    return new Expression.LiteralExpression(fromEnvConstraint);
+                }
+            }
+        }
 
         Expression? AttemptReduceViaEval()
         {
@@ -121,6 +140,60 @@ public class ReducePineExpression
             case Expression.KernelApplicationExpression rootKernelApp:
                 switch (rootKernelApp.functionName)
                 {
+                    case "equal":
+                        {
+                            if (rootKernelApp.argument is Expression.ListExpression argumentList)
+                            {
+                                if (envConstraintId is not null)
+                                {
+                                    var reducedArgumentsList =
+                                        argumentList.List
+                                        .Select(origArg => SearchForExpressionReductionRecursive(
+                                            maxDepth: 5,
+                                            expression: origArg,
+                                            envConstraintId: envConstraintId))
+                                        .ToImmutableArray();
+
+                                    var listLengthLowerBounds = new List<int>();
+
+                                    foreach (var item in reducedArgumentsList)
+                                    {
+                                        listLengthLowerBounds.AddRange(
+                                            TryInferListLengthLowerBounds(item, envConstraintId));
+                                    }
+
+                                    if (0 < listLengthLowerBounds.Count)
+                                    {
+                                        var listLengthLowerBound = listLengthLowerBounds.Max();
+
+                                        foreach (var item in argumentList.List)
+                                        {
+                                            if (item is Expression.LiteralExpression equalArgLiteral)
+                                            {
+                                                if (equalArgLiteral.Value is PineValue.ListValue equalArgLiteralList)
+                                                {
+                                                    if (equalArgLiteralList.Elements.Count < listLengthLowerBound)
+                                                    {
+                                                        return new Expression.LiteralExpression(PineVMValues.FalseValue);
+                                                    }
+                                                }
+                                            }
+
+                                            if (item is Expression.ListExpression equalArgList)
+                                            {
+                                                if (equalArgList.List.Count < listLengthLowerBound)
+                                                {
+                                                    return new Expression.LiteralExpression(PineVMValues.FalseValue);
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            return AttemptReduceViaEval();
+                        }
+
                     case "list_head":
                         {
                             if (rootKernelApp.argument is Expression.ListExpression argumentList)
@@ -242,10 +315,16 @@ public class ReducePineExpression
 
             case Expression.ConditionalExpression conditional:
                 {
-                    if (Expression.IsIndependent(conditional.condition))
+                    var condition =
+                        SearchForExpressionReductionRecursive(
+                            maxDepth: 5,
+                            conditional.condition,
+                            envConstraintId: envConstraintId);
+
+                    if (Expression.IsIndependent(condition))
                     {
                         return
-                            TryEvaluateExpressionIndependent(conditional.condition)
+                            TryEvaluateExpressionIndependent(condition)
                             .Unpack(
                                 fromErr: _ =>
                                 AttemptReduceViaEval(),
@@ -267,6 +346,69 @@ public class ReducePineExpression
 
             default:
                 return AttemptReduceViaEval();
+        }
+    }
+
+    public static IEnumerable<int> TryInferListLengthLowerBounds(
+        Expression expression,
+        EnvConstraintId envConstraintId)
+    {
+        if (expression is Expression.LiteralExpression literalExpr)
+        {
+            if (literalExpr.Value is PineValue.ListValue literalList)
+            {
+                yield return literalList.Elements.Count;
+            }
+        }
+
+        var asParsedPath = CodeAnalysis.TryParseExpressionAsIndexPathFromEnv(expression);
+
+        if (asParsedPath is ExprMappedToParentEnv.PathInParentEnv itemPath)
+        {
+            var itemConstraint = envConstraintId.PartUnderPath(itemPath.Path);
+
+            foreach (var itemConstraintItem in itemConstraint.ParsedEnvItems)
+            {
+                if (itemConstraintItem.Key.Count is 0)
+                {
+                    if (itemConstraintItem.Value is PineValue.ListValue itemListValue)
+                    {
+                        yield return itemListValue.Elements.Count;
+                    }
+                }
+                else
+                {
+                    yield return itemConstraintItem.Key[0] + 1;
+                }
+            }
+        }
+
+        if (asParsedPath is ExprMappedToParentEnv.LiteralInParentEnv literal)
+        {
+            if (literal.Value is PineValue.ListValue literalList)
+            {
+                yield return literalList.Elements.Count;
+            }
+        }
+
+        if (expression is Expression.KernelApplicationExpression kernelApp)
+        {
+            if (kernelApp.functionName is "skip" &&
+                kernelApp.argument is Expression.ListExpression skipArgList && skipArgList.List.Count is 2)
+            {
+                if (TryEvaluateExpressionIndependent(skipArgList.List[0]) is Result<string, PineValue>.Ok okSkipCountValue)
+                {
+                    if (PineValueAsInteger.SignedIntegerFromValueRelaxed(okSkipCountValue.Value) is Result<string, BigInteger>.Ok okSkipCount)
+                    {
+                        var skipCountClamped = (int)(okSkipCount.Value < 0 ? 0 : okSkipCount.Value);
+
+                        foreach (var offsetBound in TryInferListLengthLowerBounds(skipArgList.List[1], envConstraintId))
+                        {
+                            yield return offsetBound - skipCountClamped;
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -441,6 +583,7 @@ public class ReducePineExpression
     public static Expression SearchForExpressionReductionRecursive(
         int maxDepth,
         Expression expression,
+        EnvConstraintId? envConstraintId = null,
         Func<Expression, bool>? dontReduceExpression = null)
     {
         if (maxDepth < 1)
@@ -453,7 +596,7 @@ public class ReducePineExpression
                     if (dontReduceExpression?.Invoke(expr) ?? false)
                         return null;
 
-                    return SearchForExpressionReduction(expr);
+                    return SearchForExpressionReduction(expr, envConstraintId);
                 }, expression).expr;
 
         if (transformed == expression)
@@ -463,6 +606,7 @@ public class ReducePineExpression
             SearchForExpressionReductionRecursive(
                 maxDepth - 1,
                 transformed,
+                envConstraintId: envConstraintId,
                 dontReduceExpression);
     }
 }

@@ -31,6 +31,8 @@ public class PineVM : IPineVM
 
     private readonly IReadOnlyDictionary<Expression, IReadOnlyList<EnvConstraintId>>? compilationSpecializations;
 
+    private readonly bool disableReductionInCompilation;
+
     private readonly PineVMCache parseCache = new();
 
     public record EvaluationReport(
@@ -85,7 +87,8 @@ public class PineVM : IPineVM
         OverrideParseExprDelegate? overrideParseExpression = null,
         IDictionary<EvalCacheEntryKey, PineValue>? evalCache = null,
         Action<EvaluationReport>? reportFunctionApplication = null,
-        IReadOnlyDictionary<Expression, IReadOnlyList<EnvConstraintId>>? compilationSpecializations = null)
+        IReadOnlyDictionary<Expression, IReadOnlyList<EnvConstraintId>>? compilationSpecializations = null,
+        bool disableReductionInCompilation = false)
     {
         parseExpressionDelegate =
             overrideParseExpression
@@ -97,6 +100,8 @@ public class PineVM : IPineVM
         this.reportFunctionApplication = reportFunctionApplication;
 
         this.compilationSpecializations = compilationSpecializations;
+
+        this.disableReductionInCompilation = disableReductionInCompilation;
     }
 
     public Result<string, PineValue> EvaluateExpression(
@@ -105,7 +110,8 @@ public class PineVM : IPineVM
         EvaluateExpressionOnCustomStack(
             expression,
             environment,
-            config: new EvaluationConfig(ParseAndEvalCountLimit: null));
+            config: new EvaluationConfig(ParseAndEvalCountLimit: null))
+        .Map(report => report.ReturnValue);
 
     public record StackFrameInstructions(
         IReadOnlyList<StackInstruction> Instructions)
@@ -255,7 +261,7 @@ public class PineVM : IPineVM
                 rootExpression,
                 specializations ?? [],
                 parseCache: parseCache,
-                disableReduction: false);
+                disableReduction: disableReductionInCompilation);
     }
 
     public static ExpressionCompilation CompileExpression(
@@ -337,18 +343,10 @@ public class PineVM : IPineVM
             ReduceExpressionAndInlineRecursive(
                 stack: [expressionWithEnvConstraint],
                 currentExpression: expressionWithEnvConstraint,
-                /*
-                 * Adapt to observation on 2024-07-12:
-                 * Max depth of one resulted in significantly faster overall completion when compiling the whole Elm compiler.
-                 * 
-                 * TODO: Test a new heuristic to decide whether to inline recursively:
-                 * Enable inlining in cases where the parse&eval is unconditional
-                 * (after conditions are resolved for the current environment constraint).
-                 * This might require expanding code analysis to collect the parts of environments that conditions depend on.
-                 * */
-                maxDepth: 1,
-                maxSubexpressionCount: 10_000,
-                parseCache: parseCache);
+                maxDepth: 5,
+                maxSubexpressionCount: 4_000,
+                parseCache: parseCache,
+                envConstraintId: envConstraintId);
 
         return
             [.. InstructionsFromExpressionTransitive(reducedExpression).Append(StackInstruction.Return)];
@@ -357,17 +355,36 @@ public class PineVM : IPineVM
     public static Expression ReduceExpressionAndInlineRecursive(
         ImmutableStack<Expression> stack,
         Expression currentExpression,
+        EnvConstraintId? envConstraintId,
         int maxDepth,
         int maxSubexpressionCount,
         PineVMCache parseCache)
     {
+        var expressionSubstituted =
+            envConstraintId is null
+            ?
+            currentExpression
+            :
+            SubstituteSubexpressionsForEnvironmentConstraint(currentExpression, envConstraintId);
+
         var expressionReduced =
             CompilePineToDotNet.ReducePineExpression.SearchForExpressionReductionRecursive(
                 maxDepth: 10,
-                currentExpression);
+                expressionSubstituted,
+                envConstraintId: envConstraintId);
 
         if (maxDepth <= stack.Count())
         {
+            return expressionReduced;
+        }
+
+        if (envConstraintId is null)
+        {
+            /*
+             * Adapt to observation 2024-07-14:
+             * Stopping recursion here if envConstraintId is null resulted in significantly faster
+             * completion times in a test compiling all modules of the Elm compiler.
+             * */
             return expressionReduced;
         }
 
@@ -384,6 +401,18 @@ public class PineVM : IPineVM
             if (maxSubexpressionCount < subexprCount)
                 return expressionReduced;
         }
+
+        var conditionals =
+            Expression.EnumerateSelfAndDescendants(expressionReduced)
+            .OfType<Expression.ConditionalExpression>()
+            .ToImmutableArray();
+
+        var conditionalsBranchesAllDescendands =
+            conditionals
+            .SelectMany(conditional =>
+            Expression.EnumerateSelfAndDescendants(conditional.ifFalse)
+            .Concat(Expression.EnumerateSelfAndDescendants(conditional.ifTrue)))
+            .ToImmutableArray();
 
         ParseExprDelegate parseExpression =
             parseCache.BuildParseExprDelegate(ExpressionEncoding.ParseExpressionFromValueDefault);
@@ -419,6 +448,7 @@ public class PineVM : IPineVM
                     ReduceExpressionAndInlineRecursive(
                         stack: stack.Push(parseOk.Value),
                         currentExpression: inlinedExpr,
+                        envConstraintId: envConstraintId,
                         maxDepth: maxDepth,
                         maxSubexpressionCount: maxSubexpressionCount,
                         parseCache: parseCache);
@@ -442,6 +472,19 @@ public class PineVM : IPineVM
                 {
                     if (expr is Expression.ParseAndEvalExpression parseAndEval)
                     {
+                        if (conditionalsBranchesAllDescendands
+                        .Any(predicate: conditionalExpr => ReferenceEquals(expr, conditionalExpr)))
+                        {
+                            /*
+                             * Do not inline invocations that are still conditional after substituting for the environment constraint.
+                             * Inlining these cases can lead to suboptimal overall performance for various reasons.
+                             * One reason is that inlining in a generic wrapper causes us to miss an opportunity to select
+                             * a more specialized implementation because this selection only happens on invocation.
+                             * */
+
+                            return null;
+                        }
+
                         if (TryInlineParseAndEval(parseAndEval) is { } inlined)
                         {
                             return inlined;
@@ -452,7 +495,12 @@ public class PineVM : IPineVM
                 },
                 expressionReduced).expr;
 
-        return expressionInlined;
+        var expressionInlinedReduced =
+            CompilePineToDotNet.ReducePineExpression.SearchForExpressionReductionRecursive(
+                maxDepth: 10,
+                expressionInlined);
+
+        return expressionInlinedReduced;
     }
 
     public static Expression SubstituteSubexpressionsForEnvironmentConstraint(
@@ -1085,7 +1133,7 @@ public class PineVM : IPineVM
     public record EvaluationConfig(
         int? ParseAndEvalCountLimit);
 
-    public Result<string, PineValue> EvaluateExpressionOnCustomStack(
+    public Result<string, EvaluationReport> EvaluateExpressionOnCustomStack(
         Expression rootExpression,
         PineValue rootEnvironment,
         EvaluationConfig config)
@@ -1158,7 +1206,17 @@ public class PineVM : IPineVM
 
                 if (stack.Count is 0)
                 {
-                    return frameReturnValue;
+                    var rootExprValue =
+                        ExpressionEncoding.EncodeExpressionAsValue(rootExpression)
+                        .Extract(err => throw new Exception("Failed to encode root expression: " + err));
+
+                    return new EvaluationReport(
+                        ExpressionValue: rootExprValue,
+                        Expression: rootExpression,
+                        Environment: rootEnvironment,
+                        InstructionCount: instructionCount,
+                        ParseAndEvalCount: parseAndEvalCount,
+                        ReturnValue: frameReturnValue);
                 }
 
                 var previousFrame = stack.Peek();
@@ -1458,10 +1516,10 @@ public class PineVM : IPineVM
             return
                 delegatingExpr.Delegate.Invoke(
                     (expression, environment) =>
-                    EvaluateExpressionOnCustomStack(
+                    EvaluateExpressionDefaultLessStack(
                         expression,
                         environment,
-                        config: new EvaluationConfig(ParseAndEvalCountLimit: null)),
+                        stackPrevValues: ReadOnlyMemory<PineValue>.Empty),
                     environment)
                 .Extract(err => throw new GenericEvalException("Error from delegate: " + err));
         }
@@ -1591,8 +1649,10 @@ public class PineVM : IPineVM
         }
 
         return
-            EvaluateExpression(environment: environmentValue, expression: parseOk.Value)
-            .Extract(err => throw new Exception("Failed continuing parse and eval: " + err));
+            EvaluateExpressionDefaultLessStack(
+                environment: environmentValue,
+                expression: parseOk.Value,
+                stackPrevValues: ReadOnlyMemory<PineValue>.Empty);
     }
 
     public static string DescribeValueForErrorMessage(PineValue pineValue) =>

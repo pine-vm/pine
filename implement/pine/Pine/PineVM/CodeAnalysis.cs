@@ -53,6 +53,9 @@ public record EnvConstraintId
         return id0.HashBase16 == id1.HashBase16;
     }
 
+    public static EnvConstraintId CreateEquals(PineValue pineValue) =>
+        Create([new KeyValuePair<IReadOnlyList<int>, PineValue>([], pineValue)]);
+
     public static EnvConstraintId Create(
         ExpressionEnvClass.ConstrainedEnv envClass,
         PineValue envValue,
@@ -77,6 +80,12 @@ public record EnvConstraintId
             .OrderBy(kv => kv.Key, IntPathComparer.Instance)
             .ToImmutableArray();
 
+        return Create(parsedEnvItems);
+    }
+
+    public static EnvConstraintId Create(
+        IReadOnlyList<KeyValuePair<IReadOnlyList<int>, PineValue>> parsedEnvItems)
+    {
         var parsedEnvItemsPineValues =
             parsedEnvItems
             .OrderBy(kv => kv.Key, IntPathComparer.Instance)
@@ -129,6 +138,64 @@ public record EnvConstraintId
         }
 
         return true;
+    }
+
+    public static EnvConstraintId Intersect(EnvConstraintId constraint, PineValue value)
+    {
+        if (constraint.ValueSatisfiesConstraint(value))
+            return constraint;
+
+        var intersectionEnvItems = new Dictionary<IReadOnlyList<int>, PineValue>();
+
+        foreach (var envItem in constraint.ParsedEnvItems)
+        {
+            if (CodeAnalysis.ValueFromPathInValue(value, [.. envItem.Key]) is not { } pathValue)
+                continue;
+
+            if (pathValue.Equals(envItem.Value))
+            {
+                intersectionEnvItems[envItem.Key] = envItem.Value;
+                continue;
+            }
+
+            if (envItem.Value is not PineValue.ListValue constraintItemList || pathValue is not PineValue.ListValue valueItemList)
+            {
+                continue;
+            }
+
+            for (var i = 0; i < constraintItemList.Elements.Count && i < valueItemList.Elements.Count; ++i)
+            {
+                var constraintChildEnvItem = constraintItemList.Elements[i];
+                var foundChildEnvItem = valueItemList.Elements[i];
+
+                var childConstraint = EnvConstraintId.CreateEquals(constraintChildEnvItem);
+
+                var childConstraintIntersection = Intersect(childConstraint, foundChildEnvItem);
+
+                foreach (var childEnvConstraintItem in childConstraintIntersection.ParsedEnvItems)
+                {
+                    intersectionEnvItems[[.. envItem.Key, i, .. childEnvConstraintItem.Key]] = childEnvConstraintItem.Value;
+                }
+            }
+        }
+
+        return EnvConstraintId.Create([.. intersectionEnvItems]);
+    }
+
+    public EnvConstraintId PartUnderPath(IReadOnlyList<int> path)
+    {
+        return Create(
+            [..
+            ParsedEnvItems
+            .SelectMany(item =>
+            {
+                if (!item.Key.Take(path.Count).SequenceEqual(path))
+                {
+                    return (IReadOnlyList<KeyValuePair<IReadOnlyList<int>, PineValue>>)[];
+                }
+
+                return [new KeyValuePair<IReadOnlyList<int>, PineValue>([.. item.Key.Skip(path.Count)], item.Value)];
+            })]);
     }
 }
 
@@ -489,7 +556,9 @@ public class CodeAnalysis
                     parseSubExpr.ParseAndEvalExpr.environment,
                     environment,
                     config: new PineVM.EvaluationConfig(ParseAndEvalCountLimit: 100))
-                .WithDefault(null);
+                .Unpack(
+                    fromErr: _ => null,
+                    fromOk: ok => ok.ReturnValue);
             }
             catch
             {
@@ -724,6 +793,14 @@ public class CodeAnalysis
         if (path.Length is 0)
             return environment;
 
+        if (environment is PineValue.BlobValue blobValue)
+        {
+            if (1 < path.Length)
+                return null;
+
+            return KernelFunction.skip(path[0], blobValue);
+        }
+
         if (environment is not PineValue.ListValue listValue)
             return null;
 
@@ -796,4 +873,98 @@ public class CodeAnalysis
             return new ExprMappedToParentEnv.PathInParentEnv([.. pathPrefix.Path, 0]);
         }
     }
+
+    public static IReadOnlyDictionary<Expression, IReadOnlyList<EnvConstraintId>> EnvironmentClassesFromInvocationReports(
+        IReadOnlyList<PineVM.EvaluationReport> invocationReports,
+        int limitInvocationSampleCount,
+        int limitSampleCountPerSample,
+        int specializationUsageCountMin,
+        int limitSpecializationsPerExpression)
+    {
+        var invocationReportsByExpr =
+            SubsequenceWithEvenDistribution(invocationReports, limitInvocationSampleCount)
+            .GroupBy(report => report.Expression)
+            .ToImmutableArray();
+
+        var compilationSpecializations =
+            invocationReportsByExpr
+            .ToDictionary(
+                keySelector: exprGroup => exprGroup.Key,
+                elementSelector:
+                exprGroup =>
+                {
+                    var environmentClasses =
+                    GenerateEnvironmentClasses(
+                        [.. exprGroup.Select(report => report.Environment)],
+                        limitIntersectionCountPerValue: limitSampleCountPerSample);
+
+                    var environmentClassesAboveThreshold =
+                    environmentClasses
+                    .Where(envClass => specializationUsageCountMin <= envClass.matchCount)
+                    .OrderByDescending(envClass => envClass.matchCount)
+                    .ToImmutableArray();
+
+                    var selectedSpecializations = new HashSet<EnvConstraintId>();
+
+                    var queue = new Queue<EnvConstraintId>(environmentClassesAboveThreshold.Select(report => report.envClass));
+
+                    while (queue.Count > 0 && selectedSpecializations.Count < limitSpecializationsPerExpression)
+                    {
+                        var newItem = queue.Dequeue();
+
+                        foreach (var prevItem in selectedSpecializations.ToArray())
+                        {
+                            if (newItem.ConstraintSatisfiesConstraint(prevItem))
+                            {
+                                selectedSpecializations.Remove(prevItem);
+                            }
+                        }
+
+                        selectedSpecializations.Add(newItem);
+                    }
+
+                    return
+                    (IReadOnlyList<EnvConstraintId>)
+                    [.. selectedSpecializations];
+                });
+
+        return compilationSpecializations;
+    }
+
+    public static IReadOnlyList<(EnvConstraintId envClass, int matchCount)> GenerateEnvironmentClasses(
+        IReadOnlyList<PineValue> values,
+        int limitIntersectionCountPerValue)
+    {
+        var distinctValues = new HashSet<PineValue>(values);
+
+        var classes =
+            distinctValues
+            .SelectMany(value =>
+            {
+                var constraint = EnvConstraintId.CreateEquals(value);
+
+                return
+                SubsequenceWithEvenDistribution(values, limitIntersectionCountPerValue)
+                .Select(otherValue => EnvConstraintId.Intersect(constraint, otherValue));
+            })
+            .ToImmutableArray();
+
+        return
+            [..classes
+            .Where(envClass => envClass.ParsedEnvItems.Any())
+            .Distinct()
+            .Select(envClass => (envClass, values.Count(value => envClass.ValueSatisfiesConstraint(value))))];
+    }
+
+    public static IReadOnlyList<T> SubsequenceWithEvenDistribution<T>(
+        IReadOnlyList<T> source,
+        int limitSampleCount) =>
+        source.Count <= limitSampleCount
+        ?
+        [.. source]
+        :
+        [..source
+        .Chunk(source.Count / limitSampleCount)
+        .Select(chunk => chunk.First())
+        .Take(limitSampleCount)];
 }
