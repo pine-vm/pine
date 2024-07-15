@@ -140,7 +140,93 @@ public record EnvConstraintId
         return true;
     }
 
-    public static EnvConstraintId Intersect(EnvConstraintId constraint, PineValue value)
+    public static EnvConstraintId CreateIntersection(
+        PineValue valueA,
+        PineValue valueB,
+        int depthLimit) =>
+        Create(Intersection(valueA, valueB, depthLimit));
+
+
+    public static IReadOnlyList<KeyValuePair<IReadOnlyList<int>, PineValue>> Intersection(
+        PineValue valueA,
+        PineValue valueB,
+        int depthLimit)
+    {
+        var intersectionTree = IntersectionTree(valueA, valueB, depthLimit);
+
+        var mutatedCollection = new List<KeyValuePair<IReadOnlyList<int>, PineValue>>();
+
+        void collectLeafesRecursively(ImmutableQueue<int> stack, IntersectionNode node)
+        {
+            if (node is IntersectionNode.IntersectionLeaf leaf)
+            {
+                mutatedCollection.Add(new KeyValuePair<IReadOnlyList<int>, PineValue>([.. stack], leaf.Value));
+            }
+
+            if (node is IntersectionNode.IntersectionBranch branch)
+            {
+                foreach (var (offset, childNode) in branch.Children)
+                {
+                    collectLeafesRecursively(stack.Enqueue(offset), childNode);
+                }
+            }
+        }
+
+        collectLeafesRecursively([], intersectionTree);
+
+        return mutatedCollection;
+    }
+
+    private abstract record IntersectionNode
+    {
+        public sealed record IntersectionLeaf(PineValue Value)
+            : IntersectionNode;
+
+        public sealed record IntersectionBranch(IReadOnlyList<(int offset, IntersectionNode childNode)> Children)
+            : IntersectionNode;
+    }
+
+    private static IntersectionNode IntersectionTree(
+        PineValue valueA,
+        PineValue valueB,
+        int depthLimit)
+    {
+        if (valueA == valueB)
+        {
+            return new IntersectionNode.IntersectionLeaf(valueA);
+        }
+
+        if (depthLimit < 1)
+        {
+            return new IntersectionNode.IntersectionBranch([]);
+        }
+
+        if (valueA is not PineValue.ListValue listA || valueB is not PineValue.ListValue listB)
+        {
+            return new IntersectionNode.IntersectionBranch([]);
+        }
+
+        var commonLength =
+            listA.Elements.Count < listB.Elements.Count ?
+            listA.Elements.Count :
+            listB.Elements.Count;
+
+        var children = new List<(int, IntersectionNode)>();
+
+        for (var i = 0; i < commonLength; ++i)
+        {
+            var childNode = IntersectionTree(listA.Elements[i], listB.Elements[i], depthLimit - 1);
+
+            if (childNode is IntersectionNode.IntersectionBranch branch && branch.Children.Count is 0)
+                continue;
+
+            children.Add((i, childNode));
+        }
+
+        return new IntersectionNode.IntersectionBranch(children);
+    }
+
+    public static EnvConstraintId CreateIntersection(EnvConstraintId constraint, PineValue value)
     {
         if (constraint.ValueSatisfiesConstraint(value))
             return constraint;
@@ -168,9 +254,9 @@ public record EnvConstraintId
                 var constraintChildEnvItem = constraintItemList.Elements[i];
                 var foundChildEnvItem = valueItemList.Elements[i];
 
-                var childConstraint = EnvConstraintId.CreateEquals(constraintChildEnvItem);
+                var childConstraint = CreateEquals(constraintChildEnvItem);
 
-                var childConstraintIntersection = Intersect(childConstraint, foundChildEnvItem);
+                var childConstraintIntersection = CreateIntersection(childConstraint, foundChildEnvItem);
 
                 foreach (var childEnvConstraintItem in childConstraintIntersection.ParsedEnvItems)
                 {
@@ -179,7 +265,7 @@ public record EnvConstraintId
             }
         }
 
-        return EnvConstraintId.Create([.. intersectionEnvItems]);
+        return Create([.. intersectionEnvItems]);
     }
 
     public EnvConstraintId PartUnderPath(IReadOnlyList<int> path)
@@ -896,7 +982,8 @@ public class CodeAnalysis
                     var environmentClasses =
                     GenerateEnvironmentClasses(
                         [.. exprGroup.Select(report => report.Environment)],
-                        limitIntersectionCountPerValue: limitSampleCountPerSample);
+                        limitIntersectionCountPerValue: limitSampleCountPerSample,
+                        classDepthLimit: 6);
 
                     var environmentClassesAboveThreshold =
                     environmentClasses
@@ -933,7 +1020,8 @@ public class CodeAnalysis
 
     public static IReadOnlyList<(EnvConstraintId envClass, int matchCount)> GenerateEnvironmentClasses(
         IReadOnlyList<PineValue> values,
-        int limitIntersectionCountPerValue)
+        int limitIntersectionCountPerValue,
+        int classDepthLimit)
     {
         var distinctValues = new HashSet<PineValue>(values);
 
@@ -941,17 +1029,17 @@ public class CodeAnalysis
             distinctValues
             .SelectMany(value =>
             {
-                var constraint = EnvConstraintId.CreateEquals(value);
-
                 return
-                SubsequenceWithEvenDistribution(values, limitIntersectionCountPerValue)
-                .Select(otherValue => EnvConstraintId.Intersect(constraint, otherValue));
+                SubsequenceWithEvenDistribution(
+                    [.. values.Where(otherValue => otherValue != value)],
+                    limitIntersectionCountPerValue)
+                .Select(otherValue => EnvConstraintId.CreateIntersection(value, otherValue, depthLimit: classDepthLimit));
             })
+            .Where(envClass => envClass.ParsedEnvItems.Any())
             .ToImmutableArray();
 
         return
             [..classes
-            .Where(envClass => envClass.ParsedEnvItems.Any())
             .Distinct()
             .Select(envClass => (envClass, values.Count(value => envClass.ValueSatisfiesConstraint(value))))];
     }
@@ -961,7 +1049,7 @@ public class CodeAnalysis
         int limitSampleCount) =>
         source.Count <= limitSampleCount
         ?
-        [.. source]
+        source
         :
         [..source
         .Chunk(source.Count / limitSampleCount)
