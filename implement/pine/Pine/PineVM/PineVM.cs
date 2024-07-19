@@ -633,7 +633,9 @@ public class PineVM : IPineVM
                 {
                     if (reusableEvalResult(expression) is { } reusableIndex)
                     {
-                        return new Expression.StackReferenceExpression(reusableIndex - instructionIndex);
+                        var offset = reusableIndex - instructionIndex;
+
+                        return new Expression.StackReferenceExpression(offset);
                     }
 
                     localInstructionIndexFromExpr.Add(expression, instructionIndex);
@@ -726,11 +728,8 @@ public class PineVM : IPineVM
                 reusableFromCondition[evalInstruction.Expression] = i;
             }
 
-            IReadOnlyList<StackInstruction> ifInvalidInstructions =
-                [StackInstruction.Eval(new Expression.LiteralExpression(PineValue.EmptyList))];
-
             var instructionsBeforeBranchFalseCount =
-                conditionInstructions.Count + 1 + ifInvalidInstructions.Count + 1;
+                conditionInstructions.Count + 1;
 
             int? reusableResultOffsetForBranchFalse(Expression expression)
             {
@@ -741,7 +740,7 @@ public class PineVM : IPineVM
 
                 if (reusableFromCondition.TryGetValue(expression, out var offsetFromCondition))
                 {
-                    return offsetFromCondition - conditionInstructions.Count;
+                    return offsetFromCondition - instructionsBeforeBranchFalseCount;
                 }
 
                 return null;
