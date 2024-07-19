@@ -99,7 +99,7 @@ public record EnvConstraintId
             CommonConversion.StringBase16(compilerCache.ComputeHash(PineValue.List(parsedEnvItemsPineValues)));
 
         return new EnvConstraintId(
-            parsedEnvItems.ToImmutableDictionary(keyComparer: IntPathEqualityComparer.Instance),
+            parsedEnvItems.ToImmutableSortedDictionary(keyComparer: IntPathComparer.Instance),
             hashBase16: hashBase16);
     }
 
@@ -972,50 +972,299 @@ public class CodeAnalysis
             .GroupBy(report => report.Expression)
             .ToImmutableArray();
 
+        var parseCache = new PineVMCache();
+
         var compilationSpecializations =
             invocationReportsByExpr
             .ToDictionary(
                 keySelector: exprGroup => exprGroup.Key,
                 elementSelector:
                 exprGroup =>
-                {
-                    var environmentClasses =
-                    GenerateEnvironmentClasses(
-                        [.. exprGroup.Select(report => report.Environment)],
-                        limitIntersectionCountPerValue: limitSampleCountPerSample,
-                        classDepthLimit: 6);
-
-                    var environmentClassesAboveThreshold =
-                    environmentClasses
-                    .Where(envClass => specializationUsageCountMin <= envClass.matchCount)
-                    .OrderByDescending(envClass => envClass.matchCount)
-                    .ToImmutableArray();
-
-                    var selectedSpecializations = new HashSet<EnvConstraintId>();
-
-                    var queue = new Queue<EnvConstraintId>(environmentClassesAboveThreshold.Select(report => report.envClass));
-
-                    while (queue.Count > 0 && selectedSpecializations.Count < limitSpecializationsPerExpression)
-                    {
-                        var newItem = queue.Dequeue();
-
-                        foreach (var prevItem in selectedSpecializations.ToArray())
-                        {
-                            if (newItem.ConstraintSatisfiesConstraint(prevItem))
-                            {
-                                selectedSpecializations.Remove(prevItem);
-                            }
-                        }
-
-                        selectedSpecializations.Add(newItem);
-                    }
-
-                    return
-                    (IReadOnlyList<EnvConstraintId>)
-                    [.. selectedSpecializations];
-                });
+                EnvironmentClassesFromExpressionInvocationReports(
+                    expression: exprGroup.Key,
+                    invocationsEnvironments: [.. exprGroup.Select(report => report.Environment)],
+                    limitSampleCountPerSample: limitSampleCountPerSample,
+                    specializationUsageCountMin: specializationUsageCountMin,
+                    limitSpecializationsPerExpression: limitSpecializationsPerExpression,
+                    parseCache: parseCache));
 
         return compilationSpecializations;
+    }
+
+
+    public static IReadOnlyList<EnvConstraintId> EnvironmentClassesFromExpressionInvocationReports(
+        Expression expression,
+        IReadOnlyList<PineValue> invocationsEnvironments,
+        int limitSampleCountPerSample,
+        int specializationUsageCountMin,
+        int limitSpecializationsPerExpression,
+        PineVMCache parseCache)
+    {
+        var environmentClasses =
+            GenerateEnvironmentClasses(
+                invocationsEnvironments,
+                limitIntersectionCountPerValue: limitSampleCountPerSample,
+                classDepthLimit: 6);
+
+        var environmentClassesAboveThreshold =
+            environmentClasses
+            .Where(envClass => specializationUsageCountMin <= envClass.matchCount)
+            .OrderByDescending(envClass => envClass.matchCount)
+            .ToImmutableArray();
+
+        var classSimplifications = new Dictionary<EnvConstraintId, EnvConstraintId>();
+
+        var simplifiedClasses = new HashSet<EnvConstraintId>();
+
+        foreach (var (envClass, _) in environmentClassesAboveThreshold)
+        {
+            /*
+
+            var (envClassSimplified, simplicationAdditions) =
+                SimplifyEnvClassRecursive(
+                    expression: expression,
+                    envClass,
+                    simplifications: classSimplifications,
+                    parseCache: parseCache);
+
+            foreach (var mapAddition in simplicationAdditions)
+            {
+                classSimplifications[mapAddition.Key] = mapAddition.Value;
+            }
+            */
+
+            var envClassSimplified =
+                SimplifyEnvClass(
+                    expression,
+                    envClass,
+                    depthMax: 6,
+                    parseCache: parseCache);
+
+            if (0 < envClassSimplified.ParsedEnvItems.Count)
+            {
+                simplifiedClasses.Add(envClassSimplified);
+            }
+        }
+
+        var selectedSpecializations = new HashSet<EnvConstraintId>();
+
+        var queue = new Queue<EnvConstraintId>(simplifiedClasses);
+
+        while (queue.Count > 0 && selectedSpecializations.Count < limitSpecializationsPerExpression)
+        {
+            var newEnvClass = queue.Dequeue();
+
+            foreach (var prevEnvClass in selectedSpecializations.ToArray())
+            {
+                if (newEnvClass.ConstraintSatisfiesConstraint(prevEnvClass))
+                {
+                    selectedSpecializations.Remove(prevEnvClass);
+                }
+            }
+
+            selectedSpecializations.Add(newEnvClass);
+        }
+
+        return [.. selectedSpecializations];
+    }
+
+    static EnvConstraintId SimplifyEnvClassShallow(
+        Expression expression,
+        EnvConstraintId envClass)
+    {
+        var shallowObservedPaths =
+            Expression.EnumerateSelfAndDescendants(expression)
+            .SelectWhereNotNull(
+                expr =>
+                TryParseExpressionAsIndexPathFromEnv(expr) is ExprMappedToParentEnv.PathInParentEnv path
+                ?
+                path.Path
+                :
+                null)
+            .ToHashSet(IntPathEqualityComparer.Instance);
+
+        bool keepClassItemPath(IReadOnlyList<int> classItemPath)
+        {
+            foreach (var observedPath in shallowObservedPaths)
+            {
+                if (observedPath.Count < classItemPath.Count)
+                    continue;
+
+                bool mismatch = false;
+
+                for (var i = 0; i < classItemPath.Count; i++)
+                {
+                    if (observedPath[i] != classItemPath[i])
+                    {
+                        mismatch = true;
+                        break;
+                    }
+                }
+
+                if (mismatch)
+                    continue;
+
+                return true;
+            }
+
+            return false;
+        }
+
+        var itemsToKeep =
+            envClass.ParsedEnvItems
+            .Where(classItem => keepClassItemPath(classItem.Key))
+            .ToList();
+
+        if (itemsToKeep.Count == envClass.ParsedEnvItems.Count)
+            return envClass;
+
+        return EnvConstraintId.Create(itemsToKeep);
+    }
+
+    static EnvConstraintId SimplifyEnvClass(
+        Expression rootExpression,
+        EnvConstraintId envClass,
+        int depthMax,
+        PineVMCache parseCache)
+    {
+        static ImmutableHashSet<IReadOnlyList<int>> observedPathsFromExpression(Expression expression) =>
+            Expression.EnumerateSelfAndDescendants(expression)
+            .SelectWhereNotNull(
+                expr =>
+                TryParseExpressionAsIndexPathFromEnv(expr) is ExprMappedToParentEnv.PathInParentEnv path
+                ?
+                path.Path
+                :
+                null)
+            .ToImmutableHashSet(IntPathEqualityComparer.Instance);
+
+        var rootObservedPaths = observedPathsFromExpression(rootExpression);
+
+        var levelsObservedPaths = new List<ImmutableHashSet<IReadOnlyList<int>>>();
+
+        var currentExpression = rootExpression;
+
+        for (var i = 0; i < depthMax; ++i)
+        {
+            var lastExpression = currentExpression;
+
+            currentExpression =
+                PineVM.ReduceExpressionAndInlineRecursive(
+                    stack: [rootExpression],
+                    currentExpression: currentExpression,
+                    envConstraintId: envClass,
+                    maxDepth: 2,
+                    maxSubexpressionCount: 4_000,
+                    parseCache: parseCache,
+                    disableRecurseAfterInline: true);
+
+            if (currentExpression == lastExpression)
+                break;
+
+            levelsObservedPaths.Add(observedPathsFromExpression(currentExpression));
+        }
+
+        var aggregateObservedPaths =
+            levelsObservedPaths.Aggregate(
+                func: (a, b) => a.Union(b),
+                seed: rootObservedPaths);
+
+        bool keepClassItemPath(IReadOnlyList<int> classItemPath)
+        {
+            foreach (var observedPath in aggregateObservedPaths)
+            {
+                if (observedPath.Count < classItemPath.Count)
+                    continue;
+
+                bool mismatch = false;
+
+                for (var i = 0; i < classItemPath.Count; i++)
+                {
+                    if (observedPath[i] != classItemPath[i])
+                    {
+                        mismatch = true;
+                        break;
+                    }
+                }
+
+                if (mismatch)
+                    continue;
+
+                return true;
+            }
+
+            return false;
+        }
+
+        var itemsToKeep =
+            envClass.ParsedEnvItems
+            .Where(classItem => keepClassItemPath(classItem.Key))
+            .ToList();
+
+        if (itemsToKeep.Count == envClass.ParsedEnvItems.Count)
+            return envClass;
+
+        return EnvConstraintId.Create(itemsToKeep);
+    }
+
+
+    static (EnvConstraintId, ImmutableDictionary<EnvConstraintId, EnvConstraintId>) SimplifyEnvClassRecursive(
+        Expression expression,
+        EnvConstraintId envClass,
+        IReadOnlyDictionary<EnvConstraintId, EnvConstraintId> simplifications,
+        PineVMCache parseCache)
+    {
+        if (simplifications.TryGetValue(envClass, out var simplification))
+        {
+            return SimplifyEnvClassRecursive(expression, simplification, simplifications, parseCache);
+        }
+
+        var itemsToTestRemove =
+            envClass.ParsedEnvItems
+            .Where(item => 1 < item.Key.Count)
+            .OrderByDescending(item => item.Key.Count)
+            .ToArray();
+
+        foreach (var itemToTestRemove in itemsToTestRemove)
+        {
+            var envClassSimplifiedItems =
+                envClass.ParsedEnvItems
+                .Except([itemToTestRemove]);
+
+            var envClassSimplified =
+                EnvConstraintId.Create([.. envClassSimplifiedItems]);
+
+            Expression projectCompilation(EnvConstraintId envClass) =>
+                PineVM.ReduceExpressionAndInlineRecursive(
+                    stack: [],
+                    currentExpression: expression,
+                    envConstraintId: envClass,
+                    maxDepth: 7,
+                    maxSubexpressionCount: 4_000,
+                    parseCache: parseCache,
+                    disableRecurseAfterInline: false);
+
+            var origReducedExpr =
+                projectCompilation(envClass);
+
+            var simplifiedReducedExprBeforeSubstitute =
+                projectCompilation(envClassSimplified);
+
+            var simplifiedReducedExpr =
+                PineVM.SubstituteSubexpressionsForEnvironmentConstraint(
+                    simplifiedReducedExprBeforeSubstitute,
+                    envConstraintId: envClass);
+
+            if (origReducedExpr.Equals(simplifiedReducedExpr))
+            {
+                var (envClassSimplifiedLeaf, addedSimplifications) =
+                    SimplifyEnvClassRecursive(expression, envClassSimplified, simplifications, parseCache);
+
+                return (envClassSimplifiedLeaf, addedSimplifications.SetItem(envClass, envClassSimplified));
+            }
+        }
+
+        return (envClass, ImmutableDictionary<EnvConstraintId, EnvConstraintId>.Empty);
     }
 
     public static IReadOnlyList<(EnvConstraintId envClass, int matchCount)> GenerateEnvironmentClasses(

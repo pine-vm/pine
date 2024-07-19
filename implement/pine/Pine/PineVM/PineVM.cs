@@ -343,10 +343,11 @@ public class PineVM : IPineVM
             ReduceExpressionAndInlineRecursive(
                 stack: [expressionWithEnvConstraint],
                 currentExpression: expressionWithEnvConstraint,
-                maxDepth: 5,
+                maxDepth: 7,
                 maxSubexpressionCount: 4_000,
                 parseCache: parseCache,
-                envConstraintId: envConstraintId);
+                envConstraintId: envConstraintId,
+                disableRecurseAfterInline: false);
 
         return
             [.. InstructionsFromExpressionTransitive(reducedExpression).Append(StackInstruction.Return)];
@@ -358,7 +359,8 @@ public class PineVM : IPineVM
         EnvConstraintId? envConstraintId,
         int maxDepth,
         int maxSubexpressionCount,
-        PineVMCache parseCache)
+        PineVMCache parseCache,
+        bool disableRecurseAfterInline)
     {
         var expressionSubstituted =
             envConstraintId is null
@@ -432,6 +434,11 @@ public class PineVM : IPineVM
                         },
                         parseOk.Value).expr;
 
+                if (disableRecurseAfterInline)
+                {
+                    return inlinedExpr;
+                }
+
                 return
                     ReduceExpressionAndInlineRecursive(
                         stack: stack.Push(parseOk.Value),
@@ -439,7 +446,8 @@ public class PineVM : IPineVM
                         envConstraintId: envConstraintId,
                         maxDepth: maxDepth,
                         maxSubexpressionCount: maxSubexpressionCount,
-                        parseCache: parseCache);
+                        parseCache: parseCache,
+                        disableRecurseAfterInline: disableRecurseAfterInline);
             }
 
             if (Expression.IsIndependent(parseAndEvalExpr.expression))
