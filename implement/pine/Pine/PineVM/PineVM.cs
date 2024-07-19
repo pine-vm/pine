@@ -402,18 +402,6 @@ public class PineVM : IPineVM
                 return expressionReduced;
         }
 
-        var conditionals =
-            Expression.EnumerateSelfAndDescendants(expressionReduced)
-            .OfType<Expression.ConditionalExpression>()
-            .ToImmutableArray();
-
-        var conditionalsBranchesAllDescendands =
-            conditionals
-            .SelectMany(conditional =>
-            Expression.EnumerateSelfAndDescendants(conditional.ifFalse)
-            .Concat(Expression.EnumerateSelfAndDescendants(conditional.ifTrue)))
-            .ToImmutableArray();
-
         ParseExprDelegate parseExpression =
             parseCache.BuildParseExprDelegate(ExpressionEncoding.ParseExpressionFromValueDefault);
 
@@ -466,25 +454,31 @@ public class PineVM : IPineVM
             return null;
         }
 
-        var expressionInlined =
-            CompilePineToDotNet.ReducePineExpression.TransformPineExpressionWithOptionalReplacement(
+        Expression InlineParseAndEvalRecursive(Expression expression)
+        {
+            return
+                CompilePineToDotNet.ReducePineExpression.TransformPineExpressionWithOptionalReplacement(
                 findReplacement: expr =>
                 {
+                    if (expr is Expression.ConditionalExpression conditional)
+                    {
+                        var conditionInlined = InlineParseAndEvalRecursive(conditional.condition);
+
+                        /*
+                         * Do not inline invocations that are still conditional after substituting for the environment constraint.
+                         * Inlining these cases can lead to suboptimal overall performance for various reasons.
+                         * One reason is that inlining in a generic wrapper causes us to miss an opportunity to select
+                         * a more specialized implementation because this selection only happens on invocation.
+                         * */
+
+                        return new Expression.ConditionalExpression(
+                            condition: conditionInlined,
+                            ifFalse: conditional.ifFalse,
+                            ifTrue: conditional.ifTrue);
+                    }
+
                     if (expr is Expression.ParseAndEvalExpression parseAndEval)
                     {
-                        if (conditionalsBranchesAllDescendands
-                        .Any(predicate: conditionalExpr => ReferenceEquals(expr, conditionalExpr)))
-                        {
-                            /*
-                             * Do not inline invocations that are still conditional after substituting for the environment constraint.
-                             * Inlining these cases can lead to suboptimal overall performance for various reasons.
-                             * One reason is that inlining in a generic wrapper causes us to miss an opportunity to select
-                             * a more specialized implementation because this selection only happens on invocation.
-                             * */
-
-                            return null;
-                        }
-
                         if (TryInlineParseAndEval(parseAndEval) is { } inlined)
                         {
                             return inlined;
@@ -493,7 +487,10 @@ public class PineVM : IPineVM
 
                     return null;
                 },
-                expressionReduced).expr;
+                expression).expr;
+        }
+
+        var expressionInlined = InlineParseAndEvalRecursive(expressionReduced);
 
         var expressionInlinedReduced =
             CompilePineToDotNet.ReducePineExpression.SearchForExpressionReductionRecursive(
