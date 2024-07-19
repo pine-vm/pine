@@ -166,7 +166,14 @@ public abstract record Expression
 
         public override int GetHashCode()
         {
-            return HashCode.Combine(SkipCounts.GetHashCode(), Argument.GetHashCode());
+            var hashCode = Argument.GetHashCode();
+
+            for (int i = 0; i < SkipCounts.Length; ++i)
+            {
+                hashCode = HashCode.Combine(SkipCounts.Span[i], hashCode);
+            }
+
+            return hashCode;
         }
     }
 

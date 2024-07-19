@@ -999,6 +999,114 @@ public class PineVMTests
                         StackInstruction.Return
                     ])
             },
+
+            new
+            {
+                expression =
+                (Expression)
+                new Expression.ConditionalExpression(
+                    condition:
+                    new Expression.ListExpression(
+                        [
+                            ExpressionEncoding.ParseKernelApplicationExpression
+                            (
+                                functionName: "mul_int",
+                                argument:
+                                new Expression.ListExpression(
+                                    [
+                                        Expression.Environment,
+                                        Expression.Environment,
+                                        Expression.Environment,
+                                    ])
+                            ).Extract(fromErr: err => throw new Exception(err)),
+                            ExpressionEncoding.ParseKernelApplicationExpression
+                            (
+                                functionName: "mul_int",
+                                argument:
+                                new Expression.ListExpression(
+                                    [
+                                        Expression.Environment,
+                                        Expression.Environment,
+                                        Expression.Environment,
+                                    ])
+                            ).Extract(fromErr: err => throw new Exception(err)),
+                        ]),
+                    ifTrue:
+                    new Expression.LiteralExpression(PineValueAsInteger.ValueFromSignedInteger(13)),
+                    ifFalse:
+                    new Expression.ConditionalExpression(
+                        condition:
+                        ExpressionEncoding.ParseKernelApplicationExpression
+                        (
+                            functionName: "mul_int",
+                            argument:
+                            new Expression.ListExpression(
+                                [
+                                    Expression.Environment,
+                                    Expression.Environment,
+                                    Expression.Environment,
+                                ])
+                        ).Extract(fromErr: err => throw new Exception(err)),
+                        ifTrue:
+                        new Expression.LiteralExpression(PineValueAsInteger.ValueFromSignedInteger(23)),
+                        ifFalse:
+                        new Expression.LiteralExpression(PineValueAsInteger.ValueFromSignedInteger(27)))),
+
+                expected =
+                new PineVM.StackFrameInstructions(
+                    [
+                        StackInstruction.Eval(
+                            ExpressionEncoding.ParseKernelApplicationExpression
+                            (
+                                functionName: "mul_int",
+                                argument:
+                                new Expression.ListExpression(
+                                    [
+                                        Expression.Environment,
+                                        Expression.Environment,
+                                        Expression.Environment,
+                                    ])
+                            ).Extract(fromErr: err => throw new Exception(err))),
+
+                        StackInstruction.Eval(
+                            new Expression.ListExpression(
+                                [
+                                    new Expression.StackReferenceExpression(offset: -1),
+                                    new Expression.StackReferenceExpression(offset: -1),
+                                ])),
+
+                        new StackInstruction.ConditionalJumpInstruction(
+                            InvalidBranchOffset: 9,
+                            TrueBranchOffset: 8),
+
+                        StackInstruction.Eval(
+                            new Expression.StackReferenceExpression(offset: -3)),
+
+                        new StackInstruction.ConditionalJumpInstruction(
+                            InvalidBranchOffset: 3,
+                            TrueBranchOffset: 2),
+
+                        StackInstruction.Eval(
+                            new Expression.LiteralExpression(PineValueAsInteger.ValueFromSignedInteger(27))),
+                        StackInstruction.Jump(offset: 2),
+
+                        StackInstruction.Eval(
+                            new Expression.LiteralExpression(PineValueAsInteger.ValueFromSignedInteger(23))),
+
+                        new StackInstruction.CopyLastAssignedInstruction(),
+                        StackInstruction.Eval(new Expression.StackReferenceExpression(offset: -1)),
+
+                        StackInstruction.Jump(offset: 2),
+
+                        StackInstruction.Eval(
+                            new Expression.LiteralExpression(PineValueAsInteger.ValueFromSignedInteger(13))),
+                        new StackInstruction.CopyLastAssignedInstruction(),
+
+                        StackInstruction.Eval(new Expression.StackReferenceExpression(offset: -1)),
+
+                        StackInstruction.Return,
+                    ])
+            },
         };
 
         var parseCache = new PineVMCache();
