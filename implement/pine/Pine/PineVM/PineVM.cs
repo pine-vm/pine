@@ -878,7 +878,7 @@ public class PineVM : IPineVM
         var allExpressions =
             ListComponentsOrderedForCompilation(
                 rootExpression,
-                skipDescendants: null)
+                skipDescendants: expressionAlreadyCovered)
             .ToImmutableArray();
 
         var allExpressionsCount = new Dictionary<Expression, int>();
@@ -898,7 +898,7 @@ public class PineVM : IPineVM
         var allExpressionsExceptUnderDuplicate =
             ListComponentsOrderedForCompilation(
                 rootExpression,
-                skipDescendants: node => 1 < allExpressionsCount[node])
+                skipDescendants: node => 1 < allExpressionsCount[node] || expressionAlreadyCovered(node))
             .ToImmutableArray();
 
         var allExpressionsExceptUnderDuplicateCount = new Dictionary<Expression, int>();
