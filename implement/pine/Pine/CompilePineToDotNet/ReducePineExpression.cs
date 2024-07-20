@@ -354,6 +354,11 @@ public class ReducePineExpression
                                 new Expression.LiteralExpression(PineValue.EmptyList));
                     }
 
+                    if (conditional.ifTrue == conditional.ifFalse)
+                    {
+                        return conditional.ifTrue;
+                    }
+
                     return AttemptReduceViaEval();
                 }
 
