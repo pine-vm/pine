@@ -11,6 +11,8 @@ public class ReducePineExpression
 {
     static private readonly CompilerMutableCache compilerCache = new();
 
+    static private readonly PineVMCache parseCache = new();
+
     public static Result<string, PineValue> TryEvaluateExpressionIndependent(Expression expression) =>
         expression switch
         {
@@ -55,10 +57,11 @@ public class ReducePineExpression
         if (TryEvaluateExpressionIndependent(parseAndEvalExpr.environment) is Result<string, PineValue>.Ok envOk)
         {
             return
-                new PineVM.PineVM()
+                new PineVM.PineVM(
+                    overrideParseExpression: parseCache.BuildParseExprDelegate)
                 .EvaluateExpressionDefaultLessStack(
                     parseAndEvalExpr,
-                    envOk.Value,
+                    PineValue.EmptyList,
                     stackPrevValues: ReadOnlyMemory<PineValue>.Empty);
         }
 
