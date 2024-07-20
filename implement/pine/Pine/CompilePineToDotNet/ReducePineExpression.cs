@@ -143,7 +143,7 @@ public class ReducePineExpression
             case Expression.KernelApplicationExpression rootKernelApp:
                 switch (rootKernelApp.functionName)
                 {
-                    case "equal":
+                    case nameof(KernelFunction.equal):
                         {
                             if (rootKernelApp.argument is Expression.ListExpression argumentList)
                             {
@@ -165,30 +165,40 @@ public class ReducePineExpression
                                             TryInferListLengthLowerBounds(item, envConstraintId));
                                     }
 
-                                    if (0 < listLengthLowerBounds.Count)
+                                    var listLengthLowerBound =
+                                        listLengthLowerBounds.Count is 0 ?
+                                        (int?)null
+                                        :
+                                        listLengthLowerBounds.Max();
+
+                                    int? prevItemFixedLength = null;
+
+                                    foreach (var item in argumentList.List)
                                     {
-                                        var listLengthLowerBound = listLengthLowerBounds.Max();
+                                        int? itemFixedLength = null;
 
-                                        foreach (var item in argumentList.List)
+                                        if (item is Expression.LiteralExpression equalArgLiteral)
                                         {
-                                            if (item is Expression.LiteralExpression equalArgLiteral)
+                                            if (equalArgLiteral.Value is PineValue.ListValue equalArgLiteralList)
                                             {
-                                                if (equalArgLiteral.Value is PineValue.ListValue equalArgLiteralList)
-                                                {
-                                                    if (equalArgLiteralList.Elements.Count < listLengthLowerBound)
-                                                    {
-                                                        return new Expression.LiteralExpression(PineVMValues.FalseValue);
-                                                    }
-                                                }
+                                                itemFixedLength = equalArgLiteralList.Elements.Count;
+                                            }
+                                        }
+
+                                        if (item is Expression.ListExpression equalArgList)
+                                        {
+                                            itemFixedLength = equalArgList.List.Count;
+                                        }
+
+                                        if (itemFixedLength.HasValue)
+                                        {
+                                            if (itemFixedLength < listLengthLowerBound ||
+                                                (prevItemFixedLength.HasValue && itemFixedLength.Value != prevItemFixedLength.Value))
+                                            {
+                                                return new Expression.LiteralExpression(PineVMValues.FalseValue);
                                             }
 
-                                            if (item is Expression.ListExpression equalArgList)
-                                            {
-                                                if (equalArgList.List.Count < listLengthLowerBound)
-                                                {
-                                                    return new Expression.LiteralExpression(PineVMValues.FalseValue);
-                                                }
-                                            }
+                                            prevItemFixedLength = itemFixedLength;
                                         }
                                     }
                                 }
@@ -362,6 +372,11 @@ public class ReducePineExpression
             {
                 yield return literalList.Elements.Count;
             }
+        }
+
+        if (expression is Expression.ListExpression listExpr)
+        {
+            yield return listExpr.List.Count;
         }
 
         var asParsedPath = CodeAnalysis.TryParseExpressionAsIndexPathFromEnv(expression);
