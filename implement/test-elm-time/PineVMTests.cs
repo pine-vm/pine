@@ -102,9 +102,9 @@ public class PineVMTests
                 (Expression)
                 new Expression.ConditionalExpression(
                     condition: new Expression.LiteralExpression(PineValue.Blob([4])),
-                    ifTrue:
+                    trueBranch:
                     new Expression.LiteralExpression(PineValueAsInteger.ValueFromSignedInteger(13)),
-                    ifFalse:
+                    falseBranch:
                     new Expression.LiteralExpression(PineValueAsInteger.ValueFromSignedInteger(17))),
                 environment = PineValue.EmptyList,
 
@@ -118,9 +118,9 @@ public class PineVMTests
                 new Expression.ConditionalExpression(
                     condition:
                     new Expression.LiteralExpression(PineValue.Blob([2])),
-                    ifTrue:
+                    trueBranch:
                     new Expression.LiteralExpression(PineValueAsInteger.ValueFromSignedInteger(17)),
-                    ifFalse:
+                    falseBranch:
                     new Expression.ParseAndEvalExpression(
                         expression:
                         ExpressionEncoding.ParseKernelApplicationExpression
@@ -162,9 +162,9 @@ public class PineVMTests
                 new Expression.ConditionalExpression(
                     condition:
                     new Expression.LiteralExpression(PineValue.Blob([4])),
-                    ifTrue:
+                    trueBranch:
                     new Expression.LiteralExpression(PineValueAsInteger.ValueFromSignedInteger(17)),
-                    ifFalse:
+                    falseBranch:
                     new Expression.ParseAndEvalExpression(
                         expression:
                         ExpressionEncoding.ParseKernelApplicationExpression
@@ -186,7 +186,7 @@ public class PineVMTests
                 new Expression.ConditionalExpression(
                     condition:
                     new Expression.LiteralExpression(PineValue.Blob([4])),
-                    ifTrue:
+                    trueBranch:
                     new Expression.ParseAndEvalExpression(
                         expression:
                         ExpressionEncoding.ParseKernelApplicationExpression
@@ -204,7 +204,7 @@ public class PineVMTests
                                 ).Extract(fromErr: err => throw new Exception(err))
                             ).Extract(fromErr: err => throw new Exception(err)),
                         Expression.Environment),
-                    ifFalse:
+                    falseBranch:
                     new Expression.LiteralExpression(PineValueAsInteger.ValueFromSignedInteger(17))),
                 environment =
                 PineValue.List(
@@ -509,9 +509,9 @@ public class PineVMTests
                 new Expression.ConditionalExpression(
                     condition:
                     new Expression.LiteralExpression(PineValueAsInteger.ValueFromSignedInteger(11)),
-                    ifTrue:
+                    trueBranch:
                     new Expression.LiteralExpression(PineValueAsInteger.ValueFromSignedInteger(13)),
-                    ifFalse:
+                    falseBranch:
                     new Expression.LiteralExpression(PineValueAsInteger.ValueFromSignedInteger(17))),
 
                 expected =
@@ -545,7 +545,7 @@ public class PineVMTests
                 new Expression.ConditionalExpression(
                     condition:
                     new Expression.LiteralExpression(PineValueAsInteger.ValueFromSignedInteger(11)),
-                    ifTrue:
+                    trueBranch:
                     new Expression.ParseAndEvalExpression(
                         expression:
                         ExpressionEncoding.ParseKernelApplicationExpression
@@ -558,7 +558,7 @@ public class PineVMTests
                                     ])
                             ).Extract(fromErr: err => throw new Exception(err)),
                         Expression.Environment),
-                    ifFalse:
+                    falseBranch:
                     new Expression.LiteralExpression(PineValueAsInteger.ValueFromSignedInteger(17))),
 
                 expected =
@@ -606,7 +606,7 @@ public class PineVMTests
                         new Expression.ConditionalExpression(
                             condition:
                             new Expression.LiteralExpression(PineValueAsInteger.ValueFromSignedInteger(11)),
-                            ifTrue:
+                            trueBranch:
                             new Expression.ParseAndEvalExpression(
                                 expression:
                                 ExpressionEncoding.ParseKernelApplicationExpression
@@ -619,7 +619,7 @@ public class PineVMTests
                                             ])
                                     ).Extract(fromErr: err => throw new Exception(err)),
                                 Expression.Environment),
-                            ifFalse:
+                            falseBranch:
                             new Expression.LiteralExpression(PineValueAsInteger.ValueFromSignedInteger(17)))
                 ]),
 
@@ -667,17 +667,17 @@ public class PineVMTests
                 new Expression.ConditionalExpression(
                     condition:
                     new Expression.LiteralExpression(PineValueAsInteger.ValueFromSignedInteger(11)),
-                    ifFalse:
+                    falseBranch:
                     new Expression.ConditionalExpression(
                         condition:
                         new Expression.LiteralExpression(PineValueAsInteger.ValueFromSignedInteger(13)),
-                        ifFalse:
+                        falseBranch:
                         new Expression.ParseAndEvalExpression(
                             expression: Expression.Environment,
                             environment:Expression.Environment),
-                        ifTrue:
+                        trueBranch:
                         new Expression.LiteralExpression(PineValueAsInteger.ValueFromSignedInteger(21))),
-                    ifTrue:
+                    trueBranch:
                     new Expression.LiteralExpression(PineValueAsInteger.ValueFromSignedInteger(23))),
 
                 expected =
@@ -736,25 +736,25 @@ public class PineVMTests
                         new Expression.ConditionalExpression(
                             condition:
                             new Expression.LiteralExpression(PineValueAsInteger.ValueFromSignedInteger(11)),
-                            ifTrue:
+                            trueBranch:
                             new Expression.ParseAndEvalExpression(
                                 expression:
                                 new Expression.LiteralExpression(PineValueAsInteger.ValueFromSignedInteger(41)),
                                 environment:
                                 Expression.Environment),
-                            ifFalse:
+                            falseBranch:
                             new Expression.LiteralExpression(PineValueAsInteger.ValueFromSignedInteger(17))),
 
                         new Expression.ConditionalExpression(
                             condition:
                             new Expression.LiteralExpression(PineValueAsInteger.ValueFromSignedInteger(13)),
-                            ifTrue:
+                            trueBranch:
                             new Expression.ParseAndEvalExpression(
                                 expression:
                                 new Expression.LiteralExpression(PineValueAsInteger.ValueFromSignedInteger(43)),
                                 environment:
                                 Expression.Environment),
-                            ifFalse:
+                            falseBranch:
                             new Expression.LiteralExpression(PineValueAsInteger.ValueFromSignedInteger(19))),
                 ]),
 
@@ -807,11 +807,6 @@ public class PineVMTests
                     ])
             },
 
-            /*
-             * 
-             * 2024-06-07
-             * Switch to approach to add new stack frame for each condition branch by default.
-             * 
             new
             {
                 expression =
@@ -819,55 +814,15 @@ public class PineVMTests
                 new Expression.ConditionalExpression(
                     condition:
                     new Expression.LiteralExpression(PineValueAsInteger.ValueFromSignedInteger(11)),
-                    ifTrue:
+                    trueBranch:
                     new Expression.LiteralExpression(PineValueAsInteger.ValueFromSignedInteger(13)),
-                    ifFalse:
+                    falseBranch:
                     new Expression.ConditionalExpression(
                         condition:
                         new Expression.LiteralExpression(PineValueAsInteger.ValueFromSignedInteger(21)),
-                        ifTrue:
+                        trueBranch:
                         new Expression.LiteralExpression(PineValueAsInteger.ValueFromSignedInteger(23)),
-                        ifFalse:
-                        new Expression.LiteralExpression(PineValueAsInteger.ValueFromSignedInteger(27)))),
-
-                expected =
-                new PineVM.StackFrameInstructions(
-                    [
-                        new StackInstruction.ConditionalJumpInstruction(
-                            Condition:
-                            new Expression.LiteralExpression(PineValueAsInteger.ValueFromSignedInteger(11)),
-                            IfTrueOffset:4),
-                        new StackInstruction.ConditionalJumpInstruction(
-                            Condition:
-                            new Expression.LiteralExpression(PineValueAsInteger.ValueFromSignedInteger(21)),
-                            IfTrueOffset:1),
-                        StackInstruction.Return(
-                            new Expression.LiteralExpression(PineValueAsInteger.ValueFromSignedInteger(27))),
-                        StackInstruction.Return(
-                            new Expression.LiteralExpression(PineValueAsInteger.ValueFromSignedInteger(23))),
-                        StackInstruction.Return(
-                            new Expression.LiteralExpression(PineValueAsInteger.ValueFromSignedInteger(13))),
-                    ],
-                    ParseAndEvalExpression:null)
-            },
-            */
-
-            new
-            {
-                expression =
-                (Expression)
-                new Expression.ConditionalExpression(
-                    condition:
-                    new Expression.LiteralExpression(PineValueAsInteger.ValueFromSignedInteger(11)),
-                    ifTrue:
-                    new Expression.LiteralExpression(PineValueAsInteger.ValueFromSignedInteger(13)),
-                    ifFalse:
-                    new Expression.ConditionalExpression(
-                        condition:
-                        new Expression.LiteralExpression(PineValueAsInteger.ValueFromSignedInteger(21)),
-                        ifTrue:
-                        new Expression.LiteralExpression(PineValueAsInteger.ValueFromSignedInteger(23)),
-                        ifFalse:
+                        falseBranch:
                         new Expression.LiteralExpression(PineValueAsInteger.ValueFromSignedInteger(27)))),
 
                 expected =
@@ -1031,9 +986,9 @@ public class PineVMTests
                                     ])
                             ).Extract(fromErr: err => throw new Exception(err)),
                         ]),
-                    ifTrue:
+                    trueBranch:
                     new Expression.LiteralExpression(PineValueAsInteger.ValueFromSignedInteger(13)),
-                    ifFalse:
+                    falseBranch:
                     new Expression.ConditionalExpression(
                         condition:
                         ExpressionEncoding.ParseKernelApplicationExpression
@@ -1047,9 +1002,9 @@ public class PineVMTests
                                     Expression.Environment,
                                 ])
                         ).Extract(fromErr: err => throw new Exception(err)),
-                        ifTrue:
+                        trueBranch:
                         new Expression.LiteralExpression(PineValueAsInteger.ValueFromSignedInteger(23)),
-                        ifFalse:
+                        falseBranch:
                         new Expression.LiteralExpression(PineValueAsInteger.ValueFromSignedInteger(27)))),
 
                 expected =

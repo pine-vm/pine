@@ -608,11 +608,11 @@ transformExpressionWithOptionalReplacement findReplacement expression =
                         (transformExpressionWithOptionalReplacement findReplacement argument)
                         functionName
 
-                ConditionalExpression condition ifFalse ifTrue ->
+                ConditionalExpression condition falseBranch trueBranch ->
                     ConditionalExpression
                         (transformExpressionWithOptionalReplacement findReplacement condition)
-                        (transformExpressionWithOptionalReplacement findReplacement ifFalse)
-                        (transformExpressionWithOptionalReplacement findReplacement ifTrue)
+                        (transformExpressionWithOptionalReplacement findReplacement falseBranch)
+                        (transformExpressionWithOptionalReplacement findReplacement trueBranch)
 
                 ReferenceExpression _ ->
                     expression
@@ -1167,8 +1167,8 @@ expressionAsJson expression =
             [ ( "Conditional"
               , Json.Encode.object
                     [ ( "condition", expressionAsJson condition )
-                    , ( "ifFalse", expressionAsJson falseBranch )
-                    , ( "ifTrue", expressionAsJson trueBranch )
+                    , ( "falseBranch", expressionAsJson falseBranch )
+                    , ( "trueBranch", expressionAsJson trueBranch )
                     ]
               )
             ]

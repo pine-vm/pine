@@ -258,15 +258,15 @@ public static class ExpressionEncoding
     public static Result<string, PineValue> EncodeConditionalExpressionAsValue(Expression.ConditionalExpression conditionalExpression) =>
         EncodeExpressionAsValue(conditionalExpression.condition)
         .AndThen(encodedCondition =>
-        EncodeExpressionAsValue(conditionalExpression.ifTrue)
+        EncodeExpressionAsValue(conditionalExpression.trueBranch)
         .AndThen(encodedIfTrue =>
-        EncodeExpressionAsValue(conditionalExpression.ifFalse)
+        EncodeExpressionAsValue(conditionalExpression.falseBranch)
         .Map(encodedIfFalse =>
         EncodeChoiceTypeVariantAsPineValue("Conditional",
             EncodeRecordToPineValue(
                 (nameof(Expression.ConditionalExpression.condition), encodedCondition),
-                (nameof(Expression.ConditionalExpression.ifFalse), encodedIfFalse),
-                (nameof(Expression.ConditionalExpression.ifTrue), encodedIfTrue))))));
+                (nameof(Expression.ConditionalExpression.falseBranch), encodedIfFalse),
+                (nameof(Expression.ConditionalExpression.trueBranch), encodedIfTrue))))));
 
     public static Result<string, Expression.ConditionalExpression> ParseConditionalExpression(
         Func<PineValue, Result<string, Expression>> generalParser,
@@ -274,9 +274,13 @@ public static class ExpressionEncoding
         ParseRecord3FromPineValue(
             value,
             (nameof(Expression.ConditionalExpression.condition), generalParser),
-            (nameof(Expression.ConditionalExpression.ifTrue), generalParser),
-            (nameof(Expression.ConditionalExpression.ifFalse), generalParser),
-            (condition, ifTrue, ifFalse) => new Expression.ConditionalExpression(condition: condition, ifTrue: ifTrue, ifFalse: ifFalse));
+            (nameof(Expression.ConditionalExpression.trueBranch), generalParser),
+            (nameof(Expression.ConditionalExpression.falseBranch), generalParser),
+            (condition, ifTrue, falseBranch) =>
+            new Expression.ConditionalExpression(
+                condition: condition,
+                trueBranch: ifTrue,
+                falseBranch: falseBranch));
 
     public static Result<string, Expression.StringTagExpression> ParseStringTagExpression(
         Func<PineValue, Result<string, Expression>> generalParser,

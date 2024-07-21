@@ -58,18 +58,18 @@ generateTemplateEvaluatingToExpression expression =
                     ]
                 )
 
-        Pine.ConditionalExpression condition ifFalse ifTrue ->
+        Pine.ConditionalExpression condition falseBranch trueBranch ->
             buildFromTagAndArgument
                 "Conditional"
                 (buildRecordExpression
                     [ ( "condition"
                       , generateTemplateEvaluatingToExpression condition
                       )
-                    , ( "ifFalse"
-                      , generateTemplateEvaluatingToExpression ifFalse
+                    , ( "falseBranch"
+                      , generateTemplateEvaluatingToExpression falseBranch
                       )
-                    , ( "ifTrue"
-                      , generateTemplateEvaluatingToExpression ifTrue
+                    , ( "trueBranch"
+                      , generateTemplateEvaluatingToExpression trueBranch
                       )
                     ]
                 )
@@ -263,7 +263,7 @@ buildPineExpressionSyntax config expression =
                             |> String.join "\n"
                         ]
 
-                Pine.ConditionalExpression condition ifFalse ifTrue ->
+                Pine.ConditionalExpression condition falseBranch trueBranch ->
                     buildFromTagNameAndArguments
                         "Pine.ConditionalExpression"
                         [ buildRecordSyntax
@@ -271,12 +271,12 @@ buildPineExpressionSyntax config expression =
                               , buildPineExpressionSyntax config condition
                                     |> String.join "\n"
                               )
-                            , ( "ifFalse"
-                              , buildPineExpressionSyntax config ifFalse
+                            , ( "falseBranch"
+                              , buildPineExpressionSyntax config falseBranch
                                     |> String.join "\n"
                               )
-                            , ( "ifTrue"
-                              , buildPineExpressionSyntax config ifTrue
+                            , ( "trueBranch"
+                              , buildPineExpressionSyntax config trueBranch
                                     |> String.join "\n"
                               )
                             ]

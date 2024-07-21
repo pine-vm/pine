@@ -188,17 +188,17 @@ emitExpression stack expression =
                         Err err ->
                             Err err
 
-                        Ok ifTrue ->
+                        Ok trueBranch ->
                             case emitExpression stack falseBranchFir of
                                 Err err ->
                                     Err err
 
-                                Ok ifFalse ->
+                                Ok falseBranch ->
                                     Ok
                                         (Pine.ConditionalExpression
                                             condition
-                                            ifFalse
-                                            ifTrue
+                                            falseBranch
+                                            trueBranch
                                         )
 
         ReferenceExpression localReference ->
@@ -762,10 +762,10 @@ expressionNeedsAdaptiveApplication expression =
         KernelApplicationExpression argument _ ->
             expressionNeedsAdaptiveApplication argument
 
-        ConditionalExpression condition ifFalse ifTrue ->
+        ConditionalExpression condition falseBranch trueBranch ->
             expressionNeedsAdaptiveApplication condition
-                || expressionNeedsAdaptiveApplication ifTrue
-                || expressionNeedsAdaptiveApplication ifFalse
+                || expressionNeedsAdaptiveApplication trueBranch
+                || expressionNeedsAdaptiveApplication falseBranch
 
         FunctionExpression _ functionBody ->
             expressionNeedsAdaptiveApplication functionBody
@@ -955,9 +955,9 @@ listDirectDependenciesOfExpression expression =
         KernelApplicationExpression argument _ ->
             listDirectDependenciesOfExpression argument
 
-        ConditionalExpression condition ifFalse ifTrue ->
-            Set.union (listDirectDependenciesOfExpression ifFalse)
-                (Set.union (listDirectDependenciesOfExpression ifTrue)
+        ConditionalExpression condition falseBranch trueBranch ->
+            Set.union (listDirectDependenciesOfExpression falseBranch)
+                (Set.union (listDirectDependenciesOfExpression trueBranch)
                     (listDirectDependenciesOfExpression condition)
                 )
 
@@ -1963,7 +1963,7 @@ searchForExpressionReduction expression =
                 _ ->
                     attemptReduceViaEval ()
 
-        Pine.ConditionalExpression condition ifFalse ifTrue ->
+        Pine.ConditionalExpression condition falseBranch trueBranch ->
             if pineExpressionIsIndependent condition then
                 case Pine.evaluateExpression Pine.emptyEvalEnvironment condition of
                     Err _ ->
@@ -1971,10 +1971,10 @@ searchForExpressionReduction expression =
 
                     Ok conditionValue ->
                         if conditionValue == Pine.falseValue then
-                            Just ifFalse
+                            Just falseBranch
 
                         else if conditionValue == Pine.trueValue then
-                            Just ifTrue
+                            Just trueBranch
 
                         else
                             Just (Pine.LiteralExpression (Pine.ListValue []))
@@ -2047,25 +2047,25 @@ transformPineExpressionWithOptionalReplacement findReplacement expression =
                     , inspect
                     )
 
-                Pine.ConditionalExpression condition ifFalse ifTrue ->
+                Pine.ConditionalExpression condition falseBranch trueBranch ->
                     let
                         ( conditionExpr, conditionInspect ) =
                             transformPineExpressionWithOptionalReplacement findReplacement condition
 
-                        ( ifFalseExpr, ifFalseInspect ) =
-                            transformPineExpressionWithOptionalReplacement findReplacement ifFalse
+                        ( falseBranchExpr, falseBranchInspect ) =
+                            transformPineExpressionWithOptionalReplacement findReplacement falseBranch
 
-                        ( ifTrueExpr, ifTrueInspect ) =
-                            transformPineExpressionWithOptionalReplacement findReplacement ifTrue
+                        ( trueBranchExpr, trueBranchInspect ) =
+                            transformPineExpressionWithOptionalReplacement findReplacement trueBranch
                     in
                     ( Pine.ConditionalExpression
                         conditionExpr
-                        ifFalseExpr
-                        ifTrueExpr
+                        falseBranchExpr
+                        trueBranchExpr
                     , { referencesOriginalEnvironment =
                             conditionInspect.referencesOriginalEnvironment
-                                || ifFalseInspect.referencesOriginalEnvironment
-                                || ifTrueInspect.referencesOriginalEnvironment
+                                || falseBranchInspect.referencesOriginalEnvironment
+                                || trueBranchInspect.referencesOriginalEnvironment
                       }
                     )
 
@@ -2101,11 +2101,11 @@ listFunctionAppExpressions expr =
         KernelApplicationExpression argument _ ->
             listFunctionAppExpressions argument
 
-        ConditionalExpression condition ifFalse ifTrue ->
+        ConditionalExpression condition falseBranch trueBranch ->
             List.concat
                 [ listFunctionAppExpressions condition
-                , listFunctionAppExpressions ifFalse
-                , listFunctionAppExpressions ifTrue
+                , listFunctionAppExpressions falseBranch
+                , listFunctionAppExpressions trueBranch
                 ]
 
         FunctionExpression _ functionBody ->
@@ -2160,10 +2160,10 @@ pineExpressionIsIndependent expression =
         Pine.KernelApplicationExpression argument _ ->
             pineExpressionIsIndependent argument
 
-        Pine.ConditionalExpression condition ifFalse ifTrue ->
+        Pine.ConditionalExpression condition falseBranch trueBranch ->
             pineExpressionIsIndependent condition
-                && pineExpressionIsIndependent ifFalse
-                && pineExpressionIsIndependent ifTrue
+                && pineExpressionIsIndependent falseBranch
+                && pineExpressionIsIndependent trueBranch
 
         Pine.EnvironmentExpression ->
             False
@@ -2280,10 +2280,10 @@ countPineExpressionSize countValueSize expression =
         Pine.KernelApplicationExpression argument _ ->
             2 + countPineExpressionSize countValueSize argument
 
-        Pine.ConditionalExpression condition ifFalse ifTrue ->
+        Pine.ConditionalExpression condition falseBranch trueBranch ->
             countPineExpressionSize countValueSize condition
-                + countPineExpressionSize countValueSize ifFalse
-                + countPineExpressionSize countValueSize ifTrue
+                + countPineExpressionSize countValueSize falseBranch
+                + countPineExpressionSize countValueSize trueBranch
 
         Pine.EnvironmentExpression ->
             1

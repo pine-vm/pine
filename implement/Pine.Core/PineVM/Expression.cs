@@ -102,17 +102,17 @@ public abstract record Expression
 
         public Expression condition { get; }
 
-        public Expression ifTrue { get; }
+        public Expression trueBranch { get; }
 
-        public Expression ifFalse { get; }
+        public Expression falseBranch { get; }
 
-        public ConditionalExpression(Expression condition, Expression ifTrue, Expression ifFalse)
+        public ConditionalExpression(Expression condition, Expression trueBranch, Expression falseBranch)
         {
             this.condition = condition;
-            this.ifTrue = ifTrue;
-            this.ifFalse = ifFalse;
+            this.trueBranch = trueBranch;
+            this.falseBranch = falseBranch;
 
-            slimHashCode = HashCode.Combine(condition, ifTrue, ifFalse);
+            slimHashCode = HashCode.Combine(condition, trueBranch, falseBranch);
         }
 
         public virtual bool Equals(ConditionalExpression? other)
@@ -124,8 +124,8 @@ public abstract record Expression
                 ReferenceEquals(this, notNull) ||
                 slimHashCode == notNull.slimHashCode &&
                 condition.Equals(notNull.condition) &&
-                ifTrue.Equals(notNull.ifTrue) &&
-                ifFalse.Equals(notNull.ifFalse);
+                trueBranch.Equals(notNull.trueBranch) &&
+                falseBranch.Equals(notNull.falseBranch);
         }
 
         public override int GetHashCode() =>
@@ -208,7 +208,7 @@ public abstract record Expression
             IsIndependent(kernelApplication.argument),
 
             ConditionalExpression conditional =>
-            IsIndependent(conditional.condition) && IsIndependent(conditional.ifTrue) && IsIndependent(conditional.ifFalse),
+            IsIndependent(conditional.condition) && IsIndependent(conditional.trueBranch) && IsIndependent(conditional.falseBranch),
 
             StringTagExpression stringTag =>
             IsIndependent(stringTag.tagged),
@@ -276,8 +276,8 @@ public abstract record Expression
                 case ConditionalExpression conditional:
 
                     stack.Push(conditional.condition);
-                    stack.Push(conditional.ifFalse);
-                    stack.Push(conditional.ifTrue);
+                    stack.Push(conditional.falseBranch);
+                    stack.Push(conditional.trueBranch);
 
                     break;
 

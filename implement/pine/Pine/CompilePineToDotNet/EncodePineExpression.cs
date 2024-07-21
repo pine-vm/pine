@@ -45,10 +45,10 @@ public partial class CompileToCSharp
                 continueEncode(conditionalExpression.condition)
                     .MapError(err => "Failed to encode condition: " + err)
                     .AndThen(encodedCondition =>
-                        continueEncode(conditionalExpression.ifTrue)
+                        continueEncode(conditionalExpression.trueBranch)
                             .MapError(err => "Failed to encode branch if true: " + err)
                             .AndThen(encodedIfTrue =>
-                                continueEncode(conditionalExpression.ifFalse)
+                                continueEncode(conditionalExpression.falseBranch)
                                     .MapError(err => "Failed to encode branch if false: " + err)
                                     .Map(encodedIfFalse =>
                                         NewConstructorOfExpressionVariant(

@@ -92,10 +92,10 @@ public class ReducePineExpression
             .AndThen(conditionValue =>
             {
                 if (conditionValue == PineVMValues.FalseValue)
-                    return TryEvaluateExpressionIndependent(conditionalExpr.ifFalse);
+                    return TryEvaluateExpressionIndependent(conditionalExpr.falseBranch);
 
                 if (conditionValue == PineVMValues.TrueValue)
-                    return TryEvaluateExpressionIndependent(conditionalExpr.ifTrue);
+                    return TryEvaluateExpressionIndependent(conditionalExpr.trueBranch);
 
                 return PineValue.EmptyList;
             });
@@ -356,18 +356,18 @@ public class ReducePineExpression
                                 fromOk: conditionValue =>
                                 conditionValue == PineVMValues.TrueValue
                                 ?
-                                conditional.ifTrue
+                                conditional.trueBranch
                                 :
                                 conditionValue == PineVMValues.FalseValue
                                 ?
-                                conditional.ifFalse
+                                conditional.falseBranch
                                 :
                                 new Expression.LiteralExpression(PineValue.EmptyList));
                     }
 
-                    if (conditional.ifTrue == conditional.ifFalse)
+                    if (conditional.trueBranch == conditional.falseBranch)
                     {
-                        return conditional.ifTrue;
+                        return conditional.trueBranch;
                     }
 
                     return AttemptReduceViaEval();
@@ -524,26 +524,26 @@ public class ReducePineExpression
                             findReplacement,
                             conditional.condition);
 
-                    var ifTrueTransform =
+                    var trueBranchTransform =
                         TransformPineExpressionWithOptionalReplacement(
                             findReplacement,
-                            conditional.ifTrue);
+                            conditional.trueBranch);
 
-                    var ifFalseTransform =
+                    var falseBranchTransform =
                         TransformPineExpressionWithOptionalReplacement(
                             findReplacement,
-                            conditional.ifFalse);
+                            conditional.falseBranch);
 
                     return (
                         new Expression.ConditionalExpression
                         (
                             condition: conditionTransform.expr,
-                            ifTrue: ifTrueTransform.expr,
-                            ifFalse: ifFalseTransform.expr
+                            trueBranch: trueBranchTransform.expr,
+                            falseBranch: falseBranchTransform.expr
                             ),
                             conditionTransform.referencesOriginalEnv ||
-                            ifTrueTransform.referencesOriginalEnv ||
-                            ifFalseTransform.referencesOriginalEnv);
+                            trueBranchTransform.referencesOriginalEnv ||
+                            falseBranchTransform.referencesOriginalEnv);
                 }
 
             case Expression.EnvironmentExpression:

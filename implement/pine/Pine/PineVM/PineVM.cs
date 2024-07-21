@@ -603,18 +603,18 @@ public class PineVM : IPineVM
 
                         var falseBranchInlined =
                         InlineParseAndEvalRecursive(
-                            conditional.ifFalse,
+                            conditional.falseBranch,
                             underConditional: true);
 
                         var trueBranchInlined =
                         InlineParseAndEvalRecursive(
-                            conditional.ifTrue,
+                            conditional.trueBranch,
                             underConditional: true);
 
                         return new Expression.ConditionalExpression(
                             condition: conditionInlined,
-                            ifFalse: falseBranchInlined,
-                            ifTrue: trueBranchInlined);
+                            falseBranch: falseBranchInlined,
+                            trueBranch: trueBranchInlined);
                     }
 
                     if (expr is Expression.ParseAndEvalExpression parseAndEval)
@@ -705,12 +705,12 @@ public class PineVM : IPineVM
 
             var falseNode =
                 NodeFromExpressionTransitive(
-                    conditionalToSplit.ifFalse,
+                    conditionalToSplit.falseBranch,
                     conditionalsToSkip: []);
 
             var trueNode =
                 NodeFromExpressionTransitive(
-                    conditionalToSplit.ifTrue,
+                    conditionalToSplit.trueBranch,
                     conditionalsToSkip: []);
 
             var continuationNode =
@@ -886,33 +886,33 @@ public class PineVM : IPineVM
                 return null;
             }
 
-            IReadOnlyList<StackInstruction> ifFalseInstructions =
+            IReadOnlyList<StackInstruction> falseBranchInstructions =
                 [.. InstructionsFromNode(
                     conditional.FalseBranch,
                     reusableResultOffsetForBranchFalse,
                     shouldSeparate: _ => false)];
 
-            IReadOnlyList<StackInstruction> ifTrueInstructions =
+            IReadOnlyList<StackInstruction> trueBranchInstructions =
                 [.. InstructionsFromNode(
                     conditional.TrueBranch,
                     reusableExpressionResultOffset:
-                    expr => reusableResultOffsetForBranchFalse(expr) - (ifFalseInstructions.Count + 1),
+                    expr => reusableResultOffsetForBranchFalse(expr) - (falseBranchInstructions.Count + 1),
                     shouldSeparate: _ => false)];
 
-            IReadOnlyList<StackInstruction> ifFalseInstructionsAndJump =
-                [.. ifFalseInstructions,
-                StackInstruction.Jump(ifTrueInstructions.Count + 1)];
+            IReadOnlyList<StackInstruction> falseBranchInstructionsAndJump =
+                [.. falseBranchInstructions,
+                StackInstruction.Jump(trueBranchInstructions.Count + 1)];
 
             var branchInstruction =
                 new StackInstruction.ConditionalJumpInstruction(
-                    InvalidBranchOffset: ifFalseInstructionsAndJump.Count + ifTrueInstructions.Count,
-                    TrueBranchOffset: ifFalseInstructionsAndJump.Count);
+                    InvalidBranchOffset: falseBranchInstructionsAndJump.Count + trueBranchInstructions.Count,
+                    TrueBranchOffset: falseBranchInstructionsAndJump.Count);
 
             IReadOnlyList<StackInstruction> instructionsBeforeContinuation =
                 [..conditionInstructions,
                 branchInstruction,
-                ..ifFalseInstructionsAndJump,
-                ..ifTrueInstructions,
+                ..falseBranchInstructionsAndJump,
+                ..trueBranchInstructions,
                 new StackInstruction.CopyLastAssignedInstruction()];
 
             int? reusableResultOffsetForContinuation(Expression expression)
@@ -1127,8 +1127,8 @@ public class PineVM : IPineVM
                  * For now, we create a new stack frame for each conditional expression.
                  * Therefore do not descend into the branches of the conditional expression.
 
-                stack.Push(conditional.ifTrue);
-                stack.Push(conditional.ifFalse);
+                stack.Push(conditional.falseBranch);
+                stack.Push(conditional.trueBranch);
                 */
             }
 
@@ -1457,11 +1457,11 @@ public class PineVM : IPineVM
                     var expressionToContinueWith =
                         conditionValue == PineVMValues.TrueValue
                         ?
-                        conditionalExpr.ifTrue
+                        conditionalExpr.trueBranch
                         :
                         conditionValue == PineVMValues.FalseValue
                         ?
-                        conditionalExpr.ifFalse
+                        conditionalExpr.falseBranch
                         :
                         null;
 
@@ -1562,8 +1562,8 @@ public class PineVM : IPineVM
         {
             return
                 ExpressionShouldGetNewStackFrame(conditional.condition) ||
-                ExpressionShouldGetNewStackFrame(conditional.ifTrue) ||
-                ExpressionShouldGetNewStackFrame(conditional.ifFalse);
+                ExpressionShouldGetNewStackFrame(conditional.trueBranch) ||
+                ExpressionShouldGetNewStackFrame(conditional.falseBranch);
         }
 
         if (expression is Expression.ListExpression list)
@@ -1901,14 +1901,14 @@ public class PineVM : IPineVM
             conditionValue == PineVMValues.TrueValue
             ?
             EvaluateExpressionDefaultLessStack(
-                conditional.ifTrue,
+                conditional.trueBranch,
                 environment,
                 stackPrevValues: stackPrevValues)
             :
             conditionValue == PineVMValues.FalseValue
             ?
             EvaluateExpressionDefaultLessStack(
-                conditional.ifFalse,
+                conditional.falseBranch,
                 environment,
                 stackPrevValues: stackPrevValues)
             :

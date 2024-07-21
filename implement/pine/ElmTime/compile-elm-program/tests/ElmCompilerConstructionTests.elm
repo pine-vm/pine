@@ -37,8 +37,8 @@ generateTemplateEvaluatingToExpressionTests =
     , ( "ConditionalExpression"
       , Pine.ConditionalExpression
             (Pine.LiteralExpression (Pine.valueFromString "condition-placeholder"))
-            (Pine.LiteralExpression (Pine.valueFromString "ifFalse-placeholder"))
-            (Pine.LiteralExpression (Pine.valueFromString "ifTrue-placeholder"))
+            (Pine.LiteralExpression (Pine.valueFromString "falseBranch-placeholder"))
+            (Pine.LiteralExpression (Pine.valueFromString "trueBranch-placeholder"))
       )
     , ( "EnvironmentExpression"
       , Pine.EnvironmentExpression

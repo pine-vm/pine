@@ -983,13 +983,13 @@ public partial class CompileToCSharp
             .MapError(err => "Failed to compile condition: " + err)
             .AndThen(compiledCondition =>
             CompileToCSharpExpression(
-                conditionalExpression.ifTrue,
+                conditionalExpression.trueBranch,
                 environment,
                 createLetBindingsForCse: true)
             .MapError(err => "Failed to compile branch if true: " + err)
             .AndThen(compiledIfTrue =>
             CompileToCSharpExpression(
-                conditionalExpression.ifFalse,
+                conditionalExpression.falseBranch,
                 environment,
                 createLetBindingsForCse: true)
             .MapError(err => "Failed to compile branch if false: " + err)
@@ -1453,11 +1453,11 @@ public partial class CompileToCSharp
                     .AndThen(transformedCondition =>
                     TransformPineExpressionWithOptionalReplacement(
                         findReplacement,
-                        conditional.ifTrue)
+                        conditional.trueBranch)
                     .AndThen(transformedIfTrue =>
                     TransformPineExpressionWithOptionalReplacement(
                         findReplacement,
-                        conditional.ifFalse)
+                        conditional.falseBranch)
                     .Map(transformedIfFalse =>
                     (Expression)new Expression.ConditionalExpression(
                         transformedCondition,
@@ -1707,9 +1707,9 @@ public partial class CompileToCSharp
             Expression.ConditionalExpression conditionalExpression =>
             [.. EnumerateAllLiterals(conditionalExpression.condition)
             ,
-                .. EnumerateAllLiterals(conditionalExpression.ifTrue)
+                .. EnumerateAllLiterals(conditionalExpression.trueBranch)
             ,
-                .. EnumerateAllLiterals(conditionalExpression.ifFalse)],
+                .. EnumerateAllLiterals(conditionalExpression.falseBranch)],
 
             Expression.ParseAndEvalExpression parseAndEvalExpr =>
             [.. EnumerateAllLiterals(parseAndEvalExpr.expression)
@@ -1780,8 +1780,8 @@ public partial class CompileToCSharp
                     // For ConditionalExpression, traverse its branches as conditional
 
                     Traverse(conditionalExpr.condition, isConditional);
-                    Traverse(conditionalExpr.ifTrue, true);
-                    Traverse(conditionalExpr.ifFalse, true);
+                    Traverse(conditionalExpr.trueBranch, true);
+                    Traverse(conditionalExpr.falseBranch, true);
                     break;
                 case Expression.EnvironmentExpression _:
                     // Leaf node, no further traversal needed

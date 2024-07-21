@@ -131,7 +131,7 @@ evaluateExpression context expression =
                         Ok kernelFunction ->
                             Ok (kernelFunction argument)
 
-        ConditionalExpression condition ifFalse ifTrue ->
+        ConditionalExpression condition falseBranch trueBranch ->
             case evaluateExpression context condition of
                 Err error ->
                     Err (DescribePathNode "Failed to evaluate condition" error)
@@ -139,10 +139,10 @@ evaluateExpression context expression =
                 Ok conditionValue ->
                     case conditionValue of
                         BlobValue [ 2 ] ->
-                            evaluateExpression context ifFalse
+                            evaluateExpression context falseBranch
 
                         BlobValue [ 4 ] ->
-                            evaluateExpression context ifTrue
+                            evaluateExpression context trueBranch
 
                         _ ->
                             Ok listValue_Empty
@@ -1016,13 +1016,13 @@ encodeExpressionAsValue expression =
                     ]
                 )
 
-        ConditionalExpression condition ifFalse ifTrue ->
+        ConditionalExpression condition falseBranch trueBranch ->
             encodeUnionToPineValue
                 stringAsValue_Conditional
                 (ListValue
                     [ ListValue [ stringAsValue_condition, encodeExpressionAsValue condition ]
-                    , ListValue [ stringAsValue_ifFalse, encodeExpressionAsValue ifFalse ]
-                    , ListValue [ stringAsValue_ifTrue, encodeExpressionAsValue ifTrue ]
+                    , ListValue [ stringAsValue_falseBranch, encodeExpressionAsValue falseBranch ]
+                    , ListValue [ stringAsValue_trueBranch, encodeExpressionAsValue trueBranch ]
                     ]
                 )
 
@@ -1097,8 +1097,8 @@ parseExpressionFromValue exprValue =
 
                         "Conditional" ->
                             case parseConditionalExpression unionTagValue of
-                                Ok ( condition, ifFalse, ifTrue ) ->
-                                    Ok (ConditionalExpression condition ifFalse ifTrue)
+                                Ok ( condition, falseBranch, trueBranch ) ->
+                                    Ok (ConditionalExpression condition falseBranch trueBranch)
 
                                 Err err ->
                                     Err err
@@ -1232,23 +1232,23 @@ parseKernelFunctionFromName functionName =
 parseConditionalExpression : Value -> Result String ( Expression, Expression, Expression )
 parseConditionalExpression expressionValue =
     case expressionValue of
-        ListValue [ ListValue [ _, conditionValue ], ListValue [ _, ifFalseValue ], ListValue [ _, ifTrueValue ] ] ->
+        ListValue [ ListValue [ _, conditionValue ], ListValue [ _, falseBranchValue ], ListValue [ _, trueBranchValue ] ] ->
             case parseExpressionFromValue conditionValue of
                 Err error ->
                     Err ("Failed to parse condition: " ++ error)
 
                 Ok condition ->
-                    case parseExpressionFromValue ifFalseValue of
+                    case parseExpressionFromValue falseBranchValue of
                         Err error ->
                             Err ("Failed to parse false branch: " ++ error)
 
-                        Ok ifFalse ->
-                            case parseExpressionFromValue ifTrueValue of
+                        Ok falseBranch ->
+                            case parseExpressionFromValue trueBranchValue of
                                 Err error ->
                                     Err ("Failed to parse true branch: " ++ error)
 
-                                Ok ifTrue ->
-                                    Ok ( condition, ifFalse, ifTrue )
+                                Ok trueBranch ->
+                                    Ok ( condition, falseBranch, trueBranch )
 
         ListValue list ->
             Err
@@ -1359,14 +1359,14 @@ stringAsValue_condition =
     computeValueFromString "condition"
 
 
-stringAsValue_ifTrue : Value
-stringAsValue_ifTrue =
-    computeValueFromString "ifTrue"
+stringAsValue_trueBranch : Value
+stringAsValue_trueBranch =
+    computeValueFromString "trueBranch"
 
 
-stringAsValue_ifFalse : Value
-stringAsValue_ifFalse =
-    computeValueFromString "ifFalse"
+stringAsValue_falseBranch : Value
+stringAsValue_falseBranch =
+    computeValueFromString "falseBranch"
 
 
 stringAsValue_environment : Value
