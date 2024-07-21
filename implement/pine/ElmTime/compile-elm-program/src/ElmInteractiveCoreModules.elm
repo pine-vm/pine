@@ -660,7 +660,17 @@ cons element list =
 
 map : (a -> b) -> List a -> List b
 map f xs =
-    foldr (\\x acc -> cons (f x) acc ) [] xs
+    mapHelp f xs []
+
+
+mapHelp : (a -> b) -> List a -> List b -> List b
+mapHelp f remaining acc =
+    case remaining of
+        [] ->
+            Pine_kernel.reverse acc
+
+        x :: xs ->
+            mapHelp f xs (Pine_kernel.concat [ [ f x ], acc ])
 
 
 indexedMap : (Int -> a -> b) -> List a -> List b
