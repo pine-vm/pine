@@ -29,7 +29,7 @@ public class PineVM : IPineVM
 
     private readonly Action<EvaluationReport>? reportFunctionApplication;
 
-    private readonly IReadOnlyDictionary<Expression, IReadOnlyList<EnvConstraintId>>? compilationSpecializations;
+    private readonly IReadOnlyDictionary<Expression, IReadOnlyList<EnvConstraintId>>? compilationEnvClasses;
 
     private readonly bool disableReductionInCompilation;
 
@@ -87,7 +87,7 @@ public class PineVM : IPineVM
         OverrideParseExprDelegate? overrideParseExpression = null,
         IDictionary<EvalCacheEntryKey, PineValue>? evalCache = null,
         Action<EvaluationReport>? reportFunctionApplication = null,
-        IReadOnlyDictionary<Expression, IReadOnlyList<EnvConstraintId>>? compilationSpecializations = null,
+        IReadOnlyDictionary<Expression, IReadOnlyList<EnvConstraintId>>? compilationEnvClasses = null,
         bool disableReductionInCompilation = false)
     {
         parseExpressionDelegate =
@@ -99,7 +99,7 @@ public class PineVM : IPineVM
 
         this.reportFunctionApplication = reportFunctionApplication;
 
-        this.compilationSpecializations = compilationSpecializations;
+        this.compilationEnvClasses = compilationEnvClasses;
 
         this.disableReductionInCompilation = disableReductionInCompilation;
     }
@@ -254,7 +254,7 @@ public class PineVM : IPineVM
     {
         IReadOnlyList<EnvConstraintId>? specializations = null;
 
-        compilationSpecializations?.TryGetValue(rootExpression, out specializations);
+        compilationEnvClasses?.TryGetValue(rootExpression, out specializations);
 
         return
             CompileExpression(
@@ -281,7 +281,7 @@ public class PineVM : IPineVM
         var specialized =
             specializations
             // Order to prefer more specific constraints when selecting at runtime.
-            .OrderByDescending(envId => envId.ParsedEnvItems.Count)
+            .OrderDescending(EnvironmentClassSpecificityComparer.Instance)
             .Select(
                 specialization =>
                 ((IReadOnlyList<EnvConstraintItem>)

@@ -313,28 +313,28 @@ public class PGOTests
 
         var codeAnalysisStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
-        var compilationSpecializations =
+        var compilationEnvClasses =
             CodeAnalysis.EnvironmentClassesFromInvocationReports(
                 invocationReports,
                 limitInvocationSampleCount: 1000,
                 limitSampleCountPerSample: 40,
-                specializationUsageCountMin: 4,
-                limitSpecializationsPerExpression: 30);
+                classUsageCountMin: 4,
+                limitClassesPerExpression: 30);
 
         codeAnalysisStopwatch.Stop();
 
         Console.WriteLine(
             "Analyzed " + invocationReports.Count + " invocation reports in " +
             codeAnalysisStopwatch.ElapsedMilliseconds + " ms and selected " +
-            compilationSpecializations.Sum(exprGroup => exprGroup.Value.Count) + " total specializations for " +
-            compilationSpecializations.Count(exprGroup => 0 < exprGroup.Value.Count) + " expressions.");
+            compilationEnvClasses.Sum(exprGroup => exprGroup.Value.Count) + " total specializations for " +
+            compilationEnvClasses.Count(exprGroup => 0 < exprGroup.Value.Count) + " expressions.");
 
         var optimizedPineVM =
             new PineVM(
                 overrideParseExpression: pineVMCache.BuildParseExprDelegate,
                 evalCache: null,
                 reportFunctionApplication: null,
-                compilationSpecializations: compilationSpecializations);
+                compilationEnvClasses: compilationEnvClasses);
 
 
         var optimizedScenariosStats =
@@ -748,28 +748,28 @@ public class PGOTests
 
         var codeAnalysisStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
-        var compilationSpecializations =
+        var compilationEnvClasses =
             CodeAnalysis.EnvironmentClassesFromInvocationReports(
                 invocationReports,
                 limitInvocationSampleCount: 1000,
                 limitSampleCountPerSample: 40,
-                specializationUsageCountMin: 4,
-                limitSpecializationsPerExpression: 30);
+                classUsageCountMin: 4,
+                limitClassesPerExpression: 30);
 
         codeAnalysisStopwatch.Stop();
 
         Console.WriteLine(
             "Analyzed " + invocationReports.Count + " invocation reports in " +
             codeAnalysisStopwatch.ElapsedMilliseconds + " ms and selected " +
-            compilationSpecializations.Sum(exprGroup => exprGroup.Value.Count) + " total specializations for " +
-            compilationSpecializations.Count(exprGroup => 0 < exprGroup.Value.Count) + " expressions.");
+            compilationEnvClasses.Sum(exprGroup => exprGroup.Value.Count) + " total specializations for " +
+            compilationEnvClasses.Count(exprGroup => 0 < exprGroup.Value.Count) + " expressions.");
 
         var optimizedPineVM =
             new PineVM(
                 overrideParseExpression: pineVMCache.BuildParseExprDelegate,
                 evalCache: null,
                 reportFunctionApplication: null,
-                compilationSpecializations: compilationSpecializations);
+                compilationEnvClasses: compilationEnvClasses);
 
 
         var optimizedScenariosStats =

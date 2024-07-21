@@ -106,7 +106,7 @@ public record EnvConstraintId
     public virtual bool Equals(EnvConstraintId? other) =>
         Equal(this, other);
 
-    public bool ValueSatisfiesConstraint(PineValue envValue)
+    public bool SatisfiedByValue(PineValue envValue)
     {
         foreach (var envItem in ParsedEnvItems)
         {
@@ -123,14 +123,14 @@ public record EnvConstraintId
         return true;
     }
 
-    public bool ConstraintSatisfiesConstraint(EnvConstraintId otherEnvConstraintId)
+    public bool SatisfiedByConstraint(EnvConstraintId otherEnvConstraintId)
     {
-        foreach (var envItem in otherEnvConstraintId.ParsedEnvItems)
+        foreach (var envItem in ParsedEnvItems)
         {
             if (envItem.Value is not { } expectedValue)
                 return false;
 
-            if (TryGetValue(envItem.Key) is not { } pathValue)
+            if (otherEnvConstraintId.TryGetValue(envItem.Key) is not { } pathValue)
                 return false;
 
             if (!pathValue.Equals(expectedValue))
@@ -228,7 +228,7 @@ public record EnvConstraintId
 
     public static EnvConstraintId CreateIntersection(EnvConstraintId constraint, PineValue value)
     {
-        if (constraint.ValueSatisfiesConstraint(value))
+        if (constraint.SatisfiedByValue(value))
             return constraint;
 
         var intersectionEnvItems = new Dictionary<IReadOnlyList<int>, PineValue>();
@@ -284,6 +284,43 @@ public record EnvConstraintId
             })]);
     }
 }
+
+public class EnvironmentClassSpecificityComparer : IComparer<EnvConstraintId>
+{
+    public readonly static EnvironmentClassSpecificityComparer Instance = new();
+
+    public int Compare(EnvConstraintId? x, EnvConstraintId? y)
+    {
+        if (x is null && y is null)
+            return 0;
+
+        if (x is null)
+            return -1;
+
+        if (y is null)
+            return 1;
+
+        if (x.SatisfiedByConstraint(y))
+        {
+            if (!y.SatisfiedByConstraint(x))
+            {
+                return -1;
+            }
+        }
+
+        if (y.SatisfiedByConstraint(x))
+        {
+            if (!x.SatisfiedByConstraint(y))
+            {
+                return 1;
+            }
+        }
+
+        return x.ParsedEnvItems.Count - y.ParsedEnvItems.Count;
+    }
+}
+
+
 
 public abstract record ExprMappedToParentEnv
 {
@@ -761,8 +798,8 @@ public class CodeAnalysis
             .SelectMany(entry =>
             {
                 if (entry.RootExpr == expression &&
-                    mergedConstraintId.ConstraintSatisfiesConstraint(entry.RootConstraint) &&
-                    mergedConstraintId.ConstraintSatisfiesConstraint(entry.Constraint))
+                    entry.RootConstraint.SatisfiedByConstraint(mergedConstraintId) &&
+                    entry.Constraint.SatisfiedByConstraint(mergedConstraintId))
                 {
                     return (IEnumerable<(Expression, EnvConstraintId)>)[(entry.Expr, mergedConstraintId)];
                 }
@@ -964,8 +1001,8 @@ public class CodeAnalysis
         IReadOnlyList<PineVM.EvaluationReport> invocationReports,
         int limitInvocationSampleCount,
         int limitSampleCountPerSample,
-        int specializationUsageCountMin,
-        int limitSpecializationsPerExpression)
+        int classUsageCountMin,
+        int limitClassesPerExpression)
     {
         var invocationReportsByExpr =
             SubsequenceWithEvenDistribution(invocationReports, limitInvocationSampleCount)
@@ -974,7 +1011,7 @@ public class CodeAnalysis
 
         var parseCache = new PineVMCache();
 
-        var compilationSpecializations =
+        var expressionsEnvClasses =
             invocationReportsByExpr
             .ToDictionary(
                 keySelector: exprGroup => exprGroup.Key,
@@ -984,11 +1021,11 @@ public class CodeAnalysis
                     expression: exprGroup.Key,
                     invocationsEnvironments: [.. exprGroup.Select(report => report.Environment)],
                     limitSampleCountPerSample: limitSampleCountPerSample,
-                    specializationUsageCountMin: specializationUsageCountMin,
-                    limitSpecializationsPerExpression: limitSpecializationsPerExpression,
+                    classUsageCountMin: classUsageCountMin,
+                    limitClassesCount: limitClassesPerExpression,
                     parseCache: parseCache));
 
-        return compilationSpecializations;
+        return expressionsEnvClasses;
     }
 
 
@@ -996,8 +1033,8 @@ public class CodeAnalysis
         Expression expression,
         IReadOnlyList<PineValue> invocationsEnvironments,
         int limitSampleCountPerSample,
-        int specializationUsageCountMin,
-        int limitSpecializationsPerExpression,
+        int classUsageCountMin,
+        int limitClassesCount,
         PineVMCache parseCache)
     {
         var environmentClasses =
@@ -1008,7 +1045,7 @@ public class CodeAnalysis
 
         var environmentClassesAboveThreshold =
             environmentClasses
-            .Where(envClass => specializationUsageCountMin <= envClass.matchCount)
+            .Where(envClass => classUsageCountMin <= envClass.matchCount)
             .OrderByDescending(envClass => envClass.matchCount)
             .ToImmutableArray();
 
@@ -1050,13 +1087,13 @@ public class CodeAnalysis
 
         var queue = new Queue<EnvConstraintId>(simplifiedClasses);
 
-        while (queue.Count > 0 && selectedSpecializations.Count < limitSpecializationsPerExpression)
+        while (queue.Count > 0 && selectedSpecializations.Count < limitClassesCount)
         {
             var newEnvClass = queue.Dequeue();
 
             foreach (var prevEnvClass in selectedSpecializations.ToArray())
             {
-                if (newEnvClass.ConstraintSatisfiesConstraint(prevEnvClass))
+                if (prevEnvClass.SatisfiedByConstraint(newEnvClass))
                 {
                     selectedSpecializations.Remove(prevEnvClass);
                 }
@@ -1290,7 +1327,7 @@ public class CodeAnalysis
         return
             [..classes
             .Distinct()
-            .Select(envClass => (envClass, values.Count(value => envClass.ValueSatisfiesConstraint(value))))];
+            .Select(envClass => (envClass, values.Count(value => envClass.SatisfiedByValue(value))))];
     }
 
     public static IReadOnlyList<T> SubsequenceWithEvenDistribution<T>(
