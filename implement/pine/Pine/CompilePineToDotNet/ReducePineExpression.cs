@@ -56,13 +56,24 @@ public class ReducePineExpression
     {
         if (TryEvaluateExpressionIndependent(parseAndEvalExpr.environment) is Result<string, PineValue>.Ok envOk)
         {
-            return
-                new PineVM.PineVM(
-                    overrideParseExpression: parseCache.BuildParseExprDelegate)
-                .EvaluateExpressionDefaultLessStack(
-                    parseAndEvalExpr,
-                    PineValue.EmptyList,
-                    stackPrevValues: ReadOnlyMemory<PineValue>.Empty);
+            try
+            {
+                return
+                    new PineVM.PineVM(
+                        overrideParseExpression: parseCache.BuildParseExprDelegate)
+                    .EvaluateExpressionDefaultLessStack(
+                        parseAndEvalExpr,
+                        PineValue.EmptyList,
+                        stackPrevValues: ReadOnlyMemory<PineValue>.Empty);
+            }
+            catch (ParseExpressionException)
+            {
+                /*
+                * A branch of a conditional expression might always fail to parse.
+                * This does not mean that the code would crash at runtime, since it is conditional.
+                * (The Elm compiler uses constructs like this to encoding crashing branches with a custom error message.)
+                * */
+            }
         }
 
         return

@@ -341,7 +341,7 @@ public class PineVM : IPineVM
             expressionWithEnvConstraint
             :
             ReduceExpressionAndInlineRecursive(
-                stack: [expressionWithEnvConstraint],
+                rootExpression: rootExpression,
                 currentExpression: expressionWithEnvConstraint,
                 maxDepth: 7,
                 maxSubexpressionCount: 4_000,
@@ -349,12 +349,14 @@ public class PineVM : IPineVM
                 envConstraintId: envConstraintId,
                 disableRecurseAfterInline: false);
 
-        return
+        IReadOnlyList<StackInstruction> allInstructions =
             [.. InstructionsFromExpressionTransitive(reducedExpression).Append(StackInstruction.Return)];
+
+        return allInstructions;
     }
 
     public static Expression ReduceExpressionAndInlineRecursive(
-        ImmutableStack<Expression> stack,
+        Expression rootExpression,
         Expression currentExpression,
         EnvConstraintId? envConstraintId,
         int maxDepth,
@@ -375,7 +377,7 @@ public class PineVM : IPineVM
                 expressionSubstituted,
                 envConstraintId: envConstraintId);
 
-        if (maxDepth <= stack.Count())
+        if (maxDepth <= 0)
         {
             return expressionReduced;
         }
@@ -407,13 +409,23 @@ public class PineVM : IPineVM
         ParseExprDelegate parseExpression =
             parseCache.BuildParseExprDelegate(ExpressionEncoding.ParseExpressionFromValueDefault);
 
-        Expression? TryInlineParseAndEval(Expression.ParseAndEvalExpression parseAndEvalExpr)
+        Expression? TryInlineParseAndEval(
+            Expression.ParseAndEvalExpression parseAndEvalExpr,
+            bool noRecursion)
         {
             Expression? ContinueReduceForKnownExprValue(PineValue exprValue)
             {
                 if (parseExpression(exprValue) is not Result<string, Expression>.Ok parseOk)
                 {
                     return null;
+                }
+
+                if (noRecursion)
+                {
+                    if (rootExpression.Equals(parseOk.Value))
+                    {
+                        return null;
+                    }
                 }
 
                 /*
@@ -439,15 +451,111 @@ public class PineVM : IPineVM
                     return inlinedExpr;
                 }
 
-                return
+                var inlinedExprSubstituted =
+                    envConstraintId is null
+                    ?
+                    inlinedExpr
+                    :
+                    SubstituteSubexpressionsForEnvironmentConstraint(inlinedExpr, envConstraintId);
+
+                var inlinedExprReduced =
+                    CompilePineToDotNet.ReducePineExpression.SearchForExpressionReductionRecursive(
+                        maxDepth: 10,
+                        inlinedExprSubstituted,
+                        envConstraintId: envConstraintId);
+
+                {
+                    var conditionsCount = 0;
+                    var invocationsCount = 0;
+                    var inlinedSubExprCount = 0;
+
+                    foreach (var subexpr in Expression.EnumerateSelfAndDescendants(inlinedExprReduced))
+                    {
+                        ++inlinedSubExprCount;
+
+                        if (300 < inlinedSubExprCount)
+                        {
+                            return null;
+                        }
+
+                        if (subexpr is Expression.ConditionalExpression)
+                        {
+                            ++conditionsCount;
+
+                            if (3 < conditionsCount)
+                            {
+                                return null;
+                            }
+
+                            continue;
+                        }
+
+                        if (subexpr is Expression.ParseAndEvalExpression)
+                        {
+                            ++invocationsCount;
+
+                            if (4 < invocationsCount)
+                            {
+                                return null;
+                            }
+
+                            continue;
+                        }
+                    }
+                }
+
+                var inlinedFinal =
                     ReduceExpressionAndInlineRecursive(
-                        stack: stack.Push(parseOk.Value),
-                        currentExpression: inlinedExpr,
+                        rootExpression: rootExpression,
+                        // currentExpression: inlinedExpr,
+                        currentExpression: inlinedExprReduced,
                         envConstraintId: envConstraintId,
-                        maxDepth: maxDepth,
+                        maxDepth: maxDepth - 1,
                         maxSubexpressionCount: maxSubexpressionCount,
                         parseCache: parseCache,
                         disableRecurseAfterInline: disableRecurseAfterInline);
+
+                {
+                    var conditionsCount = 0;
+                    var invocationsCount = 0;
+                    var inlinedSubExprCount = 0;
+
+                    foreach (var subexpr in Expression.EnumerateSelfAndDescendants(inlinedFinal))
+                    {
+                        ++inlinedSubExprCount;
+
+                        if (300 < inlinedSubExprCount)
+                        {
+                            return null;
+                        }
+
+                        if (subexpr is Expression.ConditionalExpression)
+                        {
+                            ++conditionsCount;
+
+                            if (3 < conditionsCount)
+                            {
+                                return null;
+                            }
+
+                            continue;
+                        }
+
+                        if (subexpr is Expression.ParseAndEvalExpression)
+                        {
+                            ++invocationsCount;
+
+                            if (4 < invocationsCount)
+                            {
+                                return null;
+                            }
+
+                            continue;
+                        }
+                    }
+                }
+
+                return inlinedFinal;
             }
 
             if (Expression.IsIndependent(parseAndEvalExpr.expression))
@@ -462,32 +570,56 @@ public class PineVM : IPineVM
             return null;
         }
 
-        Expression InlineParseAndEvalRecursive(Expression expression)
+        Expression InlineParseAndEvalRecursive(
+            Expression expression,
+            bool underConditional)
         {
             return
                 CompilePineToDotNet.ReducePineExpression.TransformPineExpressionWithOptionalReplacement(
                 findReplacement: expr =>
                 {
+                    /*
+                     * Do not inline invocations that are still conditional after substituting for the environment constraint.
+                     * Inlining these cases can lead to suboptimal overall performance for various reasons.
+                     * One reason is that inlining in a generic wrapper causes us to miss an opportunity to select
+                     * a more specialized implementation because this selection only happens on invocation.
+                     * */
+
+                    /*
+                     * 2024-07-20 Adaptation, for cases like specializations of `List.map`:
+                     * When optimizing `List.map` (or its recursive helper function) (or `List.foldx` for example),
+                     * better also inline the application of the generic partial application used with the function parameter.
+                     * That application is conditional (list empty?), but we want to inline that to eliminate the generic wrapper for
+                     * the function application and inline the parameter function directly.
+                     * Thus, the new rule also enables inlining under conditional expressions unless it is recursive.
+                     * */
+
                     if (expr is Expression.ConditionalExpression conditional)
                     {
-                        var conditionInlined = InlineParseAndEvalRecursive(conditional.condition);
+                        var conditionInlined =
+                        InlineParseAndEvalRecursive(
+                            conditional.condition,
+                            underConditional: underConditional);
 
-                        /*
-                         * Do not inline invocations that are still conditional after substituting for the environment constraint.
-                         * Inlining these cases can lead to suboptimal overall performance for various reasons.
-                         * One reason is that inlining in a generic wrapper causes us to miss an opportunity to select
-                         * a more specialized implementation because this selection only happens on invocation.
-                         * */
+                        var falseBranchInlined =
+                        InlineParseAndEvalRecursive(
+                            conditional.ifFalse,
+                            underConditional: true);
+
+                        var trueBranchInlined =
+                        InlineParseAndEvalRecursive(
+                            conditional.ifTrue,
+                            underConditional: true);
 
                         return new Expression.ConditionalExpression(
                             condition: conditionInlined,
-                            ifFalse: conditional.ifFalse,
-                            ifTrue: conditional.ifTrue);
+                            ifFalse: falseBranchInlined,
+                            ifTrue: trueBranchInlined);
                     }
 
                     if (expr is Expression.ParseAndEvalExpression parseAndEval)
                     {
-                        if (TryInlineParseAndEval(parseAndEval) is { } inlined)
+                        if (TryInlineParseAndEval(parseAndEval, noRecursion: underConditional) is { } inlined)
                         {
                             return inlined;
                         }
@@ -498,7 +630,10 @@ public class PineVM : IPineVM
                 expression).expr;
         }
 
-        var expressionInlined = InlineParseAndEvalRecursive(expressionReduced);
+        var expressionInlined =
+            InlineParseAndEvalRecursive(
+                expressionReduced,
+                underConditional: false);
 
         var expressionInlinedReduced =
             CompilePineToDotNet.ReducePineExpression.SearchForExpressionReductionRecursive(

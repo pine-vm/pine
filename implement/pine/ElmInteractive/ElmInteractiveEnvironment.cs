@@ -26,34 +26,34 @@ public static class ElmInteractiveEnvironment
                 interactiveEnvironment: interactiveEnvironment,
                 moduleName: moduleName,
                 declarationName: declarationName)
-                .AndThen(functionRecord =>
+                .AndThen(functionValueAndRecord =>
                 {
                     var combinedArguments =
-                        functionRecord.argumentsAlreadyCollected
+                        functionValueAndRecord.functionRecord.argumentsAlreadyCollected
                         .Concat(arguments)
                         .ToImmutableList();
 
-                    if (combinedArguments.Count != functionRecord.functionParameterCount)
+                    if (combinedArguments.Count != functionValueAndRecord.functionRecord.functionParameterCount)
                     {
                         return (Result<string, PineValue>)
                             ("Partial application not implemented yet. Got " +
                             combinedArguments.Count +
                             " arguments, expected " +
-                            functionRecord.functionParameterCount);
+                            functionValueAndRecord.functionRecord.functionParameterCount);
                     }
 
                     var combinedEnvironment =
-                    PineValue.List([PineValue.List(functionRecord.envFunctions),
+                    PineValue.List([PineValue.List(functionValueAndRecord.functionRecord.envFunctions),
                         PineValue.List(combinedArguments)]);
 
                     return
                     pineVM.EvaluateExpression(
-                        functionRecord.innerFunction,
+                        functionValueAndRecord.functionRecord.innerFunction,
                         environment: combinedEnvironment);
                 });
     }
 
-    public static Result<string, FunctionRecord> ParseFunctionFromElmModule(
+    public static Result<string, (PineValue declValue, FunctionRecord functionRecord)> ParseFunctionFromElmModule(
         PineValue interactiveEnvironment,
         string moduleName,
         string declarationName)
@@ -67,16 +67,18 @@ public static class ElmInteractiveEnvironment
                     .FirstOrDefault(moduleNameAndContent => moduleNameAndContent.moduleName == moduleName);
 
                 if (selectedModule.moduleContent is null)
-                    return (Result<string, FunctionRecord>)"module not found";
+                    return "module not found";
 
                 var functionDeclaration =
                     selectedModule.moduleContent.FunctionDeclarations
                     .FirstOrDefault(fd => fd.Key == declarationName);
 
                 if (functionDeclaration.Value is null)
-                    return (Result<string, FunctionRecord>)"declaration " + declarationName + " not found";
+                    return "declaration " + declarationName + " not found";
 
-                return ParseFunctionRecordFromValueTagged(functionDeclaration.Value);
+                return
+                ParseFunctionRecordFromValueTagged(functionDeclaration.Value)
+                .Map(parsedRecord => (functionDeclaration.Value, parsedRecord));
             });
     }
 

@@ -68,7 +68,7 @@ public class CompileElmCompilerTests
 
         var pineVM = new PineVM();
 
-        var modByFunction =
+        var (_, modByFunction) =
             ElmInteractiveEnvironment.ParseFunctionFromElmModule(
                 interactiveEnvironment: interactiveEnvironmentValue,
                 moduleName: "Basics",
@@ -343,7 +343,7 @@ public class CompileElmCompilerTests
         var stringSplitApplicationResult =
             ElmInteractiveEnvironment.ApplyFunction(
                 pineVM,
-                stringSplitFunction,
+                stringSplitFunction.functionRecord,
                 arguments:
                 [ElmValueEncoding.ElmValueAsPineValue(new ElmValue.ElmString(",")),
                     ElmValueEncoding.ElmValueAsPineValue(new ElmValue.ElmString("pizza,risotto,focaccia"))]);
@@ -461,7 +461,7 @@ public class CompileElmCompilerTests
         {
             // Test one of the declarations used for interning.
 
-            var declaration =
+            var (_, declaration) =
                 ElmInteractiveEnvironment.ParseFunctionFromElmModule(
                     interactiveEnvironment: interactiveInitialState,
                     moduleName: "Pine",
@@ -573,7 +573,7 @@ public class CompileElmCompilerTests
             var compilerResponseValue =
                 ElmInteractiveEnvironment.ApplyFunction(
                     optimizingPineVM,
-                    declExpandInteractiveEnv,
+                    declExpandInteractiveEnv.functionRecord,
                     arguments:
                     /*
                      * 
@@ -625,7 +625,7 @@ public class CompileElmCompilerTests
             var applyFunctionResult =
                 ElmInteractiveEnvironment.ApplyFunction(
                     pineVM,
-                    declExpandInteractiveEnv,
+                    declExpandInteractiveEnv.functionRecord,
                     arguments:
                     /*
                      * 

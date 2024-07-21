@@ -1083,26 +1083,7 @@ public class CodeAnalysis
             }
         }
 
-        var selectedSpecializations = new HashSet<EnvConstraintId>();
-
-        var queue = new Queue<EnvConstraintId>(simplifiedClasses);
-
-        while (queue.Count > 0 && selectedSpecializations.Count < limitClassesCount)
-        {
-            var newEnvClass = queue.Dequeue();
-
-            foreach (var prevEnvClass in selectedSpecializations.ToArray())
-            {
-                if (prevEnvClass.SatisfiedByConstraint(newEnvClass))
-                {
-                    selectedSpecializations.Remove(prevEnvClass);
-                }
-            }
-
-            selectedSpecializations.Add(newEnvClass);
-        }
-
-        return [.. selectedSpecializations];
+        return [.. simplifiedClasses.Take(limitClassesCount)];
     }
 
     static EnvConstraintId SimplifyEnvClassShallow(
@@ -1158,12 +1139,19 @@ public class CodeAnalysis
         return EnvConstraintId.Create(itemsToKeep);
     }
 
+
+    static public long SimplifyEnvClassCount { private set; get; } = 0;
+
+
     static EnvConstraintId SimplifyEnvClass(
         Expression rootExpression,
         EnvConstraintId envClass,
         int depthMax,
         PineVMCache parseCache)
     {
+        ++SimplifyEnvClassCount;
+
+
         static ImmutableHashSet<IReadOnlyList<int>> observedPathsFromExpression(Expression expression) =>
             Expression.EnumerateSelfAndDescendants(expression)
             .SelectWhereNotNull(
@@ -1187,7 +1175,7 @@ public class CodeAnalysis
 
             currentExpression =
                 PineVM.ReduceExpressionAndInlineRecursive(
-                    stack: [rootExpression],
+                    rootExpression: rootExpression,
                     currentExpression: currentExpression,
                     envConstraintId: envClass,
                     maxDepth: 2,
@@ -1273,7 +1261,7 @@ public class CodeAnalysis
 
             Expression projectCompilation(EnvConstraintId envClass) =>
                 PineVM.ReduceExpressionAndInlineRecursive(
-                    stack: [],
+                    rootExpression: expression,
                     currentExpression: expression,
                     envConstraintId: envClass,
                     maxDepth: 7,
@@ -1341,4 +1329,24 @@ public class CodeAnalysis
         .Chunk(source.Count / limitSampleCount)
         .Select(chunk => chunk.First())
         .Take(limitSampleCount)];
+
+    /// <summary>
+    /// Filtering out some expressions known to lead to pathological cases with the current combination of interpreter and compiler.
+    /// </summary>
+    public static bool ExpressionCausesProblemsCompiled(CompilePineToDotNet.CompiledExpressionId expressionId)
+    {
+        if (expressionId.ExpressionHashBase16.Contains("085ab238"))
+            return true;
+
+        if (expressionId.ExpressionHashBase16.Contains("74c00c04"))
+            return true;
+
+        if (expressionId.ExpressionHashBase16.Contains("8cde1f66"))
+            return true;
+
+        if (expressionId.ExpressionHashBase16.Contains("f04e388a"))
+            return true;
+
+        return false;
+    }
 }
