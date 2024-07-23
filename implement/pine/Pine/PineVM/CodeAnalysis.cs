@@ -1013,6 +1013,7 @@ public class CodeAnalysis
 
         var expressionsEnvClasses =
             invocationReportsByExpr
+            .Where(exprGroup => classUsageCountMin <= exprGroup.Count())
             .ToDictionary(
                 keySelector: exprGroup => exprGroup.Key,
                 elementSelector:
@@ -1045,15 +1046,20 @@ public class CodeAnalysis
 
         var environmentClassesAboveThreshold =
             environmentClasses
-            .Where(envClass => classUsageCountMin <= envClass.matchCount)
+            .Where(envClass => classUsageCountMin / 4 <= envClass.matchCount)
             .OrderByDescending(envClass => envClass.matchCount)
+            .ToImmutableArray();
+
+        var environmentClassesToSimplify =
+            environmentClassesAboveThreshold
+            .Take(limitClassesCount * 10)
             .ToImmutableArray();
 
         var classSimplifications = new Dictionary<EnvConstraintId, EnvConstraintId>();
 
         var simplifiedClasses = new HashSet<EnvConstraintId>();
 
-        foreach (var (envClass, _) in environmentClassesAboveThreshold)
+        foreach (var (envClass, _) in environmentClassesToSimplify)
         {
             /*
 
@@ -1083,7 +1089,15 @@ public class CodeAnalysis
             }
         }
 
-        return [.. simplifiedClasses.Take(limitClassesCount)];
+        var simplifiedClassesRanked =
+            simplifiedClasses
+            .Select(envClass => (envClass, matchCount: invocationsEnvironments.Count(envClass.SatisfiedByValue)))
+            .Where(envClassAndMatchCount => classUsageCountMin <= envClassAndMatchCount.matchCount)
+            .OrderByDescending(envClassAndMatchCount => envClassAndMatchCount.matchCount)
+            .Select(envClassAndMatchCount => envClassAndMatchCount.envClass)
+            .ToImmutableArray();
+
+        return [.. simplifiedClassesRanked.Take(limitClassesCount)];
     }
 
     static EnvConstraintId SimplifyEnvClassShallow(
