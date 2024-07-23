@@ -295,13 +295,64 @@ public class ReducePineExpression
                             return AttemptReduceViaEval();
                         }
 
-                    case "concat":
+                    case nameof(KernelFunction.concat):
                         {
                             if (rootKernelApp.argument is Expression.ListExpression argumentList)
                             {
                                 if (argumentList.List.Count is 0)
                                 {
                                     return AttemptReduceViaEval();
+                                }
+
+                                if (argumentList.List.Count is 1)
+                                {
+                                    return argumentList.List[0];
+                                }
+
+                                var firstArgExpr = argumentList.List[0];
+
+                                /*
+                                if (firstArgExpr is Expression.ListExpression ||
+                                    firstArgExpr is Expression.LiteralExpression firstLiteral && firstLiteral.Value is PineValue.ListValue)
+                                */
+                                {
+                                    var nonEmptyItems = new List<Expression>(capacity: argumentList.List.Count);
+
+                                    for (var i = 0; i < argumentList.List.Count; ++i)
+                                    {
+                                        var argItem = argumentList.List[i];
+
+                                        if (argItem is Expression.ListExpression argList && argList.List.Count is 0)
+                                            continue;
+
+                                        if (argItem is Expression.LiteralExpression argLiteral)
+                                        {
+                                            if (argLiteral.Value is PineValue.ListValue listValue && listValue.Elements.Count is 0)
+                                                continue;
+                                        }
+
+                                        nonEmptyItems.Add(argItem);
+                                    }
+
+                                    if (nonEmptyItems.Count < argumentList.List.Count)
+                                    {
+                                        if (nonEmptyItems.Count is 0)
+                                        {
+                                            return new Expression.LiteralExpression(PineValue.EmptyList);
+                                        }
+
+                                        if (nonEmptyItems.Count is 1)
+                                        {
+                                            return nonEmptyItems[0];
+                                        }
+
+                                        return
+                                            rootKernelApp
+                                            with
+                                            {
+                                                argument = new Expression.ListExpression(nonEmptyItems)
+                                            };
+                                    }
                                 }
 
                                 var items = new List<Expression>();
@@ -328,6 +379,59 @@ public class ReducePineExpression
                                 }
 
                                 return new Expression.ListExpression(items);
+                            }
+
+                            return AttemptReduceViaEval();
+                        }
+
+                    case nameof(KernelFunction.length):
+                        {
+                            if (rootKernelApp.argument is Expression.ListExpression argumentList)
+                            {
+                                return
+                                    new Expression.LiteralExpression(
+                                        PineValueAsInteger.ValueFromSignedInteger(argumentList.List.Count));
+                            }
+
+                            if (rootKernelApp.argument is Expression.KernelApplicationExpression lengthArgKernelApp)
+                            {
+                                if (lengthArgKernelApp.functionName is nameof(KernelFunction.concat) &&
+                                    lengthArgKernelApp.argument is Expression.ListExpression lengthConcatList)
+                                {
+                                    int? aggregateLength = 0;
+
+                                    for (int i = 0; i < lengthConcatList.List.Count; i++)
+                                    {
+                                        var lengthConcatListItem = lengthConcatList.List[i];
+
+                                        {
+                                            if (lengthConcatListItem is Expression.LiteralExpression lengthConcatListItemLiteral &&
+                                                lengthConcatListItemLiteral.Value is PineValue.ListValue lengthConcatListItemList)
+                                            {
+                                                aggregateLength += lengthConcatListItemList.Elements.Count;
+                                                continue;
+                                            }
+                                        }
+
+                                        {
+                                            if (lengthConcatListItem is Expression.ListExpression lengthConcatListItemList)
+                                            {
+                                                aggregateLength += lengthConcatListItemList.List.Count;
+                                                continue;
+                                            }
+                                        }
+
+                                        aggregateLength = null;
+                                        break;
+                                    }
+
+                                    if (aggregateLength.HasValue)
+                                    {
+                                        return
+                                            new Expression.LiteralExpression(
+                                                PineValueAsInteger.ValueFromSignedInteger(aggregateLength.Value));
+                                    }
+                                }
                             }
 
                             return AttemptReduceViaEval();
