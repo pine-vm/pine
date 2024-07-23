@@ -343,6 +343,7 @@ public class PineVM : IPineVM
             ReduceExpressionAndInlineRecursive(
                 rootExpression: rootExpression,
                 currentExpression: expressionWithEnvConstraint,
+                inlinedParents: [],
                 maxDepth: 7,
                 maxSubexpressionCount: 4_000,
                 parseCache: parseCache,
@@ -357,7 +358,25 @@ public class PineVM : IPineVM
 
     public static Expression ReduceExpressionAndInlineRecursive(
         Expression rootExpression,
+        EnvConstraintId? envConstraintId,
+        int maxDepth,
+        int maxSubexpressionCount,
+        PineVMCache parseCache,
+        bool disableRecurseAfterInline) =>
+        ReduceExpressionAndInlineRecursive(
+            rootExpression: rootExpression,
+            currentExpression: rootExpression,
+            inlinedParents: [],
+            envConstraintId: envConstraintId,
+            maxDepth: maxDepth,
+            maxSubexpressionCount: maxSubexpressionCount,
+            parseCache: parseCache,
+            disableRecurseAfterInline: disableRecurseAfterInline);
+
+    public static Expression ReduceExpressionAndInlineRecursive(
+        Expression rootExpression,
         Expression currentExpression,
+        ImmutableStack<Expression> inlinedParents,
         EnvConstraintId? envConstraintId,
         int maxDepth,
         int maxSubexpressionCount,
@@ -420,9 +439,14 @@ public class PineVM : IPineVM
                     return null;
                 }
 
+                if (rootExpression.Equals(parseOk.Value))
+                {
+                    return null;
+                }
+
                 if (noRecursion)
                 {
-                    if (rootExpression.Equals(parseOk.Value))
+                    if (inlinedParents.Contains(parseOk.Value))
                     {
                         return null;
                     }
@@ -509,6 +533,7 @@ public class PineVM : IPineVM
                         rootExpression: rootExpression,
                         // currentExpression: inlinedExpr,
                         currentExpression: inlinedExprReduced,
+                        inlinedParents: inlinedParents.Push(parseOk.Value),
                         envConstraintId: envConstraintId,
                         maxDepth: maxDepth - 1,
                         maxSubexpressionCount: maxSubexpressionCount,

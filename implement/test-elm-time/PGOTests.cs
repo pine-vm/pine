@@ -1316,6 +1316,397 @@ public class PGOTests
         }
     }
 
+
+    [TestMethod]
+    public void PGO_reduces_Elm_Dict_fold()
+    {
+        var elmModule =
+            """
+            module Test exposing (..)
+
+            import Dict
+
+
+            usingDictFold dict functionId =
+                case functionId of
+                0 ->
+                    Dict.foldl
+                        (\key value list -> ( value, key ) :: list)
+                        []
+                        dict
+            
+                _ ->
+                    Dict.foldl
+                        (\key value list -> ( value, key ) :: list)
+                        []
+                        dict
+                                    
+            """;
+
+
+        var appCodeTree = AppCodeTreeForElmModules([elmModule]);
+
+        using var interactiveSession =
+            new InteractiveSessionPine(
+                IInteractiveSession.CompileElmProgramCodeFilesDefault.Value,
+                initialState: null,
+                appCodeTree: appCodeTree,
+                caching: true,
+                autoPGO: null);
+
+        // Force integration of the 'Test' module.
+        var testSubmissionResult =
+            interactiveSession.Submit(
+                """ Test.usingDictFold (Dict.fromList [ ("alfa", 31), ("beta", 41) ]) 0 """);
+
+        var testSubmissionResponse =
+            testSubmissionResult.Extract(err => throw new Exception(err));
+
+        Assert.AreEqual("""[(41,"beta"),(31,"alfa")]""", testSubmissionResponse.InteractiveResponse.DisplayText);
+
+        var interactiveEnvironmentValue = interactiveSession.CurrentEnvironmentValue();
+
+        var (_, usingDictFoldFunction) =
+            ElmInteractiveEnvironment.ParseFunctionFromElmModule(
+                interactiveEnvironment: interactiveEnvironmentValue,
+                moduleName: "Test",
+                declarationName: "usingDictFold")
+            .Extract(err => throw new Exception(err));
+
+        var (_, dictFromListFunction) =
+            ElmInteractiveEnvironment.ParseFunctionFromElmModule(
+                interactiveEnvironment: interactiveEnvironmentValue,
+                moduleName: "Dict",
+                declarationName: "fromList")
+            .Extract(err => throw new Exception(err));
+
+        {
+            // Help identify functions.
+
+            var functionsToInspect = new[]
+            {
+                new
+                {
+                    moduleName = "Test",
+                    declarationName = "usingDictFold",
+                },
+                new
+                {
+                    moduleName = "Dict",
+                    declarationName = "fromList",
+                },
+                new
+                {
+                    moduleName = "Dict",
+                    declarationName = "foldl",
+                },
+                new
+                {
+                    moduleName = "Dict",
+                    declarationName = "foldr",
+                },
+            };
+
+            foreach (var functionToInspect in functionsToInspect)
+            {
+                var (functionValue, functionRecord) =
+                    ElmInteractiveEnvironment.ParseFunctionFromElmModule(
+                        interactiveEnvironment: interactiveEnvironmentValue,
+                        moduleName: functionToInspect.moduleName,
+                        declarationName: functionToInspect.declarationName)
+                    .Extract(err => throw new Exception(err));
+
+                var functionValueHash = PineValueHashTree.ComputeHash(functionValue);
+
+                var envFunctionsHashes =
+                    functionRecord.envFunctions
+                    .Select(envFunction => PineValueHashTree.ComputeHash(envFunction))
+                    .ToArray();
+
+                Console.WriteLine(
+                    "\nFunction " + functionToInspect.moduleName + "." + functionToInspect.declarationName + " has hash " +
+                    CommonConversion.StringBase16(functionValueHash)[..8] + " and " +
+                    functionRecord.envFunctions.Count + " env functions:\n" +
+                    string.Join("\n", envFunctionsHashes.Select(envFunctionHash => CommonConversion.StringBase16(envFunctionHash)[..8])));
+            }
+        }
+
+
+        var usageScenarios = new[]
+        {
+            new
+            {
+                list =
+                new ElmValue.ElmList([]),
+
+                functionId = 0,
+
+                expected =
+                new ElmValue.ElmList([]),
+            },
+
+            new
+            {
+                list =
+                new ElmValue.ElmList(
+                    [
+                    new ElmValue.ElmList([ElmValue.String("alfa"), ElmValue.Integer(31)]),
+                    new ElmValue.ElmList([ElmValue.String("beta"), ElmValue.Integer(41)]),
+                    ]),
+
+                functionId = 0,
+
+                expected =
+                new ElmValue.ElmList(
+                    [
+                    new ElmValue.ElmList([ElmValue.Integer(41), ElmValue.String("beta")]),
+                    new ElmValue.ElmList([ElmValue.Integer(31), ElmValue.String("alfa")]),
+                    ]),
+            },
+
+            new
+            {
+                list =
+                new ElmValue.ElmList(
+                    [
+                    new ElmValue.ElmList([ElmValue.String("alfa"), ElmValue.Integer(31)]),
+                    new ElmValue.ElmList([ElmValue.String("gamma"), ElmValue.Integer(41)]),
+                    new ElmValue.ElmList([ElmValue.String("beta"), ElmValue.Integer(47)]),
+                    ]),
+
+                functionId = 0,
+
+                expected =
+                new ElmValue.ElmList(
+                    [
+                    new ElmValue.ElmList([ElmValue.Integer(41), ElmValue.String("gamma")]),
+                    new ElmValue.ElmList([ElmValue.Integer(47), ElmValue.String("beta")]),
+                    new ElmValue.ElmList([ElmValue.Integer(31), ElmValue.String("alfa")]),
+                    ]),
+            },
+        };
+
+        var toDictPineVM = new PineVM();
+
+        PineValue dictFromList(ElmValue.ElmList list) =>
+            ElmInteractiveEnvironment.ApplyFunction(
+                toDictPineVM,
+                dictFromListFunction,
+                [ElmValueEncoding.ElmValueAsPineValue(list)])
+            .Extract(err => throw new Exception(err));
+
+        static long ReportsAverageInvocationCount(IReadOnlyList<PineVM.EvaluationReport> reports) =>
+            reports.Sum(report => report.ParseAndEvalCount) / reports.Count;
+
+        PineVM.EvaluationReport RunScenario(
+            PineValue scenarioDict,
+            int scenarioFunctionId,
+            ElmValue.ElmList? scenarioExpected,
+            PineVM pineVM)
+        {
+            return
+                ElmInteractiveEnvironment.ApplyFunctionArgumentsForEvalExpr(
+                    usingDictFoldFunction,
+                    arguments:
+                    [
+                        scenarioDict,
+                        PineValueAsInteger.ValueFromSignedInteger(scenarioFunctionId),
+                    ])
+                .AndThen(composedArgs =>
+                pineVM.EvaluateExpressionOnCustomStack(
+                    composedArgs.expression,
+                    composedArgs.environment,
+                    new PineVM.EvaluationConfig(ParseAndEvalCountLimit: 12345))
+                .Map(evalReport =>
+                {
+                    if (scenarioExpected is not null)
+                    {
+                        Assert.AreEqual(ElmValueEncoding.ElmValueAsPineValue(scenarioExpected), evalReport.ReturnValue);
+                    }
+
+                    Console.WriteLine(
+                        "Completed scenario using " + evalReport.InstructionCount +
+                        " instructions and " + evalReport.ParseAndEvalCount + " invocations");
+
+                    return evalReport;
+                }))
+                .Extract(fromErr: err => throw new Exception("Failed for scenario: " + err));
+        }
+
+        IReadOnlyList<PineVM.EvaluationReport> RunScenariosWithGivenVM(PineVM pineVM) =>
+            usageScenarios
+            .Select(scenario =>
+            RunScenario(
+                scenarioDict: dictFromList(scenario.list),
+                scenarioFunctionId: scenario.functionId,
+                scenarioExpected: scenario.expected,
+                pineVM: pineVM))
+            .ToImmutableArray();
+
+        var nonOptimizingPineVM = new PineVM();
+
+        var nonOptimizedScenariosStats =
+            RunScenariosWithGivenVM(nonOptimizingPineVM);
+
+        var invocationReports = new List<PineVM.EvaluationReport>();
+
+        var profilingVM =
+            new PineVM(
+                overrideParseExpression: null,
+                evalCache: null,
+                reportFunctionApplication: invocationReports.Add,
+                disableReductionInCompilation: true);
+
+        RunScenariosWithGivenVM(profilingVM);
+
+        {
+            var largeProfilingList =
+                Enumerable.Range(0, 40)
+                .Select(index =>
+                new ElmValue.ElmList(
+                    [
+                    ElmValue.String("key-" + index),
+                    ElmValue.Integer(100 + index)
+                    ]))
+                .ToImmutableArray();
+
+            RunScenario(
+                dictFromList(new ElmValue.ElmList(largeProfilingList)),
+                scenarioFunctionId: 0,
+                pineVM: profilingVM,
+                scenarioExpected: null);
+        }
+
+        Console.WriteLine(
+            "Collected " + invocationReports.Count + " invocation reports from " +
+            usageScenarios.Length + " scenarios.");
+
+        var pineVMCache = new PineVMCache();
+
+        var codeAnalysisStopwatch = System.Diagnostics.Stopwatch.StartNew();
+
+        var compilationEnvClasses =
+            CodeAnalysis.EnvironmentClassesFromInvocationReports(
+                invocationReports,
+                limitInvocationSampleCount: 1000,
+                limitSampleCountPerSample: 40,
+                classUsageCountMin: 10,
+                limitClassesPerExpression: 10);
+
+        codeAnalysisStopwatch.Stop();
+
+        Console.WriteLine(
+            "Analyzed " + invocationReports.Count + " invocation reports in " +
+            codeAnalysisStopwatch.ElapsedMilliseconds + " ms and selected " +
+            compilationEnvClasses.Sum(exprGroup => exprGroup.Value.Count) + " total environment classes for " +
+            compilationEnvClasses.Count(exprGroup => 0 < exprGroup.Value.Count) + " expressions.");
+
+        {
+            foreach (var exprEnvClasses in compilationEnvClasses)
+            {
+                var exprValueHash =
+                    PineValueHashTree.ComputeHash(
+                        ExpressionEncoding.EncodeExpressionAsValue(exprEnvClasses.Key)
+                        .Extract(err => throw new Exception(err)));
+
+                for (var i = 0; i < exprEnvClasses.Value.Count; i++)
+                {
+                    var envClass = exprEnvClasses.Value[i];
+
+                    Console.WriteLine(
+                        "\nEnvironment class [" + i + "] " + envClass.HashBase16[..8] +
+                        " for expr " + CommonConversion.StringBase16(exprValueHash)[..8] +
+                        " has " + envClass.ParsedEnvItems.Count + " env items:");
+
+                    var envItems = envClass.ParsedEnvItems.ToArray();
+
+                    for (var j = 0; j < envClass.ParsedEnvItems.Count; j++)
+                    {
+                        var envItem = envItems[j];
+
+                        var envItemValueHash = PineValueHashTree.ComputeHash(envItem.Value);
+
+                        var envItemDisplayText =
+                            CommonConversion.StringBase16(envItemValueHash)[..8] +
+                            " - " +
+                            ElmValueEncoding.PineValueAsElmValue(envItem.Value)
+                            .Unpack(
+                                fromErr: _ =>
+                                "???",
+                                fromOk:
+                                elmValue =>
+                                {
+                                    var asExprString = ElmValue.ElmValueAsExpression(elmValue).expressionString;
+
+                                    if (asExprString.Length < 100)
+                                        return asExprString;
+
+                                    return asExprString[..100] + "...";
+                                });
+
+                        Console.WriteLine(
+                            "Item [" + j + "]: " + string.Join("-", envItem.Key) + ": " + envItemDisplayText);
+                    }
+                }
+            }
+        }
+
+        var optimizedPineVM =
+            new PineVM(
+                overrideParseExpression: pineVMCache.BuildParseExprDelegate,
+                evalCache: null,
+                reportFunctionApplication: null,
+                compilationEnvClasses: compilationEnvClasses);
+
+        var optimizedScenariosStats =
+            RunScenariosWithGivenVM(optimizedPineVM);
+
+
+        long nonOptimizedAverageInvocationCount =
+            ReportsAverageInvocationCount(nonOptimizedScenariosStats);
+
+        Console.WriteLine("\nAverage invocation count not optimized: " + nonOptimizedAverageInvocationCount + "\n");
+
+        var optimizedAverageInvocationCount =
+            ReportsAverageInvocationCount(optimizedScenariosStats);
+
+        Console.WriteLine("\nAverage invocation count optimized: " + optimizedAverageInvocationCount + "\n");
+
+        {
+            var largerList =
+                Enumerable.Range(0, 100)
+                .Select(index => (itemKey: "item-" + index, itemValue: index + 1000))
+                .ToImmutableArray();
+
+            var largerListOutput =
+                largerList
+                .OrderByDescending(item => item.itemKey)
+                .Select(item => new ElmValue.ElmList([ElmValue.Integer(item.itemValue), ElmValue.String(item.itemKey)]))
+                .ToImmutableArray();
+
+            var largerListInput =
+                largerList
+                .Select(item => new ElmValue.ElmList([ElmValue.String(item.itemKey), ElmValue.Integer(item.itemValue)]))
+                .ToImmutableArray();
+
+            var scenarioReport =
+                RunScenario(
+                    scenarioDict: dictFromList(new ElmValue.ElmList(largerListInput)),
+                    scenarioFunctionId: 0,
+                    scenarioExpected: new ElmValue.ElmList(largerListOutput),
+                    optimizedPineVM);
+
+            /*
+             * Since the item folding function is so simple in this case,
+             * we expect the engine (with the given configuration) to create a specialized variant of
+             * the `Dict.foldl` function with this item mapping function inlined.
+             * Therefore, the test expects at most two invocations per dictionary item.
+             * */
+
+            Assert.IsTrue(scenarioReport.ParseAndEvalCount < largerListInput.Length * 2 + 30, "Total invocation count");
+        }
+    }
+
     public static TreeNodeWithStringPath AppCodeTreeForElmModules(
         IReadOnlyList<string> elmModuleTexts)
     {
