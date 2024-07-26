@@ -266,23 +266,13 @@ emitExpressionInDeclarationBlock stackBeforeAddingDeps blockDeclarations mainExp
                         blockDeclarations
             }
 
-        mainExpressionOuterDependencies : Set.Set String
+        mainExpressionOuterDependencies : List String
         mainExpressionOuterDependencies =
-            listTransitiveDependenciesOfExpression stackBefore mainExpression
-
-        remainingOuterDependencies : Set.Set String
-        remainingOuterDependencies =
-            -- Not supporting shadowing at the moment: Filter out every name we already have from a parent scope.
-            List.foldl
-                (\( functionName, _ ) aggregate ->
-                    Set.remove functionName aggregate
-                )
-                mainExpressionOuterDependencies
-                stackBefore.environmentFunctions
+            Set.toList (listTransitiveDependenciesOfExpression stackBefore mainExpression)
 
         usedBlockDeclarationsAndImports : List ( String, Expression )
         usedBlockDeclarationsAndImports =
-            Set.foldl
+            List.foldl
                 (\declName aggregate ->
                     case Common.assocListGet declName blockDeclarations of
                         Just declExpression ->
@@ -297,7 +287,7 @@ emitExpressionInDeclarationBlock stackBeforeAddingDeps blockDeclarations mainExp
                                     ( declName, LiteralExpression importedVal ) :: aggregate
                 )
                 []
-                remainingOuterDependencies
+                mainExpressionOuterDependencies
 
         mainExpressionAsFunction : DeclBlockFunctionEntry
         mainExpressionAsFunction =
@@ -310,7 +300,7 @@ emitExpressionInDeclarationBlock stackBeforeAddingDeps blockDeclarations mainExp
         closureCaptures =
             List.foldl
                 (\( declName, deconstruction ) aggregate ->
-                    if Set.member declName mainExpressionOuterDependencies then
+                    if List.member declName mainExpressionOuterDependencies then
                         ( declName, deconstruction ) :: aggregate
 
                     else
@@ -392,10 +382,10 @@ emitDeclarationBlock stackBefore blockDeclarations (DeclBlockClosureCaptures con
         dependenciesRelations =
             Dict.union availableEmittedDependencies blockDeclarationsDirectDependencies
 
-        blockDeclarationsTransitiveDependencies : Dict.Dict String (Set.Set String)
+        blockDeclarationsTransitiveDependencies : Dict.Dict String (List String)
         blockDeclarationsTransitiveDependencies =
             Dict.map
-                (\_ declDirectDeps -> getTransitiveDependencies dependenciesRelations declDirectDeps)
+                (\_ declDirectDeps -> Set.toList (getTransitiveDependencies dependenciesRelations declDirectDeps))
                 blockDeclarationsDirectDependencies
 
         additionalImports : Set.Set String
@@ -419,13 +409,13 @@ emitDeclarationBlock stackBefore blockDeclarations (DeclBlockClosureCaptures con
                     )
                 )
 
-        stackBeforeAvailableDeclarations : Set.Set String
+        stackBeforeAvailableDeclarations : List String
         stackBeforeAvailableDeclarations =
             List.foldl
-                (\( functionName, _ ) aggregate -> Set.insert functionName aggregate)
+                (\( functionName, _ ) aggregate -> functionName :: aggregate)
                 (List.foldl
-                    (\( declName, _ ) aggregate -> Set.insert declName aggregate)
-                    Set.empty
+                    (\( declName, _ ) aggregate -> declName :: aggregate)
+                    []
                     stackBefore.environmentDeconstructions
                 )
                 stackBefore.environmentFunctions
@@ -439,7 +429,7 @@ emitDeclarationBlock stackBefore blockDeclarations (DeclBlockClosureCaptures con
                             aggregate
 
                         Just ( availableEmitted, emittedValue ) ->
-                            if Set.member depName stackBeforeAvailableDeclarations then
+                            if List.member depName stackBeforeAvailableDeclarations then
                                 aggregate
 
                             else
@@ -448,12 +438,9 @@ emitDeclarationBlock stackBefore blockDeclarations (DeclBlockClosureCaptures con
                 []
                 allDependencies
 
-        usedAvailableEmittedNames : Set.Set String
+        usedAvailableEmittedNames : List String
         usedAvailableEmittedNames =
-            List.foldl
-                (\( functionName, _, _ ) aggregate -> Set.insert functionName aggregate)
-                Set.empty
-                usedAvailableEmitted
+            List.map (\( name, _, _ ) -> name) usedAvailableEmitted
 
         allBlockDeclarationsAsFunctions : List ( String, DeclBlockFunctionEntry )
         allBlockDeclarationsAsFunctions =
@@ -511,7 +498,7 @@ emitDeclarationBlock stackBefore blockDeclarations (DeclBlockClosureCaptures con
 
             else
                 [ ( environmentFunctionPartialApplicationName
-                  , if Set.member environmentFunctionPartialApplicationName stackBeforeAvailableDeclarations then
+                  , if List.member environmentFunctionPartialApplicationName stackBeforeAvailableDeclarations then
                         ReferenceExpression environmentFunctionPartialApplicationName
 
                     else
@@ -536,15 +523,18 @@ emitDeclarationBlock stackBefore blockDeclarations (DeclBlockClosureCaptures con
                                 aggregate
 
                             Just declDependencies ->
-                                if
-                                    not (Set.member declName declDependencies)
-                                        && (Set.diff declDependencies stackBeforeAvailableDeclarations == Set.empty)
-                                then
-                                    if Set.member declName usedAvailableEmittedNames then
-                                        aggregate
+                                if List.member declName usedAvailableEmittedNames then
+                                    aggregate
 
-                                    else
-                                        ( declName, asFunctionInnerExpr ) :: aggregate
+                                else if List.member declName declDependencies then
+                                    aggregate
+
+                                else if
+                                    List.all
+                                        (\depName -> List.member depName stackBeforeAvailableDeclarations)
+                                        declDependencies
+                                then
+                                    ( declName, asFunctionInnerExpr ) :: aggregate
 
                                 else
                                     aggregate
