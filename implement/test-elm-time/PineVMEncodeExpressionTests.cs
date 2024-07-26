@@ -25,8 +25,8 @@ public class PineVMEncodeExpressionTests
 
             new Expression.ConditionalExpression(
                 condition: new Expression.LiteralExpression(PineValueAsString.ValueFromString("condition")),
-                trueBranch: new Expression.LiteralExpression(PineValueAsString.ValueFromString("if true")),
-                falseBranch: new Expression.LiteralExpression(PineValueAsString.ValueFromString("if false"))),
+                falseBranch: new Expression.LiteralExpression(PineValueAsString.ValueFromString("if false")),
+                trueBranch: new Expression.LiteralExpression(PineValueAsString.ValueFromString("if true"))),
 
             new Expression.ParseAndEvalExpression(
                 expression: new Expression.LiteralExpression(PineValueAsString.ValueFromString("expression")),

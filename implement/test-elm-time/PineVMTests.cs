@@ -102,10 +102,10 @@ public class PineVMTests
                 (Expression)
                 new Expression.ConditionalExpression(
                     condition: new Expression.LiteralExpression(PineValue.Blob([4])),
-                    trueBranch:
-                    new Expression.LiteralExpression(PineValueAsInteger.ValueFromSignedInteger(13)),
                     falseBranch:
-                    new Expression.LiteralExpression(PineValueAsInteger.ValueFromSignedInteger(17))),
+                    new Expression.LiteralExpression(PineValueAsInteger.ValueFromSignedInteger(17)),
+                    trueBranch:
+                    new Expression.LiteralExpression(PineValueAsInteger.ValueFromSignedInteger(13))),
                 environment = PineValue.EmptyList,
 
                 expected = Result<string, PineValue>.ok(PineValueAsInteger.ValueFromSignedInteger(13))
@@ -118,8 +118,6 @@ public class PineVMTests
                 new Expression.ConditionalExpression(
                     condition:
                     new Expression.LiteralExpression(PineValue.Blob([2])),
-                    trueBranch:
-                    new Expression.LiteralExpression(PineValueAsInteger.ValueFromSignedInteger(17)),
                     falseBranch:
                     new Expression.ParseAndEvalExpression(
                         expression:
@@ -137,7 +135,9 @@ public class PineVMTests
                                         ])
                                 ).Extract(fromErr: err => throw new Exception(err))
                             ).Extract(fromErr: err => throw new Exception(err)),
-                        Expression.Environment)),
+                        Expression.Environment),
+                    trueBranch:
+                    new Expression.LiteralExpression(PineValueAsInteger.ValueFromSignedInteger(17))),
 
                 environment =
                 PineValue.List(
@@ -162,8 +162,6 @@ public class PineVMTests
                 new Expression.ConditionalExpression(
                     condition:
                     new Expression.LiteralExpression(PineValue.Blob([4])),
-                    trueBranch:
-                    new Expression.LiteralExpression(PineValueAsInteger.ValueFromSignedInteger(17)),
                     falseBranch:
                     new Expression.ParseAndEvalExpression(
                         expression:
@@ -172,7 +170,9 @@ public class PineVMTests
                                 functionName: "list_head",
                                 argument: Expression.Environment
                             ).Extract(fromErr: err => throw new Exception(err)),
-                        Expression.Environment)),
+                        Expression.Environment),
+                    trueBranch:
+                    new Expression.LiteralExpression(PineValueAsInteger.ValueFromSignedInteger(17))),
 
                 environment = PineValue.EmptyList,
 
@@ -186,6 +186,8 @@ public class PineVMTests
                 new Expression.ConditionalExpression(
                     condition:
                     new Expression.LiteralExpression(PineValue.Blob([4])),
+                    falseBranch:
+                    new Expression.LiteralExpression(PineValueAsInteger.ValueFromSignedInteger(17)),
                     trueBranch:
                     new Expression.ParseAndEvalExpression(
                         expression:
@@ -203,9 +205,7 @@ public class PineVMTests
                                         ])
                                 ).Extract(fromErr: err => throw new Exception(err))
                             ).Extract(fromErr: err => throw new Exception(err)),
-                        Expression.Environment),
-                    falseBranch:
-                    new Expression.LiteralExpression(PineValueAsInteger.ValueFromSignedInteger(17))),
+                        Expression.Environment)),
                 environment =
                 PineValue.List(
                     [

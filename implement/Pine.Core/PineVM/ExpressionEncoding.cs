@@ -274,13 +274,13 @@ public static class ExpressionEncoding
         ParseRecord3FromPineValue(
             value,
             (nameof(Expression.ConditionalExpression.condition), generalParser),
-            (nameof(Expression.ConditionalExpression.trueBranch), generalParser),
             (nameof(Expression.ConditionalExpression.falseBranch), generalParser),
-            (condition, ifTrue, falseBranch) =>
+            (nameof(Expression.ConditionalExpression.trueBranch), generalParser),
+            (condition, falseBranch, trueBranch) =>
             new Expression.ConditionalExpression(
                 condition: condition,
-                trueBranch: ifTrue,
-                falseBranch: falseBranch));
+                falseBranch: falseBranch,
+                trueBranch: trueBranch));
 
     public static Result<string, Expression.StringTagExpression> ParseStringTagExpression(
         Func<PineValue, Result<string, Expression>> generalParser,

@@ -642,12 +642,12 @@ public class ReducePineExpression
                         new Expression.ConditionalExpression
                         (
                             condition: conditionTransform.expr,
-                            trueBranch: trueBranchTransform.expr,
-                            falseBranch: falseBranchTransform.expr
+                            falseBranch: falseBranchTransform.expr,
+                            trueBranch: trueBranchTransform.expr
                             ),
                             conditionTransform.referencesOriginalEnv ||
-                            trueBranchTransform.referencesOriginalEnv ||
-                            falseBranchTransform.referencesOriginalEnv);
+                            falseBranchTransform.referencesOriginalEnv ||
+                            trueBranchTransform.referencesOriginalEnv);
                 }
 
             case Expression.EnvironmentExpression:

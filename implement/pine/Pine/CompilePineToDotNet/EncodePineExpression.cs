@@ -9,7 +9,7 @@ namespace Pine.CompilePineToDotNet;
 public partial class CompileToCSharp
 {
 
-    private static Result<string, ExpressionSyntax> EncodePineExpressionAsCSharpExpression(
+    public static Result<string, ExpressionSyntax> EncodePineExpressionAsCSharpExpression(
         Expression expression,
         Func<PineValue, ExpressionSyntax?> overrideDefaultExpressionForValue)
     {
@@ -26,7 +26,7 @@ public partial class CompileToCSharp
 
             Expression.EnvironmentExpression =>
             Result<string, ExpressionSyntax>.ok(
-                NewConstructorOfExpressionVariant(
+                NewConstructorOfExpressionVariantWithoutArguments(
                     nameof(Expression.EnvironmentExpression))),
 
             Expression.ListExpression list =>
@@ -45,17 +45,26 @@ public partial class CompileToCSharp
                 continueEncode(conditionalExpression.condition)
                     .MapError(err => "Failed to encode condition: " + err)
                     .AndThen(encodedCondition =>
-                        continueEncode(conditionalExpression.trueBranch)
-                            .MapError(err => "Failed to encode branch if true: " + err)
-                            .AndThen(encodedIfTrue =>
-                                continueEncode(conditionalExpression.falseBranch)
-                                    .MapError(err => "Failed to encode branch if false: " + err)
-                                    .Map(encodedIfFalse =>
+                        continueEncode(conditionalExpression.falseBranch)
+                            .MapError(err => "Failed to encode falseBranch: " + err)
+                            .AndThen(encodedFalseBranch =>
+                                continueEncode(conditionalExpression.trueBranch)
+                                    .MapError(err => "Failed to encode trueBranch: " + err)
+                                    .Map(encodedTrueBranch =>
                                         NewConstructorOfExpressionVariant(
                                             nameof(Expression.ConditionalExpression),
-                                            encodedCondition,
-                                            encodedIfTrue,
-                                            encodedIfFalse)))),
+
+                                            SyntaxFactory.Argument(encodedCondition)
+                                            .WithNameColon(
+                                                SyntaxFactory.NameColon(nameof(Expression.ConditionalExpression.condition))),
+
+                                            SyntaxFactory.Argument(encodedFalseBranch)
+                                            .WithNameColon(
+                                                SyntaxFactory.NameColon(nameof(Expression.ConditionalExpression.falseBranch))),
+
+                                            SyntaxFactory.Argument(encodedTrueBranch)
+                                            .WithNameColon(
+                                                SyntaxFactory.NameColon(nameof(Expression.ConditionalExpression.trueBranch))))))),
 
             Expression.KernelApplicationExpression kernelApplicationExpr =>
             continueEncode(kernelApplicationExpr.argument)
@@ -93,9 +102,23 @@ public partial class CompileToCSharp
         };
     }
 
+    public static ExpressionSyntax NewConstructorOfExpressionVariantWithoutArguments(
+        string expressionVariantTypeName) =>
+        NewConstructorOfExpressionVariant(
+            expressionVariantTypeName,
+            arguments: []);
+
     public static ExpressionSyntax NewConstructorOfExpressionVariant(
         string expressionVariantTypeName,
         params ExpressionSyntax[] argumentsExpressions) =>
+        NewConstructorOfExpressionVariant(
+            expressionVariantTypeName,
+            arguments: [.. argumentsExpressions.Select(SyntaxFactory.Argument)]);
+
+
+    public static ExpressionSyntax NewConstructorOfExpressionVariant(
+        string expressionVariantTypeName,
+        params ArgumentSyntax[] arguments) =>
         SyntaxFactory.ObjectCreationExpression(
             SyntaxFactory.QualifiedName(
                 SyntaxFactory.QualifiedName(
@@ -105,5 +128,5 @@ public partial class CompileToCSharp
                     SyntaxFactory.IdentifierName("Expression")),
                 SyntaxFactory.IdentifierName(expressionVariantTypeName)))
         .WithArgumentList(
-            SyntaxFactory.ArgumentList(SyntaxFactory.SeparatedList(argumentsExpressions.Select(SyntaxFactory.Argument))));
+            SyntaxFactory.ArgumentList(SyntaxFactory.SeparatedList(arguments)));
 }

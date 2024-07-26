@@ -102,17 +102,20 @@ public abstract record Expression
 
         public Expression condition { get; }
 
-        public Expression trueBranch { get; }
-
         public Expression falseBranch { get; }
 
-        public ConditionalExpression(Expression condition, Expression trueBranch, Expression falseBranch)
+        public Expression trueBranch { get; }
+
+        public ConditionalExpression(
+            Expression condition,
+            Expression falseBranch,
+            Expression trueBranch)
         {
             this.condition = condition;
-            this.trueBranch = trueBranch;
             this.falseBranch = falseBranch;
+            this.trueBranch = trueBranch;
 
-            slimHashCode = HashCode.Combine(condition, trueBranch, falseBranch);
+            slimHashCode = HashCode.Combine(condition, falseBranch, trueBranch);
         }
 
         public virtual bool Equals(ConditionalExpression? other)
@@ -124,8 +127,8 @@ public abstract record Expression
                 ReferenceEquals(this, notNull) ||
                 slimHashCode == notNull.slimHashCode &&
                 condition.Equals(notNull.condition) &&
-                trueBranch.Equals(notNull.trueBranch) &&
-                falseBranch.Equals(notNull.falseBranch);
+                falseBranch.Equals(notNull.falseBranch) &&
+                trueBranch.Equals(notNull.trueBranch);
         }
 
         public override int GetHashCode() =>

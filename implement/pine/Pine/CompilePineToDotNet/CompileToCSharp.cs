@@ -1144,7 +1144,8 @@ public partial class CompileToCSharp
                                 NewConstructorOfExpressionVariant(
                                     nameof(Expression.LiteralExpression),
                                     exprCompiledExpr.Syntax),
-                                NewConstructorOfExpressionVariant(nameof(Expression.EnvironmentExpression))),
+                                NewConstructorOfExpressionVariantWithoutArguments(
+                                    nameof(Expression.EnvironmentExpression))),
                             environmentExpr: envCompiledExpr.Syntax);
 
                     return
@@ -1461,8 +1462,8 @@ public partial class CompileToCSharp
                     .Map(transformedIfFalse =>
                     (Expression)new Expression.ConditionalExpression(
                         transformedCondition,
-                        transformedIfTrue,
-                        transformedIfFalse)))),
+                        falseBranch: transformedIfFalse,
+                        trueBranch: transformedIfTrue)))),
 
                     Expression.KernelApplicationExpression kernelAppl =>
                     TransformPineExpressionWithOptionalReplacement(findReplacement, kernelAppl.argument)
