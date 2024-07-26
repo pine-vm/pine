@@ -622,7 +622,7 @@ emitDeclarationBlock stackBefore blockDeclarations (DeclBlockClosureCaptures con
         emitFunction : DeclBlockFunctionEntry -> Result String Pine.Expression
         emitFunction (DeclBlockFunctionEntry functionEntryParams functionEntryInnerExpression) =
             emitExpression
-                (emitFunctionStack (closureParameterFromParameters functionEntryParams))
+                (emitFunctionStack (closureParameterFromParameters 0 functionEntryParams))
                 functionEntryInnerExpression
 
         emitBlockDeclarationsResult : Result String (List ( String, ( DeclBlockFunctionEntry, Pine.Expression ) ))
@@ -1059,14 +1059,16 @@ pineExpressionForDeconstruction deconstruction =
                     )
 
 
-closureParameterFromParameters : List FunctionParam -> FunctionParam
-closureParameterFromParameters parameters =
+closureParameterFromParameters : Int -> List FunctionParam -> FunctionParam
+closureParameterFromParameters offset parameters =
     List.concat
         (List.indexedMap
             (\paramIndex paramDeconstructions ->
                 List.map
                     (\( paramName, paramDecons ) ->
-                        ( paramName, ListItemDeconstruction paramIndex :: paramDecons )
+                        ( paramName
+                        , ListItemDeconstruction (offset + paramIndex) :: paramDecons
+                        )
                     )
                     paramDeconstructions
             )
@@ -1134,18 +1136,8 @@ emitFunctionApplication functionExpression arguments compilation =
                                         []
                                         compilation.environmentDeconstructions
 
-                                envFunctionsFromClosureCaptures : List ( String, EnvironmentFunctionEntry )
-                                envFunctionsFromClosureCaptures =
-                                    List.map
-                                        (\( captureName, _ ) ->
-                                            ( captureName
-                                            , EnvironmentFunctionEntry 0 IndependentEnvironment
-                                            )
-                                        )
-                                        closureCaptures
-
-                                appendedEnvFunctionsExpressions : List Pine.Expression
-                                appendedEnvFunctionsExpressions =
+                                closureItemsExpressions : List Pine.Expression
+                                closureItemsExpressions =
                                     List.map
                                         (\( _, deconstruction ) ->
                                             pineExpressionForDeconstructions
@@ -1154,37 +1146,44 @@ emitFunctionApplication functionExpression arguments compilation =
                                         )
                                         closureCaptures
 
-                                environmentFunctions : List ( String, EnvironmentFunctionEntry )
-                                environmentFunctions =
-                                    List.concat
-                                        [ compilation.environmentFunctions, envFunctionsFromClosureCaptures ]
+                                paramsEnvDeconstructions : FunctionParam
+                                paramsEnvDeconstructions =
+                                    closureParameterFromParameters (List.length closureCaptures) params
 
-                                newEmitStack =
-                                    { compilation
-                                        | environmentDeconstructions = closureParameterFromParameters params
-                                        , environmentFunctions = environmentFunctions
-                                    }
+                                closureCapturesEnvDeconstructions : FunctionParam
+                                closureCapturesEnvDeconstructions =
+                                    List.indexedMap
+                                        (\ci ( declName, _ ) ->
+                                            ( declName
+                                            , [ ListItemDeconstruction ci ]
+                                            )
+                                        )
+                                        closureCaptures
+
+                                environmentDeconstructions : FunctionParam
+                                environmentDeconstructions =
+                                    List.concat
+                                        [ closureCapturesEnvDeconstructions
+                                        , paramsEnvDeconstructions
+                                        ]
 
                                 prevEnvFunctionsExpr : Pine.Expression
                                 prevEnvFunctionsExpr =
                                     listItemFromIndexExpression_Pine 0 Pine.environmentExpr
 
-                                forwardedItems : List Pine.Expression
-                                forwardedItems =
-                                    List.indexedMap
-                                        (\index _ ->
-                                            listItemFromIndexExpression_Pine index prevEnvFunctionsExpr
-                                        )
-                                        compilation.environmentFunctions
+                                argumentsPineWithClosure : List Pine.Expression
+                                argumentsPineWithClosure =
+                                    List.concat
+                                        [ closureItemsExpressions
+                                        , argumentsPine
+                                        ]
 
-                                envFunctionsExpr : Pine.Expression
-                                envFunctionsExpr =
-                                    Pine.ListExpression
-                                        (List.concat
-                                            [ forwardedItems
-                                            , appendedEnvFunctionsExpressions
-                                            ]
-                                        )
+                                newEmitStack : EmitStack
+                                newEmitStack =
+                                    { compilation
+                                        | environmentDeconstructions = environmentDeconstructions
+                                        , environmentFunctions = compilation.environmentFunctions
+                                    }
                             in
                             case emitExpression newEmitStack funcBody of
                                 Err err ->
@@ -1194,8 +1193,8 @@ emitFunctionApplication functionExpression arguments compilation =
                                     Ok
                                         (Pine.ParseAndEvalExpression
                                             (Pine.ListExpression
-                                                [ envFunctionsExpr
-                                                , Pine.ListExpression argumentsPine
+                                                [ prevEnvFunctionsExpr
+                                                , Pine.ListExpression argumentsPineWithClosure
                                                 ]
                                             )
                                             (Pine.LiteralExpression
