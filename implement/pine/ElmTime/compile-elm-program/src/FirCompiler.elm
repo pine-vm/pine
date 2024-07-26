@@ -24,13 +24,13 @@ module FirCompiler exposing
     , estimatePineValueSize
     , evaluateAsIndependentExpression
     , getTransitiveDependencies
-    , listDirectDependenciesOfExpression
     , listFunctionAppExpressions
     , listItemFromIndexExpression
     , listItemFromIndexExpression_Pine
     , listSkipExpression
     , listSkipExpression_Pine
     , listTransitiveDependenciesOfExpression
+    , listUnboundReferencesInExpression
     , parseFunctionParameters
     , parseFunctionRecordFromValueTagged
     , partialApplicationExpressionFromListOfArguments
@@ -260,7 +260,7 @@ emitExpressionInDeclarationBlock stackBeforeAddingDeps blockDeclarations mainExp
                 | declarationsDependencies =
                     List.foldl
                         (\( declName, declExpression ) aggregate ->
-                            Dict.insert declName (listDirectDependenciesOfExpression declExpression) aggregate
+                            Dict.insert declName (listUnboundReferencesInExpression declExpression []) aggregate
                         )
                         stackBeforeAddingDeps.declarationsDependencies
                         blockDeclarations
@@ -383,7 +383,7 @@ emitDeclarationBlock stackBefore blockDeclarations (DeclBlockClosureCaptures con
         blockDeclarationsDirectDependencies =
             List.foldl
                 (\( declName, declExpression ) aggregate ->
-                    Dict.insert declName (listDirectDependenciesOfExpression declExpression) aggregate
+                    Dict.insert declName (listUnboundReferencesInExpression declExpression []) aggregate
                 )
                 Dict.empty
                 blockDeclarations
@@ -937,74 +937,80 @@ emitReferenceExpression name compilation =
 listTransitiveDependenciesOfExpression : EmitStack -> Expression -> Set.Set String
 listTransitiveDependenciesOfExpression dependenciesRelations expression =
     getTransitiveDependencies dependenciesRelations.declarationsDependencies
-        (listDirectDependenciesOfExpression expression)
+        (listUnboundReferencesInExpression expression [])
 
 
-listDirectDependenciesOfExpression : Expression -> Set.Set String
-listDirectDependenciesOfExpression expression =
+listUnboundReferencesInExpression : Expression -> List String -> Set.Set String
+listUnboundReferencesInExpression expression boundNames =
     case expression of
         LiteralExpression _ ->
             Set.empty
 
         ListExpression list ->
             List.foldl
-                (\item aggregate -> Set.union (listDirectDependenciesOfExpression item) aggregate)
+                (\item aggregate ->
+                    Set.union (listUnboundReferencesInExpression item boundNames) aggregate
+                )
                 Set.empty
                 list
 
         KernelApplicationExpression argument _ ->
-            listDirectDependenciesOfExpression argument
+            listUnboundReferencesInExpression argument boundNames
 
         ConditionalExpression condition falseBranch trueBranch ->
-            Set.union (listDirectDependenciesOfExpression falseBranch)
-                (Set.union (listDirectDependenciesOfExpression trueBranch)
-                    (listDirectDependenciesOfExpression condition)
+            Set.union (listUnboundReferencesInExpression falseBranch boundNames)
+                (Set.union (listUnboundReferencesInExpression trueBranch boundNames)
+                    (listUnboundReferencesInExpression condition boundNames)
                 )
 
         ReferenceExpression reference ->
-            Set.singleton reference
+            if List.member reference boundNames then
+                Set.empty
+
+            else
+                Set.singleton reference
 
         FunctionExpression functionParam functionBody ->
             let
-                functionBodyDependencies =
-                    listDirectDependenciesOfExpression functionBody
-
                 functionParamNames : List String
                 functionParamNames =
                     List.concatMap
                         (\param -> List.map Tuple.first param)
                         functionParam
             in
-            List.foldl
-                (\paramName aggregate -> Set.remove paramName aggregate)
-                functionBodyDependencies
-                functionParamNames
+            listUnboundReferencesInExpression
+                functionBody
+                (List.concat [ boundNames, functionParamNames ])
 
         FunctionApplicationExpression functionExpression arguments ->
             List.foldl
-                (\argument aggregate -> Set.union (listDirectDependenciesOfExpression argument) aggregate)
-                (listDirectDependenciesOfExpression functionExpression)
+                (\argument aggregate ->
+                    Set.union (listUnboundReferencesInExpression argument boundNames) aggregate
+                )
+                (listUnboundReferencesInExpression functionExpression boundNames)
                 arguments
 
         DeclarationBlockExpression declarations innerExpression ->
             let
-                innerDependencies : Set.Set String
-                innerDependencies =
-                    List.foldl
-                        (\( _, decl ) aggregate -> Set.union (listDirectDependenciesOfExpression decl) aggregate)
-                        (listDirectDependenciesOfExpression innerExpression)
-                        declarations
+                declarationsNames : List String
+                declarationsNames =
+                    List.map Tuple.first declarations
+
+                newBoundNames =
+                    List.concat [ boundNames, declarationsNames ]
             in
             List.foldl
-                (\( declName, _ ) -> Set.remove declName)
-                innerDependencies
+                (\( _, decl ) aggregate ->
+                    Set.union (listUnboundReferencesInExpression decl newBoundNames) aggregate
+                )
+                (listUnboundReferencesInExpression innerExpression newBoundNames)
                 declarations
 
         StringTagExpression _ tagged ->
-            listDirectDependenciesOfExpression tagged
+            listUnboundReferencesInExpression tagged boundNames
 
         PineFunctionApplicationExpression _ argument ->
-            listDirectDependenciesOfExpression argument
+            listUnboundReferencesInExpression argument boundNames
 
 
 getTransitiveDependencies : Dict.Dict String (Set.Set String) -> Set.Set String -> Set.Set String
@@ -2317,12 +2323,6 @@ estimatePineListValueSizeHelper accumulated list =
             accumulated
                 + estimatePineValueSize first
                 + estimatePineValueSize second
-
-        [ first, second, third ] ->
-            accumulated
-                + estimatePineValueSize first
-                + estimatePineValueSize second
-                + estimatePineValueSize third
 
         first :: second :: third :: remaining ->
             estimatePineListValueSizeHelper

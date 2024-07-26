@@ -3005,7 +3005,7 @@ emitModuleFunctionDeclarations stackBefore declarations =
         declarationsDirectDependencies =
             Dict.foldl
                 (\declName declExpr aggregate ->
-                    Dict.insert declName (FirCompiler.listDirectDependenciesOfExpression declExpr) aggregate
+                    Dict.insert declName (FirCompiler.listUnboundReferencesInExpression declExpr []) aggregate
                 )
                 Dict.empty
                 allModuleDeclarations
