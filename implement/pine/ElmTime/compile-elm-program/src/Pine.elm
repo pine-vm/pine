@@ -34,7 +34,6 @@ module Pine exposing
     )
 
 import BigInt
-import Common
 import Dict
 import Hex
 
@@ -236,14 +235,6 @@ kernelFunctions =
           , kernelFunction_is_sorted_ascending_int
           )
         ]
-
-
-kernelFunctionsNames : List ( Value, String )
-kernelFunctionsNames =
-    Dict.foldl
-        (\name _ aggregate -> ( valueFromString name, name ) :: aggregate)
-        []
-        kernelFunctions
 
 
 kernelFunction_equal : KernelFunction
@@ -583,7 +574,7 @@ describeExpression depthLimit expression =
                 ++ describeValue (depthLimit - 1) literal
                 ++ ")"
 
-        ParseAndEvalExpression envExpr exprExpr ->
+        ParseAndEvalExpression _ exprExpr ->
             "parse-and-eval("
                 ++ (if depthLimit < 1 then
                         "..."

@@ -796,10 +796,10 @@ Each recursion domain is a set of names of declarations that mutually depend on 
 The overall list of recursion domains is ordered by their dependencies on each other.
 The first element in the list is a set of declarations that do not depend on any other declaration.
 -}
-recursionDomainsFromDeclarationDependencies : Dict.Dict String (Set.Set String) -> List (Set.Set String)
+recursionDomainsFromDeclarationDependencies : List ( String, Set.Set String ) -> List (Set.Set String)
 recursionDomainsFromDeclarationDependencies declarationDependencies =
     let
-        integrateDecl declName declDependencies recursionDomains =
+        integrateDecl ( declName, declDependencies ) recursionDomains =
             let
                 -- Inserts the new domain into the list of domains at the position where the none of the following domains depend on it.
                 insertDomainRecursive :
@@ -826,7 +826,7 @@ recursionDomainsFromDeclarationDependencies declarationDependencies =
                                 allDependenciesOfNext =
                                     Set.foldl
                                         (\nextDeclName aggregate ->
-                                            case Dict.get nextDeclName declarationDependencies of
+                                            case Common.assocListGet nextDeclName declarationDependencies of
                                                 Nothing ->
                                                     aggregate
 
@@ -855,7 +855,7 @@ recursionDomainsFromDeclarationDependencies declarationDependencies =
             in
             insertDomainRecursive (Set.singleton declName) [] recursionDomains
     in
-    Dict.foldl integrateDecl [] declarationDependencies
+    List.foldl integrateDecl [] declarationDependencies
 
 
 parseFunctionParameters : Expression -> DeclBlockFunctionEntry

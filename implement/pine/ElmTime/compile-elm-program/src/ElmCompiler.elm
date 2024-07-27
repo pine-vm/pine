@@ -68,7 +68,7 @@ type alias ProjectParsedElmFile =
 type alias CompilationStack =
     { moduleAliases : Dict.Dict (List String) (List String)
     , availableModules : Dict.Dict (List String) ElmModuleInCompilation
-    , inlineableDeclarations : Dict.Dict String (List Expression -> Expression)
+    , inlineableDeclarations : List ( String, List Expression -> Expression )
     , elmValuesToExposeToGlobal : Dict.Dict String (List String)
     , localTypeDeclarations : List ( String, ElmModuleTypeDeclaration )
     , depth : Int
@@ -244,7 +244,7 @@ elmDeclarationsOverrides =
         |> Dict.fromList
 
 
-elmDeclarationsOverridesExpressions : Dict.Dict String Expression
+elmDeclarationsOverridesExpressions : List ( String, Expression )
 elmDeclarationsOverridesExpressions =
     elmDeclarationsOverrides
         |> Dict.toList
@@ -263,7 +263,6 @@ elmDeclarationsOverridesExpressions =
                             ]
                         )
             )
-        |> Dict.fromList
 
 
 expandElmInteractiveEnvironmentWithModules :
@@ -475,7 +474,7 @@ compileElmModuleIntoNamedExports availableModules moduleToTranslate =
                                                 (Elm.Syntax.Node.Node _ valueConstructorName) =
                                                     valueConstructor.name
                                             in
-                                            case Dict.get valueConstructorName elmDeclarationsOverridesExpressions of
+                                            case Common.assocListGet valueConstructorName elmDeclarationsOverridesExpressions of
                                                 Nothing ->
                                                     ( valueConstructorName
                                                     , ElmModuleChoiceTypeTag (List.length valueConstructor.arguments)
@@ -765,7 +764,7 @@ compilationAndEmitStackFromModulesInCompilation availableModules { moduleAliases
         compilationStackForImport =
             { moduleAliases = moduleAliases
             , availableModules = availableModules
-            , inlineableDeclarations = Dict.empty
+            , inlineableDeclarations = []
             , elmValuesToExposeToGlobal = elmValuesToExposeToGlobalDefault
             , localTypeDeclarations = localTypeDeclarations
             , depth = 0
@@ -806,8 +805,8 @@ compilationAndEmitStackFromModulesInCompilation availableModules { moduleAliases
                 moduleImports.importedTypes
 
         localTypeDeclarationsSeparate :
-            { choiceTypeTagDeclarations : Dict.Dict String Int
-            , recordTypeDeclarations : Dict.Dict String (List String)
+            { choiceTypeTagDeclarations : List ( String, Int )
+            , recordTypeDeclarations : List ( String, List String )
             }
         localTypeDeclarationsSeparate =
             List.foldl
@@ -816,46 +815,55 @@ compilationAndEmitStackFromModulesInCompilation availableModules { moduleAliases
                         ElmModuleChoiceTypeDeclaration (ElmModuleChoiceType choiceTypeTags) ->
                             { aggregate
                                 | choiceTypeTagDeclarations =
-                                    List.foldl
-                                        (\( tagName, ElmModuleChoiceTypeTag argumentsCount ) innerAggregate ->
-                                            Dict.insert tagName argumentsCount innerAggregate
-                                        )
-                                        aggregate.choiceTypeTagDeclarations
-                                        choiceTypeTags
+                                    List.concat
+                                        [ List.map
+                                            (\( tagName, ElmModuleChoiceTypeTag argumentsCount ) ->
+                                                ( tagName, argumentsCount )
+                                            )
+                                            choiceTypeTags
+                                        , aggregate.choiceTypeTagDeclarations
+                                        ]
                             }
 
                         ElmModuleRecordTypeDeclaration fields ->
                             { aggregate
                                 | recordTypeDeclarations =
-                                    Dict.insert typeName fields aggregate.recordTypeDeclarations
+                                    ( typeName, fields ) :: aggregate.recordTypeDeclarations
                             }
                 )
-                { recordTypeDeclarations = Dict.empty
-                , choiceTypeTagDeclarations = Dict.empty
+                { recordTypeDeclarations = []
+                , choiceTypeTagDeclarations = []
                 }
                 localTypeDeclarations
 
+        declarationsFromTypeAliasesFieldsNames : List ( String, List String )
         declarationsFromTypeAliasesFieldsNames =
-            Dict.union
-                localTypeDeclarationsSeparate.recordTypeDeclarations
-                mergedImports.recordConstructorsFieldsNames
+            List.concat
+                [ localTypeDeclarationsSeparate.recordTypeDeclarations
+                , Dict.toList mergedImports.recordConstructorsFieldsNames
+                ]
 
-        choiceTypeTagConstructorDeclarations : Dict.Dict String Int
+        choiceTypeTagConstructorDeclarations : List ( String, Int )
         choiceTypeTagConstructorDeclarations =
-            Dict.union
-                localTypeDeclarationsSeparate.choiceTypeTagDeclarations
-                importedChoiceTypeTagConstructorDeclarations
+            List.concat
+                [ localTypeDeclarationsSeparate.choiceTypeTagDeclarations
+                , Dict.toList importedChoiceTypeTagConstructorDeclarations
+                ]
 
-        declarationsFromTypeAliases : Dict.Dict String (List Expression -> Expression)
+        declarationsFromTypeAliases : List ( String, List Expression -> Expression )
         declarationsFromTypeAliases =
-            Dict.map (\_ -> compileElmRecordConstructor)
+            List.map
+                (\( recordName, fieldNames ) ->
+                    ( recordName, compileElmRecordConstructor fieldNames )
+                )
                 declarationsFromTypeAliasesFieldsNames
 
-        declarationsFromChoiceTypes : Dict.Dict String (List Expression -> Expression)
+        declarationsFromChoiceTypes : List ( String, List Expression -> Expression )
         declarationsFromChoiceTypes =
-            Dict.map
-                (\tagName argumentsCount ->
-                    compileElmChoiceTypeTagConstructor
+            List.map
+                (\( tagName, argumentsCount ) ->
+                    ( tagName
+                    , compileElmChoiceTypeTagConstructor
                         ( case List.reverse (String.split "." tagName) of
                             [] ->
                                 tagName
@@ -864,22 +872,25 @@ compilationAndEmitStackFromModulesInCompilation availableModules { moduleAliases
                                 head
                         , argumentsCount
                         )
+                    )
                 )
                 choiceTypeTagConstructorDeclarations
 
         compilationStack =
             { compilationStackForImport
                 | inlineableDeclarations =
-                    Dict.union
-                        declarationsFromTypeAliases
-                        declarationsFromChoiceTypes
+                    List.concat
+                        [ declarationsFromTypeAliases
+                        , declarationsFromChoiceTypes
+                        ]
             }
 
-        importedFunctionsBeforeParse : Dict.Dict String Pine.Value
+        importedFunctionsBeforeParse : List ( String, Pine.Value )
         importedFunctionsBeforeParse =
-            Dict.union
-                mergedImports.modulesDeclarationsFlat
-                moduleImports.importedFunctions
+            List.concat
+                [ Dict.toList mergedImports.modulesDeclarationsFlat
+                , Dict.toList moduleImports.importedFunctions
+                ]
 
         importedFunctions : List ( String, ( FirCompiler.EnvironmentFunctionEntry, Pine.Value ) )
         importedFunctions =
@@ -904,7 +915,7 @@ compilationAndEmitStackFromModulesInCompilation availableModules { moduleAliases
                       )
                     )
                 )
-                (Dict.toList importedFunctionsBeforeParse)
+                importedFunctionsBeforeParse
 
         emitStack =
             { importedFunctions = importedFunctions
@@ -1378,12 +1389,12 @@ compileElmSyntaxApplication stack appliedFunctionElmSyntax argumentsElmSyntax =
                                 functionFlatName =
                                     String.join "." (List.concat [ functionModuleName, [ functionLocalName ] ])
                             in
-                            case Dict.get functionFlatName elmDeclarationsOverridesExpressions of
+                            case Common.assocListGet functionFlatName elmDeclarationsOverridesExpressions of
                                 Just declarationOverride ->
                                     Ok declarationOverride
 
                                 Nothing ->
-                                    case Dict.get functionFlatName stack.inlineableDeclarations of
+                                    case Common.assocListGet functionFlatName stack.inlineableDeclarations of
                                         Just applicableDeclaration ->
                                             Ok (applicableDeclaration arguments)
 
@@ -1472,12 +1483,10 @@ compileElmSyntaxLetBlock stackBefore letBlock =
         Ok newAvailableDeclarations ->
             let
                 inlineableDeclarations =
-                    List.foldl
-                        (\( declName, declExpr ) ->
-                            Dict.insert declName declExpr
-                        )
-                        stackBefore.inlineableDeclarations
-                        (List.concat newAvailableDeclarations)
+                    List.concat
+                        [ List.concat newAvailableDeclarations
+                        , stackBefore.inlineableDeclarations
+                        ]
 
                 stack =
                     { stackBefore
@@ -1896,16 +1905,18 @@ compileElmSyntaxCaseBlockCase stackBefore caseBlockValueExpression ( Elm.Syntax.
                         []
                         deconstruction.declarations
 
-                inlineableDeclarations : Dict.Dict String (List Expression -> Expression)
+                inlineableDeclarations : List ( String, List Expression -> Expression )
                 inlineableDeclarations =
-                    List.foldl
-                        (\( declName, declExpr ) aggregate ->
-                            Dict.insert declName
-                                (applicableDeclarationFromConstructorExpression declExpr)
-                                aggregate
-                        )
-                        stackBefore.inlineableDeclarations
-                        deconstructionDeclarations
+                    List.concat
+                        [ List.map
+                            (\( declName, declExpr ) ->
+                                ( declName
+                                , applicableDeclarationFromConstructorExpression declExpr
+                                )
+                            )
+                            deconstructionDeclarations
+                        , stackBefore.inlineableDeclarations
+                        ]
 
                 stack =
                     { stackBefore
@@ -2199,7 +2210,7 @@ compileElmSyntaxPattern compilation elmPattern =
                                             []
 
                                         else
-                                            [ case Dict.get qualifiedName.name elmDeclarationsOverridesExpressions of
+                                            [ case Common.assocListGet qualifiedName.name elmDeclarationsOverridesExpressions of
                                                 Just tagNameExpressionFromOverrides ->
                                                     equalCondition
                                                         [ tagNameExpressionFromOverrides
@@ -2777,7 +2788,7 @@ recursiveFunctionToLookupFieldInRecord =
 compileElmFunctionOrValueLookup : ( List String, String ) -> CompilationStack -> Result String Expression
 compileElmFunctionOrValueLookup ( moduleName, localName ) compilation =
     if moduleName == [] then
-        case Dict.get localName compilation.inlineableDeclarations of
+        case Common.assocListGet localName compilation.inlineableDeclarations of
             Nothing ->
                 compileElmFunctionOrValueLookupWithoutLocalResolution ( moduleName, localName ) compilation
 
@@ -2802,7 +2813,7 @@ compileElmFunctionOrValueLookupWithoutLocalResolution ( moduleName, name ) compi
         fusedName =
             String.join "." (List.concat [ moduleName, [ name ] ])
     in
-    case Dict.get name elmDeclarationsOverridesExpressions of
+    case Common.assocListGet name elmDeclarationsOverridesExpressions of
         Just declarationOverride ->
             Ok declarationOverride
 
@@ -2848,7 +2859,7 @@ getDeclarationValueFromCompilation ( localModuleName, nameInModule ) compilation
         Just moduleValue ->
             case Common.assocListGet nameInModule moduleValue.functionDeclarations of
                 Nothing ->
-                    case Dict.get flatName compilation.inlineableDeclarations of
+                    case Common.assocListGet flatName compilation.inlineableDeclarations of
                         Just applicableDeclaration ->
                             Ok (applicableDeclaration [])
 
@@ -3016,23 +3027,22 @@ emitModuleFunctionDeclarations stackBefore declarations =
                 declarationsDirectDependencies
                 (Set.fromList exposedDeclarationsNames)
 
-        declarationsTransitiveDependencies : Dict.Dict String (Set.Set String)
+        declarationsTransitiveDependencies : List ( String, Set.Set String )
         declarationsTransitiveDependencies =
             Dict.foldl
                 (\declarationName directDependencies aggregate ->
                     if Set.member declarationName aggregateTransitiveDependencies then
-                        Dict.insert
-                            declarationName
-                            (FirCompiler.getTransitiveDependencies
-                                declarationsDirectDependencies
-                                directDependencies
-                            )
-                            aggregate
+                        ( declarationName
+                        , FirCompiler.getTransitiveDependencies
+                            declarationsDirectDependencies
+                            directDependencies
+                        )
+                            :: aggregate
 
                     else
                         aggregate
                 )
-                Dict.empty
+                []
                 declarationsDirectDependencies
 
         ( importedFunctionsToShare, importedFunctionsToInline ) =
@@ -3797,61 +3807,53 @@ valueFromString string =
 
 
 separateEnvironmentDeclarations :
-    Dict.Dict String Pine.Value
+    List ( String, Pine.Value )
     ->
         Result
             String
             { modules : Dict.Dict Elm.Syntax.ModuleName.ModuleName ( Pine.Value, ElmModuleInCompilation )
-            , otherDeclarations : Dict.Dict String Pine.Value
+            , otherDeclarations : List ( String, Pine.Value )
             }
 separateEnvironmentDeclarations environmentDeclarations =
-    let
-        initAggregate =
-            { modules = Dict.empty, otherDeclarations = Dict.empty }
-    in
-    if Dict.isEmpty environmentDeclarations then
-        Ok initAggregate
+    List.foldl
+        (\( declNameFlat, declValue ) aggregateResult ->
+            case aggregateResult of
+                Err err ->
+                    Err err
 
-    else
-        Dict.foldl
-            (\declNameFlat declValue aggregateResult ->
-                case aggregateResult of
-                    Err err ->
-                        Err err
+                Ok aggregate ->
+                    if stringStartsWithUpper declNameFlat then
+                        case getDeclarationsFromEnvironment declValue of
+                            Err err ->
+                                Err ("Failed get decls from env: " ++ err)
 
-                    Ok aggregate ->
-                        if stringStartsWithUpper declNameFlat then
-                            case getDeclarationsFromEnvironment declValue of
-                                Err err ->
-                                    Err ("Failed get decls from env: " ++ err)
+                            Ok ( _, declsFromEnv ) ->
+                                case parseModuleValue declsFromEnv of
+                                    Err err ->
+                                        Err ("Failed to parse module " ++ declNameFlat ++ ": " ++ err)
 
-                                Ok ( _, declsFromEnv ) ->
-                                    case parseModuleValue declsFromEnv of
-                                        Err err ->
-                                            Err ("Failed to parse module " ++ declNameFlat ++ ": " ++ err)
+                                    Ok moduleDeclarations ->
+                                        Ok
+                                            { modules =
+                                                Dict.insert
+                                                    (String.split "." declNameFlat)
+                                                    ( declValue, moduleDeclarations )
+                                                    aggregate.modules
+                                            , otherDeclarations = aggregate.otherDeclarations
+                                            }
 
-                                        Ok moduleDeclarations ->
-                                            Ok
-                                                { aggregate
-                                                    | modules =
-                                                        Dict.insert
-                                                            (String.split "." declNameFlat)
-                                                            ( declValue, moduleDeclarations )
-                                                            aggregate.modules
-                                                }
-
-                        else
-                            Ok
-                                { aggregate
-                                    | otherDeclarations =
-                                        Dict.insert declNameFlat declValue aggregate.otherDeclarations
-                                }
-            )
-            (Ok initAggregate)
-            environmentDeclarations
+                    else
+                        Ok
+                            { modules = aggregate.modules
+                            , otherDeclarations =
+                                ( declNameFlat, declValue ) :: aggregate.otherDeclarations
+                            }
+        )
+        (Ok { modules = Dict.empty, otherDeclarations = [] })
+        environmentDeclarations
 
 
-getDeclarationsFromEnvironment : Pine.Value -> Result String ( List Pine.Value, Dict.Dict String Pine.Value )
+getDeclarationsFromEnvironment : Pine.Value -> Result String ( List Pine.Value, List ( String, Pine.Value ) )
 getDeclarationsFromEnvironment environment =
     case environment of
         Pine.BlobValue _ ->
@@ -3887,19 +3889,18 @@ getDeclarationsFromEnvironment environment =
                 Ok declarations ->
                     Ok
                         ( environmentList
-                        , Dict.fromList
-                            -- Elm Interactive allows shadowing, so ordering matters here.
-                            (List.reverse declarations)
+                        , -- Elm Interactive allows shadowing, so ordering matters here.
+                          List.reverse declarations
                         )
 
 
 {-| Reverses the encoding implemented in emitModuleValue, parsing the Elm module from the transportable form.
 -}
-parseModuleValue : Dict.Dict String Pine.Value -> Result String ElmModuleInCompilation
+parseModuleValue : List ( String, Pine.Value ) -> Result String ElmModuleInCompilation
 parseModuleValue moduleValues =
     case
-        Dict.foldl
-            (\declName declValue aggregateResult ->
+        List.foldr
+            (\( declName, declValue ) aggregateResult ->
                 case aggregateResult of
                     Err err ->
                         Err err

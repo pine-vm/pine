@@ -205,8 +205,9 @@ compileInteractiveSubmission environment submission =
                                         compilationStack =
                                             { defaultCompilationStack
                                                 | inlineableDeclarations =
-                                                    defaultCompilationStack.inlineableDeclarations
-                                                        |> Dict.remove declarationName
+                                                    List.filter
+                                                        (\( declName, _ ) -> declName /= declarationName)
+                                                        defaultCompilationStack.inlineableDeclarations
                                             }
                                     in
                                     case

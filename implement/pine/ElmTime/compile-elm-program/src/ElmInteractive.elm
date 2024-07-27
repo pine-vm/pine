@@ -655,7 +655,7 @@ transformExpressionWithOptionalReplacement findReplacement expression =
 
 compilationAndEmitStackFromInteractiveEnvironment :
     { modules : Dict.Dict Elm.Syntax.ModuleName.ModuleName ElmModuleInCompilation
-    , otherDeclarations : Dict.Dict String Pine.Value
+    , otherDeclarations : List ( String, Pine.Value )
     }
     -> ( CompilationStack, EmitStack )
 compilationAndEmitStackFromInteractiveEnvironment environmentDeclarations =
@@ -682,14 +682,17 @@ compilationAndEmitStackFromInteractiveEnvironment environmentDeclarations =
         compilationStack =
             { defaultCompilationStack
                 | inlineableDeclarations =
-                    defaultCompilationStack.inlineableDeclarations
-                        |> Dict.union
-                            (environmentDeclarations.otherDeclarations
-                                |> Dict.map
-                                    (always
-                                        (LiteralExpression >> ElmCompiler.applicableDeclarationFromConstructorExpression)
-                                    )
+                    List.concat
+                        [ defaultCompilationStack.inlineableDeclarations
+                        , List.map
+                            (\( declName, declValue ) ->
+                                ( declName
+                                , ElmCompiler.applicableDeclarationFromConstructorExpression
+                                    (LiteralExpression declValue)
+                                )
                             )
+                            environmentDeclarations.otherDeclarations
+                        ]
             }
     in
     ( compilationStack

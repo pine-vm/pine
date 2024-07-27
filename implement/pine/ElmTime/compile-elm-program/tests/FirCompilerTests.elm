@@ -11,23 +11,22 @@ computeRecursionDomainsTests : Test.Test
 computeRecursionDomainsTests =
     let
         testCases =
-            [ ( Dict.fromList []
+            [ ( []
               , []
               )
-            , ( Dict.fromList
-                    [ ( "mut_a"
-                      , Set.fromList [ "mut_a", "mut_b", "alfa" ]
-                      )
-                    , ( "mut_b"
-                      , Set.fromList [ "mut_a", "mut_b", "alfa" ]
-                      )
-                    , ( "alfa"
-                      , Set.fromList []
-                      )
-                    , ( "beta"
-                      , Set.fromList [ "alfa", "mut_a", "mut_b" ]
-                      )
-                    ]
+            , ( [ ( "mut_a"
+                  , Set.fromList [ "mut_a", "mut_b", "alfa" ]
+                  )
+                , ( "mut_b"
+                  , Set.fromList [ "mut_a", "mut_b", "alfa" ]
+                  )
+                , ( "alfa"
+                  , Set.fromList []
+                  )
+                , ( "beta"
+                  , Set.fromList [ "alfa", "mut_a", "mut_b" ]
+                  )
+                ]
               , [ Set.fromList [ "alfa" ]
                 , Set.fromList [ "mut_a", "mut_b" ]
                 , Set.fromList [ "beta" ]
