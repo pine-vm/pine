@@ -30,7 +30,8 @@ public class ReducePineExpression
             Expression.KernelApplicationExpression kernelApplication =>
             TryEvaluateExpressionIndependent(kernelApplication.argument)
             .MapError(err => "Failed to evaluate kernel application argument independent: " + err)
-            .Map(kernelApplication.function),
+            .Map(argumentValue =>
+            PineVM.PineVM.EvaluateKernelApplicationGeneric(argumentValue, kernelApplication.functionName)),
 
             Expression.ParseAndEvalExpression parseAndEvalExpr =>
             TryEvaluateExpressionIndependent(parseAndEvalExpr)

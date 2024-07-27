@@ -227,7 +227,7 @@ public static class ExpressionEncoding
             err.Value,
 
             Result<string, (string functionName, Expression argument)>.Ok functionNameAndArgument =>
-            ParseKernelApplicationExpression(functionNameAndArgument.Value.functionName, functionNameAndArgument.Value.argument),
+            Expression.KernelApplication(functionNameAndArgument.Value.argument, functionNameAndArgument.Value.functionName),
 
             var other =>
             throw new NotImplementedException("Unexpected result type: " + other.GetType().FullName)
@@ -236,24 +236,7 @@ public static class ExpressionEncoding
     public static Expression.KernelApplicationExpression ParseKernelApplicationExpressionThrowOnUnknownName(
         string functionName,
         Expression argument) =>
-        ParseKernelApplicationExpression(functionName, argument)
-        .Extract(err => throw new Exception(err));
-
-    public static Result<string, Expression.KernelApplicationExpression> ParseKernelApplicationExpression(
-        string functionName,
-        Expression argument)
-    {
-        if (!NamedKernelFunctions.TryGetValue(functionName, out var kernelFunction))
-        {
-            return "Did not find kernel function '" + functionName + "'";
-        }
-
-        return
-            new Expression.KernelApplicationExpression(
-                functionName: functionName,
-                function: kernelFunction,
-                argument: argument);
-    }
+        new(argument: argument, functionName: functionName);
 
     public static Result<string, PineValue> EncodeConditionalExpressionAsValue(Expression.ConditionalExpression conditionalExpression) =>
         EncodeExpressionAsValue(conditionalExpression.condition)
@@ -566,18 +549,16 @@ public static class ExpressionEncoding
             int skipCount,
             Expression argument) =>
             new(
-                functionName: nameof(KernelFunction.skip),
                 argument: new Expression.ListExpression(
                     [new Expression.LiteralExpression(PineValueAsInteger.ValueFromSignedInteger(skipCount)),
                     argument]),
-                function: _ => throw new NotImplementedException());
+                functionName: nameof(KernelFunction.skip));
 
         Expression.KernelApplicationExpression kernelListHeadExpr(
             Expression argument) =>
             new(
-                functionName: nameof(KernelFunction.list_head),
                 argument: argument,
-                function: _ => throw new NotImplementedException());
+                functionName: nameof(KernelFunction.list_head));
 
         var envListHeadExpr = kernelListHeadExpr(Expression.Environment);
 

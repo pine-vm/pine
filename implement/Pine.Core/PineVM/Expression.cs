@@ -20,6 +20,11 @@ public abstract record Expression
 {
     public static readonly Expression Environment = new EnvironmentExpression();
 
+    public static KernelApplicationExpression KernelApplication(
+        Expression argument,
+        string functionName) =>
+        new(argument: argument, functionName: functionName);
+
     public record LiteralExpression(
         PineValue Value)
         : Expression;
@@ -68,10 +73,7 @@ public abstract record Expression
 
     public record KernelApplicationExpression(
         string functionName,
-        Expression argument,
-
-        [property: JsonIgnore]
-            Func<PineValue, PineValue> function)
+        Expression argument)
         : Expression
     {
         public virtual bool Equals(KernelApplicationExpression? other)

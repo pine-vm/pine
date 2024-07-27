@@ -1470,8 +1470,7 @@ public partial class CompileToCSharp
                     .MapError(err => "Failed to transform kernel application argument: " + err)
                     .Map(transformedArgument => (Expression)new Expression.KernelApplicationExpression(
                         functionName: kernelAppl.functionName,
-                        argument: transformedArgument,
-                        function: null)),
+                        argument: transformedArgument)),
 
                     Expression.StringTagExpression stringTag =>
                     TransformPineExpressionWithOptionalReplacement(findReplacement, stringTag.tagged)

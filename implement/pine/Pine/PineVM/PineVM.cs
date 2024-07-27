@@ -1873,7 +1873,55 @@ public class PineVM : IPineVM
     {
         var argumentValue = EvaluateExpressionDefaultLessStack(application.argument, environment, stackPrevValues);
 
-        return application.function(argumentValue);
+        return
+            EvaluateKernelApplicationGeneric(
+                argumentValue: argumentValue,
+                functionName: application.functionName);
+    }
+
+    public static PineValue EvaluateKernelApplicationGeneric(
+        PineValue argumentValue,
+        string functionName)
+    {
+        return functionName switch
+        {
+            nameof(KernelFunction.equal) =>
+            KernelFunction.equal(argumentValue),
+
+            nameof(KernelFunction.length) =>
+            KernelFunction.length(argumentValue),
+
+            nameof(KernelFunction.list_head) =>
+            KernelFunction.list_head(argumentValue),
+
+            nameof(KernelFunction.skip) =>
+            KernelFunction.skip(argumentValue),
+
+            nameof(KernelFunction.take) =>
+            KernelFunction.take(argumentValue),
+
+            nameof(KernelFunction.concat) =>
+            KernelFunction.concat(argumentValue),
+
+            nameof(KernelFunction.reverse) =>
+            KernelFunction.reverse(argumentValue),
+
+            nameof(KernelFunction.negate) =>
+            KernelFunction.negate(argumentValue),
+
+            nameof(KernelFunction.add_int) =>
+            KernelFunction.add_int(argumentValue),
+
+            nameof(KernelFunction.mul_int) =>
+            KernelFunction.mul_int(argumentValue),
+
+            nameof(KernelFunction.is_sorted_ascending_int) =>
+            KernelFunction.is_sorted_ascending_int(argumentValue),
+
+            _ =>
+            throw new ParseExpressionException(
+                "Did not find kernel function '" + functionName + "'")
+        };
     }
 
     public PineValue EvaluateKernelApplications_Skip_ListHead_Expression(

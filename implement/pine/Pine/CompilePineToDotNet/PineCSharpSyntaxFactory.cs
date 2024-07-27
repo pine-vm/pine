@@ -409,14 +409,12 @@ public static class PineCSharpSyntaxFactory
                     [
                     new PineVM.Expression.LiteralExpression(PineValueAsInteger.ValueFromSignedInteger(currentOffset)),
                         compositionExpr
-                    ]),
-                function: _ => throw new NotImplementedException());
+                    ]));
 
         var currentExpr =
             new PineVM.Expression.KernelApplicationExpression(
                 functionName: "list_head",
-                argument: skippedExpr,
-                function: _ => throw new NotImplementedException());
+                argument: skippedExpr);
 
         return
             BuildPineExpressionToGetItemFromPath(

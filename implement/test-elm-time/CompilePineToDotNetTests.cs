@@ -95,8 +95,7 @@ public class CompilePineToDotNetTests
         var pineExpression =
             new Pine.PineVM.Expression.KernelApplicationExpression(
                 functionName: nameof(Pine.PineVM.KernelFunction.list_head),
-                argument: new Pine.PineVM.Expression.EnvironmentExpression(),
-                function: null);
+                argument: new Pine.PineVM.Expression.EnvironmentExpression());
 
         var compiledFormattedExpression =
             CompiledFormattedCSharp(
@@ -175,17 +174,14 @@ public class CompilePineToDotNetTests
 
             (new Pine.PineVM.Expression.KernelApplicationExpression(
                 functionName: "list_head",
-                argument: new Pine.PineVM.Expression.EnvironmentExpression(),
-                function: _=> throw new System.NotImplementedException()),
+                argument: new Pine.PineVM.Expression.EnvironmentExpression()),
                 new Pine.PineVM.ExprMappedToParentEnv.PathInParentEnv([0])),
 
             (new Pine.PineVM.Expression.KernelApplicationExpression(
                 functionName: "list_head",
                 argument: new Pine.PineVM.Expression.KernelApplicationExpression(
                     functionName: "list_head",
-                    argument: new Pine.PineVM.Expression.EnvironmentExpression(),
-                    function: _=> throw new System.NotImplementedException()),
-                function: _=> throw new System.NotImplementedException()),
+                    argument: new Pine.PineVM.Expression.EnvironmentExpression())),
                 new Pine.PineVM.ExprMappedToParentEnv.PathInParentEnv([0, 0])),
 
             (new Pine.PineVM.Expression.KernelApplicationExpression(
@@ -195,9 +191,7 @@ public class CompilePineToDotNetTests
                     argument: new Pine.PineVM.Expression.ListExpression(
                         [ new Pine.PineVM.Expression.LiteralExpression(PineValueAsInteger.ValueFromSignedInteger(13)),
                         new Pine.PineVM.Expression.EnvironmentExpression()
-                        ]),
-                    function: _=> throw new System.NotImplementedException()),
-                function: _=> throw new System.NotImplementedException()),
+                        ]))),
                 new Pine.PineVM.ExprMappedToParentEnv.PathInParentEnv([13])),
 
             (new Pine.PineVM.Expression.KernelApplicationExpression(
@@ -213,12 +207,8 @@ public class CompilePineToDotNetTests
                                 argument: new Pine.PineVM.Expression.ListExpression(
                                     [ new Pine.PineVM.Expression.LiteralExpression(PineValueAsInteger.ValueFromSignedInteger(17)),
                                     new Pine.PineVM.Expression.EnvironmentExpression()
-                                    ]),
-                                function: _=> throw new System.NotImplementedException()),
-                            function: _=> throw new System.NotImplementedException())
-                        ]),
-                    function: _=> throw new System.NotImplementedException()),
-                function: _=> throw new System.NotImplementedException()),
+                                    ])))
+                        ]))),
                 new Pine.PineVM.ExprMappedToParentEnv.PathInParentEnv([17,21])),
 
             (new Pine.PineVM.Expression.KernelApplicationExpression(
@@ -229,11 +219,8 @@ public class CompilePineToDotNetTests
                         [ new Pine.PineVM.Expression.LiteralExpression(PineValueAsInteger.ValueFromSignedInteger(23)),
                         new Pine.PineVM.Expression.KernelApplicationExpression(
                             functionName: "list_head",
-                            argument: new Pine.PineVM.Expression.EnvironmentExpression(),
-                            function: _=> throw new System.NotImplementedException())
-                        ]),
-                    function: _=> throw new System.NotImplementedException()),
-                function: _=> throw new System.NotImplementedException()),
+                            argument: new Pine.PineVM.Expression.EnvironmentExpression())
+                        ]))),
                 new Pine.PineVM.ExprMappedToParentEnv.PathInParentEnv([0,23])),
         };
 
@@ -282,9 +269,7 @@ public class CompilePineToDotNetTests
                 (Pine.PineVM.Expression)
                 new Pine.PineVM.Expression.KernelApplicationExpression(
                     functionName:"list_head",
-                    argument: new Pine.PineVM.Expression.EnvironmentExpression(),
-                    function:
-                    _=> throw new System.NotImplementedException()),
+                    argument: new Pine.PineVM.Expression.EnvironmentExpression()),
 
                 envConstraint =
                 Pine.PineVM.EnvConstraintId.Create(
@@ -307,11 +292,7 @@ public class CompilePineToDotNetTests
                             [
                             new Pine.PineVM.Expression.LiteralExpression(PineValueAsInteger.ValueFromSignedInteger(13)),
                             new Pine.PineVM.Expression.EnvironmentExpression()
-                            ]),
-                    function:
-                    _=> throw new System.NotImplementedException()),
-                    function:
-                    _=> throw new System.NotImplementedException()),
+                            ]))),
 
                 envConstraint =
                 Pine.PineVM.EnvConstraintId.Create(
