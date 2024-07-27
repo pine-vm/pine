@@ -1356,18 +1356,7 @@ emitApplyFunctionFromCurrentEnvironment compilation functionName arguments =
                                 partialApplicationExpressionFromListOfArguments
                                     arguments
                                     compilation
-                                    (Pine.ParseAndEvalExpression
-                                        (Pine.ListExpression
-                                            [ Pine.ListExpression []
-                                            , Pine.ListExpression arguments
-                                            ]
-                                        )
-                                        (Pine.ListExpression
-                                            [ Pine.LiteralExpression Pine.stringAsValue_Literal
-                                            , funcRecordLessTag
-                                            ]
-                                        )
-                                    )
+                                    funcRecordLessTag
                             )
                         )
 
