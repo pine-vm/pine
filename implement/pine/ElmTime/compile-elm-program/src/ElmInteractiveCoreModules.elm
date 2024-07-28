@@ -410,7 +410,6 @@ compareList listA listB =
 
 compareStrings : List Char -> List Char -> Order
 compareStrings stringA stringB =
-    -- Pine_kernel.is_sorted_ascending_int only works with signed integers. Therefore prepend sign to each character.
     case stringA of
         [] ->
             case stringB of
@@ -430,6 +429,7 @@ compareStrings stringA stringB =
                         compareStrings tailA tailB
 
                     else if
+                        -- Pine_kernel.is_sorted_ascending_int only works with signed integers. Therefore prepend sign to each character.
                         Pine_kernel.is_sorted_ascending_int
                             [ Pine_kernel.concat [ 0, charA ]
                             , Pine_kernel.concat [ 0, charB ]
@@ -1147,9 +1147,8 @@ type String
 
 
 toList : String -> List Char
-toList string =
-    case string of
-    String list -> list
+toList (String chars) =
+    chars
 
 
 fromList : List Char -> String
@@ -1163,44 +1162,38 @@ fromChar char =
 
 
 cons : Char -> String -> String
-cons char string =
-    fromList (char :: toList string)
+cons char (String string) =
+    String (char :: string)
 
 
 uncons : String -> Maybe ( Char, String )
-uncons string =
-    case toList string of
+uncons (String chars) =
+    case chars of
         [] ->
             Nothing
 
         first :: rest ->
-            Just ( first, fromList rest )
+            Just ( first, String rest )
 
 
 isEmpty : String -> Bool
-isEmpty string =
-    Pine_kernel.equal [ string, "" ]
+isEmpty (String chars) =
+    Pine_kernel.equal [ chars, [] ]
 
 
 length : String -> Int
-length string =
-    case string of
-    String list ->
-        Pine_kernel.length list
+length (String chars) =
+    Pine_kernel.length chars
 
 
 reverse : String -> String
-reverse string =
-    case string of
-    String list ->
-        String (Pine_kernel.reverse list)
+reverse (String chars) =
+    String (Pine_kernel.reverse chars)
 
 
 repeat : Int -> String -> String
-repeat n string =
-    case string of
-    String list ->
-        String (Pine_kernel.concat (List.repeat n list))
+repeat n (String chars) =
+    String (Pine_kernel.concat (List.repeat n chars))
 
 
 replace : String -> String -> String -> String
@@ -1209,8 +1202,8 @@ replace before after string =
 
 
 append : String -> String -> String
-append a b =
-    fromList (Pine_kernel.concat [ toList a, toList b ])
+append (String a) (String b) =
+    String (Pine_kernel.concat [ a, b ])
 
 
 concat : List String -> String
@@ -1219,14 +1212,12 @@ concat strings =
 
 
 split : String -> String -> List String
-split sep string =
-    case sep of
-    String sepList ->
-        if Pine_kernel.equal [ sepList, [] ] then
-            List.map fromChar (toList string)
+split (String sep) (String string) =
+    if Pine_kernel.equal [ sep, [] ] then
+        List.map fromChar string
 
-        else
-            splitHelperOnList [] sepList (toList string)
+    else
+        splitHelperOnList [] sep string
 
 
 splitHelperOnList : List Char -> List Char -> List Char -> List String
@@ -1242,10 +1233,8 @@ splitHelperOnList current sep string =
 
 
 join : String -> List String -> String
-join sep chunks =
-    case sep of
-    String sepList ->
-        String (joinOnList sepList chunks)
+join (String sepList) chunks =
+    String (joinOnList sepList chunks)
 
 
 joinOnList : List Char -> List String -> List Char
@@ -1279,8 +1268,8 @@ slice start end string =
 
 
 left : Int -> String -> String
-left n string =
-    fromList (List.take n (toList string))
+left n (String chars) =
+    String (List.take n chars)
 
 
 right : Int -> String -> String
@@ -1292,8 +1281,8 @@ right n string =
 
 
 dropLeft : Int -> String -> String
-dropLeft n string =
-    fromList (List.drop n (toList string))
+dropLeft n (String chars) =
+    String (List.drop n chars)
 
 
 dropRight : Int -> String -> String
@@ -1305,14 +1294,12 @@ dropRight n string =
 
 
 contains : String -> String -> Bool
-contains pattern string =
-    case (pattern, string) of
-        (String patternList, String stringList) ->
-            if Pine_kernel.equal [ patternList, [] ] then
-                True
+contains (String patternList) (String stringList) =
+    if Pine_kernel.equal [ patternList, [] ] then
+        True
 
-            else
-                containsOnList patternList stringList
+    else
+        containsOnList patternList stringList
 
 
 containsOnList : List Char -> List Char -> Bool
@@ -1331,28 +1318,29 @@ containsOnList pattern string =
 
 
 startsWith : String -> String -> Bool
-startsWith pattern string =
-    case (pattern, string) of
-        (String patternList, String stringList) ->
-            Pine_kernel.equal
-                [ Pine_kernel.take [ Pine_kernel.length patternList, stringList ]
-                , patternList
-                ]
+startsWith (String patternList) (String stringList) =
+    Pine_kernel.equal
+        [ Pine_kernel.take [ Pine_kernel.length patternList, stringList ]
+        , patternList
+        ]
 
 
 endsWith : String -> String -> Bool
 endsWith pattern string =
-    right (length pattern) string == pattern
+    Pine_kernel.equal
+        [ right (length pattern) string
+        , pattern
+        ]
 
 
 toInt : String -> Maybe Int
-toInt string =
-    toIntFromList (toList string)
+toInt (String chars) =
+    toIntFromList chars
 
 
 fromInt : Int -> String
 fromInt int =
-    fromList (fromIntAsList int)
+    String (fromIntAsList int)
 
 
 toIntFromList : List Char -> Maybe Int
@@ -1512,20 +1500,20 @@ unsafeDigitCharacterFromValue digitValue =
 
 
 trim : String -> String
-trim str =
-    fromList
+trim (String chars) =
+    String
         (dropWhileList isCharRemovedOnTrim
-            (List.reverse (dropWhileList isCharRemovedOnTrim (List.reverse (toList str)))))
+            (List.reverse (dropWhileList isCharRemovedOnTrim (List.reverse chars))))
 
 
 trimLeft : String -> String
-trimLeft str =
-    fromList (dropWhileList isCharRemovedOnTrim (toList str))
+trimLeft (String chars) =
+    String (dropWhileList isCharRemovedOnTrim chars)
 
 
 trimRight : String -> String
-trimRight str =
-    fromList (List.reverse (dropWhileList isCharRemovedOnTrim (List.reverse (toList str))))
+trimRight (String chars) =
+    String (List.reverse (dropWhileList isCharRemovedOnTrim (List.reverse chars)))
 
 
 isCharRemovedOnTrim : Char -> Bool
@@ -1547,11 +1535,9 @@ dropWhileList predicate stringList =
 
 
 padLeft : Int -> Char -> String -> String
-padLeft n char string =
-    case string of
-    String list ->
-        String
-            (Pine_kernel.concat [ List.repeat (n - Pine_kernel.length list) char, list ])
+padLeft n char (String list) =
+    String
+        (Pine_kernel.concat [ List.repeat (n - Pine_kernel.length list) char, list ])
 
 
 lines : String -> List String
@@ -1563,10 +1549,8 @@ lines string =
 
 
 foldr : (Char -> b -> b) -> b -> String -> b
-foldr func acc string =
-    case string of
-    String list ->
-        List.foldr func acc list
+foldr func acc (String list) =
+    List.foldr func acc list
 
 
 """
