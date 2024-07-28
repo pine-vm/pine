@@ -355,10 +355,14 @@ emitDeclarationBlock stackBefore blockDeclarations (DeclBlockClosureCaptures con
                 (\( functionName, ( EnvironmentFunctionEntry _ expectedEnvironment, _ ) ) aggregate ->
                     case expectedEnvironment of
                         LocalEnvironment localEnvExpectedDecls ->
-                            Dict.insert
-                                functionName
-                                (Set.fromList localEnvExpectedDecls)
+                            if localEnvExpectedDecls == [] then
                                 aggregate
+
+                            else
+                                Dict.insert
+                                    functionName
+                                    (Set.fromList localEnvExpectedDecls)
+                                    aggregate
 
                         ImportedEnvironment _ ->
                             aggregate
