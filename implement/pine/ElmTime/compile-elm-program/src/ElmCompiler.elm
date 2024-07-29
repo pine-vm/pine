@@ -3189,7 +3189,7 @@ emitRecursionDomain { exposedDeclarationsNames, allModuleDeclarations, importedF
             }
             recursionDomainDeclarationsInBlock
             (FirCompiler.DeclBlockClosureCaptures [])
-            (FirCompiler.DeclBlockAdditionalDeps (List.map Tuple.second recursionDomainDeclarations))
+            (FirCompiler.DeclBlockRootDeps (List.map Tuple.second recursionDomainDeclarations))
     of
         Err err ->
             Err err

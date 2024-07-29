@@ -1,7 +1,7 @@
 module FirCompiler exposing
-    ( DeclBlockAdditionalDeps(..)
-    , DeclBlockClosureCaptures(..)
+    ( DeclBlockClosureCaptures(..)
     , DeclBlockFunctionEntry(..)
+    , DeclBlockRootDeps(..)
     , Deconstruction(..)
     , EmitDeclarationBlockResult(..)
     , EmitStack
@@ -121,8 +121,8 @@ type DeclBlockClosureCaptures
     = DeclBlockClosureCaptures (List ( String, EnvironmentDeconstructionEntry ))
 
 
-type DeclBlockAdditionalDeps
-    = DeclBlockAdditionalDeps (List Expression)
+type DeclBlockRootDeps
+    = DeclBlockRootDeps (List Expression)
 
 
 type ClosureCapture
@@ -319,7 +319,7 @@ emitExpressionInDeclarationBlock stackBeforeAddingDeps blockDeclarations mainExp
                     stackBefore
                     usedBlockDeclarationsAndImports
                     (DeclBlockClosureCaptures closureCaptures)
-                    (DeclBlockAdditionalDeps [ mainExpression ])
+                    (DeclBlockRootDeps [ mainExpression ])
             of
                 Err err ->
                     Err err
@@ -346,10 +346,14 @@ emitDeclarationBlock :
     EmitStack
     -> List ( String, Expression )
     -> DeclBlockClosureCaptures
-    -> DeclBlockAdditionalDeps
+    -> DeclBlockRootDeps
     -> Result String ( EmitStack, EmitDeclarationBlockResult )
-emitDeclarationBlock stackBefore blockDeclarations (DeclBlockClosureCaptures configClosureCaptures) (DeclBlockAdditionalDeps additionalDeps) =
+emitDeclarationBlock stackBefore blockDeclarations (DeclBlockClosureCaptures configClosureCaptures) (DeclBlockRootDeps rootDependencies) =
     let
+        blockDeclarationsNames : List String
+        blockDeclarationsNames =
+            List.map Tuple.first blockDeclarations
+
         availableEmittedDependencies : Dict.Dict String (Set.Set String)
         availableEmittedDependencies =
             List.foldl
@@ -388,33 +392,6 @@ emitDeclarationBlock stackBefore blockDeclarations (DeclBlockClosureCaptures con
         dependenciesRelations =
             Dict.union availableEmittedDependencies blockDeclarationsDirectDependencies
 
-        blockDeclarationsTransitiveDependencies : Dict.Dict String (List String)
-        blockDeclarationsTransitiveDependencies =
-            Dict.map
-                (\_ declDirectDeps -> Set.toList (getTransitiveDependencies dependenciesRelations declDirectDeps))
-                blockDeclarationsDirectDependencies
-
-        additionalImports : Set.Set String
-        additionalImports =
-            List.foldl
-                (\depExpr aggregate ->
-                    Set.union aggregate (listTransitiveDependenciesOfExpression stackBefore depExpr)
-                )
-                Set.empty
-                additionalDeps
-
-        allDependencies : Set.Set String
-        allDependencies =
-            Set.union
-                additionalImports
-                (getTransitiveDependencies
-                    dependenciesRelations
-                    (Dict.foldl (\_ dependencies -> Set.union dependencies)
-                        Set.empty
-                        blockDeclarationsDirectDependencies
-                    )
-                )
-
         stackBeforeAvailableDeclarations : List String
         stackBeforeAvailableDeclarations =
             List.foldl
@@ -441,25 +418,19 @@ emitDeclarationBlock stackBefore blockDeclarations (DeclBlockClosureCaptures con
                   )
                 ]
 
+        emittedImports : List ( String, EnvironmentFunctionEntry, Pine.Expression )
+        emittedImports =
+            emittedImportsFromRoots
+                rootDependencies
+                stackBefore
+                dependenciesRelations
+                stackBeforeAvailableDeclarations
+
         usedAvailableEmitted : List ( String, EnvironmentFunctionEntry, Pine.Expression )
         usedAvailableEmitted =
             List.concat
                 [ usedAvailableEmittedForInternals
-                , Set.foldl
-                    (\depName aggregate ->
-                        case Common.assocListGet depName stackBefore.importedFunctions of
-                            Nothing ->
-                                aggregate
-
-                            Just ( availableEmitted, emittedValue ) ->
-                                if List.member depName stackBeforeAvailableDeclarations then
-                                    aggregate
-
-                                else
-                                    ( depName, availableEmitted, Pine.LiteralExpression emittedValue ) :: aggregate
-                    )
-                    []
-                    allDependencies
+                , emittedImports
                 ]
 
         usedAvailableEmittedNames : List String
@@ -501,16 +472,14 @@ emitDeclarationBlock stackBefore blockDeclarations (DeclBlockClosureCaptures con
 
         forwardedDecls : List String
         forwardedDecls =
-            List.map
-                (\( functionName, _ ) -> functionName)
-                stackBefore.environmentFunctions
+            List.map Tuple.first stackBefore.environmentFunctions
 
         contentsDependOnFunctionApplication : Bool
         contentsDependOnFunctionApplication =
             List.any
                 (\( _, declExpression ) -> expressionNeedsAdaptiveApplication declExpression)
                 blockDeclarations
-                || List.any expressionNeedsAdaptiveApplication additionalDeps
+                || List.any expressionNeedsAdaptiveApplication rootDependencies
 
         closureCapturesForBlockDecls : List ( String, Expression )
         closureCapturesForBlockDecls =
@@ -522,26 +491,28 @@ emitDeclarationBlock stackBefore blockDeclarations (DeclBlockClosureCaptures con
                 (\( declName, DeclBlockFunctionEntry asFunctionParams asFunctionInnerExpr ) aggregate ->
                     case asFunctionParams of
                         [] ->
-                            case Dict.get declName blockDeclarationsTransitiveDependencies of
-                                Nothing ->
-                                    aggregate
+                            if List.member declName usedAvailableEmittedNames then
+                                aggregate
 
-                                Just declDependencies ->
-                                    if List.member declName usedAvailableEmittedNames then
+                            else
+                                case Dict.get declName blockDeclarationsDirectDependencies of
+                                    Nothing ->
                                         aggregate
 
-                                    else if List.member declName declDependencies then
-                                        aggregate
+                                    Just declDirectDeps ->
+                                        let
+                                            declTransitiveDeps =
+                                                getTransitiveDependencies dependenciesRelations declDirectDeps
+                                        in
+                                        if
+                                            List.any
+                                                (\depName -> Set.member depName declTransitiveDeps)
+                                                blockDeclarationsNames
+                                        then
+                                            aggregate
 
-                                    else if
-                                        List.all
-                                            (\depName -> List.member depName stackBeforeAvailableDeclarations)
-                                            declDependencies
-                                    then
-                                        ( declName, asFunctionInnerExpr ) :: aggregate
-
-                                    else
-                                        aggregate
+                                        else
+                                            ( declName, asFunctionInnerExpr ) :: aggregate
 
                         _ ->
                             -- Do not include functions into closureCapturesForBlockDecls
@@ -746,6 +717,55 @@ emitDeclarationBlock stackBefore blockDeclarations (DeclBlockClosureCaptures con
                         )
 
 
+emittedImportsFromRoots :
+    List Expression
+    -> EmitStack
+    -> Dict.Dict String (Set.Set String)
+    -> List String
+    -> List ( String, EnvironmentFunctionEntry, Pine.Expression )
+emittedImportsFromRoots rootDependencies emitStack dependenciesRelations stackBeforeAvailableDeclarations =
+    case emitStack.importedFunctions of
+        [] ->
+            {-
+               Specialize for early exit, because importedFunctions will often be empty,
+               as emitDeclarationBlock only emits imports at the root and removes the collection for descendants.
+            -}
+            []
+
+        importedFunctions ->
+            let
+                rootDependenciesNames : Set.Set String
+                rootDependenciesNames =
+                    List.foldl
+                        (\depExpr aggregate ->
+                            Set.union aggregate (listUnboundReferencesInExpression depExpr [])
+                        )
+                        Set.empty
+                        rootDependencies
+
+                allDependencies : Set.Set String
+                allDependencies =
+                    getTransitiveDependencies
+                        dependenciesRelations
+                        rootDependenciesNames
+            in
+            Set.foldl
+                (\depName aggregate ->
+                    case Common.assocListGet depName importedFunctions of
+                        Nothing ->
+                            aggregate
+
+                        Just ( availableEmitted, emittedValue ) ->
+                            if List.member depName stackBeforeAvailableDeclarations then
+                                aggregate
+
+                            else
+                                ( depName, availableEmitted, Pine.LiteralExpression emittedValue ) :: aggregate
+                )
+                []
+                allDependencies
+
+
 {-| Searches the tree of subexpressions for any that might require adaptive application.
 -}
 expressionNeedsAdaptiveApplication : Expression -> Bool
@@ -793,8 +813,7 @@ expressionNeedsAdaptiveApplication expression =
         DeclarationBlockExpression declarations innerExpression ->
             List.foldl
                 (\( _, decl ) aggregate ->
-                    expressionNeedsAdaptiveApplication decl
-                        || aggregate
+                    aggregate || expressionNeedsAdaptiveApplication decl
                 )
                 (expressionNeedsAdaptiveApplication innerExpression)
                 declarations
