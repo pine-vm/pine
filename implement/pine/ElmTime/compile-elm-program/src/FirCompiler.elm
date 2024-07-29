@@ -309,36 +309,37 @@ emitExpressionInDeclarationBlock stackBeforeAddingDeps blockDeclarations mainExp
                 []
                 stackBefore.environmentDeconstructions
     in
-    if mainExprParams == [] && usedBlockDeclarationsAndImports == [] then
-        emitExpression stackBeforeAddingDeps mainExprInnerExpr
+    case ( mainExprParams, usedBlockDeclarationsAndImports ) of
+        ( [], [] ) ->
+            emitExpression stackBeforeAddingDeps mainExprInnerExpr
 
-    else
-        case
-            emitDeclarationBlock
-                stackBefore
-                usedBlockDeclarationsAndImports
-                (DeclBlockClosureCaptures closureCaptures)
-                (DeclBlockAdditionalDeps [ mainExpression ])
-        of
-            Err err ->
-                Err err
+        _ ->
+            case
+                emitDeclarationBlock
+                    stackBefore
+                    usedBlockDeclarationsAndImports
+                    (DeclBlockClosureCaptures closureCaptures)
+                    (DeclBlockAdditionalDeps [ mainExpression ])
+            of
+                Err err ->
+                    Err err
 
-            Ok ( _, EmitDeclarationBlockResult _ parseAndEmitFunction envFunctionsExpression ) ->
-                let
-                    ( _, mainExpressionEmitResult ) =
-                        parseAndEmitFunction mainExpression
-                in
-                case mainExpressionEmitResult of
-                    Err err ->
-                        Err ("Failed emitting main expression: " ++ err)
+                Ok ( _, EmitDeclarationBlockResult _ parseAndEmitFunction envFunctionsExpression ) ->
+                    let
+                        ( _, mainExpressionEmitResult ) =
+                            parseAndEmitFunction mainExpression
+                    in
+                    case mainExpressionEmitResult of
+                        Err err ->
+                            Err ("Failed emitting main expression: " ++ err)
 
-                    Ok mainExpressionEmitted ->
-                        Ok
-                            (emitWrapperForPartialApplication
-                                envFunctionsExpression
-                                (List.length mainExprParams)
-                                mainExpressionEmitted
-                            )
+                        Ok mainExpressionEmitted ->
+                            Ok
+                                (emitWrapperForPartialApplication
+                                    envFunctionsExpression
+                                    (List.length mainExprParams)
+                                    mainExpressionEmitted
+                                )
 
 
 emitDeclarationBlock :
@@ -355,14 +356,15 @@ emitDeclarationBlock stackBefore blockDeclarations (DeclBlockClosureCaptures con
                 (\( functionName, ( EnvironmentFunctionEntry _ expectedEnvironment, _ ) ) aggregate ->
                     case expectedEnvironment of
                         LocalEnvironment localEnvExpectedDecls ->
-                            if localEnvExpectedDecls == [] then
-                                aggregate
-
-                            else
-                                Dict.insert
-                                    functionName
-                                    (Set.fromList localEnvExpectedDecls)
+                            case localEnvExpectedDecls of
+                                [] ->
                                     aggregate
+
+                                _ ->
+                                    Dict.insert
+                                        functionName
+                                        (Set.fromList localEnvExpectedDecls)
+                                        aggregate
 
                         ImportedEnvironment _ ->
                             aggregate
@@ -424,23 +426,41 @@ emitDeclarationBlock stackBefore blockDeclarations (DeclBlockClosureCaptures con
                 )
                 stackBefore.environmentFunctions
 
+        usedAvailableEmittedForInternals : List ( String, EnvironmentFunctionEntry, Pine.Expression )
+        usedAvailableEmittedForInternals =
+            if List.member environmentFunctionPartialApplicationName forwardedDecls then
+                []
+
+            else if not contentsDependOnFunctionApplication then
+                []
+
+            else
+                [ ( environmentFunctionPartialApplicationName
+                  , EnvironmentFunctionEntry 0 IndependentEnvironment
+                  , Pine.LiteralExpression (adaptivePartialApplicationRecursiveValue ())
+                  )
+                ]
+
         usedAvailableEmitted : List ( String, EnvironmentFunctionEntry, Pine.Expression )
         usedAvailableEmitted =
-            Set.foldl
-                (\depName aggregate ->
-                    case Common.assocListGet depName stackBefore.importedFunctions of
-                        Nothing ->
-                            aggregate
-
-                        Just ( availableEmitted, emittedValue ) ->
-                            if List.member depName stackBeforeAvailableDeclarations then
+            List.concat
+                [ usedAvailableEmittedForInternals
+                , Set.foldl
+                    (\depName aggregate ->
+                        case Common.assocListGet depName stackBefore.importedFunctions of
+                            Nothing ->
                                 aggregate
 
-                            else
-                                ( depName, availableEmitted, Pine.LiteralExpression emittedValue ) :: aggregate
-                )
-                []
-                allDependencies
+                            Just ( availableEmitted, emittedValue ) ->
+                                if List.member depName stackBeforeAvailableDeclarations then
+                                    aggregate
+
+                                else
+                                    ( depName, availableEmitted, Pine.LiteralExpression emittedValue ) :: aggregate
+                    )
+                    []
+                    allDependencies
+                ]
 
         usedAvailableEmittedNames : List String
         usedAvailableEmittedNames =
@@ -492,24 +512,6 @@ emitDeclarationBlock stackBefore blockDeclarations (DeclBlockClosureCaptures con
                 blockDeclarations
                 || List.any expressionNeedsAdaptiveApplication additionalDeps
 
-        closureCapturesForInternals : List ( String, Expression )
-        closureCapturesForInternals =
-            if List.member environmentFunctionPartialApplicationName forwardedDecls then
-                []
-
-            else if not contentsDependOnFunctionApplication then
-                []
-
-            else
-                [ ( environmentFunctionPartialApplicationName
-                  , if List.member environmentFunctionPartialApplicationName stackBeforeAvailableDeclarations then
-                        ReferenceExpression environmentFunctionPartialApplicationName
-
-                    else
-                        LiteralExpression (adaptivePartialApplicationRecursiveValue ())
-                  )
-                ]
-
         closureCapturesForBlockDecls : List ( String, Expression )
         closureCapturesForBlockDecls =
             {-
@@ -518,30 +520,32 @@ emitDeclarationBlock stackBefore blockDeclarations (DeclBlockClosureCaptures con
             -}
             List.foldl
                 (\( declName, DeclBlockFunctionEntry asFunctionParams asFunctionInnerExpr ) aggregate ->
-                    if asFunctionParams /= [] then
-                        aggregate
-
-                    else
-                        case Dict.get declName blockDeclarationsTransitiveDependencies of
-                            Nothing ->
-                                aggregate
-
-                            Just declDependencies ->
-                                if List.member declName usedAvailableEmittedNames then
+                    case asFunctionParams of
+                        [] ->
+                            case Dict.get declName blockDeclarationsTransitiveDependencies of
+                                Nothing ->
                                     aggregate
 
-                                else if List.member declName declDependencies then
-                                    aggregate
+                                Just declDependencies ->
+                                    if List.member declName usedAvailableEmittedNames then
+                                        aggregate
 
-                                else if
-                                    List.all
-                                        (\depName -> List.member depName stackBeforeAvailableDeclarations)
-                                        declDependencies
-                                then
-                                    ( declName, asFunctionInnerExpr ) :: aggregate
+                                    else if List.member declName declDependencies then
+                                        aggregate
 
-                                else
-                                    aggregate
+                                    else if
+                                        List.all
+                                            (\depName -> List.member depName stackBeforeAvailableDeclarations)
+                                            declDependencies
+                                    then
+                                        ( declName, asFunctionInnerExpr ) :: aggregate
+
+                                    else
+                                        aggregate
+
+                        _ ->
+                            -- Do not include functions into closureCapturesForBlockDecls
+                            aggregate
                 )
                 []
                 allBlockDeclarationsAsFunctions
@@ -550,7 +554,12 @@ emitDeclarationBlock stackBefore blockDeclarations (DeclBlockClosureCaptures con
         blockDeclarationsAsFunctionsLessClosure =
             List.filter
                 (\( declName, _ ) ->
-                    not (List.any (\( name, _ ) -> name == declName) closureCapturesForBlockDecls)
+                    case Common.assocListGet declName closureCapturesForBlockDecls of
+                        Nothing ->
+                            True
+
+                        _ ->
+                            False
                 )
                 allBlockDeclarationsAsFunctions
 
@@ -560,7 +569,7 @@ emitDeclarationBlock stackBefore blockDeclarations (DeclBlockClosureCaptures con
                 [ List.map (Tuple.mapSecond DeconstructionCapture)
                     configClosureCaptures
                 , List.map (Tuple.mapSecond ExpressionCapture)
-                    (closureCapturesForInternals ++ closureCapturesForBlockDecls)
+                    closureCapturesForBlockDecls
                 ]
 
         newEnvironmentFunctionsNames : List String
@@ -774,7 +783,12 @@ expressionNeedsAdaptiveApplication expression =
                     List.any expressionNeedsAdaptiveApplication args
 
                 _ ->
-                    expressionNeedsAdaptiveApplication funcExpr || (args /= [])
+                    case args of
+                        [] ->
+                            expressionNeedsAdaptiveApplication funcExpr
+
+                        _ ->
+                            True
 
         DeclarationBlockExpression declarations innerExpression ->
             List.foldl
@@ -1082,148 +1096,149 @@ closureParameterFromParameters offset parameters =
 
 emitFunctionApplication : Expression -> List Expression -> EmitStack -> Result String Pine.Expression
 emitFunctionApplication functionExpression arguments compilation =
-    if arguments == [] then
-        emitExpression compilation functionExpression
+    case arguments of
+        [] ->
+            emitExpression compilation functionExpression
 
-    else
-        case
-            Common.resultListIndexedMapCombine
-                (\( argumentIndex, argumentExpression ) ->
-                    case emitExpression compilation argumentExpression of
-                        Err err ->
-                            Err
-                                ("Failed emitting argument "
-                                    ++ String.fromInt argumentIndex
-                                    ++ " for function application: "
-                                    ++ err
-                                )
-
-                        Ok result ->
-                            Ok result
-                )
-                arguments
-        of
-            Err err ->
-                Err err
-
-            Ok argumentsPine ->
-                let
-                    genericFunctionApplication () =
-                        case emitExpression compilation functionExpression of
+        _ ->
+            case
+                Common.resultListIndexedMapCombine
+                    (\( argumentIndex, argumentExpression ) ->
+                        case emitExpression compilation argumentExpression of
                             Err err ->
-                                Err ("Failed emitting function expression: " ++ err)
-
-                            Ok functionExpressionPine ->
-                                emitFunctionApplicationPine compilation argumentsPine functionExpressionPine
-                in
-                case functionExpression of
-                    FunctionExpression params funcBody ->
-                        if List.length params /= List.length argumentsPine then
-                            genericFunctionApplication ()
-
-                        else
-                            let
-                                funcBodyDeps : Set.Set String
-                                funcBodyDeps =
-                                    listTransitiveDependenciesOfExpression compilation funcBody
-
-                                closureCaptures : List ( String, EnvironmentDeconstructionEntry )
-                                closureCaptures =
-                                    List.foldl
-                                        (\( declName, deconstruction ) aggregate ->
-                                            if Set.member declName funcBodyDeps then
-                                                ( declName, deconstruction ) :: aggregate
-
-                                            else
-                                                aggregate
-                                        )
-                                        []
-                                        compilation.environmentDeconstructions
-
-                                closureItemsExpressions : List Pine.Expression
-                                closureItemsExpressions =
-                                    List.map
-                                        (\( _, deconstruction ) ->
-                                            pineExpressionForDeconstructions
-                                                deconstruction
-                                                (listItemFromIndexExpression_Pine 1 Pine.environmentExpr)
-                                        )
-                                        closureCaptures
-
-                                paramsEnvDeconstructions : FunctionParam
-                                paramsEnvDeconstructions =
-                                    closureParameterFromParameters (List.length closureCaptures) params
-
-                                closureCapturesEnvDeconstructions : FunctionParam
-                                closureCapturesEnvDeconstructions =
-                                    List.indexedMap
-                                        (\ci ( declName, _ ) ->
-                                            ( declName
-                                            , [ ListItemDeconstruction ci ]
-                                            )
-                                        )
-                                        closureCaptures
-
-                                environmentDeconstructions : FunctionParam
-                                environmentDeconstructions =
-                                    List.concat
-                                        [ closureCapturesEnvDeconstructions
-                                        , paramsEnvDeconstructions
-                                        ]
-
-                                prevEnvFunctionsExpr : Pine.Expression
-                                prevEnvFunctionsExpr =
-                                    listItemFromIndexExpression_Pine 0 Pine.environmentExpr
-
-                                argumentsPineWithClosure : List Pine.Expression
-                                argumentsPineWithClosure =
-                                    List.concat
-                                        [ closureItemsExpressions
-                                        , argumentsPine
-                                        ]
-
-                                newEmitStack : EmitStack
-                                newEmitStack =
-                                    { compilation
-                                        | environmentDeconstructions = environmentDeconstructions
-                                        , environmentFunctions = compilation.environmentFunctions
-                                    }
-                            in
-                            case emitExpression newEmitStack funcBody of
-                                Err err ->
-                                    Err ("Failed emitting function body: " ++ err)
-
-                                Ok funcBodyEmitted ->
-                                    Ok
-                                        (Pine.ParseAndEvalExpression
-                                            (Pine.ListExpression
-                                                [ prevEnvFunctionsExpr
-                                                , Pine.ListExpression argumentsPineWithClosure
-                                                ]
-                                            )
-                                            (Pine.LiteralExpression
-                                                (Pine.encodeExpressionAsValue funcBodyEmitted)
-                                            )
-                                        )
-
-                    ReferenceExpression functionName ->
-                        case emitApplyFunctionFromCurrentEnvironment compilation functionName argumentsPine of
-                            Nothing ->
-                                genericFunctionApplication ()
-
-                            Just (Err err) ->
                                 Err
-                                    ("Failed emitting function application with "
-                                        ++ String.fromInt (List.length arguments)
-                                        ++ " arguments: "
+                                    ("Failed emitting argument "
+                                        ++ String.fromInt argumentIndex
+                                        ++ " for function application: "
                                         ++ err
                                     )
 
-                            Just (Ok ok) ->
-                                Ok ok
+                            Ok result ->
+                                Ok result
+                    )
+                    arguments
+            of
+                Err err ->
+                    Err err
 
-                    _ ->
-                        genericFunctionApplication ()
+                Ok argumentsPine ->
+                    let
+                        genericFunctionApplication () =
+                            case emitExpression compilation functionExpression of
+                                Err err ->
+                                    Err ("Failed emitting function expression: " ++ err)
+
+                                Ok functionExpressionPine ->
+                                    emitFunctionApplicationPine compilation argumentsPine functionExpressionPine
+                    in
+                    case functionExpression of
+                        FunctionExpression params funcBody ->
+                            if List.length params /= List.length argumentsPine then
+                                genericFunctionApplication ()
+
+                            else
+                                let
+                                    funcBodyDeps : Set.Set String
+                                    funcBodyDeps =
+                                        listTransitiveDependenciesOfExpression compilation funcBody
+
+                                    closureCaptures : List ( String, EnvironmentDeconstructionEntry )
+                                    closureCaptures =
+                                        List.foldl
+                                            (\( declName, deconstruction ) aggregate ->
+                                                if Set.member declName funcBodyDeps then
+                                                    ( declName, deconstruction ) :: aggregate
+
+                                                else
+                                                    aggregate
+                                            )
+                                            []
+                                            compilation.environmentDeconstructions
+
+                                    closureItemsExpressions : List Pine.Expression
+                                    closureItemsExpressions =
+                                        List.map
+                                            (\( _, deconstruction ) ->
+                                                pineExpressionForDeconstructions
+                                                    deconstruction
+                                                    (listItemFromIndexExpression_Pine 1 Pine.environmentExpr)
+                                            )
+                                            closureCaptures
+
+                                    paramsEnvDeconstructions : FunctionParam
+                                    paramsEnvDeconstructions =
+                                        closureParameterFromParameters (List.length closureCaptures) params
+
+                                    closureCapturesEnvDeconstructions : FunctionParam
+                                    closureCapturesEnvDeconstructions =
+                                        List.indexedMap
+                                            (\ci ( declName, _ ) ->
+                                                ( declName
+                                                , [ ListItemDeconstruction ci ]
+                                                )
+                                            )
+                                            closureCaptures
+
+                                    environmentDeconstructions : FunctionParam
+                                    environmentDeconstructions =
+                                        List.concat
+                                            [ closureCapturesEnvDeconstructions
+                                            , paramsEnvDeconstructions
+                                            ]
+
+                                    prevEnvFunctionsExpr : Pine.Expression
+                                    prevEnvFunctionsExpr =
+                                        listItemFromIndexExpression_Pine 0 Pine.environmentExpr
+
+                                    argumentsPineWithClosure : List Pine.Expression
+                                    argumentsPineWithClosure =
+                                        List.concat
+                                            [ closureItemsExpressions
+                                            , argumentsPine
+                                            ]
+
+                                    newEmitStack : EmitStack
+                                    newEmitStack =
+                                        { compilation
+                                            | environmentDeconstructions = environmentDeconstructions
+                                            , environmentFunctions = compilation.environmentFunctions
+                                        }
+                                in
+                                case emitExpression newEmitStack funcBody of
+                                    Err err ->
+                                        Err ("Failed emitting function body: " ++ err)
+
+                                    Ok funcBodyEmitted ->
+                                        Ok
+                                            (Pine.ParseAndEvalExpression
+                                                (Pine.ListExpression
+                                                    [ prevEnvFunctionsExpr
+                                                    , Pine.ListExpression argumentsPineWithClosure
+                                                    ]
+                                                )
+                                                (Pine.LiteralExpression
+                                                    (Pine.encodeExpressionAsValue funcBodyEmitted)
+                                                )
+                                            )
+
+                        ReferenceExpression functionName ->
+                            case emitApplyFunctionFromCurrentEnvironment compilation functionName argumentsPine of
+                                Nothing ->
+                                    genericFunctionApplication ()
+
+                                Just (Err err) ->
+                                    Err
+                                        ("Failed emitting function application with "
+                                            ++ String.fromInt (List.length arguments)
+                                            ++ " arguments: "
+                                            ++ err
+                                        )
+
+                                Just (Ok ok) ->
+                                    Ok ok
+
+                        _ ->
+                            genericFunctionApplication ()
 
 
 emitFunctionApplicationPine : EmitStack -> List Pine.Expression -> Pine.Expression -> Result String Pine.Expression
@@ -1408,11 +1423,12 @@ emitApplyFunctionFromCurrentEnvironment compilation functionName arguments =
 
                         buildExpectedEnvironmentResult =
                             if currentEnvCoversExpected then
-                                if localEnvExpectedDecls == [] then
-                                    Ok (Pine.ListExpression [])
+                                case localEnvExpectedDecls of
+                                    [] ->
+                                        Ok (Pine.ListExpression [])
 
-                                else
-                                    Ok getEnvFunctionsExpression
+                                    _ ->
+                                        Ok getEnvFunctionsExpression
 
                             else
                                 buildEnvironmentRecursive [] localEnvExpectedDecls
@@ -1437,22 +1453,23 @@ emitApplyFunctionFromCurrentEnvironment compilation functionName arguments =
                                         partialApplicationExpressionFromListOfArguments
                                             arguments
                                             compilation
-                                            (if funcParamCount == 0 then
-                                                Pine.ParseAndEvalExpression
-                                                    (Pine.ListExpression
-                                                        [ expectedEnvironment
-                                                        , Pine.ListExpression []
-                                                        ]
-                                                    )
-                                                    getFunctionExpression
+                                            (case funcParamCount of
+                                                0 ->
+                                                    Pine.ParseAndEvalExpression
+                                                        (Pine.ListExpression
+                                                            [ expectedEnvironment
+                                                            , Pine.ListExpression []
+                                                            ]
+                                                        )
+                                                        getFunctionExpression
 
-                                             else
-                                                buildRecordOfPartiallyAppliedFunction
-                                                    { getFunctionInnerExpression = getFunctionExpression
-                                                    , getEnvFunctionsExpression = expectedEnvironment
-                                                    , parameterCount = funcParamCount
-                                                    , argumentsAlreadyCollected = []
-                                                    }
+                                                _ ->
+                                                    buildRecordOfPartiallyAppliedFunction
+                                                        { getFunctionInnerExpression = getFunctionExpression
+                                                        , getEnvFunctionsExpression = expectedEnvironment
+                                                        , parameterCount = funcParamCount
+                                                        , argumentsAlreadyCollected = []
+                                                        }
                                             )
                                     )
                                 )
@@ -1474,44 +1491,46 @@ partialApplicationExpressionFromListOfArguments :
     -> Pine.Expression
     -> Pine.Expression
 partialApplicationExpressionFromListOfArguments arguments emitStack function =
-    if arguments == [] then
-        function
+    case arguments of
+        [] ->
+            function
 
-    else
-        adaptivePartialApplicationExpression
-            { function = function
-            , arguments = arguments
-            , applicationFunctionSource =
-                case emitReferenceExpression environmentFunctionPartialApplicationName emitStack of
-                    Err _ ->
-                        Nothing
+        _ ->
+            adaptivePartialApplicationExpression
+                { function = function
+                , arguments = arguments
+                , applicationFunctionSource =
+                    case emitReferenceExpression environmentFunctionPartialApplicationName emitStack of
+                        Err _ ->
+                            Nothing
 
-                    Ok appFunc ->
-                        Just appFunc
-            }
+                        Ok appFunc ->
+                            Just appFunc
+                }
 
 
 emitWrapperForPartialApplication : Pine.Expression -> Int -> Pine.Expression -> Pine.Expression
 emitWrapperForPartialApplication envFunctionsExpression parameterCount innerExpression =
-    if parameterCount == 0 then
-        emitWrapperForPartialApplicationZero
-            { getFunctionInnerExpression =
-                innerExpression
-                    |> Pine.encodeExpressionAsValue
-                    |> Pine.LiteralExpression
-            , getEnvFunctionsExpression = envFunctionsExpression
-            }
+    case parameterCount of
+        0 ->
+            emitWrapperForPartialApplicationZero
+                { getFunctionInnerExpression =
+                    innerExpression
+                        |> Pine.encodeExpressionAsValue
+                        |> Pine.LiteralExpression
+                , getEnvFunctionsExpression = envFunctionsExpression
+                }
 
-    else
-        buildRecordOfPartiallyAppliedFunction
-            { getFunctionInnerExpression =
-                innerExpression
-                    |> Pine.encodeExpressionAsValue
-                    |> Pine.LiteralExpression
-            , parameterCount = parameterCount
-            , getEnvFunctionsExpression = envFunctionsExpression
-            , argumentsAlreadyCollected = []
-            }
+        _ ->
+            buildRecordOfPartiallyAppliedFunction
+                { getFunctionInnerExpression =
+                    innerExpression
+                        |> Pine.encodeExpressionAsValue
+                        |> Pine.LiteralExpression
+                , parameterCount = parameterCount
+                , getEnvFunctionsExpression = envFunctionsExpression
+                , argumentsAlreadyCollected = []
+                }
 
 
 emitWrapperForPartialApplicationZero :
@@ -1536,27 +1555,28 @@ adaptivePartialApplicationExpression :
     }
     -> Pine.Expression
 adaptivePartialApplicationExpression config =
-    if config.arguments == [] then
-        config.function
+    case config.arguments of
+        [] ->
+            config.function
 
-    else
-        let
-            applicationFunctionExpr =
-                case config.applicationFunctionSource of
-                    Just applicationFunctionSource ->
-                        applicationFunctionSource
+        _ ->
+            let
+                applicationFunctionExpr =
+                    case config.applicationFunctionSource of
+                        Just applicationFunctionSource ->
+                            applicationFunctionSource
 
-                    Nothing ->
-                        Pine.LiteralExpression (adaptivePartialApplicationRecursiveValue ())
-        in
-        Pine.ParseAndEvalExpression
-            (Pine.ListExpression
-                [ applicationFunctionExpr
-                , config.function
-                , Pine.ListExpression config.arguments
-                ]
-            )
-            applicationFunctionExpr
+                        Nothing ->
+                            Pine.LiteralExpression (adaptivePartialApplicationRecursiveValue ())
+            in
+            Pine.ParseAndEvalExpression
+                (Pine.ListExpression
+                    [ applicationFunctionExpr
+                    , config.function
+                    , Pine.ListExpression config.arguments
+                    ]
+                )
+                applicationFunctionExpr
 
 
 adaptivePartialApplicationRecursiveValue : () -> Pine.Value

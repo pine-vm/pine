@@ -727,7 +727,15 @@ parseElmSyntaxImport importSyntax =
                     ModuleImportTopLevelExpose typeOrAlias False
 
                 Elm.Syntax.Exposing.TypeExpose typeExpose ->
-                    ModuleImportTopLevelExpose typeExpose.name (typeExpose.open /= Nothing)
+                    ModuleImportTopLevelExpose
+                        typeExpose.name
+                        (case typeExpose.open of
+                            Nothing ->
+                                False
+
+                            _ ->
+                                True
+                        )
 
         exposingList =
             case importSyntax.exposingList of
@@ -1787,33 +1795,34 @@ compileElmSyntaxCaseBlock stack caseBlock =
 
                         casesFunctionToWrap : Maybe Expression
                         casesFunctionToWrap =
-                            if switchedExprFuncApps == [] then
-                                Nothing
+                            case switchedExprFuncApps of
+                                [] ->
+                                    Nothing
 
-                            else
-                                case compileCaseBlockInline stack innerExpr caseBlock.cases of
-                                    Err _ ->
-                                        Nothing
-
-                                    Ok casesFunction ->
-                                        let
-                                            inlineVariantFuncApps : List ( Expression, List Expression )
-                                            inlineVariantFuncApps =
-                                                FirCompiler.listFunctionAppExpressions inlineVariant
-
-                                            casesFunctionFuncApps : List ( Expression, List Expression )
-                                            casesFunctionFuncApps =
-                                                FirCompiler.listFunctionAppExpressions casesFunction
-
-                                            wrappedVariantFunctionAppsCount : Int
-                                            wrappedVariantFunctionAppsCount =
-                                                List.length switchedExprFuncApps + List.length casesFunctionFuncApps
-                                        in
-                                        if wrappedVariantFunctionAppsCount < List.length inlineVariantFuncApps then
-                                            Just casesFunction
-
-                                        else
+                                _ ->
+                                    case compileCaseBlockInline stack innerExpr caseBlock.cases of
+                                        Err _ ->
                                             Nothing
+
+                                        Ok casesFunction ->
+                                            let
+                                                inlineVariantFuncApps : List ( Expression, List Expression )
+                                                inlineVariantFuncApps =
+                                                    FirCompiler.listFunctionAppExpressions inlineVariant
+
+                                                casesFunctionFuncApps : List ( Expression, List Expression )
+                                                casesFunctionFuncApps =
+                                                    FirCompiler.listFunctionAppExpressions casesFunction
+
+                                                wrappedVariantFunctionAppsCount : Int
+                                                wrappedVariantFunctionAppsCount =
+                                                    List.length switchedExprFuncApps + List.length casesFunctionFuncApps
+                                            in
+                                            if wrappedVariantFunctionAppsCount < List.length inlineVariantFuncApps then
+                                                Just casesFunction
+
+                                            else
+                                                Nothing
                     in
                     case casesFunctionToWrap of
                         Just casesFunction ->
@@ -1932,13 +1941,14 @@ compileElmSyntaxCaseBlockCase stackBefore caseBlockValueExpression ( Elm.Syntax.
                         { conditionExpressions =
                             deconstruction.conditionExpressions caseBlockValueExpression
                         , thenExpression =
-                            if deconstruction.declarations == [] then
-                                expression
-
-                            else
-                                DeclarationBlockExpression
-                                    deconstructionDeclarations
+                            case deconstruction.declarations of
+                                [] ->
                                     expression
+
+                                _ ->
+                                    DeclarationBlockExpression
+                                        deconstructionDeclarations
+                                        expression
                         }
 
 
@@ -1993,66 +2003,67 @@ compileElmSyntaxPattern compilation elmPattern =
             List (Elm.Syntax.Node.Node Elm.Syntax.Pattern.Pattern)
             -> Result String { conditionExpressions : Expression -> List Expression, declarations : List ( String, List Deconstruction ) }
         continueWithListOrTupleItems listItems =
-            if listItems == [] then
-                continueWithOnlyEqualsCondition (ListExpression [])
+            case listItems of
+                [] ->
+                    continueWithOnlyEqualsCondition (ListExpression [])
+
                 {-
                    TODO: Analogous to the case of an empty list:
                    Optimize other cases that constrain to a single value by emitting an equality check.
                 -}
+                _ ->
+                    case
+                        Common.resultListIndexedMapCombine
+                            (\( argIndex, Elm.Syntax.Node.Node _ itemPattern ) ->
+                                conditionsAndDeclarationsFromItemPattern argIndex itemPattern
+                            )
+                            listItems
+                    of
+                        Err err ->
+                            Err err
 
-            else
-                case
-                    Common.resultListIndexedMapCombine
-                        (\( argIndex, Elm.Syntax.Node.Node _ itemPattern ) ->
-                            conditionsAndDeclarationsFromItemPattern argIndex itemPattern
-                        )
-                        listItems
-                of
-                    Err err ->
-                        Err err
+                        Ok itemsResults ->
+                            let
+                                expectedLength =
+                                    List.length listItems
 
-                    Ok itemsResults ->
-                        let
-                            expectedLength =
-                                List.length listItems
+                                matchesLengthCondition : Expression -> Expression
+                                matchesLengthCondition =
+                                    \deconstructedExpression ->
+                                        let
+                                            genericLengthCheckExpr () =
+                                                equalCondition
+                                                    [ LiteralExpression (Pine.valueFromInt expectedLength)
+                                                    , countListElementsExpression deconstructedExpression
+                                                    ]
+                                        in
+                                        case deconstructedExpression of
+                                            ListExpression deconstructedList ->
+                                                LiteralExpression
+                                                    (if List.length deconstructedList == expectedLength then
+                                                        Pine.trueValue
 
-                            matchesLengthCondition : Expression -> Expression
-                            matchesLengthCondition =
-                                \deconstructedExpression ->
-                                    let
-                                        genericLengthCheckExpr () =
-                                            equalCondition
-                                                [ LiteralExpression (Pine.valueFromInt expectedLength)
-                                                , countListElementsExpression deconstructedExpression
-                                                ]
-                                    in
-                                    case deconstructedExpression of
-                                        ListExpression deconstructedList ->
-                                            LiteralExpression
-                                                (if List.length deconstructedList == expectedLength then
-                                                    Pine.trueValue
+                                                     else
+                                                        Pine.falseValue
+                                                    )
 
-                                                 else
-                                                    Pine.falseValue
+                                            _ ->
+                                                genericLengthCheckExpr ()
+
+                                conditionExpressions : Expression -> List Expression
+                                conditionExpressions =
+                                    \deconstructedExpression ->
+                                        matchesLengthCondition deconstructedExpression
+                                            :: List.concatMap
+                                                (\{ conditions } ->
+                                                    conditions deconstructedExpression
                                                 )
-
-                                        _ ->
-                                            genericLengthCheckExpr ()
-
-                            conditionExpressions : Expression -> List Expression
-                            conditionExpressions =
-                                \deconstructedExpression ->
-                                    matchesLengthCondition deconstructedExpression
-                                        :: List.concatMap
-                                            (\{ conditions } ->
-                                                conditions deconstructedExpression
-                                            )
-                                            itemsResults
-                        in
-                        Ok
-                            { conditionExpressions = conditionExpressions
-                            , declarations = List.concatMap .declarations itemsResults
-                            }
+                                                itemsResults
+                            in
+                            Ok
+                                { conditionExpressions = conditionExpressions
+                                , declarations = List.concatMap .declarations itemsResults
+                                }
     in
     case elmPattern of
         Elm.Syntax.Pattern.AllPattern ->
@@ -2203,7 +2214,12 @@ compileElmSyntaxPattern compilation elmPattern =
                                                 False
 
                                             Just ( _, ElmModuleChoiceType choiceTypeTags ) ->
-                                                List.length choiceTypeTags == 1
+                                                case List.length choiceTypeTags of
+                                                    1 ->
+                                                        True
+
+                                                    _ ->
+                                                        False
 
                                     matchingTagConditions =
                                         if tagIsOnlyPossible then
@@ -3387,33 +3403,34 @@ attemptReduceBlockDecl (FirCompiler.EmitDeclarationBlockResult _ _ envFunctionsE
         ( FirCompiler.EnvironmentFunctionEntry funcParamCount _, funcValue ) =
             blockDecl
     in
-    if funcParamCount /= 0 then
-        blockDecl
+    case funcParamCount of
+        0 ->
+            let
+                evaluatableExpr =
+                    FirCompiler.emitWrapperForPartialApplicationZero
+                        { getFunctionInnerExpression = Pine.LiteralExpression funcValue
+                        , getEnvFunctionsExpression = envFunctionsExpression
+                        }
+            in
+            case evaluateAsIndependentExpression evaluatableExpr of
+                Ok reducedValue ->
+                    let
+                        reducedExpr =
+                            Pine.LiteralExpression reducedValue
+                    in
+                    if estimatePineValueSize reducedValue > estimatePineValueSize funcValue then
+                        blockDecl
 
-    else
-        let
-            evaluatableExpr =
-                FirCompiler.emitWrapperForPartialApplicationZero
-                    { getFunctionInnerExpression = Pine.LiteralExpression funcValue
-                    , getEnvFunctionsExpression = envFunctionsExpression
-                    }
-        in
-        case evaluateAsIndependentExpression evaluatableExpr of
-            Ok reducedValue ->
-                let
-                    reducedExpr =
-                        Pine.LiteralExpression reducedValue
-                in
-                if estimatePineValueSize reducedValue > estimatePineValueSize funcValue then
+                    else
+                        ( FirCompiler.EnvironmentFunctionEntry 0 (FirCompiler.LocalEnvironment [])
+                        , Pine.encodeExpressionAsValue reducedExpr
+                        )
+
+                Err _ ->
                     blockDecl
 
-                else
-                    ( FirCompiler.EnvironmentFunctionEntry 0 (FirCompiler.LocalEnvironment [])
-                    , Pine.encodeExpressionAsValue reducedExpr
-                    )
-
-            Err _ ->
-                blockDecl
+        _ ->
+            blockDecl
 
 
 splitEmittedFunctionsToInline :
@@ -3471,19 +3488,20 @@ splitEmittedFunctionsToInline emittedFunctions =
                                     else
                                         continueSharing
             in
-            if paramCount /= 0 then
-                continueSharing
+            case paramCount of
+                0 ->
+                    case expectedEnv of
+                        FirCompiler.IndependentEnvironment ->
+                            continueWithReduction ()
 
-            else
-                case expectedEnv of
-                    FirCompiler.IndependentEnvironment ->
-                        continueWithReduction ()
+                        FirCompiler.LocalEnvironment [] ->
+                            continueWithReduction ()
 
-                    FirCompiler.LocalEnvironment [] ->
-                        continueWithReduction ()
+                        _ ->
+                            continueSharing
 
-                    _ ->
-                        continueSharing
+                _ ->
+                    continueSharing
         )
         ( [], [] )
         emittedFunctions
@@ -3541,13 +3559,14 @@ compileElmChoiceTypeTagConstructor ( tagName, argumentsCount ) =
 applicableDeclarationFromConstructorExpression : Expression -> (List Expression -> Expression)
 applicableDeclarationFromConstructorExpression genericContructorExpression =
     \arguments ->
-        if arguments == [] then
-            genericContructorExpression
-
-        else
-            FunctionApplicationExpression
+        case arguments of
+            [] ->
                 genericContructorExpression
-                arguments
+
+            _ ->
+                FunctionApplicationExpression
+                    genericContructorExpression
+                    arguments
 
 
 {-| Directly inlines an application of a choice type tag constructor for cases where number of applied
@@ -3735,40 +3754,42 @@ listModuleTransitiveDependenciesExcludingModules excluded allFiles file =
     if Set.member currentName excluded then
         Err ( [ currentName ], "Cyclic dependency" )
 
-    else if currentDependencies == [] then
-        Ok [ currentName ]
-
     else
-        case
-            Common.resultListMapCombine
-                (\currentDependency ->
-                    case
-                        Common.listFind
-                            (\candidate ->
-                                let
-                                    (Elm.Syntax.Node.Node _ candidateModuleDefinition) =
-                                        candidate.moduleDefinition
-                                in
-                                Elm.Syntax.Module.moduleName candidateModuleDefinition == currentDependency
-                            )
-                            allFiles
-                    of
-                        Nothing ->
-                            Ok []
+        case currentDependencies of
+            [] ->
+                Ok [ currentName ]
 
-                        Just currentDependencyFile ->
-                            listModuleTransitiveDependenciesExcludingModules
-                                (Set.insert currentName excluded)
-                                allFiles
-                                currentDependencyFile
-                )
-                currentDependencies
-        of
-            Err ( moduleNames, err ) ->
-                Err ( currentName :: moduleNames, err )
+            _ ->
+                case
+                    Common.resultListMapCombine
+                        (\currentDependency ->
+                            case
+                                Common.listFind
+                                    (\candidate ->
+                                        let
+                                            (Elm.Syntax.Node.Node _ candidateModuleDefinition) =
+                                                candidate.moduleDefinition
+                                        in
+                                        Elm.Syntax.Module.moduleName candidateModuleDefinition == currentDependency
+                                    )
+                                    allFiles
+                            of
+                                Nothing ->
+                                    Ok []
 
-            Ok ok ->
-                Ok (Common.listUnique (List.concat [ List.concat ok, [ currentName ] ]))
+                                Just currentDependencyFile ->
+                                    listModuleTransitiveDependenciesExcludingModules
+                                        (Set.insert currentName excluded)
+                                        allFiles
+                                        currentDependencyFile
+                        )
+                        currentDependencies
+                of
+                    Err ( moduleNames, err ) ->
+                        Err ( currentName :: moduleNames, err )
+
+                    Ok ok ->
+                        Ok (Common.listUnique (List.concat [ List.concat ok, [ currentName ] ]))
 
 
 getDirectDependenciesFromModule : Elm.Syntax.File.File -> List Elm.Syntax.ModuleName.ModuleName
