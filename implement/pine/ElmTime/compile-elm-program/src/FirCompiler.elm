@@ -270,24 +270,19 @@ emitExpressionInDeclarationBlock stackBeforeAddingDeps blockDeclarations mainExp
         mainExpressionOuterDependencies =
             Set.toList (listTransitiveDependenciesOfExpression stackBefore mainExpression)
 
-        usedBlockDeclarationsAndImports : List ( String, Expression )
-        usedBlockDeclarationsAndImports =
-            List.foldl
-                (\declName aggregate ->
-                    case Common.assocListGet declName blockDeclarations of
-                        Just declExpression ->
-                            ( declName, declExpression ) :: aggregate
+        usedBlockDeclarations : List ( String, Expression )
+        usedBlockDeclarations =
+            List.filter
+                (\( declName, _ ) -> List.member declName mainExpressionOuterDependencies)
+                blockDeclarations
 
-                        Nothing ->
-                            case Common.assocListGet declName stackBeforeAddingDeps.importedFunctions of
-                                Nothing ->
-                                    aggregate
-
-                                Just ( _, importedVal ) ->
-                                    ( declName, LiteralExpression importedVal ) :: aggregate
+        mainDependsOnImport : Bool
+        mainDependsOnImport =
+            List.any
+                (\( importedName, _ ) ->
+                    List.member importedName mainExpressionOuterDependencies
                 )
-                []
-                mainExpressionOuterDependencies
+                stackBefore.importedFunctions
 
         mainExpressionAsFunction : DeclBlockFunctionEntry
         mainExpressionAsFunction =
@@ -298,26 +293,21 @@ emitExpressionInDeclarationBlock stackBeforeAddingDeps blockDeclarations mainExp
 
         closureCaptures : List ( String, EnvironmentDeconstructionEntry )
         closureCaptures =
-            List.foldl
-                (\( declName, deconstruction ) aggregate ->
-                    if List.member declName mainExpressionOuterDependencies then
-                        ( declName, deconstruction ) :: aggregate
-
-                    else
-                        aggregate
+            List.filter
+                (\( declName, deconstruction ) ->
+                    List.member declName mainExpressionOuterDependencies
                 )
-                []
                 stackBefore.environmentDeconstructions
     in
-    case ( mainExprParams, usedBlockDeclarationsAndImports ) of
-        ( [], [] ) ->
+    case ( mainExprParams, usedBlockDeclarations, mainDependsOnImport ) of
+        ( [], [], False ) ->
             emitExpression stackBeforeAddingDeps mainExprInnerExpr
 
         _ ->
             case
                 emitDeclarationBlock
                     stackBefore
-                    usedBlockDeclarationsAndImports
+                    usedBlockDeclarations
                     (DeclBlockClosureCaptures closureCaptures)
                     (DeclBlockRootDeps [ mainExpression ])
             of
@@ -392,17 +382,6 @@ emitDeclarationBlock stackBefore blockDeclarations (DeclBlockClosureCaptures con
         dependenciesRelations =
             Dict.union availableEmittedDependencies blockDeclarationsDirectDependencies
 
-        stackBeforeAvailableDeclarations : List String
-        stackBeforeAvailableDeclarations =
-            List.foldl
-                (\( functionName, _ ) aggregate -> functionName :: aggregate)
-                (List.foldl
-                    (\( declName, _ ) aggregate -> declName :: aggregate)
-                    []
-                    stackBefore.environmentDeconstructions
-                )
-                stackBefore.environmentFunctions
-
         usedAvailableEmittedForInternals : List ( String, EnvironmentFunctionEntry, Pine.Expression )
         usedAvailableEmittedForInternals =
             if List.member environmentFunctionPartialApplicationName forwardedDecls then
@@ -424,7 +403,6 @@ emitDeclarationBlock stackBefore blockDeclarations (DeclBlockClosureCaptures con
                 rootDependencies
                 stackBefore
                 dependenciesRelations
-                stackBeforeAvailableDeclarations
 
         usedAvailableEmitted : List ( String, EnvironmentFunctionEntry, Pine.Expression )
         usedAvailableEmitted =
@@ -721,9 +699,8 @@ emittedImportsFromRoots :
     List Expression
     -> EmitStack
     -> Dict.Dict String (Set.Set String)
-    -> List String
     -> List ( String, EnvironmentFunctionEntry, Pine.Expression )
-emittedImportsFromRoots rootDependencies emitStack dependenciesRelations stackBeforeAvailableDeclarations =
+emittedImportsFromRoots rootDependencies emitStack dependenciesRelations =
     case emitStack.importedFunctions of
         [] ->
             {-
@@ -756,11 +733,7 @@ emittedImportsFromRoots rootDependencies emitStack dependenciesRelations stackBe
                             aggregate
 
                         Just ( availableEmitted, emittedValue ) ->
-                            if List.member depName stackBeforeAvailableDeclarations then
-                                aggregate
-
-                            else
-                                ( depName, availableEmitted, Pine.LiteralExpression emittedValue ) :: aggregate
+                            ( depName, availableEmitted, Pine.LiteralExpression emittedValue ) :: aggregate
                 )
                 []
                 allDependencies
@@ -811,12 +784,10 @@ expressionNeedsAdaptiveApplication expression =
                             True
 
         DeclarationBlockExpression declarations innerExpression ->
-            List.foldl
-                (\( _, decl ) aggregate ->
-                    aggregate || expressionNeedsAdaptiveApplication decl
-                )
-                (expressionNeedsAdaptiveApplication innerExpression)
+            List.any
+                (\( _, decl ) -> expressionNeedsAdaptiveApplication decl)
                 declarations
+                || expressionNeedsAdaptiveApplication innerExpression
 
         ReferenceExpression _ ->
             False
