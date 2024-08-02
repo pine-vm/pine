@@ -508,151 +508,6 @@ parsedElmFileRecordFromSeparatelyParsedSyntax ( fileText, parsedModule ) =
     }
 
 
-inlineApplicationsOfEnvironmentDeclarations : EmitStack -> List ( String, Expression ) -> Expression -> Expression
-inlineApplicationsOfEnvironmentDeclarations stackBeforeAddingDeps environmentDeclarations =
-    let
-        newReferencesDependencies =
-            environmentDeclarations
-                |> List.map (Tuple.mapSecond (listTransitiveDependenciesOfExpression stackBeforeAddingDeps))
-                |> Dict.fromList
-
-        stackWithEnvironmentDeclDeps =
-            { stackBeforeAddingDeps
-                | declarationsDependencies = Dict.union newReferencesDependencies stackBeforeAddingDeps.declarationsDependencies
-            }
-
-        environmentDeclarationsDict =
-            Dict.fromList environmentDeclarations
-
-        findReplacement expr =
-            case expr of
-                FunctionApplicationExpression (ReferenceExpression functionName) arguments ->
-                    case Dict.get functionName environmentDeclarationsDict of
-                        Nothing ->
-                            Nothing
-
-                        Just appliedFunction ->
-                            let
-                                (FirCompiler.DeclBlockFunctionEntry functionParsedParams functionParsedBody) =
-                                    parseFunctionParameters appliedFunction
-
-                                dependencies =
-                                    listTransitiveDependenciesOfExpression stackWithEnvironmentDeclDeps appliedFunction
-                            in
-                            if
-                                (List.length arguments /= List.length functionParsedParams)
-                                    || Set.member functionName dependencies
-                            then
-                                Nothing
-
-                            else
-                                let
-                                    replacementsDict : Dict.Dict String Expression
-                                    replacementsDict =
-                                        functionParsedParams
-                                            |> List.indexedMap
-                                                (\paramIndex paramDeconstructions ->
-                                                    arguments
-                                                        |> List.drop paramIndex
-                                                        |> List.head
-                                                        |> Maybe.map
-                                                            (\argumentExpr ->
-                                                                paramDeconstructions
-                                                                    |> List.map
-                                                                        (Tuple.mapSecond
-                                                                            (expressionForDeconstructions
-                                                                                >> (|>) argumentExpr
-                                                                            )
-                                                                        )
-                                                            )
-                                                        |> Maybe.withDefault []
-                                                )
-                                            |> List.concat
-                                            |> Dict.fromList
-
-                                    findReplacementForReference innerExpr =
-                                        case innerExpr of
-                                            ReferenceExpression innerReference ->
-                                                Dict.get innerReference replacementsDict
-
-                                            _ ->
-                                                Nothing
-                                in
-                                functionParsedBody
-                                    |> transformExpressionWithOptionalReplacement findReplacementForReference
-                                    |> inlineApplicationsOfEnvironmentDeclarations stackWithEnvironmentDeclDeps environmentDeclarations
-                                    |> Just
-
-                _ ->
-                    Nothing
-    in
-    transformExpressionWithOptionalReplacement findReplacement
-
-
-transformExpressionWithOptionalReplacement : (Expression -> Maybe Expression) -> Expression -> Expression
-transformExpressionWithOptionalReplacement findReplacement expression =
-    case findReplacement expression of
-        Just replacement ->
-            replacement
-
-        Nothing ->
-            case expression of
-                LiteralExpression _ ->
-                    expression
-
-                ListExpression list ->
-                    ListExpression (List.map (transformExpressionWithOptionalReplacement findReplacement) list)
-
-                KernelApplicationExpression argument functionName ->
-                    KernelApplicationExpression
-                        (transformExpressionWithOptionalReplacement findReplacement argument)
-                        functionName
-
-                ConditionalExpression condition falseBranch trueBranch ->
-                    ConditionalExpression
-                        (transformExpressionWithOptionalReplacement findReplacement condition)
-                        (transformExpressionWithOptionalReplacement findReplacement falseBranch)
-                        (transformExpressionWithOptionalReplacement findReplacement trueBranch)
-
-                ReferenceExpression _ ->
-                    expression
-
-                FunctionExpression functionParam functionBody ->
-                    FunctionExpression
-                        functionParam
-                        (transformExpressionWithOptionalReplacement findReplacement functionBody)
-
-                FunctionApplicationExpression functionExpression arguments ->
-                    let
-                        mappedArguments =
-                            List.map (transformExpressionWithOptionalReplacement findReplacement) arguments
-
-                        mappedFunctionExpression =
-                            transformExpressionWithOptionalReplacement findReplacement functionExpression
-                    in
-                    FunctionApplicationExpression
-                        mappedFunctionExpression
-                        mappedArguments
-
-                DeclarationBlockExpression declarations innerExpression ->
-                    DeclarationBlockExpression
-                        (List.map
-                            (\( declName, declExpr ) ->
-                                ( declName, transformExpressionWithOptionalReplacement findReplacement declExpr )
-                            )
-                            declarations
-                        )
-                        (transformExpressionWithOptionalReplacement findReplacement innerExpression)
-
-                StringTagExpression tag tagged ->
-                    StringTagExpression tag (transformExpressionWithOptionalReplacement findReplacement tagged)
-
-                PineFunctionApplicationExpression pineFunctionValue argument ->
-                    PineFunctionApplicationExpression
-                        pineFunctionValue
-                        (transformExpressionWithOptionalReplacement findReplacement argument)
-
-
 compilationAndEmitStackFromInteractiveEnvironment :
     { modules : Dict.Dict Elm.Syntax.ModuleName.ModuleName ElmModuleInCompilation
     , otherDeclarations : List ( String, Pine.Value )
@@ -677,6 +532,7 @@ compilationAndEmitStackFromInteractiveEnvironment environmentDeclarations =
                 { moduleAliases = Dict.empty
                 , parsedImports = interactiveImplicitImportStatements
                 , localTypeDeclarations = []
+                , selfModuleName = []
                 }
 
         compilationStack =
@@ -1176,9 +1032,10 @@ expressionAsJson expression =
               )
             ]
 
-        ReferenceExpression name ->
+        ReferenceExpression moduleName name ->
             [ ( "Reference"
-              , [ ( "name", Json.Encode.string name )
+              , [ ( "moduleName", Json.Encode.list Json.Encode.string moduleName )
+                , ( "name", Json.Encode.string name )
                 ]
                     |> Json.Encode.object
               )

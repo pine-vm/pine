@@ -62,7 +62,7 @@ type Expression
          Referencing a declaration from a declaration block enables (mutual) recursion.
          References, in general, enable modeling closures.
       -}
-    | ReferenceExpression String
+    | ReferenceExpression (List String) String
     | DeclarationBlockExpression (List ( String, Expression )) Expression
     | PineFunctionApplicationExpression Pine.Expression Expression
       -- The tag expression case is only a wrapper to label a node for inspection and does not influence the evaluation result.
@@ -80,12 +80,12 @@ type Deconstruction
 
 
 type alias EmitStack =
-    { importedFunctions : List ( String, ( EnvironmentFunctionEntry, Pine.Value ) )
-    , importedFunctionsToInline : List ( String, Pine.Value )
+    { importedFunctions : List ( List String, List ( String, ( EnvironmentFunctionEntry, Pine.Value ) ) )
+    , importedFunctionsToInline : List ( List String, List ( String, Pine.Value ) )
     , declarationsDependencies : Dict.Dict String (Set.Set String)
 
     -- The functions in the first item in the environment list
-    , environmentFunctions : List ( String, EnvironmentFunctionEntry )
+    , environmentFunctions : List ( ( List String, String ), EnvironmentFunctionEntry )
 
     -- Deconstructions we can derive from the second item in the environment list
     , environmentDeconstructions : List ( String, EnvironmentDeconstructionEntry )
@@ -106,7 +106,7 @@ type EnvironmentFunctionEntry
 type FunctionEnvironment
     = LocalEnvironment
         -- List of expected declarations
-        (List String)
+        (List ( List String, String ))
     | ImportedEnvironment
         -- Path to the tagged function record relative to the entry in the current environment.
         (List Deconstruction)
@@ -201,8 +201,8 @@ emitExpression stack expression =
                                             trueBranch
                                         )
 
-        ReferenceExpression localReference ->
-            emitReferenceExpression localReference stack
+        ReferenceExpression moduleName localReference ->
+            emitReferenceExpression ( moduleName, localReference ) stack
 
         FunctionExpression functionParams functionBody ->
             emitFunctionExpression stack functionParams functionBody
@@ -276,14 +276,6 @@ emitExpressionInDeclarationBlock stackBeforeAddingDeps blockDeclarations mainExp
                 (\( declName, _ ) -> List.member declName mainExpressionOuterDependencies)
                 blockDeclarations
 
-        mainDependsOnImport : Bool
-        mainDependsOnImport =
-            List.any
-                (\( importedName, _ ) ->
-                    List.member importedName mainExpressionOuterDependencies
-                )
-                stackBefore.importedFunctions
-
         mainExpressionAsFunction : DeclBlockFunctionEntry
         mainExpressionAsFunction =
             parseFunctionParameters mainExpression
@@ -298,12 +290,8 @@ emitExpressionInDeclarationBlock stackBeforeAddingDeps blockDeclarations mainExp
                     List.member declName mainExpressionOuterDependencies
                 )
                 stackBefore.environmentDeconstructions
-    in
-    case ( mainExprParams, usedBlockDeclarations, mainDependsOnImport ) of
-        ( [], [], False ) ->
-            emitExpression stackBeforeAddingDeps mainExprInnerExpr
 
-        _ ->
+        continueEmitBlock () =
             case
                 emitDeclarationBlock
                     stackBefore
@@ -330,6 +318,36 @@ emitExpressionInDeclarationBlock stackBeforeAddingDeps blockDeclarations mainExp
                                     (List.length mainExprParams)
                                     mainExpressionEmitted
                                 )
+    in
+    case ( mainExprParams, usedBlockDeclarations ) of
+        ( [], [] ) ->
+            let
+                mainExpressionImports : Set.Set ( List String, String )
+                mainExpressionImports =
+                    listImportingReferencesInExpression mainExpression
+
+                mainDependsOnImport : Bool
+                mainDependsOnImport =
+                    List.any
+                        (\importedName ->
+                            case Common.assocListGet importedName stackBefore.environmentFunctions of
+                                Nothing ->
+                                    True
+
+                                _ ->
+                                    False
+                        )
+                        (Set.toList mainExpressionImports)
+            in
+            case mainDependsOnImport of
+                False ->
+                    emitExpression stackBeforeAddingDeps mainExprInnerExpr
+
+                True ->
+                    continueEmitBlock ()
+
+        _ ->
+            continueEmitBlock ()
 
 
 emitDeclarationBlock :
@@ -346,28 +364,47 @@ emitDeclarationBlock stackBefore blockDeclarations (DeclBlockClosureCaptures con
 
         availableEmittedDependencies : Dict.Dict String (Set.Set String)
         availableEmittedDependencies =
-            List.foldl
-                (\( functionName, ( EnvironmentFunctionEntry _ expectedEnvironment, _ ) ) aggregate ->
-                    case expectedEnvironment of
-                        LocalEnvironment localEnvExpectedDecls ->
-                            case localEnvExpectedDecls of
-                                [] ->
+            case Common.assocListGet [] stackBefore.importedFunctions of
+                Nothing ->
+                    Dict.empty
+
+                Just prevCompiledDecls ->
+                    List.foldl
+                        (\( functionName, ( EnvironmentFunctionEntry _ expectedEnvironment, _ ) ) aggregate ->
+                            case expectedEnvironment of
+                                LocalEnvironment localEnvExpectedDecls ->
+                                    let
+                                        localEnvExpectedDeclsLocal : List String
+                                        localEnvExpectedDeclsLocal =
+                                            List.concatMap
+                                                (\( depModuleName, depDeclName ) ->
+                                                    case depModuleName of
+                                                        [] ->
+                                                            [ depDeclName ]
+
+                                                        _ ->
+                                                            []
+                                                )
+                                                localEnvExpectedDecls
+                                    in
+                                    case localEnvExpectedDeclsLocal of
+                                        [] ->
+                                            aggregate
+
+                                        _ ->
+                                            Dict.insert
+                                                functionName
+                                                (Set.fromList localEnvExpectedDeclsLocal)
+                                                aggregate
+
+                                ImportedEnvironment _ ->
                                     aggregate
 
-                                _ ->
-                                    Dict.insert
-                                        functionName
-                                        (Set.fromList localEnvExpectedDecls)
-                                        aggregate
-
-                        ImportedEnvironment _ ->
-                            aggregate
-
-                        IndependentEnvironment ->
-                            aggregate
-                )
-                Dict.empty
-                stackBefore.importedFunctions
+                                IndependentEnvironment ->
+                                    aggregate
+                        )
+                        Dict.empty
+                        prevCompiledDecls
 
         blockDeclarationsDirectDependencies : Dict.Dict String (Set.Set String)
         blockDeclarationsDirectDependencies =
@@ -382,38 +419,35 @@ emitDeclarationBlock stackBefore blockDeclarations (DeclBlockClosureCaptures con
         dependenciesRelations =
             Dict.union availableEmittedDependencies blockDeclarationsDirectDependencies
 
-        usedAvailableEmittedForInternals : List ( String, EnvironmentFunctionEntry, Pine.Expression )
+        usedAvailableEmittedForInternals : List ( ( List String, String ), EnvironmentFunctionEntry, Pine.Expression )
         usedAvailableEmittedForInternals =
-            if List.member environmentFunctionPartialApplicationName forwardedDecls then
+            if List.member ( [], environmentFunctionPartialApplicationName ) forwardedDecls then
                 []
 
             else if not contentsDependOnFunctionApplication then
                 []
 
             else
-                [ ( environmentFunctionPartialApplicationName
+                [ ( ( [], environmentFunctionPartialApplicationName )
                   , EnvironmentFunctionEntry 0 IndependentEnvironment
                   , Pine.LiteralExpression (adaptivePartialApplicationRecursiveValue ())
                   )
                 ]
 
-        emittedImports : List ( String, EnvironmentFunctionEntry, Pine.Expression )
+        emittedImports : List ( ( List String, String ), EnvironmentFunctionEntry, Pine.Expression )
         emittedImports =
             emittedImportsFromRoots
                 rootDependencies
                 stackBefore
                 dependenciesRelations
+                blockDeclarations
 
-        usedAvailableEmitted : List ( String, EnvironmentFunctionEntry, Pine.Expression )
+        usedAvailableEmitted : List ( ( List String, String ), EnvironmentFunctionEntry, Pine.Expression )
         usedAvailableEmitted =
             List.concat
                 [ usedAvailableEmittedForInternals
                 , emittedImports
                 ]
-
-        usedAvailableEmittedNames : List String
-        usedAvailableEmittedNames =
-            List.map (\( name, _, _ ) -> name) usedAvailableEmitted
 
         allBlockDeclarationsAsFunctions : List ( String, DeclBlockFunctionEntry )
         allBlockDeclarationsAsFunctions =
@@ -436,7 +470,7 @@ emitDeclarationBlock stackBefore blockDeclarations (DeclBlockClosureCaptures con
             List.concat
                 [ prefix, forwarded, appendedFromDecls, appendedFromClosureCaptures ]
 
-        prefixEnvironmentFunctions : List ( String, EnvironmentFunctionEntry )
+        prefixEnvironmentFunctions : List ( ( List String, String ), EnvironmentFunctionEntry )
         prefixEnvironmentFunctions =
             List.map
                 (\( functionName, functionEntry, _ ) -> ( functionName, functionEntry ))
@@ -448,7 +482,7 @@ emitDeclarationBlock stackBefore blockDeclarations (DeclBlockClosureCaptures con
                 (\( _, _, emittedExpr ) -> emittedExpr)
                 usedAvailableEmitted
 
-        forwardedDecls : List String
+        forwardedDecls : List ( List String, String )
         forwardedDecls =
             List.map Tuple.first stackBefore.environmentFunctions
 
@@ -469,28 +503,24 @@ emitDeclarationBlock stackBefore blockDeclarations (DeclBlockClosureCaptures con
                 (\( declName, DeclBlockFunctionEntry asFunctionParams asFunctionInnerExpr ) aggregate ->
                     case asFunctionParams of
                         [] ->
-                            if List.member declName usedAvailableEmittedNames then
-                                aggregate
+                            case Dict.get declName blockDeclarationsDirectDependencies of
+                                Nothing ->
+                                    aggregate
 
-                            else
-                                case Dict.get declName blockDeclarationsDirectDependencies of
-                                    Nothing ->
+                                Just declDirectDeps ->
+                                    let
+                                        declTransitiveDeps =
+                                            getTransitiveDependencies dependenciesRelations declDirectDeps
+                                    in
+                                    if
+                                        List.any
+                                            (\depName -> Set.member depName declTransitiveDeps)
+                                            blockDeclarationsNames
+                                    then
                                         aggregate
 
-                                    Just declDirectDeps ->
-                                        let
-                                            declTransitiveDeps =
-                                                getTransitiveDependencies dependenciesRelations declDirectDeps
-                                        in
-                                        if
-                                            List.any
-                                                (\depName -> Set.member depName declTransitiveDeps)
-                                                blockDeclarationsNames
-                                        then
-                                            aggregate
-
-                                        else
-                                            ( declName, asFunctionInnerExpr ) :: aggregate
+                                    else
+                                        ( declName, asFunctionInnerExpr ) :: aggregate
 
                         _ ->
                             -- Do not include functions into closureCapturesForBlockDecls
@@ -521,7 +551,7 @@ emitDeclarationBlock stackBefore blockDeclarations (DeclBlockClosureCaptures con
                     closureCapturesForBlockDecls
                 ]
 
-        newEnvironmentFunctionsNames : List String
+        newEnvironmentFunctionsNames : List ( List String, String )
         newEnvironmentFunctionsNames =
             composeEnvironmentFunctions
                 { prefix =
@@ -529,15 +559,21 @@ emitDeclarationBlock stackBefore blockDeclarations (DeclBlockClosureCaptures con
                         (\( functionName, _, _ ) -> functionName)
                         usedAvailableEmitted
                 , forwarded = forwardedDecls
-                , appendedFromDecls = List.map Tuple.first blockDeclarationsAsFunctionsLessClosure
-                , appendedFromClosureCaptures = List.map Tuple.first closureCaptures
+                , appendedFromDecls =
+                    List.map
+                        (\( declName, _ ) -> ( [], declName ))
+                        blockDeclarationsAsFunctionsLessClosure
+                , appendedFromClosureCaptures =
+                    List.map
+                        (\( declName, _ ) -> ( [], declName ))
+                        closureCaptures
                 }
 
-        newEnvironmentFunctionsFromDecls : List ( String, EnvironmentFunctionEntry )
+        newEnvironmentFunctionsFromDecls : List ( ( List String, String ), EnvironmentFunctionEntry )
         newEnvironmentFunctionsFromDecls =
             List.map
                 (\( functionName, DeclBlockFunctionEntry functionEntryParams _ ) ->
-                    ( functionName
+                    ( ( [], functionName )
                     , EnvironmentFunctionEntry
                         (List.length functionEntryParams)
                         (LocalEnvironment newEnvironmentFunctionsNames)
@@ -545,17 +581,17 @@ emitDeclarationBlock stackBefore blockDeclarations (DeclBlockClosureCaptures con
                 )
                 blockDeclarationsAsFunctionsLessClosure
 
-        newEnvironmentFunctionsFromClosureCaptures : List ( String, EnvironmentFunctionEntry )
+        newEnvironmentFunctionsFromClosureCaptures : List ( ( List String, String ), EnvironmentFunctionEntry )
         newEnvironmentFunctionsFromClosureCaptures =
             List.map
                 (\( captureName, _ ) ->
-                    ( captureName
+                    ( ( [], captureName )
                     , EnvironmentFunctionEntry 0 IndependentEnvironment
                     )
                 )
                 closureCaptures
 
-        environmentFunctions : List ( String, EnvironmentFunctionEntry )
+        environmentFunctions : List ( ( List String, String ), EnvironmentFunctionEntry )
         environmentFunctions =
             composeEnvironmentFunctions
                 { prefix = prefixEnvironmentFunctions
@@ -699,8 +735,9 @@ emittedImportsFromRoots :
     List Expression
     -> EmitStack
     -> Dict.Dict String (Set.Set String)
-    -> List ( String, EnvironmentFunctionEntry, Pine.Expression )
-emittedImportsFromRoots rootDependencies emitStack dependenciesRelations =
+    -> List ( String, Expression )
+    -> List ( ( List String, String ), EnvironmentFunctionEntry, Pine.Expression )
+emittedImportsFromRoots rootDependencies emitStack dependenciesRelations blockDecls =
     case emitStack.importedFunctions of
         [] ->
             {-
@@ -711,6 +748,15 @@ emittedImportsFromRoots rootDependencies emitStack dependenciesRelations =
 
         importedFunctions ->
             let
+                prevCompiledFunctions : List ( String, ( EnvironmentFunctionEntry, Pine.Value ) )
+                prevCompiledFunctions =
+                    case Common.assocListGet [] importedFunctions of
+                        Nothing ->
+                            []
+
+                        Just list ->
+                            list
+
                 rootDependenciesNames : Set.Set String
                 rootDependenciesNames =
                     List.foldl
@@ -720,23 +766,71 @@ emittedImportsFromRoots rootDependencies emitStack dependenciesRelations =
                         Set.empty
                         rootDependencies
 
-                allDependencies : Set.Set String
-                allDependencies =
+                allLocalDependencies : Set.Set String
+                allLocalDependencies =
                     getTransitiveDependencies
                         dependenciesRelations
                         rootDependenciesNames
+
+                rootDependenciesImportedNames : Set.Set ( List String, String )
+                rootDependenciesImportedNames =
+                    List.foldl
+                        (\rootDep aggregate ->
+                            Set.union
+                                (listImportingReferencesInExpression rootDep)
+                                aggregate
+                        )
+                        Set.empty
+                        rootDependencies
+
+                allImportedNames : Set.Set ( List String, String )
+                allImportedNames =
+                    Set.foldl
+                        (\depName aggregate ->
+                            let
+                                addedNames =
+                                    case Common.assocListGet depName blockDecls of
+                                        Nothing ->
+                                            case Common.assocListGet depName prevCompiledFunctions of
+                                                Nothing ->
+                                                    Set.singleton ( [], depName )
+
+                                                Just ( EnvironmentFunctionEntry _ prevCompiledEnv, _ ) ->
+                                                    case prevCompiledEnv of
+                                                        LocalEnvironment localDeps ->
+                                                            Set.fromList (( [], depName ) :: localDeps)
+
+                                                        _ ->
+                                                            Set.singleton ( [], depName )
+
+                                        Just blockDecl ->
+                                            listImportingReferencesInExpression blockDecl
+                            in
+                            Set.union addedNames aggregate
+                        )
+                        rootDependenciesImportedNames
+                        allLocalDependencies
             in
             Set.foldl
-                (\depName aggregate ->
-                    case Common.assocListGet depName importedFunctions of
+                (\( moduleName, declName ) aggregate ->
+                    case Common.assocListGet moduleName importedFunctions of
                         Nothing ->
                             aggregate
 
-                        Just ( availableEmitted, emittedValue ) ->
-                            ( depName, availableEmitted, Pine.LiteralExpression emittedValue ) :: aggregate
+                        Just moduleDecls ->
+                            case Common.assocListGet declName moduleDecls of
+                                Nothing ->
+                                    aggregate
+
+                                Just ( availableEmitted, emittedValue ) ->
+                                    ( ( moduleName, declName )
+                                    , availableEmitted
+                                    , Pine.LiteralExpression emittedValue
+                                    )
+                                        :: aggregate
                 )
                 []
-                allDependencies
+                allImportedNames
 
 
 {-| Searches the tree of subexpressions for any that might require adaptive application.
@@ -789,7 +883,7 @@ expressionNeedsAdaptiveApplication expression =
                 declarations
                 || expressionNeedsAdaptiveApplication innerExpression
 
-        ReferenceExpression _ ->
+        ReferenceExpression _ _ ->
             False
 
         StringTagExpression _ tagged ->
@@ -885,8 +979,8 @@ parseFunctionParameters expression =
             DeclBlockFunctionEntry [] expression
 
 
-emitReferenceExpression : String -> EmitStack -> Result String Pine.Expression
-emitReferenceExpression name compilation =
+emitReferenceExpression : ( List String, String ) -> EmitStack -> Result String Pine.Expression
+emitReferenceExpression ( moduleName, declName ) compilation =
     {-
        Prioritize environmentDeconstructions before environmentFunctions here to
        support shadowing for function parameters.
@@ -895,41 +989,67 @@ emitReferenceExpression name compilation =
        which can result in shadowing when nested.
        An example is the `pseudoParamName` in `compileElmSyntaxCaseBlock`
     -}
-    case Common.assocListGet name compilation.environmentDeconstructions of
-        Just deconstruction ->
-            Ok
-                (pineExpressionForDeconstructions deconstruction
-                    (listItemFromIndexExpression_Pine 1 Pine.environmentExpr)
-                )
+    let
+        continueWithoutImport () =
+            case
+                emitApplyFunctionFromCurrentEnvironment compilation ( moduleName, declName ) []
+            of
+                Nothing ->
+                    Err
+                        (String.join ""
+                            [ "Failed referencing '"
+                            , String.join "." (List.concat [ moduleName, [ declName ] ])
+                            , "'. "
+                            , String.fromInt (List.length compilation.environmentDeconstructions)
+                            , " deconstructions in scope: "
+                            , String.join ", " (List.map Tuple.first compilation.environmentDeconstructions)
+                            , ". "
+                            , String.fromInt (List.length compilation.environmentFunctions)
+                            , " functions in scope: "
+                            , String.join
+                                ", "
+                                (List.map
+                                    (\( ( availableModuleName, localName ), _ ) ->
+                                        String.join "." (List.concat [ availableModuleName, [ localName ] ])
+                                    )
+                                    compilation.environmentFunctions
+                                )
+                            ]
+                        )
 
-        Nothing ->
-            case Common.assocListGet name compilation.importedFunctionsToInline of
-                Just importedFunction ->
-                    Ok (Pine.LiteralExpression importedFunction)
+                Just (Err err) ->
+                    Err ("Failed emitting reference as function application: " ++ err)
+
+                Just (Ok functionApplicationOk) ->
+                    Ok functionApplicationOk
+
+        continueWithoutDecons () =
+            case Common.assocListGet moduleName compilation.importedFunctionsToInline of
+                Nothing ->
+                    continueWithoutImport ()
+
+                Just importedModule ->
+                    case Common.assocListGet declName importedModule of
+                        Nothing ->
+                            continueWithoutImport ()
+
+                        Just importedFunction ->
+                            Ok (Pine.LiteralExpression importedFunction)
+    in
+    case moduleName of
+        [] ->
+            case Common.assocListGet declName compilation.environmentDeconstructions of
+                Just deconstruction ->
+                    Ok
+                        (pineExpressionForDeconstructions deconstruction
+                            (listItemFromIndexExpression_Pine 1 Pine.environmentExpr)
+                        )
 
                 Nothing ->
-                    case emitApplyFunctionFromCurrentEnvironment compilation name [] of
-                        Nothing ->
-                            Err
-                                (String.join ""
-                                    [ "Failed referencing '"
-                                    , name
-                                    , "'. "
-                                    , String.fromInt (List.length compilation.environmentDeconstructions)
-                                    , " deconstructions in scope: "
-                                    , String.join ", " (List.map Tuple.first compilation.environmentDeconstructions)
-                                    , ". "
-                                    , String.fromInt (List.length compilation.environmentFunctions)
-                                    , " functions in scope: "
-                                    , String.join ", " (List.map Tuple.first compilation.environmentFunctions)
-                                    ]
-                                )
+                    continueWithoutDecons ()
 
-                        Just (Err err) ->
-                            Err ("Failed emitting reference as function application: " ++ err)
-
-                        Just (Ok functionApplicationOk) ->
-                            Ok functionApplicationOk
+        _ ->
+            continueWithoutDecons ()
 
 
 listTransitiveDependenciesOfExpression : EmitStack -> Expression -> Set.Set String
@@ -961,12 +1081,17 @@ listUnboundReferencesInExpression expression boundNames =
                     (listUnboundReferencesInExpression condition boundNames)
                 )
 
-        ReferenceExpression reference ->
-            if List.member reference boundNames then
-                Set.empty
+        ReferenceExpression moduleName reference ->
+            case moduleName of
+                [] ->
+                    if List.member reference boundNames then
+                        Set.empty
 
-            else
-                Set.singleton reference
+                    else
+                        Set.singleton reference
+
+                _ ->
+                    Set.empty
 
         FunctionExpression functionParam functionBody ->
             let
@@ -1009,6 +1134,64 @@ listUnboundReferencesInExpression expression boundNames =
 
         PineFunctionApplicationExpression _ argument ->
             listUnboundReferencesInExpression argument boundNames
+
+
+listImportingReferencesInExpression : Expression -> Set.Set ( List String, String )
+listImportingReferencesInExpression expression =
+    case expression of
+        LiteralExpression _ ->
+            Set.empty
+
+        ListExpression list ->
+            List.foldl
+                (\item aggregate ->
+                    Set.union (listImportingReferencesInExpression item) aggregate
+                )
+                Set.empty
+                list
+
+        KernelApplicationExpression argument _ ->
+            listImportingReferencesInExpression argument
+
+        ConditionalExpression condition falseBranch trueBranch ->
+            Set.union (listImportingReferencesInExpression falseBranch)
+                (Set.union (listImportingReferencesInExpression trueBranch)
+                    (listImportingReferencesInExpression condition)
+                )
+
+        ReferenceExpression moduleName reference ->
+            case moduleName of
+                [] ->
+                    Set.empty
+
+                _ ->
+                    Set.singleton ( moduleName, reference )
+
+        FunctionExpression _ functionBody ->
+            listImportingReferencesInExpression
+                functionBody
+
+        FunctionApplicationExpression functionExpression arguments ->
+            List.foldl
+                (\argument aggregate ->
+                    Set.union (listImportingReferencesInExpression argument) aggregate
+                )
+                (listImportingReferencesInExpression functionExpression)
+                arguments
+
+        DeclarationBlockExpression declarations innerExpression ->
+            List.foldl
+                (\( _, decl ) aggregate ->
+                    Set.union (listImportingReferencesInExpression decl) aggregate
+                )
+                (listImportingReferencesInExpression innerExpression)
+                declarations
+
+        StringTagExpression _ tagged ->
+            listImportingReferencesInExpression tagged
+
+        PineFunctionApplicationExpression _ argument ->
+            listImportingReferencesInExpression argument
 
 
 getTransitiveDependencies : Dict.Dict String (Set.Set String) -> Set.Set String -> Set.Set String
@@ -1211,8 +1394,13 @@ emitFunctionApplication functionExpression arguments compilation =
                                                 )
                                             )
 
-                        ReferenceExpression functionName ->
-                            case emitApplyFunctionFromCurrentEnvironment compilation functionName argumentsPine of
+                        ReferenceExpression moduleName functionName ->
+                            case
+                                emitApplyFunctionFromCurrentEnvironment
+                                    compilation
+                                    ( moduleName, functionName )
+                                    argumentsPine
+                            of
                                 Nothing ->
                                     genericFunctionApplication ()
 
@@ -1300,16 +1488,16 @@ emitFunctionApplicationPine emitStack arguments functionExpressionPine =
 
 emitApplyFunctionFromCurrentEnvironment :
     EmitStack
-    -> String
+    -> ( List String, String )
     -> List Pine.Expression
     -> Maybe (Result String Pine.Expression)
-emitApplyFunctionFromCurrentEnvironment compilation functionName arguments =
+emitApplyFunctionFromCurrentEnvironment compilation ( moduleName, functionName ) arguments =
     let
-        currentEnvironmentFunctionEntryFromName : String -> Maybe ( Int, EnvironmentFunctionEntry )
+        currentEnvironmentFunctionEntryFromName : ( List String, String ) -> Maybe ( Int, EnvironmentFunctionEntry )
         currentEnvironmentFunctionEntryFromName name =
             Common.assocListGetWithIndex name compilation.environmentFunctions
     in
-    case currentEnvironmentFunctionEntryFromName functionName of
+    case currentEnvironmentFunctionEntryFromName ( moduleName, functionName ) of
         Nothing ->
             Nothing
 
@@ -1371,7 +1559,7 @@ emitApplyFunctionFromCurrentEnvironment compilation functionName arguments =
 
                 LocalEnvironment localEnvExpectedDecls ->
                     let
-                        currentEnv : List String
+                        currentEnv : List ( List String, String )
                         currentEnv =
                             List.map Tuple.first compilation.environmentFunctions
 
@@ -1381,7 +1569,7 @@ emitApplyFunctionFromCurrentEnvironment compilation functionName arguments =
 
                         buildEnvironmentRecursive :
                             List Pine.Expression
-                            -> List String
+                            -> List ( List String, String )
                             -> Result String Pine.Expression
                         buildEnvironmentRecursive alreadyMapped remainingToBeMapped =
                             case remainingToBeMapped of
@@ -1391,11 +1579,16 @@ emitApplyFunctionFromCurrentEnvironment compilation functionName arguments =
                                 nextExpectedFunctionName :: remainingExpectedFunctions ->
                                     case currentEnvironmentFunctionEntryFromName nextExpectedFunctionName of
                                         Nothing ->
+                                            let
+                                                ( expectModuleName, expectDeclName ) =
+                                                    nextExpectedFunctionName
+                                            in
                                             Err
                                                 ("Function '"
                                                     ++ functionName
                                                     ++ "' expects environment function '"
-                                                    ++ nextExpectedFunctionName
+                                                    ++ String.join "."
+                                                        (List.concat [ expectModuleName, [ expectDeclName ] ])
                                                     ++ "' but it is not in the environment"
                                                 )
 
@@ -1490,7 +1683,7 @@ partialApplicationExpressionFromListOfArguments arguments emitStack function =
                 { function = function
                 , arguments = arguments
                 , applicationFunctionSource =
-                    case emitReferenceExpression environmentFunctionPartialApplicationName emitStack of
+                    case emitReferenceExpression ( [], environmentFunctionPartialApplicationName ) emitStack of
                         Err _ ->
                             Nothing
 
@@ -2109,7 +2302,7 @@ listFunctionAppExpressions expr =
         FunctionExpression _ functionBody ->
             listFunctionAppExpressions functionBody
 
-        ReferenceExpression _ ->
+        ReferenceExpression _ _ ->
             []
 
         DeclarationBlockExpression declarations innerExpression ->
