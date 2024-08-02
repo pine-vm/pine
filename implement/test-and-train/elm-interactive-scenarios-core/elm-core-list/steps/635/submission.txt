@@ -1,0 +1,2 @@
+List.sortBy (\( _, dependencies ) -> List.length dependencies)
+    [ (23, []), (0, ["a","b"]), (1, ["c"]), (13, ["d"]), (17, []), (11, ["e"]) ]

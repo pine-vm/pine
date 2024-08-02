@@ -983,19 +983,12 @@ sortWith compareFunc list =
 
 sortWithSplit : List a -> ( List a, List a )
 sortWithSplit list =
-    case list of
-        [] ->
-            ( [], [] )
-
-        [ x ] ->
-            ( [ x ], [] )
-
-        x :: y :: rest ->
-            let
-                ( left, right ) =
-                    sortWithSplit rest
-            in
-            (Pine_kernel.concat [ [ x ], left], Pine_kernel.concat [ [ y ], right])
+    let
+        middleIndex = (Pine_kernel.length list) // 2
+    in
+    ( Pine_kernel.take [ middleIndex, list ]
+    , Pine_kernel.skip [ middleIndex, list ]
+    )
 
 
 sortWithMerge : List a -> List a -> (a -> a -> Order) -> List a
@@ -1009,11 +1002,11 @@ sortWithMerge left right compareFunc =
 
         ( x :: xs, y :: ys ) ->
             case compareFunc x y of
-                LT ->
-                    Pine_kernel.concat [ [ x ], sortWithMerge xs right compareFunc ]
+                GT ->
+                    Pine_kernel.concat [ [ y ], sortWithMerge left ys compareFunc ]
 
                 _ ->
-                    Pine_kernel.concat [ [ y ], sortWithMerge left ys compareFunc ]
+                    Pine_kernel.concat [ [ x ], sortWithMerge xs right compareFunc ]
 
 """
     , """
