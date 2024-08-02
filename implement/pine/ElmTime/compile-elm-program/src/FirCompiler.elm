@@ -901,63 +901,41 @@ The first element in the list is a set of declarations that do not depend on any
 recursionDomainsFromDeclarationDependencies : List ( String, Set.Set String ) -> List (Set.Set String)
 recursionDomainsFromDeclarationDependencies declarationDependencies =
     let
-        integrateDecl ( declName, declDependencies ) recursionDomains =
-            let
-                -- Inserts the new domain into the list of domains at the position where the none of the following domains depend on it.
-                insertDomainRecursive :
-                    Set.Set String
-                    -> List (Set.Set String)
-                    -> List (Set.Set String)
-                    -> List (Set.Set String)
-                insertDomainRecursive domainToInsert skipped following =
-                    case following of
-                        [] ->
-                            skipped ++ [ domainToInsert ]
+        depsGroups : List (Set.Set String)
+        depsGroups =
+            List.map
+                (\( declName, declDependencies ) -> Set.insert declName declDependencies)
+                declarationDependencies
 
-                        next :: rest ->
-                            let
-                                allCurrentAndFollowing : Set.Set String
-                                allCurrentAndFollowing =
-                                    List.foldl Set.union next rest
+        depsGroupsUniqueOrdered : List (Set.Set String)
+        depsGroupsUniqueOrdered =
+            List.sortBy Set.size (Common.listUnique depsGroups)
 
-                                dependingOnAnyCurrentOrFollowing : Bool
-                                dependingOnAnyCurrentOrFollowing =
-                                    not (Set.isEmpty (Set.intersect declDependencies allCurrentAndFollowing))
+        deriveDomainsRecursive :
+            Set.Set String
+            -> List (Set.Set String)
+            -> List (Set.Set String)
+            -> List (Set.Set String)
+        deriveDomainsRecursive covered groups domains =
+            case groups of
+                [] ->
+                    List.reverse domains
 
-                                allDependenciesOfNext : Set.Set String
-                                allDependenciesOfNext =
-                                    Set.foldl
-                                        (\nextDeclName aggregate ->
-                                            case Common.assocListGet nextDeclName declarationDependencies of
-                                                Nothing ->
-                                                    aggregate
+                nextGroup :: remainingGroups ->
+                    let
+                        domain : Set.Set String
+                        domain =
+                            Set.filter
+                                (\name -> not (Set.member name covered))
+                                nextGroup
 
-                                                Just nextDeclDependencies ->
-                                                    Set.union nextDeclDependencies aggregate
-                                        )
-                                        Set.empty
-                                        next
-
-                                nextDependingOnNewDomain : Bool
-                                nextDependingOnNewDomain =
-                                    Set.member declName allDependenciesOfNext
-                            in
-                            if dependingOnAnyCurrentOrFollowing then
-                                if nextDependingOnNewDomain then
-                                    -- Merge the new domain into the current domain
-                                    List.concat
-                                        [ skipped, [ Set.union domainToInsert next ], rest ]
-
-                                else
-                                    insertDomainRecursive domainToInsert (skipped ++ [ next ]) rest
-
-                            else
-                                List.concat
-                                    [ skipped, [ domainToInsert ], following ]
-            in
-            insertDomainRecursive (Set.singleton declName) [] recursionDomains
+                        coveredNext : Set.Set String
+                        coveredNext =
+                            Set.union nextGroup covered
+                    in
+                    deriveDomainsRecursive coveredNext remainingGroups (domain :: domains)
     in
-    List.foldl integrateDecl [] declarationDependencies
+    deriveDomainsRecursive Set.empty depsGroupsUniqueOrdered []
 
 
 parseFunctionParameters : Expression -> DeclBlockFunctionEntry
