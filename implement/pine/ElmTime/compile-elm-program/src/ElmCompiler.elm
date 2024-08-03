@@ -1596,16 +1596,22 @@ compileElmSyntaxCaseBlock stack caseBlock =
             Err ("Failed to compile case-of block expression: " ++ error)
 
         Ok expression ->
-            case compileCaseBlockInline stack expression caseBlock.cases of
-                Err err ->
-                    Err err
+            let
+                switchedExprFuncApps : List ( Expression, List Expression )
+                switchedExprFuncApps =
+                    FirCompiler.listFunctionAppExpressions expression
+            in
+            case switchedExprFuncApps of
+                [] ->
+                    case compileCaseBlockInline stack expression caseBlock.cases of
+                        Err err ->
+                            Err err
 
-                Ok inlineVariant ->
+                        Ok inlineVariant ->
+                            Ok inlineVariant
+
+                _ ->
                     let
-                        switchedExprFuncApps : List ( Expression, List Expression )
-                        switchedExprFuncApps =
-                            FirCompiler.listFunctionAppExpressions expression
-
                         pseudoParamName =
                             {-
                                Adapt to current limitation in FirCompiler:
@@ -1616,40 +1622,12 @@ compileElmSyntaxCaseBlock stack caseBlock =
                         innerExpr : Expression
                         innerExpr =
                             FirCompiler.ReferenceExpression [] pseudoParamName
-
-                        casesFunctionToWrap : Maybe Expression
-                        casesFunctionToWrap =
-                            case switchedExprFuncApps of
-                                [] ->
-                                    Nothing
-
-                                _ ->
-                                    case compileCaseBlockInline stack innerExpr caseBlock.cases of
-                                        Err _ ->
-                                            Nothing
-
-                                        Ok casesFunction ->
-                                            let
-                                                inlineVariantFuncApps : List ( Expression, List Expression )
-                                                inlineVariantFuncApps =
-                                                    FirCompiler.listFunctionAppExpressions inlineVariant
-
-                                                casesFunctionFuncApps : List ( Expression, List Expression )
-                                                casesFunctionFuncApps =
-                                                    FirCompiler.listFunctionAppExpressions casesFunction
-
-                                                wrappedVariantFunctionAppsCount : Int
-                                                wrappedVariantFunctionAppsCount =
-                                                    List.length switchedExprFuncApps + List.length casesFunctionFuncApps
-                                            in
-                                            if wrappedVariantFunctionAppsCount < List.length inlineVariantFuncApps then
-                                                Just casesFunction
-
-                                            else
-                                                Nothing
                     in
-                    case casesFunctionToWrap of
-                        Just casesFunction ->
+                    case compileCaseBlockInline stack innerExpr caseBlock.cases of
+                        Err err ->
+                            Err err
+
+                        Ok casesFunction ->
                             Ok
                                 (FunctionApplicationExpression
                                     (FunctionExpression
@@ -1658,9 +1636,6 @@ compileElmSyntaxCaseBlock stack caseBlock =
                                     )
                                     [ expression ]
                                 )
-
-                        Nothing ->
-                            Ok inlineVariant
 
 
 compileCaseBlockInline :
