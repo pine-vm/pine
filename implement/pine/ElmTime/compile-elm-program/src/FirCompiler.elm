@@ -341,7 +341,25 @@ emitExpressionInDeclarationBlock stackBeforeAddingDeps blockDeclarations mainExp
             in
             case mainDependsOnImport of
                 False ->
-                    emitExpression stackBeforeAddingDeps mainExprInnerExpr
+                    let
+                        needsAdaptiveApplication =
+                            case stackBefore.environmentFunctions of
+                                [] ->
+                                    expressionNeedsAdaptiveApplication mainExprInnerExpr
+
+                                _ ->
+                                    {-
+                                       If the stackBefore.environmentFunctions is not empty, assume we already added nessecary internals
+                                       in a parent scope.
+                                    -}
+                                    False
+                    in
+                    case needsAdaptiveApplication of
+                        True ->
+                            continueEmitBlock ()
+
+                        False ->
+                            emitExpression stackBeforeAddingDeps mainExprInnerExpr
 
                 True ->
                     continueEmitBlock ()
@@ -419,20 +437,38 @@ emitDeclarationBlock stackBefore blockDeclarations (DeclBlockClosureCaptures con
         dependenciesRelations =
             Dict.union availableEmittedDependencies blockDeclarationsDirectDependencies
 
+        forwardedDecls : List ( List String, String )
+        forwardedDecls =
+            List.map Tuple.first stackBefore.environmentFunctions
+
         usedAvailableEmittedForInternals : List ( ( List String, String ), EnvironmentFunctionEntry, Pine.Expression )
         usedAvailableEmittedForInternals =
-            if List.member ( [], environmentFunctionPartialApplicationName ) forwardedDecls then
-                []
+            case forwardedDecls of
+                [] ->
+                    let
+                        contentsDependOnFunctionApplication : Bool
+                        contentsDependOnFunctionApplication =
+                            List.any
+                                (\( _, declExpression ) -> expressionNeedsAdaptiveApplication declExpression)
+                                blockDeclarations
+                                || List.any expressionNeedsAdaptiveApplication rootDependencies
+                    in
+                    if contentsDependOnFunctionApplication then
+                        [ ( ( [], environmentFunctionPartialApplicationName )
+                          , EnvironmentFunctionEntry 0 IndependentEnvironment
+                          , Pine.LiteralExpression (adaptivePartialApplicationRecursiveValue ())
+                          )
+                        ]
 
-            else if not contentsDependOnFunctionApplication then
-                []
+                    else
+                        []
 
-            else
-                [ ( ( [], environmentFunctionPartialApplicationName )
-                  , EnvironmentFunctionEntry 0 IndependentEnvironment
-                  , Pine.LiteralExpression (adaptivePartialApplicationRecursiveValue ())
-                  )
-                ]
+                _ ->
+                    {-
+                       If the stackBefore.environmentFunctions is not empty, assume we already added nessecary internals
+                       in a parent scope.
+                    -}
+                    []
 
         emittedImports : List ( ( List String, String ), EnvironmentFunctionEntry, Pine.Expression )
         emittedImports =
@@ -481,17 +517,6 @@ emitDeclarationBlock stackBefore blockDeclarations (DeclBlockClosureCaptures con
             List.map
                 (\( _, _, emittedExpr ) -> emittedExpr)
                 usedAvailableEmitted
-
-        forwardedDecls : List ( List String, String )
-        forwardedDecls =
-            List.map Tuple.first stackBefore.environmentFunctions
-
-        contentsDependOnFunctionApplication : Bool
-        contentsDependOnFunctionApplication =
-            List.any
-                (\( _, declExpression ) -> expressionNeedsAdaptiveApplication declExpression)
-                blockDeclarations
-                || List.any expressionNeedsAdaptiveApplication rootDependencies
 
         closureCapturesForBlockDecls : List ( String, Expression )
         closureCapturesForBlockDecls =

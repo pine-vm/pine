@@ -1042,25 +1042,26 @@ emitClosureExpressionTests =
                                 , environmentDeconstructions = []
                                 }
 
-                            rootAsExpression =
+                            rootFunctionExpression =
                                 declarationBlockOuterExprFromFunctionParamsAndInnerExpr
                                     testCase.functionParams
                                     testCase.functionInnerExpr
+
+                            rootFunctionApplication =
+                                FirCompiler.FunctionApplicationExpression
+                                    rootFunctionExpression
+                                    (testCase.arguments |> List.map FirCompiler.LiteralExpression)
 
                             emitClosureResult =
                                 FirCompiler.emitExpressionInDeclarationBlock
                                     emptyEmitStack
                                     environmentFunctions
-                                    rootAsExpression
+                                    rootFunctionApplication
                         in
                         emitClosureResult
                             |> Result.andThen
-                                ((\partialApplicable ->
-                                    FirCompiler.partialApplicationExpressionFromListOfArguments
-                                        (testCase.arguments |> List.map Pine.LiteralExpression)
-                                        emptyEmitStack
-                                        partialApplicable
-                                        |> Pine.evaluateExpression Pine.emptyEvalEnvironment
+                                ((\applicationExpr ->
+                                    Pine.evaluateExpression Pine.emptyEvalEnvironment applicationExpr
                                         |> Result.mapError Pine.displayStringFromPineError
                                  )
                                     >> Result.map (Expect.equal testCase.expectedValue)
