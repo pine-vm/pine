@@ -2245,8 +2245,13 @@ searchCompileElmSyntaxOperatorOptimized stack operator leftExpr rightExpr =
                             stringsExpressions =
                                 List.map
                                     (\stringExpr ->
-                                        FirCompiler.listItemFromIndexExpression 0
-                                            (FirCompiler.listItemFromIndexExpression 1 stringExpr)
+                                        case stringExpr of
+                                            LiteralExpression (Pine.ListValue ({- 'String' tag -} _ :: (Pine.ListValue [ literalChars ]) :: _)) ->
+                                                LiteralExpression literalChars
+
+                                            _ ->
+                                                FirCompiler.listItemFromIndexExpression 0
+                                                    (FirCompiler.listItemFromIndexExpression 1 stringExpr)
                                     )
                                     expressions
 
