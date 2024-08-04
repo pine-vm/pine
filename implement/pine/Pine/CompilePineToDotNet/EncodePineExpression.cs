@@ -70,20 +70,18 @@ public partial class CompileToCSharp
             continueEncode(kernelApplicationExpr.argument)
             .MapError(err => "Failed to encode argument of kernel application: " + err)
             .Map(encodedArgument =>
-            (ExpressionSyntax)SyntaxFactory.InvocationExpression(
-                SyntaxFactory.QualifiedName(
-                    PineCSharpSyntaxFactory.ExpressionEncodingClassQualifiedNameSyntax,
-                    SyntaxFactory.IdentifierName(nameof(ExpressionEncoding.ParseKernelApplicationExpressionThrowOnUnknownName))))
-            .WithArgumentList(
-                SyntaxFactory.ArgumentList(
-                    SyntaxFactory.SeparatedList(
-                    [
-                        SyntaxFactory.Argument(
-                            SyntaxFactory.LiteralExpression(
-                                SyntaxKind.StringLiteralExpression,
-                                SyntaxFactory.Literal(kernelApplicationExpr.functionName))),
-                        SyntaxFactory.Argument(encodedArgument)
-                    ])))),
+            NewConstructorOfExpressionVariant(
+                nameof(Expression.KernelApplicationExpression),
+
+                SyntaxFactory.Argument(encodedArgument)
+                .WithNameColon(
+                    SyntaxFactory.NameColon(nameof(Expression.KernelApplicationExpression.argument))),
+
+                SyntaxFactory.Argument(SyntaxFactory.LiteralExpression(
+                    SyntaxKind.StringLiteralExpression, SyntaxFactory.Literal(kernelApplicationExpr.functionName)))
+                .WithNameColon(
+                    SyntaxFactory.NameColon(nameof(Expression.KernelApplicationExpression.functionName)))
+            )),
 
             Expression.ParseAndEvalExpression decodeAndEvaluate =>
             continueEncode(decodeAndEvaluate.expression)
