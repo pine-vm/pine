@@ -28,6 +28,21 @@ public class JsonConverterForPineValueTests
 
             PineValue.Blob([]),
             PineValue.Blob([10,11,13]),
+
+            PineValue.List(
+                [PineValue.List([]), PineValue.List([])]),
+
+            PineValueAsString.ValueFromString("Hello world!"),
+
+            PineValue.List(
+                [PineValueAsString.ValueFromString("Hello world!")]),
+
+            PineValue.List(
+                [
+                PineValueAsString.ValueFromString("String"),
+                PineValue.List([PineValueAsString.ValueFromString("Hello world!")]),
+                ]),
+
         };
 
         foreach (var testCase in testCases)

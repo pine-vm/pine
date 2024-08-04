@@ -60,6 +60,8 @@ public class JsonConverterForPineValue : JsonConverter<PineValue>
                 if (reader.TokenType is not JsonTokenType.EndObject)
                     throw new NotSupportedException("Unexpected token type in object: " + reader.TokenType);
 
+                reader.Read();
+
                 return pineValue;
             }
 
@@ -72,6 +74,8 @@ public class JsonConverterForPineValue : JsonConverter<PineValue>
 
                 if (reader.TokenType is not JsonTokenType.EndObject)
                     throw new NotSupportedException("Unexpected token type in object: " + reader.TokenType);
+
+                reader.Read();
 
                 return pineValue;
             }
