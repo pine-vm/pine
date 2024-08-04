@@ -54,7 +54,7 @@ public class ElmValueInterop
                 {
                 [ElmValue.ElmList firstArgument] =>
                 ResultExtension.ListCombine(firstArgument.Elements.Select(ElmValueDecodedAsInElmCompiler))
-                .Map(elements => (PineValue)new PineValue.ListValue(elements)),
+                .Map(PineValue.List),
 
                     _ =>
                     "Invalid arguments for ListValue tag"

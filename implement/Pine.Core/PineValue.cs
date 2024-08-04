@@ -82,15 +82,15 @@ public abstract record PineValue : IEquatable<PineValue>
 
     private static readonly IReadOnlyList<ListValue> InternedBlobsSingletonLists =
         [..InternedBlobs
-        .Select(b => new ListValue([b]))];
+        .Select(b => (ListValue)List([b]))];
 
     private static readonly IReadOnlyList<ListValue> InternedBlobsSingletonSingletonLists =
         [..InternedBlobsSingletonLists
-        .Select(b => new ListValue([b]))];
+        .Select(b => (ListValue)List([b]))];
 
     private static readonly IReadOnlyList<ListValue> InternedStringsLists =
         [..PopularValues.PopularStrings
-        .Select(s => new ListValue(PineValueAsString.ListValueFromString(s)))];
+        .Select(s => (ListValue)List(PineValueAsString.ListValueFromString(s)))];
 
     private static readonly IReadOnlyList<ListValue> InternedElmStringsLists =
         [..InternedStringsLists
@@ -160,22 +160,55 @@ public abstract record PineValue : IEquatable<PineValue>
 
         var sourceSortedBySize =
             InternedListsSource
-            .OrderBy(CountListElementsTransitive)
+            .OrderBy(l => l.NodesCount)
             .ToList();
 
         foreach (var item in sourceSortedBySize)
         {
-            var asStruct = new ListValue.ListValueStruct(item.Elements);
+            var containedLists =
+                EnumerateContainedLists(item)
+                .Prepend(item)
+                .Distinct()
+                .OrderBy(l => l.NodesCount)
+                .ToList();
 
-            if (InternedListsDictInConstruction.ContainsKey(asStruct))
-                continue;
+            foreach (var oldInstance in containedLists)
+            {
+                var asStruct = new ListValue.ListValueStruct(oldInstance.Elements);
 
-            InternedListsDictInConstruction[asStruct] = item;
+                if (InternedListsDictInConstruction.ContainsKey(asStruct))
+                    continue;
+
+                var rebuilt = (ListValue)List(oldInstance.Elements);
+
+                InternedListsDictInConstruction[asStruct] = rebuilt;
+            }
         }
 
         return
             InternedListsDictInConstruction
             .ToFrozenDictionary();
+    }
+
+    private static IEnumerable<ListValue> EnumerateContainedLists(PineValue pineValue)
+    {
+        if (pineValue is not ListValue rootList)
+            yield break;
+
+        var stack = new Stack<ListValue>([rootList]);
+
+        while (stack.TryPop(out var listValue))
+        {
+            yield return listValue;
+
+            for (var i = 0; i < listValue.Elements.Count; i++)
+            {
+                if (listValue.Elements[i] is not ListValue childList)
+                    continue;
+
+                stack.Push(childList);
+            }
+        }
     }
 
     /// <summary>
@@ -311,18 +344,6 @@ public abstract record PineValue : IEquatable<PineValue>
 
             public override int GetHashCode() => slimHashCode;
         }
-
-        public int ComputeDepth() =>
-            Elements.Count == 0
-            ?
-            1
-            :
-            Elements.Max(
-                e => e switch
-                {
-                    ListValue list => 1 + list.ComputeDepth(),
-                    _ => 1
-                });
     }
 
     /// <summary>
@@ -374,18 +395,6 @@ public abstract record PineValue : IEquatable<PineValue>
 
             ListValue list =>
             list.Elements.Any(e => e.Equals(pineValue) || e.ContainsInListTransitive(pineValue)),
-
-            _ =>
-            throw new NotImplementedException()
-        };
-
-    private static int CountListElementsTransitive(PineValue pineValue) =>
-        pineValue switch
-        {
-            BlobValue => 0,
-
-            ListValue list =>
-            1 + list.Elements.Sum(CountListElementsTransitive),
 
             _ =>
             throw new NotImplementedException()
