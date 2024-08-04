@@ -74,33 +74,33 @@ eq a b =
                 RBNode_elm_builtin _ _ _ _ _ ->
                     Pine_kernel.equal [ dictToList a, dictToList b ]
 
-                Set_elm_builtin _ ->
-                    Pine_kernel.equal [ setToList a, setToList b ]
+                Set_elm_builtin dictA ->
+                    let
+                        (Set_elm_builtin dictB) =
+                            b
+                    in
+                    Pine_kernel.equal [ dictKeys dictA, dictKeys dictB ]
 
                 _ ->
-                    let
-                        itemsEqualRecursive listA listB =
-                            if Pine_kernel.equal [ Pine_kernel.length listA, 0 ] then
-                                True
-
-                            else
-                                if eq (Pine_kernel.list_head listA) (Pine_kernel.list_head listB) then
-                                    itemsEqualRecursive
-                                        (Pine_kernel.skip [ 1, listA ])
-                                        (Pine_kernel.skip [ 1, listB ])
-
-                                else
-                                    False
-                    in
-                    itemsEqualRecursive a b
+                    listsEqualRecursive a b
 
         else
             False
 
 
-setToList : Set a -> List a
-setToList (Set_elm_builtin dict) =
-  dictKeys dict
+listsEqualRecursive : List comparable -> List comparable -> Bool
+listsEqualRecursive listA listB =
+    if Pine_kernel.equal [ listA, [] ] then
+        True
+
+    else
+        if eq (Pine_kernel.list_head listA) (Pine_kernel.list_head listB) then
+            listsEqualRecursive
+                (Pine_kernel.skip [ 1, listA ])
+                (Pine_kernel.skip [ 1, listB ])
+
+        else
+            False
 
 
 dictToList : Dict k v -> List (k,v)
