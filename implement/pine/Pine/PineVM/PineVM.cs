@@ -926,7 +926,8 @@ public class PineVM : IPineVM
 
             IReadOnlyList<StackInstruction> falseBranchInstructionsAndJump =
                 [.. falseBranchInstructions,
-                StackInstruction.Jump(trueBranchInstructions.Count + 1)];
+                StackInstruction.Jump(trueBranchInstructions.Count + 1)
+                ];
 
             var branchInstruction =
                 new StackInstruction.ConditionalJumpInstruction(
@@ -938,7 +939,8 @@ public class PineVM : IPineVM
                 branchInstruction,
                 ..falseBranchInstructionsAndJump,
                 ..trueBranchInstructions,
-                new StackInstruction.CopyLastAssignedInstruction()];
+                new StackInstruction.CopyLastAssignedInstruction()
+                ];
 
             int? reusableResultOffsetForContinuation(Expression expression)
             {
@@ -956,11 +958,13 @@ public class PineVM : IPineVM
                 [.. InstructionsFromNode(
                     conditional.Continuation,
                     reusableResultOffsetForContinuation,
-                    shouldSeparate: _ => false)];
+                    shouldSeparate: _ => false)
+                ];
 
             IReadOnlyList<StackInstruction> mergedInstructions =
                 [..instructionsBeforeContinuation,
-                ..continuationInstructions];
+                ..continuationInstructions
+                ];
 
             return mergedInstructions;
         }
@@ -1348,8 +1352,9 @@ public class PineVM : IPineVM
                 if (currentFrame.ExpressionValue is { } currentFrameExprValue)
                 {
                     var frameInstructionCount = instructionCount - currentFrame.BeginInstructionCount;
+                    var frameParseAndEvalCount = parseAndEvalCount - currentFrame.BeginParseAndEvalCount;
 
-                    if (frameInstructionCount > 3_000 && EvalCache is { } evalCache)
+                    if (frameInstructionCount + frameParseAndEvalCount * 100 > 1_500 && EvalCache is { } evalCache)
                     {
                         evalCache.TryAdd(
                             new EvalCacheEntryKey(currentFrameExprValue, currentFrame.EnvironmentValue),
@@ -1363,7 +1368,7 @@ public class PineVM : IPineVM
                             currentFrame.EnvironmentValue,
                             InstructionCount: frameInstructionCount,
                             ParseAndEvalCount: parseAndEvalCount - currentFrame.BeginParseAndEvalCount,
-                            frameReturnValue));
+                            ReturnValue: frameReturnValue));
                 }
 
                 stack.Pop();
@@ -1456,6 +1461,15 @@ public class PineVM : IPineVM
                     if (parseResult is not Result<string, Expression>.Ok parseOk)
                     {
                         throw new NotImplementedException("Unexpected result type: " + parseResult.GetType().FullName);
+                    }
+
+                    if (Precompiled.SelectPrecompiled(parseOk.Value, environmentValue) is { } precompiledDelegate)
+                    {
+                        var resultValue = precompiledDelegate(environmentValue);
+
+                        currentFrame.PushInstructionResult(resultValue);
+
+                        continue;
                     }
 
                     var newFrame =

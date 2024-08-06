@@ -1,0 +1,438 @@
+{
+  "ConditionalExpression": [
+    {
+      "KernelApplicationExpression": [
+        "equal",
+        {
+          "ListExpression": [
+            [
+              { "LiteralExpression": [ { "ListAsString": "LT" } ] },
+              {
+                "KernelApplicationExpression": [
+                  "list_head",
+                  {
+                    "KernelApplicationExpression": [
+                      "list_head",
+                      {
+                        "KernelApplicationExpression": [
+                          "list_head",
+                          {
+                            "KernelApplicationExpression": [
+                              "skip",
+                              {
+                                "ListExpression": [
+                                  [
+                                    { "LiteralExpression": [ 1 ] },
+                                    { "EnvironmentExpression": [] }
+                                  ]
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "ConditionalExpression": [
+        {
+          "KernelApplicationExpression": [
+            "equal",
+            {
+              "ListExpression": [
+                [
+                  { "LiteralExpression": [ { "ListAsString": "EQ" } ] },
+                  {
+                    "KernelApplicationExpression": [
+                      "list_head",
+                      {
+                        "KernelApplicationExpression": [
+                          "list_head",
+                          {
+                            "KernelApplicationExpression": [
+                              "list_head",
+                              {
+                                "KernelApplicationExpression": [
+                                  "skip",
+                                  {
+                                    "ListExpression": [
+                                      [
+                                        { "LiteralExpression": [ 1 ] },
+                                        { "EnvironmentExpression": [] }
+                                      ]
+                                    ]
+                                  }
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              ]
+            }
+          ]
+        },
+        {
+          "ConditionalExpression": [
+            {
+              "KernelApplicationExpression": [
+                "equal",
+                {
+                  "ListExpression": [
+                    [
+                      { "LiteralExpression": [ { "ListAsString": "GT" } ] },
+                      {
+                        "KernelApplicationExpression": [
+                          "list_head",
+                          {
+                            "KernelApplicationExpression": [
+                              "list_head",
+                              {
+                                "KernelApplicationExpression": [
+                                  "list_head",
+                                  {
+                                    "KernelApplicationExpression": [
+                                      "skip",
+                                      {
+                                        "ListExpression": [
+                                          [
+                                            { "LiteralExpression": [ 1 ] },
+                                            { "EnvironmentExpression": [] }
+                                          ]
+                                        ]
+                                      }
+                                    ]
+                                  }
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  ]
+                }
+              ]
+            },
+            {
+              "ParseAndEvalExpression": [
+                { "LiteralExpression": [ { "ListAsString": "Error in case-of block: No matching branch." } ] },
+                {
+                  "KernelApplicationExpression": [
+                    "list_head",
+                    {
+                      "KernelApplicationExpression": [
+                        "list_head",
+                        {
+                          "KernelApplicationExpression": [
+                            "skip",
+                            {
+                              "ListExpression": [
+                                [
+                                  { "LiteralExpression": [ 1 ] },
+                                  { "EnvironmentExpression": [] }
+                                ]
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "ParseAndEvalExpression": [
+                {
+                  "KernelApplicationExpression": [
+                    "list_head",
+                    {
+                      "KernelApplicationExpression": [
+                        "skip",
+                        {
+                          "ListExpression": [
+                            [
+                              { "LiteralExpression": [ 2 ] },
+                              {
+                                "KernelApplicationExpression": [
+                                  "list_head",
+                                  { "EnvironmentExpression": [] }
+                                ]
+                              }
+                            ]
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "ListExpression": [
+                    [
+                      {
+                        "KernelApplicationExpression": [
+                          "list_head",
+                          { "EnvironmentExpression": [] }
+                        ]
+                      },
+                      {
+                        "ListExpression": [
+                          [
+                            {
+                              "KernelApplicationExpression": [
+                                "list_head",
+                                {
+                                  "KernelApplicationExpression": [
+                                    "skip",
+                                    {
+                                      "ListExpression": [
+                                        [
+                                          { "LiteralExpression": [ 1 ] },
+                                          {
+                                            "KernelApplicationExpression": [
+                                              "list_head",
+                                              {
+                                                "KernelApplicationExpression": [
+                                                  "skip",
+                                                  {
+                                                    "ListExpression": [
+                                                      [
+                                                        { "LiteralExpression": [ 1 ] },
+                                                        { "EnvironmentExpression": [] }
+                                                      ]
+                                                    ]
+                                                  }
+                                                ]
+                                              }
+                                            ]
+                                          }
+                                        ]
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            },
+                            {
+                              "KernelApplicationExpression": [
+                                "list_head",
+                                {
+                                  "KernelApplicationExpression": [
+                                    "skip",
+                                    {
+                                      "ListExpression": [
+                                        [
+                                          { "LiteralExpression": [ 4 ] },
+                                          {
+                                            "KernelApplicationExpression": [
+                                              "list_head",
+                                              {
+                                                "KernelApplicationExpression": [
+                                                  "skip",
+                                                  {
+                                                    "ListExpression": [
+                                                      [
+                                                        { "LiteralExpression": [ 1 ] },
+                                                        { "EnvironmentExpression": [] }
+                                                      ]
+                                                    ]
+                                                  }
+                                                ]
+                                              }
+                                            ]
+                                          }
+                                        ]
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        ]
+                      }
+                    ]
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "ListExpression": [
+            [
+              { "LiteralExpression": [ { "ListAsString": "Just" } ] },
+              {
+                "ListExpression": [
+                  [
+                    {
+                      "KernelApplicationExpression": [
+                        "list_head",
+                        {
+                          "KernelApplicationExpression": [
+                            "skip",
+                            {
+                              "ListExpression": [
+                                [
+                                  { "LiteralExpression": [ 2 ] },
+                                  {
+                                    "KernelApplicationExpression": [
+                                      "list_head",
+                                      {
+                                        "KernelApplicationExpression": [
+                                          "skip",
+                                          {
+                                            "ListExpression": [
+                                              [
+                                                { "LiteralExpression": [ 1 ] },
+                                                { "EnvironmentExpression": [] }
+                                              ]
+                                            ]
+                                          }
+                                        ]
+                                      }
+                                    ]
+                                  }
+                                ]
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                ]
+              }
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "ParseAndEvalExpression": [
+        {
+          "KernelApplicationExpression": [
+            "list_head",
+            {
+              "KernelApplicationExpression": [
+                "skip",
+                {
+                  "ListExpression": [
+                    [
+                      { "LiteralExpression": [ 2 ] },
+                      {
+                        "KernelApplicationExpression": [
+                          "list_head",
+                          { "EnvironmentExpression": [] }
+                        ]
+                      }
+                    ]
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "ListExpression": [
+            [
+              {
+                "KernelApplicationExpression": [
+                  "list_head",
+                  { "EnvironmentExpression": [] }
+                ]
+              },
+              {
+                "ListExpression": [
+                  [
+                    {
+                      "KernelApplicationExpression": [
+                        "list_head",
+                        {
+                          "KernelApplicationExpression": [
+                            "skip",
+                            {
+                              "ListExpression": [
+                                [
+                                  { "LiteralExpression": [ 1 ] },
+                                  {
+                                    "KernelApplicationExpression": [
+                                      "list_head",
+                                      {
+                                        "KernelApplicationExpression": [
+                                          "skip",
+                                          {
+                                            "ListExpression": [
+                                              [
+                                                { "LiteralExpression": [ 1 ] },
+                                                { "EnvironmentExpression": [] }
+                                              ]
+                                            ]
+                                          }
+                                        ]
+                                      }
+                                    ]
+                                  }
+                                ]
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "KernelApplicationExpression": [
+                        "list_head",
+                        {
+                          "KernelApplicationExpression": [
+                            "skip",
+                            {
+                              "ListExpression": [
+                                [
+                                  { "LiteralExpression": [ 3 ] },
+                                  {
+                                    "KernelApplicationExpression": [
+                                      "list_head",
+                                      {
+                                        "KernelApplicationExpression": [
+                                          "skip",
+                                          {
+                                            "ListExpression": [
+                                              [
+                                                { "LiteralExpression": [ 1 ] },
+                                                { "EnvironmentExpression": [] }
+                                              ]
+                                            ]
+                                          }
+                                        ]
+                                      }
+                                    ]
+                                  }
+                                ]
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                ]
+              }
+            ]
+          ]
+        }
+      ]
+    }
+  ]
+}

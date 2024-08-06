@@ -581,5 +581,10 @@ public static class ExpressionEncoding
 
             yield return kernelListHeadExpr(justSkip);
         }
+
+        foreach (var namedExpr in PopularExpression.BuildPopularExpressionDictionary())
+        {
+            yield return namedExpr.Value;
+        }
     }
 }

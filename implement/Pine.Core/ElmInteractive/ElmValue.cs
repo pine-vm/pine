@@ -35,11 +35,26 @@ public abstract record ElmValue
 
     public const string ElmStringTypeTagName = "String";
 
+    public const string ElmSetTypeTagName = "Set_elm_builtin";
+
+    public const string ElmDictEmptyTagName = "RBEmpty_elm_builtin";
+
+    public const string ElmDictNotEmptyTagName = "RBNode_elm_builtin";
+
     public static readonly PineValue ElmRecordTypeTagNameAsValue =
         PineValueAsString.ValueFromString(ElmRecordTypeTagName);
 
     public static readonly PineValue ElmStringTypeTagNameAsValue =
         PineValueAsString.ValueFromString(ElmStringTypeTagName);
+
+    public static readonly PineValue ElmSetTypeTagNameAsValue =
+        PineValueAsString.ValueFromString(ElmSetTypeTagName);
+
+    public static readonly PineValue ElmDictEmptyTagNameAsValue =
+        PineValueAsString.ValueFromString(ElmDictEmptyTagName);
+
+    public static readonly PineValue ElmDictNotEmptyTagNameAsValue =
+        PineValueAsString.ValueFromString(ElmDictNotEmptyTagName);
 
     public static ElmValue Integer(System.Numerics.BigInteger Value) =>
         ReusedIntegerInstances?.TryGetValue(Value, out var reusedInstance) ?? false && reusedInstance is not null ?

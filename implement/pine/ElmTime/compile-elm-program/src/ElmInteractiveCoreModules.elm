@@ -2011,15 +2011,25 @@ get targetKey dict =
       Nothing
 
     RBNode_elm_builtin _ key value left right ->
-      case compare targetKey key of
+      getAfterCompare
+        (compare targetKey key)
+        targetKey
+        value
+        left
+        right
+
+
+getAfterCompare : Order -> comparable -> Dict comparable v -> Dict comparable v -> Maybe v
+getAfterCompare order targetKey value left right =
+    case order of
         LT ->
-          get targetKey left
+            get targetKey left
 
         EQ ->
-          Just value
+            Just value
 
         GT ->
-          get targetKey right
+            get targetKey right
 
 
 {-| Determine if a key is in a dictionary. -}

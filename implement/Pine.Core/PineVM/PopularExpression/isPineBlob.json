@@ -1,0 +1,52 @@
+{
+  "KernelApplicationExpression": [
+    "equal",
+    {
+      "ListExpression": [
+        [
+          {
+            "KernelApplicationExpression": [
+              "take",
+              {
+                "ListExpression": [
+                  [
+                    { "LiteralExpression": [ 0 ] },
+                    {
+                      "KernelApplicationExpression": [
+                        "list_head",
+                        {
+                          "KernelApplicationExpression": [
+                            "list_head",
+                            {
+                              "KernelApplicationExpression": [
+                                "skip",
+                                {
+                                  "ListExpression": [
+                                    [
+                                      { "LiteralExpression": [ 1 ] },
+                                      { "EnvironmentExpression": [] }
+                                    ]
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                ]
+              }
+            ]
+          },
+          {
+            "KernelApplicationExpression": [
+              "take",
+              { "LiteralExpression": [ [ 0, 0 ] ] }
+            ]
+          }
+        ]
+      ]
+    }
+  ]
+}
