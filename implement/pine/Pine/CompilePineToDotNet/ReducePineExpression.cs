@@ -34,13 +34,7 @@ public class ReducePineExpression
             PineVM.PineVM.EvaluateKernelApplicationGeneric(argumentValue, kernelApplication.functionName)),
 
             Expression.ParseAndEvalExpression parseAndEvalExpr =>
-            TryEvaluateExpressionIndependent(parseAndEvalExpr)
-            .Map(ok =>
-            {
-                Console.WriteLine("Successfully evaluated ParseAndEvalExpression independent 🙃");
-
-                return ok;
-            }),
+            TryEvaluateExpressionIndependent(parseAndEvalExpr),
 
             Expression.ConditionalExpression conditional =>
             TryEvaluateExpressionIndependent(conditional),
