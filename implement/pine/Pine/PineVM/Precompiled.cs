@@ -8,9 +8,35 @@ namespace Pine.PineVM;
 
 public class Precompiled
 {
+    /*
+     * 
+     * Using the general environment class model in the first stage of dispatch/linking means that we can use that
+     * information to optimize the dispatch at compile time.
+     * */
+
+    public abstract record PrecompiledResult
+    {
+        public sealed record FinalValue(
+            PineValue Value)
+            : PrecompiledResult;
+
+        public sealed record ContinueParseAndEval(
+            PineValue EnvironmentValue,
+            PineValue ExpressionValue)
+            : PrecompiledResult;
+    }
+
     record PrecompiledEntry(
         EnvConstraintId EnvConstraint,
-        Func<PineValue, PineValue> PrecompiledDelegate);
+        Func<PineValue, Func<PrecompiledResult>?> PrecompiledDelegate)
+    {
+        public static PrecompiledEntry FinalValueForAnyEnvironment(
+            EnvConstraintId EnvConstraint,
+            Func<PineValue, PineValue> delegateForAnyEnv) =>
+            new(
+                EnvConstraint,
+                env => () => new PrecompiledResult.FinalValue(delegateForAnyEnv(env)));
+    }
 
     public static ImmutableHashSet<Expression> PrecompiledExpressions =>
         PrecompiledDict?.Keys.ToImmutableHashSet() ?? [];
@@ -18,7 +44,7 @@ public class Precompiled
     public static bool HasPrecompiledForExpression(Expression expression) =>
         PrecompiledDict?.ContainsKey(expression) ?? false;
 
-    public static Func<PineValue, PineValue>? SelectPrecompiled(
+    public static Func<PrecompiledResult>? SelectPrecompiled(
         Expression expression,
         PineValue environment)
     {
@@ -28,7 +54,7 @@ public class Precompiled
             {
                 if (envItem.EnvConstraint.SatisfiedByValue(environment))
                 {
-                    return envItem.PrecompiledDelegate;
+                    return envItem.PrecompiledDelegate.Invoke(environment);
                 }
             }
         }
@@ -38,8 +64,11 @@ public class Precompiled
 
     private static IEnumerable<KeyValuePair<Expression, IReadOnlyList<PrecompiledEntry>>> BuildPrecompiled()
     {
-        var genericPartialApplicationExpressionValue =
-            ExpressionEncoding.EncodeExpressionAsValue(popularExpressionDictionary["adaptivePartialApplication"])
+        var adaptivePartialApplicationExpression =
+            popularExpressionDictionary["adaptivePartialApplication"];
+
+        var adaptivePartialApplicationExpressionValue =
+            ExpressionEncoding.EncodeExpressionAsValue(adaptivePartialApplicationExpression)
             .Extract(err => throw new Exception(err));
 
         var isPineListExpressionValue =
@@ -125,7 +154,7 @@ public class Precompiled
                     [0],
                     PineValue.List(
                         [
-                        genericPartialApplicationExpressionValue,
+                        adaptivePartialApplicationExpressionValue,
                         isPineListExpressionValue,
                         compareStringsExpressionValue,
                         compareExpressionValue,
@@ -136,7 +165,7 @@ public class Precompiled
             yield return
                 new KeyValuePair<Expression, IReadOnlyList<PrecompiledEntry>>(
                     compareExpression,
-                    [new PrecompiledEntry(compareExpressionEnvClass, Compare)]);
+                    [PrecompiledEntry.FinalValueForAnyEnvironment(compareExpressionEnvClass, Compare)]);
         }
 
         {
@@ -147,7 +176,7 @@ public class Precompiled
                     [0],
                     PineValue.List(
                         [
-                        genericPartialApplicationExpressionValue,
+                        adaptivePartialApplicationExpressionValue,
                         isPineBlobExpressionValue,
                         dictToListExpressionValue,
                         dictKeysExpressionValue,
@@ -159,7 +188,7 @@ public class Precompiled
             yield return
                 new KeyValuePair<Expression, IReadOnlyList<PrecompiledEntry>>(
                     eqExpression,
-                    [new PrecompiledEntry(eqExpressionEnvClass, Eq)]);
+                    [PrecompiledEntry.FinalValueForAnyEnvironment(eqExpressionEnvClass, Eq)]);
         }
 
 
@@ -171,7 +200,7 @@ public class Precompiled
                     [0],
                     PineValue.List(
                         [
-                        genericPartialApplicationExpressionValue,
+                        adaptivePartialApplicationExpressionValue,
                         eqExposedValue,
                         listMemberExpressionValue,
                         ]))
@@ -180,7 +209,7 @@ public class Precompiled
             yield return
                 new KeyValuePair<Expression, IReadOnlyList<PrecompiledEntry>>(
                     listMemberExpression,
-                    [new PrecompiledEntry(listMemberExpressionEnvClass, ListMember)]);
+                    [PrecompiledEntry.FinalValueForAnyEnvironment(listMemberExpressionEnvClass, ListMember)]);
         }
 
 
@@ -192,7 +221,7 @@ public class Precompiled
                     [0],
                     PineValue.List(
                         [
-                        genericPartialApplicationExpressionValue,
+                        adaptivePartialApplicationExpressionValue,
                         eqExposedValue,
                         assocListGetExpressionValue,
                         ]))
@@ -201,10 +230,10 @@ public class Precompiled
             yield return
                 new KeyValuePair<Expression, IReadOnlyList<PrecompiledEntry>>(
                     assocListGetExpression,
-                    [new PrecompiledEntry(assocListGetExpressionEnvClass, AssocListGet)]);
+                    [PrecompiledEntry.FinalValueForAnyEnvironment(assocListGetExpressionEnvClass, AssocListGet)]);
         }
 
-        
+
         {
             var dictGetExpressionEnvClass =
                 EnvConstraintId.Create(
@@ -213,7 +242,7 @@ public class Precompiled
                     [0],
                     PineValue.List(
                         [
-                        genericPartialApplicationExpressionValue,
+                        adaptivePartialApplicationExpressionValue,
                         compareExposedValue,
                         dictGetExpressionValue,
                         dictGetAfterCompareExpressionValue,
@@ -223,7 +252,27 @@ public class Precompiled
             yield return
                 new KeyValuePair<Expression, IReadOnlyList<PrecompiledEntry>>(
                     dictGetExpression,
-                    [new PrecompiledEntry(dictGetExpressionEnvClass, DictGet)]);
+                    [PrecompiledEntry.FinalValueForAnyEnvironment(dictGetExpressionEnvClass, DictGet)]);
+        }
+
+
+        {
+            var adaptivePartialApplicationEnvClass =
+                EnvConstraintId.Create(
+                    [
+                    new KeyValuePair<IReadOnlyList<int>, PineValue>(
+                    [0],
+                    adaptivePartialApplicationExpressionValue),
+
+                    new KeyValuePair<IReadOnlyList<int>, PineValue>(
+                    [1,0],
+                    PineValueAsString.ValueFromString("Function")),
+                    ]);
+
+            yield return
+                new KeyValuePair<Expression, IReadOnlyList<PrecompiledEntry>>(
+                    adaptivePartialApplicationExpression,
+                    [new PrecompiledEntry(adaptivePartialApplicationEnvClass, AdaptivePartialApplication)]);
         }
     }
 
@@ -617,6 +666,100 @@ public class Precompiled
 
         throw new ParseExpressionException("Error in case-of block: No matching branch.");
     }
+
+    static Func<PrecompiledResult>? AdaptivePartialApplication(
+        PineValue environment)
+    {
+        if (environment is not PineValue.ListValue envList)
+            return null;
+
+        if (envList.Elements.Count < 2)
+            return null;
+
+        if (envList.Elements[1] is not PineValue.ListValue taggedFunctionRecordList)
+            return null;
+
+        if (envList.Elements[2] is not PineValue.ListValue newArgumentsList)
+            return null;
+
+        if (newArgumentsList.Elements.Count is 0)
+        {
+            return () => new PrecompiledResult.FinalValue(taggedFunctionRecordList);
+        }
+
+        if (taggedFunctionRecordList.Elements.Count < 2)
+            return null;
+
+        /*
+         * We already check this condition via the environment value class.
+         * 
+        if (taggedFunctionRecordList.Elements[0] != ElmCompilerFunctionTagValue)
+            return null;
+        */
+
+        if (taggedFunctionRecordList.Elements[1] is not PineValue.ListValue functionRecord)
+            return null;
+
+        if (functionRecord.Elements.Count < 4)
+            return null;
+
+        if (functionRecord.Elements[3] is not PineValue.ListValue argsCollectedPreviouslyList)
+            return null;
+
+        if (functionRecord.Elements[1] is not PineValue.BlobValue paramCountBlob)
+            return null;
+
+        if (paramCountBlob.Bytes.Length is not 2)
+            return null;
+
+        if (paramCountBlob.Bytes.Span[0] is not 4)
+            return null;
+
+        var paramCount = paramCountBlob.Bytes.Span[1];
+
+        var envFunctions = functionRecord.Elements[2];
+
+        if (paramCount != argsCollectedPreviouslyList.Elements.Count + newArgumentsList.Elements.Count)
+            return null;
+
+        PineValue? combinedArgumentsValue = null;
+
+        if (argsCollectedPreviouslyList.Elements.Count is 0)
+        {
+            combinedArgumentsValue = newArgumentsList;
+        }
+        else
+        {
+            var combinedArgsArray = new PineValue[argsCollectedPreviouslyList.Elements.Count + newArgumentsList.Elements.Count];
+
+            for (var i = 0; i < argsCollectedPreviouslyList.Elements.Count; ++i)
+            {
+                combinedArgsArray[i] = argsCollectedPreviouslyList.Elements[i];
+            }
+
+            for (var i = 0; i < newArgumentsList.Elements.Count; ++i)
+            {
+                combinedArgsArray[i + argsCollectedPreviouslyList.Elements.Count] = newArgumentsList.Elements[i];
+            }
+
+            combinedArgumentsValue = PineValue.List(combinedArgsArray);
+        }
+
+        var newEnvironment =
+            PineValue.List(
+                [
+                envFunctions,
+                combinedArgumentsValue
+                ]);
+
+        return
+            () => new PrecompiledResult.ContinueParseAndEval(
+                EnvironmentValue: newEnvironment,
+                ExpressionValue: functionRecord.Elements[0]);
+    }
+
+    static readonly PineValue ElmCompilerFunctionTagValue =
+        PineValueAsString.ValueFromString("Function");
 
     static readonly PineValue Tag_EQ_Value =
         ElmValueEncoding.ElmValueAsPineValue(new ElmValue.ElmTag("EQ", []));
