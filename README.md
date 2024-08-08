@@ -1,13 +1,16 @@
 # Pine
 
-Pine is a runtime for the Elm programming language.   
+Pine is a runtime for the Elm programming language.    
 It's built on .NET and runs on Linux, Windows, and macOS.
 
-Pine integrates web server and database management system, automating the persistence and maintenance of application state and database migrations.
++ Pine supports building and running Elm programs natively on .NET without JavaScript.
++ The Elm compilation interfaces support the customization of code generation at build time.
++ Pine comes bundled with a web server and database management system for building full-stack web applications.
 
-To learn more about the database management system and persistence, see the dedicated guide on [persistence of application state](./guide/persistence-of-application-state-in-pine.md)
+## Web Services
 
-The integrated Elm compiler offers various interfaces supporting the automatic generation of Elm code at build time. This automation frees applications from boilerplate and glue code and allows us to focus on business logic.
++ Pine integrates web server and database management system, automating the persistence and maintenance of application state and database migrations.
++ Run reports or custom updates as Elm functions on your database via the admin interface.
 
 ## Getting Started
 
@@ -31,7 +34,7 @@ docker  run  -p 5000:80  -p 4000:4000  --env "APPSETTING_adminPassword=test"  gh
 ```
 
 
-## Guides
+## 📚 Guides
 
 A selection of guides on popular topics:
 
@@ -42,6 +45,10 @@ A selection of guides on popular topics:
 + Using Elm compilation interfaces: [./guide/how-to-use-elm-compilation-interfaces.md](./guide/how-to-use-elm-compilation-interfaces.md)
 
 For an overview of all guides and documentation, see the [`guide` directory](./guide/).
+
+## 🎥 Videos
+
++ Manually Applying Elm Functions On An Online Database Using Pine: <https://youtu.be/9mFjdf_ABNM>
 
 ## Example Apps
 
