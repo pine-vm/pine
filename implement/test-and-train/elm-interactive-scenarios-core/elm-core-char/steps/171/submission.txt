@@ -1,0 +1,10 @@
+[ Char.isAlphaNum 'a'
+, Char.isAlphaNum 'b'
+, Char.isAlphaNum 'E'
+, Char.isAlphaNum 'Y'
+, Char.isAlphaNum '0'
+, Char.isAlphaNum '7'
+
+, Char.isAlphaNum '-'
+, Char.isAlphaNum 'π'
+]

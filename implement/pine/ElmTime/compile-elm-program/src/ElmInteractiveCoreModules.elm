@@ -1111,6 +1111,27 @@ isLower char =
     in
     Pine_kernel.is_sorted_ascending_int [ 0x61, code, 0x7A ]
 
+
+isAlpha : Char -> Bool
+isAlpha char =
+    let
+        code =
+            toCode char
+    in
+    if Pine_kernel.is_sorted_ascending_int [ 0x41, code, 0x5A ] then
+        True
+    else
+        Pine_kernel.is_sorted_ascending_int [ 0x61, code, 0x7A ]
+
+
+isAlphaNum : Char -> Bool
+isAlphaNum char =
+    if isAlpha char then
+        True
+    else
+        isDigit char
+
+
 """
     , """
 module String exposing
