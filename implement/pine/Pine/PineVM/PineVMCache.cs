@@ -8,7 +8,7 @@ namespace Pine.PineVM;
 /// 
 /// For parsing of expressions, it always caches the result.
 /// 
-/// For expression evaluation cache, it only considers caching if the expression is of type <see cref="Expression.ParseAndEvalExpression"/>.
+/// For expression evaluation cache, it only considers caching if the expression is of type <see cref="Expression.ParseAndEval"/>.
 /// To decide whether to cache the result, it uses the environment time source to measure time spent on evaluation.
 /// Therefore, the caching of evaluation results is not deterministic.
 /// </summary>

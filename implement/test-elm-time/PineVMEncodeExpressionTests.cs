@@ -12,33 +12,33 @@ public class PineVMEncodeExpressionTests
     {
         var testCases = new Expression[]
         {
-            new Expression.LiteralExpression(PineValueAsString.ValueFromString("literal content")),
+            new Expression.Literal(PineValueAsString.ValueFromString("literal content")),
 
-            new Expression.EnvironmentExpression(),
+            new Expression.Environment(),
 
-            new Expression.ListExpression(
+            new Expression.List(
                 [
-                    new Expression.LiteralExpression(PineValueAsString.ValueFromString("list element alfa")),
-                    new Expression.LiteralExpression(PineValueAsString.ValueFromString("list element beta")),
-                    new Expression.LiteralExpression(PineValueAsString.ValueFromString("list element gamma")),
+                    new Expression.Literal(PineValueAsString.ValueFromString("list element alfa")),
+                    new Expression.Literal(PineValueAsString.ValueFromString("list element beta")),
+                    new Expression.Literal(PineValueAsString.ValueFromString("list element gamma")),
                 ]),
 
-            new Expression.ConditionalExpression(
-                condition: new Expression.LiteralExpression(PineValueAsString.ValueFromString("condition")),
-                falseBranch: new Expression.LiteralExpression(PineValueAsString.ValueFromString("if false")),
-                trueBranch: new Expression.LiteralExpression(PineValueAsString.ValueFromString("if true"))),
+            new Expression.Conditional(
+                condition: new Expression.Literal(PineValueAsString.ValueFromString("condition")),
+                falseBranch: new Expression.Literal(PineValueAsString.ValueFromString("if false")),
+                trueBranch: new Expression.Literal(PineValueAsString.ValueFromString("if true"))),
 
-            new Expression.ParseAndEvalExpression(
-                expression: new Expression.LiteralExpression(PineValueAsString.ValueFromString("expression")),
-                environment: new Expression.LiteralExpression(PineValueAsString.ValueFromString("environment"))),
+            new Expression.ParseAndEval(
+                expression: new Expression.Literal(PineValueAsString.ValueFromString("expression")),
+                environment: new Expression.Literal(PineValueAsString.ValueFromString("environment"))),
 
-            new Expression.KernelApplicationExpression(
+            new Expression.KernelApplication(
                 functionName: nameof(KernelFunction.length),
-                argument: new Expression.LiteralExpression(PineValueAsString.ValueFromString("kernel app arg"))),
+                argument: new Expression.Literal(PineValueAsString.ValueFromString("kernel app arg"))),
 
-            new Expression.StringTagExpression(
+            new Expression.StringTag(
                 tag: "tag text",
-                tagged: new Expression.LiteralExpression(PineValueAsString.ValueFromString("tagged expr")))
+                tagged: new Expression.Literal(PineValueAsString.ValueFromString("tagged expr")))
         };
 
         foreach (var testCase in testCases)

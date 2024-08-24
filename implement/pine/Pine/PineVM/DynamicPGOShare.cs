@@ -363,7 +363,7 @@ public class DynamicPGOShare : IDisposable
     public static bool ShouldIncludeExpressionInCompilation(Expression expression) =>
         expression switch
         {
-            Expression.LiteralExpression =>
+            Expression.Literal =>
             false,
 
             Expression.DelegatingExpression =>

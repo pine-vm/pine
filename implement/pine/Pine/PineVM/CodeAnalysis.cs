@@ -452,16 +452,16 @@ public abstract record ExpressionEnvClass
 
         var currentIndex = path[0];
 
-        if (envExpr is not Expression.ListExpression listExpr)
+        if (envExpr is not Expression.List listExpr)
             return null;
 
         if (currentIndex < 0)
             return null;
 
-        if (currentIndex >= listExpr.List.Count)
+        if (currentIndex >= listExpr.items.Count)
             return null;
 
-        return TryMapPathToParentEnvironment(listExpr.List[currentIndex], [.. path.Skip(1)]);
+        return TryMapPathToParentEnvironment(listExpr.items[currentIndex], [.. path.Skip(1)]);
     }
 }
 
@@ -491,7 +491,7 @@ public class CodeAnalysis
         PineValue Environment);
 
     public record ParseSubExpression(
-        Expression.ParseAndEvalExpression ParseAndEvalExpr,
+        Expression.ParseAndEval ParseAndEvalExpr,
         IReadOnlyList<int>? ExpressionPath,
         PineValue? ExpressionValue,
         Expression? ParsedExpr);
@@ -510,7 +510,7 @@ public class CodeAnalysis
 
         var parseSubexpressions =
             Expression.EnumerateSelfAndDescendants(expression)
-            .OfType<Expression.ParseAndEvalExpression>()
+            .OfType<Expression.ParseAndEval>()
             .Select(parseAndEvalExpr =>
             {
                 var expressionMapped = TryParseExpressionAsIndexPathFromEnv(parseAndEvalExpr.expression);
@@ -874,11 +874,11 @@ public class CodeAnalysis
             return [new KeyValuePair<IReadOnlyList<int>, ExprMappedToParentEnv>([], path)];
         }
 
-        if (envExpression is Expression.ListExpression envListExpr)
+        if (envExpression is Expression.List envListExpr)
         {
             return
                 [
-                ..envListExpr.List
+                ..envListExpr.items
                 .SelectMany((childExpr, childIndex) =>
                 EnvItemsMappingsFromChildToParent(childExpr)
                 .Select(childMapping => new KeyValuePair<IReadOnlyList<int>, ExprMappedToParentEnv>(
@@ -944,7 +944,7 @@ public class CodeAnalysis
         return
             TryParseExpressionAsIndexPath(
                 pathExpression: expression,
-                rootExpression: Expression.Environment);
+                rootExpression: Expression.EnvironmentInstance);
     }
 
     public static ExprMappedToParentEnv? TryParseExpressionAsIndexPath(
@@ -954,31 +954,31 @@ public class CodeAnalysis
         if (pathExpression == rootExpression)
             return new ExprMappedToParentEnv.PathInParentEnv([]);
 
-        if (pathExpression is Expression.LiteralExpression literal)
+        if (pathExpression is Expression.Literal literal)
             return new ExprMappedToParentEnv.LiteralInParentEnv(literal.Value);
 
-        if (pathExpression is Expression.StringTagExpression stringTagExpr)
+        if (pathExpression is Expression.StringTag stringTagExpr)
             return TryParseExpressionAsIndexPath(stringTagExpr.tagged, rootExpression);
 
-        if (pathExpression is not Expression.KernelApplicationExpression kernelApplication)
+        if (pathExpression is not Expression.KernelApplication kernelApplication)
             return null;
 
         if (kernelApplication.functionName is not nameof(KernelFunction.list_head))
             return null;
 
-        if (kernelApplication.argument is Expression.KernelApplicationExpression argumentKernelApplication &&
+        if (kernelApplication.argument is Expression.KernelApplication argumentKernelApplication &&
             argumentKernelApplication.functionName is nameof(KernelFunction.skip))
         {
-            if (argumentKernelApplication.argument is not Expression.ListExpression skipArgumentList)
+            if (argumentKernelApplication.argument is not Expression.List skipArgumentList)
                 return null;
 
-            if (skipArgumentList.List.Count is not 2)
+            if (skipArgumentList.items.Count is not 2)
                 return null;
 
-            if (skipArgumentList.List[0] is not Expression.LiteralExpression skipCountLiteral)
+            if (skipArgumentList.items[0] is not Expression.Literal skipCountLiteral)
                 return null;
 
-            if (TryParseExpressionAsIndexPath(skipArgumentList.List[1], rootExpression) is not ExprMappedToParentEnv.PathInParentEnv pathPrefix)
+            if (TryParseExpressionAsIndexPath(skipArgumentList.items[1], rootExpression) is not ExprMappedToParentEnv.PathInParentEnv pathPrefix)
                 return null;
 
             return

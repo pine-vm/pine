@@ -1,30 +1,30 @@
 {
-  "KernelApplicationExpression": [
+  "KernelApplication": [
     "equal",
     {
-      "ListExpression": [
+      "List": [
         [
           {
-            "KernelApplicationExpression": [
+            "KernelApplication": [
               "take",
               {
-                "ListExpression": [
+                "List": [
                   [
-                    { "LiteralExpression": [ 0 ] },
+                    { "Literal": [ 0 ] },
                     {
-                      "KernelApplicationExpression": [
+                      "KernelApplication": [
                         "list_head",
                         {
-                          "KernelApplicationExpression": [
+                          "KernelApplication": [
                             "list_head",
                             {
-                              "KernelApplicationExpression": [
+                              "KernelApplication": [
                                 "skip",
                                 {
-                                  "ListExpression": [
+                                  "List": [
                                     [
-                                      { "LiteralExpression": [ 1 ] },
-                                      { "EnvironmentExpression": [] }
+                                      { "Literal": [ 1 ] },
+                                      { "Environment": [] }
                                     ]
                                   ]
                                 }
@@ -39,7 +39,7 @@
               }
             ]
           },
-          { "LiteralExpression": [ [] ] }
+          { "Literal": [ [] ] }
         ]
       ]
     }

@@ -153,7 +153,7 @@ public static class ElmInteractiveEnvironment
             If the declaration has zero parameters, it could be encoded as plain PineValue without wrapping in a 'Function' record.
             */
             new FunctionRecord(
-                innerFunction: new Expression.LiteralExpression(pineValue),
+                innerFunction: new Expression.Literal(pineValue),
                 functionParameterCount: 0,
                 envFunctions: [],
                 argumentsAlreadyCollected: [])

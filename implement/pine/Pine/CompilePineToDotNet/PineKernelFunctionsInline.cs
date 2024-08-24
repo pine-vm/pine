@@ -16,8 +16,8 @@ public class PineKernelFunctionsInline
         return
             argumentExpression switch
             {
-                Expression.ListExpression argumentList =>
-                argumentList.List switch
+                Expression.List argumentList =>
+                argumentList.items switch
                 {
                 [var firstArgument, var secondArgument] =>
                 TryInlineKernelFunction_Equal_two_args(firstArgument, secondArgument, compilationEnv),
@@ -38,7 +38,7 @@ public class PineKernelFunctionsInline
     {
         if (IsKernelAppTakingZeroFrom(firstArgument) is Expression firstArgumentTakenZero)
         {
-            if (secondArgument == new Expression.LiteralExpression(PineValue.EmptyBlob))
+            if (secondArgument == new Expression.Literal(PineValue.EmptyBlob))
             {
                 return
                     CompileToCSharp.CompileToCSharpExpression(
@@ -54,7 +54,7 @@ public class PineKernelFunctionsInline
                             PineCSharpSyntaxFactory.BuildCSharpExpressionToCheckIsBlob(firstArgumentTakenZeroCompiledOk))));
             }
 
-            if (secondArgument == new Expression.LiteralExpression(PineValue.EmptyList))
+            if (secondArgument == new Expression.Literal(PineValue.EmptyList))
             {
                 return
                     CompileToCSharp.CompileToCSharpExpression(
@@ -100,22 +100,22 @@ public class PineKernelFunctionsInline
 
     public static Expression? IsKernelAppTakingZeroFrom(Expression expression)
     {
-        if (expression is not Expression.KernelApplicationExpression kernelApp)
+        if (expression is not Expression.KernelApplication kernelApp)
             return null;
 
         if (kernelApp.functionName is not nameof(KernelFunction.take))
             return null;
 
-        if (kernelApp.argument is not Expression.ListExpression takeArgumentList)
+        if (kernelApp.argument is not Expression.List takeArgumentList)
             return null;
 
-        if (takeArgumentList.List.Count is not 2)
+        if (takeArgumentList.items.Count is not 2)
             return null;
 
-        if (takeArgumentList.List[0] != new Expression.LiteralExpression(PineValueAsInteger.ValueFromSignedInteger(0)))
+        if (takeArgumentList.items[0] != new Expression.Literal(PineValueAsInteger.ValueFromSignedInteger(0)))
             return null;
 
-        return takeArgumentList.List[1];
+        return takeArgumentList.items[1];
     }
 
     public static Result<string, CompiledExpression>? TryInlineKernelFunction_Length(

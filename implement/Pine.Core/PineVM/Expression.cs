@@ -18,31 +18,26 @@ public delegate ParseExprDelegate OverrideParseExprDelegate(ParseExprDelegate pa
 [JsonConverter(typeof(JsonConverterForChoiceType))]
 public abstract record Expression
 {
-    public static readonly Expression Environment = new EnvironmentExpression();
+    public static readonly Expression EnvironmentInstance = new Environment();
 
-    public static KernelApplicationExpression KernelApplication(
-        Expression argument,
-        string functionName) =>
-        new(argument: argument, functionName: functionName);
-
-    public record LiteralExpression(
+    public record Literal(
         PineValue Value)
         : Expression;
 
-    public record ListExpression
+    public record List
         : Expression
     {
         private readonly int slimHashCode;
 
-        public IReadOnlyList<Expression> List { get; }
+        public IReadOnlyList<Expression> items { get; }
 
-        public ListExpression(IReadOnlyList<Expression> List)
+        public List(IReadOnlyList<Expression> items)
         {
-            this.List = List;
+            this.items = items;
 
             var hashCode = new HashCode();
 
-            foreach (var item in List)
+            foreach (var item in items)
             {
                 hashCode.Add(item.GetHashCode());
             }
@@ -50,7 +45,7 @@ public abstract record Expression
             slimHashCode = hashCode.ToHashCode();
         }
 
-        public virtual bool Equals(ListExpression? other)
+        public virtual bool Equals(List? other)
         {
             if (other is not { } notNull)
                 return false;
@@ -58,25 +53,25 @@ public abstract record Expression
             return
                 ReferenceEquals(this, notNull) ||
                 slimHashCode == notNull.slimHashCode &&
-                List.Count == notNull.List.Count &&
-                List.SequenceEqual(notNull.List);
+                items.Count == notNull.items.Count &&
+                items.SequenceEqual(notNull.items);
         }
 
         public override int GetHashCode() =>
             slimHashCode;
     }
 
-    public record ParseAndEvalExpression(
+    public record ParseAndEval(
         Expression expression,
         Expression environment)
         : Expression;
 
-    public record KernelApplicationExpression(
+    public record KernelApplication(
         string functionName,
         Expression argument)
         : Expression
     {
-        public virtual bool Equals(KernelApplicationExpression? other)
+        public virtual bool Equals(KernelApplication? other)
         {
             if (other is not { } notNull)
                 return false;
@@ -97,7 +92,7 @@ public abstract record Expression
         }
     }
 
-    public record ConditionalExpression
+    public record Conditional
         : Expression
     {
         private readonly int slimHashCode;
@@ -108,7 +103,7 @@ public abstract record Expression
 
         public Expression trueBranch { get; }
 
-        public ConditionalExpression(
+        public Conditional(
             Expression condition,
             Expression falseBranch,
             Expression trueBranch)
@@ -120,7 +115,7 @@ public abstract record Expression
             slimHashCode = HashCode.Combine(condition, falseBranch, trueBranch);
         }
 
-        public virtual bool Equals(ConditionalExpression? other)
+        public virtual bool Equals(Conditional? other)
         {
             if (other is not { } notNull)
                 return false;
@@ -137,9 +132,9 @@ public abstract record Expression
             slimHashCode;
     }
 
-    public record EnvironmentExpression : Expression;
+    public record Environment : Expression;
 
-    public record StringTagExpression(
+    public record StringTag(
         string tag,
         Expression tagged)
         : Expression;
@@ -154,12 +149,12 @@ public abstract record Expression
     /// Fusion of the two applications of the kernel functions 'skip' and 'list_head',
     /// as an implementation detail of the interpreter.
     /// </summary>
-    public record KernelApplications_Skip_ListHead_Path_Expression(
+    public record KernelApplications_Skip_ListHead_Path(
         ReadOnlyMemory<int> SkipCounts,
         Expression Argument)
         : Expression
     {
-        public virtual bool Equals(KernelApplications_Skip_ListHead_Path_Expression? other)
+        public virtual bool Equals(KernelApplications_Skip_ListHead_Path? other)
         {
             if (other is null)
                 return false;
@@ -192,30 +187,30 @@ public abstract record Expression
         : Expression;
 
     /// <summary>
-    /// Returns true if the expression is independent of the environment, that is none of the expressions in the tree contain an <see cref="EnvironmentExpression"/>.
+    /// Returns true if the expression is independent of the environment, that is none of the expressions in the tree contain an <see cref="Environment"/>.
     /// </summary>
     public static bool IsIndependent(Expression expression) =>
         expression switch
         {
-            EnvironmentExpression =>
+            Environment =>
             false,
 
-            LiteralExpression =>
+            Literal =>
             true,
 
-            ListExpression list =>
-            list.List.All(IsIndependent),
+            List list =>
+            list.items.All(IsIndependent),
 
-            ParseAndEvalExpression decodeAndEvaluate =>
+            ParseAndEval decodeAndEvaluate =>
             IsIndependent(decodeAndEvaluate.expression) && IsIndependent(decodeAndEvaluate.environment),
 
-            KernelApplicationExpression kernelApplication =>
+            KernelApplication kernelApplication =>
             IsIndependent(kernelApplication.argument),
 
-            ConditionalExpression conditional =>
+            Conditional conditional =>
             IsIndependent(conditional.condition) && IsIndependent(conditional.trueBranch) && IsIndependent(conditional.falseBranch),
 
-            StringTagExpression stringTag =>
+            StringTag stringTag =>
             IsIndependent(stringTag.tagged),
 
             DelegatingExpression =>
@@ -224,7 +219,7 @@ public abstract record Expression
             StackReferenceExpression =>
             false,
 
-            KernelApplications_Skip_ListHead_Path_Expression fused =>
+            KernelApplications_Skip_ListHead_Path fused =>
             IsIndependent(fused.Argument),
 
             KernelApplication_Equal_Two fused =>
@@ -253,32 +248,32 @@ public abstract record Expression
 
             switch (expression)
             {
-                case EnvironmentExpression:
-                case LiteralExpression:
+                case Environment:
+                case Literal:
                 case DelegatingExpression:
                     break;
 
-                case ListExpression list:
-                    foreach (var item in list.List)
+                case List list:
+                    foreach (var item in list.items)
                     {
                         stack.Push(item);
                     }
                     break;
 
-                case ParseAndEvalExpression parseAndEvaluate:
+                case ParseAndEval parseAndEvaluate:
 
                     stack.Push(parseAndEvaluate.expression);
                     stack.Push(parseAndEvaluate.environment);
 
                     break;
 
-                case KernelApplicationExpression kernelApplication:
+                case KernelApplication kernelApplication:
 
                     stack.Push(kernelApplication.argument);
 
                     break;
 
-                case ConditionalExpression conditional:
+                case Conditional conditional:
 
                     stack.Push(conditional.condition);
                     stack.Push(conditional.falseBranch);
@@ -286,7 +281,7 @@ public abstract record Expression
 
                     break;
 
-                case StringTagExpression stringTag:
+                case StringTag stringTag:
 
                     stack.Push(stringTag.tagged);
 
@@ -302,7 +297,7 @@ public abstract record Expression
 
                     break;
 
-                case KernelApplications_Skip_ListHead_Path_Expression skipListHead:
+                case KernelApplications_Skip_ListHead_Path skipListHead:
 
                     stack.Push(skipListHead.Argument);
 

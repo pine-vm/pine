@@ -8,7 +8,7 @@ public abstract record ImperativeNode
         : ImperativeNode;
 
     public record ConditionalNode(
-        Expression.ConditionalExpression Origin,
+        Expression.Conditional Origin,
         ImperativeNode Condition,
         ImperativeNode FalseBranch,
         ImperativeNode TrueBranch,

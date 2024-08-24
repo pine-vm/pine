@@ -1,23 +1,23 @@
 {
-  "ConditionalExpression": [
+  "Conditional": [
     {
-      "KernelApplicationExpression": [
+      "KernelApplication": [
         "equal",
         {
-          "ListExpression": [
+          "List": [
             [
-              { "ListExpression": [ [] ] },
+              { "List": [ [] ] },
               {
-                "KernelApplicationExpression": [
+                "KernelApplication": [
                   "list_head",
                   {
-                    "KernelApplicationExpression": [
+                    "KernelApplication": [
                       "skip",
                       {
-                        "ListExpression": [
+                        "List": [
                           [
-                            { "LiteralExpression": [ 2 ] },
-                            { "EnvironmentExpression": [] }
+                            { "Literal": [ 2 ] },
+                            { "Environment": [] }
                           ]
                         ]
                       }
@@ -31,44 +31,44 @@
       ]
     },
     {
-      "ParseAndEvalExpression": [
+      "ParseAndEval": [
         {
-          "KernelApplicationExpression": [
+          "KernelApplication": [
             "list_head",
-            { "EnvironmentExpression": [] }
+            { "Environment": [] }
           ]
         },
         {
-          "ListExpression": [
+          "List": [
             [
               {
-                "KernelApplicationExpression": [
+                "KernelApplication": [
                   "list_head",
-                  { "EnvironmentExpression": [] }
+                  { "Environment": [] }
                 ]
               },
               {
-                "ConditionalExpression": [
+                "Conditional": [
                   {
-                    "KernelApplicationExpression": [
+                    "KernelApplication": [
                       "equal",
                       {
-                        "ListExpression": [
+                        "List": [
                           [
                             {
-                              "KernelApplicationExpression": [
+                              "KernelApplication": [
                                 "list_head",
                                 {
-                                  "KernelApplicationExpression": [
+                                  "KernelApplication": [
                                     "list_head",
                                     {
-                                      "KernelApplicationExpression": [
+                                      "KernelApplication": [
                                         "skip",
                                         {
-                                          "ListExpression": [
+                                          "List": [
                                             [
-                                              { "LiteralExpression": [ 1 ] },
-                                              { "EnvironmentExpression": [] }
+                                              { "Literal": [ 1 ] },
+                                              { "Environment": [] }
                                             ]
                                           ]
                                         }
@@ -78,25 +78,25 @@
                                 }
                               ]
                             },
-                            { "LiteralExpression": [ { "ListAsString": "Function" } ] }
+                            { "Literal": [ { "ListAsString": "Function" } ] }
                           ]
                         ]
                       }
                     ]
                   },
                   {
-                    "ParseAndEvalExpression": [
+                    "ParseAndEval": [
                       {
-                        "KernelApplicationExpression": [
+                        "KernelApplication": [
                           "list_head",
                           {
-                            "KernelApplicationExpression": [
+                            "KernelApplication": [
                               "skip",
                               {
-                                "ListExpression": [
+                                "List": [
                                   [
-                                    { "LiteralExpression": [ 1 ] },
-                                    { "EnvironmentExpression": [] }
+                                    { "Literal": [ 1 ] },
+                                    { "Environment": [] }
                                   ]
                                 ]
                               }
@@ -105,19 +105,19 @@
                         ]
                       },
                       {
-                        "KernelApplicationExpression": [
+                        "KernelApplication": [
                           "list_head",
                           {
-                            "KernelApplicationExpression": [
+                            "KernelApplication": [
                               "list_head",
                               {
-                                "KernelApplicationExpression": [
+                                "KernelApplication": [
                                   "skip",
                                   {
-                                    "ListExpression": [
+                                    "List": [
                                       [
-                                        { "LiteralExpression": [ 2 ] },
-                                        { "EnvironmentExpression": [] }
+                                        { "Literal": [ 2 ] },
+                                        { "Environment": [] }
                                       ]
                                     ]
                                   }
@@ -130,53 +130,53 @@
                     ]
                   },
                   {
-                    "ConditionalExpression": [
+                    "Conditional": [
                       {
-                        "KernelApplicationExpression": [
+                        "KernelApplication": [
                           "equal",
                           {
-                            "ListExpression": [
+                            "List": [
                               [
                                 {
-                                  "KernelApplicationExpression": [
+                                  "KernelApplication": [
                                     "length",
                                     {
-                                      "KernelApplicationExpression": [
+                                      "KernelApplication": [
                                         "concat",
                                         {
-                                          "ListExpression": [
+                                          "List": [
                                             [
                                               {
-                                                "KernelApplicationExpression": [
+                                                "KernelApplication": [
                                                   "list_head",
                                                   {
-                                                    "KernelApplicationExpression": [
+                                                    "KernelApplication": [
                                                       "skip",
                                                       {
-                                                        "ListExpression": [
+                                                        "List": [
                                                           [
-                                                            { "LiteralExpression": [ 3 ] },
+                                                            { "Literal": [ 3 ] },
                                                             {
-                                                              "KernelApplicationExpression": [
+                                                              "KernelApplication": [
                                                                 "list_head",
                                                                 {
-                                                                  "KernelApplicationExpression": [
+                                                                  "KernelApplication": [
                                                                     "skip",
                                                                     {
-                                                                      "ListExpression": [
+                                                                      "List": [
                                                                         [
-                                                                          { "LiteralExpression": [ 1 ] },
+                                                                          { "Literal": [ 1 ] },
                                                                           {
-                                                                            "KernelApplicationExpression": [
+                                                                            "KernelApplication": [
                                                                               "list_head",
                                                                               {
-                                                                                "KernelApplicationExpression": [
+                                                                                "KernelApplication": [
                                                                                   "skip",
                                                                                   {
-                                                                                    "ListExpression": [
+                                                                                    "List": [
                                                                                       [
-                                                                                        { "LiteralExpression": [ 1 ] },
-                                                                                        { "EnvironmentExpression": [] }
+                                                                                        { "Literal": [ 1 ] },
+                                                                                        { "Environment": [] }
                                                                                       ]
                                                                                     ]
                                                                                   }
@@ -199,22 +199,22 @@
                                                 ]
                                               },
                                               {
-                                                "ListExpression": [
+                                                "List": [
                                                   [
                                                     {
-                                                      "KernelApplicationExpression": [
+                                                      "KernelApplication": [
                                                         "list_head",
                                                         {
-                                                          "KernelApplicationExpression": [
+                                                          "KernelApplication": [
                                                             "list_head",
                                                             {
-                                                              "KernelApplicationExpression": [
+                                                              "KernelApplication": [
                                                                 "skip",
                                                                 {
-                                                                  "ListExpression": [
+                                                                  "List": [
                                                                     [
-                                                                      { "LiteralExpression": [ 2 ] },
-                                                                      { "EnvironmentExpression": [] }
+                                                                      { "Literal": [ 2 ] },
+                                                                      { "Environment": [] }
                                                                     ]
                                                                   ]
                                                                 }
@@ -235,36 +235,36 @@
                                   ]
                                 },
                                 {
-                                  "KernelApplicationExpression": [
+                                  "KernelApplication": [
                                     "list_head",
                                     {
-                                      "KernelApplicationExpression": [
+                                      "KernelApplication": [
                                         "skip",
                                         {
-                                          "ListExpression": [
+                                          "List": [
                                             [
-                                              { "LiteralExpression": [ 1 ] },
+                                              { "Literal": [ 1 ] },
                                               {
-                                                "KernelApplicationExpression": [
+                                                "KernelApplication": [
                                                   "list_head",
                                                   {
-                                                    "KernelApplicationExpression": [
+                                                    "KernelApplication": [
                                                       "skip",
                                                       {
-                                                        "ListExpression": [
+                                                        "List": [
                                                           [
-                                                            { "LiteralExpression": [ 1 ] },
+                                                            { "Literal": [ 1 ] },
                                                             {
-                                                              "KernelApplicationExpression": [
+                                                              "KernelApplication": [
                                                                 "list_head",
                                                                 {
-                                                                  "KernelApplicationExpression": [
+                                                                  "KernelApplication": [
                                                                     "skip",
                                                                     {
-                                                                      "ListExpression": [
+                                                                      "List": [
                                                                         [
-                                                                          { "LiteralExpression": [ 1 ] },
-                                                                          { "EnvironmentExpression": [] }
+                                                                          { "Literal": [ 1 ] },
+                                                                          { "Environment": [] }
                                                                         ]
                                                                       ]
                                                                     }
@@ -292,36 +292,36 @@
                         ]
                       },
                       {
-                        "ListExpression": [
+                        "List": [
                           [
-                            { "LiteralExpression": [ { "ListAsString": "Function" } ] },
+                            { "Literal": [ { "ListAsString": "Function" } ] },
                             {
-                              "ListExpression": [
+                              "List": [
                                 [
                                   {
-                                    "KernelApplicationExpression": [
+                                    "KernelApplication": [
                                       "list_head",
                                       {
-                                        "KernelApplicationExpression": [
+                                        "KernelApplication": [
                                           "list_head",
                                           {
-                                            "KernelApplicationExpression": [
+                                            "KernelApplication": [
                                               "skip",
                                               {
-                                                "ListExpression": [
+                                                "List": [
                                                   [
-                                                    { "LiteralExpression": [ 1 ] },
+                                                    { "Literal": [ 1 ] },
                                                     {
-                                                      "KernelApplicationExpression": [
+                                                      "KernelApplication": [
                                                         "list_head",
                                                         {
-                                                          "KernelApplicationExpression": [
+                                                          "KernelApplication": [
                                                             "skip",
                                                             {
-                                                              "ListExpression": [
+                                                              "List": [
                                                                 [
-                                                                  { "LiteralExpression": [ 1 ] },
-                                                                  { "EnvironmentExpression": [] }
+                                                                  { "Literal": [ 1 ] },
+                                                                  { "Environment": [] }
                                                                 ]
                                                               ]
                                                             }
@@ -339,36 +339,36 @@
                                     ]
                                   },
                                   {
-                                    "KernelApplicationExpression": [
+                                    "KernelApplication": [
                                       "list_head",
                                       {
-                                        "KernelApplicationExpression": [
+                                        "KernelApplication": [
                                           "skip",
                                           {
-                                            "ListExpression": [
+                                            "List": [
                                               [
-                                                { "LiteralExpression": [ 1 ] },
+                                                { "Literal": [ 1 ] },
                                                 {
-                                                  "KernelApplicationExpression": [
+                                                  "KernelApplication": [
                                                     "list_head",
                                                     {
-                                                      "KernelApplicationExpression": [
+                                                      "KernelApplication": [
                                                         "skip",
                                                         {
-                                                          "ListExpression": [
+                                                          "List": [
                                                             [
-                                                              { "LiteralExpression": [ 1 ] },
+                                                              { "Literal": [ 1 ] },
                                                               {
-                                                                "KernelApplicationExpression": [
+                                                                "KernelApplication": [
                                                                   "list_head",
                                                                   {
-                                                                    "KernelApplicationExpression": [
+                                                                    "KernelApplication": [
                                                                       "skip",
                                                                       {
-                                                                        "ListExpression": [
+                                                                        "List": [
                                                                           [
-                                                                            { "LiteralExpression": [ 1 ] },
-                                                                            { "EnvironmentExpression": [] }
+                                                                            { "Literal": [ 1 ] },
+                                                                            { "Environment": [] }
                                                                           ]
                                                                         ]
                                                                       }
@@ -391,36 +391,36 @@
                                     ]
                                   },
                                   {
-                                    "KernelApplicationExpression": [
+                                    "KernelApplication": [
                                       "list_head",
                                       {
-                                        "KernelApplicationExpression": [
+                                        "KernelApplication": [
                                           "skip",
                                           {
-                                            "ListExpression": [
+                                            "List": [
                                               [
-                                                { "LiteralExpression": [ 2 ] },
+                                                { "Literal": [ 2 ] },
                                                 {
-                                                  "KernelApplicationExpression": [
+                                                  "KernelApplication": [
                                                     "list_head",
                                                     {
-                                                      "KernelApplicationExpression": [
+                                                      "KernelApplication": [
                                                         "skip",
                                                         {
-                                                          "ListExpression": [
+                                                          "List": [
                                                             [
-                                                              { "LiteralExpression": [ 1 ] },
+                                                              { "Literal": [ 1 ] },
                                                               {
-                                                                "KernelApplicationExpression": [
+                                                                "KernelApplication": [
                                                                   "list_head",
                                                                   {
-                                                                    "KernelApplicationExpression": [
+                                                                    "KernelApplication": [
                                                                       "skip",
                                                                       {
-                                                                        "ListExpression": [
+                                                                        "List": [
                                                                           [
-                                                                            { "LiteralExpression": [ 1 ] },
-                                                                            { "EnvironmentExpression": [] }
+                                                                            { "Literal": [ 1 ] },
+                                                                            { "Environment": [] }
                                                                           ]
                                                                         ]
                                                                       }
@@ -443,42 +443,42 @@
                                     ]
                                   },
                                   {
-                                    "KernelApplicationExpression": [
+                                    "KernelApplication": [
                                       "concat",
                                       {
-                                        "ListExpression": [
+                                        "List": [
                                           [
                                             {
-                                              "KernelApplicationExpression": [
+                                              "KernelApplication": [
                                                 "list_head",
                                                 {
-                                                  "KernelApplicationExpression": [
+                                                  "KernelApplication": [
                                                     "skip",
                                                     {
-                                                      "ListExpression": [
+                                                      "List": [
                                                         [
-                                                          { "LiteralExpression": [ 3 ] },
+                                                          { "Literal": [ 3 ] },
                                                           {
-                                                            "KernelApplicationExpression": [
+                                                            "KernelApplication": [
                                                               "list_head",
                                                               {
-                                                                "KernelApplicationExpression": [
+                                                                "KernelApplication": [
                                                                   "skip",
                                                                   {
-                                                                    "ListExpression": [
+                                                                    "List": [
                                                                       [
-                                                                        { "LiteralExpression": [ 1 ] },
+                                                                        { "Literal": [ 1 ] },
                                                                         {
-                                                                          "KernelApplicationExpression": [
+                                                                          "KernelApplication": [
                                                                             "list_head",
                                                                             {
-                                                                              "KernelApplicationExpression": [
+                                                                              "KernelApplication": [
                                                                                 "skip",
                                                                                 {
-                                                                                  "ListExpression": [
+                                                                                  "List": [
                                                                                     [
-                                                                                      { "LiteralExpression": [ 1 ] },
-                                                                                      { "EnvironmentExpression": [] }
+                                                                                      { "Literal": [ 1 ] },
+                                                                                      { "Environment": [] }
                                                                                     ]
                                                                                   ]
                                                                                 }
@@ -501,22 +501,22 @@
                                               ]
                                             },
                                             {
-                                              "ListExpression": [
+                                              "List": [
                                                 [
                                                   {
-                                                    "KernelApplicationExpression": [
+                                                    "KernelApplication": [
                                                       "list_head",
                                                       {
-                                                        "KernelApplicationExpression": [
+                                                        "KernelApplication": [
                                                           "list_head",
                                                           {
-                                                            "KernelApplicationExpression": [
+                                                            "KernelApplication": [
                                                               "skip",
                                                               {
-                                                                "ListExpression": [
+                                                                "List": [
                                                                   [
-                                                                    { "LiteralExpression": [ 2 ] },
-                                                                    { "EnvironmentExpression": [] }
+                                                                    { "Literal": [ 2 ] },
+                                                                    { "Environment": [] }
                                                                   ]
                                                                 ]
                                                               }
@@ -541,31 +541,31 @@
                         ]
                       },
                       {
-                        "ParseAndEvalExpression": [
+                        "ParseAndEval": [
                           {
-                            "KernelApplicationExpression": [
+                            "KernelApplication": [
                               "list_head",
                               {
-                                "KernelApplicationExpression": [
+                                "KernelApplication": [
                                   "list_head",
                                   {
-                                    "KernelApplicationExpression": [
+                                    "KernelApplication": [
                                       "skip",
                                       {
-                                        "ListExpression": [
+                                        "List": [
                                           [
-                                            { "LiteralExpression": [ 1 ] },
+                                            { "Literal": [ 1 ] },
                                             {
-                                              "KernelApplicationExpression": [
+                                              "KernelApplication": [
                                                 "list_head",
                                                 {
-                                                  "KernelApplicationExpression": [
+                                                  "KernelApplication": [
                                                     "skip",
                                                     {
-                                                      "ListExpression": [
+                                                      "List": [
                                                         [
-                                                          { "LiteralExpression": [ 1 ] },
-                                                          { "EnvironmentExpression": [] }
+                                                          { "Literal": [ 1 ] },
+                                                          { "Environment": [] }
                                                         ]
                                                       ]
                                                     }
@@ -583,39 +583,39 @@
                             ]
                           },
                           {
-                            "ListExpression": [
+                            "List": [
                               [
                                 {
-                                  "KernelApplicationExpression": [
+                                  "KernelApplication": [
                                     "list_head",
                                     {
-                                      "KernelApplicationExpression": [
+                                      "KernelApplication": [
                                         "skip",
                                         {
-                                          "ListExpression": [
+                                          "List": [
                                             [
-                                              { "LiteralExpression": [ 2 ] },
+                                              { "Literal": [ 2 ] },
                                               {
-                                                "KernelApplicationExpression": [
+                                                "KernelApplication": [
                                                   "list_head",
                                                   {
-                                                    "KernelApplicationExpression": [
+                                                    "KernelApplication": [
                                                       "skip",
                                                       {
-                                                        "ListExpression": [
+                                                        "List": [
                                                           [
-                                                            { "LiteralExpression": [ 1 ] },
+                                                            { "Literal": [ 1 ] },
                                                             {
-                                                              "KernelApplicationExpression": [
+                                                              "KernelApplication": [
                                                                 "list_head",
                                                                 {
-                                                                  "KernelApplicationExpression": [
+                                                                  "KernelApplication": [
                                                                     "skip",
                                                                     {
-                                                                      "ListExpression": [
+                                                                      "List": [
                                                                         [
-                                                                          { "LiteralExpression": [ 1 ] },
-                                                                          { "EnvironmentExpression": [] }
+                                                                          { "Literal": [ 1 ] },
+                                                                          { "Environment": [] }
                                                                         ]
                                                                       ]
                                                                     }
@@ -638,42 +638,42 @@
                                   ]
                                 },
                                 {
-                                  "KernelApplicationExpression": [
+                                  "KernelApplication": [
                                     "concat",
                                     {
-                                      "ListExpression": [
+                                      "List": [
                                         [
                                           {
-                                            "KernelApplicationExpression": [
+                                            "KernelApplication": [
                                               "list_head",
                                               {
-                                                "KernelApplicationExpression": [
+                                                "KernelApplication": [
                                                   "skip",
                                                   {
-                                                    "ListExpression": [
+                                                    "List": [
                                                       [
-                                                        { "LiteralExpression": [ 3 ] },
+                                                        { "Literal": [ 3 ] },
                                                         {
-                                                          "KernelApplicationExpression": [
+                                                          "KernelApplication": [
                                                             "list_head",
                                                             {
-                                                              "KernelApplicationExpression": [
+                                                              "KernelApplication": [
                                                                 "skip",
                                                                 {
-                                                                  "ListExpression": [
+                                                                  "List": [
                                                                     [
-                                                                      { "LiteralExpression": [ 1 ] },
+                                                                      { "Literal": [ 1 ] },
                                                                       {
-                                                                        "KernelApplicationExpression": [
+                                                                        "KernelApplication": [
                                                                           "list_head",
                                                                           {
-                                                                            "KernelApplicationExpression": [
+                                                                            "KernelApplication": [
                                                                               "skip",
                                                                               {
-                                                                                "ListExpression": [
+                                                                                "List": [
                                                                                   [
-                                                                                    { "LiteralExpression": [ 1 ] },
-                                                                                    { "EnvironmentExpression": [] }
+                                                                                    { "Literal": [ 1 ] },
+                                                                                    { "Environment": [] }
                                                                                   ]
                                                                                 ]
                                                                               }
@@ -696,22 +696,22 @@
                                             ]
                                           },
                                           {
-                                            "ListExpression": [
+                                            "List": [
                                               [
                                                 {
-                                                  "KernelApplicationExpression": [
+                                                  "KernelApplication": [
                                                     "list_head",
                                                     {
-                                                      "KernelApplicationExpression": [
+                                                      "KernelApplication": [
                                                         "list_head",
                                                         {
-                                                          "KernelApplicationExpression": [
+                                                          "KernelApplication": [
                                                             "skip",
                                                             {
-                                                              "ListExpression": [
+                                                              "List": [
                                                                 [
-                                                                  { "LiteralExpression": [ 2 ] },
-                                                                  { "EnvironmentExpression": [] }
+                                                                  { "Literal": [ 2 ] },
+                                                                  { "Environment": [] }
                                                                 ]
                                                               ]
                                                             }
@@ -739,23 +739,23 @@
                 ]
               },
               {
-                "KernelApplicationExpression": [
+                "KernelApplication": [
                   "skip",
                   {
-                    "ListExpression": [
+                    "List": [
                       [
-                        { "LiteralExpression": [ 1 ] },
+                        { "Literal": [ 1 ] },
                         {
-                          "KernelApplicationExpression": [
+                          "KernelApplication": [
                             "list_head",
                             {
-                              "KernelApplicationExpression": [
+                              "KernelApplication": [
                                 "skip",
                                 {
-                                  "ListExpression": [
+                                  "List": [
                                     [
-                                      { "LiteralExpression": [ 2 ] },
-                                      { "EnvironmentExpression": [] }
+                                      { "Literal": [ 2 ] },
+                                      { "Environment": [] }
                                     ]
                                   ]
                                 }
@@ -774,16 +774,16 @@
       ]
     },
     {
-      "KernelApplicationExpression": [
+      "KernelApplication": [
         "list_head",
         {
-          "KernelApplicationExpression": [
+          "KernelApplication": [
             "skip",
             {
-              "ListExpression": [
+              "List": [
                 [
-                  { "LiteralExpression": [ 1 ] },
-                  { "EnvironmentExpression": [] }
+                  { "Literal": [ 1 ] },
+                  { "Environment": [] }
                 ]
               ]
             }

@@ -42,7 +42,7 @@ public static class PineCSharpSyntaxFactory
                     EnvConstraint: envConstraint),
                 invokedExpr: expr,
                 envConstraint: envConstraint,
-                parseAndEvalEnvExpr: new PineVM.Expression.EnvironmentExpression())
+                parseAndEvalEnvExpr: new PineVM.Expression.Environment())
             .Extract(err => throw new Exception(err));
 
         var branchInvocationBlock =
@@ -402,17 +402,17 @@ public static class PineCSharpSyntaxFactory
             ?
             compositionExpr
             :
-            new PineVM.Expression.KernelApplicationExpression(
+            new PineVM.Expression.KernelApplication(
                 functionName: "skip",
                 argument:
-                new PineVM.Expression.ListExpression(
+                new PineVM.Expression.List(
                     [
-                    new PineVM.Expression.LiteralExpression(PineValueAsInteger.ValueFromSignedInteger(currentOffset)),
+                    new PineVM.Expression.Literal(PineValueAsInteger.ValueFromSignedInteger(currentOffset)),
                         compositionExpr
                     ]));
 
         var currentExpr =
-            new PineVM.Expression.KernelApplicationExpression(
+            new PineVM.Expression.KernelApplication(
                 functionName: "list_head",
                 argument: skippedExpr);
 

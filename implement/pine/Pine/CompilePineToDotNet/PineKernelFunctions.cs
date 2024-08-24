@@ -48,15 +48,15 @@ public partial class CompileToCSharp
         return
             kernelApplicationArgumentExpression switch
             {
-                Expression.ListExpression listExpressionArgument =>
-                    continueWithList(listExpressionArgument.List),
+                Expression.List listExpressionArgument =>
+                    continueWithList(listExpressionArgument.items),
 
-                Expression.LiteralExpression literalExpressionArgument =>
+                Expression.Literal literalExpressionArgument =>
                     literalExpressionArgument.Value switch
                     {
                         PineValue.ListValue literalList =>
                             continueWithList(
-                                literalList.Elements.Select(elementValue => new Expression.LiteralExpression(elementValue))),
+                                literalList.Elements.Select(elementValue => new Expression.Literal(elementValue))),
 
                         _ => null
                     },
@@ -73,7 +73,7 @@ public partial class CompileToCSharp
 
         long? asLiteralInt64 = null;
 
-        if (argumentExpression is Expression.LiteralExpression literal)
+        if (argumentExpression is Expression.Literal literal)
         {
             if (PineValueAsInteger.SignedIntegerFromValueStrict(literal.Value) is Result<string, BigInteger>.Ok okInteger &&
                 PineValueAsInteger.ValueFromSignedInteger(okInteger.Value) == literal.Value)

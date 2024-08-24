@@ -1,25 +1,25 @@
 {
-  "ConditionalExpression": [
+  "Conditional": [
     {
-      "KernelApplicationExpression": [
+      "KernelApplication": [
         "equal",
         {
-          "ListExpression": [
+          "List": [
             [
               {
-                "KernelApplicationExpression": [
+                "KernelApplication": [
                   "list_head",
                   {
-                    "KernelApplicationExpression": [
+                    "KernelApplication": [
                       "list_head",
                       {
-                        "KernelApplicationExpression": [
+                        "KernelApplication": [
                           "skip",
                           {
-                            "ListExpression": [
+                            "List": [
                               [
-                                { "LiteralExpression": [ 1 ] },
-                                { "EnvironmentExpression": [] }
+                                { "Literal": [ 1 ] },
+                                { "Environment": [] }
                               ]
                             ]
                           }
@@ -29,30 +29,30 @@
                   }
                 ]
               },
-              { "LiteralExpression": [ [] ] }
+              { "Literal": [ [] ] }
             ]
           ]
         }
       ]
     },
     {
-      "ConditionalExpression": [
+      "Conditional": [
         {
-          "ParseAndEvalExpression": [
+          "ParseAndEval": [
             {
-              "KernelApplicationExpression": [
+              "KernelApplication": [
                 "list_head",
                 {
-                  "KernelApplicationExpression": [
+                  "KernelApplication": [
                     "skip",
                     {
-                      "ListExpression": [
+                      "List": [
                         [
-                          { "LiteralExpression": [ 4 ] },
+                          { "Literal": [ 4 ] },
                           {
-                            "KernelApplicationExpression": [
+                            "KernelApplication": [
                               "list_head",
-                              { "EnvironmentExpression": [] }
+                              { "Environment": [] }
                             ]
                           }
                         ]
@@ -63,34 +63,34 @@
               ]
             },
             {
-              "ListExpression": [
+              "List": [
                 [
                   {
-                    "KernelApplicationExpression": [
+                    "KernelApplication": [
                       "list_head",
-                      { "EnvironmentExpression": [] }
+                      { "Environment": [] }
                     ]
                   },
                   {
-                    "ListExpression": [
+                    "List": [
                       [
                         {
-                          "KernelApplicationExpression": [
+                          "KernelApplication": [
                             "list_head",
                             {
-                              "KernelApplicationExpression": [
+                              "KernelApplication": [
                                 "list_head",
                                 {
-                                  "KernelApplicationExpression": [
+                                  "KernelApplication": [
                                     "list_head",
                                     {
-                                      "KernelApplicationExpression": [
+                                      "KernelApplication": [
                                         "skip",
                                         {
-                                          "ListExpression": [
+                                          "List": [
                                             [
-                                              { "LiteralExpression": [ 1 ] },
-                                              { "EnvironmentExpression": [] }
+                                              { "Literal": [ 1 ] },
+                                              { "Environment": [] }
                                             ]
                                           ]
                                         }
@@ -103,29 +103,29 @@
                           ]
                         },
                         {
-                          "KernelApplicationExpression": [
+                          "KernelApplication": [
                             "list_head",
                             {
-                              "KernelApplicationExpression": [
+                              "KernelApplication": [
                                 "list_head",
                                 {
-                                  "KernelApplicationExpression": [
+                                  "KernelApplication": [
                                     "skip",
                                     {
-                                      "ListExpression": [
+                                      "List": [
                                         [
-                                          { "LiteralExpression": [ 1 ] },
+                                          { "Literal": [ 1 ] },
                                           {
-                                            "KernelApplicationExpression": [
+                                            "KernelApplication": [
                                               "list_head",
                                               {
-                                                "KernelApplicationExpression": [
+                                                "KernelApplication": [
                                                   "skip",
                                                   {
-                                                    "ListExpression": [
+                                                    "List": [
                                                       [
-                                                        { "LiteralExpression": [ 1 ] },
-                                                        { "EnvironmentExpression": [] }
+                                                        { "Literal": [ 1 ] },
+                                                        { "Environment": [] }
                                                       ]
                                                     ]
                                                   }
@@ -150,23 +150,23 @@
             }
           ]
         },
-        { "LiteralExpression": [ { "AsBase64": "Ag==" } ] },
+        { "Literal": [ { "AsBase64": "Ag==" } ] },
         {
-          "ParseAndEvalExpression": [
+          "ParseAndEval": [
             {
-              "KernelApplicationExpression": [
+              "KernelApplication": [
                 "list_head",
                 {
-                  "KernelApplicationExpression": [
+                  "KernelApplication": [
                     "skip",
                     {
-                      "ListExpression": [
+                      "List": [
                         [
-                          { "LiteralExpression": [ 5 ] },
+                          { "Literal": [ 5 ] },
                           {
-                            "KernelApplicationExpression": [
+                            "KernelApplication": [
                               "list_head",
-                              { "EnvironmentExpression": [] }
+                              { "Environment": [] }
                             ]
                           }
                         ]
@@ -177,38 +177,38 @@
               ]
             },
             {
-              "ListExpression": [
+              "List": [
                 [
                   {
-                    "KernelApplicationExpression": [
+                    "KernelApplication": [
                       "list_head",
-                      { "EnvironmentExpression": [] }
+                      { "Environment": [] }
                     ]
                   },
                   {
-                    "ListExpression": [
+                    "List": [
                       [
                         {
-                          "KernelApplicationExpression": [
+                          "KernelApplication": [
                             "skip",
                             {
-                              "ListExpression": [
+                              "List": [
                                 [
-                                  { "LiteralExpression": [ 1 ] },
+                                  { "Literal": [ 1 ] },
                                   {
-                                    "KernelApplicationExpression": [
+                                    "KernelApplication": [
                                       "list_head",
                                       {
-                                        "KernelApplicationExpression": [
+                                        "KernelApplication": [
                                           "list_head",
                                           {
-                                            "KernelApplicationExpression": [
+                                            "KernelApplication": [
                                               "skip",
                                               {
-                                                "ListExpression": [
+                                                "List": [
                                                   [
-                                                    { "LiteralExpression": [ 1 ] },
-                                                    { "EnvironmentExpression": [] }
+                                                    { "Literal": [ 1 ] },
+                                                    { "Environment": [] }
                                                   ]
                                                 ]
                                               }
@@ -224,33 +224,33 @@
                           ]
                         },
                         {
-                          "KernelApplicationExpression": [
+                          "KernelApplication": [
                             "skip",
                             {
-                              "ListExpression": [
+                              "List": [
                                 [
-                                  { "LiteralExpression": [ 1 ] },
+                                  { "Literal": [ 1 ] },
                                   {
-                                    "KernelApplicationExpression": [
+                                    "KernelApplication": [
                                       "list_head",
                                       {
-                                        "KernelApplicationExpression": [
+                                        "KernelApplication": [
                                           "skip",
                                           {
-                                            "ListExpression": [
+                                            "List": [
                                               [
-                                                { "LiteralExpression": [ 1 ] },
+                                                { "Literal": [ 1 ] },
                                                 {
-                                                  "KernelApplicationExpression": [
+                                                  "KernelApplication": [
                                                     "list_head",
                                                     {
-                                                      "KernelApplicationExpression": [
+                                                      "KernelApplication": [
                                                         "skip",
                                                         {
-                                                          "ListExpression": [
+                                                          "List": [
                                                             [
-                                                              { "LiteralExpression": [ 1 ] },
-                                                              { "EnvironmentExpression": [] }
+                                                              { "Literal": [ 1 ] },
+                                                              { "Environment": [] }
                                                             ]
                                                           ]
                                                         }
@@ -280,6 +280,6 @@
         }
       ]
     },
-    { "LiteralExpression": [ { "AsBase64": "BA==" } ] }
+    { "Literal": [ { "AsBase64": "BA==" } ] }
   ]
 }
