@@ -40,21 +40,21 @@ generateTemplateEvaluatingToExpression expression =
                 "Literal"
                 (Pine.LiteralExpression literal)
 
-        Pine.ParseAndEvalExpression envExpr exprExpr ->
+        Pine.ParseAndEvalExpression encodedExpr envExpr ->
             buildFromTagAndArgument
                 "ParseAndEval"
                 (buildRecordExpression
-                    [ ( "environment", generateTemplateEvaluatingToExpression envExpr )
-                    , ( "expression", generateTemplateEvaluatingToExpression exprExpr )
+                    [ ( "encoded", generateTemplateEvaluatingToExpression encodedExpr )
+                    , ( "environment", generateTemplateEvaluatingToExpression envExpr )
                     ]
                 )
 
-        Pine.KernelApplicationExpression argument functionName ->
+        Pine.KernelApplicationExpression functionName input ->
             buildFromTagAndArgument
                 "KernelApplication"
                 (buildRecordExpression
-                    [ ( "argument", generateTemplateEvaluatingToExpression argument )
-                    , ( "functionName", Pine.LiteralExpression (Pine.valueFromString functionName) )
+                    [ ( "function", Pine.LiteralExpression (Pine.valueFromString functionName) )
+                    , ( "input", generateTemplateEvaluatingToExpression input )
                     ]
                 )
 
@@ -232,32 +232,32 @@ buildPineExpressionSyntax config expression =
                         "Pine.ListExpression"
                         [ String.join "\n" listSyntax ]
 
-                Pine.ParseAndEvalExpression envExpr exprExpr ->
+                Pine.ParseAndEvalExpression encodedExpr envExpr ->
                     buildFromTagNameAndArguments
                         "Pine.ParseAndEvalExpression"
                         [ buildRecordSyntax
-                            [ ( "environment"
-                              , buildPineExpressionSyntax config envExpr
+                            [ ( "encoded"
+                              , buildPineExpressionSyntax config encodedExpr
                                     |> String.join "\n"
                               )
-                            , ( "expression"
-                              , buildPineExpressionSyntax config exprExpr
+                            , ( "environment"
+                              , buildPineExpressionSyntax config envExpr
                                     |> String.join "\n"
                               )
                             ]
                             |> String.join "\n"
                         ]
 
-                Pine.KernelApplicationExpression argument functionName ->
+                Pine.KernelApplicationExpression functionName input ->
                     buildFromTagNameAndArguments
                         "Pine.KernelApplicationExpression"
                         [ buildRecordSyntax
-                            [ ( "argument"
-                              , buildPineExpressionSyntax config argument
-                                    |> String.join "\n"
-                              )
-                            , ( "functionName"
+                            [ ( "function"
                               , "\"" ++ functionName ++ "\""
+                              )
+                            , ( "input"
+                              , buildPineExpressionSyntax config input
+                                    |> String.join "\n"
                               )
                             ]
                             |> String.join "\n"

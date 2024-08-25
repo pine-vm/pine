@@ -230,6 +230,7 @@ compileInteractiveSubmission environment submission =
                                                 (buildExpressionForNewStateAndResponse
                                                     { newStateExpression =
                                                         Pine.KernelApplicationExpression
+                                                            "concat"
                                                             (Pine.ListExpression
                                                                 [ Pine.ListExpression
                                                                     [ Pine.LiteralExpression
@@ -242,7 +243,6 @@ compileInteractiveSubmission environment submission =
                                                                 , Pine.EnvironmentExpression
                                                                 ]
                                                             )
-                                                            "concat"
                                                     , responseExpression =
                                                         responseExpressionFromString ("Declared '" ++ declarationName ++ "'")
                                                     }

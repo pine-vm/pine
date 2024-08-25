@@ -29,12 +29,12 @@ public class PineVMEncodeExpressionTests
                 trueBranch: new Expression.Literal(PineValueAsString.ValueFromString("if true"))),
 
             new Expression.ParseAndEval(
-                expression: new Expression.Literal(PineValueAsString.ValueFromString("expression")),
+                encoded: new Expression.Literal(PineValueAsString.ValueFromString("encoded")),
                 environment: new Expression.Literal(PineValueAsString.ValueFromString("environment"))),
 
             new Expression.KernelApplication(
-                functionName: nameof(KernelFunction.length),
-                argument: new Expression.Literal(PineValueAsString.ValueFromString("kernel app arg"))),
+                function: nameof(KernelFunction.length),
+                input: new Expression.Literal(PineValueAsString.ValueFromString("kernel app arg"))),
 
             new Expression.StringTag(
                 tag: "tag text",

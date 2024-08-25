@@ -103,10 +103,10 @@ public class PineKernelFunctionsInline
         if (expression is not Expression.KernelApplication kernelApp)
             return null;
 
-        if (kernelApp.functionName is not nameof(KernelFunction.take))
+        if (kernelApp.function is not nameof(KernelFunction.take))
             return null;
 
-        if (kernelApp.argument is not Expression.List takeArgumentList)
+        if (kernelApp.input is not Expression.List takeArgumentList)
             return null;
 
         if (takeArgumentList.items.Count is not 2)

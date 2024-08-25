@@ -62,13 +62,13 @@ public abstract record Expression
     }
 
     public record ParseAndEval(
-        Expression expression,
+        Expression encoded,
         Expression environment)
         : Expression;
 
     public record KernelApplication(
-        string functionName,
-        Expression argument)
+        string function,
+        Expression input)
         : Expression
     {
         public virtual bool Equals(KernelApplication? other)
@@ -77,16 +77,16 @@ public abstract record Expression
                 return false;
 
             return
-                notNull.functionName == functionName &&
-                (ReferenceEquals(notNull.argument, argument) || notNull.argument.Equals(argument));
+                notNull.function == function &&
+                (ReferenceEquals(notNull.input, input) || notNull.input.Equals(input));
         }
 
         public override int GetHashCode()
         {
             var hash = new HashCode();
 
-            hash.Add(functionName);
-            hash.Add(argument);
+            hash.Add(function);
+            hash.Add(input);
 
             return hash.ToHashCode();
         }
@@ -202,10 +202,10 @@ public abstract record Expression
             list.items.All(IsIndependent),
 
             ParseAndEval decodeAndEvaluate =>
-            IsIndependent(decodeAndEvaluate.expression) && IsIndependent(decodeAndEvaluate.environment),
+            IsIndependent(decodeAndEvaluate.encoded) && IsIndependent(decodeAndEvaluate.environment),
 
             KernelApplication kernelApplication =>
-            IsIndependent(kernelApplication.argument),
+            IsIndependent(kernelApplication.input),
 
             Conditional conditional =>
             IsIndependent(conditional.condition) && IsIndependent(conditional.trueBranch) && IsIndependent(conditional.falseBranch),
@@ -262,14 +262,14 @@ public abstract record Expression
 
                 case ParseAndEval parseAndEvaluate:
 
-                    stack.Push(parseAndEvaluate.expression);
+                    stack.Push(parseAndEvaluate.encoded);
                     stack.Push(parseAndEvaluate.environment);
 
                     break;
 
                 case KernelApplication kernelApplication:
 
-                    stack.Push(kernelApplication.argument);
+                    stack.Push(kernelApplication.input);
 
                     break;
 

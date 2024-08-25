@@ -855,12 +855,12 @@ public partial class CompileToCSharp
         Expression.KernelApplication kernelApplicationExpression,
         ExpressionCompilationEnvironment environment)
     {
-        if (!KernelFunctionsInfo.Value.TryGetValue(kernelApplicationExpression.functionName,
+        if (!KernelFunctionsInfo.Value.TryGetValue(kernelApplicationExpression.function,
               out var kernelFunctionInfo))
         {
             return
                 Result<string, CompiledExpression>.err(
-                    "Kernel function name " + kernelApplicationExpression.functionName + " does not match any of the " +
+                    "Kernel function name " + kernelApplicationExpression.function + " does not match any of the " +
                     KernelFunctionsInfo.Value.Count + " known names: " +
                     string.Join(", ", KernelFunctionsInfo.Value.Keys));
         }
@@ -868,7 +868,7 @@ public partial class CompileToCSharp
         return
             CompileKernelFunctionApplicationToCSharpExpression(
                 kernelFunctionInfo,
-                kernelApplicationExpression.argument,
+                kernelApplicationExpression.input,
                 environment);
     }
 
@@ -1131,7 +1131,7 @@ public partial class CompileToCSharp
                     createLetBindingsForCse: false)
                 .AndThen(envCompiledExpr =>
                 CompileToCSharpExpression(
-                    parseAndEvalExpr.expression,
+                    parseAndEvalExpr.encoded,
                     environment,
                     createLetBindingsForCse: false)
                 .Map(exprCompiledExpr =>
@@ -1253,10 +1253,10 @@ public partial class CompileToCSharp
                     });
         }
 
-        if (Expression.IsIndependent(parseAndEvalExpr.expression))
+        if (Expression.IsIndependent(parseAndEvalExpr.encoded))
         {
             return
-                ReducePineExpression.TryEvaluateExpressionIndependent(parseAndEvalExpr.expression)
+                ReducePineExpression.TryEvaluateExpressionIndependent(parseAndEvalExpr.encoded)
                 .MapError(err => "Failed evaluate inner as independent expression: " + err)
                 .AndThen(continueForKnownExprValue);
         }
@@ -1264,7 +1264,7 @@ public partial class CompileToCSharp
         var exprMappedToParent =
             ExprFunctionCompilationInterface.TryResolveExpressionInFunction(
                 environment.FunctionEnvironment.SelfInterface,
-                parseAndEvalExpr.expression,
+                parseAndEvalExpr.encoded,
                 environment.EnvConstraint);
 
         if (exprMappedToParent is ExprResolvedInFunction.ExprResolvedToLiteral literal)
@@ -1466,11 +1466,11 @@ public partial class CompileToCSharp
                         trueBranch: transformedIfTrue)))),
 
                     Expression.KernelApplication kernelAppl =>
-                    TransformPineExpressionWithOptionalReplacement(findReplacement, kernelAppl.argument)
+                    TransformPineExpressionWithOptionalReplacement(findReplacement, kernelAppl.input)
                     .MapError(err => "Failed to transform kernel application argument: " + err)
                     .Map(transformedArgument => (Expression)new Expression.KernelApplication(
-                        functionName: kernelAppl.functionName,
-                        argument: transformedArgument)),
+                        function: kernelAppl.function,
+                        input: transformedArgument)),
 
                     Expression.StringTag stringTag =>
                     TransformPineExpressionWithOptionalReplacement(findReplacement, stringTag.tagged)
@@ -1702,7 +1702,7 @@ public partial class CompileToCSharp
             list.items.SelectMany(EnumerateAllLiterals),
 
             Expression.KernelApplication kernelApplicationExpression =>
-            EnumerateAllLiterals(kernelApplicationExpression.argument),
+            EnumerateAllLiterals(kernelApplicationExpression.input),
 
             Expression.Conditional conditionalExpression =>
             [.. EnumerateAllLiterals(conditionalExpression.condition)
@@ -1712,7 +1712,7 @@ public partial class CompileToCSharp
                 .. EnumerateAllLiterals(conditionalExpression.falseBranch)],
 
             Expression.ParseAndEval parseAndEvalExpr =>
-            [.. EnumerateAllLiterals(parseAndEvalExpr.expression)
+            [.. EnumerateAllLiterals(parseAndEvalExpr.encoded)
             ,
                 .. EnumerateAllLiterals(parseAndEvalExpr.environment)],
 
@@ -1770,11 +1770,11 @@ public partial class CompileToCSharp
                         Traverse(subExpr, isConditional);
                     break;
                 case Expression.ParseAndEval parseAndEvalExpr:
-                    Traverse(parseAndEvalExpr.expression, isConditional);
+                    Traverse(parseAndEvalExpr.encoded, isConditional);
                     Traverse(parseAndEvalExpr.environment, isConditional);
                     break;
                 case Expression.KernelApplication kernelAppExpr:
-                    Traverse(kernelAppExpr.argument, isConditional);
+                    Traverse(kernelAppExpr.input, isConditional);
                     break;
                 case Expression.Conditional conditionalExpr:
                     // For ConditionalExpression, traverse its branches as conditional

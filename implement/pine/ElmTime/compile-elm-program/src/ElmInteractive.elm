@@ -1013,11 +1013,11 @@ expressionAsJson expression =
               )
             ]
 
-        KernelApplicationExpression argument functionName ->
+        KernelApplicationExpression functionName input ->
             [ ( "KernelApplication"
               , Json.Encode.object
-                    [ ( "argument", expressionAsJson argument )
-                    , ( "functionName", Json.Encode.string functionName )
+                    [ ( "function", Json.Encode.string functionName )
+                    , ( "input", expressionAsJson input )
                     ]
               )
             ]

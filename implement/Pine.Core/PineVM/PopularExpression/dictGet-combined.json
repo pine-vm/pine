@@ -159,7 +159,11 @@
                         { "ListAsString": "KernelApplication" },
                         [
                           [
-                            { "ListAsString": "argument" },
+                            { "ListAsString": "function" },
+                            { "ListAsString": "equal" }
+                          ],
+                          [
+                            { "ListAsString": "input" },
                             [
                               { "ListAsString": "List" },
                               [
@@ -171,17 +175,29 @@
                                   { "ListAsString": "KernelApplication" },
                                   [
                                     [
-                                      { "ListAsString": "argument" },
+                                      { "ListAsString": "function" },
+                                      { "ListAsString": "list_head" }
+                                    ],
+                                    [
+                                      { "ListAsString": "input" },
                                       [
                                         { "ListAsString": "KernelApplication" },
                                         [
                                           [
-                                            { "ListAsString": "argument" },
+                                            { "ListAsString": "function" },
+                                            { "ListAsString": "list_head" }
+                                          ],
+                                          [
+                                            { "ListAsString": "input" },
                                             [
                                               { "ListAsString": "KernelApplication" },
                                               [
                                                 [
-                                                  { "ListAsString": "argument" },
+                                                  { "ListAsString": "function" },
+                                                  { "ListAsString": "skip" }
+                                                ],
+                                                [
+                                                  { "ListAsString": "input" },
                                                   [
                                                     { "ListAsString": "List" },
                                                     [
@@ -193,12 +209,20 @@
                                                         { "ListAsString": "KernelApplication" },
                                                         [
                                                           [
-                                                            { "ListAsString": "argument" },
+                                                            { "ListAsString": "function" },
+                                                            { "ListAsString": "list_head" }
+                                                          ],
+                                                          [
+                                                            { "ListAsString": "input" },
                                                             [
                                                               { "ListAsString": "KernelApplication" },
                                                               [
                                                                 [
-                                                                  { "ListAsString": "argument" },
+                                                                  { "ListAsString": "function" },
+                                                                  { "ListAsString": "skip" }
+                                                                ],
+                                                                [
+                                                                  { "ListAsString": "input" },
                                                                   [
                                                                     { "ListAsString": "List" },
                                                                     [
@@ -212,49 +236,25 @@
                                                                       ]
                                                                     ]
                                                                   ]
-                                                                ],
-                                                                [
-                                                                  { "ListAsString": "functionName" },
-                                                                  { "ListAsString": "skip" }
                                                                 ]
                                                               ]
                                                             ]
-                                                          ],
-                                                          [
-                                                            { "ListAsString": "functionName" },
-                                                            { "ListAsString": "list_head" }
                                                           ]
                                                         ]
                                                       ]
                                                     ]
                                                   ]
-                                                ],
-                                                [
-                                                  { "ListAsString": "functionName" },
-                                                  { "ListAsString": "skip" }
                                                 ]
                                               ]
                                             ]
-                                          ],
-                                          [
-                                            { "ListAsString": "functionName" },
-                                            { "ListAsString": "list_head" }
                                           ]
                                         ]
                                       ]
-                                    ],
-                                    [
-                                      { "ListAsString": "functionName" },
-                                      { "ListAsString": "list_head" }
                                     ]
                                   ]
                                 ]
                               ]
                             ]
-                          ],
-                          [
-                            { "ListAsString": "functionName" },
-                            { "ListAsString": "equal" }
                           ]
                         ]
                       ]
@@ -270,7 +270,11 @@
                               { "ListAsString": "KernelApplication" },
                               [
                                 [
-                                  { "ListAsString": "argument" },
+                                  { "ListAsString": "function" },
+                                  { "ListAsString": "equal" }
+                                ],
+                                [
+                                  { "ListAsString": "input" },
                                   [
                                     { "ListAsString": "List" },
                                     [
@@ -282,17 +286,29 @@
                                         { "ListAsString": "KernelApplication" },
                                         [
                                           [
-                                            { "ListAsString": "argument" },
+                                            { "ListAsString": "function" },
+                                            { "ListAsString": "list_head" }
+                                          ],
+                                          [
+                                            { "ListAsString": "input" },
                                             [
                                               { "ListAsString": "KernelApplication" },
                                               [
                                                 [
-                                                  { "ListAsString": "argument" },
+                                                  { "ListAsString": "function" },
+                                                  { "ListAsString": "list_head" }
+                                                ],
+                                                [
+                                                  { "ListAsString": "input" },
                                                   [
                                                     { "ListAsString": "KernelApplication" },
                                                     [
                                                       [
-                                                        { "ListAsString": "argument" },
+                                                        { "ListAsString": "function" },
+                                                        { "ListAsString": "skip" }
+                                                      ],
+                                                      [
+                                                        { "ListAsString": "input" },
                                                         [
                                                           { "ListAsString": "List" },
                                                           [
@@ -304,12 +320,20 @@
                                                               { "ListAsString": "KernelApplication" },
                                                               [
                                                                 [
-                                                                  { "ListAsString": "argument" },
+                                                                  { "ListAsString": "function" },
+                                                                  { "ListAsString": "list_head" }
+                                                                ],
+                                                                [
+                                                                  { "ListAsString": "input" },
                                                                   [
                                                                     { "ListAsString": "KernelApplication" },
                                                                     [
                                                                       [
-                                                                        { "ListAsString": "argument" },
+                                                                        { "ListAsString": "function" },
+                                                                        { "ListAsString": "skip" }
+                                                                      ],
+                                                                      [
+                                                                        { "ListAsString": "input" },
                                                                         [
                                                                           { "ListAsString": "List" },
                                                                           [
@@ -323,49 +347,25 @@
                                                                             ]
                                                                           ]
                                                                         ]
-                                                                      ],
-                                                                      [
-                                                                        { "ListAsString": "functionName" },
-                                                                        { "ListAsString": "skip" }
                                                                       ]
                                                                     ]
                                                                   ]
-                                                                ],
-                                                                [
-                                                                  { "ListAsString": "functionName" },
-                                                                  { "ListAsString": "list_head" }
                                                                 ]
                                                               ]
                                                             ]
                                                           ]
                                                         ]
-                                                      ],
-                                                      [
-                                                        { "ListAsString": "functionName" },
-                                                        { "ListAsString": "skip" }
                                                       ]
                                                     ]
                                                   ]
-                                                ],
-                                                [
-                                                  { "ListAsString": "functionName" },
-                                                  { "ListAsString": "list_head" }
                                                 ]
                                               ]
                                             ]
-                                          ],
-                                          [
-                                            { "ListAsString": "functionName" },
-                                            { "ListAsString": "list_head" }
                                           ]
                                         ]
                                       ]
                                     ]
                                   ]
-                                ],
-                                [
-                                  { "ListAsString": "functionName" },
-                                  { "ListAsString": "equal" }
                                 ]
                               ]
                             ]
@@ -381,7 +381,11 @@
                                     { "ListAsString": "KernelApplication" },
                                     [
                                       [
-                                        { "ListAsString": "argument" },
+                                        { "ListAsString": "function" },
+                                        { "ListAsString": "equal" }
+                                      ],
+                                      [
+                                        { "ListAsString": "input" },
                                         [
                                           { "ListAsString": "List" },
                                           [
@@ -393,17 +397,29 @@
                                               { "ListAsString": "KernelApplication" },
                                               [
                                                 [
-                                                  { "ListAsString": "argument" },
+                                                  { "ListAsString": "function" },
+                                                  { "ListAsString": "list_head" }
+                                                ],
+                                                [
+                                                  { "ListAsString": "input" },
                                                   [
                                                     { "ListAsString": "KernelApplication" },
                                                     [
                                                       [
-                                                        { "ListAsString": "argument" },
+                                                        { "ListAsString": "function" },
+                                                        { "ListAsString": "list_head" }
+                                                      ],
+                                                      [
+                                                        { "ListAsString": "input" },
                                                         [
                                                           { "ListAsString": "KernelApplication" },
                                                           [
                                                             [
-                                                              { "ListAsString": "argument" },
+                                                              { "ListAsString": "function" },
+                                                              { "ListAsString": "skip" }
+                                                            ],
+                                                            [
+                                                              { "ListAsString": "input" },
                                                               [
                                                                 { "ListAsString": "List" },
                                                                 [
@@ -415,12 +431,20 @@
                                                                     { "ListAsString": "KernelApplication" },
                                                                     [
                                                                       [
-                                                                        { "ListAsString": "argument" },
+                                                                        { "ListAsString": "function" },
+                                                                        { "ListAsString": "list_head" }
+                                                                      ],
+                                                                      [
+                                                                        { "ListAsString": "input" },
                                                                         [
                                                                           { "ListAsString": "KernelApplication" },
                                                                           [
                                                                             [
-                                                                              { "ListAsString": "argument" },
+                                                                              { "ListAsString": "function" },
+                                                                              { "ListAsString": "skip" }
+                                                                            ],
+                                                                            [
+                                                                              { "ListAsString": "input" },
                                                                               [
                                                                                 { "ListAsString": "List" },
                                                                                 [
@@ -434,49 +458,25 @@
                                                                                   ]
                                                                                 ]
                                                                               ]
-                                                                            ],
-                                                                            [
-                                                                              { "ListAsString": "functionName" },
-                                                                              { "ListAsString": "skip" }
                                                                             ]
                                                                           ]
                                                                         ]
-                                                                      ],
-                                                                      [
-                                                                        { "ListAsString": "functionName" },
-                                                                        { "ListAsString": "list_head" }
                                                                       ]
                                                                     ]
                                                                   ]
                                                                 ]
                                                               ]
-                                                            ],
-                                                            [
-                                                              { "ListAsString": "functionName" },
-                                                              { "ListAsString": "skip" }
                                                             ]
                                                           ]
                                                         ]
-                                                      ],
-                                                      [
-                                                        { "ListAsString": "functionName" },
-                                                        { "ListAsString": "list_head" }
                                                       ]
                                                     ]
                                                   ]
-                                                ],
-                                                [
-                                                  { "ListAsString": "functionName" },
-                                                  { "ListAsString": "list_head" }
                                                 ]
                                               ]
                                             ]
                                           ]
                                         ]
-                                      ],
-                                      [
-                                        { "ListAsString": "functionName" },
-                                        { "ListAsString": "equal" }
                                       ]
                                     ]
                                   ]
@@ -487,17 +487,32 @@
                                     { "ListAsString": "ParseAndEval" },
                                     [
                                       [
+                                        { "ListAsString": "encoded" },
+                                        [
+                                          { "ListAsString": "Literal" },
+                                          { "ListAsString": "Error in case-of block: No matching branch." }
+                                        ]
+                                      ],
+                                      [
                                         { "ListAsString": "environment" },
                                         [
                                           { "ListAsString": "KernelApplication" },
                                           [
                                             [
-                                              { "ListAsString": "argument" },
+                                              { "ListAsString": "function" },
+                                              { "ListAsString": "list_head" }
+                                            ],
+                                            [
+                                              { "ListAsString": "input" },
                                               [
                                                 { "ListAsString": "KernelApplication" },
                                                 [
                                                   [
-                                                    { "ListAsString": "argument" },
+                                                    { "ListAsString": "function" },
+                                                    { "ListAsString": "skip" }
+                                                  ],
+                                                  [
+                                                    { "ListAsString": "input" },
                                                     [
                                                       { "ListAsString": "List" },
                                                       [
@@ -509,12 +524,20 @@
                                                           { "ListAsString": "KernelApplication" },
                                                           [
                                                             [
-                                                              { "ListAsString": "argument" },
+                                                              { "ListAsString": "function" },
+                                                              { "ListAsString": "list_head" }
+                                                            ],
+                                                            [
+                                                              { "ListAsString": "input" },
                                                               [
                                                                 { "ListAsString": "KernelApplication" },
                                                                 [
                                                                   [
-                                                                    { "ListAsString": "argument" },
+                                                                    { "ListAsString": "function" },
+                                                                    { "ListAsString": "skip" }
+                                                                  ],
+                                                                  [
+                                                                    { "ListAsString": "input" },
                                                                     [
                                                                       { "ListAsString": "List" },
                                                                       [
@@ -528,42 +551,19 @@
                                                                         ]
                                                                       ]
                                                                     ]
-                                                                  ],
-                                                                  [
-                                                                    { "ListAsString": "functionName" },
-                                                                    { "ListAsString": "skip" }
                                                                   ]
                                                                 ]
                                                               ]
-                                                            ],
-                                                            [
-                                                              { "ListAsString": "functionName" },
-                                                              { "ListAsString": "list_head" }
                                                             ]
                                                           ]
                                                         ]
                                                       ]
                                                     ]
-                                                  ],
-                                                  [
-                                                    { "ListAsString": "functionName" },
-                                                    { "ListAsString": "skip" }
                                                   ]
                                                 ]
                                               ]
-                                            ],
-                                            [
-                                              { "ListAsString": "functionName" },
-                                              { "ListAsString": "list_head" }
                                             ]
                                           ]
-                                        ]
-                                      ],
-                                      [
-                                        { "ListAsString": "expression" },
-                                        [
-                                          { "ListAsString": "Literal" },
-                                          { "ListAsString": "Error in case-of block: No matching branch." }
                                         ]
                                       ]
                                     ]
@@ -575,6 +575,58 @@
                                     { "ListAsString": "ParseAndEval" },
                                     [
                                       [
+                                        { "ListAsString": "encoded" },
+                                        [
+                                          { "ListAsString": "KernelApplication" },
+                                          [
+                                            [
+                                              { "ListAsString": "function" },
+                                              { "ListAsString": "list_head" }
+                                            ],
+                                            [
+                                              { "ListAsString": "input" },
+                                              [
+                                                { "ListAsString": "KernelApplication" },
+                                                [
+                                                  [
+                                                    { "ListAsString": "function" },
+                                                    { "ListAsString": "skip" }
+                                                  ],
+                                                  [
+                                                    { "ListAsString": "input" },
+                                                    [
+                                                      { "ListAsString": "List" },
+                                                      [
+                                                        [
+                                                          { "ListAsString": "Literal" },
+                                                          2
+                                                        ],
+                                                        [
+                                                          { "ListAsString": "KernelApplication" },
+                                                          [
+                                                            [
+                                                              { "ListAsString": "function" },
+                                                              { "ListAsString": "list_head" }
+                                                            ],
+                                                            [
+                                                              { "ListAsString": "input" },
+                                                              [
+                                                                { "ListAsString": "Environment" },
+                                                                []
+                                                              ]
+                                                            ]
+                                                          ]
+                                                        ]
+                                                      ]
+                                                    ]
+                                                  ]
+                                                ]
+                                              ]
+                                            ]
+                                          ]
+                                        ]
+                                      ],
+                                      [
                                         { "ListAsString": "environment" },
                                         [
                                           { "ListAsString": "List" },
@@ -583,15 +635,15 @@
                                               { "ListAsString": "KernelApplication" },
                                               [
                                                 [
-                                                  { "ListAsString": "argument" },
+                                                  { "ListAsString": "function" },
+                                                  { "ListAsString": "list_head" }
+                                                ],
+                                                [
+                                                  { "ListAsString": "input" },
                                                   [
                                                     { "ListAsString": "Environment" },
                                                     []
                                                   ]
-                                                ],
-                                                [
-                                                  { "ListAsString": "functionName" },
-                                                  { "ListAsString": "list_head" }
                                                 ]
                                               ]
                                             ],
@@ -602,12 +654,20 @@
                                                   { "ListAsString": "KernelApplication" },
                                                   [
                                                     [
-                                                      { "ListAsString": "argument" },
+                                                      { "ListAsString": "function" },
+                                                      { "ListAsString": "list_head" }
+                                                    ],
+                                                    [
+                                                      { "ListAsString": "input" },
                                                       [
                                                         { "ListAsString": "KernelApplication" },
                                                         [
                                                           [
-                                                            { "ListAsString": "argument" },
+                                                            { "ListAsString": "function" },
+                                                            { "ListAsString": "skip" }
+                                                          ],
+                                                          [
+                                                            { "ListAsString": "input" },
                                                             [
                                                               { "ListAsString": "List" },
                                                               [
@@ -619,12 +679,20 @@
                                                                   { "ListAsString": "KernelApplication" },
                                                                   [
                                                                     [
-                                                                      { "ListAsString": "argument" },
+                                                                      { "ListAsString": "function" },
+                                                                      { "ListAsString": "list_head" }
+                                                                    ],
+                                                                    [
+                                                                      { "ListAsString": "input" },
                                                                       [
                                                                         { "ListAsString": "KernelApplication" },
                                                                         [
                                                                           [
-                                                                            { "ListAsString": "argument" },
+                                                                            { "ListAsString": "function" },
+                                                                            { "ListAsString": "skip" }
+                                                                          ],
+                                                                          [
+                                                                            { "ListAsString": "input" },
                                                                             [
                                                                               { "ListAsString": "List" },
                                                                               [
@@ -638,33 +706,17 @@
                                                                                 ]
                                                                               ]
                                                                             ]
-                                                                          ],
-                                                                          [
-                                                                            { "ListAsString": "functionName" },
-                                                                            { "ListAsString": "skip" }
                                                                           ]
                                                                         ]
                                                                       ]
-                                                                    ],
-                                                                    [
-                                                                      { "ListAsString": "functionName" },
-                                                                      { "ListAsString": "list_head" }
                                                                     ]
                                                                   ]
                                                                 ]
                                                               ]
                                                             ]
-                                                          ],
-                                                          [
-                                                            { "ListAsString": "functionName" },
-                                                            { "ListAsString": "skip" }
                                                           ]
                                                         ]
                                                       ]
-                                                    ],
-                                                    [
-                                                      { "ListAsString": "functionName" },
-                                                      { "ListAsString": "list_head" }
                                                     ]
                                                   ]
                                                 ],
@@ -672,12 +724,20 @@
                                                   { "ListAsString": "KernelApplication" },
                                                   [
                                                     [
-                                                      { "ListAsString": "argument" },
+                                                      { "ListAsString": "function" },
+                                                      { "ListAsString": "list_head" }
+                                                    ],
+                                                    [
+                                                      { "ListAsString": "input" },
                                                       [
                                                         { "ListAsString": "KernelApplication" },
                                                         [
                                                           [
-                                                            { "ListAsString": "argument" },
+                                                            { "ListAsString": "function" },
+                                                            { "ListAsString": "skip" }
+                                                          ],
+                                                          [
+                                                            { "ListAsString": "input" },
                                                             [
                                                               { "ListAsString": "List" },
                                                               [
@@ -689,12 +749,20 @@
                                                                   { "ListAsString": "KernelApplication" },
                                                                   [
                                                                     [
-                                                                      { "ListAsString": "argument" },
+                                                                      { "ListAsString": "function" },
+                                                                      { "ListAsString": "list_head" }
+                                                                    ],
+                                                                    [
+                                                                      { "ListAsString": "input" },
                                                                       [
                                                                         { "ListAsString": "KernelApplication" },
                                                                         [
                                                                           [
-                                                                            { "ListAsString": "argument" },
+                                                                            { "ListAsString": "function" },
+                                                                            { "ListAsString": "skip" }
+                                                                          ],
+                                                                          [
+                                                                            { "ListAsString": "input" },
                                                                             [
                                                                               { "ListAsString": "List" },
                                                                               [
@@ -706,17 +774,29 @@
                                                                                   { "ListAsString": "KernelApplication" },
                                                                                   [
                                                                                     [
-                                                                                      { "ListAsString": "argument" },
+                                                                                      { "ListAsString": "function" },
+                                                                                      { "ListAsString": "list_head" }
+                                                                                    ],
+                                                                                    [
+                                                                                      { "ListAsString": "input" },
                                                                                       [
                                                                                         { "ListAsString": "KernelApplication" },
                                                                                         [
                                                                                           [
-                                                                                            { "ListAsString": "argument" },
+                                                                                            { "ListAsString": "function" },
+                                                                                            { "ListAsString": "list_head" }
+                                                                                          ],
+                                                                                          [
+                                                                                            { "ListAsString": "input" },
                                                                                             [
                                                                                               { "ListAsString": "KernelApplication" },
                                                                                               [
                                                                                                 [
-                                                                                                  { "ListAsString": "argument" },
+                                                                                                  { "ListAsString": "function" },
+                                                                                                  { "ListAsString": "skip" }
+                                                                                                ],
+                                                                                                [
+                                                                                                  { "ListAsString": "input" },
                                                                                                   [
                                                                                                     { "ListAsString": "List" },
                                                                                                     [
@@ -730,112 +810,32 @@
                                                                                                       ]
                                                                                                     ]
                                                                                                   ]
-                                                                                                ],
-                                                                                                [
-                                                                                                  { "ListAsString": "functionName" },
-                                                                                                  { "ListAsString": "skip" }
                                                                                                 ]
                                                                                               ]
                                                                                             ]
-                                                                                          ],
-                                                                                          [
-                                                                                            { "ListAsString": "functionName" },
-                                                                                            { "ListAsString": "list_head" }
                                                                                           ]
                                                                                         ]
                                                                                       ]
-                                                                                    ],
-                                                                                    [
-                                                                                      { "ListAsString": "functionName" },
-                                                                                      { "ListAsString": "list_head" }
                                                                                     ]
                                                                                   ]
                                                                                 ]
                                                                               ]
                                                                             ]
-                                                                          ],
-                                                                          [
-                                                                            { "ListAsString": "functionName" },
-                                                                            { "ListAsString": "skip" }
                                                                           ]
                                                                         ]
                                                                       ]
-                                                                    ],
-                                                                    [
-                                                                      { "ListAsString": "functionName" },
-                                                                      { "ListAsString": "list_head" }
                                                                     ]
                                                                   ]
                                                                 ]
                                                               ]
                                                             ]
-                                                          ],
-                                                          [
-                                                            { "ListAsString": "functionName" },
-                                                            { "ListAsString": "skip" }
-                                                          ]
-                                                        ]
-                                                      ]
-                                                    ],
-                                                    [
-                                                      { "ListAsString": "functionName" },
-                                                      { "ListAsString": "list_head" }
-                                                    ]
-                                                  ]
-                                                ]
-                                              ]
-                                            ]
-                                          ]
-                                        ]
-                                      ],
-                                      [
-                                        { "ListAsString": "expression" },
-                                        [
-                                          { "ListAsString": "KernelApplication" },
-                                          [
-                                            [
-                                              { "ListAsString": "argument" },
-                                              [
-                                                { "ListAsString": "KernelApplication" },
-                                                [
-                                                  [
-                                                    { "ListAsString": "argument" },
-                                                    [
-                                                      { "ListAsString": "List" },
-                                                      [
-                                                        [
-                                                          { "ListAsString": "Literal" },
-                                                          2
-                                                        ],
-                                                        [
-                                                          { "ListAsString": "KernelApplication" },
-                                                          [
-                                                            [
-                                                              { "ListAsString": "argument" },
-                                                              [
-                                                                { "ListAsString": "Environment" },
-                                                                []
-                                                              ]
-                                                            ],
-                                                            [
-                                                              { "ListAsString": "functionName" },
-                                                              { "ListAsString": "list_head" }
-                                                            ]
                                                           ]
                                                         ]
                                                       ]
                                                     ]
-                                                  ],
-                                                  [
-                                                    { "ListAsString": "functionName" },
-                                                    { "ListAsString": "skip" }
                                                   ]
                                                 ]
                                               ]
-                                            ],
-                                            [
-                                              { "ListAsString": "functionName" },
-                                              { "ListAsString": "list_head" }
                                             ]
                                           ]
                                         ]
@@ -862,12 +862,20 @@
                                       { "ListAsString": "KernelApplication" },
                                       [
                                         [
-                                          { "ListAsString": "argument" },
+                                          { "ListAsString": "function" },
+                                          { "ListAsString": "list_head" }
+                                        ],
+                                        [
+                                          { "ListAsString": "input" },
                                           [
                                             { "ListAsString": "KernelApplication" },
                                             [
                                               [
-                                                { "ListAsString": "argument" },
+                                                { "ListAsString": "function" },
+                                                { "ListAsString": "skip" }
+                                              ],
+                                              [
+                                                { "ListAsString": "input" },
                                                 [
                                                   { "ListAsString": "List" },
                                                   [
@@ -879,12 +887,20 @@
                                                       { "ListAsString": "KernelApplication" },
                                                       [
                                                         [
-                                                          { "ListAsString": "argument" },
+                                                          { "ListAsString": "function" },
+                                                          { "ListAsString": "list_head" }
+                                                        ],
+                                                        [
+                                                          { "ListAsString": "input" },
                                                           [
                                                             { "ListAsString": "KernelApplication" },
                                                             [
                                                               [
-                                                                { "ListAsString": "argument" },
+                                                                { "ListAsString": "function" },
+                                                                { "ListAsString": "skip" }
+                                                              ],
+                                                              [
+                                                                { "ListAsString": "input" },
                                                                 [
                                                                   { "ListAsString": "List" },
                                                                   [
@@ -896,17 +912,29 @@
                                                                       { "ListAsString": "KernelApplication" },
                                                                       [
                                                                         [
-                                                                          { "ListAsString": "argument" },
+                                                                          { "ListAsString": "function" },
+                                                                          { "ListAsString": "list_head" }
+                                                                        ],
+                                                                        [
+                                                                          { "ListAsString": "input" },
                                                                           [
                                                                             { "ListAsString": "KernelApplication" },
                                                                             [
                                                                               [
-                                                                                { "ListAsString": "argument" },
+                                                                                { "ListAsString": "function" },
+                                                                                { "ListAsString": "list_head" }
+                                                                              ],
+                                                                              [
+                                                                                { "ListAsString": "input" },
                                                                                 [
                                                                                   { "ListAsString": "KernelApplication" },
                                                                                   [
                                                                                     [
-                                                                                      { "ListAsString": "argument" },
+                                                                                      { "ListAsString": "function" },
+                                                                                      { "ListAsString": "skip" }
+                                                                                    ],
+                                                                                    [
+                                                                                      { "ListAsString": "input" },
                                                                                       [
                                                                                         { "ListAsString": "List" },
                                                                                         [
@@ -920,56 +948,28 @@
                                                                                           ]
                                                                                         ]
                                                                                       ]
-                                                                                    ],
-                                                                                    [
-                                                                                      { "ListAsString": "functionName" },
-                                                                                      { "ListAsString": "skip" }
                                                                                     ]
                                                                                   ]
                                                                                 ]
-                                                                              ],
-                                                                              [
-                                                                                { "ListAsString": "functionName" },
-                                                                                { "ListAsString": "list_head" }
                                                                               ]
                                                                             ]
                                                                           ]
-                                                                        ],
-                                                                        [
-                                                                          { "ListAsString": "functionName" },
-                                                                          { "ListAsString": "list_head" }
                                                                         ]
                                                                       ]
                                                                     ]
                                                                   ]
                                                                 ]
-                                                              ],
-                                                              [
-                                                                { "ListAsString": "functionName" },
-                                                                { "ListAsString": "skip" }
                                                               ]
                                                             ]
                                                           ]
-                                                        ],
-                                                        [
-                                                          { "ListAsString": "functionName" },
-                                                          { "ListAsString": "list_head" }
                                                         ]
                                                       ]
                                                     ]
                                                   ]
                                                 ]
-                                              ],
-                                              [
-                                                { "ListAsString": "functionName" },
-                                                { "ListAsString": "skip" }
                                               ]
                                             ]
                                           ]
-                                        ],
-                                        [
-                                          { "ListAsString": "functionName" },
-                                          { "ListAsString": "list_head" }
                                         ]
                                       ]
                                     ]
@@ -987,6 +987,58 @@
                         { "ListAsString": "ParseAndEval" },
                         [
                           [
+                            { "ListAsString": "encoded" },
+                            [
+                              { "ListAsString": "KernelApplication" },
+                              [
+                                [
+                                  { "ListAsString": "function" },
+                                  { "ListAsString": "list_head" }
+                                ],
+                                [
+                                  { "ListAsString": "input" },
+                                  [
+                                    { "ListAsString": "KernelApplication" },
+                                    [
+                                      [
+                                        { "ListAsString": "function" },
+                                        { "ListAsString": "skip" }
+                                      ],
+                                      [
+                                        { "ListAsString": "input" },
+                                        [
+                                          { "ListAsString": "List" },
+                                          [
+                                            [
+                                              { "ListAsString": "Literal" },
+                                              2
+                                            ],
+                                            [
+                                              { "ListAsString": "KernelApplication" },
+                                              [
+                                                [
+                                                  { "ListAsString": "function" },
+                                                  { "ListAsString": "list_head" }
+                                                ],
+                                                [
+                                                  { "ListAsString": "input" },
+                                                  [
+                                                    { "ListAsString": "Environment" },
+                                                    []
+                                                  ]
+                                                ]
+                                              ]
+                                            ]
+                                          ]
+                                        ]
+                                      ]
+                                    ]
+                                  ]
+                                ]
+                              ]
+                            ]
+                          ],
+                          [
                             { "ListAsString": "environment" },
                             [
                               { "ListAsString": "List" },
@@ -995,15 +1047,15 @@
                                   { "ListAsString": "KernelApplication" },
                                   [
                                     [
-                                      { "ListAsString": "argument" },
+                                      { "ListAsString": "function" },
+                                      { "ListAsString": "list_head" }
+                                    ],
+                                    [
+                                      { "ListAsString": "input" },
                                       [
                                         { "ListAsString": "Environment" },
                                         []
                                       ]
-                                    ],
-                                    [
-                                      { "ListAsString": "functionName" },
-                                      { "ListAsString": "list_head" }
                                     ]
                                   ]
                                 ],
@@ -1014,12 +1066,20 @@
                                       { "ListAsString": "KernelApplication" },
                                       [
                                         [
-                                          { "ListAsString": "argument" },
+                                          { "ListAsString": "function" },
+                                          { "ListAsString": "list_head" }
+                                        ],
+                                        [
+                                          { "ListAsString": "input" },
                                           [
                                             { "ListAsString": "KernelApplication" },
                                             [
                                               [
-                                                { "ListAsString": "argument" },
+                                                { "ListAsString": "function" },
+                                                { "ListAsString": "skip" }
+                                              ],
+                                              [
+                                                { "ListAsString": "input" },
                                                 [
                                                   { "ListAsString": "List" },
                                                   [
@@ -1031,12 +1091,20 @@
                                                       { "ListAsString": "KernelApplication" },
                                                       [
                                                         [
-                                                          { "ListAsString": "argument" },
+                                                          { "ListAsString": "function" },
+                                                          { "ListAsString": "list_head" }
+                                                        ],
+                                                        [
+                                                          { "ListAsString": "input" },
                                                           [
                                                             { "ListAsString": "KernelApplication" },
                                                             [
                                                               [
-                                                                { "ListAsString": "argument" },
+                                                                { "ListAsString": "function" },
+                                                                { "ListAsString": "skip" }
+                                                              ],
+                                                              [
+                                                                { "ListAsString": "input" },
                                                                 [
                                                                   { "ListAsString": "List" },
                                                                   [
@@ -1050,33 +1118,17 @@
                                                                     ]
                                                                   ]
                                                                 ]
-                                                              ],
-                                                              [
-                                                                { "ListAsString": "functionName" },
-                                                                { "ListAsString": "skip" }
                                                               ]
                                                             ]
                                                           ]
-                                                        ],
-                                                        [
-                                                          { "ListAsString": "functionName" },
-                                                          { "ListAsString": "list_head" }
                                                         ]
                                                       ]
                                                     ]
                                                   ]
                                                 ]
-                                              ],
-                                              [
-                                                { "ListAsString": "functionName" },
-                                                { "ListAsString": "skip" }
                                               ]
                                             ]
                                           ]
-                                        ],
-                                        [
-                                          { "ListAsString": "functionName" },
-                                          { "ListAsString": "list_head" }
                                         ]
                                       ]
                                     ],
@@ -1084,12 +1136,20 @@
                                       { "ListAsString": "KernelApplication" },
                                       [
                                         [
-                                          { "ListAsString": "argument" },
+                                          { "ListAsString": "function" },
+                                          { "ListAsString": "list_head" }
+                                        ],
+                                        [
+                                          { "ListAsString": "input" },
                                           [
                                             { "ListAsString": "KernelApplication" },
                                             [
                                               [
-                                                { "ListAsString": "argument" },
+                                                { "ListAsString": "function" },
+                                                { "ListAsString": "skip" }
+                                              ],
+                                              [
+                                                { "ListAsString": "input" },
                                                 [
                                                   { "ListAsString": "List" },
                                                   [
@@ -1101,12 +1161,20 @@
                                                       { "ListAsString": "KernelApplication" },
                                                       [
                                                         [
-                                                          { "ListAsString": "argument" },
+                                                          { "ListAsString": "function" },
+                                                          { "ListAsString": "list_head" }
+                                                        ],
+                                                        [
+                                                          { "ListAsString": "input" },
                                                           [
                                                             { "ListAsString": "KernelApplication" },
                                                             [
                                                               [
-                                                                { "ListAsString": "argument" },
+                                                                { "ListAsString": "function" },
+                                                                { "ListAsString": "skip" }
+                                                              ],
+                                                              [
+                                                                { "ListAsString": "input" },
                                                                 [
                                                                   { "ListAsString": "List" },
                                                                   [
@@ -1118,17 +1186,29 @@
                                                                       { "ListAsString": "KernelApplication" },
                                                                       [
                                                                         [
-                                                                          { "ListAsString": "argument" },
+                                                                          { "ListAsString": "function" },
+                                                                          { "ListAsString": "list_head" }
+                                                                        ],
+                                                                        [
+                                                                          { "ListAsString": "input" },
                                                                           [
                                                                             { "ListAsString": "KernelApplication" },
                                                                             [
                                                                               [
-                                                                                { "ListAsString": "argument" },
+                                                                                { "ListAsString": "function" },
+                                                                                { "ListAsString": "list_head" }
+                                                                              ],
+                                                                              [
+                                                                                { "ListAsString": "input" },
                                                                                 [
                                                                                   { "ListAsString": "KernelApplication" },
                                                                                   [
                                                                                     [
-                                                                                      { "ListAsString": "argument" },
+                                                                                      { "ListAsString": "function" },
+                                                                                      { "ListAsString": "skip" }
+                                                                                    ],
+                                                                                    [
+                                                                                      { "ListAsString": "input" },
                                                                                       [
                                                                                         { "ListAsString": "List" },
                                                                                         [
@@ -1142,112 +1222,32 @@
                                                                                           ]
                                                                                         ]
                                                                                       ]
-                                                                                    ],
-                                                                                    [
-                                                                                      { "ListAsString": "functionName" },
-                                                                                      { "ListAsString": "skip" }
                                                                                     ]
                                                                                   ]
                                                                                 ]
-                                                                              ],
-                                                                              [
-                                                                                { "ListAsString": "functionName" },
-                                                                                { "ListAsString": "list_head" }
                                                                               ]
                                                                             ]
                                                                           ]
-                                                                        ],
-                                                                        [
-                                                                          { "ListAsString": "functionName" },
-                                                                          { "ListAsString": "list_head" }
                                                                         ]
                                                                       ]
                                                                     ]
                                                                   ]
                                                                 ]
-                                                              ],
-                                                              [
-                                                                { "ListAsString": "functionName" },
-                                                                { "ListAsString": "skip" }
                                                               ]
                                                             ]
                                                           ]
-                                                        ],
-                                                        [
-                                                          { "ListAsString": "functionName" },
-                                                          { "ListAsString": "list_head" }
                                                         ]
                                                       ]
                                                     ]
                                                   ]
                                                 ]
-                                              ],
-                                              [
-                                                { "ListAsString": "functionName" },
-                                                { "ListAsString": "skip" }
-                                              ]
-                                            ]
-                                          ]
-                                        ],
-                                        [
-                                          { "ListAsString": "functionName" },
-                                          { "ListAsString": "list_head" }
-                                        ]
-                                      ]
-                                    ]
-                                  ]
-                                ]
-                              ]
-                            ]
-                          ],
-                          [
-                            { "ListAsString": "expression" },
-                            [
-                              { "ListAsString": "KernelApplication" },
-                              [
-                                [
-                                  { "ListAsString": "argument" },
-                                  [
-                                    { "ListAsString": "KernelApplication" },
-                                    [
-                                      [
-                                        { "ListAsString": "argument" },
-                                        [
-                                          { "ListAsString": "List" },
-                                          [
-                                            [
-                                              { "ListAsString": "Literal" },
-                                              2
-                                            ],
-                                            [
-                                              { "ListAsString": "KernelApplication" },
-                                              [
-                                                [
-                                                  { "ListAsString": "argument" },
-                                                  [
-                                                    { "ListAsString": "Environment" },
-                                                    []
-                                                  ]
-                                                ],
-                                                [
-                                                  { "ListAsString": "functionName" },
-                                                  { "ListAsString": "list_head" }
-                                                ]
                                               ]
                                             ]
                                           ]
                                         ]
-                                      ],
-                                      [
-                                        { "ListAsString": "functionName" },
-                                        { "ListAsString": "skip" }
                                       ]
                                     ]
                                   ]
-                                ],
-                                [
-                                  { "ListAsString": "functionName" },
-                                  { "ListAsString": "list_head" }
                                 ]
                               ]
                             ]

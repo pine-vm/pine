@@ -26,13 +26,13 @@ generateTemplateEvaluatingToExpressionTests =
       )
     , ( "ParseAndEvalExpression"
       , Pine.ParseAndEvalExpression
+            (Pine.LiteralExpression (Pine.valueFromString "encoded-placeholder"))
             (Pine.LiteralExpression (Pine.valueFromString "environment-placeholder"))
-            (Pine.LiteralExpression (Pine.valueFromString "expression-placeholder"))
       )
     , ( "KernelApplicationExpression"
       , Pine.KernelApplicationExpression
-            (Pine.LiteralExpression (Pine.valueFromString "argument-placeholder"))
             "equal"
+            (Pine.LiteralExpression (Pine.valueFromString "argument-placeholder"))
       )
     , ( "ConditionalExpression"
       , Pine.ConditionalExpression

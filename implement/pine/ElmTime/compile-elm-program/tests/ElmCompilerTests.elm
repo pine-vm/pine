@@ -46,10 +46,10 @@ compiler_reduces_decode_and_eval_test_cases : List ( String, ReduceParseAndEvalT
 compiler_reduces_decode_and_eval_test_cases =
     [ ( "simple reducible - literal"
       , { original =
-            ( Pine.ListExpression []
-            , Pine.LiteralExpression (Pine.valueFromString "test")
+            ( Pine.LiteralExpression (Pine.valueFromString "test")
                 |> Pine.encodeExpressionAsValue
                 |> Pine.LiteralExpression
+            , Pine.ListExpression []
             )
         , expected = Pine.LiteralExpression (Pine.valueFromString "test")
         , additionalTestEnvironments = []
@@ -57,10 +57,10 @@ compiler_reduces_decode_and_eval_test_cases =
       )
     , ( "simple reducible - list head"
       , { original =
-            ( FirCompiler.pineKernel_ListHead_Pine Pine.EnvironmentExpression
-            , Pine.EnvironmentExpression
+            ( Pine.EnvironmentExpression
                 |> Pine.encodeExpressionAsValue
                 |> Pine.LiteralExpression
+            , FirCompiler.pineKernel_ListHead_Pine Pine.EnvironmentExpression
             )
         , expected =
             FirCompiler.pineKernel_ListHead_Pine Pine.EnvironmentExpression
@@ -69,7 +69,12 @@ compiler_reduces_decode_and_eval_test_cases =
       )
     , ( "reducible - skip 2"
       , { original =
-            ( Pine.ListExpression
+            ( Pine.EnvironmentExpression
+                |> FirCompiler.listSkipExpression_Pine 2
+                |> FirCompiler.pineKernel_ListHead_Pine
+                |> Pine.encodeExpressionAsValue
+                |> Pine.LiteralExpression
+            , Pine.ListExpression
                 [ Pine.EnvironmentExpression
                     |> FirCompiler.listSkipExpression_Pine 4
                 , Pine.EnvironmentExpression
@@ -79,11 +84,6 @@ compiler_reduces_decode_and_eval_test_cases =
                 , Pine.EnvironmentExpression
                     |> FirCompiler.listSkipExpression_Pine 2
                 ]
-            , Pine.EnvironmentExpression
-                |> FirCompiler.listSkipExpression_Pine 2
-                |> FirCompiler.pineKernel_ListHead_Pine
-                |> Pine.encodeExpressionAsValue
-                |> Pine.LiteralExpression
             )
         , expected =
             Pine.EnvironmentExpression
@@ -93,7 +93,14 @@ compiler_reduces_decode_and_eval_test_cases =
       )
     , ( "reducible - skip 1 (skip 2)"
       , { original =
-            ( Pine.ListExpression
+            ( Pine.EnvironmentExpression
+                |> FirCompiler.listSkipExpression_Pine 2
+                |> FirCompiler.pineKernel_ListHead_Pine
+                |> FirCompiler.listSkipExpression_Pine 1
+                |> FirCompiler.pineKernel_ListHead_Pine
+                |> Pine.encodeExpressionAsValue
+                |> Pine.LiteralExpression
+            , Pine.ListExpression
                 [ Pine.ListExpression
                     [ Pine.ListExpression []
                     , Pine.EnvironmentExpression
@@ -115,13 +122,6 @@ compiler_reduces_decode_and_eval_test_cases =
                         |> FirCompiler.listSkipExpression_Pine 2
                     ]
                 ]
-            , Pine.EnvironmentExpression
-                |> FirCompiler.listSkipExpression_Pine 2
-                |> FirCompiler.pineKernel_ListHead_Pine
-                |> FirCompiler.listSkipExpression_Pine 1
-                |> FirCompiler.pineKernel_ListHead_Pine
-                |> Pine.encodeExpressionAsValue
-                |> Pine.LiteralExpression
             )
         , expected =
             Pine.EnvironmentExpression
@@ -159,10 +159,10 @@ test_compiler_reduces_decode_and_eval_test_cases =
                             Test.test ("Environment " ++ String.fromInt envIndex) <|
                                 \_ ->
                                     let
-                                        ( origEnv, origExpr ) =
+                                        ( origEncoded, origEnv ) =
                                             testCase.original
                                     in
-                                    Pine.ParseAndEvalExpression origEnv origExpr
+                                    Pine.ParseAndEvalExpression origEncoded origEnv
                                         |> Pine.evaluateExpression (Pine.EvalEnvironment environment)
                                         |> Expect.equal
                                             (Pine.evaluateExpression
@@ -339,17 +339,18 @@ emitClosureExpressionTests =
               , { functionInnerExpr =
                     FirCompiler.ConditionalExpression
                         (FirCompiler.KernelApplicationExpression
+                            "is_sorted_ascending_int"
                             (FirCompiler.ListExpression
                                 [ FirCompiler.ReferenceExpression [] "remainingCount"
                                 , FirCompiler.LiteralExpression (Pine.valueFromInt 0)
                                 ]
                             )
-                            "is_sorted_ascending_int"
                         )
                         (FirCompiler.FunctionApplicationExpression
                             (FirCompiler.ReferenceExpression [] "repeat_help")
                             [ FirCompiler.ListExpression
                                 [ FirCompiler.KernelApplicationExpression
+                                    "concat"
                                     (FirCompiler.ListExpression
                                         [ FirCompiler.ListExpression
                                             [ FirCompiler.ReferenceExpression [] "value"
@@ -357,14 +358,13 @@ emitClosureExpressionTests =
                                         , FirCompiler.ReferenceExpression [] "result"
                                         ]
                                     )
-                                    "concat"
                                 , FirCompiler.KernelApplicationExpression
+                                    "add_int"
                                     (FirCompiler.ListExpression
                                         [ FirCompiler.ReferenceExpression [] "remainingCount"
                                         , FirCompiler.LiteralExpression (Pine.valueFromInt -1)
                                         ]
                                     )
-                                    "add_int"
                                 , FirCompiler.ReferenceExpression [] "value"
                                 ]
                             ]
@@ -420,12 +420,12 @@ emitClosureExpressionTests =
             [ ( "is_less_than_or_equal_to_zero"
               , { functionInnerExpr =
                     FirCompiler.KernelApplicationExpression
+                        "is_sorted_ascending_int"
                         (FirCompiler.ListExpression
                             [ FirCompiler.ReferenceExpression [] "num"
                             , FirCompiler.LiteralExpression (Pine.valueFromInt 0)
                             ]
                         )
-                        "is_sorted_ascending_int"
                 , functionParams =
                     [ [ ( "num", [] )
                       ]
@@ -444,6 +444,7 @@ emitClosureExpressionTests =
                             (FirCompiler.ReferenceExpression [] "repeat_help")
                             [ FirCompiler.ListExpression
                                 [ FirCompiler.KernelApplicationExpression
+                                    "concat"
                                     (FirCompiler.ListExpression
                                         [ FirCompiler.ListExpression
                                             [ FirCompiler.ReferenceExpression [] "value"
@@ -451,14 +452,13 @@ emitClosureExpressionTests =
                                         , FirCompiler.ReferenceExpression [] "result"
                                         ]
                                     )
-                                    "concat"
                                 , FirCompiler.KernelApplicationExpression
+                                    "add_int"
                                     (FirCompiler.ListExpression
                                         [ FirCompiler.ReferenceExpression [] "remainingCount"
                                         , FirCompiler.LiteralExpression (Pine.valueFromInt -1)
                                         ]
                                     )
-                                    "add_int"
                                 , FirCompiler.ReferenceExpression [] "value"
                                 ]
                             ]
@@ -709,16 +709,17 @@ emitClosureExpressionTests =
               , { functionInnerExpr =
                     FirCompiler.ConditionalExpression
                         (FirCompiler.KernelApplicationExpression
+                            "is_sorted_ascending_int"
                             (FirCompiler.ListExpression
                                 [ FirCompiler.ReferenceExpression [] "remainingCount"
                                 , FirCompiler.LiteralExpression (Pine.valueFromInt 0)
                                 ]
                             )
-                            "is_sorted_ascending_int"
                         )
                         (FirCompiler.FunctionApplicationExpression
                             (FirCompiler.ReferenceExpression [] "repeat_help")
                             [ FirCompiler.KernelApplicationExpression
+                                "concat"
                                 (FirCompiler.ListExpression
                                     [ FirCompiler.ListExpression
                                         [ FirCompiler.ReferenceExpression [] "value"
@@ -726,15 +727,14 @@ emitClosureExpressionTests =
                                     , FirCompiler.ReferenceExpression [] "result"
                                     ]
                                 )
-                                "concat"
                             , FirCompiler.ListExpression
                                 [ FirCompiler.KernelApplicationExpression
+                                    "add_int"
                                     (FirCompiler.ListExpression
                                         [ FirCompiler.ReferenceExpression [] "remainingCount"
                                         , FirCompiler.LiteralExpression (Pine.valueFromInt -1)
                                         ]
                                     )
-                                    "add_int"
                                 , FirCompiler.ReferenceExpression [] "value"
                                 ]
                             ]
@@ -777,16 +777,17 @@ emitClosureExpressionTests =
               , { functionInnerExpr =
                     FirCompiler.ConditionalExpression
                         (FirCompiler.KernelApplicationExpression
+                            "is_sorted_ascending_int"
                             (FirCompiler.ListExpression
                                 [ FirCompiler.ReferenceExpression [] "remainingCount"
                                 , FirCompiler.LiteralExpression (Pine.valueFromInt 0)
                                 ]
                             )
-                            "is_sorted_ascending_int"
                         )
                         (FirCompiler.FunctionApplicationExpression
                             (FirCompiler.ReferenceExpression [] "repeat_help")
                             [ FirCompiler.KernelApplicationExpression
+                                "concat"
                                 (FirCompiler.ListExpression
                                     [ FirCompiler.ListExpression
                                         [ FirCompiler.ReferenceExpression [] "value"
@@ -794,14 +795,13 @@ emitClosureExpressionTests =
                                     , FirCompiler.ReferenceExpression [] "result"
                                     ]
                                 )
-                                "concat"
                             , FirCompiler.KernelApplicationExpression
+                                "add_int"
                                 (FirCompiler.ListExpression
                                     [ FirCompiler.ReferenceExpression [] "remainingCount"
                                     , FirCompiler.LiteralExpression (Pine.valueFromInt -1)
                                     ]
                                 )
-                                "add_int"
                             , FirCompiler.ReferenceExpression [] "value"
                             ]
                         )

@@ -403,8 +403,8 @@ public static class PineCSharpSyntaxFactory
             compositionExpr
             :
             new PineVM.Expression.KernelApplication(
-                functionName: "skip",
-                argument:
+                function: "skip",
+                input:
                 new PineVM.Expression.List(
                     [
                     new PineVM.Expression.Literal(PineValueAsInteger.ValueFromSignedInteger(currentOffset)),
@@ -413,8 +413,8 @@ public static class PineCSharpSyntaxFactory
 
         var currentExpr =
             new PineVM.Expression.KernelApplication(
-                functionName: "list_head",
-                argument: skippedExpr);
+                function: "list_head",
+                input: skippedExpr);
 
         return
             BuildPineExpressionToGetItemFromPath(

@@ -407,15 +407,15 @@ evolutionStagesToMakeElmFunction =
                 [ Pine.LiteralExpression (Pine.valueFromString "KernelApplication")
                 , Pine.ListExpression
                     [ Pine.ListExpression
-                        [ Pine.LiteralExpression (Pine.valueFromString "argument")
+                        [ Pine.LiteralExpression (Pine.valueFromString "function")
+                        , Pine.LiteralExpression (Pine.valueFromString "equal")
+                        ]
+                    , Pine.ListExpression
+                        [ Pine.LiteralExpression (Pine.valueFromString "input")
                         , Pine.ListExpression
                             [ Pine.LiteralExpression (Pine.valueFromString "List")
                             , Pine.LiteralExpression (Pine.ListValue [])
                             ]
-                        ]
-                    , Pine.ListExpression
-                        [ Pine.LiteralExpression (Pine.valueFromString "functionName")
-                        , Pine.LiteralExpression (Pine.valueFromString "equal")
                         ]
                     ]
                 ]
@@ -424,8 +424,8 @@ evolutionStagesToMakeElmFunction =
                 |> Expect.equal
                     (Ok
                         (Pine.KernelApplicationExpression
-                            (Pine.ListExpression [])
                             "equal"
+                            (Pine.ListExpression [])
                         )
                     )
     , Test.test "Kernel application concat" <|
@@ -434,15 +434,15 @@ evolutionStagesToMakeElmFunction =
                 [ Pine.LiteralExpression (Pine.valueFromString "KernelApplication")
                 , Pine.ListExpression
                     [ Pine.ListExpression
-                        [ Pine.LiteralExpression (Pine.valueFromString "argument")
+                        [ Pine.LiteralExpression (Pine.valueFromString "function")
+                        , Pine.LiteralExpression (Pine.valueFromString "concat")
+                        ]
+                    , Pine.ListExpression
+                        [ Pine.LiteralExpression (Pine.valueFromString "input")
                         , Pine.ListExpression
                             [ Pine.LiteralExpression (Pine.valueFromString "Literal")
                             , Pine.EnvironmentExpression
                             ]
-                        ]
-                    , Pine.ListExpression
-                        [ Pine.LiteralExpression (Pine.valueFromString "functionName")
-                        , Pine.LiteralExpression (Pine.valueFromString "concat")
                         ]
                     ]
                 ]
@@ -456,6 +456,7 @@ evolutionStagesToMakeElmFunction =
                 |> Expect.equal
                     (Ok
                         (Pine.KernelApplicationExpression
+                            "concat"
                             (Pine.LiteralExpression
                                 (Pine.ListValue
                                     [ Pine.valueFromContextExpansionWithName
@@ -463,7 +464,6 @@ evolutionStagesToMakeElmFunction =
                                     ]
                                 )
                             )
-                            "concat"
                         )
                     )
     , Test.test "Kernel application concat with context" <|
@@ -472,7 +472,11 @@ evolutionStagesToMakeElmFunction =
                 [ Pine.LiteralExpression (Pine.valueFromString "KernelApplication")
                 , Pine.ListExpression
                     [ Pine.ListExpression
-                        [ Pine.LiteralExpression (Pine.valueFromString "argument")
+                        [ Pine.LiteralExpression (Pine.valueFromString "function")
+                        , Pine.LiteralExpression (Pine.valueFromString "concat")
+                        ]
+                    , Pine.ListExpression
+                        [ Pine.LiteralExpression (Pine.valueFromString "input")
                         , Pine.ListExpression
                             [ Pine.LiteralExpression (Pine.valueFromString "List")
                             , Pine.ListExpression
@@ -487,10 +491,6 @@ evolutionStagesToMakeElmFunction =
                                 ]
                             ]
                         ]
-                    , Pine.ListExpression
-                        [ Pine.LiteralExpression (Pine.valueFromString "functionName")
-                        , Pine.LiteralExpression (Pine.valueFromString "concat")
-                        ]
                     ]
                 ]
                 |> Pine.evaluateExpression
@@ -503,6 +503,7 @@ evolutionStagesToMakeElmFunction =
                 |> Expect.equal
                     (Ok
                         (Pine.KernelApplicationExpression
+                            "concat"
                             (Pine.ListExpression
                                 [ Pine.LiteralExpression
                                     (Pine.ListValue
@@ -513,7 +514,6 @@ evolutionStagesToMakeElmFunction =
                                 , Pine.EnvironmentExpression
                                 ]
                             )
-                            "concat"
                         )
                     )
     ]
@@ -564,12 +564,12 @@ testCompileRecordAccessPineExpression =
                         ]
             in
             Pine.ParseAndEvalExpression
+                (Pine.LiteralExpression ElmCompiler.pineFunctionForRecordAccessAsValue)
                 (Pine.ListExpression
                     [ Pine.LiteralExpression recordValue
                     , Pine.LiteralExpression (Pine.valueFromString "alfa")
                     ]
                 )
-                (Pine.LiteralExpression ElmCompiler.pineFunctionForRecordAccessAsValue)
                 |> Pine.evaluateExpression Pine.emptyEvalEnvironment
                 |> Result.mapError Pine.displayStringFromPineError
                 |> Result.andThen ElmInteractive.pineValueAsElmValue
@@ -596,6 +596,7 @@ testCompileRecordUpdatePineExpression =
                             ]
                 in
                 Pine.ParseAndEvalExpression
+                    (Pine.LiteralExpression ElmCompiler.pineFunctionForRecordUpdateAsValue)
                     (Pine.ListExpression
                         [ Pine.LiteralExpression recordValue
                         , Pine.ListExpression
@@ -606,7 +607,6 @@ testCompileRecordUpdatePineExpression =
                             ]
                         ]
                     )
-                    (Pine.LiteralExpression ElmCompiler.pineFunctionForRecordUpdateAsValue)
                     |> Pine.evaluateExpression Pine.emptyEvalEnvironment
                     |> Result.mapError Pine.displayStringFromPineError
                     |> Result.andThen ElmInteractive.pineValueAsElmValue
@@ -638,6 +638,7 @@ testCompileRecordUpdatePineExpression =
                             ]
                 in
                 Pine.ParseAndEvalExpression
+                    (Pine.LiteralExpression ElmCompiler.pineFunctionForRecordUpdateAsValue)
                     (Pine.ListExpression
                         [ Pine.LiteralExpression recordValue
                         , Pine.ListExpression
@@ -648,7 +649,6 @@ testCompileRecordUpdatePineExpression =
                             ]
                         ]
                     )
-                    (Pine.LiteralExpression ElmCompiler.pineFunctionForRecordUpdateAsValue)
                     |> Pine.evaluateExpression Pine.emptyEvalEnvironment
                     |> Result.mapError Pine.displayStringFromPineError
                     |> Result.andThen ElmInteractive.pineValueAsElmValue
@@ -681,6 +681,7 @@ testCompileRecordUpdatePineExpression =
                             ]
                 in
                 Pine.ParseAndEvalExpression
+                    (Pine.LiteralExpression ElmCompiler.pineFunctionForRecordUpdateAsValue)
                     (Pine.ListExpression
                         [ Pine.LiteralExpression recordValue
                         , Pine.ListExpression
@@ -691,7 +692,6 @@ testCompileRecordUpdatePineExpression =
                             ]
                         ]
                     )
-                    (Pine.LiteralExpression ElmCompiler.pineFunctionForRecordUpdateAsValue)
                     |> Pine.evaluateExpression Pine.emptyEvalEnvironment
                     |> Result.mapError Pine.displayStringFromPineError
                     |> Result.andThen ElmInteractive.pineValueAsElmValue

@@ -583,9 +583,9 @@ public class PineVM : IPineVM
                 return inlinedFinal;
             }
 
-            if (Expression.IsIndependent(parseAndEvalExpr.expression))
+            if (Expression.IsIndependent(parseAndEvalExpr.encoded))
             {
-                if (CompilePineToDotNet.ReducePineExpression.TryEvaluateExpressionIndependent(parseAndEvalExpr.expression) is
+                if (CompilePineToDotNet.ReducePineExpression.TryEvaluateExpressionIndependent(parseAndEvalExpr.encoded) is
                     Result<string, PineValue>.Ok evalExprOk)
                 {
                     return ContinueReduceForKnownExprValue(evalExprOk.Value);
@@ -1138,13 +1138,13 @@ public class PineVM : IPineVM
 
             if (expression is Expression.ParseAndEval parseAndEval)
             {
-                stack.Push(parseAndEval.expression);
+                stack.Push(parseAndEval.encoded);
                 stack.Push(parseAndEval.environment);
             }
 
             if (expression is Expression.KernelApplication kernelApp)
             {
-                stack.Push(kernelApp.argument);
+                stack.Push(kernelApp.input);
             }
 
             if (expression is Expression.Conditional conditional)
@@ -1215,18 +1215,18 @@ public class PineVM : IPineVM
         if (expression is not Expression.KernelApplication kernelApp)
             return null;
 
-        if (kernelApp.functionName is not nameof(KernelFunction.list_head))
+        if (kernelApp.function is not nameof(KernelFunction.list_head))
             return null;
 
-        if (kernelApp.argument is not Expression.KernelApplication innerKernelApp)
+        if (kernelApp.input is not Expression.KernelApplication innerKernelApp)
         {
-            return continueWithSkipCount(skipCount: 0, kernelApp.argument);
+            return continueWithSkipCount(skipCount: 0, kernelApp.input);
         }
 
-        if (innerKernelApp.functionName is not nameof(KernelFunction.skip))
+        if (innerKernelApp.function is not nameof(KernelFunction.skip))
             return null;
 
-        if (innerKernelApp.argument is not Expression.List skipListExpr)
+        if (innerKernelApp.input is not Expression.List skipListExpr)
             return null;
 
         if (skipListExpr.items.Count is not 2)
@@ -1284,10 +1284,10 @@ public class PineVM : IPineVM
         if (expression is not Expression.KernelApplication kernelApp)
             return null;
 
-        if (kernelApp.functionName is not nameof(KernelFunction.equal))
+        if (kernelApp.function is not nameof(KernelFunction.equal))
             return null;
 
-        if (kernelApp.argument is not Expression.List listExpr)
+        if (kernelApp.input is not Expression.List listExpr)
             return null;
 
         if (listExpr.items.Count is not 2)
@@ -1426,7 +1426,7 @@ public class PineVM : IPineVM
 
                     var expressionValue =
                         EvaluateExpressionDefaultLessStack(
-                            parseAndEval.expression,
+                            parseAndEval.encoded,
                             currentFrame.EnvironmentValue,
                             stackPrevValues: stackPrevValues);
 
@@ -1633,7 +1633,7 @@ public class PineVM : IPineVM
 
         if (expression is Expression.KernelApplication kernelApp)
         {
-            return ExpressionShouldGetNewStackFrame(kernelApp.argument);
+            return ExpressionShouldGetNewStackFrame(kernelApp.input);
         }
 
         if (expression is Expression.Conditional conditional)
@@ -1828,7 +1828,7 @@ public class PineVM : IPineVM
 
         var expressionValue =
             EvaluateExpressionDefaultLessStack(
-                parseAndEval.expression,
+                parseAndEval.encoded,
                 environment,
                 stackPrevValues: stackPrevValues);
 
@@ -1881,11 +1881,11 @@ public class PineVM : IPineVM
         Expression.KernelApplication application,
         ReadOnlyMemory<PineValue> stackPrevValues)
     {
-        if (application.functionName is nameof(KernelFunction.list_head) &&
-            application.argument is Expression.KernelApplication innerKernelApplication)
+        if (application.function is nameof(KernelFunction.list_head) &&
+            application.input is Expression.KernelApplication innerKernelApplication)
         {
-            if (innerKernelApplication.functionName == nameof(KernelFunction.skip) &&
-                innerKernelApplication.argument is Expression.List skipListExpr &&
+            if (innerKernelApplication.function == nameof(KernelFunction.skip) &&
+                innerKernelApplication.input is Expression.List skipListExpr &&
                 skipListExpr.items.Count is 2)
             {
                 var skipValue =
@@ -1924,56 +1924,56 @@ public class PineVM : IPineVM
         Expression.KernelApplication application,
         ReadOnlyMemory<PineValue> stackPrevValues)
     {
-        var argumentValue = EvaluateExpressionDefaultLessStack(application.argument, environment, stackPrevValues);
+        var inputValue = EvaluateExpressionDefaultLessStack(application.input, environment, stackPrevValues);
 
         return
             EvaluateKernelApplicationGeneric(
-                argumentValue: argumentValue,
-                functionName: application.functionName);
+                function: application.function,
+                inputValue: inputValue);
     }
 
     public static PineValue EvaluateKernelApplicationGeneric(
-        PineValue argumentValue,
-        string functionName)
+        string function,
+        PineValue inputValue)
     {
-        return functionName switch
+        return function switch
         {
             nameof(KernelFunction.equal) =>
-            KernelFunction.equal(argumentValue),
+            KernelFunction.equal(inputValue),
 
             nameof(KernelFunction.length) =>
-            KernelFunction.length(argumentValue),
+            KernelFunction.length(inputValue),
 
             nameof(KernelFunction.list_head) =>
-            KernelFunction.list_head(argumentValue),
+            KernelFunction.list_head(inputValue),
 
             nameof(KernelFunction.skip) =>
-            KernelFunction.skip(argumentValue),
+            KernelFunction.skip(inputValue),
 
             nameof(KernelFunction.take) =>
-            KernelFunction.take(argumentValue),
+            KernelFunction.take(inputValue),
 
             nameof(KernelFunction.concat) =>
-            KernelFunction.concat(argumentValue),
+            KernelFunction.concat(inputValue),
 
             nameof(KernelFunction.reverse) =>
-            KernelFunction.reverse(argumentValue),
+            KernelFunction.reverse(inputValue),
 
             nameof(KernelFunction.negate) =>
-            KernelFunction.negate(argumentValue),
+            KernelFunction.negate(inputValue),
 
             nameof(KernelFunction.add_int) =>
-            KernelFunction.add_int(argumentValue),
+            KernelFunction.add_int(inputValue),
 
             nameof(KernelFunction.mul_int) =>
-            KernelFunction.mul_int(argumentValue),
+            KernelFunction.mul_int(inputValue),
 
             nameof(KernelFunction.is_sorted_ascending_int) =>
-            KernelFunction.is_sorted_ascending_int(argumentValue),
+            KernelFunction.is_sorted_ascending_int(inputValue),
 
             _ =>
             throw new ParseExpressionException(
-                "Did not find kernel function '" + functionName + "'")
+                "Did not find kernel function '" + function + "'")
         };
     }
 

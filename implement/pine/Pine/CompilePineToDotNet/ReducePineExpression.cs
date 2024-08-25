@@ -28,10 +28,10 @@ public class ReducePineExpression
             .Map(PineValue.List),
 
             Expression.KernelApplication kernelApplication =>
-            TryEvaluateExpressionIndependent(kernelApplication.argument)
-            .MapError(err => "Failed to evaluate kernel application argument independent: " + err)
-            .Map(argumentValue =>
-            PineVM.PineVM.EvaluateKernelApplicationGeneric(argumentValue, kernelApplication.functionName)),
+            TryEvaluateExpressionIndependent(kernelApplication.input)
+            .MapError(err => "Failed to evaluate kernel application input independent: " + err)
+            .Map(inputValue =>
+            PineVM.PineVM.EvaluateKernelApplicationGeneric(kernelApplication.function, inputValue)),
 
             Expression.ParseAndEval parseAndEvalExpr =>
             TryEvaluateExpressionIndependent(parseAndEvalExpr),
@@ -72,7 +72,7 @@ public class ReducePineExpression
         }
 
         return
-            TryEvaluateExpressionIndependent(parseAndEvalExpr.expression)
+            TryEvaluateExpressionIndependent(parseAndEvalExpr.encoded)
             .MapError(err => "Expression is not independent: " + err)
             .AndThen(compilerCache.ParseExpressionFromValue)
             .AndThen(innerExpr => TryEvaluateExpressionIndependent(innerExpr)
@@ -147,16 +147,16 @@ public class ReducePineExpression
         switch (expression)
         {
             case Expression.KernelApplication rootKernelApp:
-                switch (rootKernelApp.functionName)
+                switch (rootKernelApp.function)
                 {
                     case nameof(KernelFunction.equal):
                         {
-                            if (rootKernelApp.argument is Expression.List argumentList)
+                            if (rootKernelApp.input is Expression.List inputList)
                             {
                                 if (envConstraintId is not null)
                                 {
                                     var reducedArgumentsList =
-                                        argumentList.items
+                                        inputList.items
                                         .Select(origArg => SearchForExpressionReductionRecursive(
                                             maxDepth: 5,
                                             expression: origArg,
@@ -179,7 +179,7 @@ public class ReducePineExpression
 
                                     int? prevItemFixedLength = null;
 
-                                    foreach (var item in argumentList.items)
+                                    foreach (var item in inputList.items)
                                     {
                                         int? itemFixedLength = null;
 
@@ -215,14 +215,14 @@ public class ReducePineExpression
 
                     case "list_head":
                         {
-                            if (rootKernelApp.argument is Expression.List argumentList)
+                            if (rootKernelApp.input is Expression.List inputList)
                             {
                                 return
-                                    argumentList.items.FirstOrDefault() ??
+                                    inputList.items.FirstOrDefault() ??
                                     new Expression.Literal(PineValue.EmptyList);
                             }
 
-                            if (rootKernelApp.argument is Expression.Literal literal)
+                            if (rootKernelApp.input is Expression.Literal literal)
                                 return new Expression.Literal(KernelFunction.list_head(literal.Value));
 
                             return AttemptReduceViaEval();
@@ -230,31 +230,31 @@ public class ReducePineExpression
 
                     case "skip":
                         {
-                            if (rootKernelApp.argument is Expression.List argumentList && argumentList.items.Count is 2)
+                            if (rootKernelApp.input is Expression.List inputList && inputList.items.Count is 2)
                             {
-                                if (TryEvaluateExpressionIndependent(argumentList.items[0]) is Result<string, PineValue>.Ok okSkipCountValue)
+                                if (TryEvaluateExpressionIndependent(inputList.items[0]) is Result<string, PineValue>.Ok okSkipCountValue)
                                 {
                                     if (PineValueAsInteger.SignedIntegerFromValueRelaxed(okSkipCountValue.Value) is Result<string, BigInteger>.Ok okSkipCount)
                                     {
-                                        if (argumentList.items[1] is Expression.List partiallySkippedList)
+                                        if (inputList.items[1] is Expression.List partiallySkippedList)
                                         {
                                             return new Expression.List(
                                                 [.. partiallySkippedList.items.Skip((int)okSkipCount.Value)]);
                                         }
 
-                                        if (argumentList.items[1] is Expression.Literal literal)
+                                        if (inputList.items[1] is Expression.Literal literal)
                                         {
                                             return new Expression.Literal(
                                                 KernelFunction.skip((int)okSkipCount.Value, literal.Value));
                                         }
 
-                                        if (argumentList.items[1] is Expression.KernelApplication innerKernelApp)
+                                        if (inputList.items[1] is Expression.KernelApplication innerKernelApp)
                                         {
-                                            if (innerKernelApp.functionName is "skip"
-                                                && innerKernelApp.argument is Expression.List innerSkipArgList &&
-                                                innerSkipArgList.items.Count is 2)
+                                            if (innerKernelApp.function is "skip"
+                                                && innerKernelApp.input is Expression.List innerSkipInputList &&
+                                                innerSkipInputList.items.Count is 2)
                                             {
-                                                if (TryEvaluateExpressionIndependent(innerSkipArgList.items[0]) is Result<string, PineValue>.Ok okInnerSkipCountValue)
+                                                if (TryEvaluateExpressionIndependent(innerSkipInputList.items[0]) is Result<string, PineValue>.Ok okInnerSkipCountValue)
                                                 {
                                                     if (PineValueAsInteger.SignedIntegerFromValueRelaxed(okInnerSkipCountValue.Value) is Result<string, BigInteger>.Ok okInnerSkipCount)
                                                     {
@@ -270,10 +270,10 @@ public class ReducePineExpression
                                                             rootKernelApp
                                                             with
                                                             {
-                                                                argument = new Expression.List(
+                                                                input = new Expression.List(
                                                                     [
                                                                     new Expression.Literal(PineValueAsInteger.ValueFromSignedInteger(aggregateSkipCount)),
-                                                                    innerSkipArgList.items[1]
+                                                                    innerSkipInputList.items[1]
                                                                     ]
                                                                 )
                                                             };
@@ -292,30 +292,30 @@ public class ReducePineExpression
 
                     case nameof(KernelFunction.concat):
                         {
-                            if (rootKernelApp.argument is Expression.List argumentList)
+                            if (rootKernelApp.input is Expression.List inputList)
                             {
-                                if (argumentList.items.Count is 0)
+                                if (inputList.items.Count is 0)
                                 {
                                     return AttemptReduceViaEval();
                                 }
 
-                                if (argumentList.items.Count is 1)
+                                if (inputList.items.Count is 1)
                                 {
-                                    return argumentList.items[0];
+                                    return inputList.items[0];
                                 }
 
-                                var firstArgExpr = argumentList.items[0];
+                                var firstArgExpr = inputList.items[0];
 
                                 /*
                                 if (firstArgExpr is Expression.ListExpression ||
                                     firstArgExpr is Expression.LiteralExpression firstLiteral && firstLiteral.Value is PineValue.ListValue)
                                 */
                                 {
-                                    var nonEmptyItems = new List<Expression>(capacity: argumentList.items.Count);
+                                    var nonEmptyItems = new List<Expression>(capacity: inputList.items.Count);
 
-                                    for (var i = 0; i < argumentList.items.Count; ++i)
+                                    for (var i = 0; i < inputList.items.Count; ++i)
                                     {
-                                        var argItem = argumentList.items[i];
+                                        var argItem = inputList.items[i];
 
                                         if (argItem is Expression.List argList && argList.items.Count is 0)
                                             continue;
@@ -329,7 +329,7 @@ public class ReducePineExpression
                                         nonEmptyItems.Add(argItem);
                                     }
 
-                                    if (nonEmptyItems.Count < argumentList.items.Count)
+                                    if (nonEmptyItems.Count < inputList.items.Count)
                                     {
                                         if (nonEmptyItems.Count is 0)
                                         {
@@ -345,14 +345,14 @@ public class ReducePineExpression
                                             rootKernelApp
                                             with
                                             {
-                                                argument = new Expression.List(nonEmptyItems)
+                                                input = new Expression.List(nonEmptyItems)
                                             };
                                     }
                                 }
 
                                 var items = new List<Expression>();
 
-                                foreach (var argument in argumentList.items)
+                                foreach (var argument in inputList.items)
                                 {
                                     if (argument is not Expression.List subList)
                                     {
@@ -381,17 +381,17 @@ public class ReducePineExpression
 
                     case nameof(KernelFunction.length):
                         {
-                            if (rootKernelApp.argument is Expression.List argumentList)
+                            if (rootKernelApp.input is Expression.List inputList)
                             {
                                 return
                                     new Expression.Literal(
-                                        PineValueAsInteger.ValueFromSignedInteger(argumentList.items.Count));
+                                        PineValueAsInteger.ValueFromSignedInteger(inputList.items.Count));
                             }
 
-                            if (rootKernelApp.argument is Expression.KernelApplication lengthArgKernelApp)
+                            if (rootKernelApp.input is Expression.KernelApplication lengthInputKernelApp)
                             {
-                                if (lengthArgKernelApp.functionName is nameof(KernelFunction.concat) &&
-                                    lengthArgKernelApp.argument is Expression.List lengthConcatList)
+                                if (lengthInputKernelApp.function is nameof(KernelFunction.concat) &&
+                                    lengthInputKernelApp.input is Expression.List lengthConcatList)
                                 {
                                     int? aggregateLength = 0;
 
@@ -526,16 +526,16 @@ public class ReducePineExpression
 
         if (expression is Expression.KernelApplication kernelApp)
         {
-            if (kernelApp.functionName is "skip" &&
-                kernelApp.argument is Expression.List skipArgList && skipArgList.items.Count is 2)
+            if (kernelApp.function is "skip" &&
+                kernelApp.input is Expression.List skipInputList && skipInputList.items.Count is 2)
             {
-                if (TryEvaluateExpressionIndependent(skipArgList.items[0]) is Result<string, PineValue>.Ok okSkipCountValue)
+                if (TryEvaluateExpressionIndependent(skipInputList.items[0]) is Result<string, PineValue>.Ok okSkipCountValue)
                 {
                     if (PineValueAsInteger.SignedIntegerFromValueRelaxed(okSkipCountValue.Value) is Result<string, BigInteger>.Ok okSkipCount)
                     {
                         var skipCountClamped = (int)(okSkipCount.Value < 0 ? 0 : okSkipCount.Value);
 
-                        foreach (var offsetBound in TryInferListLengthLowerBounds(skipArgList.items[1], envConstraintId))
+                        foreach (var offsetBound in TryInferListLengthLowerBounds(skipInputList.items[1], envConstraintId))
                         {
                             yield return offsetBound - skipCountClamped;
                         }
@@ -579,10 +579,10 @@ public class ReducePineExpression
 
             case Expression.ParseAndEval parseAndEval:
                 {
-                    var exprTransform =
+                    var encodedTransform =
                         TransformPineExpressionWithOptionalReplacement(
                             findReplacement,
-                            parseAndEval.expression);
+                            parseAndEval.encoded);
 
                     var envTransform =
                         TransformPineExpressionWithOptionalReplacement(
@@ -593,10 +593,10 @@ public class ReducePineExpression
                         (
                         new Expression.ParseAndEval
                         (
-                            expression: exprTransform.expr,
+                            encoded: encodedTransform.expr,
                             environment: envTransform.expr
                         ),
-                        exprTransform.referencesOriginalEnv || envTransform.referencesOriginalEnv);
+                        encodedTransform.referencesOriginalEnv || envTransform.referencesOriginalEnv);
                 }
 
             case Expression.KernelApplication kernelApp:
@@ -604,14 +604,14 @@ public class ReducePineExpression
                     var argumentTransform =
                         TransformPineExpressionWithOptionalReplacement(
                             findReplacement,
-                            kernelApp.argument);
+                            kernelApp.input);
 
                     return
                         (
                         kernelApp
                         with
                         {
-                            argument = argumentTransform.expr
+                            input = argumentTransform.expr
                         },
                         argumentTransform.referencesOriginalEnv);
                 }

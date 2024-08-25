@@ -33,24 +33,24 @@ public class EncodePineExpressionAsJsonTests
 
             // Function 'isPineList' from the core libraries.
             new Expression.KernelApplication(
-            argument: new Expression.List(
+            input: new Expression.List(
                 [new Expression.KernelApplication(
-                    argument: new Expression.List(
+                    input: new Expression.List(
                         [new Expression.Literal(
                             PineValueAsInteger.ValueFromSignedInteger(
                                 0)), new Expression.KernelApplication(
-                            argument: new Expression.KernelApplication(
-                                argument: new Expression.KernelApplication(
-                                    argument: new Expression.List(
+                            input: new Expression.KernelApplication(
+                                input: new Expression.KernelApplication(
+                                    input: new Expression.List(
                                         [new Expression.Literal(
                                             PineValueAsInteger.ValueFromSignedInteger(
                                                 1)), new Expression.Environment()]),
-                                    functionName: "skip"),
-                                functionName: "list_head"),
-                            functionName: "list_head")]),
-                    functionName: "take"), new Expression.Literal(
+                                    function: "skip"),
+                                function: "list_head"),
+                            function: "list_head")]),
+                    function: "take"), new Expression.Literal(
                     PineValue.EmptyList)]),
-            functionName: "equal")
+            function: "equal")
 
             ];
 

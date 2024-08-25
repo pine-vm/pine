@@ -217,12 +217,14 @@ public static class PopularValues
 
         "functionName",
         "argument",
+        "input",
         "condition",
         "falseBranch",
         "trueBranch",
         "environment",
         "function",
         "expression",
+        "encoded",
 
         // From the FirCompiler module
         "FirCompiler",

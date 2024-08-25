@@ -42,11 +42,11 @@ type Expression
     = LiteralExpression Value
     | ListExpression (List Expression)
     | ParseAndEvalExpression
+        -- Encoded
+        Expression
         -- Environment
         Expression
-        -- Expression
-        Expression
-    | KernelApplicationExpression Expression String
+    | KernelApplicationExpression String Expression
     | ConditionalExpression
         -- Condition
         Expression
@@ -101,20 +101,20 @@ evaluateExpression context expression =
         ListExpression listElements ->
             evaluateListExpression [] context listElements
 
-        ParseAndEvalExpression envExpr exprExpr ->
-            case evaluateParseAndEval context ( envExpr, exprExpr ) of
+        ParseAndEvalExpression encodedExpr envExpr ->
+            case evaluateParseAndEval context ( encodedExpr, envExpr ) of
                 Err error ->
                     Err
                         (DescribePathNode
-                            ("Failed parse and evaluate of '" ++ describeExpression 1 exprExpr ++ "'")
+                            ("Failed parse and evaluate of '" ++ describeExpression 1 encodedExpr ++ "'")
                             error
                         )
 
                 Ok value ->
                     Ok value
 
-        KernelApplicationExpression argumentExpr functionName ->
-            case evaluateExpression context argumentExpr of
+        KernelApplicationExpression functionName inputExpr ->
+            case evaluateExpression context inputExpr of
                 Err error ->
                     Err
                         (DescribePathNode
@@ -122,13 +122,13 @@ evaluateExpression context expression =
                             error
                         )
 
-                Ok argument ->
+                Ok input ->
                     case parseKernelFunctionFromName functionName of
                         Err error ->
                             Err (DescribePathEnd error)
 
                         Ok kernelFunction ->
-                            Ok (kernelFunction argument)
+                            Ok (kernelFunction input)
 
         ConditionalExpression condition falseBranch trueBranch ->
             case evaluateExpression context condition of
@@ -497,7 +497,7 @@ is_sorted_ascending_int_recursive remaining previous =
 
 
 evaluateParseAndEval : EvalEnvironment -> ( Expression, Expression ) -> Result (PathDescription String) Value
-evaluateParseAndEval context ( envExpr, exprExpr ) =
+evaluateParseAndEval context ( encodedExpr, envExpr ) =
     case evaluateExpression context envExpr of
         Err error ->
             Err
@@ -510,12 +510,12 @@ evaluateParseAndEval context ( envExpr, exprExpr ) =
                 )
 
         Ok environmentValue ->
-            case evaluateExpression context exprExpr of
+            case evaluateExpression context encodedExpr of
                 Err error ->
                     Err
                         (DescribePathNode
                             ("Failed to evaluate expression '"
-                                ++ describeExpression 1 exprExpr
+                                ++ describeExpression 1 encodedExpr
                                 ++ "'"
                             )
                             error
@@ -584,7 +584,7 @@ describeExpression depthLimit expression =
                             ++ ")"
                    )
 
-        KernelApplicationExpression _ functionName ->
+        KernelApplicationExpression functionName _ ->
             "kernel-application("
                 ++ functionName
                 ++ ")"
@@ -989,21 +989,21 @@ encodeExpressionAsValue expression =
         ListExpression listExpr ->
             encodeListExpressionAsValueReversed [] (List.reverse listExpr)
 
-        ParseAndEvalExpression envExpr exprExpr ->
+        ParseAndEvalExpression encodedExpr envExpr ->
             encodeUnionToPineValue
                 stringAsValue_ParseAndEval
                 (ListValue
-                    [ ListValue [ stringAsValue_environment, encodeExpressionAsValue envExpr ]
-                    , ListValue [ stringAsValue_expression, encodeExpressionAsValue exprExpr ]
+                    [ ListValue [ stringAsValue_encoded, encodeExpressionAsValue encodedExpr ]
+                    , ListValue [ stringAsValue_environment, encodeExpressionAsValue envExpr ]
                     ]
                 )
 
-        KernelApplicationExpression argument functionName ->
+        KernelApplicationExpression functionName input ->
             encodeUnionToPineValue
                 stringAsValue_KernelApplication
                 (ListValue
-                    [ ListValue [ stringAsValue_argument, encodeExpressionAsValue argument ]
-                    , ListValue [ stringAsValue_functionName, valueFromString functionName ]
+                    [ ListValue [ stringAsValue_function, valueFromString functionName ]
+                    , ListValue [ stringAsValue_input, encodeExpressionAsValue input ]
                     ]
                 )
 
@@ -1072,16 +1072,16 @@ parseExpressionFromValue exprValue =
 
                         "ParseAndEval" ->
                             case parseParseAndEvalExpression unionTagValue of
-                                Ok ( envExpr, exprExpr ) ->
-                                    Ok (ParseAndEvalExpression envExpr exprExpr)
+                                Ok ( encodedExpr, envExpr ) ->
+                                    Ok (ParseAndEvalExpression encodedExpr envExpr)
 
                                 Err err ->
                                     Err err
 
                         "KernelApplication" ->
                             case parseKernelApplicationExpression unionTagValue of
-                                Ok ( argument, functionName ) ->
-                                    Ok (KernelApplicationExpression argument functionName)
+                                Ok ( functionName, input ) ->
+                                    Ok (KernelApplicationExpression functionName input)
 
                                 Err err ->
                                     Err err
@@ -1152,18 +1152,18 @@ parseListExpression value =
 parseParseAndEvalExpression : Value -> Result String ( Expression, Expression )
 parseParseAndEvalExpression value =
     case value of
-        ListValue ((ListValue [ _, envValue ]) :: (ListValue [ _, exprValue ]) :: _) ->
-            case parseExpressionFromValue envValue of
-                Err envErr ->
-                    Err ("Failed to parse env field: " ++ envErr)
+        ListValue ((ListValue [ _, encodedValue ]) :: (ListValue [ _, envValue ]) :: _) ->
+            case parseExpressionFromValue encodedValue of
+                Err parseErr ->
+                    Err ("Failed to parse encoded field: " ++ parseErr)
 
-                Ok envExpr ->
-                    case parseExpressionFromValue exprValue of
-                        Err exprErr ->
-                            Err ("Failed to parse expr field: " ++ exprErr)
+                Ok encodedExpr ->
+                    case parseExpressionFromValue envValue of
+                        Err envErr ->
+                            Err ("Failed to parse env field: " ++ envErr)
 
-                        Ok exprExpr ->
-                            Ok ( envExpr, exprExpr )
+                        Ok envExpr ->
+                            Ok ( encodedExpr, envExpr )
 
         ListValue list ->
             Err
@@ -1176,21 +1176,21 @@ parseParseAndEvalExpression value =
             Err "Failed to parse parse-and-eval: Is not list but blob"
 
 
-parseKernelApplicationExpression : Value -> Result String ( Expression, String )
+parseKernelApplicationExpression : Value -> Result String ( String, Expression )
 parseKernelApplicationExpression expressionValue =
     case expressionValue of
-        ListValue ((ListValue [ _, argumentValue ]) :: (ListValue [ _, functionNameValue ]) :: _) ->
-            case parseExpressionFromValue argumentValue of
+        ListValue ((ListValue [ _, functionNameValue ]) :: (ListValue [ _, inputValue ]) :: _) ->
+            case stringFromValue functionNameValue of
                 Err error ->
-                    Err ("Failed to parse kernel application argument: " ++ error)
+                    Err ("Failed to parse kernel application function name: " ++ error)
 
-                Ok argument ->
-                    case stringFromValue functionNameValue of
+                Ok functionName ->
+                    case parseExpressionFromValue inputValue of
                         Err error ->
-                            Err ("Failed to parse kernel application function name: " ++ error)
+                            Err ("Failed to parse kernel application input: " ++ error)
 
-                        Ok functionName ->
-                            Ok ( argument, functionName )
+                        Ok argument ->
+                            Ok ( functionName, argument )
 
         ListValue list ->
             Err
@@ -1335,14 +1335,14 @@ stringAsValue_StringTag =
     computeValueFromString "StringTag"
 
 
-stringAsValue_functionName : Value
-stringAsValue_functionName =
-    computeValueFromString "functionName"
+stringAsValue_function : Value
+stringAsValue_function =
+    computeValueFromString "function"
 
 
-stringAsValue_argument : Value
-stringAsValue_argument =
-    computeValueFromString "argument"
+stringAsValue_input : Value
+stringAsValue_input =
+    computeValueFromString "input"
 
 
 stringAsValue_condition : Value
@@ -1360,14 +1360,14 @@ stringAsValue_falseBranch =
     computeValueFromString "falseBranch"
 
 
+stringAsValue_encoded : Value
+stringAsValue_encoded =
+    computeValueFromString "encoded"
+
+
 stringAsValue_environment : Value
 stringAsValue_environment =
     computeValueFromString "environment"
-
-
-stringAsValue_expression : Value
-stringAsValue_expression =
-    computeValueFromString "expression"
 
 
 stringAsValue_String : Value

@@ -963,8 +963,8 @@ compileElmSyntaxExpression stackBefore elmExpression =
                 Ok negatedExpression ->
                     Ok
                         (KernelApplicationExpression
-                            negatedExpression
                             "negate"
+                            negatedExpression
                         )
 
         Elm.Syntax.Expression.FunctionOrValue moduleName localName ->
@@ -1168,8 +1168,8 @@ compileElmSyntaxApplication stack appliedFunctionElmSyntax argumentsElmSyntax =
                                         [ singleArgumentExpression ] ->
                                             Ok
                                                 (KernelApplicationExpression
-                                                    singleArgumentExpression
                                                     declName
+                                                    singleArgumentExpression
                                                 )
 
                                         _ ->
@@ -1670,8 +1670,8 @@ compileCaseBlockInline stack caseBlockExpr caseBlockCases =
                     (PineFunctionApplicationExpression
                         -- Crash in case none of the branches match.
                         (Pine.ParseAndEvalExpression
-                            Pine.EnvironmentExpression
                             (Pine.LiteralExpression stringAsValue_errorNoMatchingBranch)
+                            Pine.EnvironmentExpression
                         )
                         caseBlockExpr
                     )
@@ -1893,12 +1893,12 @@ compileElmSyntaxPattern compilation elmPattern =
                                     \deconstructedExpression ->
                                         List.concat
                                             [ [ KernelApplicationExpression
+                                                    "negate"
                                                     (equalCondition
                                                         [ deconstructedExpression
                                                         , listSkipExpression 1 deconstructedExpression
                                                         ]
                                                     )
-                                                    "negate"
                                               ]
                                             , leftSide.conditionExpressions
                                                 (listItemFromIndexExpression 0 deconstructedExpression)
@@ -2085,12 +2085,12 @@ compileElmSyntaxPattern compilation elmPattern =
                             ( fieldName
                             , [ PineFunctionApplicationDeconstruction
                                     (Pine.ParseAndEvalExpression
+                                        (Pine.LiteralExpression pineFunctionForRecordAccessAsValue)
                                         (Pine.ListExpression
                                             [ Pine.environmentExpr
                                             , Pine.LiteralExpression (Pine.valueFromString fieldName)
                                             ]
                                         )
-                                        (Pine.LiteralExpression pineFunctionForRecordAccessAsValue)
                                     )
                               ]
                             )
@@ -2203,8 +2203,8 @@ searchCompileElmSyntaxOperatorOptimized stack operator leftExpr rightExpr =
                                 Just
                                     (Ok
                                         (KernelApplicationExpression
-                                            (ListExpression [ leftExprCompiled, rightExprCompiled ])
                                             "equal"
+                                            (ListExpression [ leftExprCompiled, rightExprCompiled ])
                                         )
                                     )
 
@@ -2257,8 +2257,8 @@ searchCompileElmSyntaxOperatorOptimized stack operator leftExpr rightExpr =
 
                             concatExpr =
                                 KernelApplicationExpression
-                                    (ListExpression stringsExpressions)
                                     "concat"
+                                    (ListExpression stringsExpressions)
                         in
                         Just
                             (Ok
@@ -2287,12 +2287,12 @@ searchCompileElmSyntaxOperatorOptimized stack operator leftExpr rightExpr =
                             Just
                                 (Ok
                                     (KernelApplicationExpression
+                                        "concat"
                                         (ListExpression
                                             [ ListExpression [ leftExprCompiled ]
                                             , rightExprCompiled
                                             ]
                                         )
-                                        "concat"
                                     )
                                 )
 
@@ -2368,15 +2368,16 @@ pineFunctionForRecordUpdate =
             ]
         )
         (Pine.ParseAndEvalExpression
-            recordExpression
             (Pine.LiteralExpression
                 (Pine.valueFromString "invalid record update - not a record")
             )
+            recordExpression
         )
         (Pine.ListExpression
             [ Pine.LiteralExpression elmRecordTypeTagNameAsValue
             , Pine.ListExpression
                 [ Pine.ParseAndEvalExpression
+                    (Pine.LiteralExpression recursiveFunction)
                     (Pine.ListExpression
                         [ Pine.LiteralExpression recursiveFunction
                         , fieldsUpdatesExpression
@@ -2384,7 +2385,6 @@ pineFunctionForRecordUpdate =
                         , recordFieldsExpression
                         ]
                     )
-                    (Pine.LiteralExpression recursiveFunction)
                 ]
             ]
         )
@@ -2451,54 +2451,54 @@ recursiveFunctionToUpdateFieldsInRecord =
                     ]
                 )
                 (Pine.ParseAndEvalExpression
+                    functionReferenceLocalExpression
                     (Pine.ListExpression
                         [ functionReferenceLocalExpression
                         , fieldPairsLocalExpression
                         , Pine.KernelApplicationExpression
+                            "concat"
                             (Pine.ListExpression
                                 [ processedFieldsLocalExpression
                                 , Pine.ListExpression
                                     [ remainingFieldsNextLocalExpression ]
                                 ]
                             )
-                            "concat"
                         , listSkipExpression_Pine 1 remainingFieldsLocalExpression
                         ]
                     )
-                    functionReferenceLocalExpression
                 )
                 (Pine.ParseAndEvalExpression
+                    functionReferenceLocalExpression
                     (Pine.ListExpression
                         [ functionReferenceLocalExpression
                         , listSkipExpression_Pine 1 fieldPairsLocalExpression
                         , Pine.KernelApplicationExpression
+                            "concat"
                             (Pine.ListExpression
                                 [ processedFieldsLocalExpression
                                 , Pine.ListExpression
                                     [ firstFieldPairLocalExpression ]
                                 ]
                             )
-                            "concat"
                         , listSkipExpression_Pine 1 remainingFieldsLocalExpression
                         ]
                     )
-                    functionReferenceLocalExpression
                 )
             )
             (Pine.ParseAndEvalExpression
-                firstFieldNameLocalExpression
                 (Pine.LiteralExpression
                     (Pine.valueFromString "invalid record update - field name not found")
                 )
+                firstFieldNameLocalExpression
             )
         )
         (Pine.KernelApplicationExpression
+            "concat"
             (Pine.ListExpression
                 [ processedFieldsLocalExpression
                 , remainingFieldsLocalExpression
                 ]
             )
-            "concat"
         )
 
 
@@ -2526,19 +2526,19 @@ pineFunctionForRecordAccess =
             ]
         )
         (Pine.ParseAndEvalExpression
-            fieldNameLocalExpression
             (Pine.LiteralExpression
                 (Pine.valueFromString "invalid record access - not a record")
             )
+            fieldNameLocalExpression
         )
         (Pine.ParseAndEvalExpression
+            (Pine.LiteralExpression recursiveFunctionToLookupFieldInRecordAsValue)
             (Pine.ListExpression
                 [ Pine.LiteralExpression recursiveFunctionToLookupFieldInRecordAsValue
                 , fieldNameLocalExpression
                 , recordFieldsExpression
                 ]
             )
-            (Pine.LiteralExpression recursiveFunctionToLookupFieldInRecordAsValue)
         )
 
 
@@ -2561,13 +2561,13 @@ recursiveFunctionToLookupFieldInRecord =
 
         continueWithRemainingExpression =
             Pine.ParseAndEvalExpression
+                selfFunctionLocalExpression
                 (Pine.ListExpression
                     [ selfFunctionLocalExpression
                     , fieldNameLocalExpression
                     , listSkipExpression_Pine 1 remainingFieldsLocalExpression
                     ]
                 )
-                selfFunctionLocalExpression
     in
     Pine.ConditionalExpression
         (equalCondition_Pine
@@ -2590,10 +2590,10 @@ recursiveFunctionToLookupFieldInRecord =
             )
         )
         (Pine.ParseAndEvalExpression
-            fieldNameLocalExpression
             (Pine.LiteralExpression
                 (Pine.valueFromString "invalid record access - field name not found")
             )
+            fieldNameLocalExpression
         )
 
 
@@ -3150,11 +3150,11 @@ emitRecursionDomain { exposedDeclarationsNames, allModuleDeclarations, importedF
                                                                 Pine.LiteralExpression
                                                                     (Pine.encodeExpressionAsValue
                                                                         (Pine.ParseAndEvalExpression
-                                                                            Pine.environmentExpr
                                                                             (FirCompiler.listItemFromIndexExpression_Pine
                                                                                 declarationIndex
                                                                                 getEnvFunctionsExpression
                                                                             )
+                                                                            Pine.environmentExpr
                                                                         )
                                                                     )
 

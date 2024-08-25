@@ -67,24 +67,24 @@ public partial class CompileToCSharp
                                                 SyntaxFactory.NameColon(nameof(Expression.Conditional.trueBranch))))))),
 
             Expression.KernelApplication kernelApplicationExpr =>
-            continueEncode(kernelApplicationExpr.argument)
-            .MapError(err => "Failed to encode argument of kernel application: " + err)
-            .Map(encodedArgument =>
+            continueEncode(kernelApplicationExpr.input)
+            .MapError(err => "Failed to encode input of kernel application: " + err)
+            .Map(encodedInput =>
             NewConstructorOfExpressionVariant(
                 nameof(Expression.KernelApplication),
 
-                SyntaxFactory.Argument(encodedArgument)
-                .WithNameColon(
-                    SyntaxFactory.NameColon(nameof(Expression.KernelApplication.argument))),
-
                 SyntaxFactory.Argument(SyntaxFactory.LiteralExpression(
-                    SyntaxKind.StringLiteralExpression, SyntaxFactory.Literal(kernelApplicationExpr.functionName)))
+                    SyntaxKind.StringLiteralExpression, SyntaxFactory.Literal(kernelApplicationExpr.function)))
                 .WithNameColon(
-                    SyntaxFactory.NameColon(nameof(Expression.KernelApplication.functionName)))
+                    SyntaxFactory.NameColon(nameof(Expression.KernelApplication.function))),
+
+                SyntaxFactory.Argument(encodedInput)
+                .WithNameColon(
+                    SyntaxFactory.NameColon(nameof(Expression.KernelApplication.input)))
             )),
 
             Expression.ParseAndEval decodeAndEvaluate =>
-            continueEncode(decodeAndEvaluate.expression)
+            continueEncode(decodeAndEvaluate.encoded)
             .MapError(err => "Failed to encode expression of decode and evaluate: " + err)
             .AndThen(encodedExpression =>
             continueEncode(decodeAndEvaluate.environment)
