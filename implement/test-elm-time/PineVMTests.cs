@@ -56,7 +56,7 @@ public class PineVMTests
 
                             new Expression.KernelApplication
                             (
-                                function: "list_head",
+                                function: nameof(KernelFunction.head),
                                 input: Expression.EnvironmentInstance
                             ),
 
@@ -66,7 +66,7 @@ public class PineVMTests
                                     ExpressionEncoding.EncodeExpressionAsValue(
                                         new Expression.KernelApplication
                                         (
-                                            function: "list_head",
+                                            function: nameof(KernelFunction.head),
                                             input: Expression.EnvironmentInstance
                                         ))
                                     .Extract(fromErr: err => throw new Exception(err))),
@@ -125,7 +125,7 @@ public class PineVMTests
                         encoded:
                         new Expression.KernelApplication
                             (
-                                function: "list_head",
+                                function: nameof(KernelFunction.head),
                                 input:
                                 new Expression.KernelApplication
                                 (
@@ -148,7 +148,7 @@ public class PineVMTests
                         ExpressionEncoding.EncodeExpressionAsValue(
                             new Expression.KernelApplication
                             (
-                                function: "list_head",
+                                function: nameof(KernelFunction.head),
                                 input: Expression.EnvironmentInstance
                             ))
                         .Extract(fromErr: err => throw new Exception(err))
@@ -169,7 +169,7 @@ public class PineVMTests
                         encoded:
                         new Expression.KernelApplication
                             (
-                                function: "list_head",
+                                function: nameof(KernelFunction.head),
                                 input: Expression.EnvironmentInstance
                             ),
                         Expression.EnvironmentInstance),
@@ -195,7 +195,7 @@ public class PineVMTests
                         encoded:
                         new Expression.KernelApplication
                             (
-                                function: "list_head",
+                                function: nameof(KernelFunction.head),
                                 input:
                                 new Expression.KernelApplication
                                 (
@@ -215,7 +215,7 @@ public class PineVMTests
                         ExpressionEncoding.EncodeExpressionAsValue(
                             new Expression.KernelApplication
                             (
-                                function: "list_head",
+                                function: nameof(KernelFunction.head),
                                 input: Expression.EnvironmentInstance
                             ))
                         .Extract(fromErr: err => throw new Exception(err))
@@ -869,13 +869,13 @@ public class PineVMTests
             new
             {
                 /*
-                 * Fusion of kernel functions skip and list_head.
+                 * Fusion of kernel functions skip and head.
                  * */
                 expression =
                 (Expression)
                 new Expression.KernelApplication
                 (
-                    function: "list_head",
+                    function: nameof(KernelFunction.head),
                     input:
                     new Expression.KernelApplication
                     (
@@ -892,7 +892,7 @@ public class PineVMTests
                 new PineVM.StackFrameInstructions(
                     [
                         StackInstruction.Eval(
-                            new Expression.KernelApplications_Skip_ListHead_Path(
+                            new Expression.KernelApplications_Skip_Head_Path(
                                 SkipCounts: (int[]) [17],
                                 Argument:Expression.EnvironmentInstance)),
                         StackInstruction.Return
@@ -903,13 +903,13 @@ public class PineVMTests
             new
             {
                 /*
-                 * Fusion of nested kernel functions skip and list_head.
+                 * Fusion of nested kernel functions skip and head.
                  * */
                 expression =
                 (Expression)
                 new Expression.KernelApplication
                 (
-                    function: "list_head",
+                    function: nameof(KernelFunction.head),
                     input:
                     new Expression.KernelApplication
                     (
@@ -922,7 +922,7 @@ public class PineVMTests
                                 new Expression.Literal(PineValueAsInteger.ValueFromSignedInteger(21)),
                                 new Expression.KernelApplication
                                 (
-                                    function: "list_head",
+                                    function: nameof(KernelFunction.head),
                                     input:
                                     new Expression.KernelApplication
                                     (
@@ -943,13 +943,13 @@ public class PineVMTests
                 new PineVM.StackFrameInstructions(
                     [
                         StackInstruction.Eval(
-                            new Expression.KernelApplications_Skip_ListHead_Path(
+                            new Expression.KernelApplications_Skip_Head_Path(
                                 SkipCounts: (int[])[17],
                                 Argument:
                                 new Expression.List(
                                 [
                                     new Expression.Literal(PineValueAsInteger.ValueFromSignedInteger(21)),
-                                    new Expression.KernelApplications_Skip_ListHead_Path(
+                                    new Expression.KernelApplications_Skip_Head_Path(
                                         SkipCounts: (int[]) [23],
                                         Argument: Expression.EnvironmentInstance)
                                 ]))),

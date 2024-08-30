@@ -13,10 +13,10 @@
                     { "Literal": [ 0 ] },
                     {
                       "KernelApplication": [
-                        "list_head",
+                        "head",
                         {
                           "KernelApplication": [
-                            "list_head",
+                            "head",
                             {
                               "KernelApplication": [
                                 "skip",

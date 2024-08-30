@@ -46,8 +46,8 @@ public class EncodePineExpressionAsJsonTests
                                             PineValueAsInteger.ValueFromSignedInteger(
                                                 1)), new Expression.Environment()]),
                                     function: "skip"),
-                                function: "list_head"),
-                            function: "list_head")]),
+                                function: "head"),
+                            function: "head")]),
                     function: "take"), new Expression.Literal(
                     PineValue.EmptyList)]),
             function: "equal")

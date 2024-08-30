@@ -222,8 +222,8 @@ kernelFunctions =
         , ( "concat"
           , kernelFunction_concat
           )
-        , ( "list_head"
-          , kernelFunction_list_head
+        , ( "head"
+          , kernelFunction_head
           )
         , ( "add_int"
           , kernelFunction_add_int
@@ -383,14 +383,17 @@ kernelFunction_concat_list flattenedItems remainingItems =
             ListValue flattenedItems
 
 
-kernelFunction_list_head : Value -> Value
-kernelFunction_list_head value =
+kernelFunction_head : Value -> Value
+kernelFunction_head value =
     case value of
         ListValue (head :: _) ->
             head
 
-        _ ->
+        ListValue [] ->
             listValue_Empty
+
+        BlobValue bytes ->
+            BlobValue (List.take 1 bytes)
 
 
 kernelFunction_add_int : Value -> Value
@@ -654,14 +657,14 @@ prependAllLines prefix text =
 valueFromString : String -> Value
 valueFromString string =
     case string of
-        "list_head" ->
-            stringAsValue_list_head
+        "equal" ->
+            stringAsValue_equal
+
+        "head" ->
+            stringAsValue_head
 
         "skip" ->
             stringAsValue_skip
-
-        "equal" ->
-            stringAsValue_equal
 
         "String" ->
             stringAsValue_String
@@ -1280,19 +1283,19 @@ environmentExpr =
     EnvironmentExpression
 
 
-stringAsValue_list_head : Value
-stringAsValue_list_head =
-    computeValueFromString "list_head"
+stringAsValue_equal : Value
+stringAsValue_equal =
+    computeValueFromString "equal"
+
+
+stringAsValue_head : Value
+stringAsValue_head =
+    computeValueFromString "head"
 
 
 stringAsValue_skip : Value
 stringAsValue_skip =
     computeValueFromString "skip"
-
-
-stringAsValue_equal : Value
-stringAsValue_equal =
-    computeValueFromString "equal"
 
 
 stringAsValue_Literal : Value

@@ -52,8 +52,8 @@ import FirCompiler
         , listItemFromIndexExpression_Pine
         , listSkipExpression
         , listSkipExpression_Pine
-        , pineKernel_ListHead
-        , pineKernel_ListHead_Pine
+        , pineKernel_Head
+        , pineKernel_Head_Pine
         )
 import Pine
 import Set
@@ -2027,7 +2027,7 @@ compileElmSyntaxPattern compilation elmPattern =
                                                         Nothing ->
                                                             equalCondition
                                                                 [ LiteralExpression (Pine.valueFromString qualifiedName.name)
-                                                                , pineKernel_ListHead deconstructedExpression
+                                                                , pineKernel_Head deconstructedExpression
                                                                 ]
                                                     ]
 
@@ -2352,7 +2352,7 @@ pineFunctionForRecordUpdate =
             listItemFromIndexExpression_Pine 0 Pine.environmentExpr
 
         recordFieldsExpression =
-            pineKernel_ListHead_Pine (listItemFromIndexExpression_Pine 1 recordExpression)
+            pineKernel_Head_Pine (listItemFromIndexExpression_Pine 1 recordExpression)
 
         fieldsUpdatesExpression =
             listItemFromIndexExpression_Pine 1 Pine.environmentExpr
@@ -2364,7 +2364,7 @@ pineFunctionForRecordUpdate =
     Pine.ConditionalExpression
         (equalCondition_Pine
             [ Pine.LiteralExpression elmRecordTypeTagNameAsValue
-            , pineKernel_ListHead_Pine recordExpression
+            , pineKernel_Head_Pine recordExpression
             ]
         )
         (Pine.ParseAndEvalExpression
@@ -2517,12 +2517,12 @@ pineFunctionForRecordAccess =
             listItemFromIndexExpression_Pine 1 Pine.environmentExpr
 
         recordFieldsExpression =
-            pineKernel_ListHead_Pine (listItemFromIndexExpression_Pine 1 recordExpression)
+            pineKernel_Head_Pine (listItemFromIndexExpression_Pine 1 recordExpression)
     in
     Pine.ConditionalExpression
         (equalCondition_Pine
             [ Pine.LiteralExpression elmRecordTypeTagNameAsValue
-            , pineKernel_ListHead_Pine recordExpression
+            , pineKernel_Head_Pine recordExpression
             ]
         )
         (Pine.ParseAndEvalExpression

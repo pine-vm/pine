@@ -198,9 +198,9 @@ public partial class CompileToCSharp
 
                     /*
                      * 2023-12-01:
-                     * Disabling the inlining for 'list_head' to reduce the size of the emitted C# code.
+                     * Disabling the inlining for 'head' to reduce the size of the emitted C# code.
                      * 
-                    nameof(KernelFunction.list_head) =>
+                    nameof(KernelFunction.head) =>
                     PineKernelFunctionsInline.TryInlineKernelFunction_ListHead,
                     */
 

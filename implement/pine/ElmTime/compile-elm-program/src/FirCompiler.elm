@@ -34,8 +34,8 @@ module FirCompiler exposing
     , parseFunctionRecordFromValueTagged
     , partialApplicationExpressionFromListOfArguments
     , pineExpressionIsIndependent
-    , pineKernel_ListHead
-    , pineKernel_ListHead_Pine
+    , pineKernel_Head
+    , pineKernel_Head_Pine
     , recursionDomainsFromDeclarationDependencies
     )
 
@@ -2137,7 +2137,7 @@ searchForExpressionReduction expression =
 
         Pine.KernelApplicationExpression rootFunctionName rootArgument ->
             case rootFunctionName of
-                "list_head" ->
+                "head" ->
                     case rootArgument of
                         Pine.ListExpression argumentList ->
                             List.head argumentList
@@ -2384,7 +2384,7 @@ pineExpressionIsIndependent expression =
 
 listItemFromIndexExpression : Int -> Expression -> Expression
 listItemFromIndexExpression itemIndex listExpression =
-    pineKernel_ListHead (listSkipExpression itemIndex listExpression)
+    pineKernel_Head (listSkipExpression itemIndex listExpression)
 
 
 countListElementsExpression : Expression -> Expression
@@ -2394,10 +2394,10 @@ countListElementsExpression sequenceExpression =
         sequenceExpression
 
 
-pineKernel_ListHead : Expression -> Expression
-pineKernel_ListHead listExpression =
+pineKernel_Head : Expression -> Expression
+pineKernel_Head listExpression =
     KernelApplicationExpression
-        "list_head"
+        "head"
         listExpression
 
 
@@ -2436,7 +2436,7 @@ countListElementsExpression_Pine sequenceExpression =
 
 listItemFromIndexExpression_Pine : Int -> Pine.Expression -> Pine.Expression
 listItemFromIndexExpression_Pine itemIndex listExpression =
-    pineKernel_ListHead_Pine (listSkipExpression_Pine itemIndex listExpression)
+    pineKernel_Head_Pine (listSkipExpression_Pine itemIndex listExpression)
 
 
 listSkipExpression_Pine : Int -> Pine.Expression -> Pine.Expression
@@ -2451,10 +2451,10 @@ listSkipExpression_Pine numberToDrop listExpression =
             listExpression
 
 
-pineKernel_ListHead_Pine : Pine.Expression -> Pine.Expression
-pineKernel_ListHead_Pine listExpression =
+pineKernel_Head_Pine : Pine.Expression -> Pine.Expression
+pineKernel_Head_Pine listExpression =
     Pine.KernelApplicationExpression
-        "list_head"
+        "head"
         listExpression
 
 

@@ -146,15 +146,15 @@ public abstract record Expression
         : Expression;
 
     /// <summary>
-    /// Fusion of the two applications of the kernel functions 'skip' and 'list_head',
+    /// Fusion of the two applications of the kernel functions 'skip' and 'head',
     /// as an implementation detail of the interpreter.
     /// </summary>
-    public record KernelApplications_Skip_ListHead_Path(
+    public record KernelApplications_Skip_Head_Path(
         ReadOnlyMemory<int> SkipCounts,
         Expression Argument)
         : Expression
     {
-        public virtual bool Equals(KernelApplications_Skip_ListHead_Path? other)
+        public virtual bool Equals(KernelApplications_Skip_Head_Path? other)
         {
             if (other is null)
                 return false;
@@ -219,7 +219,7 @@ public abstract record Expression
             StackReferenceExpression =>
             false,
 
-            KernelApplications_Skip_ListHead_Path fused =>
+            KernelApplications_Skip_Head_Path fused =>
             IsIndependent(fused.Argument),
 
             KernelApplication_Equal_Two fused =>
@@ -297,9 +297,9 @@ public abstract record Expression
 
                     break;
 
-                case KernelApplications_Skip_ListHead_Path skipListHead:
+                case KernelApplications_Skip_Head_Path skipHead:
 
-                    stack.Push(skipListHead.Argument);
+                    stack.Push(skipHead.Argument);
 
                     break;
 

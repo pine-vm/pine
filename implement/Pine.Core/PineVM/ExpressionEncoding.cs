@@ -24,7 +24,7 @@ public static class ExpressionEncoding
         .SetItem(nameof(KernelFunction.take), KernelFunction.take)
         .SetItem(nameof(KernelFunction.reverse), KernelFunction.reverse)
         .SetItem(nameof(KernelFunction.concat), KernelFunction.concat)
-        .SetItem(nameof(KernelFunction.list_head), KernelFunction.list_head)
+        .SetItem(nameof(KernelFunction.head), KernelFunction.head)
         .SetItem(nameof(KernelFunction.add_int), KernelFunction.add_int)
         .SetItem(nameof(KernelFunction.mul_int), KernelFunction.mul_int)
         .SetItem(nameof(KernelFunction.is_sorted_ascending_int), KernelFunction.is_sorted_ascending_int);
@@ -560,7 +560,7 @@ public static class ExpressionEncoding
             Expression argument) =>
             new(
                 input: argument,
-                function: nameof(KernelFunction.list_head));
+                function: nameof(KernelFunction.head));
 
         var envListHeadExpr = kernelListHeadExpr(Expression.EnvironmentInstance);
 

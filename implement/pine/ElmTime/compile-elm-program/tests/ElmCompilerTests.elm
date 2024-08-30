@@ -55,15 +55,15 @@ compiler_reduces_decode_and_eval_test_cases =
         , additionalTestEnvironments = []
         }
       )
-    , ( "simple reducible - list head"
+    , ( "simple reducible - head"
       , { original =
             ( Pine.EnvironmentExpression
                 |> Pine.encodeExpressionAsValue
                 |> Pine.LiteralExpression
-            , FirCompiler.pineKernel_ListHead_Pine Pine.EnvironmentExpression
+            , FirCompiler.pineKernel_Head_Pine Pine.EnvironmentExpression
             )
         , expected =
-            FirCompiler.pineKernel_ListHead_Pine Pine.EnvironmentExpression
+            FirCompiler.pineKernel_Head_Pine Pine.EnvironmentExpression
         , additionalTestEnvironments = []
         }
       )
@@ -71,7 +71,7 @@ compiler_reduces_decode_and_eval_test_cases =
       , { original =
             ( Pine.EnvironmentExpression
                 |> FirCompiler.listSkipExpression_Pine 2
-                |> FirCompiler.pineKernel_ListHead_Pine
+                |> FirCompiler.pineKernel_Head_Pine
                 |> Pine.encodeExpressionAsValue
                 |> Pine.LiteralExpression
             , Pine.ListExpression
@@ -95,9 +95,9 @@ compiler_reduces_decode_and_eval_test_cases =
       , { original =
             ( Pine.EnvironmentExpression
                 |> FirCompiler.listSkipExpression_Pine 2
-                |> FirCompiler.pineKernel_ListHead_Pine
+                |> FirCompiler.pineKernel_Head_Pine
                 |> FirCompiler.listSkipExpression_Pine 1
-                |> FirCompiler.pineKernel_ListHead_Pine
+                |> FirCompiler.pineKernel_Head_Pine
                 |> Pine.encodeExpressionAsValue
                 |> Pine.LiteralExpression
             , Pine.ListExpression

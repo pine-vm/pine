@@ -413,7 +413,7 @@ public static class PineCSharpSyntaxFactory
 
         var currentExpr =
             new PineVM.Expression.KernelApplication(
-                function: "list_head",
+                function: "head",
                 input: skippedExpr);
 
         return

@@ -283,7 +283,7 @@ public static class KernelFunction
             "Unexpected value type: " + head.GetType().FullName);
     }
 
-    public static PineValue list_head(PineValue value) =>
+    public static PineValue head(PineValue value) =>
         value switch
         {
             PineValue.ListValue listValue =>

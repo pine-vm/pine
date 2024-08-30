@@ -13,13 +13,13 @@ public class FormatCSharpSyntaxRewriterTests
     {
         var inputSyntaxText =
             """
-            Result<string, PineValue>.ok(Pine.PineVM.KernelFunction.list_head(pine_environment).WithDefault(PineValue.EmptyList));
+            Result<string, PineValue>.ok(Pine.PineVM.KernelFunction.head(pine_environment).WithDefault(PineValue.EmptyList));
             """.Trim();
 
         var expectedFormattedText =
             """
             Result<string, PineValue>.ok(
-                Pine.PineVM.KernelFunction.list_head(
+                Pine.PineVM.KernelFunction.head(
                     pine_environment)
                 .WithDefault(
                     PineValue.EmptyList));
@@ -90,7 +90,7 @@ public class FormatCSharpSyntaxRewriterTests
     {
         var inputSyntaxText =
             """
-            new Expression.ParseAndEvalExpression(new Expression.ParseAndEvalExpression(PineVM.ParseKernelApplicationExpressionThrowOnUnknownName("list_head",arg_a_a), arg_a_b), arg_b);
+            new Expression.ParseAndEvalExpression(new Expression.ParseAndEvalExpression(PineVM.ParseKernelApplicationExpressionThrowOnUnknownName("head",arg_a_a), arg_a_b), arg_b);
             """.Trim();
 
         var expectedFormattedText =
@@ -98,7 +98,7 @@ public class FormatCSharpSyntaxRewriterTests
             new Expression.ParseAndEvalExpression(
                 new Expression.ParseAndEvalExpression(
                     PineVM.ParseKernelApplicationExpressionThrowOnUnknownName(
-                        "list_head",
+                        "head",
                         arg_a_a),
                     arg_a_b),
                 arg_b);

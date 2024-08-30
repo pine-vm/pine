@@ -205,7 +205,7 @@ public static class PopularValues
 
         "equal",
         "length",
-        "list_head",
+        "head",
         "skip",
         "take",
         "reverse",
@@ -213,6 +213,7 @@ public static class PopularValues
         "concat",
         "add_int",
         "mul_int",
+        "list_head",
         "is_sorted_ascending_int",
 
         "functionName",

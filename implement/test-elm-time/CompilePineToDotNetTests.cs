@@ -89,12 +89,12 @@ public class CompilePineToDotNetTests
     }
 
     [TestMethod]
-    [Ignore("Inlining disabled for list_head")]
-    public void Test_compile_specialized_for_kernel_list_head()
+    [Ignore("Inlining disabled for head")]
+    public void Test_compile_specialized_for_kernel_head()
     {
         var pineExpression =
             new Pine.PineVM.Expression.KernelApplication(
-                function: nameof(Pine.PineVM.KernelFunction.list_head),
+                function: nameof(Pine.PineVM.KernelFunction.head),
                 input: new Pine.PineVM.Expression.Environment());
 
         var compiledFormattedExpression =
@@ -173,19 +173,19 @@ public class CompilePineToDotNetTests
             null),
 
             (new Pine.PineVM.Expression.KernelApplication(
-                function: "list_head",
+                function: nameof(Pine.PineVM.KernelFunction.head),
                 input: new Pine.PineVM.Expression.Environment()),
                 new Pine.PineVM.ExprMappedToParentEnv.PathInParentEnv([0])),
 
             (new Pine.PineVM.Expression.KernelApplication(
-                function: "list_head",
+                function: nameof(Pine.PineVM.KernelFunction.head),
                 input: new Pine.PineVM.Expression.KernelApplication(
-                    function: "list_head",
+                    function: nameof(Pine.PineVM.KernelFunction.head),
                     input: new Pine.PineVM.Expression.Environment())),
                 new Pine.PineVM.ExprMappedToParentEnv.PathInParentEnv([0, 0])),
 
             (new Pine.PineVM.Expression.KernelApplication(
-                function: "list_head",
+                function: nameof(Pine.PineVM.KernelFunction.head),
                 input: new Pine.PineVM.Expression.KernelApplication(
                     function: "skip",
                     input: new Pine.PineVM.Expression.List(
@@ -195,13 +195,13 @@ public class CompilePineToDotNetTests
                 new Pine.PineVM.ExprMappedToParentEnv.PathInParentEnv([13])),
 
             (new Pine.PineVM.Expression.KernelApplication(
-                function: "list_head",
+                function: nameof(Pine.PineVM.KernelFunction.head),
                 input: new Pine.PineVM.Expression.KernelApplication(
                     function: "skip",
                     input: new Pine.PineVM.Expression.List(
                         [ new Pine.PineVM.Expression.Literal(PineValueAsInteger.ValueFromSignedInteger(21)),
                         new Pine.PineVM.Expression.KernelApplication(
-                            function: "list_head",
+                            function: nameof(Pine.PineVM.KernelFunction.head),
                             input: new Pine.PineVM.Expression.KernelApplication(
                                 function: "skip",
                                 input: new Pine.PineVM.Expression.List(
@@ -212,13 +212,13 @@ public class CompilePineToDotNetTests
                 new Pine.PineVM.ExprMappedToParentEnv.PathInParentEnv([17,21])),
 
             (new Pine.PineVM.Expression.KernelApplication(
-                function: "list_head",
+                function: nameof(Pine.PineVM.KernelFunction.head),
                 input: new Pine.PineVM.Expression.KernelApplication(
                     function: "skip",
                     input: new Pine.PineVM.Expression.List(
                         [ new Pine.PineVM.Expression.Literal(PineValueAsInteger.ValueFromSignedInteger(23)),
                         new Pine.PineVM.Expression.KernelApplication(
-                            function: "list_head",
+                            function: nameof(Pine.PineVM.KernelFunction.head),
                             input: new Pine.PineVM.Expression.Environment())
                         ]))),
                 new Pine.PineVM.ExprMappedToParentEnv.PathInParentEnv([0,23])),
@@ -268,7 +268,7 @@ public class CompilePineToDotNetTests
                 expr =
                 (Pine.PineVM.Expression)
                 new Pine.PineVM.Expression.KernelApplication(
-                    function:"list_head",
+                    function: nameof(Pine.PineVM.KernelFunction.head),
                     input: new Pine.PineVM.Expression.Environment()),
 
                 envConstraint =
@@ -284,7 +284,7 @@ public class CompilePineToDotNetTests
                 expr =
                 (Pine.PineVM.Expression)
                 new Pine.PineVM.Expression.KernelApplication(
-                    function:"list_head",
+                    function: nameof(Pine.PineVM.KernelFunction.head),
                     input:
                     new Pine.PineVM.Expression.KernelApplication(
                         function:"skip",

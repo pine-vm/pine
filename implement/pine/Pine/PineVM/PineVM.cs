@@ -1209,13 +1209,13 @@ public class PineVM : IPineVM
         return null;
     }
 
-    public static Expression.KernelApplications_Skip_ListHead_Path?
+    public static Expression.KernelApplications_Skip_Head_Path?
         TryMapToKernelApplications_Skip_ListHead_Path_Expression(Expression expression)
     {
         if (expression is not Expression.KernelApplication kernelApp)
             return null;
 
-        if (kernelApp.function is not nameof(KernelFunction.list_head))
+        if (kernelApp.function is not nameof(KernelFunction.head))
             return null;
 
         if (kernelApp.input is not Expression.KernelApplication innerKernelApp)
@@ -1259,7 +1259,7 @@ public class PineVM : IPineVM
 
         return continueWithSkipCount((int)skipCount, currentArg);
 
-        static Expression.KernelApplications_Skip_ListHead_Path continueWithSkipCount(
+        static Expression.KernelApplications_Skip_Head_Path continueWithSkipCount(
             int skipCount,
             Expression currentArg)
         {
@@ -1273,7 +1273,7 @@ public class PineVM : IPineVM
                     };
             }
 
-            return new Expression.KernelApplications_Skip_ListHead_Path(
+            return new Expression.KernelApplications_Skip_Head_Path(
                 SkipCounts: (int[])[skipCount],
                 Argument: currentArg);
         }
@@ -1666,7 +1666,7 @@ public class PineVM : IPineVM
         if (expression is Expression.StackReferenceExpression)
             return false;
 
-        if (expression is Expression.KernelApplications_Skip_ListHead_Path)
+        if (expression is Expression.KernelApplications_Skip_Head_Path)
             return false;
 
         if (expression is Expression.KernelApplication_Equal_Two)
@@ -1766,7 +1766,7 @@ public class PineVM : IPineVM
             return content;
         }
 
-        if (expression is Expression.KernelApplications_Skip_ListHead_Path kernelApplicationsSkipListHead)
+        if (expression is Expression.KernelApplications_Skip_Head_Path kernelApplicationsSkipListHead)
         {
             return
                 EvaluateKernelApplications_Skip_ListHead_Expression(
@@ -1881,7 +1881,7 @@ public class PineVM : IPineVM
         Expression.KernelApplication application,
         ReadOnlyMemory<PineValue> stackPrevValues)
     {
-        if (application.function is nameof(KernelFunction.list_head) &&
+        if (application.function is nameof(KernelFunction.head) &&
             application.input is Expression.KernelApplication innerKernelApplication)
         {
             if (innerKernelApplication.function == nameof(KernelFunction.skip) &&
@@ -1944,8 +1944,8 @@ public class PineVM : IPineVM
             nameof(KernelFunction.length) =>
             KernelFunction.length(inputValue),
 
-            nameof(KernelFunction.list_head) =>
-            KernelFunction.list_head(inputValue),
+            nameof(KernelFunction.head) =>
+            KernelFunction.head(inputValue),
 
             nameof(KernelFunction.skip) =>
             KernelFunction.skip(inputValue),
@@ -1979,7 +1979,7 @@ public class PineVM : IPineVM
 
     public PineValue EvaluateKernelApplications_Skip_ListHead_Expression(
         PineValue environment,
-        Expression.KernelApplications_Skip_ListHead_Path application,
+        Expression.KernelApplications_Skip_Head_Path application,
         ReadOnlyMemory<PineValue> stackPrevValues)
     {
         var argumentValue =

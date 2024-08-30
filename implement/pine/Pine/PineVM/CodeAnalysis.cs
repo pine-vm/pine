@@ -963,7 +963,7 @@ public class CodeAnalysis
         if (pathExpression is not Expression.KernelApplication kernelApplication)
             return null;
 
-        if (kernelApplication.function is not nameof(KernelFunction.list_head))
+        if (kernelApplication.function is not nameof(KernelFunction.head))
             return null;
 
         if (kernelApplication.input is Expression.KernelApplication inputKernelApplication &&

@@ -9,7 +9,7 @@
               { "List": [ [] ] },
               {
                 "KernelApplication": [
-                  "list_head",
+                  "head",
                   {
                     "KernelApplication": [
                       "skip",
@@ -40,13 +40,13 @@
                 [
                   {
                     "KernelApplication": [
-                      "list_head",
+                      "head",
                       {
                         "KernelApplication": [
-                          "list_head",
+                          "head",
                           {
                             "KernelApplication": [
-                              "list_head",
+                              "head",
                               {
                                 "KernelApplication": [
                                   "skip",
@@ -68,7 +68,7 @@
                   },
                   {
                     "KernelApplication": [
-                      "list_head",
+                      "head",
                       {
                         "KernelApplication": [
                           "skip",
@@ -93,7 +93,7 @@
           "ParseAndEval": [
             {
               "KernelApplication": [
-                "list_head",
+                "head",
                 { "Environment": [] }
               ]
             },
@@ -102,13 +102,13 @@
                 [
                   {
                     "KernelApplication": [
-                      "list_head",
+                      "head",
                       { "Environment": [] }
                     ]
                   },
                   {
                     "KernelApplication": [
-                      "list_head",
+                      "head",
                       {
                         "KernelApplication": [
                           "skip",
@@ -133,7 +133,7 @@
                             { "Literal": [ 1 ] },
                             {
                               "KernelApplication": [
-                                "list_head",
+                                "head",
                                 {
                                   "KernelApplication": [
                                     "skip",
@@ -161,7 +161,7 @@
         },
         {
           "KernelApplication": [
-            "list_head",
+            "head",
             {
               "KernelApplication": [
                 "skip",
@@ -171,10 +171,10 @@
                       { "Literal": [ 1 ] },
                       {
                         "KernelApplication": [
-                          "list_head",
+                          "head",
                           {
                             "KernelApplication": [
-                              "list_head",
+                              "head",
                               {
                                 "KernelApplication": [
                                   "skip",
@@ -206,7 +206,7 @@
         { "Literal": [ { "ListAsString": "invalid record access - field name not found" } ] },
         {
           "KernelApplication": [
-            "list_head",
+            "head",
             {
               "KernelApplication": [
                 "skip",

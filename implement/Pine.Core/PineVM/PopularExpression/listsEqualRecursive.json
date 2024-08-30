@@ -8,10 +8,10 @@
             [
               {
                 "KernelApplication": [
-                  "list_head",
+                  "head",
                   {
                     "KernelApplication": [
-                      "list_head",
+                      "head",
                       {
                         "KernelApplication": [
                           "skip",
@@ -41,7 +41,7 @@
           "ParseAndEval": [
             {
               "KernelApplication": [
-                "list_head",
+                "head",
                 {
                   "KernelApplication": [
                     "skip",
@@ -51,7 +51,7 @@
                           { "Literal": [ 4 ] },
                           {
                             "KernelApplication": [
-                              "list_head",
+                              "head",
                               { "Environment": [] }
                             ]
                           }
@@ -67,7 +67,7 @@
                 [
                   {
                     "KernelApplication": [
-                      "list_head",
+                      "head",
                       { "Environment": [] }
                     ]
                   },
@@ -76,13 +76,13 @@
                       [
                         {
                           "KernelApplication": [
-                            "list_head",
+                            "head",
                             {
                               "KernelApplication": [
-                                "list_head",
+                                "head",
                                 {
                                   "KernelApplication": [
-                                    "list_head",
+                                    "head",
                                     {
                                       "KernelApplication": [
                                         "skip",
@@ -104,10 +104,10 @@
                         },
                         {
                           "KernelApplication": [
-                            "list_head",
+                            "head",
                             {
                               "KernelApplication": [
-                                "list_head",
+                                "head",
                                 {
                                   "KernelApplication": [
                                     "skip",
@@ -117,7 +117,7 @@
                                           { "Literal": [ 1 ] },
                                           {
                                             "KernelApplication": [
-                                              "list_head",
+                                              "head",
                                               {
                                                 "KernelApplication": [
                                                   "skip",
@@ -155,7 +155,7 @@
           "ParseAndEval": [
             {
               "KernelApplication": [
-                "list_head",
+                "head",
                 {
                   "KernelApplication": [
                     "skip",
@@ -165,7 +165,7 @@
                           { "Literal": [ 5 ] },
                           {
                             "KernelApplication": [
-                              "list_head",
+                              "head",
                               { "Environment": [] }
                             ]
                           }
@@ -181,7 +181,7 @@
                 [
                   {
                     "KernelApplication": [
-                      "list_head",
+                      "head",
                       { "Environment": [] }
                     ]
                   },
@@ -197,10 +197,10 @@
                                   { "Literal": [ 1 ] },
                                   {
                                     "KernelApplication": [
-                                      "list_head",
+                                      "head",
                                       {
                                         "KernelApplication": [
-                                          "list_head",
+                                          "head",
                                           {
                                             "KernelApplication": [
                                               "skip",
@@ -232,7 +232,7 @@
                                   { "Literal": [ 1 ] },
                                   {
                                     "KernelApplication": [
-                                      "list_head",
+                                      "head",
                                       {
                                         "KernelApplication": [
                                           "skip",
@@ -242,7 +242,7 @@
                                                 { "Literal": [ 1 ] },
                                                 {
                                                   "KernelApplication": [
-                                                    "list_head",
+                                                    "head",
                                                     {
                                                       "KernelApplication": [
                                                         "skip",

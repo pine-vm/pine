@@ -213,7 +213,7 @@ public class ReducePineExpression
                             return AttemptReduceViaEval();
                         }
 
-                    case "list_head":
+                    case "head":
                         {
                             if (rootKernelApp.input is Expression.List inputList)
                             {
@@ -223,7 +223,7 @@ public class ReducePineExpression
                             }
 
                             if (rootKernelApp.input is Expression.Literal literal)
-                                return new Expression.Literal(KernelFunction.list_head(literal.Value));
+                                return new Expression.Literal(KernelFunction.head(literal.Value));
 
                             return AttemptReduceViaEval();
                         }
@@ -667,7 +667,7 @@ public class ReducePineExpression
             case Expression.StackReferenceExpression:
                 return (expression, true);
 
-            case Expression.KernelApplications_Skip_ListHead_Path skipListHead:
+            case Expression.KernelApplications_Skip_Head_Path skipListHead:
                 {
                     var argumentTransform =
                         TransformPineExpressionWithOptionalReplacement(

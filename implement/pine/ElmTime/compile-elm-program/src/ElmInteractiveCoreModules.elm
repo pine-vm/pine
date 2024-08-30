@@ -94,7 +94,7 @@ listsEqualRecursive listA listB =
         True
 
     else
-        if eq (Pine_kernel.list_head listA) (Pine_kernel.list_head listB) then
+        if eq (Pine_kernel.head listA) (Pine_kernel.head listB) then
             listsEqualRecursive
                 (Pine_kernel.skip [ 1, listA ])
                 (Pine_kernel.skip [ 1, listB ])
