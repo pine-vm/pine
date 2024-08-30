@@ -845,7 +845,12 @@ concat lists =
 
 concatMap : (a -> List b) -> List a -> List b
 concatMap f list =
-    foldr (\\x xs -> Pine_kernel.concat [ f x, xs ]) [] list
+    case list of
+        [] ->
+            []
+
+        x :: xs ->
+            Pine_kernel.concat [ f x, concatMap f xs ]
 
 
 intersperse : a -> List a -> List a
@@ -2685,14 +2690,14 @@ insertFromList list (Set_elm_builtin dict) =
 -}
 foldl : (a -> b -> b) -> b -> Set a -> b
 foldl func initialState (Set_elm_builtin dict) =
-  Dict.foldl (\\key _ state -> func key state) initialState dict
+    List.foldl (\\key state -> func key state) initialState (Dict.keys dict)
 
 
 {-| Fold over the values in a set, in order from highest to lowest.
 -}
 foldr : (a -> b -> b) -> b -> Set a -> b
 foldr func initialState (Set_elm_builtin dict) =
-  Dict.foldr (\\key _ state -> func key state) initialState dict
+    List.foldr (\\key state -> func key state) initialState (Dict.keys dict)
 
 
 {-| Map a function onto a set, creating a new set with no duplicates.

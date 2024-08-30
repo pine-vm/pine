@@ -82,7 +82,6 @@ type Deconstruction
 type alias EmitStack =
     { importedFunctions : List ( List String, List ( String, ( EnvironmentFunctionEntry, Pine.Value ) ) )
     , importedFunctionsToInline : List ( List String, List ( String, Pine.Value ) )
-    , declarationsDependencies : Dict.Dict String (Set.Set String)
 
     -- The functions in the first item in the environment list
     , environmentFunctions : List ( ( List String, String ), EnvironmentFunctionEntry )
@@ -253,22 +252,23 @@ emitExpressionInDeclarationBlock :
     -> List ( String, Expression )
     -> Expression
     -> Result String Pine.Expression
-emitExpressionInDeclarationBlock stackBeforeAddingDeps blockDeclarations mainExpression =
+emitExpressionInDeclarationBlock stackBefore blockDeclarations mainExpression =
     let
-        stackBefore =
-            { stackBeforeAddingDeps
-                | declarationsDependencies =
-                    List.foldl
-                        (\( declName, declExpression ) aggregate ->
-                            Dict.insert declName (listUnboundReferencesInExpression declExpression []) aggregate
-                        )
-                        stackBeforeAddingDeps.declarationsDependencies
-                        blockDeclarations
-            }
+        blockDeclarationsDependencies : Dict.Dict String (List String)
+        blockDeclarationsDependencies =
+            List.foldl
+                (\( declName, declExpression ) aggregate ->
+                    Dict.insert
+                        declName
+                        (listUnboundReferencesInExpression declExpression [])
+                        aggregate
+                )
+                Dict.empty
+                blockDeclarations
 
         mainExpressionOuterDependencies : List String
         mainExpressionOuterDependencies =
-            Set.toList (listTransitiveDependenciesOfExpression stackBefore mainExpression)
+            listTransitiveDependenciesOfExpression blockDeclarationsDependencies mainExpression
 
         usedBlockDeclarations : List ( String, Expression )
         usedBlockDeclarations =
@@ -322,7 +322,7 @@ emitExpressionInDeclarationBlock stackBeforeAddingDeps blockDeclarations mainExp
     case ( mainExprParams, usedBlockDeclarations ) of
         ( [], [] ) ->
             let
-                mainExpressionImports : Set.Set ( List String, String )
+                mainExpressionImports : List ( List String, String )
                 mainExpressionImports =
                     listImportingReferencesInExpression mainExpression
 
@@ -337,7 +337,7 @@ emitExpressionInDeclarationBlock stackBeforeAddingDeps blockDeclarations mainExp
                                 _ ->
                                     False
                         )
-                        (Set.toList mainExpressionImports)
+                        mainExpressionImports
             in
             case mainDependsOnImport of
                 False ->
@@ -359,7 +359,7 @@ emitExpressionInDeclarationBlock stackBeforeAddingDeps blockDeclarations mainExp
                             continueEmitBlock ()
 
                         False ->
-                            emitExpression stackBeforeAddingDeps mainExprInnerExpr
+                            emitExpression stackBefore mainExprInnerExpr
 
                 True ->
                     continueEmitBlock ()
@@ -380,7 +380,7 @@ emitDeclarationBlock stackBefore blockDeclarations (DeclBlockClosureCaptures con
         blockDeclarationsNames =
             List.map Tuple.first blockDeclarations
 
-        availableEmittedDependencies : Dict.Dict String (Set.Set String)
+        availableEmittedDependencies : Dict.Dict String (List String)
         availableEmittedDependencies =
             case Common.assocListGet [] stackBefore.importedFunctions of
                 Nothing ->
@@ -412,7 +412,7 @@ emitDeclarationBlock stackBefore blockDeclarations (DeclBlockClosureCaptures con
                                         _ ->
                                             Dict.insert
                                                 functionName
-                                                (Set.fromList localEnvExpectedDeclsLocal)
+                                                localEnvExpectedDeclsLocal
                                                 aggregate
 
                                 ImportedEnvironment _ ->
@@ -424,18 +424,24 @@ emitDeclarationBlock stackBefore blockDeclarations (DeclBlockClosureCaptures con
                         Dict.empty
                         prevCompiledDecls
 
-        blockDeclarationsDirectDependencies : Dict.Dict String (Set.Set String)
+        blockDeclarationsDirectDependencies : List ( String, List String )
         blockDeclarationsDirectDependencies =
-            List.foldl
-                (\( declName, declExpression ) aggregate ->
-                    Dict.insert declName (listUnboundReferencesInExpression declExpression []) aggregate
+            List.map
+                (\( declName, declExpression ) ->
+                    ( declName
+                    , Common.listUnique (listUnboundReferencesInExpression declExpression [])
+                    )
                 )
-                Dict.empty
                 blockDeclarations
 
-        dependenciesRelations : Dict.Dict String (Set.Set String)
+        dependenciesRelations : Dict.Dict String (List String)
         dependenciesRelations =
-            Dict.union availableEmittedDependencies blockDeclarationsDirectDependencies
+            List.foldl
+                (\( declName, declDeps ) aggregate ->
+                    Dict.insert declName declDeps aggregate
+                )
+                availableEmittedDependencies
+                blockDeclarationsDirectDependencies
 
         forwardedDecls : List ( List String, String )
         forwardedDecls =
@@ -528,18 +534,20 @@ emitDeclarationBlock stackBefore blockDeclarations (DeclBlockClosureCaptures con
                 (\( declName, DeclBlockFunctionEntry asFunctionParams asFunctionInnerExpr ) aggregate ->
                     case asFunctionParams of
                         [] ->
-                            case Dict.get declName blockDeclarationsDirectDependencies of
+                            case Common.assocListGet declName blockDeclarationsDirectDependencies of
                                 Nothing ->
                                     aggregate
 
                                 Just declDirectDeps ->
                                     let
                                         declTransitiveDeps =
-                                            getTransitiveDependencies dependenciesRelations declDirectDeps
+                                            getTransitiveDependencies
+                                                dependenciesRelations
+                                                declDirectDeps
                                     in
                                     if
                                         List.any
-                                            (\depName -> Set.member depName declTransitiveDeps)
+                                            (\depName -> List.member depName declTransitiveDeps)
                                             blockDeclarationsNames
                                     then
                                         aggregate
@@ -637,7 +645,6 @@ emitDeclarationBlock stackBefore blockDeclarations (DeclBlockClosureCaptures con
                 -}
                 []
             , importedFunctionsToInline = stackBefore.importedFunctionsToInline
-            , declarationsDependencies = stackBefore.declarationsDependencies
             , environmentFunctions = environmentFunctions
             , environmentDeconstructions = environmentDeconstructions
             }
@@ -759,7 +766,7 @@ emitDeclarationBlock stackBefore blockDeclarations (DeclBlockClosureCaptures con
 emittedImportsFromRoots :
     List Expression
     -> EmitStack
-    -> Dict.Dict String (Set.Set String)
+    -> Dict.Dict String (List String)
     -> List ( String, Expression )
     -> List ( ( List String, String ), EnvironmentFunctionEntry, Pine.Expression )
 emittedImportsFromRoots rootDependencies emitStack dependenciesRelations blockDecls =
@@ -782,61 +789,55 @@ emittedImportsFromRoots rootDependencies emitStack dependenciesRelations blockDe
                         Just list ->
                             list
 
-                rootDependenciesNames : Set.Set String
+                rootDependenciesNames : List String
                 rootDependenciesNames =
-                    List.foldl
-                        (\depExpr aggregate ->
-                            Set.union aggregate (listUnboundReferencesInExpression depExpr [])
+                    Common.listUnique
+                        (List.concatMap
+                            (\depExpr -> listUnboundReferencesInExpression depExpr [])
+                            rootDependencies
                         )
-                        Set.empty
-                        rootDependencies
 
-                allLocalDependencies : Set.Set String
+                allLocalDependencies : List String
                 allLocalDependencies =
                     getTransitiveDependencies
                         dependenciesRelations
                         rootDependenciesNames
 
-                rootDependenciesImportedNames : Set.Set ( List String, String )
+                rootDependenciesImportedNames : List ( List String, String )
                 rootDependenciesImportedNames =
-                    List.foldl
-                        (\rootDep aggregate ->
-                            Set.union
-                                (listImportingReferencesInExpression rootDep)
-                                aggregate
-                        )
-                        Set.empty
+                    List.concatMap
+                        (\rootDep -> listImportingReferencesInExpression rootDep)
                         rootDependencies
 
-                allImportedNames : Set.Set ( List String, String )
+                allImportedNames : List ( List String, String )
                 allImportedNames =
-                    Set.foldl
-                        (\depName aggregate ->
-                            let
-                                addedNames =
+                    Common.listUnique
+                        (List.concat
+                            [ rootDependenciesImportedNames
+                            , List.concatMap
+                                (\depName ->
                                     case Common.assocListGet depName blockDecls of
                                         Nothing ->
                                             case Common.assocListGet depName prevCompiledFunctions of
                                                 Nothing ->
-                                                    Set.singleton ( [], depName )
+                                                    [ ( [], depName ) ]
 
                                                 Just ( EnvironmentFunctionEntry _ prevCompiledEnv, _ ) ->
                                                     case prevCompiledEnv of
                                                         LocalEnvironment localDeps ->
-                                                            Set.fromList (( [], depName ) :: localDeps)
+                                                            ( [], depName ) :: localDeps
 
                                                         _ ->
-                                                            Set.singleton ( [], depName )
+                                                            [ ( [], depName ) ]
 
                                         Just blockDecl ->
                                             listImportingReferencesInExpression blockDecl
-                            in
-                            Set.union addedNames aggregate
+                                )
+                                allLocalDependencies
+                            ]
                         )
-                        rootDependenciesImportedNames
-                        allLocalDependencies
             in
-            Set.foldl
+            List.foldl
                 (\( moduleName, declName ) aggregate ->
                     case Common.assocListGet moduleName importedFunctions of
                         Nothing ->
@@ -1055,46 +1056,44 @@ emitReferenceExpression ( moduleName, declName ) compilation =
             continueWithoutDecons ()
 
 
-listTransitiveDependenciesOfExpression : EmitStack -> Expression -> Set.Set String
+listTransitiveDependenciesOfExpression : Dict.Dict String (List String) -> Expression -> List String
 listTransitiveDependenciesOfExpression dependenciesRelations expression =
-    getTransitiveDependencies dependenciesRelations.declarationsDependencies
+    getTransitiveDependencies dependenciesRelations
         (listUnboundReferencesInExpression expression [])
 
 
-listUnboundReferencesInExpression : Expression -> List String -> Set.Set String
+listUnboundReferencesInExpression : Expression -> List String -> List String
 listUnboundReferencesInExpression expression boundNames =
     case expression of
         LiteralExpression _ ->
-            Set.empty
+            []
 
         ListExpression list ->
-            List.foldl
-                (\item aggregate ->
-                    Set.union (listUnboundReferencesInExpression item boundNames) aggregate
-                )
-                Set.empty
+            List.concatMap
+                (\item -> listUnboundReferencesInExpression item boundNames)
                 list
 
         KernelApplicationExpression _ input ->
             listUnboundReferencesInExpression input boundNames
 
         ConditionalExpression condition falseBranch trueBranch ->
-            Set.union (listUnboundReferencesInExpression falseBranch boundNames)
-                (Set.union (listUnboundReferencesInExpression trueBranch boundNames)
-                    (listUnboundReferencesInExpression condition boundNames)
-                )
+            List.concat
+                [ listUnboundReferencesInExpression condition boundNames
+                , listUnboundReferencesInExpression falseBranch boundNames
+                , listUnboundReferencesInExpression trueBranch boundNames
+                ]
 
         ReferenceExpression moduleName reference ->
             case moduleName of
                 [] ->
                     if List.member reference boundNames then
-                        Set.empty
+                        []
 
                     else
-                        Set.singleton reference
+                        [ reference ]
 
                 _ ->
-                    Set.empty
+                    []
 
         FunctionExpression functionParam functionBody ->
             let
@@ -1109,12 +1108,12 @@ listUnboundReferencesInExpression expression boundNames =
                 (List.concat [ boundNames, functionParamNames ])
 
         FunctionApplicationExpression functionExpression arguments ->
-            List.foldl
-                (\argument aggregate ->
-                    Set.union (listUnboundReferencesInExpression argument boundNames) aggregate
-                )
-                (listUnboundReferencesInExpression functionExpression boundNames)
-                arguments
+            List.concat
+                [ listUnboundReferencesInExpression functionExpression boundNames
+                , List.concatMap
+                    (\argument -> listUnboundReferencesInExpression argument boundNames)
+                    arguments
+                ]
 
         DeclarationBlockExpression declarations innerExpression ->
             let
@@ -1125,12 +1124,12 @@ listUnboundReferencesInExpression expression boundNames =
                 newBoundNames =
                     List.concat [ boundNames, declarationsNames ]
             in
-            List.foldl
-                (\( _, decl ) aggregate ->
-                    Set.union (listUnboundReferencesInExpression decl newBoundNames) aggregate
-                )
-                (listUnboundReferencesInExpression innerExpression newBoundNames)
-                declarations
+            List.concat
+                [ listUnboundReferencesInExpression innerExpression newBoundNames
+                , List.concatMap
+                    (\( _, decl ) -> listUnboundReferencesInExpression decl newBoundNames)
+                    declarations
+                ]
 
         StringTagExpression _ tagged ->
             listUnboundReferencesInExpression tagged boundNames
@@ -1139,56 +1138,54 @@ listUnboundReferencesInExpression expression boundNames =
             listUnboundReferencesInExpression argument boundNames
 
 
-listImportingReferencesInExpression : Expression -> Set.Set ( List String, String )
+listImportingReferencesInExpression : Expression -> List ( List String, String )
 listImportingReferencesInExpression expression =
     case expression of
         LiteralExpression _ ->
-            Set.empty
+            []
 
         ListExpression list ->
-            List.foldl
-                (\item aggregate ->
-                    Set.union (listImportingReferencesInExpression item) aggregate
-                )
-                Set.empty
+            List.concatMap
+                (\item -> listImportingReferencesInExpression item)
                 list
 
         KernelApplicationExpression _ input ->
             listImportingReferencesInExpression input
 
         ConditionalExpression condition falseBranch trueBranch ->
-            Set.union (listImportingReferencesInExpression falseBranch)
-                (Set.union (listImportingReferencesInExpression trueBranch)
-                    (listImportingReferencesInExpression condition)
-                )
+            List.concat
+                [ listImportingReferencesInExpression condition
+                , listImportingReferencesInExpression falseBranch
+                , listImportingReferencesInExpression trueBranch
+                ]
 
         ReferenceExpression moduleName reference ->
             case moduleName of
                 [] ->
-                    Set.empty
+                    []
 
                 _ ->
-                    Set.singleton ( moduleName, reference )
+                    [ ( moduleName, reference ) ]
 
         FunctionExpression _ functionBody ->
             listImportingReferencesInExpression
                 functionBody
 
         FunctionApplicationExpression functionExpression arguments ->
-            List.foldl
-                (\argument aggregate ->
-                    Set.union (listImportingReferencesInExpression argument) aggregate
-                )
-                (listImportingReferencesInExpression functionExpression)
-                arguments
+            List.concat
+                [ listImportingReferencesInExpression functionExpression
+                , List.concatMap
+                    (\argument -> listImportingReferencesInExpression argument)
+                    arguments
+                ]
 
         DeclarationBlockExpression declarations innerExpression ->
-            List.foldl
-                (\( _, decl ) aggregate ->
-                    Set.union (listImportingReferencesInExpression decl) aggregate
-                )
-                (listImportingReferencesInExpression innerExpression)
-                declarations
+            List.concat
+                [ listImportingReferencesInExpression innerExpression
+                , List.concatMap
+                    (\( _, decl ) -> listImportingReferencesInExpression decl)
+                    declarations
+                ]
 
         StringTagExpression _ tagged ->
             listImportingReferencesInExpression tagged
@@ -1197,32 +1194,47 @@ listImportingReferencesInExpression expression =
             listImportingReferencesInExpression argument
 
 
-getTransitiveDependencies : Dict.Dict String (Set.Set String) -> Set.Set String -> Set.Set String
-getTransitiveDependencies dependenciesDependencies current =
+getTransitiveDependencies : Dict.Dict String (List String) -> List String -> List String
+getTransitiveDependencies dependencies roots =
+    mergeDependenciesRecursive dependencies [] roots
+
+
+mergeDependenciesRecursive :
+    Dict.Dict String (List String)
+    -> List String
+    -> List String
+    -> List String
+mergeDependenciesRecursive dependencies covered current =
     let
-        stepResult =
-            mergeDependenciesStep dependenciesDependencies current
+        beforeFilter =
+            List.concatMap
+                (\reference ->
+                    case Dict.get reference dependencies of
+                        Nothing ->
+                            []
+
+                        Just declDeps ->
+                            declDeps
+                )
+                current
+
+        nextCovered =
+            List.concat [ covered, current ]
+
+        newRefs =
+            List.filter
+                (\dep -> not (List.member dep nextCovered))
+                beforeFilter
     in
-    if Set.size stepResult == Set.size current then
-        stepResult
+    case newRefs of
+        [] ->
+            List.concat [ newRefs, nextCovered ]
 
-    else
-        getTransitiveDependencies dependenciesDependencies stepResult
-
-
-mergeDependenciesStep : Dict.Dict String (Set.Set String) -> Set.Set String -> Set.Set String
-mergeDependenciesStep dependenciesDependencies references =
-    Set.foldl
-        (\reference aggregate ->
-            case Dict.get reference dependenciesDependencies of
-                Nothing ->
-                    aggregate
-
-                Just dependencies ->
-                    Set.union dependencies aggregate
-        )
-        references
-        references
+        _ ->
+            mergeDependenciesRecursive
+                dependencies
+                nextCovered
+                newRefs
 
 
 pineExpressionForDeconstructions : List Deconstruction -> Pine.Expression -> Pine.Expression
@@ -1314,21 +1326,17 @@ emitFunctionApplication functionExpression arguments compilation =
 
                             else
                                 let
-                                    funcBodyDeps : Set.Set String
-                                    funcBodyDeps =
-                                        listTransitiveDependenciesOfExpression compilation funcBody
+                                    funcBodyRefs : List String
+                                    funcBodyRefs =
+                                        Common.listUnique
+                                            (listUnboundReferencesInExpression funcBody [])
 
                                     closureCaptures : List ( String, EnvironmentDeconstructionEntry )
                                     closureCaptures =
-                                        List.foldl
-                                            (\( declName, deconstruction ) aggregate ->
-                                                if Set.member declName funcBodyDeps then
-                                                    ( declName, deconstruction ) :: aggregate
-
-                                                else
-                                                    aggregate
+                                        List.filter
+                                            (\( declName, _ ) ->
+                                                List.member declName funcBodyRefs
                                             )
-                                            []
                                             compilation.environmentDeconstructions
 
                                     closureItemsExpressions : List Pine.Expression

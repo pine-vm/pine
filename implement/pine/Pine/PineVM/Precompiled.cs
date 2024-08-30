@@ -155,8 +155,8 @@ public class Precompiled
                     PineValue.List(
                         [
                         adaptivePartialApplicationExpressionValue,
-                        isPineListExpressionValue,
                         compareStringsExpressionValue,
+                        isPineListExpressionValue,
                         compareExpressionValue,
                         compareListsExpressionValue
                         ]))
@@ -177,9 +177,9 @@ public class Precompiled
                     PineValue.List(
                         [
                         adaptivePartialApplicationExpressionValue,
-                        isPineBlobExpressionValue,
                         dictToListExpressionValue,
                         dictKeysExpressionValue,
+                        isPineBlobExpressionValue,
                         eqExpressionValue,
                         listsEqualRecursiveExpressionValue,
                         ]))

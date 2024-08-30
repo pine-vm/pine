@@ -515,9 +515,9 @@ compileElmModuleIntoNamedExports availableModules moduleToTranslate =
         moduleExposingList =
             Elm.Syntax.Module.exposingList moduleDefSyntax
 
-        redirectsForInfix : Dict.Dict String String
+        redirectsForInfix : List ( String, String )
         redirectsForInfix =
-            List.foldl
+            List.foldr
                 (\(Elm.Syntax.Node.Node _ declaration) aggregate ->
                     case declaration of
                         Elm.Syntax.Declaration.FunctionDeclaration _ ->
@@ -534,24 +534,21 @@ compileElmModuleIntoNamedExports availableModules moduleToTranslate =
                                 (Elm.Syntax.Node.Node _ function) =
                                     infixDeclaration.function
                             in
-                            Dict.insert
-                                ("(" ++ operator ++ ")")
-                                function
-                                aggregate
+                            ( "(" ++ operator ++ ")", function ) :: aggregate
 
                         _ ->
                             aggregate
                 )
-                Dict.empty
+                []
                 moduleToTranslate.parsedModule.declarations
 
         functionsToExposeForInfix : List String
         functionsToExposeForInfix =
-            Dict.values redirectsForInfix
+            List.map Tuple.second redirectsForInfix
 
-        localFunctionDeclarations : Dict.Dict String Elm.Syntax.Expression.Function
+        localFunctionDeclarations : List ( String, Elm.Syntax.Expression.Function )
         localFunctionDeclarations =
-            List.foldl
+            List.foldr
                 (\(Elm.Syntax.Node.Node _ declaration) aggregate ->
                     case declaration of
                         Elm.Syntax.Declaration.FunctionDeclaration functionDeclaration ->
@@ -562,13 +559,17 @@ compileElmModuleIntoNamedExports availableModules moduleToTranslate =
                                 (Elm.Syntax.Node.Node _ name) =
                                     function.name
                             in
-                            Dict.insert name functionDeclaration aggregate
+                            ( name, functionDeclaration ) :: aggregate
 
                         _ ->
                             aggregate
                 )
-                Dict.empty
+                []
                 moduleToTranslate.parsedModule.declarations
+
+        localFunctionDeclarationsNames : List String
+        localFunctionDeclarationsNames =
+            List.map Tuple.first localFunctionDeclarations
 
         initialCompilationStack : CompilationStack
         initialCompilationStack =
@@ -576,7 +577,7 @@ compileElmModuleIntoNamedExports availableModules moduleToTranslate =
             , moduleAliases = moduleAliases
             , inlineableDeclarations = compilationStackForImport.inlineableDeclarations
             , exposedDeclarations = compilationStackForImport.exposedDeclarations
-            , localAvailableDeclarations = Dict.keys localFunctionDeclarations
+            , localAvailableDeclarations = localFunctionDeclarationsNames
             , localTypeDeclarations = compilationStackForImport.localTypeDeclarations
             , depth = 0
             }
@@ -588,7 +589,7 @@ compileElmModuleIntoNamedExports availableModules moduleToTranslate =
                     [ functionsToExposeForInfix
                     , case moduleExposingList of
                         Elm.Syntax.Exposing.All _ ->
-                            Dict.keys localFunctionDeclarations
+                            localFunctionDeclarationsNames
 
                         Elm.Syntax.Exposing.Explicit explicitList ->
                             List.foldl
@@ -608,14 +609,14 @@ compileElmModuleIntoNamedExports availableModules moduleToTranslate =
         localFunctionsResult : Result String (List ( String, Pine.Value ))
         localFunctionsResult =
             case
-                Common.resultDictMapCombine
+                Common.resultListMapCombine
                     (\( functionName, functionDeclaration ) ->
                         case compileElmSyntaxFunction initialCompilationStack functionDeclaration of
                             Err err ->
                                 Err ("Failed to compile function '" ++ functionName ++ "': " ++ err)
 
                             Ok ( _, compiledFunction ) ->
-                                Ok compiledFunction
+                                Ok ( functionName, compiledFunction )
                     )
                     localFunctionDeclarations
             of
@@ -636,8 +637,8 @@ compileElmModuleIntoNamedExports availableModules moduleToTranslate =
             let
                 declarationsValuesForInfix : List ( String, Pine.Value )
                 declarationsValuesForInfix =
-                    Dict.foldl
-                        (\name function aggregate ->
+                    List.foldr
+                        (\( name, function ) aggregate ->
                             case Common.assocListGet function functionDeclarations of
                                 Nothing ->
                                     aggregate
@@ -819,7 +820,6 @@ compilationAndEmitStackFromModulesInCompilation availableModules { moduleAliases
         emitStack =
             { importedFunctions = importedFunctions
             , importedFunctionsToInline = []
-            , declarationsDependencies = Dict.empty
             , environmentFunctions = []
             , environmentDeconstructions = []
             }
@@ -2819,35 +2819,40 @@ type alias EmittedRecursionDomain =
 
 emitModuleFunctionDeclarations :
     EmitStack
-    -> Dict.Dict String Expression
+    -> List ( String, Expression )
     -> List String
     -> Result String (List ( String, Pine.Value ))
-emitModuleFunctionDeclarations stackBefore allModuleDeclarations exposedDeclarationsNames =
+emitModuleFunctionDeclarations emitStack allModuleDeclarations exposedDeclarationsNames =
     let
-        declarationsDirectDependencies : Dict.Dict String (Set.Set String)
+        declarationsDirectDependencies : Dict.Dict String (List String)
         declarationsDirectDependencies =
-            Dict.foldl
-                (\declName declExpr aggregate ->
-                    Dict.insert declName (FirCompiler.listUnboundReferencesInExpression declExpr []) aggregate
+            List.foldl
+                (\( declName, declExpr ) aggregate ->
+                    Dict.insert
+                        declName
+                        (Common.listUnique (FirCompiler.listUnboundReferencesInExpression declExpr []))
+                        aggregate
                 )
                 Dict.empty
                 allModuleDeclarations
 
-        aggregateTransitiveDependencies : Set.Set String
+        aggregateTransitiveDependencies : List String
         aggregateTransitiveDependencies =
             FirCompiler.getTransitiveDependencies
                 declarationsDirectDependencies
-                (Set.fromList exposedDeclarationsNames)
+                exposedDeclarationsNames
 
         declarationsTransitiveDependencies : List ( String, Set.Set String )
         declarationsTransitiveDependencies =
             Dict.foldl
                 (\declarationName directDependencies aggregate ->
-                    if Set.member declarationName aggregateTransitiveDependencies then
+                    if List.member declarationName aggregateTransitiveDependencies then
                         ( declarationName
-                        , FirCompiler.getTransitiveDependencies
-                            declarationsDirectDependencies
-                            directDependencies
+                        , Set.fromList
+                            (FirCompiler.getTransitiveDependencies
+                                declarationsDirectDependencies
+                                directDependencies
+                            )
                         )
                             :: aggregate
 
@@ -2869,20 +2874,12 @@ emitModuleFunctionDeclarations stackBefore allModuleDeclarations exposedDeclarat
                     )
                 )
                 ( [], [] )
-                stackBefore.importedFunctions
+                emitStack.importedFunctions
 
         recursionDomains : List (Set.Set String)
         recursionDomains =
             FirCompiler.recursionDomainsFromDeclarationDependencies
                 declarationsTransitiveDependencies
-
-        emitStack =
-            { stackBefore
-                | declarationsDependencies =
-                    Dict.union
-                        declarationsDirectDependencies
-                        stackBefore.declarationsDependencies
-            }
 
         emitRecursionDomainsRecursive :
             List EmittedRecursionDomain
@@ -2924,10 +2921,10 @@ emitModuleFunctionDeclarations stackBefore allModuleDeclarations exposedDeclarat
 
 emitRecursionDomain :
     { exposedDeclarationsNames : List String
-    , allModuleDeclarations : Dict.Dict String Expression
+    , allModuleDeclarations : List ( String, Expression )
     , importedFunctionsToShare : List ( List String, List ( String, ( FirCompiler.EnvironmentFunctionEntry, Pine.Value ) ) )
     , importedFunctionsToInline : List ( List String, List ( String, Pine.Value ) )
-    , declarationsDirectDependencies : Dict.Dict String (Set.Set String)
+    , declarationsDirectDependencies : Dict.Dict String (List String)
     }
     -> EmitStack
     -> Set.Set String
@@ -2943,8 +2940,8 @@ emitRecursionDomain { exposedDeclarationsNames, allModuleDeclarations, importedF
 
         recursionDomainDeclarations : List ( String, Expression )
         recursionDomainDeclarations =
-            Dict.foldr
-                (\declName declExpr aggregate ->
+            List.foldr
+                (\( declName, declExpr ) aggregate ->
                     if Set.member declName currentRecursionDomain then
                         ( declName, declExpr ) :: aggregate
 
@@ -2975,7 +2972,7 @@ emitRecursionDomain { exposedDeclarationsNames, allModuleDeclarations, importedF
                             aggregate
 
                         Just directDependencies ->
-                            Set.union directDependencies aggregate
+                            List.foldl Set.insert aggregate directDependencies
                 )
                 Set.empty
                 currentRecursionDomain
@@ -3000,7 +2997,6 @@ emitRecursionDomain { exposedDeclarationsNames, allModuleDeclarations, importedF
             { importedFunctions = importedFunctions
             , importedFunctionsToInline =
                 ( [], prevEmittedDeclarationsToInline ) :: importedFunctionsToInline
-            , declarationsDependencies = emitStack.declarationsDependencies
             , environmentFunctions = emitStack.environmentFunctions
             , environmentDeconstructions = emitStack.environmentDeconstructions
             }

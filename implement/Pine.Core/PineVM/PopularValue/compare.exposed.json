@@ -1635,97 +1635,6 @@
         ]
       ],
       [
-        { "ListAsString": "KernelApplication" },
-        [
-          [
-            { "ListAsString": "function" },
-            { "ListAsString": "equal" }
-          ],
-          [
-            { "ListAsString": "input" },
-            [
-              { "ListAsString": "List" },
-              [
-                [
-                  { "ListAsString": "KernelApplication" },
-                  [
-                    [
-                      { "ListAsString": "function" },
-                      { "ListAsString": "take" }
-                    ],
-                    [
-                      { "ListAsString": "input" },
-                      [
-                        { "ListAsString": "List" },
-                        [
-                          [
-                            { "ListAsString": "Literal" },
-                            0
-                          ],
-                          [
-                            { "ListAsString": "KernelApplication" },
-                            [
-                              [
-                                { "ListAsString": "function" },
-                                { "ListAsString": "list_head" }
-                              ],
-                              [
-                                { "ListAsString": "input" },
-                                [
-                                  { "ListAsString": "KernelApplication" },
-                                  [
-                                    [
-                                      { "ListAsString": "function" },
-                                      { "ListAsString": "list_head" }
-                                    ],
-                                    [
-                                      { "ListAsString": "input" },
-                                      [
-                                        { "ListAsString": "KernelApplication" },
-                                        [
-                                          [
-                                            { "ListAsString": "function" },
-                                            { "ListAsString": "skip" }
-                                          ],
-                                          [
-                                            { "ListAsString": "input" },
-                                            [
-                                              { "ListAsString": "List" },
-                                              [
-                                                [
-                                                  { "ListAsString": "Literal" },
-                                                  1
-                                                ],
-                                                [
-                                                  { "ListAsString": "Environment" },
-                                                  []
-                                                ]
-                                              ]
-                                            ]
-                                          ]
-                                        ]
-                                      ]
-                                    ]
-                                  ]
-                                ]
-                              ]
-                            ]
-                          ]
-                        ]
-                      ]
-                    ]
-                  ]
-                ],
-                [
-                  { "ListAsString": "Literal" },
-                  []
-                ]
-              ]
-            ]
-          ]
-        ]
-      ],
-      [
         { "ListAsString": "Conditional" },
         [
           [
@@ -3207,6 +3116,97 @@
         ]
       ],
       [
+        { "ListAsString": "KernelApplication" },
+        [
+          [
+            { "ListAsString": "function" },
+            { "ListAsString": "equal" }
+          ],
+          [
+            { "ListAsString": "input" },
+            [
+              { "ListAsString": "List" },
+              [
+                [
+                  { "ListAsString": "KernelApplication" },
+                  [
+                    [
+                      { "ListAsString": "function" },
+                      { "ListAsString": "take" }
+                    ],
+                    [
+                      { "ListAsString": "input" },
+                      [
+                        { "ListAsString": "List" },
+                        [
+                          [
+                            { "ListAsString": "Literal" },
+                            0
+                          ],
+                          [
+                            { "ListAsString": "KernelApplication" },
+                            [
+                              [
+                                { "ListAsString": "function" },
+                                { "ListAsString": "list_head" }
+                              ],
+                              [
+                                { "ListAsString": "input" },
+                                [
+                                  { "ListAsString": "KernelApplication" },
+                                  [
+                                    [
+                                      { "ListAsString": "function" },
+                                      { "ListAsString": "list_head" }
+                                    ],
+                                    [
+                                      { "ListAsString": "input" },
+                                      [
+                                        { "ListAsString": "KernelApplication" },
+                                        [
+                                          [
+                                            { "ListAsString": "function" },
+                                            { "ListAsString": "skip" }
+                                          ],
+                                          [
+                                            { "ListAsString": "input" },
+                                            [
+                                              { "ListAsString": "List" },
+                                              [
+                                                [
+                                                  { "ListAsString": "Literal" },
+                                                  1
+                                                ],
+                                                [
+                                                  { "ListAsString": "Environment" },
+                                                  []
+                                                ]
+                                              ]
+                                            ]
+                                          ]
+                                        ]
+                                      ]
+                                    ]
+                                  ]
+                                ]
+                              ]
+                            ]
+                          ]
+                        ]
+                      ]
+                    ]
+                  ]
+                ],
+                [
+                  { "ListAsString": "Literal" },
+                  []
+                ]
+              ]
+            ]
+          ]
+        ]
+      ],
+      [
         { "ListAsString": "Conditional" },
         [
           [
@@ -3581,7 +3581,7 @@
                                             [
                                               [
                                                 { "ListAsString": "Literal" },
-                                                1
+                                                2
                                               ],
                                               [
                                                 { "ListAsString": "KernelApplication" },
@@ -4267,7 +4267,7 @@
                                                   [
                                                     [
                                                       { "ListAsString": "Literal" },
-                                                      1
+                                                      2
                                                     ],
                                                     [
                                                       { "ListAsString": "KernelApplication" },
@@ -4788,7 +4788,7 @@
                                                         [
                                                           [
                                                             { "ListAsString": "Literal" },
-                                                            1
+                                                            2
                                                           ],
                                                           [
                                                             { "ListAsString": "KernelApplication" },
@@ -5292,7 +5292,7 @@
                                                   [
                                                     [
                                                       { "ListAsString": "Literal" },
-                                                      2
+                                                      1
                                                     ],
                                                     [
                                                       { "ListAsString": "KernelApplication" },
@@ -5325,83 +5325,17 @@
                                       { "ListAsString": "List" },
                                       [
                                         [
-                                          { "ListAsString": "List" },
+                                          { "ListAsString": "KernelApplication" },
                                           [
                                             [
-                                              { "ListAsString": "KernelApplication" },
-                                              [
-                                                [
-                                                  { "ListAsString": "function" },
-                                                  { "ListAsString": "list_head" }
-                                                ],
-                                                [
-                                                  { "ListAsString": "input" },
-                                                  [
-                                                    { "ListAsString": "KernelApplication" },
-                                                    [
-                                                      [
-                                                        { "ListAsString": "function" },
-                                                        { "ListAsString": "list_head" }
-                                                      ],
-                                                      [
-                                                        { "ListAsString": "input" },
-                                                        [
-                                                          { "ListAsString": "Environment" },
-                                                          []
-                                                        ]
-                                                      ]
-                                                    ]
-                                                  ]
-                                                ]
-                                              ]
+                                              { "ListAsString": "function" },
+                                              { "ListAsString": "list_head" }
                                             ],
                                             [
-                                              { "ListAsString": "KernelApplication" },
+                                              { "ListAsString": "input" },
                                               [
-                                                [
-                                                  { "ListAsString": "function" },
-                                                  { "ListAsString": "list_head" }
-                                                ],
-                                                [
-                                                  { "ListAsString": "input" },
-                                                  [
-                                                    { "ListAsString": "KernelApplication" },
-                                                    [
-                                                      [
-                                                        { "ListAsString": "function" },
-                                                        { "ListAsString": "skip" }
-                                                      ],
-                                                      [
-                                                        { "ListAsString": "input" },
-                                                        [
-                                                          { "ListAsString": "List" },
-                                                          [
-                                                            [
-                                                              { "ListAsString": "Literal" },
-                                                              2
-                                                            ],
-                                                            [
-                                                              { "ListAsString": "KernelApplication" },
-                                                              [
-                                                                [
-                                                                  { "ListAsString": "function" },
-                                                                  { "ListAsString": "list_head" }
-                                                                ],
-                                                                [
-                                                                  { "ListAsString": "input" },
-                                                                  [
-                                                                    { "ListAsString": "Environment" },
-                                                                    []
-                                                                  ]
-                                                                ]
-                                                              ]
-                                                            ]
-                                                          ]
-                                                        ]
-                                                      ]
-                                                    ]
-                                                  ]
-                                                ]
+                                                { "ListAsString": "Environment" },
+                                                []
                                               ]
                                             ]
                                           ]

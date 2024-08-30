@@ -22,7 +22,6 @@ import FirCompiler
     exposing
         ( EmitStack
         , Expression(..)
-        , listTransitiveDependenciesOfExpression
         , parseFunctionParameters
         )
 import Json.Decode
