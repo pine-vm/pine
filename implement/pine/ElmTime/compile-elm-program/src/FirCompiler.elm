@@ -29,7 +29,6 @@ module FirCompiler exposing
     , listItemFromIndexExpression_Pine
     , listSkipExpression
     , listSkipExpression_Pine
-    , listTransitiveDependenciesOfExpression
     , listUnboundReferencesInExpression
     , parseFunctionParameters
     , parseFunctionRecordFromValueTagged
@@ -2356,16 +2355,25 @@ pineExpressionIsIndependent expression =
             List.all pineExpressionIsIndependent list
 
         Pine.ParseAndEvalExpression encodedExpr envExpr ->
-            pineExpressionIsIndependent encodedExpr
-                && pineExpressionIsIndependent envExpr
+            if pineExpressionIsIndependent encodedExpr then
+                pineExpressionIsIndependent envExpr
+
+            else
+                False
 
         Pine.KernelApplicationExpression _ input ->
             pineExpressionIsIndependent input
 
         Pine.ConditionalExpression condition falseBranch trueBranch ->
-            pineExpressionIsIndependent condition
-                && pineExpressionIsIndependent falseBranch
-                && pineExpressionIsIndependent trueBranch
+            if pineExpressionIsIndependent condition then
+                if pineExpressionIsIndependent falseBranch then
+                    pineExpressionIsIndependent trueBranch
+
+                else
+                    False
+
+            else
+                False
 
         Pine.EnvironmentExpression ->
             False
@@ -2496,35 +2504,34 @@ countPineExpressionSize countValueSize expression =
 
 estimatePineValueSize : Pine.Value -> Int
 estimatePineValueSize value =
+    let
+        ( nodeCount, byteCount ) =
+            countValueContent value
+    in
+    nodeCount * 10 + byteCount
+
+
+{-| Returns aggregate node count and aggregate blob byte count.
+-}
+countValueContent : Pine.Value -> ( Int, Int )
+countValueContent value =
     case value of
         Pine.BlobValue blob ->
-            10 + List.length blob
+            ( 1, List.length blob )
 
         Pine.ListValue list ->
-            10 + estimatePineListValueSizeHelper 0 list
+            countListValueContent ( 0, 0 ) list
 
 
-estimatePineListValueSizeHelper : Int -> List Pine.Value -> Int
-estimatePineListValueSizeHelper accumulated list =
-    -- Reduce stack depths by matching the most common cases with few elements inline.
-    case list of
+countListValueContent : ( Int, Int ) -> List Pine.Value -> ( Int, Int )
+countListValueContent ( nodeCount, byteCount ) items =
+    case items of
         [] ->
-            accumulated
+            ( nodeCount, byteCount )
 
-        [ first ] ->
-            accumulated
-                + estimatePineValueSize first
-
-        [ first, second ] ->
-            accumulated
-                + estimatePineValueSize first
-                + estimatePineValueSize second
-
-        first :: second :: third :: remaining ->
-            estimatePineListValueSizeHelper
-                (accumulated
-                    + estimatePineValueSize first
-                    + estimatePineValueSize second
-                    + estimatePineValueSize third
-                )
-                remaining
+        item :: remaining ->
+            let
+                ( itemNodeCount, itemByteCount ) =
+                    countValueContent item
+            in
+            countListValueContent ( nodeCount + itemNodeCount, byteCount + itemByteCount ) remaining
