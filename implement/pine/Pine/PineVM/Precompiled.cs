@@ -145,6 +145,19 @@ public class Precompiled
             ExpressionEncoding.EncodeExpressionAsValue(assocListGetExpression)
             .Extract(err => throw new Exception(err));
 
+        var dictSizeHelpExpression = popularExpressionDictionary["dictSizeHelp"];
+
+        var dictSizeHelpExpressionValue =
+            ExpressionEncoding.EncodeExpressionAsValue(dictSizeHelpExpression)
+            .Extract(err => throw new Exception(err));
+
+
+        var elmCompiledRecordAccessExpression = popularExpressionDictionary["elmCompiledRecordAccess"];
+
+        var elmCompiledRecordAccessExpressionValue =
+            ExpressionEncoding.EncodeExpressionAsValue(elmCompiledRecordAccessExpression)
+            .Extract(err => throw new Exception(err));
+
 
         {
             var compareExpressionEnvClass =
@@ -253,6 +266,42 @@ public class Precompiled
                 new KeyValuePair<Expression, IReadOnlyList<PrecompiledEntry>>(
                     dictGetExpression,
                     [PrecompiledEntry.FinalValueForAnyEnvironment(dictGetExpressionEnvClass, DictGet)]);
+        }
+
+
+        {
+            var dictSizeHelpEnvClass =
+                EnvConstraintId.Create(
+                    [
+                    new KeyValuePair<IReadOnlyList<int>, PineValue>(
+                    [0],
+                    PineValue.List(
+                        [
+                        adaptivePartialApplicationExpressionValue,
+                        dictSizeHelpExpressionValue,
+                        ]))
+                    ]);
+
+            yield return
+                new KeyValuePair<Expression, IReadOnlyList<PrecompiledEntry>>(
+                    dictSizeHelpExpression,
+                    [PrecompiledEntry.FinalValueForAnyEnvironment(dictSizeHelpEnvClass, DictSizeHelp)]);
+        }
+
+
+        {
+            var elmCompiledRecordAccessEnvClass =
+                EnvConstraintId.Create(
+                    [
+                    new KeyValuePair<IReadOnlyList<int>, PineValue>(
+                    [0],
+                    elmCompiledRecordAccessExpressionValue)
+                    ]);
+
+            yield return
+                new KeyValuePair<Expression, IReadOnlyList<PrecompiledEntry>>(
+                    elmCompiledRecordAccessExpression,
+                    [PrecompiledEntry.FinalValueForAnyEnvironment(elmCompiledRecordAccessEnvClass, ElmCompiledRecordAccess)]);
         }
 
 
@@ -665,6 +714,72 @@ public class Precompiled
         }
 
         throw new ParseExpressionException("Error in case-of block: No matching branch.");
+    }
+
+    static PineValue DictSizeHelp(PineValue environment)
+    {
+        static long sizeHelp(
+            long n,
+            PineValue dict)
+        {
+            var dictTag = PineVM.ValueFromPathInValueOrEmptyList(dict, [0]);
+
+            if (dictTag == ElmValue.ElmDictEmptyTagNameAsValue)
+            {
+                return n;
+            }
+
+            if (dictTag == ElmValue.ElmDictNotEmptyTagNameAsValue)
+            {
+                var dictNotEmptyArgs = PineVM.ValueFromPathInValueOrEmptyList(dict, [1]);
+
+                var left = PineVM.ValueFromPathInValueOrEmptyList(dictNotEmptyArgs, [3]);
+                var right = PineVM.ValueFromPathInValueOrEmptyList(dictNotEmptyArgs, [4]);
+
+                return sizeHelp(sizeHelp(n + 1, right), left);
+            }
+
+            throw new ParseExpressionException("Error in case-of block: No matching branch.");
+        }
+
+        var countValue = PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 0]);
+        var count =
+            PineValueAsInteger.SignedIntegerFromValueStrict(countValue)
+            .Extract(err => throw new Exception(err));
+
+        var dict = PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 1]);
+
+        return PineValueAsInteger.ValueFromSignedInteger(sizeHelp((long)count, dict));
+    }
+
+
+    static PineValue ElmCompiledRecordAccess(PineValue environment)
+    {
+        var fieldNameValue = PineVM.ValueFromPathInValueOrEmptyList(environment, [1]);
+        var remainingFieldsValue = PineVM.ValueFromPathInValueOrEmptyList(environment, [2]);
+
+        if (remainingFieldsValue is PineValue.ListValue remainingFields)
+        {
+            for (var i = 0; i < remainingFields.Elements.Count; ++i)
+            {
+                var field = remainingFields.Elements[i];
+
+                if (field is PineValue.ListValue fieldList && 0 < fieldList.Elements.Count)
+                {
+                    if (fieldList.Elements[0] == fieldNameValue)
+                    {
+                        if (1 < fieldList.Elements.Count)
+                        {
+                            return fieldList.Elements[1];
+                        }
+
+                        return PineValue.EmptyList;
+                    }
+                }
+            }
+        }
+
+        throw new ParseExpressionException("invalid record access - field name not found");
     }
 
     static Func<PrecompiledResult>? AdaptivePartialApplication(
