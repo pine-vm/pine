@@ -158,6 +158,20 @@ public class Precompiled
             ExpressionEncoding.EncodeExpressionAsValue(elmCompiledRecordAccessExpression)
             .Extract(err => throw new Exception(err));
 
+        var countPineListValueContentExpression =
+            popularExpressionDictionary["countPineListValueContent"];
+
+        var countPineListValueContentExpressionValue =
+            ExpressionEncoding.EncodeExpressionAsValue(countPineListValueContentExpression)
+            .Extract(err => throw new Exception(err));
+
+        var countPineValueContentExpression =
+            popularExpressionDictionary["countPineValueContent"];
+
+        var countPineValueContentExpressionValue =
+            ExpressionEncoding.EncodeExpressionAsValue(countPineValueContentExpression)
+            .Extract(err => throw new Exception(err));
+
 
         {
             var compareExpressionEnvClass =
@@ -322,6 +336,27 @@ public class Precompiled
                 new KeyValuePair<Expression, IReadOnlyList<PrecompiledEntry>>(
                     adaptivePartialApplicationExpression,
                     [new PrecompiledEntry(adaptivePartialApplicationEnvClass, AdaptivePartialApplication)]);
+        }
+
+
+        {
+            var countPineValueContentEnvClass =
+                EnvConstraintId.Create(
+                    [
+                    new KeyValuePair<IReadOnlyList<int>, PineValue>(
+                    [0],
+                    PineValue.List(
+                        [
+                        adaptivePartialApplicationExpressionValue,
+                        countPineValueContentExpressionValue,
+                        countPineListValueContentExpressionValue,
+                        ]))
+                    ]);
+
+            yield return
+                new KeyValuePair<Expression, IReadOnlyList<PrecompiledEntry>>(
+                    countPineValueContentExpression,
+                    [PrecompiledEntry.FinalValueForAnyEnvironment(countPineValueContentEnvClass, CountPineValueContent)]);
         }
     }
 
@@ -782,6 +817,75 @@ public class Precompiled
         throw new ParseExpressionException("invalid record access - field name not found");
     }
 
+    static PineValue CountPineValueContent(PineValue environment)
+    {
+        var valueArgument =
+            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 0]);
+
+        var (nodeCount, byteCount) =
+            CountEncodedPineValueContent(valueArgument);
+
+        var returnValue =
+            PineValue.List(
+                [
+                PineValueAsInteger.ValueFromSignedInteger(nodeCount),
+                PineValueAsInteger.ValueFromSignedInteger(byteCount)
+                ]);
+
+        return returnValue;
+    }
+
+    static (long, long) CountEncodedPineValueContent(PineValue encodedValue)
+    {
+        if (encodedValue is not PineValue.ListValue listValue)
+        {
+            throw new ParseExpressionException("Error in case-of block: No matching branch.");
+        }
+
+        if (listValue.Elements.Count is not 2)
+        {
+            throw new ParseExpressionException("Error in case-of block: No matching branch.");
+        }
+
+        if (listValue.Elements[1] is not PineValue.ListValue tagArgumentsList)
+        {
+            throw new ParseExpressionException("Error in case-of block: No matching branch.");
+        }
+
+        if (tagArgumentsList.Elements.Count is not 1)
+        {
+            throw new ParseExpressionException("Error in case-of block: No matching branch.");
+        }
+
+        var tagArgument = tagArgumentsList.Elements[0];
+
+        if (listValue.Elements[0] == Tag_BlobValue_Value &&
+            tagArgument is PineValue.ListValue blobValueList)
+        {
+            return (0, blobValueList.Elements.Count);
+        }
+
+        if (listValue.Elements[0] == Tag_ListValue_Value &&
+            tagArgument is PineValue.ListValue listValueListList)
+        {
+            long nodeCount = 0;
+            long byteCount = 0;
+
+            for (var i = 0; i < listValueListList.Elements.Count; ++i)
+            {
+                var (itemNodeCount, itemByteCount) =
+                    CountEncodedPineValueContent(listValueListList.Elements[i]);
+
+                nodeCount += itemNodeCount + 1;
+                byteCount += itemByteCount;
+            }
+
+            return (nodeCount, byteCount);
+        }
+
+        throw new ParseExpressionException("Error in case-of block: No matching branch.");
+    }
+
     static Func<PrecompiledResult>? AdaptivePartialApplication(
         PineValue environment)
     {
@@ -872,6 +976,12 @@ public class Precompiled
                 EnvironmentValue: newEnvironment,
                 ExpressionValue: functionRecord.Elements[0]);
     }
+
+    static readonly PineValue Tag_BlobValue_Value =
+        PineValueAsString.ValueFromString("BlobValue");
+
+    static readonly PineValue Tag_ListValue_Value =
+        PineValueAsString.ValueFromString("ListValue");
 
     static readonly PineValue ElmCompilerFunctionTagValue =
         PineValueAsString.ValueFromString("Function");
