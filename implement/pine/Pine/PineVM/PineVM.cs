@@ -151,11 +151,24 @@ public class PineVM : IPineVM
         PineValue EnvironmentValue,
         Memory<PineValue> InstructionsResultValues,
         long BeginInstructionCount,
-        long BeginParseAndEvalCount)
+        long BeginParseAndEvalCount,
+        long BeginStackFrameCount,
+        ApplyStepwise? Specialization)
     {
         public int InstructionPointer { get; set; } = 0;
 
         public int LastEvalResultIndex { get; set; } = -1;
+
+        public void ReturnFromChildFrame(PineValue frameReturnValue)
+        {
+            if (Specialization is not null)
+            {
+                Specialization.ReturningFromChildFrame(frameReturnValue);
+                return;
+            }
+
+            PushInstructionResult(frameReturnValue);
+        }
 
         public void PushInstructionResult(PineValue value)
         {
@@ -170,6 +183,45 @@ public class PineVM : IPineVM
                 throw new InvalidOperationException("Reference to last eval result before first eval");
 
             return InstructionsResultValues.Span[LastEvalResultIndex];
+        }
+    }
+
+    /*
+     * TODO: Expand the stack frame instruction format so that we can model these specializations
+     * as precompiled stack frames.
+     * That means the stack frame (instruction) model needs to be able to loop (mutate counter in place) and to supply inputs.
+     * */
+    public record ApplyStepwise
+    {
+        public StepResult CurrentStep { private set; get; }
+
+        public ApplyStepwise(StepResult.Continue start)
+        {
+            CurrentStep = start;
+        }
+
+        public void ReturningFromChildFrame(PineValue frameReturnValue)
+        {
+            if (CurrentStep is StepResult.Continue cont)
+            {
+                CurrentStep = cont.Callback(frameReturnValue);
+            }
+            else
+            {
+                throw new Exception("Returning on frame already completed earlier.");
+            }
+        }
+
+        public abstract record StepResult
+        {
+            public sealed record Continue(
+                Expression Expression,
+                PineValue EnvironmentValue,
+                Func<PineValue, StepResult> Callback)
+                : StepResult;
+
+            public sealed record Complete(PineValue PineValue)
+                : StepResult;
         }
     }
 
@@ -223,7 +275,8 @@ public class PineVM : IPineVM
         Expression expression,
         PineValue environment,
         long beginInstructionCount,
-        long beginParseAndEvalCount)
+        long beginParseAndEvalCount,
+        long beginStackFrameCount)
     {
         var compilation = GetExpressionCompilation(expression);
 
@@ -236,7 +289,9 @@ public class PineVM : IPineVM
             EnvironmentValue: environment,
             new PineValue[instructions.Instructions.Count],
             BeginInstructionCount: beginInstructionCount,
-            BeginParseAndEvalCount: beginParseAndEvalCount);
+            BeginParseAndEvalCount: beginParseAndEvalCount,
+            BeginStackFrameCount: beginStackFrameCount,
+            Specialization: null);
     }
 
     public ExpressionCompilation GetExpressionCompilation(
@@ -1311,24 +1366,121 @@ public class PineVM : IPineVM
         EvaluationConfig config)
     {
         long instructionCount = 0;
-
-        int parseAndEvalCount = 0;
+        long parseAndEvalCount = 0;
+        long stackFrameCount = 0;
 
         var stack = new Stack<StackFrame>();
 
-        stack.Push(
+        void pushStackFrame(StackFrame newFrame)
+        {
+            stack.Push(newFrame);
+
+            ++stackFrameCount;
+        }
+
+        EvaluationReport? returnFromStackFrame(PineValue frameReturnValue)
+        {
+            var currentFrame = stack.Peek();
+
+            if (currentFrame.ExpressionValue is { } currentFrameExprValue)
+            {
+                var frameInstructionCount = instructionCount - currentFrame.BeginInstructionCount;
+                var frameParseAndEvalCount = parseAndEvalCount - currentFrame.BeginParseAndEvalCount;
+                var frameStackFrameCount = stackFrameCount - currentFrame.BeginStackFrameCount;
+
+                if (frameInstructionCount + frameStackFrameCount * 100 > 1_000 && EvalCache is { } evalCache)
+                {
+                    evalCache.TryAdd(
+                        new EvalCacheEntryKey(currentFrameExprValue, currentFrame.EnvironmentValue),
+                        frameReturnValue);
+                }
+
+                reportFunctionApplication?.Invoke(
+                    new EvaluationReport(
+                        ExpressionValue: currentFrameExprValue,
+                        currentFrame.Expression,
+                        currentFrame.EnvironmentValue,
+                        InstructionCount: frameInstructionCount,
+                        ParseAndEvalCount: frameParseAndEvalCount,
+                        ReturnValue: frameReturnValue));
+            }
+
+            stack.Pop();
+
+            if (stack.Count is 0)
+            {
+                var rootExprValue =
+                    ExpressionEncoding.EncodeExpressionAsValue(rootExpression)
+                    .Extract(err => throw new Exception("Failed to encode root expression: " + err));
+
+                return new EvaluationReport(
+                    ExpressionValue: rootExprValue,
+                    Expression: rootExpression,
+                    Environment: rootEnvironment,
+                    InstructionCount: instructionCount,
+                    ParseAndEvalCount: parseAndEvalCount,
+                    ReturnValue: frameReturnValue);
+            }
+
+            var previousFrame = stack.Peek();
+
+            previousFrame.ReturnFromChildFrame(frameReturnValue);
+
+            return null;
+        }
+
+        pushStackFrame(
             StackFrameFromExpression(
                 expressionValue: null,
                 rootExpression,
                 rootEnvironment,
                 beginInstructionCount: instructionCount,
-                beginParseAndEvalCount: parseAndEvalCount));
+                beginParseAndEvalCount: parseAndEvalCount,
+                beginStackFrameCount: stackFrameCount));
 
         while (true)
         {
             var currentFrame = stack.Peek();
 
             ++instructionCount;
+
+            if (currentFrame.Specialization is { } specializedFrame)
+            {
+                var stepResult = specializedFrame.CurrentStep;
+
+                if (stepResult is ApplyStepwise.StepResult.Complete complete)
+                {
+                    var returnOverall =
+                        returnFromStackFrame(complete.PineValue);
+
+                    if (returnOverall is not null)
+                    {
+                        return returnOverall;
+                    }
+
+                    continue;
+                }
+
+                if (stepResult is ApplyStepwise.StepResult.Continue cont)
+                {
+                    var newFrame =
+                        StackFrameFromExpression(
+                            expressionValue: null,
+                            expression: cont.Expression,
+                            environment: cont.EnvironmentValue,
+                            beginInstructionCount: instructionCount,
+                            beginParseAndEvalCount: parseAndEvalCount,
+                            beginStackFrameCount: stackFrameCount);
+
+                    pushStackFrame(newFrame);
+
+                    continue;
+                }
+
+                throw new NotImplementedException(
+                    "Unexpected step result type: " + stepResult.GetType().FullName);
+            }
+
 
             if (currentFrame.Instructions.Instructions.Count <= currentFrame.InstructionPointer)
             {
@@ -1353,48 +1505,13 @@ public class PineVM : IPineVM
                 var frameReturnValue =
                     currentFrame.InstructionsResultValues.Span[lastAssignedIndex];
 
-                if (currentFrame.ExpressionValue is { } currentFrameExprValue)
+                var returnOverall =
+                    returnFromStackFrame(frameReturnValue);
+
+                if (returnOverall is not null)
                 {
-                    var frameInstructionCount = instructionCount - currentFrame.BeginInstructionCount;
-                    var frameParseAndEvalCount = parseAndEvalCount - currentFrame.BeginParseAndEvalCount;
-
-                    if (frameInstructionCount + frameParseAndEvalCount * 100 > 1_500 && EvalCache is { } evalCache)
-                    {
-                        evalCache.TryAdd(
-                            new EvalCacheEntryKey(currentFrameExprValue, currentFrame.EnvironmentValue),
-                            frameReturnValue);
-                    }
-
-                    reportFunctionApplication?.Invoke(
-                        new EvaluationReport(
-                            ExpressionValue: currentFrameExprValue,
-                            currentFrame.Expression,
-                            currentFrame.EnvironmentValue,
-                            InstructionCount: frameInstructionCount,
-                            ParseAndEvalCount: parseAndEvalCount - currentFrame.BeginParseAndEvalCount,
-                            ReturnValue: frameReturnValue));
+                    return returnOverall;
                 }
-
-                stack.Pop();
-
-                if (stack.Count is 0)
-                {
-                    var rootExprValue =
-                        ExpressionEncoding.EncodeExpressionAsValue(rootExpression)
-                        .Extract(err => throw new Exception("Failed to encode root expression: " + err));
-
-                    return new EvaluationReport(
-                        ExpressionValue: rootExprValue,
-                        Expression: rootExpression,
-                        Environment: rootEnvironment,
-                        InstructionCount: instructionCount,
-                        ParseAndEvalCount: parseAndEvalCount,
-                        ReturnValue: frameReturnValue);
-                }
-
-                var previousFrame = stack.Peek();
-
-                previousFrame.PushInstructionResult(frameReturnValue);
 
                 continue;
             }
@@ -1502,12 +1619,32 @@ public class PineVM : IPineVM
                                             expression: contParseOk.Value,
                                             environment: continueParseAndEval.EnvironmentValue,
                                             beginInstructionCount: instructionCount,
-                                            beginParseAndEvalCount: parseAndEvalCount);
+                                            beginParseAndEvalCount: parseAndEvalCount,
+                                            beginStackFrameCount: stackFrameCount);
 
-                                    stack.Push(newFrame);
+                                    pushStackFrame(newFrame);
+
+                                    continue;
                                 }
 
-                                continue;
+                            case Precompiled.PrecompiledResult.StepwiseSpecialization specialization:
+                                {
+                                    var newFrame =
+                                        new StackFrame(
+                                            ExpressionValue: expressionValue,
+                                            Expression: parseOk.Value,
+                                            Instructions: null,
+                                            EnvironmentValue: environmentValue,
+                                            InstructionsResultValues: null,
+                                            BeginInstructionCount: instructionCount,
+                                            BeginParseAndEvalCount: parseAndEvalCount,
+                                            BeginStackFrameCount: stackFrameCount,
+                                            Specialization: specialization.Stepwise);
+
+                                    pushStackFrame(newFrame);
+
+                                    continue;
+                                }
 
                             default:
                                 throw new Exception("Unexpected return type from precompiled: " + precompiledResult.GetType().FullName);
@@ -1521,9 +1658,10 @@ public class PineVM : IPineVM
                                 parseOk.Value,
                                 environmentValue,
                                 beginInstructionCount: instructionCount,
-                                beginParseAndEvalCount: parseAndEvalCount);
+                                beginParseAndEvalCount: parseAndEvalCount,
+                                beginStackFrameCount: stackFrameCount);
 
-                        stack.Push(newFrame);
+                        pushStackFrame(newFrame);
 
                         continue;
                     }
@@ -1552,13 +1690,14 @@ public class PineVM : IPineVM
                     {
                         if (ExpressionShouldGetNewStackFrame(expressionToContinueWith))
                         {
-                            stack.Push(
+                            pushStackFrame(
                                 StackFrameFromExpression(
                                     expressionValue: null,
                                     expressionToContinueWith,
                                     currentFrame.EnvironmentValue,
                                     beginInstructionCount: instructionCount,
-                                    beginParseAndEvalCount: parseAndEvalCount));
+                                    beginParseAndEvalCount: parseAndEvalCount,
+                                    beginStackFrameCount: stackFrameCount));
 
                             continue;
                         }

@@ -237,14 +237,19 @@ public static class KernelFunction
             return PineValue.EmptyList;
         }
 
-        if (listValue.Elements.Count is 0)
+        return concat(listValue.Elements);
+    }
+
+    public static PineValue concat(IReadOnlyList<PineValue> list)
+    {
+        if (list.Count is 0)
         {
             return PineValue.EmptyList;
         }
 
-        var head = listValue.Elements[0];
+        var head = list[0];
 
-        if (listValue.Elements.Count is 1)
+        if (list.Count is 1)
         {
             return head;
         }
@@ -253,9 +258,9 @@ public static class KernelFunction
         {
             var aggregated = new List<PineValue>(capacity: 40);
 
-            for (var i = 0; i < listValue.Elements.Count; ++i)
+            for (var i = 0; i < list.Count; ++i)
             {
-                if (listValue.Elements[i] is PineValue.ListValue listValueElement)
+                if (list[i] is PineValue.ListValue listValueElement)
                 {
                     aggregated.AddRange(listValueElement.Elements);
                 }
@@ -266,11 +271,11 @@ public static class KernelFunction
 
         if (head is PineValue.BlobValue)
         {
-            var blobs = new List<ReadOnlyMemory<byte>>(capacity: listValue.Elements.Count);
+            var blobs = new List<ReadOnlyMemory<byte>>(capacity: list.Count);
 
-            for (int i = 0; i < listValue.Elements.Count; ++i)
+            for (int i = 0; i < list.Count; ++i)
             {
-                if (listValue.Elements[i] is not PineValue.BlobValue blobValue)
+                if (list[i] is not PineValue.BlobValue blobValue)
                     continue;
 
                 blobs.Add(blobValue.Bytes);

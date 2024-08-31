@@ -137,15 +137,14 @@ public static class ElmInteractiveEnvironment
     /// Analog to the 'parseFunctionRecordFromValueTagged' function in FirCompiler.elm
     /// </summary>
     public static Result<string, FunctionRecord> ParseFunctionRecordFromValueTagged(
-        PineValue pineValue,
-        PineVM? pineVM = null)
+        PineValue pineValue)
     {
         return
             ParseTagged(pineValue)
             .AndThen(taggedFunctionDeclaration =>
             taggedFunctionDeclaration.name is "Function"
             ?
-            ParseFunctionRecordFromValue(taggedFunctionDeclaration.value, pineVM)
+            ParseFunctionRecordFromValue(taggedFunctionDeclaration.value)
             :
             /*
             (Result<string, FunctionRecord>)"Unexpected tag: " + taggedFunctionDeclaration.name
@@ -164,8 +163,7 @@ public static class ElmInteractiveEnvironment
     /// Analog to the 'parseFunctionRecordFromValue' function in FirCompiler.elm
     /// </summary>
     public static Result<string, FunctionRecord> ParseFunctionRecordFromValue(
-        PineValue pineValue,
-        PineVM? pineVM = null)
+        PineValue pineValue)
     {
         return
             pineValue switch
