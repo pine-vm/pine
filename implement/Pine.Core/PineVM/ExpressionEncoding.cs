@@ -36,7 +36,9 @@ public static class ExpressionEncoding
         expression switch
         {
             Expression.Literal literal =>
-            EncodeChoiceTypeVariantAsPineValue("Literal", literal.Value),
+            EncodeChoiceTypeVariantAsPineValue(
+                "Literal",
+                PineValue.List([literal.Value])),
 
             Expression.Environment =>
             EncodeChoiceTypeVariantAsPineValue("Environment", PineValue.EmptyList),
@@ -44,7 +46,8 @@ public static class ExpressionEncoding
             Expression.List list =>
             list.items.Select(EncodeExpressionAsValue)
             .ListCombine()
-            .Map(listElements => EncodeChoiceTypeVariantAsPineValue("List", PineValue.List(listElements))),
+            .Map(listElements => EncodeChoiceTypeVariantAsPineValue(
+                "List", PineValue.List([PineValue.List(listElements)]))),
 
             Expression.Conditional conditional =>
             EncodeConditionalExpressionAsValue(conditional),
@@ -100,13 +103,25 @@ public static class ExpressionEncoding
                 err.Value,
 
                 Result<string, string>.Ok tag =>
+                rootList.Elements[1] is not PineValue.ListValue tagArguments
+                ?
+                "Unexpected shape of tag argument value: Not a list"
+                :
                 tag.Value switch
                 {
                     "Literal" =>
-                    new Expression.Literal(rootList.Elements[1]),
+                    tagArguments.Elements.Count < 1
+                    ?
+                    "Expected one argument for literal but got zero"
+                    :
+                    new Expression.Literal(tagArguments.Elements[0]),
 
                     "List" =>
-                    ParsePineListValue(rootList.Elements[1]) switch
+                    tagArguments.Elements.Count < 1
+                    ?
+                    "Expected one argument for list but got zero"
+                    :
+                    ParsePineListValue(tagArguments.Elements[0]) switch
                     {
                         Result<string, IReadOnlyList<PineValue>>.Err err =>
                         (Result<string, Expression>)err.Value,
@@ -129,7 +144,7 @@ public static class ExpressionEncoding
                     },
 
                     "ParseAndEval" =>
-                    ParseParseAndEvalExpression(generalParser, rootList.Elements[1]) switch
+                    ParseParseAndEvalExpression(generalParser, tagArguments.Elements) switch
                     {
                         Result<string, Expression.ParseAndEval>.Err err =>
                         (Result<string, Expression>)err.Value,
@@ -142,7 +157,7 @@ public static class ExpressionEncoding
                     },
 
                     "KernelApplication" =>
-                    ParseKernelApplicationExpression(generalParser, rootList.Elements[1]) switch
+                    ParseKernelApplicationExpression(generalParser, tagArguments.Elements) switch
                     {
                         Result<string, Expression.KernelApplication>.Err err =>
                         (Result<string, Expression>)err.Value,
@@ -155,7 +170,7 @@ public static class ExpressionEncoding
                     },
 
                     "Conditional" =>
-                    ParseConditionalExpression(generalParser, rootList.Elements[1]) switch
+                    ParseConditionalExpression(generalParser, tagArguments.Elements) switch
                     {
                         Result<string, Expression.Conditional>.Err err =>
                         (Result<string, Expression>)err.Value,
@@ -171,7 +186,7 @@ public static class ExpressionEncoding
                     Expression.EnvironmentInstance,
 
                     "StringTag" =>
-                    ParseStringTagExpression(generalParser, rootList.Elements[1])
+                    ParseStringTagExpression(generalParser, tagArguments.Elements)
                     .Map(stringTag => (Expression)stringTag),
 
                     var otherTag =>
@@ -192,117 +207,96 @@ public static class ExpressionEncoding
         EncodeExpressionAsValue(parseAndEval.environment)
         .Map(encodedEnvironment =>
         EncodeChoiceTypeVariantAsPineValue("ParseAndEval",
-            EncodeRecordToPineValue(
-                (nameof(Expression.ParseAndEval.encoded), encodedExpression),
-                (nameof(Expression.ParseAndEval.environment), encodedEnvironment)))));
+            PineValue.List([encodedExpression, encodedEnvironment]))));
 
     public static Result<string, Expression.ParseAndEval> ParseParseAndEvalExpression(
         Func<PineValue, Result<string, Expression>> generalParser,
-        PineValue value) =>
-        DecodeRecord2FromPineValue(
-            value,
-            ("encoded", generalParser),
-            ("environment", generalParser),
-            (encoded, environment) => new Expression.ParseAndEval(encoded: encoded, environment: environment));
+        IReadOnlyList<PineValue> arguments) =>
+        arguments.Count < 2
+        ?
+        "Expected two arguments under parse and eval, but got " + arguments.Count
+        :
+        generalParser(arguments[0])
+        .AndThen(encoded =>
+        generalParser(arguments[1])
+        .Map(environment => new Expression.ParseAndEval(encoded: encoded, environment: environment)));
 
-    public static Result<string, PineValue> EncodeKernelApplicationExpression(Expression.KernelApplication kernelApplicationExpression) =>
+    public static Result<string, PineValue> EncodeKernelApplicationExpression(
+        Expression.KernelApplication kernelApplicationExpression) =>
         EncodeExpressionAsValue(kernelApplicationExpression.input)
         .Map(encodedInput =>
-        EncodeChoiceTypeVariantAsPineValue("KernelApplication",
-            EncodeRecordToPineValue(
-                (nameof(Expression.KernelApplication.function), PineValueAsString.ValueFromString(kernelApplicationExpression.function)),
-                (nameof(Expression.KernelApplication.input), encodedInput))));
+        EncodeChoiceTypeVariantAsPineValue(
+            "KernelApplication",
+            PineValue.List([PineValueAsString.ValueFromString(kernelApplicationExpression.function), encodedInput])));
 
     public static Result<string, Expression.KernelApplication> ParseKernelApplicationExpression(
         Func<PineValue, Result<string, Expression>> generalParser,
-        PineValue value) =>
-        DecodeRecord2FromPineValue(
-            value,
-            (nameof(Expression.KernelApplication.function), decode: PineValueAsString.StringFromValue),
-            (nameof(Expression.KernelApplication.input), decode: generalParser),
-            (functionName, argument) => (functionName, argument))
-        switch
-        {
-            Result<string, (string functionName, Expression argument)>.Err err =>
-            err.Value,
+        IReadOnlyList<PineValue> arguments) =>
+        arguments.Count < 2
+        ?
+        "Expected two arguments under kernel application, but got " + arguments.Count
+        :
+        PineValueAsString.StringFromValue(arguments[0])
+        .AndThen(function =>
+        generalParser(arguments[1])
+        .Map(input => new Expression.KernelApplication(
+            function: function,
+            input: input)));
 
-            Result<string, (string functionName, Expression argument)>.Ok functionNameAndArgument =>
-            new Expression.KernelApplication(
-                input: functionNameAndArgument.Value.argument,
-                function: functionNameAndArgument.Value.functionName),
-
-            var other =>
-            throw new NotImplementedException("Unexpected result type: " + other.GetType().FullName)
-        };
-
-    public static Expression.KernelApplication ParseKernelApplicationExpressionThrowOnUnknownName(
-        string functionName,
-        Expression argument) =>
-        new(input: argument, function: functionName);
-
-    public static Result<string, PineValue> EncodeConditionalExpressionAsValue(Expression.Conditional conditionalExpression) =>
+    public static Result<string, PineValue> EncodeConditionalExpressionAsValue(
+        Expression.Conditional conditionalExpression) =>
         EncodeExpressionAsValue(conditionalExpression.condition)
         .AndThen(encodedCondition =>
         EncodeExpressionAsValue(conditionalExpression.trueBranch)
         .AndThen(encodedIfTrue =>
         EncodeExpressionAsValue(conditionalExpression.falseBranch)
         .Map(encodedIfFalse =>
-        EncodeChoiceTypeVariantAsPineValue("Conditional",
-            EncodeRecordToPineValue(
-                (nameof(Expression.Conditional.condition), encodedCondition),
-                (nameof(Expression.Conditional.falseBranch), encodedIfFalse),
-                (nameof(Expression.Conditional.trueBranch), encodedIfTrue))))));
+        EncodeChoiceTypeVariantAsPineValue(
+            "Conditional",
+            PineValue.List(
+                [encodedCondition,
+                encodedIfFalse,
+                encodedIfTrue
+                ])))));
 
     public static Result<string, Expression.Conditional> ParseConditionalExpression(
         Func<PineValue, Result<string, Expression>> generalParser,
-        PineValue value) =>
-        ParseRecord3FromPineValue(
-            value,
-            (nameof(Expression.Conditional.condition), generalParser),
-            (nameof(Expression.Conditional.falseBranch), generalParser),
-            (nameof(Expression.Conditional.trueBranch), generalParser),
-            (condition, falseBranch, trueBranch) =>
+        IReadOnlyList<PineValue> arguments) =>
+        arguments.Count < 3
+        ?
+        "Expected 3 arguments under conditional, but got " + arguments.Count
+        :
+        generalParser(arguments[0])
+        .AndThen(condition =>
+        generalParser(arguments[1])
+        .AndThen(falseBranch =>
+        generalParser(arguments[2])
+        .Map(trueBranch =>
             new Expression.Conditional(
                 condition: condition,
                 falseBranch: falseBranch,
-                trueBranch: trueBranch));
+                trueBranch: trueBranch))));
 
     public static Result<string, Expression.StringTag> ParseStringTagExpression(
         Func<PineValue, Result<string, Expression>> generalParser,
-        PineValue value) =>
-        ParsePineListValue(value) switch
+        IReadOnlyList<PineValue> arguments) =>
+        arguments.Count < 2
+        ?
+        "Expected 2 arguments under string tag, but got " + arguments.Count
+        :
+        PineValueAsString.StringFromValue(arguments[0]) switch
         {
-            Result<string, IReadOnlyList<PineValue>>.Err err =>
+            Result<string, string>.Err err =>
             err.Value,
 
-            Result<string, IReadOnlyList<PineValue>>.Ok list =>
-            ParseListWithExactlyTwoElements(list.Value) switch
+            Result<string, string>.Ok tag =>
+            generalParser(arguments[1]) switch
             {
-                Result<string, (PineValue, PineValue)>.Err err =>
+                Result<string, Expression>.Err err =>
                 err.Value,
 
-                Result<string, (PineValue, PineValue)>.Ok tagValueAndTaggedValue =>
-                PineValueAsString.StringFromValue(tagValueAndTaggedValue.Value.Item1) switch
-                {
-                    Result<string, string>.Err err =>
-                    err.Value,
-
-                    Result<string, string>.Ok tag =>
-                    generalParser(tagValueAndTaggedValue.Value.Item2) switch
-                    {
-                        Result<string, Expression>.Err err =>
-                        err.Value,
-
-                        Result<string, Expression>.Ok tagged =>
-                        new Expression.StringTag(tag: tag.Value, tagged: tagged.Value),
-
-                        var other =>
-                        throw new NotImplementedException("Unexpected result type: " + other.GetType().FullName)
-                    },
-
-                    var other =>
-                    throw new NotImplementedException("Unexpected result type: " + other.GetType().FullName)
-                },
+                Result<string, Expression>.Ok tagged =>
+                new Expression.StringTag(tag: tag.Value, tagged: tagged.Value),
 
                 var other =>
                 throw new NotImplementedException("Unexpected result type: " + other.GetType().FullName)

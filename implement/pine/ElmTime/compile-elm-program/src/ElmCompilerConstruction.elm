@@ -12,9 +12,9 @@ One typical use case for these templates is wrapping a function to support the p
 generateTemplateEvaluatingToExpression : Pine.Expression -> Pine.Expression
 generateTemplateEvaluatingToExpression expression =
     let
-        buildFromTagAndArgument tagName argument =
+        buildFromTagAndArguments tagName arguments =
             [ Pine.LiteralExpression (Pine.valueFromString tagName)
-            , argument
+            , arguments
             ]
                 |> Pine.ListExpression
 
@@ -31,56 +31,56 @@ generateTemplateEvaluatingToExpression expression =
     in
     case expression of
         Pine.ListExpression list ->
-            buildFromTagAndArgument
+            buildFromTagAndArguments
                 "List"
-                (Pine.ListExpression (List.map generateTemplateEvaluatingToExpression list))
+                (Pine.ListExpression
+                    [ Pine.ListExpression (List.map generateTemplateEvaluatingToExpression list)
+                    ]
+                )
 
         Pine.LiteralExpression literal ->
-            buildFromTagAndArgument
+            buildFromTagAndArguments
                 "Literal"
-                (Pine.LiteralExpression literal)
+                (Pine.ListExpression
+                    [ Pine.LiteralExpression literal
+                    ]
+                )
 
         Pine.ParseAndEvalExpression encodedExpr envExpr ->
-            buildFromTagAndArgument
+            buildFromTagAndArguments
                 "ParseAndEval"
-                (buildRecordExpression
-                    [ ( "encoded", generateTemplateEvaluatingToExpression encodedExpr )
-                    , ( "environment", generateTemplateEvaluatingToExpression envExpr )
+                (Pine.ListExpression
+                    [ generateTemplateEvaluatingToExpression encodedExpr
+                    , generateTemplateEvaluatingToExpression envExpr
                     ]
                 )
 
         Pine.KernelApplicationExpression functionName input ->
-            buildFromTagAndArgument
+            buildFromTagAndArguments
                 "KernelApplication"
-                (buildRecordExpression
-                    [ ( "function", Pine.LiteralExpression (Pine.valueFromString functionName) )
-                    , ( "input", generateTemplateEvaluatingToExpression input )
+                (Pine.ListExpression
+                    [ Pine.LiteralExpression (Pine.valueFromString functionName)
+                    , generateTemplateEvaluatingToExpression input
                     ]
                 )
 
         Pine.ConditionalExpression condition falseBranch trueBranch ->
-            buildFromTagAndArgument
+            buildFromTagAndArguments
                 "Conditional"
-                (buildRecordExpression
-                    [ ( "condition"
-                      , generateTemplateEvaluatingToExpression condition
-                      )
-                    , ( "falseBranch"
-                      , generateTemplateEvaluatingToExpression falseBranch
-                      )
-                    , ( "trueBranch"
-                      , generateTemplateEvaluatingToExpression trueBranch
-                      )
+                (Pine.ListExpression
+                    [ generateTemplateEvaluatingToExpression condition
+                    , generateTemplateEvaluatingToExpression falseBranch
+                    , generateTemplateEvaluatingToExpression trueBranch
                     ]
                 )
 
         Pine.EnvironmentExpression ->
-            buildFromTagAndArgument
+            buildFromTagAndArguments
                 "Environment"
                 (Pine.ListExpression [])
 
         Pine.StringTagExpression tag tagged ->
-            buildFromTagAndArgument
+            buildFromTagAndArguments
                 "StringTag"
                 (Pine.ListExpression
                     [ Pine.LiteralExpression (Pine.valueFromString tag)

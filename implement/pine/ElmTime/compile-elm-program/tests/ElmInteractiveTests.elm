@@ -376,7 +376,7 @@ evolutionStagesToMakeElmFunction =
         \_ ->
             Pine.ListExpression
                 [ Pine.LiteralExpression (Pine.valueFromString "Literal")
-                , Pine.LiteralExpression (Pine.valueFromString "just a literal")
+                , Pine.ListExpression [ Pine.LiteralExpression (Pine.valueFromString "just a literal") ]
                 ]
                 |> Pine.evaluateExpression Pine.emptyEvalEnvironment
                 |> Result.andThen (Pine.parseExpressionFromValue >> Result.mapError Pine.DescribePathEnd)
@@ -388,8 +388,10 @@ evolutionStagesToMakeElmFunction =
                 [ Pine.LiteralExpression (Pine.valueFromString "List")
                 , Pine.ListExpression
                     [ Pine.ListExpression
-                        [ Pine.LiteralExpression (Pine.valueFromString "Literal")
-                        , Pine.LiteralExpression (Pine.valueFromString "test")
+                        [ Pine.ListExpression
+                            [ Pine.LiteralExpression (Pine.valueFromString "Literal")
+                            , Pine.ListExpression [ Pine.LiteralExpression (Pine.valueFromString "test") ]
+                            ]
                         ]
                     ]
                 ]
@@ -406,16 +408,10 @@ evolutionStagesToMakeElmFunction =
             Pine.ListExpression
                 [ Pine.LiteralExpression (Pine.valueFromString "KernelApplication")
                 , Pine.ListExpression
-                    [ Pine.ListExpression
-                        [ Pine.LiteralExpression (Pine.valueFromString "function")
-                        , Pine.LiteralExpression (Pine.valueFromString "equal")
-                        ]
+                    [ Pine.LiteralExpression (Pine.valueFromString "equal")
                     , Pine.ListExpression
-                        [ Pine.LiteralExpression (Pine.valueFromString "input")
-                        , Pine.ListExpression
-                            [ Pine.LiteralExpression (Pine.valueFromString "List")
-                            , Pine.LiteralExpression (Pine.ListValue [])
-                            ]
+                        [ Pine.LiteralExpression (Pine.valueFromString "List")
+                        , Pine.ListExpression [ Pine.LiteralExpression (Pine.ListValue []) ]
                         ]
                     ]
                 ]
@@ -433,16 +429,10 @@ evolutionStagesToMakeElmFunction =
             Pine.ListExpression
                 [ Pine.LiteralExpression (Pine.valueFromString "KernelApplication")
                 , Pine.ListExpression
-                    [ Pine.ListExpression
-                        [ Pine.LiteralExpression (Pine.valueFromString "function")
-                        , Pine.LiteralExpression (Pine.valueFromString "concat")
-                        ]
+                    [ Pine.LiteralExpression (Pine.valueFromString "concat")
                     , Pine.ListExpression
-                        [ Pine.LiteralExpression (Pine.valueFromString "input")
-                        , Pine.ListExpression
-                            [ Pine.LiteralExpression (Pine.valueFromString "Literal")
-                            , Pine.EnvironmentExpression
-                            ]
+                        [ Pine.LiteralExpression (Pine.valueFromString "Literal")
+                        , Pine.ListExpression [ Pine.EnvironmentExpression ]
                         ]
                     ]
                 ]
@@ -471,18 +461,14 @@ evolutionStagesToMakeElmFunction =
             Pine.ListExpression
                 [ Pine.LiteralExpression (Pine.valueFromString "KernelApplication")
                 , Pine.ListExpression
-                    [ Pine.ListExpression
-                        [ Pine.LiteralExpression (Pine.valueFromString "function")
-                        , Pine.LiteralExpression (Pine.valueFromString "concat")
-                        ]
+                    [ Pine.LiteralExpression (Pine.valueFromString "concat")
                     , Pine.ListExpression
-                        [ Pine.LiteralExpression (Pine.valueFromString "input")
+                        [ Pine.LiteralExpression (Pine.valueFromString "List")
                         , Pine.ListExpression
-                            [ Pine.LiteralExpression (Pine.valueFromString "List")
-                            , Pine.ListExpression
+                            [ Pine.ListExpression
                                 [ Pine.ListExpression
                                     [ Pine.LiteralExpression (Pine.valueFromString "Literal")
-                                    , Pine.EnvironmentExpression
+                                    , Pine.ListExpression [ Pine.EnvironmentExpression ]
                                     ]
                                 , Pine.ListExpression
                                     [ Pine.LiteralExpression (Pine.valueFromString "Environment")

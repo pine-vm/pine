@@ -3421,19 +3421,23 @@ compileElmChoiceTypeTagConstructorValue ( tagName, argumentsCount ) =
                 [ Pine.LiteralExpression Pine.stringAsValue_List
                 , Pine.ListExpression
                     [ Pine.ListExpression
-                        [ Pine.LiteralExpression Pine.stringAsValue_Literal
-                        , Pine.LiteralExpression (Pine.valueFromString tagName)
-                        ]
-                    , Pine.ListExpression
-                        [ Pine.LiteralExpression Pine.stringAsValue_List
+                        [ Pine.ListExpression
+                            [ Pine.LiteralExpression Pine.stringAsValue_Literal
+                            , Pine.LiteralExpression (Pine.ListValue [ Pine.valueFromString tagName ])
+                            ]
                         , Pine.ListExpression
-                            [ Pine.ListExpression
-                                [ Pine.LiteralExpression Pine.stringAsValue_Literal
-                                , Pine.environmentExpr
+                            [ Pine.LiteralExpression Pine.stringAsValue_List
+                            , Pine.ListExpression
+                                [ Pine.ListExpression
+                                    [ Pine.ListExpression
+                                        [ Pine.LiteralExpression Pine.stringAsValue_Literal
+                                        , Pine.ListExpression [ Pine.environmentExpr ]
+                                        ]
+                                    , Pine.environmentExpr
+                                        |> Pine.encodeExpressionAsValue
+                                        |> Pine.LiteralExpression
+                                    ]
                                 ]
-                            , Pine.environmentExpr
-                                |> Pine.encodeExpressionAsValue
-                                |> Pine.LiteralExpression
                             ]
                         ]
                     ]

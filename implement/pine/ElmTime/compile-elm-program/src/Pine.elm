@@ -987,7 +987,7 @@ encodeExpressionAsValue expression =
         LiteralExpression literal ->
             encodeUnionToPineValue
                 stringAsValue_Literal
-                literal
+                (ListValue [ literal ])
 
         ListExpression listExpr ->
             encodeListExpressionAsValueReversed [] (List.reverse listExpr)
@@ -996,8 +996,8 @@ encodeExpressionAsValue expression =
             encodeUnionToPineValue
                 stringAsValue_ParseAndEval
                 (ListValue
-                    [ ListValue [ stringAsValue_encoded, encodeExpressionAsValue encodedExpr ]
-                    , ListValue [ stringAsValue_environment, encodeExpressionAsValue envExpr ]
+                    [ encodeExpressionAsValue encodedExpr
+                    , encodeExpressionAsValue envExpr
                     ]
                 )
 
@@ -1005,8 +1005,8 @@ encodeExpressionAsValue expression =
             encodeUnionToPineValue
                 stringAsValue_KernelApplication
                 (ListValue
-                    [ ListValue [ stringAsValue_function, valueFromString functionName ]
-                    , ListValue [ stringAsValue_input, encodeExpressionAsValue input ]
+                    [ valueFromString functionName
+                    , encodeExpressionAsValue input
                     ]
                 )
 
@@ -1014,9 +1014,9 @@ encodeExpressionAsValue expression =
             encodeUnionToPineValue
                 stringAsValue_Conditional
                 (ListValue
-                    [ ListValue [ stringAsValue_condition, encodeExpressionAsValue condition ]
-                    , ListValue [ stringAsValue_falseBranch, encodeExpressionAsValue falseBranch ]
-                    , ListValue [ stringAsValue_trueBranch, encodeExpressionAsValue trueBranch ]
+                    [ encodeExpressionAsValue condition
+                    , encodeExpressionAsValue falseBranch
+                    , encodeExpressionAsValue trueBranch
                     ]
                 )
 
@@ -1039,7 +1039,7 @@ encodeListExpressionAsValueReversed encodedItems list =
         [] ->
             encodeUnionToPineValue
                 stringAsValue_List
-                (ListValue encodedItems)
+                (ListValue [ ListValue encodedItems ])
 
         itemExpr :: remaining ->
             encodeListExpressionAsValueReversed
@@ -1056,11 +1056,8 @@ environmentExpressionAsValue =
 
 parseExpressionFromValue : Value -> Result String Expression
 parseExpressionFromValue exprValue =
-    case parseListWithExactlyTwoElements exprValue of
-        Err err ->
-            Err ("Failed to parse union: " ++ err)
-
-        Ok ( tagNameValue, unionTagValue ) ->
+    case exprValue of
+        ListValue (tagNameValue :: (ListValue tagArguments) :: _) ->
             case stringFromValue tagNameValue of
                 Err err ->
                     Err ("Failed parsing tag name: " ++ err)
@@ -1068,13 +1065,23 @@ parseExpressionFromValue exprValue =
                 Ok tagName ->
                     case tagName of
                         "Literal" ->
-                            Ok (LiteralExpression unionTagValue)
+                            case tagArguments of
+                                argument :: _ ->
+                                    Ok (LiteralExpression argument)
+
+                                [] ->
+                                    Err "Expected one argument for literal but got zero"
 
                         "List" ->
-                            parseListExpression unionTagValue
+                            case tagArguments of
+                                argument :: _ ->
+                                    parseListExpression argument
+
+                                [] ->
+                                    Err "Expected one argument for list but got zero"
 
                         "ParseAndEval" ->
-                            case parseParseAndEvalExpression unionTagValue of
+                            case parseParseAndEvalExpression tagArguments of
                                 Ok ( encodedExpr, envExpr ) ->
                                     Ok (ParseAndEvalExpression encodedExpr envExpr)
 
@@ -1082,7 +1089,7 @@ parseExpressionFromValue exprValue =
                                     Err err
 
                         "KernelApplication" ->
-                            case parseKernelApplicationExpression unionTagValue of
+                            case parseKernelApplicationExpression tagArguments of
                                 Ok ( functionName, input ) ->
                                     Ok (KernelApplicationExpression functionName input)
 
@@ -1090,7 +1097,7 @@ parseExpressionFromValue exprValue =
                                     Err err
 
                         "Conditional" ->
-                            case parseConditionalExpression unionTagValue of
+                            case parseConditionalExpression tagArguments of
                                 Ok ( condition, falseBranch, trueBranch ) ->
                                     Ok (ConditionalExpression condition falseBranch trueBranch)
 
@@ -1101,25 +1108,20 @@ parseExpressionFromValue exprValue =
                             Ok environmentExpr
 
                         "StringTag" ->
-                            case parseListWithExactlyTwoElements unionTagValue of
-                                Err err ->
-                                    Err err
-
-                                Ok ( tagValue, taggedValue ) ->
-                                    case stringFromValue tagValue of
-                                        Err err ->
-                                            Err err
-
-                                        Ok tag ->
-                                            case parseExpressionFromValue taggedValue of
-                                                Err err ->
-                                                    Err err
-
-                                                Ok tagged ->
-                                                    Ok (StringTagExpression tag tagged)
+                            parseStringTagExpression tagArguments
 
                         _ ->
                             Err ("Unexpected expr tag: " ++ tagName)
+
+        ListValue list ->
+            Err
+                ("Unexpected shape in list value ("
+                    ++ String.fromInt (List.length list)
+                    ++ " items)"
+                )
+
+        BlobValue _ ->
+            Err "Unexpected blob value"
 
 
 parseListExpression : Value -> Result String Expression
@@ -1152,10 +1154,10 @@ parseListExpression value =
             parseListRecursively [] list
 
 
-parseParseAndEvalExpression : Value -> Result String ( Expression, Expression )
-parseParseAndEvalExpression value =
-    case value of
-        ListValue ((ListValue [ _, encodedValue ]) :: (ListValue [ _, envValue ]) :: _) ->
+parseParseAndEvalExpression : List Value -> Result String ( Expression, Expression )
+parseParseAndEvalExpression arguments =
+    case arguments of
+        encodedValue :: envValue :: _ ->
             case parseExpressionFromValue encodedValue of
                 Err parseErr ->
                     Err ("Failed to parse encoded field: " ++ parseErr)
@@ -1168,21 +1170,18 @@ parseParseAndEvalExpression value =
                         Ok envExpr ->
                             Ok ( encodedExpr, envExpr )
 
-        ListValue list ->
+        list ->
             Err
                 ("Failed to parse parse-and-eval: Too few elements in top list or unexpected shape of fields ("
                     ++ String.fromInt (List.length list)
                     ++ ")"
                 )
 
-        BlobValue _ ->
-            Err "Failed to parse parse-and-eval: Is not list but blob"
 
-
-parseKernelApplicationExpression : Value -> Result String ( String, Expression )
-parseKernelApplicationExpression expressionValue =
-    case expressionValue of
-        ListValue ((ListValue [ _, functionNameValue ]) :: (ListValue [ _, inputValue ]) :: _) ->
+parseKernelApplicationExpression : List Value -> Result String ( String, Expression )
+parseKernelApplicationExpression arguments =
+    case arguments of
+        functionNameValue :: inputValue :: _ ->
             case stringFromValue functionNameValue of
                 Err error ->
                     Err ("Failed to parse kernel application function name: " ++ error)
@@ -1192,18 +1191,15 @@ parseKernelApplicationExpression expressionValue =
                         Err error ->
                             Err ("Failed to parse kernel application input: " ++ error)
 
-                        Ok argument ->
-                            Ok ( functionName, argument )
+                        Ok input ->
+                            Ok ( functionName, input )
 
-        ListValue list ->
+        list ->
             Err
-                ("Failed to parse kernel application expression: Too few items in top list or unexpected shape of fields ("
+                ("Failed to parse kernel application expression: Too few arguments ("
                     ++ String.fromInt (List.length list)
                     ++ ")"
                 )
-
-        BlobValue _ ->
-            Err "Failed to parse kernel application: Is not list but blob"
 
 
 parseKernelFunctionFromName : String -> Result String KernelFunction
@@ -1223,10 +1219,10 @@ parseKernelFunctionFromName functionName =
             Ok kernelFunction
 
 
-parseConditionalExpression : Value -> Result String ( Expression, Expression, Expression )
-parseConditionalExpression expressionValue =
-    case expressionValue of
-        ListValue [ ListValue [ _, conditionValue ], ListValue [ _, falseBranchValue ], ListValue [ _, trueBranchValue ] ] ->
+parseConditionalExpression : List Value -> Result String ( Expression, Expression, Expression )
+parseConditionalExpression arguments =
+    case arguments of
+        [ conditionValue, falseBranchValue, trueBranchValue ] ->
             case parseExpressionFromValue conditionValue of
                 Err error ->
                     Err ("Failed to parse condition: " ++ error)
@@ -1244,38 +1240,41 @@ parseConditionalExpression expressionValue =
                                 Ok trueBranch ->
                                     Ok ( condition, falseBranch, trueBranch )
 
-        ListValue list ->
+        list ->
             Err
-                ("Failed to parse conditional: Too few items in top list or unexpected shape of fields ("
+                ("Failed to parse conditional: Wrong number of arguments ("
                     ++ String.fromInt (List.length list)
                     ++ ")"
                 )
 
-        BlobValue _ ->
-            Err "Failed to parse conditional: Is not list but blob"
+
+parseStringTagExpression : List Value -> Result String Expression
+parseStringTagExpression arguments =
+    case arguments of
+        tagValue :: taggedValue :: _ ->
+            case stringFromValue tagValue of
+                Err err ->
+                    Err err
+
+                Ok tag ->
+                    case parseExpressionFromValue taggedValue of
+                        Err err ->
+                            Err err
+
+                        Ok tagged ->
+                            Ok (StringTagExpression tag tagged)
+
+        _ ->
+            Err
+                ("Unexpected shape under string tag ("
+                    ++ String.fromInt (List.length arguments)
+                    ++ " items)"
+                )
 
 
 encodeUnionToPineValue : Value -> Value -> Value
 encodeUnionToPineValue tagNameValue unionTagValue =
     ListValue [ tagNameValue, unionTagValue ]
-
-
-parseListWithExactlyTwoElements : Value -> Result String ( Value, Value )
-parseListWithExactlyTwoElements value =
-    case value of
-        BlobValue _ ->
-            Err "Is not list but blob"
-
-        ListValue list ->
-            case list of
-                [ a, b ] ->
-                    Ok ( a, b )
-
-                _ ->
-                    Err
-                        ("Unexpected number of elements in list: Not 2 but "
-                            ++ String.fromInt (List.length list)
-                        )
 
 
 environmentExpr : Expression
@@ -1336,41 +1335,6 @@ stringAsValue_Function =
 stringAsValue_StringTag : Value
 stringAsValue_StringTag =
     computeValueFromString "StringTag"
-
-
-stringAsValue_function : Value
-stringAsValue_function =
-    computeValueFromString "function"
-
-
-stringAsValue_input : Value
-stringAsValue_input =
-    computeValueFromString "input"
-
-
-stringAsValue_condition : Value
-stringAsValue_condition =
-    computeValueFromString "condition"
-
-
-stringAsValue_trueBranch : Value
-stringAsValue_trueBranch =
-    computeValueFromString "trueBranch"
-
-
-stringAsValue_falseBranch : Value
-stringAsValue_falseBranch =
-    computeValueFromString "falseBranch"
-
-
-stringAsValue_encoded : Value
-stringAsValue_encoded =
-    computeValueFromString "encoded"
-
-
-stringAsValue_environment : Value
-stringAsValue_environment =
-    computeValueFromString "environment"
 
 
 stringAsValue_String : Value
