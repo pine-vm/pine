@@ -16,7 +16,6 @@ namespace TestElmTime;
 public class PGOTests
 {
     [TestMethod]
-    [Ignore("Elm record access was optimized via precompiled on 2024-08-30")]
     public void PGO_reduces_Elm_record_access()
     {
         var elmModule =
@@ -283,7 +282,9 @@ public class PGOTests
             })
             .ToImmutableArray();
 
-        var nonOptimizingPineVM = new PineVM();
+        var nonOptimizingPineVM =
+            new PineVM(
+                disablePrecompiled: true);
 
         var nonOptimizedScenariosStats =
             RunScenariosWithGivenVM(nonOptimizingPineVM);
@@ -302,7 +303,8 @@ public class PGOTests
                 overrideParseExpression: null,
                 evalCache: null,
                 reportFunctionApplication: invocationReports.Add,
-                disableReductionInCompilation: true);
+                disableReductionInCompilation: true,
+                disablePrecompiled: true);
 
         RunScenariosWithGivenVM(profilingVM);
 

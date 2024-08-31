@@ -33,6 +33,8 @@ public class PineVM : IPineVM
 
     private readonly bool disableReductionInCompilation;
 
+    private readonly bool disablePrecompiled;
+
     private readonly PineVMCache parseCache = new();
 
     public record EvaluationReport(
@@ -88,7 +90,8 @@ public class PineVM : IPineVM
         IDictionary<EvalCacheEntryKey, PineValue>? evalCache = null,
         Action<EvaluationReport>? reportFunctionApplication = null,
         IReadOnlyDictionary<Expression, IReadOnlyList<EnvConstraintId>>? compilationEnvClasses = null,
-        bool disableReductionInCompilation = false)
+        bool disableReductionInCompilation = false,
+        bool disablePrecompiled = false)
     {
         parseExpressionDelegate =
             overrideParseExpression
@@ -102,6 +105,7 @@ public class PineVM : IPineVM
         this.compilationEnvClasses = compilationEnvClasses;
 
         this.disableReductionInCompilation = disableReductionInCompilation;
+        this.disablePrecompiled = disablePrecompiled;
     }
 
     public Result<string, PineValue> EvaluateExpression(
@@ -1463,7 +1467,8 @@ public class PineVM : IPineVM
                         throw new NotImplementedException("Unexpected result type: " + parseResult.GetType().FullName);
                     }
 
-                    if (Precompiled.SelectPrecompiled(parseOk.Value, environmentValue) is { } precompiledDelegate)
+                    if (!disablePrecompiled &&
+                        Precompiled.SelectPrecompiled(parseOk.Value, environmentValue) is { } precompiledDelegate)
                     {
                         var precompiledResult = precompiledDelegate();
 
