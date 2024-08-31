@@ -8,6 +8,7 @@ module Pine exposing
     , bigIntFromUnsignedBlobValue
     , bigIntFromValue
     , blobValueFromBigInt
+    , countValueContent
     , displayStringFromPineError
     , emptyEvalEnvironment
     , encodeExpressionAsValue
@@ -1270,6 +1271,36 @@ parseStringTagExpression arguments =
                     ++ String.fromInt (List.length arguments)
                     ++ " items)"
                 )
+
+
+{-| Returns aggregate node count and aggregate blob byte count.
+-}
+countValueContent : Value -> ( Int, Int )
+countValueContent value =
+    case value of
+        BlobValue blob ->
+            ( 0, List.length blob )
+
+        ListValue list ->
+            countListValueContent ( 0, 0 ) list
+
+
+countListValueContent : ( Int, Int ) -> List Value -> ( Int, Int )
+countListValueContent ( nodeCount, byteCount ) items =
+    case items of
+        [] ->
+            ( nodeCount, byteCount )
+
+        item :: remaining ->
+            let
+                ( itemNodeCount, itemByteCount ) =
+                    countValueContent item
+            in
+            countListValueContent
+                ( nodeCount + itemNodeCount + 1
+                , byteCount + itemByteCount
+                )
+                remaining
 
 
 encodeUnionToPineValue : Value -> Value -> Value

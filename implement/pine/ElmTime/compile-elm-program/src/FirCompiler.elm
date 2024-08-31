@@ -2506,32 +2506,6 @@ estimatePineValueSize : Pine.Value -> Int
 estimatePineValueSize value =
     let
         ( nodeCount, byteCount ) =
-            countValueContent value
+            Pine.countValueContent value
     in
-    nodeCount * 10 + byteCount
-
-
-{-| Returns aggregate node count and aggregate blob byte count.
--}
-countValueContent : Pine.Value -> ( Int, Int )
-countValueContent value =
-    case value of
-        Pine.BlobValue blob ->
-            ( 1, List.length blob )
-
-        Pine.ListValue list ->
-            countListValueContent ( 0, 0 ) list
-
-
-countListValueContent : ( Int, Int ) -> List Pine.Value -> ( Int, Int )
-countListValueContent ( nodeCount, byteCount ) items =
-    case items of
-        [] ->
-            ( nodeCount, byteCount )
-
-        item :: remaining ->
-            let
-                ( itemNodeCount, itemByteCount ) =
-                    countValueContent item
-            in
-            countListValueContent ( nodeCount + itemNodeCount, byteCount + itemByteCount ) remaining
+    10 + nodeCount * 10 + byteCount
