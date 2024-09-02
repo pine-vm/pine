@@ -563,13 +563,13 @@ json_encode_pineValue dictionary value =
                 (\entryName entryValue aggregate ->
                     case entryValue of
                         Pine.BlobValue blob ->
-                               if List.length blob < 3 then
-                                   aggregate
+                            if List.length blob < 3 then
+                                aggregate
 
-                               else
-                            { aggregate
-                                | blobDict = Dict.insert blob entryName aggregate.blobDict
-                            }
+                            else
+                                { aggregate
+                                    | blobDict = Dict.insert blob entryName aggregate.blobDict
+                                }
 
                         Pine.ListValue list ->
                             if list == [] then
@@ -676,78 +676,78 @@ json_encode_pineValue_Internal dictionary value =
                     jsonEncodeEmptyBlob
 
                 _ ->
-                       if List.length blob < 3 then
-                               case intFromBlobValueStrict blob of
-                                   Err _ ->
-                                       defaultBlobEncoding ()
+                    if List.length blob < 3 then
+                        case intFromBlobValueStrict blob of
+                            Err _ ->
+                                defaultBlobEncoding ()
 
-                                   Ok asInt ->
-                                       Json.Encode.object
-                                           [ ( "BlobAsInt"
-                                             , Json.Encode.int asInt
-                                             )
-                                           ]
+                            Ok asInt ->
+                                Json.Encode.object
+                                    [ ( "BlobAsInt"
+                                      , Json.Encode.int asInt
+                                      )
+                                    ]
 
-                       else
-                    tryFindReference ()
+                    else
+                        tryFindReference ()
 
 
 intFromBlobValueStrict : List Int -> Result String Int
 intFromBlobValueStrict blobBytes =
-        case blobBytes of
-            [] ->
-                Err "Empty blob does not encode an integer."
+    case blobBytes of
+        [] ->
+            Err "Empty blob does not encode an integer."
 
-            [ _ ] ->
-                Err "Blob with only one byte does not encode an integer."
+        [ _ ] ->
+            Err "Blob with only one byte does not encode an integer."
 
-            sign :: absFirst :: following ->
-                let
-                    computeAbsValue () =
-                        if following == [] then
-                            Ok absFirst
+        sign :: absFirst :: following ->
+            let
+                computeAbsValue () =
+                    if following == [] then
+                        Ok absFirst
 
-                        else if absFirst == 0 then
-                            Err "Avoid ambiguous leading zero."
+                    else if absFirst == 0 then
+                        Err "Avoid ambiguous leading zero."
 
-                        else
-                            case following of
-                                [ b1 ] ->
-                                    Ok ((absFirst * 256) + b1)
+                    else
+                        case following of
+                            [ b1 ] ->
+                                Ok ((absFirst * 256) + b1)
 
-                                [ b1, b2 ] ->
-                                    Ok ((absFirst * 65536) + (b1 * 256) + b2)
+                            [ b1, b2 ] ->
+                                Ok ((absFirst * 65536) + (b1 * 256) + b2)
 
-                                [ b1, b2, b3 ] ->
-                                    Ok ((absFirst * 16777216) + (b1 * 65536) + (b2 * 256) + b3)
+                            [ b1, b2, b3 ] ->
+                                Ok ((absFirst * 16777216) + (b1 * 65536) + (b2 * 256) + b3)
 
-                                [ b1, b2, b3, b4 ] ->
-                                    Ok ((absFirst * 4294967296) + (b1 * 16777216) + (b2 * 65536) + (b3 * 256) + b4)
+                            [ b1, b2, b3, b4 ] ->
+                                Ok ((absFirst * 4294967296) + (b1 * 16777216) + (b2 * 65536) + (b3 * 256) + b4)
 
-                                [ b1, b2, b3, b4, b5 ] ->
-                                    Ok ((absFirst * 1099511627776) + (b1 * 4294967296) + (b2 * 16777216) + (b3 * 65536) + (b4 * 256) + b5)
+                            [ b1, b2, b3, b4, b5 ] ->
+                                Ok ((absFirst * 1099511627776) + (b1 * 4294967296) + (b2 * 16777216) + (b3 * 65536) + (b4 * 256) + b5)
 
-                                _ ->
-                                    Err "Failed to map to int - unsupported number of bytes"
-                in
-                case sign of
-                    4 ->
-                        computeAbsValue ()
+                            _ ->
+                                Err "Failed to map to int - unsupported number of bytes"
+            in
+            case sign of
+                4 ->
+                    computeAbsValue ()
 
-                    2 ->
-                        case computeAbsValue () of
-                            Err err ->
-                                Err err
+                2 ->
+                    case computeAbsValue () of
+                        Err err ->
+                            Err err
 
-                            Ok absValue ->
-                                if absValue == 0 then
-                                    Err "Avoid ambiguous negative zero."
+                        Ok absValue ->
+                            if absValue == 0 then
+                                Err "Avoid ambiguous negative zero."
 
-                                else
-                                    Ok -absValue
+                            else
+                                Ok -absValue
 
-                    _ ->
-                        Err ("Unexpected value for sign byte: " ++ String.fromInt sign)
+                _ ->
+                    Err ("Unexpected value for sign byte: " ++ String.fromInt sign)
 
 
 jsonEncodeEmptyList : Json.Encode.Value
