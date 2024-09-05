@@ -6,11 +6,17 @@ namespace Pine;
 
 public static class PineValueAsString
 {
-    private static readonly FrozenDictionary<string, PineValue> InternedStrings =
+    private static readonly FrozenDictionary<string, PineValue> ReusedInstances =
         PopularValues.PopularStrings
         .ToFrozenDictionary(
             keySelector: s => s,
             elementSelector: ValueFromString);
+
+    private static readonly FrozenDictionary<PineValue.ListValue, string> CommonStringsDecoded =
+        ReusedInstances
+        .ToFrozenDictionary(
+            keySelector: kvp => kvp.Value as PineValue.ListValue,
+            elementSelector: kvp => kvp.Key);
 
     /// <summary>
     /// Converts a .NET string to a Pine list value containing one element for each character in the input string.
@@ -21,8 +27,8 @@ public static class PineValueAsString
         if (str.Length is 0)
             return PineValue.EmptyList;
 
-        if (InternedStrings?.TryGetValue(str, out var internedStringValue) ?? false && internedStringValue is not null)
-            return internedStringValue;
+        if (ReusedInstances?.TryGetValue(str, out var reusedStringValue) ?? false && reusedStringValue is not null)
+            return reusedStringValue;
 
         return PineValue.List(ListValueFromString(str));
     }
@@ -69,6 +75,9 @@ public static class PineValueAsString
     {
         if (list.Elements.Count is 0)
             return emptyStringOk;
+
+        if (CommonStringsDecoded.TryGetValue(list, out var commonString))
+            return Result<string, string>.ok(commonString);
 
         var stringBuilder = new System.Text.StringBuilder(capacity: list.Elements.Count * 2);
 
