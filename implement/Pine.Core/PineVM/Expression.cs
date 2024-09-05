@@ -37,9 +37,9 @@ public abstract record Expression
 
             var hashCode = new HashCode();
 
-            foreach (var item in items)
+            for (int i = 0; i < items.Count; ++i)
             {
-                hashCode.Add(item.GetHashCode());
+                hashCode.Add(items[i].GetHashCode());
             }
 
             slimHashCode = hashCode.ToHashCode();
@@ -50,11 +50,22 @@ public abstract record Expression
             if (other is not { } notNull)
                 return false;
 
-            return
-                ReferenceEquals(this, notNull) ||
-                slimHashCode == notNull.slimHashCode &&
-                items.Count == notNull.items.Count &&
-                items.SequenceEqual(notNull.items);
+            if (ReferenceEquals(this, notNull))
+                return true;
+
+            if (!(slimHashCode == notNull.slimHashCode))
+                return false;
+
+            if (items.Count != notNull.items.Count)
+                return false;
+
+            for (int i = 0; i < items.Count; ++i)
+            {
+                if (!items[i].Equals(notNull.items[i]))
+                    return false;
+            }
+
+            return true;
         }
 
         public override int GetHashCode() =>
@@ -254,9 +265,9 @@ public abstract record Expression
                     break;
 
                 case List list:
-                    foreach (var item in list.items)
+                    for (var i = 0; i < list.items.Count; i++)
                     {
-                        stack.Push(item);
+                        stack.Push(list.items[i]);
                     }
                     break;
 
