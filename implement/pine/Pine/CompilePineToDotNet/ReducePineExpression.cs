@@ -54,8 +54,7 @@ public class ReducePineExpression
             try
             {
                 return
-                    new PineVM.PineVM(
-                        overrideParseExpression: parseCache.BuildParseExprDelegate)
+                    new PineVM.PineVM()
                     .EvaluateExpressionDefaultLessStack(
                         parseAndEvalExpr,
                         PineValue.EmptyList,
@@ -704,9 +703,6 @@ public class ReducePineExpression
                         ),
                         leftTransform.referencesOriginalEnv || rightTransform.referencesOriginalEnv);
                 }
-
-            case Expression.DelegatingExpression:
-                return (expression, true);
         }
 
         throw new NotImplementedException(

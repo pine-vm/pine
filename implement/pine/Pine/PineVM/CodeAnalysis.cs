@@ -501,7 +501,7 @@ public class CodeAnalysis
         Expression expression,
         PineValue environment,
         ConcurrentDictionary<Expression, ExprAnalysis> mutatedCache,
-        ParseExprDelegate parseExpressionForAnalysis,
+        PineVMParseCache parseCache,
         PineVM evalVM)
     {
         var expressionId =
@@ -551,7 +551,7 @@ public class CodeAnalysis
                     ?
                     null
                     :
-                    parseExpressionForAnalysis(expressionValue)
+                    parseCache.ParseExpression(expressionValue)
                     .WithDefault(null);
 
                 return
@@ -707,7 +707,7 @@ public class CodeAnalysis
                     parsedChildExpr,
                     childEnvValue,
                     mutatedCache: mutatedCache,
-                    parseExpressionForAnalysis: parseExpressionForAnalysis,
+                    parseCache: parseCache,
                     evalVM: evalVM);
 
             if (childEnvBeforeMapping.RootEnvClass is not ExpressionEnvClass.ConstrainedEnv childConstrainedEnv)
@@ -1002,14 +1002,36 @@ public class CodeAnalysis
         int limitInvocationSampleCount,
         int limitSampleCountPerSample,
         int classUsageCountMin,
+        int limitClassesPerExpression) =>
+        EnvironmentClassesFromInvocationReports(
+            invocationReports: invocationReports,
+            expressionsToIgnore: Precompiled.PrecompiledExpressions,
+            limitInvocationSampleCount: limitInvocationSampleCount,
+            limitSampleCountPerSample: limitSampleCountPerSample,
+            classUsageCountMin: classUsageCountMin,
+            limitClassesPerExpression: limitClassesPerExpression);
+
+    public static IReadOnlyDictionary<Expression, IReadOnlyList<EnvConstraintId>> EnvironmentClassesFromInvocationReports(
+        IReadOnlyList<PineVM.EvaluationReport> invocationReports,
+        IReadOnlySet<Expression> expressionsToIgnore,
+        int limitInvocationSampleCount,
+        int limitSampleCountPerSample,
+        int classUsageCountMin,
         int limitClassesPerExpression)
     {
+        var invocationReportsFiltered =
+            invocationReports
+            .Where(r => !expressionsToIgnore.Contains(r.Expression))
+            .ToImmutableArray();
+
         var invocationReportsByExpr =
-            SubsequenceWithEvenDistribution(invocationReports, limitInvocationSampleCount)
+            SubsequenceWithEvenDistribution(
+                invocationReportsFiltered,
+                limitInvocationSampleCount)
             .GroupBy(report => report.Expression)
             .ToImmutableArray();
 
-        var parseCache = new PineVMCache();
+        var parseCache = new PineVMParseCache();
 
         var expressionsEnvClasses =
             invocationReportsByExpr
@@ -1036,7 +1058,7 @@ public class CodeAnalysis
         int limitSampleCountPerSample,
         int classUsageCountMin,
         int limitClassesCount,
-        PineVMCache parseCache)
+        PineVMParseCache parseCache)
     {
         var environmentClasses =
             GenerateEnvironmentClasses(
@@ -1161,7 +1183,7 @@ public class CodeAnalysis
         Expression rootExpression,
         EnvConstraintId envClass,
         int depthMax,
-        PineVMCache parseCache)
+        PineVMParseCache parseCache)
     {
         ++SimplifyEnvClassCount;
 
@@ -1252,7 +1274,7 @@ public class CodeAnalysis
         Expression expression,
         EnvConstraintId envClass,
         IReadOnlyDictionary<EnvConstraintId, EnvConstraintId> simplifications,
-        PineVMCache parseCache)
+        PineVMParseCache parseCache)
     {
         if (simplifications.TryGetValue(envClass, out var simplification))
         {

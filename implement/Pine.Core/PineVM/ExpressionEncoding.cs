@@ -1,4 +1,4 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using System;
 using System.Linq;
 using System.Collections.Immutable;
@@ -68,24 +68,14 @@ public static class ExpressionEncoding
             "Unsupported expression type: " + expression.GetType().FullName
         };
 
-    public static Result<string, Expression> ParseExpressionFromValue(
-        PineValue value,
-        IReadOnlyDictionary<PineValue, Expression.DelegatingExpression> parseExpressionOverrides)
+    public static Result<string, Expression> ParseExpressionFromValueDefault(
+        PineValue value)
     {
-        if (parseExpressionOverrides.TryGetValue(value, out var delegatingExpression))
-            return delegatingExpression;
-
         return
             ParseExpressionFromValueDefault(
                 value,
-                generalParser: value => ParseExpressionFromValue(value, parseExpressionOverrides));
+                generalParser: ParseExpressionFromValueDefault);
     }
-
-    public static Result<string, Expression> ParseExpressionFromValueDefault(
-        PineValue value) =>
-        ParseExpressionFromValueDefault(
-            value,
-            generalParser: ParseExpressionFromValueDefault);
 
     public static Result<string, Expression> ParseExpressionFromValueDefault(
         PineValue value,

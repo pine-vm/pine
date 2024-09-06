@@ -23,8 +23,6 @@ public class PineVM : IPineVM
 
     public long FunctionApplicationMaxEnvSize { private set; get; }
 
-    private readonly ParseExprDelegate parseExpressionDelegate;
-
     private IDictionary<EvalCacheEntryKey, PineValue>? EvalCache { init; get; }
 
     private readonly Action<EvaluationReport>? reportFunctionApplication;
@@ -35,7 +33,9 @@ public class PineVM : IPineVM
 
     private readonly bool disablePrecompiled;
 
-    private readonly PineVMCache parseCache = new();
+    private readonly PineVMParseCache parseCache = new();
+
+    private readonly IReadOnlyDictionary<PineValue, Func<EvalExprDelegate, PineValue, Result<string, PineValue>>>? overrideInvocations;
 
     public record EvaluationReport(
         PineValue ExpressionValue,
@@ -45,59 +45,14 @@ public class PineVM : IPineVM
         long ParseAndEvalCount,
         PineValue ReturnValue);
 
-    public static PineVM Construct(
-        IReadOnlyDictionary<PineValue, Func<EvalExprDelegate, PineValue, Result<string, PineValue>>>? parseExpressionOverrides,
-        IDictionary<EvalCacheEntryKey, PineValue>? evalCache)
-    {
-        var parseExpressionOverridesDict =
-            parseExpressionOverrides
-            ?.ToFrozenDictionary(
-                keySelector: encodedExprAndDelegate => encodedExprAndDelegate.Key,
-                elementSelector: encodedExprAndDelegate => new Expression.DelegatingExpression(encodedExprAndDelegate.Value));
-
-        var parseCache = new Dictionary<PineValue, Result<string, Expression>>();
-
-        return new PineVM(
-            overrideParseExpression:
-            parseExpressionOverridesDict switch
-            {
-                null =>
-                originalHandler => originalHandler,
-
-                not null =>
-                _ => value =>
-                {
-                    if (parseExpressionOverridesDict.TryGetValue(value, out var delegatingExpr))
-                        return delegatingExpr;
-
-                    if (parseCache.TryGetValue(value, out var fromCache))
-                    {
-                        return fromCache;
-                    }
-
-                    var parseResult = ExpressionEncoding.ParseExpressionFromValue(value, parseExpressionOverridesDict);
-
-                    parseCache[value] = parseResult;
-
-                    return parseResult;
-                }
-            },
-            evalCache: evalCache);
-    }
-
     public PineVM(
-        OverrideParseExprDelegate? overrideParseExpression = null,
         IDictionary<EvalCacheEntryKey, PineValue>? evalCache = null,
         Action<EvaluationReport>? reportFunctionApplication = null,
         IReadOnlyDictionary<Expression, IReadOnlyList<EnvConstraintId>>? compilationEnvClasses = null,
         bool disableReductionInCompilation = false,
-        bool disablePrecompiled = false)
+        bool disablePrecompiled = false,
+        IReadOnlyDictionary<PineValue, Func<EvalExprDelegate, PineValue, Result<string, PineValue>>>? overrideInvocations = null)
     {
-        parseExpressionDelegate =
-            overrideParseExpression
-            ?.Invoke(ExpressionEncoding.ParseExpressionFromValueDefault) ??
-            ExpressionEncoding.ParseExpressionFromValueDefault;
-
         EvalCache = evalCache;
 
         this.reportFunctionApplication = reportFunctionApplication;
@@ -106,6 +61,8 @@ public class PineVM : IPineVM
 
         this.disableReductionInCompilation = disableReductionInCompilation;
         this.disablePrecompiled = disablePrecompiled;
+
+        this.overrideInvocations = overrideInvocations;
     }
 
     public Result<string, PineValue> EvaluateExpression(
@@ -326,7 +283,7 @@ public class PineVM : IPineVM
     public static ExpressionCompilation CompileExpression(
         Expression rootExpression,
         IReadOnlyList<EnvConstraintId> specializations,
-        PineVMCache parseCache,
+        PineVMParseCache parseCache,
         bool disableReduction)
     {
         var generic =
@@ -379,7 +336,7 @@ public class PineVM : IPineVM
     public static IReadOnlyList<StackInstruction> InstructionsFromExpressionTransitive(
         Expression rootExpression,
         EnvConstraintId? envConstraintId,
-        PineVMCache parseCache,
+        PineVMParseCache parseCache,
         bool disableReduction)
     {
         var expressionWithEnvConstraint =
@@ -420,7 +377,7 @@ public class PineVM : IPineVM
         EnvConstraintId? envConstraintId,
         int maxDepth,
         int maxSubexpressionCount,
-        PineVMCache parseCache,
+        PineVMParseCache parseCache,
         bool disableRecurseAfterInline) =>
         ReduceExpressionAndInlineRecursive(
             rootExpression: rootExpression,
@@ -439,7 +396,7 @@ public class PineVM : IPineVM
         EnvConstraintId? envConstraintId,
         int maxDepth,
         int maxSubexpressionCount,
-        PineVMCache parseCache,
+        PineVMParseCache parseCache,
         bool disableRecurseAfterInline)
     {
         var expressionSubstituted =
@@ -481,11 +438,10 @@ public class PineVM : IPineVM
              * */
 
             if (maxSubexpressionCount < subexprCount)
+            {
                 return expressionReduced;
+            }
         }
-
-        ParseExprDelegate parseExpression =
-            parseCache.BuildParseExprDelegate(ExpressionEncoding.ParseExpressionFromValueDefault);
 
         Expression? TryInlineParseAndEval(
             Expression.ParseAndEval parseAndEvalExpr,
@@ -493,7 +449,7 @@ public class PineVM : IPineVM
         {
             Expression? ContinueReduceForKnownExprValue(PineValue exprValue)
             {
-                if (parseExpression(exprValue) is not Result<string, Expression>.Ok parseOk)
+                if (parseCache.ParseExpression(exprValue) is not Result<string, Expression>.Ok parseOk)
                 {
                     return null;
                 }
@@ -1557,19 +1513,18 @@ public class PineVM : IPineVM
                             currentFrame.EnvironmentValue,
                             stackPrevValues: stackPrevValues);
 
-                    if (EvalCache is { } evalCache)
                     {
-                        var evalCacheKey = new EvalCacheEntryKey(expressionValue, environmentValue);
-
-                        if (evalCache.TryGetValue(evalCacheKey, out var cachedValue) && cachedValue is not null)
+                        if (InvocationCachedResultOrOverride(
+                            expressionValue: expressionValue,
+                            environmentValue: environmentValue) is { } fromCacheOrDelegate)
                         {
-                            currentFrame.PushInstructionResult(cachedValue);
+                            currentFrame.PushInstructionResult(fromCacheOrDelegate);
 
                             continue;
                         }
                     }
 
-                    var parseResult = parseExpressionDelegate(expressionValue);
+                    var parseResult = parseCache.ParseExpression(expressionValue);
 
                     if (parseResult is Result<string, Expression>.Err parseErr)
                     {
@@ -1598,7 +1553,16 @@ public class PineVM : IPineVM
 
                             case Precompiled.PrecompiledResult.ContinueParseAndEval continueParseAndEval:
                                 {
-                                    var contParseResult = parseExpressionDelegate(continueParseAndEval.ExpressionValue);
+                                    if (InvocationCachedResultOrOverride(
+                                        expressionValue: continueParseAndEval.ExpressionValue,
+                                        environmentValue: continueParseAndEval.EnvironmentValue) is { } fromCacheOrDelegate)
+                                    {
+                                        currentFrame.PushInstructionResult(fromCacheOrDelegate);
+
+                                        continue;
+                                    }
+
+                                    var contParseResult = parseCache.ParseExpression(continueParseAndEval.ExpressionValue);
 
                                     if (contParseResult is Result<string, Expression>.Err contParseErr)
                                     {
@@ -1804,9 +1768,6 @@ public class PineVM : IPineVM
         if (expression is Expression.StringTag stringTag)
             return ExpressionShouldGetNewStackFrame(stringTag.tagged);
 
-        if (expression is Expression.DelegatingExpression)
-            return false;
-
         if (expression is Expression.StackReferenceExpression)
             return false;
 
@@ -1870,19 +1831,6 @@ public class PineVM : IPineVM
                 stringTagExpression.tagged,
                 environment,
                 stackPrevValues: stackPrevValues);
-        }
-
-        if (expression is Expression.DelegatingExpression delegatingExpr)
-        {
-            return
-                delegatingExpr.Delegate.Invoke(
-                    (expression, environment) =>
-                    EvaluateExpressionDefaultLessStack(
-                        expression,
-                        environment,
-                        stackPrevValues: ReadOnlyMemory<PineValue>.Empty),
-                    environment)
-                .Extract(err => throw new GenericEvalException("Error from delegate: " + err));
         }
 
         if (expression is Expression.StackReferenceExpression stackRef)
@@ -1976,17 +1924,15 @@ public class PineVM : IPineVM
                 environment,
                 stackPrevValues: stackPrevValues);
 
-        if (EvalCache is { } evalCache)
-        {
-            var cacheKey = new EvalCacheEntryKey(ExprValue: expressionValue, EnvValue: environmentValue);
 
-            if (evalCache.TryGetValue(cacheKey, out var fromCache))
-            {
-                return fromCache;
-            }
+        if (InvocationCachedResultOrOverride(
+            expressionValue: expressionValue,
+            environmentValue: environmentValue) is { } fromCacheOrDelegate)
+        {
+            return fromCacheOrDelegate;
         }
 
-        var parseResult = parseExpressionDelegate(expressionValue);
+        var parseResult = parseCache.ParseExpression(expressionValue);
 
         if (parseResult is Result<string, Expression>.Err parseErr)
         {
@@ -2014,6 +1960,38 @@ public class PineVM : IPineVM
                 environment: environmentValue,
                 expression: parseOk.Value,
                 stackPrevValues: ReadOnlyMemory<PineValue>.Empty);
+    }
+
+    private PineValue? InvocationCachedResultOrOverride(
+        PineValue expressionValue,
+        PineValue environmentValue)
+    {
+        if (EvalCache is { } evalCache)
+        {
+            var cacheKey = new EvalCacheEntryKey(ExprValue: expressionValue, EnvValue: environmentValue);
+
+            if (evalCache.TryGetValue(cacheKey, out var fromCache))
+            {
+                return fromCache;
+            }
+        }
+
+        if (overrideInvocations?.TryGetValue(expressionValue, out var overrideValue) ?? false)
+        {
+            var result =
+            overrideValue(
+                (expr, envVal) => EvaluateExpressionDefaultLessStack(
+                    expr,
+                    envVal,
+                    stackPrevValues: ReadOnlyMemory<PineValue>.Empty),
+                environmentValue);
+
+            return
+                result
+                .Extract(err => throw new Exception(err));
+        }
+
+        return null;
     }
 
     public static string DescribeValueForErrorMessage(PineValue pineValue) =>

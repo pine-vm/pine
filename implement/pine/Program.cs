@@ -1111,8 +1111,8 @@ public class Program
                                     var vmCache = new PineVMCache();
 
                                     var pineVMWithCompiledAssembly =
-                                    PineVM.Construct(
-                                        parseExpressionOverrides: compiledDecodeExpressionOverrides,
+                                    new PineVM(
+                                        overrideInvocations: compiledDecodeExpressionOverrides,
                                         evalCache: vmCache.EvalCache);
 
                                     return new ElmInteractive.InteractiveSessionPine(

@@ -300,7 +300,6 @@ public class PGOTests
 
         var profilingVM =
             new PineVM(
-                overrideParseExpression: null,
                 evalCache: null,
                 reportFunctionApplication: invocationReports.Add,
                 disableReductionInCompilation: true,
@@ -311,8 +310,6 @@ public class PGOTests
         Console.WriteLine(
             "Collected " + invocationReports.Count + " invocation reports from " +
             usingRecordAccessScenarios.Length + " scenarios.");
-
-        var pineVMCache = new PineVMCache();
 
         var codeAnalysisStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
@@ -384,7 +381,6 @@ public class PGOTests
 
         var optimizedPineVM =
             new PineVM(
-                overrideParseExpression: pineVMCache.BuildParseExprDelegate,
                 evalCache: null,
                 reportFunctionApplication: null,
                 compilationEnvClasses: compilationEnvClasses);
@@ -786,7 +782,6 @@ public class PGOTests
 
         var profilingVM =
             new PineVM(
-                overrideParseExpression: null,
                 evalCache: null,
                 reportFunctionApplication: invocationReports.Add,
                 disableReductionInCompilation: true);
@@ -796,8 +791,6 @@ public class PGOTests
         Console.WriteLine(
             "Collected " + invocationReports.Count + " invocation reports from " +
             recordUpdateScenarios.Length + " scenarios.");
-
-        var pineVMCache = new PineVMCache();
 
         var codeAnalysisStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
@@ -869,7 +862,6 @@ public class PGOTests
 
         var optimizedPineVM =
             new PineVM(
-                overrideParseExpression: pineVMCache.BuildParseExprDelegate,
                 evalCache: null,
                 reportFunctionApplication: null,
                 compilationEnvClasses: compilationEnvClasses);
@@ -1188,7 +1180,6 @@ public class PGOTests
 
         var profilingVM =
             new PineVM(
-                overrideParseExpression: null,
                 evalCache: null,
                 reportFunctionApplication: invocationReports.Add,
                 disableReductionInCompilation: true);
@@ -1271,7 +1262,6 @@ public class PGOTests
 
         var optimizedPineVM =
             new PineVM(
-                overrideParseExpression: pineVMCache.BuildParseExprDelegate,
                 evalCache: null,
                 reportFunctionApplication: null,
                 compilationEnvClasses: compilationEnvClasses);
@@ -1555,7 +1545,6 @@ public class PGOTests
 
         var profilingVM =
             new PineVM(
-                overrideParseExpression: null,
                 evalCache: null,
                 reportFunctionApplication: invocationReports.Add,
                 disableReductionInCompilation: true);
@@ -1583,8 +1572,6 @@ public class PGOTests
         Console.WriteLine(
             "Collected " + invocationReports.Count + " invocation reports from " +
             usageScenarios.Length + " scenarios.");
-
-        var pineVMCache = new PineVMCache();
 
         var codeAnalysisStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
@@ -1656,7 +1643,6 @@ public class PGOTests
 
         var optimizedPineVM =
             new PineVM(
-                overrideParseExpression: pineVMCache.BuildParseExprDelegate,
                 evalCache: null,
                 reportFunctionApplication: null,
                 compilationEnvClasses: compilationEnvClasses);

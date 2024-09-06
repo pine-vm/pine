@@ -88,25 +88,14 @@ public class InteractiveSessionPine : IInteractiveSession
         PineVMCache? cache,
         DynamicPGOShare? autoPGO)
     {
-        var overrideParseExpression =
-            cache is null
-            ?
-            null
-            :
-            (OverrideParseExprDelegate?)cache.BuildParseExprDelegate;
-
         if (autoPGO is not null)
         {
             return
-                autoPGO.GetVMAutoUpdating(
-                    overrideParseExpression: overrideParseExpression,
-                    evalCache: cache?.EvalCache);
+                autoPGO.GetVMAutoUpdating(evalCache: cache?.EvalCache);
         }
 
         return
-            new PineVM(
-                overrideParseExpression: overrideParseExpression,
-                evalCache: cache?.EvalCache);
+            new PineVM(evalCache: cache?.EvalCache);
     }
 
     private static readonly ConcurrentDictionary<string, Result<string, PineValue>> compileEvalContextCache = new();
@@ -305,12 +294,12 @@ public class InteractiveSessionPine : IInteractiveSession
         TestElmInteractive.Scenario scenario,
         bool enableEvalExprCache)
     {
-        var cache = new PineVMCache();
+        var cache =
+            enableEvalExprCache ? new PineVMCache() : null;
 
         var profilingVM =
             new ProfilingPineVM(
-                overrideParseExpression: cache.BuildParseExprDelegate,
-                evalCache: cache.EvalCache);
+                evalCache: cache?.EvalCache);
 
         var profilingSession = new InteractiveSessionPine(
             compileElmProgramCodeFiles: compileElmProgramCodeFiles,

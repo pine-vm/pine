@@ -150,9 +150,6 @@ public abstract record Expression
         Expression tagged)
         : Expression;
 
-    public record DelegatingExpression(Func<EvalExprDelegate, PineValue, Result<string, PineValue>> Delegate)
-        : Expression;
-
     public record StackReferenceExpression(int offset)
         : Expression;
 
@@ -224,9 +221,6 @@ public abstract record Expression
             StringTag stringTag =>
             IsIndependent(stringTag.tagged),
 
-            DelegatingExpression =>
-            false,
-
             StackReferenceExpression =>
             false,
 
@@ -261,7 +255,6 @@ public abstract record Expression
             {
                 case Environment:
                 case Literal:
-                case DelegatingExpression:
                     break;
 
                 case List list:

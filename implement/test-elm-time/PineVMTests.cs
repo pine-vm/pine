@@ -1066,7 +1066,7 @@ public class PineVMTests
             },
         };
 
-        var parseCache = new PineVMCache();
+        var parseCache = new PineVMParseCache();
 
         foreach (var testCase in testCases)
         {

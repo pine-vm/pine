@@ -62,7 +62,7 @@ public class ProfilingPineVM
 
     public IPineVM PineVM { init; get; }
 
-    private readonly PineVMCache parseExprCache = new();
+    private readonly PineVMParseCache parseExprCache = new();
 
     private readonly Dictionary<Expression, ExpressionUsageRecord> expressionUsages = [];
 
@@ -78,26 +78,18 @@ public class ProfilingPineVM
         .ToImmutableDictionary();
 
     public ProfilingPineVM(
-        OverrideParseExprDelegate? overrideParseExpression = null,
         IDictionary<EvalCacheEntryKey, PineValue>? evalCache = null,
-        PineVMCache? analysisEvalCache = null)
+        PineVMCache? analysisEvalCache = null,
+        IReadOnlyDictionary<PineValue, System.Func<EvalExprDelegate, PineValue, Result<string, PineValue>>>? overrideInvocations = null)
     {
         ConcurrentDictionary<Expression, CodeAnalysis.ExprAnalysis> exprAnalysisMutatedCache = new();
 
-        ParseExprDelegate parseExpressionForAnalysis =
-            parseExprCache.BuildParseExprDelegate(ExpressionEncoding.ParseExpressionFromValueDefault);
-
-        var parseExpressionForEval =
-            overrideParseExpression?.Invoke(parseExpressionForAnalysis) ??
-            parseExpressionForAnalysis;
-
         var analysisVM = new PineVM(
-            overrideParseExpression: _ => parseExpressionForEval,
-            evalCache: analysisEvalCache?.EvalCache);
+            evalCache: analysisEvalCache?.EvalCache,
+            overrideInvocations: overrideInvocations);
 
         PineVM =
             new PineVM(
-                overrideParseExpression: overrideParseExpression,
                 evalCache: evalCache,
                 reportFunctionApplication:
                 funcApplReport =>
@@ -122,7 +114,7 @@ public class ProfilingPineVM
                                                 originalExpression,
                                                 funcApplReport.Environment,
                                                 exprAnalysisMutatedCache,
-                                                parseExpressionForAnalysis: parseExpressionForAnalysis,
+                                                parseCache: parseExprCache,
                                                 evalVM: analysisVM));
                                 }
                                 finally
@@ -173,7 +165,7 @@ public class ProfilingPineVM
         Expression expression,
         PineValue environment,
         ConcurrentDictionary<Expression, CodeAnalysis.ExprAnalysis> exprAnalysisMutatedCache,
-        ParseExprDelegate parseExpressionForAnalysis,
+        PineVMParseCache parseCache,
         PineVM evalVM)
     {
         var analysisResult =
@@ -182,7 +174,7 @@ public class ProfilingPineVM
                 expression,
                 environment,
                 mutatedCache: exprAnalysisMutatedCache,
-                parseExpressionForAnalysis: parseExpressionForAnalysis,
+                parseCache: parseCache,
                 evalVM: evalVM);
 
         var rootConstraintId =
@@ -205,7 +197,7 @@ public class ProfilingPineVM
             [new ExpressionUsageAnalysis(expression, rootConstraintId),
             ..otherExprAnalysis];
 
-        return allExprReported.ToImmutableArray();
+        return [.. allExprReported];
     }
 
     public static IReadOnlyDictionary<ExpressionUsageAnalysis, ExpressionUsageProfile> UsageProfileDictionaryFromListOfUsages(

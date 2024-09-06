@@ -1789,10 +1789,6 @@ public partial class CompileToCSharp
                 case Expression.StringTag stringTagExpr:
                     Traverse(stringTagExpr.tagged, isConditional);
                     break;
-                case Expression.DelegatingExpression _:
-                    // DelegatingExpression might not need traversal depending on its delegate's behavior
-                    // Adjust this part if necessary
-                    break;
                 default:
                     throw new NotImplementedException();
             }

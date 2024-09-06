@@ -70,7 +70,6 @@ public class DynamicPGOShare : IDisposable
     }
 
     public IPineVM GetVMAutoUpdating(
-        OverrideParseExprDelegate? overrideParseExpression = null,
         IDictionary<EvalCacheEntryKey, PineValue>? evalCache = null)
     {
         return new RedirectingVM(
@@ -80,7 +79,6 @@ public class DynamicPGOShare : IDisposable
                 environment,
                 initialProfileAggregationDelay: TimeSpan.FromSeconds(8),
                 overrideLimitSampleCountPerSubmission: null,
-                overrideParseExpression,
                 evalCache: evalCache));
     }
 
@@ -94,7 +92,6 @@ public class DynamicPGOShare : IDisposable
         PineValue environment,
         TimeSpan initialProfileAggregationDelay,
         int? overrideLimitSampleCountPerSubmission,
-        OverrideParseExprDelegate? overrideParseExpression = null,
         IDictionary<EvalCacheEntryKey, PineValue>? evalCache = null)
     {
         var limitSampleCount = overrideLimitSampleCountPerSubmission ?? LimitSampleCountPerSubmissionDefault;
@@ -114,7 +111,6 @@ public class DynamicPGOShare : IDisposable
                     expression,
                     environment: environment,
                     cancellationTokenSource: new CancellationTokenSource(),
-                    overrideParseExpression: overrideParseExpression,
                     evalCache: evalCache);
 
             profilingEvalTask.EvalTask.Wait(profileAggregationDelay, disposedCancellationTokenSource.Token);
@@ -194,7 +190,6 @@ public class DynamicPGOShare : IDisposable
         Expression expression,
         PineValue environment,
         CancellationTokenSource cancellationTokenSource,
-        OverrideParseExprDelegate? overrideParseExpression = null,
         IDictionary<EvalCacheEntryKey, PineValue>? evalCache = null)
     {
         var compiledParseExpressionOverrides =
@@ -210,7 +205,6 @@ public class DynamicPGOShare : IDisposable
                 CancellationTokenSource.CreateLinkedTokenSource(
                     cancellationTokenSource.Token,
                     disposedCancellationTokenSource.Token),
-                overrideParseExpression,
                 evalCache,
                 compiledParseExpressionOverrides);
     }
@@ -219,43 +213,10 @@ public class DynamicPGOShare : IDisposable
         Expression expression,
         PineValue environment,
         CancellationTokenSource cancellationTokenSource,
-        OverrideParseExprDelegate? overrideParseExpression = null,
         IDictionary<EvalCacheEntryKey, PineValue>? evalCache = null,
         IReadOnlyDictionary<PineValue, Func<EvalExprDelegate, PineValue, Result<string, PineValue>>>?
         compiledParseExpressionOverrides = null)
     {
-        var parseExpressionOverridesDict =
-            !(0 < compiledParseExpressionOverrides?.Count)
-            ?
-            null
-            :
-            compiledParseExpressionOverrides
-            .ToImmutableDictionary(
-                keySelector: encodedExprAndDelegate => encodedExprAndDelegate.Key,
-                elementSelector: encodedExprAndDelegate => new Expression.DelegatingExpression(encodedExprAndDelegate.Value));
-
-        OverrideParseExprDelegate overrideParseExpressionBeforeAddCompiled =
-            overrideParseExpression ?? (originalHandler => originalHandler);
-
-        var overrideParseExprIncludeCompiled =
-            parseExpressionOverridesDict switch
-            {
-                null =>
-                overrideParseExpressionBeforeAddCompiled,
-
-                not null =>
-                new OverrideParseExprDelegate(
-                originalHandler => value =>
-                {
-                    if (parseExpressionOverridesDict.TryGetValue(value, out var delegatingExpression))
-                    {
-                        return Result<string, Expression>.ok(delegatingExpression);
-                    }
-
-                    return overrideParseExpressionBeforeAddCompiled(originalHandler)(value);
-                })
-            };
-
         var newCancellationTokenSource = new CancellationTokenSource();
 
         var combinedCancellationTokenSource =
@@ -267,9 +228,9 @@ public class DynamicPGOShare : IDisposable
 
         var profilingVM =
             new ProfilingPineVM(
-                overrideParseExpression: overrideParseExprIncludeCompiled,
                 evalCache: evalCache,
-                analysisEvalCache: analysisEvalCache);
+                analysisEvalCache: analysisEvalCache,
+                overrideInvocations: compiledParseExpressionOverrides);
 
         var evalTask =
             Task.Run(() => profilingVM.PineVM.EvaluateExpression(expression, environment));
@@ -364,9 +325,6 @@ public class DynamicPGOShare : IDisposable
         expression switch
         {
             Expression.Literal =>
-            false,
-
-            Expression.DelegatingExpression =>
             false,
 
             _ =>
