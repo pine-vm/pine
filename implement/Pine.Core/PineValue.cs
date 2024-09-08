@@ -32,184 +32,47 @@ public abstract record PineValue : IEquatable<PineValue>
         :
         bytes.Length is 1
         ?
-        InternedBlobSingle[bytes.Span[0]]
+        ReusedBlobSingle[bytes.Span[0]]
         :
         bytes.Length is 2
         ?
-        InternedBlobTuple[bytes.Span[0] * 256 + bytes.Span[1]]
+        ReusedBlobTuple[bytes.Span[0] * 256 + bytes.Span[1]]
         :
         new BlobValue(bytes);
 
-    public static PineValue List(IReadOnlyList<PineValue> elements)
+    public static ListValue List(IReadOnlyList<PineValue> elements)
     {
         if (elements.Count is 0)
             return EmptyList;
 
         var asStruct = new ListValue.ListValueStruct(elements);
 
-        if (InternedListsDict is not null)
+        if (ReusedInstances.Instance?.ListValues is { } reusedListValues)
         {
-            InternedListsDict.TryGetValue(asStruct, out var existing);
-
-            if (existing is not null)
+            if (reusedListValues.TryGetValue(asStruct, out var existing))
+            {
                 return existing;
-        }
-        else
-        {
-            if (InternedListsDictInConstruction?.TryGetValue(asStruct, out var existing) ?? false && existing is not null)
-                return existing;
+            }
         }
 
         return new ListValue(asStruct);
     }
 
-    public static readonly PineValue EmptyList = new ListValue([]);
+    public static readonly ListValue EmptyList = new([]);
 
-    public static readonly PineValue EmptyBlob = new BlobValue(ReadOnlyMemory<byte>.Empty);
+    public static readonly BlobValue EmptyBlob = new(ReadOnlyMemory<byte>.Empty);
 
-    private static readonly PineValue[] InternedBlobSingle =
+    private static readonly BlobValue[] ReusedBlobSingle =
         [..Enumerable.Range(0, 256)
         .Select(i => new BlobValue(new byte[] { (byte)i }))];
 
-    private static readonly PineValue[] InternedBlobTuple =
+    private static readonly BlobValue[] ReusedBlobTuple =
         [..Enumerable.Range(0, 256)
         .SelectMany(i => Enumerable.Range(0, 256).Select(j => new BlobValue(new byte[] { (byte)i, (byte)j })))];
 
-    public static readonly IReadOnlyList<PineValue> InternedBlobs =
-        [EmptyBlob, .. InternedBlobSingle, .. InternedBlobTuple];
-
-    private static readonly ListValue Interned_Pine_string_String = (ListValue)PineValueAsString.ValueFromString("String");
-
-    private static readonly IReadOnlyList<ListValue> InternedBlobsSingletonLists =
-        [..InternedBlobs
-        .Select(b => (ListValue)List([b]))];
-
-    private static readonly IReadOnlyList<ListValue> InternedBlobsSingletonSingletonLists =
-        [..InternedBlobsSingletonLists
-        .Select(b => (ListValue)List([b]))];
-
-    private static readonly IReadOnlyList<ListValue> InternedStringsLists =
-        [..PopularValues.PopularStrings
-        .Select(s => (ListValue)List(PineValueAsString.ListValueFromString(s)))];
-
-    private static readonly IReadOnlyList<ListValue> InternedElmStringsLists =
-        [..InternedStringsLists
-        .Distinct()
-        .Select(s => new ListValue([Interned_Pine_string_String, s]))];
-
-    private static readonly IReadOnlyList<ListValue> InternedBlobsInCompiler =
-        [..InternedBlobs
-        .Select(selector: b =>
-        (ListValue)
-        ElmValueEncoding.ElmValueAsPineValue(
-            ElmValueInterop.PineValueEncodedAsInElmCompiler(b)))
-        ];
-
-    private static readonly IReadOnlyList<ListValue> InternedListsInCompiler =
-        [..InternedStringsLists.Prepend(EmptyList)
-        .Distinct()
-        .Select(selector: s =>
-        (ListValue)
-        ElmValueEncoding.ElmValueAsPineValue(
-            ElmValueInterop.PineValueEncodedAsInElmCompiler(s)))];
-
-    private static IEnumerable<ElmValue> ReusedPopularElmValues =>
-        PopularValues.PopularStrings
-        .Where(s => s.Length is not 0 && char.IsUpper(s[0]))
-        .SelectMany(tagName =>
-        (IEnumerable<ElmValue>)
-        [new ElmValue.ElmTag(tagName, []),
-            new ElmValue.ElmList([new ElmValue.ElmTag(tagName, [])])])
-        .Concat(PopularValues.PopularElmValuesSource());
-
-    private static IEnumerable<ListValue> ReusedPopularElmValuesEncoded =>
-        ReusedPopularElmValues
-        .Select(elmValue => (ListValue)ElmValueEncoding.ElmValueAsPineValue(elmValue));
-
-
-    private static readonly IReadOnlyList<ListValue> PopularPineExpressions =
-        [.. PineVM.ExpressionEncoding.PopularPineExpressionsEncoded.Values.Cast<ListValue>()];
-
-    private static IEnumerable<ListValue> InternedListsSource =>
-        [
-        (ListValue)EmptyList,
-        (ListValue)List([EmptyList]),
-        (ListValue)List([EmptyList,EmptyList]),
-        Interned_Pine_string_String,
-        ..InternedBlobsSingletonLists,
-        ..InternedBlobsSingletonSingletonLists,
-        ..InternedStringsLists,
-        ..InternedElmStringsLists,
-        ..ReusedPopularElmValuesEncoded,
-        ..InternedBlobsInCompiler,
-        ..InternedListsInCompiler,
-        ..PopularPineExpressions
-        ];
-
-    private static readonly Dictionary<ListValue.ListValueStruct, ListValue> InternedListsDictInConstruction = [];
-
-    public static readonly FrozenDictionary<ListValue.ListValueStruct, ListValue> InternedListsDict = BuildInternedListsDict();
-
-    private static FrozenDictionary<ListValue.ListValueStruct, ListValue> BuildInternedListsDict()
-    {
-        /*
-         * Build the final collection for lookup in a way that prevents the creation of duplicate values in the construction process:
-         * To ensure that composite values will reuse the same instances for the same values,
-         * maintain a registry of the values that are being constructed.
-         * */
-
-        var sourceSortedBySize =
-            InternedListsSource
-            .OrderBy(l => l.NodesCount)
-            .ToList();
-
-        foreach (var item in sourceSortedBySize)
-        {
-            var containedLists =
-                EnumerateContainedLists(item)
-                .Prepend(item)
-                .Distinct()
-                .OrderBy(l => l.NodesCount)
-                .ToList();
-
-            foreach (var oldInstance in containedLists)
-            {
-                var asStruct = new ListValue.ListValueStruct(oldInstance.Elements);
-
-                if (InternedListsDictInConstruction.ContainsKey(asStruct))
-                    continue;
-
-                var rebuilt = (ListValue)List(oldInstance.Elements);
-
-                InternedListsDictInConstruction[asStruct] = rebuilt;
-            }
-        }
-
-        return
-            InternedListsDictInConstruction
-            .ToFrozenDictionary();
-    }
-
-    private static IEnumerable<ListValue> EnumerateContainedLists(PineValue pineValue)
-    {
-        if (pineValue is not ListValue rootList)
-            yield break;
-
-        var stack = new Stack<ListValue>([rootList]);
-
-        while (stack.TryPop(out var listValue))
-        {
-            yield return listValue;
-
-            for (var i = 0; i < listValue.Elements.Count; i++)
-            {
-                if (listValue.Elements[i] is not ListValue childList)
-                    continue;
-
-                stack.Push(childList);
-            }
-        }
-    }
+    public static readonly FrozenSet<BlobValue> ReusedBlobs =
+        new HashSet<BlobValue>([EmptyBlob, .. ReusedBlobSingle, .. ReusedBlobTuple])
+        .ToFrozenSet();
 
     /// <summary>
     /// A <see cref="PineValue"/> that is a list of <see cref="PineValue"/>s.
@@ -278,7 +141,9 @@ public abstract record PineValue : IEquatable<PineValue>
             if (ReferenceEquals(this, other))
                 return true;
 
-            if (slimHashCode != other.slimHashCode || Elements.Count != other.Elements.Count)
+            if (slimHashCode != other.slimHashCode ||
+                Elements.Count != other.Elements.Count ||
+                NodesCount != other.NodesCount)
                 return false;
 
             for (int i = 0; i < Elements.Count; i++)

@@ -1,7 +1,6 @@
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Pine;
 using Pine.PineVM;
-using System;
 
 namespace TestElmTime;
 
@@ -23,7 +22,7 @@ public class PineVMTests
             },
             new
             {
-                expression = (Expression)new Expression.List([]),
+                expression = (Expression)Expression.ListInstance([]),
                 environment = PineValue.EmptyList,
 
                 expected = Result<string, PineValue>.ok(PineValue.EmptyList)
@@ -33,7 +32,7 @@ public class PineVMTests
                 expression =
                 (Expression)new Expression.KernelApplication
                 (
-                    input: new Expression.List([]),
+                    input: Expression.ListInstance([]),
                     function: "concat"
                 ),
                 environment = PineValue.EmptyList,
@@ -46,9 +45,9 @@ public class PineVMTests
                 (Expression)new Expression.KernelApplication
                 (
                     input:
-                    new Expression.List(
+                    Expression.ListInstance(
                         [
-                            new Expression.List(
+                            Expression.ListInstance(
                                 [
                                     new Expression.Literal(
                                         PineValueAsInteger.ValueFromSignedInteger(1)),
@@ -68,13 +67,12 @@ public class PineVMTests
                                         (
                                             function: nameof(KernelFunction.head),
                                             input: Expression.EnvironmentInstance
-                                        ))
-                                    .Extract(fromErr: err => throw new Exception(err))),
+                                        ))),
                                 environment:
                                 new Expression.KernelApplication
                                 (
                                     function: "skip",
-                                    input: new Expression.List(
+                                    input: Expression.ListInstance(
                                         [
                                         new Expression.Literal(PineValueAsInteger.ValueFromSignedInteger(1)),
                                         Expression.EnvironmentInstance,
@@ -102,7 +100,7 @@ public class PineVMTests
             {
                 expression =
                 (Expression)
-                new Expression.Conditional(
+                Expression.ConditionalInstance(
                     condition: new Expression.Literal(PineValue.Blob([4])),
                     falseBranch:
                     new Expression.Literal(PineValueAsInteger.ValueFromSignedInteger(17)),
@@ -117,7 +115,7 @@ public class PineVMTests
             {
                 expression=
                 (Expression)
-                new Expression.Conditional(
+                Expression.ConditionalInstance(
                     condition:
                     new Expression.Literal(PineValue.Blob([2])),
                     falseBranch:
@@ -130,7 +128,7 @@ public class PineVMTests
                                 new Expression.KernelApplication
                                 (
                                     function: "skip",
-                                    input: new Expression.List(
+                                    input: Expression.ListInstance(
                                         [
                                         new Expression.Literal(PineValueAsInteger.ValueFromSignedInteger(1)),
                                         Expression.EnvironmentInstance,
@@ -151,7 +149,6 @@ public class PineVMTests
                                 function: nameof(KernelFunction.head),
                                 input: Expression.EnvironmentInstance
                             ))
-                        .Extract(fromErr: err => throw new Exception(err))
                     ]),
 
                 expected = Result<string, PineValue>.ok(PineValueAsInteger.ValueFromSignedInteger(43))
@@ -161,7 +158,7 @@ public class PineVMTests
             {
                 expression=
                 (Expression)
-                new Expression.Conditional(
+                Expression.ConditionalInstance(
                     condition:
                     new Expression.Literal(PineValue.Blob([4])),
                     falseBranch:
@@ -185,7 +182,7 @@ public class PineVMTests
             {
                 expression=
                 (Expression)
-                new Expression.Conditional(
+                Expression.ConditionalInstance(
                     condition:
                     new Expression.Literal(PineValue.Blob([4])),
                     falseBranch:
@@ -200,7 +197,7 @@ public class PineVMTests
                                 new Expression.KernelApplication
                                 (
                                     function: "skip",
-                                    input: new Expression.List(
+                                    input: Expression.ListInstance(
                                         [
                                         new Expression.Literal(PineValueAsInteger.ValueFromSignedInteger(1)),
                                         Expression.EnvironmentInstance,
@@ -218,7 +215,6 @@ public class PineVMTests
                                 function: nameof(KernelFunction.head),
                                 input: Expression.EnvironmentInstance
                             ))
-                        .Extract(fromErr: err => throw new Exception(err))
                     ]),
 
                 expected = Result<string, PineValue>.ok(PineValueAsInteger.ValueFromSignedInteger(41))
@@ -258,7 +254,7 @@ public class PineVMTests
             new
             {
                 expression =
-                (Expression)new Expression.List(
+                (Expression)Expression.ListInstance(
                     [
                         new Expression.Literal(PineValue.EmptyList),
                         new Expression.Literal(PineValue.EmptyBlob),
@@ -268,7 +264,7 @@ public class PineVMTests
                 new PineVM.StackFrameInstructions(
                     [
                         StackInstruction.Eval(
-                            new Expression.List(
+                            Expression.ListInstance(
                             [
                                 new Expression.Literal(PineValue.EmptyList),
                                 new Expression.Literal(PineValue.EmptyBlob),
@@ -280,13 +276,13 @@ public class PineVMTests
             new
             {
                 expression =
-                (Expression)new Expression.List(
+                (Expression)Expression.ListInstance(
                     [
                         new Expression.Literal(PineValue.EmptyList),
                         new Expression.KernelApplication
                         (
                             function: "skip",
-                            input: new Expression.List(
+                            input: Expression.ListInstance(
                                 [
                                 new Expression.Literal(PineValueAsInteger.ValueFromSignedInteger(1)),
                                 Expression.EnvironmentInstance,
@@ -296,7 +292,7 @@ public class PineVMTests
                         new Expression.KernelApplication
                         (
                             function: "skip",
-                            input: new Expression.List(
+                            input: Expression.ListInstance(
                                 [
                                 new Expression.Literal(PineValueAsInteger.ValueFromSignedInteger(1)),
                                 Expression.EnvironmentInstance,
@@ -314,14 +310,14 @@ public class PineVMTests
                             new Expression.KernelApplication
                             (
                                 function: "skip",
-                                input: new Expression.List(
+                                input: Expression.ListInstance(
                                     [
                                     new Expression.Literal(PineValueAsInteger.ValueFromSignedInteger(1)),
                                     Expression.EnvironmentInstance,
                                     ])
                             )),
                         StackInstruction.Eval(
-                            new Expression.List(
+                            Expression.ListInstance(
                             [
                                 new Expression.Literal(PineValue.EmptyList),
                                 new Expression.StackReferenceExpression(offset: -1),
@@ -336,7 +332,7 @@ public class PineVMTests
             {
                 expression =
                 (Expression)
-                new Expression.List(
+                Expression.ListInstance(
                     [
                         new Expression.Literal(PineValue.EmptyList),
                         new Expression.KernelApplication
@@ -347,7 +343,7 @@ public class PineVMTests
                             (
                                 function: "skip",
                                 input:
-                                new Expression.List(
+                                Expression.ListInstance(
                                     [
                                     new Expression.Literal(PineValueAsInteger.ValueFromSignedInteger(13)),
                                     Expression.EnvironmentInstance,
@@ -365,7 +361,7 @@ public class PineVMTests
                             (
                                 function: "skip",
                                 input:
-                                new Expression.List(
+                                Expression.ListInstance(
                                     [
                                     new Expression.Literal(PineValueAsInteger.ValueFromSignedInteger(13)),
                                     Expression.EnvironmentInstance,
@@ -389,7 +385,7 @@ public class PineVMTests
                                 (
                                     function: "skip",
                                     input:
-                                    new Expression.List(
+                                    Expression.ListInstance(
                                         [
                                         new Expression.Literal(PineValueAsInteger.ValueFromSignedInteger(13)),
                                         Expression.EnvironmentInstance,
@@ -397,7 +393,7 @@ public class PineVMTests
                                 )
                             )),
                         StackInstruction.Eval(
-                            new Expression.List(
+                            Expression.ListInstance(
                             [
                                 new Expression.Literal(PineValue.EmptyList),
                                 new Expression.StackReferenceExpression(offset: -1),
@@ -431,7 +427,7 @@ public class PineVMTests
             {
                 expression =
                 (Expression)
-                new Expression.List(
+                Expression.ListInstance(
                     [
                         new Expression.ParseAndEval(
                             encoded: Expression.EnvironmentInstance,
@@ -447,7 +443,7 @@ public class PineVMTests
                                 encoded: Expression.EnvironmentInstance,
                                 environment: Expression.EnvironmentInstance)),
                         StackInstruction.Eval(
-                            new Expression.List(
+                            Expression.ListInstance(
                             [
                                 new Expression.StackReferenceExpression(offset: -1),
                                 new Expression.Literal(PineValue.EmptyBlob),
@@ -460,11 +456,11 @@ public class PineVMTests
             {
                 expression =
                 (Expression)
-                new Expression.List(
+                Expression.ListInstance(
                     [
                         new Expression.ParseAndEval(
                             encoded: Expression.EnvironmentInstance,
-                            environment: new Expression.List(
+                            environment: Expression.ListInstance(
                             [
                                 new Expression.ParseAndEval(
                                     encoded:
@@ -489,13 +485,13 @@ public class PineVMTests
                             new Expression.ParseAndEval(
                                 encoded: Expression.EnvironmentInstance,
                                 environment:
-                                new Expression.List(
+                                Expression.ListInstance(
                                 [
                                     new Expression.StackReferenceExpression(offset: -1),
                                     new Expression.Literal(PineValueAsInteger.ValueFromSignedInteger(17)),
                                 ]))),
                         StackInstruction.Eval(
-                            new Expression.List(
+                            Expression.ListInstance(
                             [
                                 new Expression.StackReferenceExpression(offset: -1),
                                 new Expression.Literal(PineValue.EmptyBlob),
@@ -508,7 +504,7 @@ public class PineVMTests
             {
                 expression =
                 (Expression)
-                new Expression.Conditional(
+                Expression.ConditionalInstance(
                     condition:
                     new Expression.Literal(PineValueAsInteger.ValueFromSignedInteger(11)),
                     trueBranch:
@@ -544,7 +540,7 @@ public class PineVMTests
             {
                 expression =
                 (Expression)
-                new Expression.Conditional(
+                Expression.ConditionalInstance(
                     condition:
                     new Expression.Literal(PineValueAsInteger.ValueFromSignedInteger(11)),
                     trueBranch:
@@ -553,7 +549,7 @@ public class PineVMTests
                         new Expression.KernelApplication
                             (
                                 function: "skip",
-                                input: new Expression.List(
+                                input: Expression.ListInstance(
                                     [
                                     new Expression.Literal(PineValueAsInteger.ValueFromSignedInteger(13)),
                                     Expression.EnvironmentInstance,
@@ -582,7 +578,7 @@ public class PineVMTests
                             new Expression.KernelApplication
                             (
                                 function: "skip",
-                                input: new Expression.List(
+                                input: Expression.ListInstance(
                                     [
                                     new Expression.Literal(PineValueAsInteger.ValueFromSignedInteger(13)),
                                     Expression.EnvironmentInstance,
@@ -602,10 +598,10 @@ public class PineVMTests
             {
                 expression =
                 (Expression)
-                new Expression.List(
+                Expression.ListInstance(
                     [
                         new Expression.Literal(PineValueAsInteger.ValueFromSignedInteger(47)),
-                        new Expression.Conditional(
+                        Expression.ConditionalInstance(
                             condition:
                             new Expression.Literal(PineValueAsInteger.ValueFromSignedInteger(11)),
                             trueBranch:
@@ -614,7 +610,7 @@ public class PineVMTests
                                 new Expression.KernelApplication
                                     (
                                         function: "skip",
-                                        input: new Expression.List(
+                                        input: Expression.ListInstance(
                                             [
                                             new Expression.Literal(PineValueAsInteger.ValueFromSignedInteger(13)),
                                             Expression.EnvironmentInstance,
@@ -644,7 +640,7 @@ public class PineVMTests
                             new Expression.KernelApplication
                             (
                                 function: "skip",
-                                input: new Expression.List(
+                                input: Expression.ListInstance(
                                     [
                                     new Expression.Literal(PineValueAsInteger.ValueFromSignedInteger(13)),
                                     Expression.EnvironmentInstance,
@@ -653,7 +649,7 @@ public class PineVMTests
                             Expression.EnvironmentInstance)),
 
                         new StackInstruction.CopyLastAssignedInstruction(),
-                        StackInstruction.Eval(new Expression.List(
+                        StackInstruction.Eval(Expression.ListInstance(
                             [
                                 new Expression.Literal(PineValueAsInteger.ValueFromSignedInteger(47)),
                                 new Expression.StackReferenceExpression(offset: -1),
@@ -666,11 +662,11 @@ public class PineVMTests
             {
                 expression =
                 (Expression)
-                new Expression.Conditional(
+                Expression.ConditionalInstance(
                     condition:
                     new Expression.Literal(PineValueAsInteger.ValueFromSignedInteger(11)),
                     falseBranch:
-                    new Expression.Conditional(
+                    Expression.ConditionalInstance(
                         condition:
                         new Expression.Literal(PineValueAsInteger.ValueFromSignedInteger(13)),
                         falseBranch:
@@ -733,9 +729,9 @@ public class PineVMTests
             {
                 expression =
                 (Expression)
-                new Expression.List(
+                Expression.ListInstance(
                     [
-                        new Expression.Conditional(
+                        Expression.ConditionalInstance(
                             condition:
                             new Expression.Literal(PineValueAsInteger.ValueFromSignedInteger(11)),
                             trueBranch:
@@ -747,7 +743,7 @@ public class PineVMTests
                             falseBranch:
                             new Expression.Literal(PineValueAsInteger.ValueFromSignedInteger(17))),
 
-                        new Expression.Conditional(
+                        Expression.ConditionalInstance(
                             condition:
                             new Expression.Literal(PineValueAsInteger.ValueFromSignedInteger(13)),
                             trueBranch:
@@ -799,7 +795,7 @@ public class PineVMTests
 
                         new StackInstruction.CopyLastAssignedInstruction(),
 
-                        StackInstruction.Eval(new Expression.List(
+                        StackInstruction.Eval(Expression.ListInstance(
                             [
                                 new Expression.StackReferenceExpression(offset: -7),
                                 new Expression.StackReferenceExpression(offset: -1),
@@ -813,13 +809,13 @@ public class PineVMTests
             {
                 expression =
                 (Expression)
-                new Expression.Conditional(
+                Expression.ConditionalInstance(
                     condition:
                     new Expression.Literal(PineValueAsInteger.ValueFromSignedInteger(11)),
                     trueBranch:
                     new Expression.Literal(PineValueAsInteger.ValueFromSignedInteger(13)),
                     falseBranch:
-                    new Expression.Conditional(
+                    Expression.ConditionalInstance(
                         condition:
                         new Expression.Literal(PineValueAsInteger.ValueFromSignedInteger(21)),
                         trueBranch:
@@ -880,7 +876,7 @@ public class PineVMTests
                     new Expression.KernelApplication
                     (
                         function: "skip",
-                        input: new Expression.List(
+                        input: Expression.ListInstance(
                             [
                             new Expression.Literal(PineValueAsInteger.ValueFromSignedInteger(17)),
                             Expression.EnvironmentInstance,
@@ -914,10 +910,10 @@ public class PineVMTests
                     new Expression.KernelApplication
                     (
                         function: "skip",
-                        input: new Expression.List(
+                        input: Expression.ListInstance(
                             [
                             new Expression.Literal(PineValueAsInteger.ValueFromSignedInteger(17)),
-                            new Expression.List(
+                            Expression.ListInstance(
                                 [
                                 new Expression.Literal(PineValueAsInteger.ValueFromSignedInteger(21)),
                                 new Expression.KernelApplication
@@ -927,7 +923,7 @@ public class PineVMTests
                                     new Expression.KernelApplication
                                     (
                                         function: "skip",
-                                        input: new Expression.List(
+                                        input: Expression.ListInstance(
                                             [
                                             new Expression.Literal(PineValueAsInteger.ValueFromSignedInteger(23)),
                                             Expression.EnvironmentInstance,
@@ -946,7 +942,7 @@ public class PineVMTests
                             new Expression.KernelApplications_Skip_Head_Path(
                                 SkipCounts: (int[])[17],
                                 Argument:
-                                new Expression.List(
+                                Expression.ListInstance(
                                 [
                                     new Expression.Literal(PineValueAsInteger.ValueFromSignedInteger(21)),
                                     new Expression.KernelApplications_Skip_Head_Path(
@@ -961,15 +957,15 @@ public class PineVMTests
             {
                 expression =
                 (Expression)
-                new Expression.Conditional(
+                Expression.ConditionalInstance(
                     condition:
-                    new Expression.List(
+                    Expression.ListInstance(
                         [
                             new Expression.KernelApplication
                             (
                                 function: nameof(KernelFunction.mul_int),
                                 input:
-                                new Expression.List(
+                                Expression.ListInstance(
                                     [
                                         Expression.EnvironmentInstance,
                                         Expression.EnvironmentInstance,
@@ -980,7 +976,7 @@ public class PineVMTests
                             (
                                 function: nameof(KernelFunction.mul_int),
                                 input:
-                                new Expression.List(
+                                Expression.ListInstance(
                                     [
                                         Expression.EnvironmentInstance,
                                         Expression.EnvironmentInstance,
@@ -991,13 +987,13 @@ public class PineVMTests
                     trueBranch:
                     new Expression.Literal(PineValueAsInteger.ValueFromSignedInteger(13)),
                     falseBranch:
-                    new Expression.Conditional(
+                    Expression.ConditionalInstance(
                         condition:
                         new Expression.KernelApplication
                         (
                             function: nameof(KernelFunction.mul_int),
                             input:
-                            new Expression.List(
+                            Expression.ListInstance(
                                 [
                                     Expression.EnvironmentInstance,
                                     Expression.EnvironmentInstance,
@@ -1017,7 +1013,7 @@ public class PineVMTests
                             (
                                 function: nameof(KernelFunction.mul_int),
                                 input:
-                                new Expression.List(
+                                Expression.ListInstance(
                                     [
                                         Expression.EnvironmentInstance,
                                         Expression.EnvironmentInstance,
@@ -1026,7 +1022,7 @@ public class PineVMTests
                             )),
 
                         StackInstruction.Eval(
-                            new Expression.List(
+                            Expression.ListInstance(
                                 [
                                     new Expression.StackReferenceExpression(offset: -1),
                                     new Expression.StackReferenceExpression(offset: -1),

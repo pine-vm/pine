@@ -25,7 +25,8 @@ public static class ElmInteractiveEnvironment
             ParseFunctionFromElmModule(
                 interactiveEnvironment: interactiveEnvironment,
                 moduleName: moduleName,
-                declarationName: declarationName)
+                declarationName: declarationName,
+                pineVM.parseCache)
                 .AndThen(functionValueAndRecord =>
                 {
                     var combinedArguments =
@@ -56,7 +57,8 @@ public static class ElmInteractiveEnvironment
     public static Result<string, (PineValue declValue, FunctionRecord functionRecord)> ParseFunctionFromElmModule(
         PineValue interactiveEnvironment,
         string moduleName,
-        string declarationName)
+        string declarationName,
+        PineVMParseCache parseCache)
     {
         return
             ParseInteractiveEnvironment(interactiveEnvironment)
@@ -77,7 +79,7 @@ public static class ElmInteractiveEnvironment
                     return "declaration " + declarationName + " not found";
 
                 return
-                ParseFunctionRecordFromValueTagged(functionDeclaration.Value)
+                ParseFunctionRecordFromValueTagged(functionDeclaration.Value, parseCache)
                 .Map(parsedRecord => (functionDeclaration.Value, parsedRecord));
             });
     }
@@ -137,14 +139,15 @@ public static class ElmInteractiveEnvironment
     /// Analog to the 'parseFunctionRecordFromValueTagged' function in FirCompiler.elm
     /// </summary>
     public static Result<string, FunctionRecord> ParseFunctionRecordFromValueTagged(
-        PineValue pineValue)
+        PineValue pineValue,
+        PineVMParseCache parseCache)
     {
         return
             ParseTagged(pineValue)
             .AndThen(taggedFunctionDeclaration =>
             taggedFunctionDeclaration.name is "Function"
             ?
-            ParseFunctionRecordFromValue(taggedFunctionDeclaration.value)
+            ParseFunctionRecordFromValue(taggedFunctionDeclaration.value, parseCache)
             :
             /*
             (Result<string, FunctionRecord>)"Unexpected tag: " + taggedFunctionDeclaration.name
@@ -152,7 +155,7 @@ public static class ElmInteractiveEnvironment
             If the declaration has zero parameters, it could be encoded as plain PineValue without wrapping in a 'Function' record.
             */
             new FunctionRecord(
-                innerFunction: new Expression.Literal(pineValue),
+                innerFunction: Expression.LiteralInstance(pineValue),
                 functionParameterCount: 0,
                 envFunctions: [],
                 argumentsAlreadyCollected: [])
@@ -163,7 +166,8 @@ public static class ElmInteractiveEnvironment
     /// Analog to the 'parseFunctionRecordFromValue' function in FirCompiler.elm
     /// </summary>
     public static Result<string, FunctionRecord> ParseFunctionRecordFromValue(
-        PineValue pineValue)
+        PineValue pineValue,
+        PineVMParseCache parseCache)
     {
         return
             pineValue switch
@@ -171,7 +175,7 @@ public static class ElmInteractiveEnvironment
                 PineValue.ListValue functionRecordListItems =>
                 functionRecordListItems.Elements.Count is 4
                 ?
-                ExpressionEncoding.ParseExpressionFromValueDefault(functionRecordListItems.Elements[0])
+                parseCache.ParseExpression(functionRecordListItems.Elements[0])
                 .AndThen(innerFunction =>
                 PineValueAsInteger.SignedIntegerFromValueStrict(functionRecordListItems.Elements[1])
                 .MapError(err => "Failed to decode function parameter count: " + err)

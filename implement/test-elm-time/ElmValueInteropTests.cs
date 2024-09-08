@@ -20,7 +20,8 @@ public class ElmValueInteropTests
 
         foreach (var testCase in testCases)
         {
-            var encodedInCompiler = ElmValueInterop.PineValueEncodedAsInElmCompiler(testCase);
+            var encodedInCompiler =
+                ElmValueInterop.PineValueEncodedAsInElmCompiler(testCase);
 
             var roundtrip =
                 ElmValueInterop.ElmValueDecodedAsInElmCompiler(encodedInCompiler)

@@ -23,9 +23,7 @@ public class ReducePineExpression
             Result<string, PineValue>.ok(literal.Value),
 
             Expression.List list =>
-            list.items.Select(TryEvaluateExpressionIndependent)
-            .ListCombine()
-            .Map(PineValue.List),
+            TryEvaluateExpressionIndependent(list),
 
             Expression.KernelApplication kernelApplication =>
             TryEvaluateExpressionIndependent(kernelApplication.input)
@@ -45,6 +43,28 @@ public class ReducePineExpression
             _ =>
             "Unsupported expression type: " + expression.GetType().FullName
         };
+
+    public static Result<string, PineValue> TryEvaluateExpressionIndependent(
+        Expression.List listExpr)
+    {
+        var itemsValues = new PineValue[listExpr.items.Count];
+
+        for (var i = 0; i < listExpr.items.Count; i++)
+        {
+            var itemResult = TryEvaluateExpressionIndependent(listExpr.items[i]);
+
+            if (itemResult is Result<string, PineValue>.Ok itemValue)
+            {
+                itemsValues[i] = itemValue.Value;
+            }
+            else
+            {
+                return itemResult;
+            }
+        }
+
+        return PineValue.List(itemsValues);
+    }
 
     public static Result<string, PineValue> TryEvaluateExpressionIndependent(
         Expression.ParseAndEval parseAndEvalExpr)
@@ -106,14 +126,14 @@ public class ReducePineExpression
         {
             if (parsedAsPath is ExprMappedToParentEnv.LiteralInParentEnv asLiteral)
             {
-                return new Expression.Literal(asLiteral.Value);
+                return Expression.LiteralInstance(asLiteral.Value);
             }
 
             if (parsedAsPath is ExprMappedToParentEnv.PathInParentEnv asPath && envConstraintId is not null)
             {
                 if (envConstraintId.TryGetValue(asPath.Path) is { } fromEnvConstraint)
                 {
-                    return new Expression.Literal(fromEnvConstraint);
+                    return Expression.LiteralInstance(fromEnvConstraint);
                 }
             }
         }
@@ -128,7 +148,7 @@ public class ReducePineExpression
                         TryEvaluateExpressionIndependent(expression)
                         .Unpack(
                             fromErr: _ => null,
-                            fromOk: literalValue => new Expression.Literal(literalValue));
+                            fromOk: literalValue => Expression.LiteralInstance(literalValue));
                 }
                 catch (ParseExpressionException)
                 {
@@ -200,7 +220,7 @@ public class ReducePineExpression
                                             if (itemFixedLength < listLengthLowerBound ||
                                                 (prevItemFixedLength.HasValue && itemFixedLength.Value != prevItemFixedLength.Value))
                                             {
-                                                return new Expression.Literal(PineVMValues.FalseValue);
+                                                return Expression.LiteralInstance(PineVMValues.FalseValue);
                                             }
 
                                             prevItemFixedLength = itemFixedLength;
@@ -218,11 +238,11 @@ public class ReducePineExpression
                             {
                                 return
                                     inputList.items.FirstOrDefault() ??
-                                    new Expression.Literal(PineValue.EmptyList);
+                                    Expression.LiteralInstance(PineValue.EmptyList);
                             }
 
                             if (rootKernelApp.input is Expression.Literal literal)
-                                return new Expression.Literal(KernelFunction.head(literal.Value));
+                                return Expression.LiteralInstance(KernelFunction.head(literal.Value));
 
                             return AttemptReduceViaEval();
                         }
@@ -237,13 +257,13 @@ public class ReducePineExpression
                                     {
                                         if (inputList.items[1] is Expression.List partiallySkippedList)
                                         {
-                                            return new Expression.List(
+                                            return Expression.ListInstance(
                                                 [.. partiallySkippedList.items.Skip((int)okSkipCount.Value)]);
                                         }
 
                                         if (inputList.items[1] is Expression.Literal literal)
                                         {
-                                            return new Expression.Literal(
+                                            return Expression.LiteralInstance(
                                                 KernelFunction.skip((int)okSkipCount.Value, literal.Value));
                                         }
 
@@ -269,9 +289,10 @@ public class ReducePineExpression
                                                             rootKernelApp
                                                             with
                                                             {
-                                                                input = new Expression.List(
+                                                                input = Expression.ListInstance(
                                                                     [
-                                                                    new Expression.Literal(PineValueAsInteger.ValueFromSignedInteger(aggregateSkipCount)),
+                                                                    Expression.LiteralInstance(
+                                                                        PineValueAsInteger.ValueFromSignedInteger(aggregateSkipCount)),
                                                                     innerSkipInputList.items[1]
                                                                     ]
                                                                 )
@@ -332,7 +353,7 @@ public class ReducePineExpression
                                     {
                                         if (nonEmptyItems.Count is 0)
                                         {
-                                            return new Expression.Literal(PineValue.EmptyList);
+                                            return Expression.LiteralInstance(PineValue.EmptyList);
                                         }
 
                                         if (nonEmptyItems.Count is 1)
@@ -344,7 +365,7 @@ public class ReducePineExpression
                                             rootKernelApp
                                             with
                                             {
-                                                input = new Expression.List(nonEmptyItems)
+                                                input = Expression.ListInstance(nonEmptyItems)
                                             };
                                     }
                                 }
@@ -360,7 +381,7 @@ public class ReducePineExpression
                                         {
                                             foreach (var literalItem in subLiteralList.Elements)
                                             {
-                                                items.Add(new Expression.Literal(literalItem));
+                                                items.Add(Expression.LiteralInstance(literalItem));
                                             }
 
                                             continue;
@@ -372,7 +393,7 @@ public class ReducePineExpression
                                     items.AddRange(subList.items);
                                 }
 
-                                return new Expression.List(items);
+                                return Expression.ListInstance(items);
                             }
 
                             return AttemptReduceViaEval();
@@ -383,7 +404,7 @@ public class ReducePineExpression
                             if (rootKernelApp.input is Expression.List inputList)
                             {
                                 return
-                                    new Expression.Literal(
+                                    Expression.LiteralInstance(
                                         PineValueAsInteger.ValueFromSignedInteger(inputList.items.Count));
                             }
 
@@ -422,7 +443,7 @@ public class ReducePineExpression
                                     if (aggregateLength.HasValue)
                                     {
                                         return
-                                            new Expression.Literal(
+                                            Expression.LiteralInstance(
                                                 PineValueAsInteger.ValueFromSignedInteger(aggregateLength.Value));
                                     }
                                 }
@@ -460,7 +481,7 @@ public class ReducePineExpression
                                 ?
                                 conditional.falseBranch
                                 :
-                                new Expression.Literal(PineValue.EmptyList));
+                                Expression.LiteralInstance(PineValue.EmptyList));
                     }
 
                     if (conditional.trueBranch == conditional.falseBranch)
@@ -553,7 +574,7 @@ public class ReducePineExpression
 
         switch (expression)
         {
-            case Expression.Literal _:
+            case Expression.Literal:
                 return (expression, false);
 
             case Expression.List list:
@@ -573,7 +594,7 @@ public class ReducePineExpression
                         referencesOriginalEnv = referencesOriginalEnv || itemReferencesOriginalEnv;
                     }
 
-                    return (new Expression.List(mappedItems), referencesOriginalEnv);
+                    return (Expression.ListInstance(mappedItems), referencesOriginalEnv);
                 }
 
             case Expression.ParseAndEval parseAndEval:
@@ -633,7 +654,7 @@ public class ReducePineExpression
                             conditional.falseBranch);
 
                     return (
-                        new Expression.Conditional
+                        Expression.ConditionalInstance
                         (
                             condition: conditionTransform.expr,
                             falseBranch: falseBranchTransform.expr,

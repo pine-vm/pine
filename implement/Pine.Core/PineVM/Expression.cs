@@ -20,6 +20,60 @@ public abstract record Expression
 {
     public static readonly Expression EnvironmentInstance = new Environment();
 
+    public static readonly Literal LiteralEmptyListInstance =
+        LiteralInstance(PineValue.EmptyList);
+
+    public static readonly Literal LiteralEmptyBlobInstance =
+        LiteralInstance(PineValue.EmptyBlob);
+
+    public static Expression EnsureReuseInstanceGeneral(Expression expression)
+    {
+        if (ReusedInstances.Instance?.Expressions?.TryGetValue(expression, out var reused) ?? false)
+        {
+            return reused;
+        }
+
+        return expression;
+    }
+
+    public static Literal LiteralInstance(PineValue pineValue)
+    {
+        if (ReusedInstances.Instance.LiteralExpressions?.TryGetValue(pineValue, out var literal) ?? false)
+            return literal;
+
+        return new Literal(pineValue);
+    }
+
+    public static List ListInstance(IReadOnlyList<Expression> items)
+    {
+        var listKey = new List.ListStruct(items);
+
+        if (ReusedInstances.Instance.ListExpressions is { } ReusedListExpressions)
+        {
+            if (ReusedListExpressions.TryGetValue(listKey, out var list))
+                return list;
+        }
+
+        return new List(listKey);
+    }
+
+    public static Conditional ConditionalInstance(
+        Expression condition,
+        Expression falseBranch,
+        Expression trueBranch)
+    {
+        var conditionalStruct =
+            new Conditional.ConditionalStruct(condition, falseBranch, trueBranch);
+
+        if (ReusedInstances.Instance.ConditionalExpressions is { } ReusedConditionalExpressions)
+        {
+            if (ReusedConditionalExpressions.TryGetValue(conditionalStruct, out var conditional))
+                return conditional;
+        }
+
+        return new Conditional(conditionalStruct);
+    }
+
     public record Literal(
         PineValue Value)
         : Expression;
@@ -31,18 +85,17 @@ public abstract record Expression
 
         public IReadOnlyList<Expression> items { get; }
 
-        public List(IReadOnlyList<Expression> items)
+        internal List(IReadOnlyList<Expression> items)
+            :
+            this(new ListStruct(items))
         {
-            this.items = items;
+        }
 
-            var hashCode = new HashCode();
+        internal List(ListStruct listKey)
+        {
+            items = listKey.Items;
 
-            for (int i = 0; i < items.Count; ++i)
-            {
-                hashCode.Add(items[i].GetHashCode());
-            }
-
-            slimHashCode = hashCode.ToHashCode();
+            slimHashCode = listKey.slimHashCode;
         }
 
         public virtual bool Equals(List? other)
@@ -70,6 +123,37 @@ public abstract record Expression
 
         public override int GetHashCode() =>
             slimHashCode;
+
+        internal readonly record struct ListStruct
+        {
+            public IReadOnlyList<Expression> Items { get; }
+
+            internal readonly int slimHashCode;
+
+            public ListStruct(IReadOnlyList<Expression> items)
+            {
+                Items = items;
+
+                slimHashCode = ComputeHashCode(items);
+            }
+
+            public override int GetHashCode()
+            {
+                return slimHashCode;
+            }
+
+            public static int ComputeHashCode(IReadOnlyList<Expression> items)
+            {
+                var hashCode = new HashCode();
+
+                for (int i = 0; i < items.Count; ++i)
+                {
+                    hashCode.Add(items[i].GetHashCode());
+                }
+
+                return hashCode.ToHashCode();
+            }
+        }
     }
 
     public record ParseAndEval(
@@ -114,25 +198,34 @@ public abstract record Expression
 
         public Expression trueBranch { get; }
 
-        public Conditional(
+        internal Conditional(
             Expression condition,
             Expression falseBranch,
             Expression trueBranch)
+            :
+            this(new ConditionalStruct(condition, falseBranch, trueBranch))
         {
-            this.condition = condition;
-            this.falseBranch = falseBranch;
-            this.trueBranch = trueBranch;
+        }
 
-            slimHashCode = HashCode.Combine(condition, falseBranch, trueBranch);
+        internal Conditional(
+            ConditionalStruct conditionalStruct)
+        {
+            condition = conditionalStruct.Condition;
+            falseBranch = conditionalStruct.FalseBranch;
+            trueBranch = conditionalStruct.TrueBranch;
+
+            slimHashCode = conditionalStruct.slimHashCode;
         }
 
         public virtual bool Equals(Conditional? other)
         {
+            if (ReferenceEquals(this, other))
+                return true;
+
             if (other is not { } notNull)
                 return false;
 
             return
-                ReferenceEquals(this, notNull) ||
                 slimHashCode == notNull.slimHashCode &&
                 condition.Equals(notNull.condition) &&
                 falseBranch.Equals(notNull.falseBranch) &&
@@ -141,6 +234,49 @@ public abstract record Expression
 
         public override int GetHashCode() =>
             slimHashCode;
+
+        public record struct ConditionalStruct
+        {
+            public Expression Condition { get; }
+
+            public Expression FalseBranch { get; }
+
+            public Expression TrueBranch { get; }
+
+            public readonly int slimHashCode;
+
+            public ConditionalStruct(
+                Expression condition,
+                Expression falseBranch,
+                Expression trueBranch)
+            {
+                Condition = condition;
+                FalseBranch = falseBranch;
+                TrueBranch = trueBranch;
+
+                slimHashCode = ComputeHashCode(condition, falseBranch, trueBranch);
+            }
+
+            public override int GetHashCode() =>
+                slimHashCode;
+
+            public bool Equals(ConditionalStruct other)
+            {
+                return
+                    other.slimHashCode == slimHashCode &&
+                    other.Condition.Equals(Condition) &&
+                    other.FalseBranch.Equals(FalseBranch) &&
+                    other.TrueBranch.Equals(TrueBranch);
+            }
+
+            public static int ComputeHashCode(
+                Expression condition,
+                Expression falseBranch,
+                Expression trueBranch)
+            {
+                return HashCode.Combine(condition, falseBranch, trueBranch);
+            }
+        }
     }
 
     public record Environment : Expression;

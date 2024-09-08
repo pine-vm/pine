@@ -38,7 +38,7 @@ public class PineKernelFunctionsInline
     {
         if (IsKernelAppTakingZeroFrom(firstArgument) is Expression firstArgumentTakenZero)
         {
-            if (secondArgument == new Expression.Literal(PineValue.EmptyBlob))
+            if (secondArgument == Expression.LiteralInstance(PineValue.EmptyBlob))
             {
                 return
                     CompileToCSharp.CompileToCSharpExpression(
@@ -54,7 +54,7 @@ public class PineKernelFunctionsInline
                             PineCSharpSyntaxFactory.BuildCSharpExpressionToCheckIsBlob(firstArgumentTakenZeroCompiledOk))));
             }
 
-            if (secondArgument == new Expression.Literal(PineValue.EmptyList))
+            if (secondArgument == Expression.LiteralInstance(PineValue.EmptyList))
             {
                 return
                     CompileToCSharp.CompileToCSharpExpression(
@@ -112,7 +112,7 @@ public class PineKernelFunctionsInline
         if (takeArgumentList.items.Count is not 2)
             return null;
 
-        if (takeArgumentList.items[0] != new Expression.Literal(PineValueAsInteger.ValueFromSignedInteger(0)))
+        if (takeArgumentList.items[0] != Expression.LiteralInstance(PineValueAsInteger.ValueFromSignedInteger(0)))
             return null;
 
         return takeArgumentList.items[1];

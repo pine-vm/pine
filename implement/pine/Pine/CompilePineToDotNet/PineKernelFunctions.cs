@@ -56,7 +56,7 @@ public partial class CompileToCSharp
                     {
                         PineValue.ListValue literalList =>
                             continueWithList(
-                                literalList.Elements.Select(elementValue => new Expression.Literal(elementValue))),
+                                literalList.Elements.Select(elementValue => Expression.LiteralInstance(elementValue))),
 
                         _ => null
                     },

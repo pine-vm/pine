@@ -118,7 +118,7 @@ public class JsonConverterForChoiceType : JsonConverterFactory
         var allProperties = variantType.GetProperties();
 
         var constructorsResults =
-            variantType.GetConstructors()
+            variantType.GetConstructors(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance)
             .OrderBy(c => c.IsPublic ? 0 : 1)
             .ThenByDescending(c => c.GetParameters().Length)
             .Select(constructor =>
@@ -164,7 +164,13 @@ public class JsonConverterForChoiceType : JsonConverterFactory
         foreach (var constructorResult in constructorsResults)
         {
             if (constructorResult is Result<string, (ConstructorInfo, IReadOnlyList<ConstructorParameter>)>.Ok constructorMatch)
-                return new ParsedType.Variant(variantType.Name, variantType, constructorMatch.Value.Item1, constructorMatch.Value.Item2);
+            {
+                return new ParsedType.Variant(
+                    variantType.Name,
+                    variantType,
+                    constructorMatch.Value.Item1,
+                    constructorMatch.Value.Item2);
+            }
         }
 
         return "Did not find a matching constructor";

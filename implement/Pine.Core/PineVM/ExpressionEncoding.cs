@@ -1,20 +1,12 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System;
 using System.Linq;
 using System.Collections.Immutable;
-using System.Collections.Frozen;
 
 namespace Pine.PineVM;
 
 public static class ExpressionEncoding
 {
-    public static readonly IReadOnlyDictionary<Expression, PineValue> PopularPineExpressionsEncoded =
-        PopularPineExpressionsSource()
-        .Distinct()
-        .ToFrozenDictionary(
-            keySelector: expression => expression,
-            elementSelector: e => EncodeExpressionAsValue(e).Extract(err => throw new Exception(err)));
-
     private static readonly IReadOnlyDictionary<string, Func<PineValue, PineValue>> NamedKernelFunctions =
         ImmutableDictionary<string, Func<PineValue, PineValue>>.Empty
         .SetItem(nameof(KernelFunction.equal), KernelFunction.equal)
@@ -29,9 +21,10 @@ public static class ExpressionEncoding
         .SetItem(nameof(KernelFunction.mul_int), KernelFunction.mul_int)
         .SetItem(nameof(KernelFunction.is_sorted_ascending_int), KernelFunction.is_sorted_ascending_int);
 
-    public static Result<string, PineValue> EncodeExpressionAsValue(Expression expression) =>
-        PopularPineExpressionsEncoded?.TryGetValue(expression, out var encoded) ?? false && encoded is not null
-        ? encoded
+    public static PineValue.ListValue EncodeExpressionAsValue(Expression expression) =>
+        ReusedInstances.Instance.ExpressionEncodings?.TryGetValue(expression, out var encoded) ?? false && encoded is not null
+        ?
+        encoded
         :
         expression switch
         {
@@ -44,33 +37,36 @@ public static class ExpressionEncoding
             EncodeChoiceTypeVariantAsPineValue("Environment", PineValue.EmptyList),
 
             Expression.List list =>
-            list.items.Select(EncodeExpressionAsValue)
-            .ListCombine()
-            .Map(listElements => EncodeChoiceTypeVariantAsPineValue(
-                "List", PineValue.List([PineValue.List(listElements)]))),
+            EncodeChoiceTypeVariantAsPineValue(
+                "List", PineValue.List([PineValue.List([.. list.items.Select(EncodeExpressionAsValue)])])),
 
             Expression.Conditional conditional =>
-            EncodeConditionalExpressionAsValue(conditional),
+            EncodeConditional(conditional),
 
             Expression.ParseAndEval parseAndEval =>
-            EncodeParseAndEvalExpression(parseAndEval),
+            EncodeParseAndEval(parseAndEval),
 
             Expression.KernelApplication kernelAppl =>
-            EncodeKernelApplicationExpression(kernelAppl),
+            EncodeKernelApplication(kernelAppl),
 
             Expression.StringTag stringTag =>
-            EncodeExpressionAsValue(stringTag.tagged)
-            .Map(encodedTagged => EncodeChoiceTypeVariantAsPineValue(
+            EncodeChoiceTypeVariantAsPineValue(
                 "StringTag",
-                PineValue.List([PineValueAsString.ValueFromString(stringTag.tag), encodedTagged]))),
+                PineValue.List([PineValueAsString.ValueFromString(stringTag.tag), EncodeExpressionAsValue(stringTag.tagged)])),
 
             _ =>
-            "Unsupported expression type: " + expression.GetType().FullName
+            throw new Exception("Unsupported expression type: " + expression.GetType().FullName)
         };
 
     public static Result<string, Expression> ParseExpressionFromValueDefault(
         PineValue value)
     {
+        if (value is PineValue.ListValue listValue)
+        {
+            if (ReusedInstances.Instance.ExpressionDecodings?.TryGetValue(listValue, out var popularExpression) ?? false)
+                return popularExpression;
+        }
+
         return
             ParseExpressionFromValueDefault(
                 value,
@@ -104,7 +100,7 @@ public static class ExpressionEncoding
                     ?
                     "Expected one argument for literal but got zero"
                     :
-                    new Expression.Literal(tagArguments.Elements[0]),
+                    Expression.LiteralInstance(tagArguments.Elements[0]),
 
                     "List" =>
                     tagArguments.Elements.Count < 1
@@ -123,7 +119,7 @@ public static class ExpressionEncoding
                             (Result<string, Expression>)err.Value,
 
                             Result<string, IReadOnlyList<Expression>>.Ok expressionList =>
-                            Result<string, Expression>.ok(new Expression.List(expressionList.Value)),
+                            Result<string, Expression>.ok(Expression.ListInstance(expressionList.Value)),
 
                             var other =>
                             throw new NotImplementedException("Unexpected result type: " + other.GetType().FullName)
@@ -134,7 +130,7 @@ public static class ExpressionEncoding
                     },
 
                     "ParseAndEval" =>
-                    ParseParseAndEvalExpression(generalParser, tagArguments.Elements) switch
+                    ParseParseAndEval(generalParser, tagArguments.Elements) switch
                     {
                         Result<string, Expression.ParseAndEval>.Err err =>
                         (Result<string, Expression>)err.Value,
@@ -147,7 +143,7 @@ public static class ExpressionEncoding
                     },
 
                     "KernelApplication" =>
-                    ParseKernelApplicationExpression(generalParser, tagArguments.Elements) switch
+                    ParseKernelApplication(generalParser, tagArguments.Elements) switch
                     {
                         Result<string, Expression.KernelApplication>.Err err =>
                         (Result<string, Expression>)err.Value,
@@ -160,7 +156,7 @@ public static class ExpressionEncoding
                     },
 
                     "Conditional" =>
-                    ParseConditionalExpression(generalParser, tagArguments.Elements) switch
+                    ParseConditional(generalParser, tagArguments.Elements) switch
                     {
                         Result<string, Expression.Conditional>.Err err =>
                         (Result<string, Expression>)err.Value,
@@ -176,7 +172,7 @@ public static class ExpressionEncoding
                     Expression.EnvironmentInstance,
 
                     "StringTag" =>
-                    ParseStringTagExpression(generalParser, tagArguments.Elements)
+                    ParseStringTag(generalParser, tagArguments.Elements)
                     .Map(stringTag => (Expression)stringTag),
 
                     var otherTag =>
@@ -191,15 +187,15 @@ public static class ExpressionEncoding
             "Unexpected value type, not a list: " + other.GetType().FullName
         };
 
-    public static Result<string, PineValue> EncodeParseAndEvalExpression(Expression.ParseAndEval parseAndEval) =>
-        EncodeExpressionAsValue(parseAndEval.encoded)
-        .AndThen(encodedExpression =>
-        EncodeExpressionAsValue(parseAndEval.environment)
-        .Map(encodedEnvironment =>
+    public static PineValue.ListValue EncodeParseAndEval(Expression.ParseAndEval parseAndEval) =>
         EncodeChoiceTypeVariantAsPineValue("ParseAndEval",
-            PineValue.List([encodedExpression, encodedEnvironment]))));
+            PineValue.List(
+                [
+                EncodeExpressionAsValue(parseAndEval.encoded),
+                EncodeExpressionAsValue(parseAndEval.environment)
+                ]));
 
-    public static Result<string, Expression.ParseAndEval> ParseParseAndEvalExpression(
+    public static Result<string, Expression.ParseAndEval> ParseParseAndEval(
         Func<PineValue, Result<string, Expression>> generalParser,
         IReadOnlyList<PineValue> arguments) =>
         arguments.Count < 2
@@ -211,15 +207,17 @@ public static class ExpressionEncoding
         generalParser(arguments[1])
         .Map(environment => new Expression.ParseAndEval(encoded: encoded, environment: environment)));
 
-    public static Result<string, PineValue> EncodeKernelApplicationExpression(
+    public static PineValue.ListValue EncodeKernelApplication(
         Expression.KernelApplication kernelApplicationExpression) =>
-        EncodeExpressionAsValue(kernelApplicationExpression.input)
-        .Map(encodedInput =>
         EncodeChoiceTypeVariantAsPineValue(
             "KernelApplication",
-            PineValue.List([PineValueAsString.ValueFromString(kernelApplicationExpression.function), encodedInput])));
+            PineValue.List(
+                [
+                PineValueAsString.ValueFromString(kernelApplicationExpression.function),
+                EncodeExpressionAsValue(kernelApplicationExpression.input)
+                ]));
 
-    public static Result<string, Expression.KernelApplication> ParseKernelApplicationExpression(
+    public static Result<string, Expression.KernelApplication> ParseKernelApplication(
         Func<PineValue, Result<string, Expression>> generalParser,
         IReadOnlyList<PineValue> arguments) =>
         arguments.Count < 2
@@ -233,23 +231,18 @@ public static class ExpressionEncoding
             function: function,
             input: input)));
 
-    public static Result<string, PineValue> EncodeConditionalExpressionAsValue(
+    public static PineValue.ListValue EncodeConditional(
         Expression.Conditional conditionalExpression) =>
-        EncodeExpressionAsValue(conditionalExpression.condition)
-        .AndThen(encodedCondition =>
-        EncodeExpressionAsValue(conditionalExpression.trueBranch)
-        .AndThen(encodedIfTrue =>
-        EncodeExpressionAsValue(conditionalExpression.falseBranch)
-        .Map(encodedIfFalse =>
         EncodeChoiceTypeVariantAsPineValue(
             "Conditional",
             PineValue.List(
-                [encodedCondition,
-                encodedIfFalse,
-                encodedIfTrue
-                ])))));
+                [
+                EncodeExpressionAsValue(conditionalExpression.condition),
+                EncodeExpressionAsValue(conditionalExpression.falseBranch),
+                EncodeExpressionAsValue(conditionalExpression.trueBranch)
+                ]));
 
-    public static Result<string, Expression.Conditional> ParseConditionalExpression(
+    public static Result<string, Expression.Conditional> ParseConditional(
         Func<PineValue, Result<string, Expression>> generalParser,
         IReadOnlyList<PineValue> arguments) =>
         arguments.Count < 3
@@ -262,12 +255,12 @@ public static class ExpressionEncoding
         .AndThen(falseBranch =>
         generalParser(arguments[2])
         .Map(trueBranch =>
-            new Expression.Conditional(
+            Expression.ConditionalInstance(
                 condition: condition,
                 falseBranch: falseBranch,
                 trueBranch: trueBranch))));
 
-    public static Result<string, Expression.StringTag> ParseStringTagExpression(
+    public static Result<string, Expression.StringTag> ParseStringTag(
         Func<PineValue, Result<string, Expression>> generalParser,
         IReadOnlyList<PineValue> arguments) =>
         arguments.Count < 2
@@ -421,7 +414,8 @@ public static class ExpressionEncoding
             throw new NotImplementedException("Unexpected result type: " + other.GetType().FullName)
         };
 
-    public static PineValue EncodeRecordToPineValue(params (string fieldName, PineValue fieldValue)[] fields) =>
+    public static PineValue.ListValue EncodeRecordToPineValue(
+        params (string fieldName, PineValue fieldValue)[] fields) =>
         PineValue.List(
             [..fields.Select(field => PineValue.List(
                 [
@@ -454,7 +448,7 @@ public static class ExpressionEncoding
         return recordFields;
     }
 
-    public static PineValue EncodeChoiceTypeVariantAsPineValue(string tagName, PineValue tagArguments) =>
+    public static PineValue.ListValue EncodeChoiceTypeVariantAsPineValue(string tagName, PineValue tagArguments) =>
         PineValue.List(
             [
                 PineValueAsString.ValueFromString(tagName),
@@ -519,58 +513,5 @@ public static class ExpressionEncoding
             return "Unexpected number of items in list: Not 2 but " + list.Count;
 
         return (list[0], list[1]);
-    }
-
-    private static IEnumerable<Expression> PopularPineExpressionsSource()
-    {
-        yield return Expression.EnvironmentInstance;
-
-        for (var i = -100; i < 100; ++i)
-        {
-            yield return new Expression.Literal(
-                PineValueAsInteger.ValueFromSignedInteger(i));
-        }
-
-        Expression.KernelApplication kernelSkipExprFromCount(
-            int skipCount,
-            Expression argument) =>
-            new(
-                input: new Expression.List(
-                    [new Expression.Literal(PineValueAsInteger.ValueFromSignedInteger(skipCount)),
-                    argument]),
-                function: nameof(KernelFunction.skip));
-
-        Expression.KernelApplication kernelListHeadExpr(
-            Expression argument) =>
-            new(
-                input: argument,
-                function: nameof(KernelFunction.head));
-
-        var envListHeadExpr = kernelListHeadExpr(Expression.EnvironmentInstance);
-
-        yield return envListHeadExpr;
-
-        for (var skipCount = 0; skipCount < 10; skipCount++)
-        {
-            var justSkip = kernelSkipExprFromCount(skipCount, Expression.EnvironmentInstance);
-
-            yield return justSkip;
-
-            yield return kernelListHeadExpr(justSkip);
-        }
-
-        for (var skipCount = 0; skipCount < 10; skipCount++)
-        {
-            var justSkip = kernelSkipExprFromCount(skipCount, envListHeadExpr);
-
-            yield return justSkip;
-
-            yield return kernelListHeadExpr(justSkip);
-        }
-
-        foreach (var namedExpr in PopularExpression.BuildPopularExpressionDictionary())
-        {
-            yield return namedExpr.Value;
-        }
     }
 }

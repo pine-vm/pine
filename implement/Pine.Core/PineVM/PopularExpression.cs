@@ -33,7 +33,9 @@ public class PopularExpression
 
                         var exprName = nextFile.Key[0][..^5];
 
-                        return aggregate.SetItem(exprName, expression);
+                        return aggregate.SetItem(
+                            exprName,
+                            Expression.EnsureReuseInstanceGeneral(expression));
                     }
 
                     return aggregate;

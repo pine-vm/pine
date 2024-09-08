@@ -16,14 +16,14 @@ public class PineVMEncodeExpressionTests
 
             new Expression.Environment(),
 
-            new Expression.List(
+            Expression.ListInstance(
                 [
                     new Expression.Literal(PineValueAsString.ValueFromString("list element alfa")),
                     new Expression.Literal(PineValueAsString.ValueFromString("list element beta")),
                     new Expression.Literal(PineValueAsString.ValueFromString("list element gamma")),
                 ]),
 
-            new Expression.Conditional(
+            Expression.ConditionalInstance(
                 condition: new Expression.Literal(PineValueAsString.ValueFromString("condition")),
                 falseBranch: new Expression.Literal(PineValueAsString.ValueFromString("if false")),
                 trueBranch: new Expression.Literal(PineValueAsString.ValueFromString("if true"))),
@@ -44,8 +44,7 @@ public class PineVMEncodeExpressionTests
         foreach (var testCase in testCases)
         {
             var encoded =
-                ExpressionEncoding.EncodeExpressionAsValue(testCase)
-                .Extract(err => throw new System.Exception("Failed to encode expression: " + err));
+                ExpressionEncoding.EncodeExpressionAsValue(testCase);
 
             var decoded =
                 ExpressionEncoding.ParseExpressionFromValueDefault(encoded)

@@ -16,7 +16,6 @@ public class PineValueTests
                 testName = "empty list",
 
                 listValue =
-                (PineValue.ListValue)
                 PineValue.List([]),
 
                 expectedNodeCount = 0,
@@ -28,7 +27,6 @@ public class PineValueTests
                 testName = "list with one empty list",
 
                 listValue =
-                (PineValue.ListValue)
                 PineValue.List([PineValue.List([])]),
 
                 expectedNodeCount = 1,
@@ -40,7 +38,6 @@ public class PineValueTests
                 testName = "list with one list containing empty list",
 
                 listValue =
-                (PineValue.ListValue)
                 PineValue.List([PineValue.List([PineValue.List([])])]),
 
                 expectedNodeCount = 2,
@@ -52,7 +49,6 @@ public class PineValueTests
                 testName = "list (blob(1))",
 
                 listValue =
-                (PineValue.ListValue)
                 PineValue.List([PineValue.Blob([1])]),
 
                 expectedNodeCount = 1,
@@ -64,7 +60,6 @@ public class PineValueTests
                 testName = "list (blob(1),blob(3))",
 
                 listValue =
-                (PineValue.ListValue)
                 PineValue.List([PineValue.Blob([123]),PineValue.Blob([1,2,3])]),
 
                 expectedNodeCount = 2,

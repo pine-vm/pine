@@ -24,12 +24,14 @@ public abstract record ElmValue
 
      * */
 
-    public static readonly ElmValue TrueValue = new ElmTag("True", []);
+    abstract public int ContainedNodesCount { get; }
 
-    public static readonly ElmValue FalseValue = new ElmTag("False", []);
+    public static readonly ElmValue TrueValue = TagInstance("True", []);
+
+    public static readonly ElmValue FalseValue = TagInstance("False", []);
 
     override public string ToString() =>
-        ElmValueAsExpression(this).expressionString;
+        GetType().Name + " : " + ElmValueAsExpression(this).expressionString;
 
     public const string ElmRecordTypeTagName = "Elm_Record";
 
@@ -68,11 +70,24 @@ public abstract record ElmValue
         :
         new ElmString(Value);
 
-    public static ElmValue Char(int Value) =>
+    public static ElmTag TagInstance(string TagName, IReadOnlyList<ElmValue> Arguments)
+    {
+        var tagStruct =
+            new ElmTag.ElmTagStruct(TagName, Arguments);
+
+        if (ReusedInstances.Instance.ElmTagValues?.TryGetValue(tagStruct, out var reusedInstance) ?? false)
+        {
+            return reusedInstance;
+        }
+
+        return new ElmTag(TagName, Arguments);
+    }
+
+    public static ElmValue CharInstance(int Value) =>
         Value < ReusedCharInstances?.Count && 0 <= Value ?
         ReusedCharInstances[Value]
         :
-        new CharObject(Value);
+        new ElmChar(Value);
 
     private static readonly FrozenDictionary<System.Numerics.BigInteger, ElmValue> ReusedIntegerInstances =
         Enumerable.Range(-100, 400)
@@ -88,17 +103,57 @@ public abstract record ElmValue
 
     private static readonly IReadOnlyList<ElmValue> ReusedCharInstances =
         [..Enumerable.Range(0, 4000)
-        .Select(Char)];
+        .Select(CharInstance)];
 
     public record ElmInteger(System.Numerics.BigInteger Value)
-        : ElmValue;
-
-    public record ElmTag(string TagName, IReadOnlyList<ElmValue> Arguments)
         : ElmValue
     {
+        override public int ContainedNodesCount { get; } = 0;
+    }
+
+    public record ElmTag
+        : ElmValue
+    {
+        public string TagName { get; }
+
+        public IReadOnlyList<ElmValue> Arguments { get; }
+
+        readonly int slimHashCode;
+
+        override public int ContainedNodesCount { get; }
+
+        internal ElmTag(
+            string TagName,
+            IReadOnlyList<ElmValue> Arguments)
+            :
+            this(new ElmTagStruct(TagName, Arguments))
+        {
+        }
+
+        internal ElmTag(ElmTagStruct elmTagStruct)
+        {
+            TagName = elmTagStruct.TagName;
+            Arguments = elmTagStruct.Arguments;
+
+            slimHashCode = elmTagStruct.slimHashCode;
+
+            ContainedNodesCount = 0;
+
+            for (int i = 0; i < Arguments.Count; i++)
+            {
+                ContainedNodesCount += Arguments[i].ContainedNodesCount + 1;
+            }
+        }
+
         public virtual bool Equals(ElmTag? otherTag)
         {
+            if (ReferenceEquals(this, otherTag))
+                return true;
+
             if (otherTag is null)
+                return false;
+
+            if (otherTag.slimHashCode != slimHashCode)
                 return false;
 
             if (TagName != otherTag.TagName)
@@ -117,13 +172,95 @@ public abstract record ElmValue
         }
 
         override public int GetHashCode() =>
-            TagName.GetHashCode() ^
-            Arguments.Select(a => a.GetHashCode()).Aggregate((a, b) => a ^ b);
+            slimHashCode;
+
+        internal readonly record struct ElmTagStruct
+        {
+            public string TagName { get; }
+
+            public IReadOnlyList<ElmValue> Arguments { get; }
+
+            public readonly int slimHashCode;
+
+            public ElmTagStruct(string TagName, IReadOnlyList<ElmValue> Arguments)
+            {
+                this.TagName = TagName;
+                this.Arguments = Arguments;
+
+                slimHashCode = ComputeHashCode(TagName, Arguments);
+            }
+
+            public override int GetHashCode() =>
+                slimHashCode;
+
+            public bool Equals(ElmTagStruct otherTag)
+            {
+                if (otherTag.slimHashCode != slimHashCode)
+                    return false;
+
+                if (TagName != otherTag.TagName)
+                    return false;
+
+                if (Arguments.Count != otherTag.Arguments.Count)
+                    return false;
+
+                for (int i = 0; i < Arguments.Count; i++)
+                {
+                    if (!Arguments[i].Equals(otherTag.Arguments[i]))
+                        return false;
+                }
+
+                return true;
+            }
+
+            public static int ComputeHashCode(
+                string TagName,
+                IReadOnlyList<ElmValue> Arguments)
+            {
+                var hashCode = new HashCode();
+
+                hashCode.Add(TagName);
+
+                for (int i = 0; i < Arguments.Count; i++)
+                {
+                    hashCode.Add(Arguments[i]);
+                }
+
+                return hashCode.ToHashCode();
+            }
+
+            public override string ToString() =>
+                GetType().Name + " : " + ElmTagAsExpression(TagName, Arguments).expressionString;
+        }
+
+        public override string ToString() =>
+            GetType().Name + " : " + ElmValueAsExpression(this).expressionString;
     }
 
-    public record ElmList(IReadOnlyList<ElmValue> Elements)
+    public record ElmList
         : ElmValue
     {
+        public IReadOnlyList<ElmValue> Elements { init; get; }
+
+
+        internal readonly int slimHashCode;
+
+        public override int ContainedNodesCount { get; }
+
+        public ElmList(IReadOnlyList<ElmValue> Elements)
+        {
+            this.Elements = Elements;
+
+            slimHashCode = ComputeSlimHashCode(Elements);
+
+            ContainedNodesCount = 0;
+
+            for (int i = 0; i < Elements.Count; i++)
+            {
+                ContainedNodesCount += Elements[i].ContainedNodesCount + 1;
+            }
+        }
+
         public virtual bool Equals(ElmList? otherList)
         {
             if (otherList is null)
@@ -141,22 +278,45 @@ public abstract record ElmValue
             return true;
         }
 
-        public override int GetHashCode() =>
-            Elements.Select(e => e.GetHashCode()).Aggregate((a, b) => a ^ b);
+        public override int GetHashCode()
+        {
+            return slimHashCode;
+        }
+
+        private static int ComputeSlimHashCode(IReadOnlyList<ElmValue> elements)
+        {
+            var hashCode = new HashCode();
+
+            for (int i = 0; i < elements.Count; i++)
+            {
+                hashCode.Add(elements[i].GetHashCode());
+            }
+
+            return hashCode.ToHashCode();
+        }
 
         public override string ToString() =>
-            ElmValueAsExpression(this).expressionString;
+            GetType().Name + " : " + ElmValueAsExpression(this).expressionString;
     }
 
     public record ElmString(string Value)
-        : ElmValue;
+        : ElmValue
+    {
+        public override int ContainedNodesCount { get; } = 0;
+    }
 
-    public record CharObject(int Value)
-        : ElmValue;
+    public record ElmChar(int Value)
+        : ElmValue
+    {
+        public override int ContainedNodesCount { get; } = 0;
+    }
 
     public record ElmRecord(IReadOnlyList<(string FieldName, ElmValue Value)> Fields)
         : ElmValue
     {
+        public override int ContainedNodesCount { get; } =
+            Fields.Sum(field => field.Value.ContainedNodesCount) + Fields.Count;
+
         public virtual bool Equals(ElmRecord? otherRecord)
         {
             if (otherRecord is null)
@@ -177,18 +337,31 @@ public abstract record ElmValue
             return true;
         }
 
-        public override int GetHashCode() =>
-            Fields.Select(f => f.GetHashCode()).Aggregate((a, b) => a ^ b);
+        public override int GetHashCode()
+        {
+            var hashCode = new HashCode();
+
+            for (int i = 0; i < Fields.Count; i++)
+            {
+                hashCode.Add(Fields[i].FieldName);
+                hashCode.Add(Fields[i].Value);
+            }
+
+            return hashCode.ToHashCode();
+        }
 
         public override string ToString() =>
-            ElmValueAsExpression(this).expressionString;
+            GetType().Name + " : " + ElmValueAsExpression(this).expressionString;
 
         public ElmValue? this[string fieldName] =>
             Fields.FirstOrDefault(field => field.FieldName == fieldName).Value;
     }
 
     public record ElmInternal(string Value)
-        : ElmValue;
+        : ElmValue
+    {
+        public override int ContainedNodesCount { get; } = 0;
+    }
 
     public static Maybe<string> TryMapElmValueToString(ElmList elmValues) =>
         elmValues.Elements.Select(TryMapElmValueToChar).ListCombine()
@@ -197,14 +370,15 @@ public abstract record ElmValue
     public static Maybe<int> TryMapElmValueToChar(ElmValue elmValue) =>
         elmValue switch
         {
-            CharObject elmChar =>
+            ElmChar elmChar =>
             elmChar.Value,
 
             _ =>
             Maybe<int>.nothing()
         };
 
-    public static (string expressionString, bool needsParens) ElmValueAsExpression(ElmValue elmValue)
+    public static (string expressionString, bool needsParens) ElmValueAsExpression(
+        ElmValue elmValue)
     {
         return
             elmValue switch
@@ -212,7 +386,7 @@ public abstract record ElmValue
                 ElmInteger integer =>
                 (integer.Value.ToString(), needsParens: false),
 
-                CharObject charValue =>
+                ElmChar charValue =>
                 ("'" + char.ConvertFromUtf32(charValue.Value) + "'", needsParens: false),
 
                 ElmList list =>
@@ -237,7 +411,7 @@ public abstract record ElmValue
                 needsParens: false),
 
                 ElmTag tag =>
-                ElmTagAsExpression(tag),
+                ElmTagAsExpression(tag.TagName, tag.Arguments),
 
                 ElmInternal internalValue =>
                 ("<" + internalValue.Value + ">", needsParens: false),
@@ -312,16 +486,18 @@ public abstract record ElmValue
             return "Not a list.";
     }
 
-    public static (string expressionString, bool needsParens) ElmTagAsExpression(ElmTag elmTag)
+    public static (string expressionString, bool needsParens) ElmTagAsExpression(
+        string tagName,
+        IReadOnlyList<ElmValue> arguments)
     {
         static string applyNeedsParens((string expressionString, bool needsParens) tuple) =>
             tuple.needsParens ? "(" + tuple.expressionString + ")" : tuple.expressionString;
 
-        if (elmTag.TagName is "Set_elm_builtin")
+        if (tagName is "Set_elm_builtin")
         {
-            if (elmTag.Arguments.Count is 1)
+            if (arguments.Count is 1)
             {
-                var singleArgument = elmTag.Arguments[0];
+                var singleArgument = arguments[0];
 
                 var singleArgumentDictToList = ElmValueDictToList(singleArgument);
 
@@ -336,24 +512,25 @@ public abstract record ElmValue
             }
         }
 
-        if (elmTag.TagName is "RBEmpty_elm_builtin")
+        if (tagName is "RBEmpty_elm_builtin")
             return ("Dict.empty", needsParens: false);
 
-        var dictToList = ElmValueDictToList(elmTag);
+        var dictToList =
+            ElmValueDictToList(new ElmTag(tagName, arguments));
 
         if (dictToList.Count is 0)
         {
             var (needsParens, argumentsString) =
-                elmTag.Arguments.Count switch
+                arguments.Count switch
                 {
                     0 =>
                     (false, ""),
 
                     _ =>
-                    (true, " " + string.Join(" ", elmTag.Arguments.Select(ElmValueAsExpression).Select(applyNeedsParens)))
+                    (true, " " + string.Join(" ", arguments.Select(ElmValueAsExpression).Select(applyNeedsParens)))
                 };
 
-            return (elmTag.TagName + argumentsString, needsParens);
+            return (tagName + argumentsString, needsParens);
         }
 
         return
@@ -421,12 +598,14 @@ public abstract record ElmValue
         return Maybe<bool>.nothing();
     }
 
-    public static Maybe<bool> AreElmValueTypesEqual(ElmValue valueA, ElmValue valueB)
+    public static Maybe<bool> AreElmValueTypesEqual(
+        ElmValue valueA,
+        ElmValue valueB)
     {
         if (valueA is ElmInteger && valueB is ElmInteger)
             return true;
 
-        if (valueA is Char && valueB is Char)
+        if (valueA is ElmChar && valueB is ElmChar)
             return true;
 
         if (valueA is ElmString && valueB is ElmString)
@@ -437,8 +616,11 @@ public abstract record ElmValue
 
         if (valueA is ElmRecord recordA && valueB is ElmRecord recordB)
         {
-            var recordAFieldNames = recordA.Fields.Select(field => field.FieldName).ToList();
-            var recordBFieldNames = recordB.Fields.Select(field => field.FieldName).ToList();
+            var recordAFieldNames =
+                recordA.Fields.Select(field => field.FieldName).ToList();
+
+            var recordBFieldNames =
+                recordB.Fields.Select(field => field.FieldName).ToList();
 
             if (!recordAFieldNames.OrderBy(name => name).SequenceEqual(recordBFieldNames))
                 return false;

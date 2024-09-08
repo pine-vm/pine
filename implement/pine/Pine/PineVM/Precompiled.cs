@@ -1,6 +1,7 @@
 using ElmTime.ElmInteractive;
 using Pine.ElmInteractive;
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Frozen;
 using System.Collections.Generic;
 using System.Collections.Immutable;
@@ -18,7 +19,8 @@ public class Precompiled
     public abstract record PrecompiledResult
     {
         public sealed record FinalValue(
-            PineValue Value)
+            PineValue Value,
+            long StackFrameCount)
             : PrecompiledResult;
 
         public sealed record ContinueParseAndEval(
@@ -33,14 +35,34 @@ public class Precompiled
 
     record PrecompiledEntry(
         EnvConstraintId EnvConstraint,
-        Func<PineValue, Func<PrecompiledResult>?> PrecompiledDelegate)
+        Func<PineValue, PineVMParseCache, Func<PrecompiledResult>?> PrecompiledDelegate)
     {
+        public PrecompiledEntry(
+            EnvConstraintId EnvConstraint,
+            Func<PineValue, PineVMParseCache, PrecompiledResult?> PrecompiledDelegate)
+            : this(
+                EnvConstraint,
+                (env, parseCache) =>
+                {
+                    var result = PrecompiledDelegate(env, parseCache);
+
+                    if (result is null)
+                    {
+                        return null;
+                    }
+
+                    return () => result;
+                })
+        {
+        }
+
         public static PrecompiledEntry FinalValueForAnyEnvironment(
             EnvConstraintId EnvConstraint,
-            Func<PineValue, PineValue> delegateForAnyEnv) =>
+            Func<PineValue, PineVMParseCache, PineValue> delegateForAnyEnv) =>
             new(
                 EnvConstraint,
-                env => () => new PrecompiledResult.FinalValue(delegateForAnyEnv(env)));
+                (env, parseCache) =>
+                () => new PrecompiledResult.FinalValue(delegateForAnyEnv(env, parseCache), StackFrameCount: 0));
     }
 
     public static ImmutableHashSet<Expression> PrecompiledExpressions =>
@@ -51,7 +73,8 @@ public class Precompiled
 
     public static Func<PrecompiledResult>? SelectPrecompiled(
         Expression expression,
-        PineValue environment)
+        PineValue environment,
+        PineVMParseCache parseCache)
     {
         if (PrecompiledDict?.TryGetValue(expression, out var envItems) ?? false)
         {
@@ -59,7 +82,7 @@ public class Precompiled
             {
                 if (envItem.EnvConstraint.SatisfiedByValue(environment))
                 {
-                    return envItem.PrecompiledDelegate.Invoke(environment);
+                    return envItem.PrecompiledDelegate.Invoke(environment, parseCache);
                 }
             }
         }
@@ -73,57 +96,46 @@ public class Precompiled
             popularExpressionDictionary["adaptivePartialApplication"];
 
         var adaptivePartialApplicationExpressionValue =
-            ExpressionEncoding.EncodeExpressionAsValue(adaptivePartialApplicationExpression)
-            .Extract(err => throw new Exception(err));
+            ExpressionEncoding.EncodeExpressionAsValue(adaptivePartialApplicationExpression);
 
         var isPineListExpressionValue =
-            ExpressionEncoding.EncodeExpressionAsValue(popularExpressionDictionary["isPineList"])
-            .Extract(err => throw new Exception(err));
+            ExpressionEncoding.EncodeExpressionAsValue(popularExpressionDictionary["isPineList"]);
 
         var isPineBlobExpressionValue =
-            ExpressionEncoding.EncodeExpressionAsValue(popularExpressionDictionary["isPineBlob"])
-            .Extract(err => throw new Exception(err));
+            ExpressionEncoding.EncodeExpressionAsValue(popularExpressionDictionary["isPineBlob"]);
 
         var compareStringsExpressionValue =
-            ExpressionEncoding.EncodeExpressionAsValue(popularExpressionDictionary["compareStrings"])
-            .Extract(err => throw new Exception(err));
+            ExpressionEncoding.EncodeExpressionAsValue(popularExpressionDictionary["compareStrings"]);
 
         var compareExpression =
             popularExpressionDictionary["compare"];
 
         var compareExpressionValue =
-            ExpressionEncoding.EncodeExpressionAsValue(compareExpression)
-            .Extract(err => throw new Exception(err));
+            ExpressionEncoding.EncodeExpressionAsValue(compareExpression);
 
         var compareListsExpressionValue =
-            ExpressionEncoding.EncodeExpressionAsValue(popularExpressionDictionary["compareLists"])
-            .Extract(err => throw new Exception(err));
+            ExpressionEncoding.EncodeExpressionAsValue(popularExpressionDictionary["compareLists"]);
 
         var eqExpression =
             popularExpressionDictionary["eq"];
 
         var eqExpressionValue =
-            ExpressionEncoding.EncodeExpressionAsValue(eqExpression)
-            .Extract(err => throw new Exception(err));
+            ExpressionEncoding.EncodeExpressionAsValue(eqExpression);
 
         var dictToListExpressionValue =
-            ExpressionEncoding.EncodeExpressionAsValue(popularExpressionDictionary["dictToList"])
-            .Extract(err => throw new Exception(err));
+            ExpressionEncoding.EncodeExpressionAsValue(popularExpressionDictionary["dictToList"]);
 
         var dictKeysExpressionValue =
-            ExpressionEncoding.EncodeExpressionAsValue(popularExpressionDictionary["dictKeys"])
-            .Extract(err => throw new Exception(err));
+            ExpressionEncoding.EncodeExpressionAsValue(popularExpressionDictionary["dictKeys"]);
 
         var listsEqualRecursiveExpressionValue =
-            ExpressionEncoding.EncodeExpressionAsValue(popularExpressionDictionary["listsEqualRecursive"])
-            .Extract(err => throw new Exception(err));
+            ExpressionEncoding.EncodeExpressionAsValue(popularExpressionDictionary["listsEqualRecursive"]);
 
 
         var listMemberExpression = popularExpressionDictionary["List.member"];
 
         var listMemberExpressionValue =
-            ExpressionEncoding.EncodeExpressionAsValue(listMemberExpression)
-            .Extract(err => throw new Exception(err));
+            ExpressionEncoding.EncodeExpressionAsValue(listMemberExpression);
 
         var eqExposedValue = popularValueDictionary["eq.exposed"];
 
@@ -131,14 +143,12 @@ public class Precompiled
         var dictGetExpression = popularExpressionDictionary["dictGet"];
 
         var dictGetExpressionValue =
-            ExpressionEncoding.EncodeExpressionAsValue(dictGetExpression)
-            .Extract(err => throw new Exception(err));
+            ExpressionEncoding.EncodeExpressionAsValue(dictGetExpression);
 
         var dictGetAfterCompareExpression = popularExpressionDictionary["dictGetAfterCompare"];
 
         var dictGetAfterCompareExpressionValue =
-            ExpressionEncoding.EncodeExpressionAsValue(dictGetAfterCompareExpression)
-            .Extract(err => throw new Exception(err));
+            ExpressionEncoding.EncodeExpressionAsValue(dictGetAfterCompareExpression);
 
 
         var compareExposedValue = popularValueDictionary["compare.exposed"];
@@ -147,57 +157,49 @@ public class Precompiled
         var assocListGetExpression = popularExpressionDictionary["assocListGet"];
 
         var assocListGetExpressionValue =
-            ExpressionEncoding.EncodeExpressionAsValue(assocListGetExpression)
-            .Extract(err => throw new Exception(err));
+            ExpressionEncoding.EncodeExpressionAsValue(assocListGetExpression);
 
         var dictSizeHelpExpression = popularExpressionDictionary["dictSizeHelp"];
 
         var dictSizeHelpExpressionValue =
-            ExpressionEncoding.EncodeExpressionAsValue(dictSizeHelpExpression)
-            .Extract(err => throw new Exception(err));
+            ExpressionEncoding.EncodeExpressionAsValue(dictSizeHelpExpression);
 
 
         var elmCompiledRecordAccessExpression = popularExpressionDictionary["elmCompiledRecordAccess"];
 
         var elmCompiledRecordAccessExpressionValue =
-            ExpressionEncoding.EncodeExpressionAsValue(elmCompiledRecordAccessExpression)
-            .Extract(err => throw new Exception(err));
+            ExpressionEncoding.EncodeExpressionAsValue(elmCompiledRecordAccessExpression);
 
         var countPineListValueContentExpression =
             popularExpressionDictionary["countPineListValueContent"];
 
         var countPineListValueContentExpressionValue =
-            ExpressionEncoding.EncodeExpressionAsValue(countPineListValueContentExpression)
-            .Extract(err => throw new Exception(err));
+            ExpressionEncoding.EncodeExpressionAsValue(countPineListValueContentExpression);
 
         var countPineValueContentExpression =
             popularExpressionDictionary["countPineValueContent"];
 
         var countPineValueContentExpressionValue =
-            ExpressionEncoding.EncodeExpressionAsValue(countPineValueContentExpression)
-            .Extract(err => throw new Exception(err));
+            ExpressionEncoding.EncodeExpressionAsValue(countPineValueContentExpression);
 
 
         var listMapExpression =
             popularExpressionDictionary["List.map"];
 
         var listMapExpressionValue =
-            ExpressionEncoding.EncodeExpressionAsValue(listMapExpression)
-            .Extract(err => throw new Exception(err));
+            ExpressionEncoding.EncodeExpressionAsValue(listMapExpression);
 
         var listConcatMapExpression =
             popularExpressionDictionary["List.concatMap"];
 
         var listConcatMapExpressionValue =
-            ExpressionEncoding.EncodeExpressionAsValue(listConcatMapExpression)
-            .Extract(err => throw new Exception(err));
+            ExpressionEncoding.EncodeExpressionAsValue(listConcatMapExpression);
 
         var listFoldlExpression =
             popularExpressionDictionary["List.foldl"];
 
         var listFoldlExpressionValue =
-            ExpressionEncoding.EncodeExpressionAsValue(listFoldlExpression)
-            .Extract(err => throw new Exception(err));
+            ExpressionEncoding.EncodeExpressionAsValue(listFoldlExpression);
 
 
         {
@@ -242,7 +244,7 @@ public class Precompiled
             yield return
                 new KeyValuePair<Expression, IReadOnlyList<PrecompiledEntry>>(
                     eqExpression,
-                    [PrecompiledEntry.FinalValueForAnyEnvironment(eqExpressionEnvClass, Eq)]);
+                    [new PrecompiledEntry(eqExpressionEnvClass, BasicsEq)]);
         }
 
 
@@ -263,7 +265,7 @@ public class Precompiled
             yield return
                 new KeyValuePair<Expression, IReadOnlyList<PrecompiledEntry>>(
                     listMemberExpression,
-                    [PrecompiledEntry.FinalValueForAnyEnvironment(listMemberExpressionEnvClass, ListMember)]);
+                    [new PrecompiledEntry(listMemberExpressionEnvClass, ListMember)]);
         }
 
 
@@ -352,7 +354,7 @@ public class Precompiled
             yield return
                 new KeyValuePair<Expression, IReadOnlyList<PrecompiledEntry>>(
                     assocListGetExpression,
-                    [PrecompiledEntry.FinalValueForAnyEnvironment(assocListGetExpressionEnvClass, AssocListGet)]);
+                    [new PrecompiledEntry(assocListGetExpressionEnvClass, CommonAssocListGet)]);
         }
 
 
@@ -430,7 +432,7 @@ public class Precompiled
             yield return
                 new KeyValuePair<Expression, IReadOnlyList<PrecompiledEntry>>(
                     adaptivePartialApplicationExpression,
-                    [new PrecompiledEntry(adaptivePartialApplicationEnvClass, AdaptivePartialApplication)]);
+                    [new PrecompiledEntry(adaptivePartialApplicationEnvClass, ElmCompiledAdaptivePartialApplication)]);
         }
 
 
@@ -451,11 +453,13 @@ public class Precompiled
             yield return
                 new KeyValuePair<Expression, IReadOnlyList<PrecompiledEntry>>(
                     countPineValueContentExpression,
-                    [PrecompiledEntry.FinalValueForAnyEnvironment(countPineValueContentEnvClass, CountPineValueContent)]);
+                    [new PrecompiledEntry(countPineValueContentEnvClass, CountPineValueContent)]);
         }
     }
 
-    static PineValue Compare(PineValue environment)
+    static PineValue Compare(
+        PineValue environment,
+        PineVMParseCache parseCache)
     {
         var argA = PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 0]);
         var argB = PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 1]);
@@ -614,43 +618,58 @@ public class Precompiled
         throw new ParseExpressionException("Error in case-of block: No matching branch.");
     }
 
-    static PineValue Eq(PineValue environment)
+    static PrecompiledResult BasicsEq(
+        PineValue environment,
+        PineVMParseCache parseCache)
     {
         var argA = PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 0]);
         var argB = PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 1]);
 
-        return Eq(argA, argB);
+        return BasicsEq(argA, argB);
     }
 
-    static PineValue Eq(PineValue a, PineValue b)
+    static PrecompiledResult BasicsEq(PineValue a, PineValue b)
+    {
+        var (isEq, stackFrameCount) = BasicsEqRecursive(a, b);
+
+        return new PrecompiledResult.FinalValue(
+            isEq ? PineVMValues.TrueValue : PineVMValues.FalseValue,
+            StackFrameCount: stackFrameCount);
+    }
+
+    static (bool, int) BasicsEqRecursive(PineValue a, PineValue b)
     {
         if (a == b)
         {
-            return PineVMValues.TrueValue;
+            return (true, 0);
         }
 
         if (a is PineValue.BlobValue)
         {
-            return PineVMValues.FalseValue;
+            return (false, 0);
         }
 
         if (a is PineValue.ListValue listA && b is PineValue.ListValue listB)
         {
             if (listA.Elements.Count != listB.Elements.Count)
             {
-                return PineVMValues.FalseValue;
+                return (false, 0);
             }
 
             var aTag = PineVM.ValueFromPathInValueOrEmptyList(a, [0]);
 
             if (aTag == ElmValue.ElmStringTypeTagNameAsValue)
             {
-                return PineVMValues.FalseValue;
+                return (false, 0);
             }
 
             if (aTag == ElmValue.ElmDictNotEmptyTagNameAsValue)
             {
-                return KernelFunction.equal(DictToList(a), DictToList(b));
+                var dictAList = DictToListRecursive(a);
+                var dictBList = DictToListRecursive(b);
+
+                return
+                    (PineValue.List(dictAList) == PineValue.List(dictBList), dictAList.Count + dictBList.Count);
             }
 
             if (aTag == ElmValue.ElmSetTypeTagNameAsValue)
@@ -658,7 +677,11 @@ public class Precompiled
                 var dictA = PineVM.ValueFromPathInValueOrEmptyList(a, [1, 0]);
                 var dictB = PineVM.ValueFromPathInValueOrEmptyList(b, [1, 0]);
 
-                return KernelFunction.equal(DictKeys(dictA), DictKeys(dictB));
+                var dictAKeys = DictKeysRecursive(dictA);
+                var dictBKeys = DictKeysRecursive(dictB);
+
+                return
+                    (PineValue.List(dictAKeys) == PineValue.List(dictBKeys), dictAKeys.Count + dictBKeys.Count);
             }
 
             return ListsEqualRecursive(listA.Elements, listB.Elements);
@@ -735,20 +758,30 @@ public class Precompiled
         throw new ParseExpressionException("Error in case-of block: No matching branch.");
     }
 
-    static PineValue ListsEqualRecursive(IReadOnlyList<PineValue> listA, IReadOnlyList<PineValue> listB)
+    static (bool, int) ListsEqualRecursive(
+        IReadOnlyList<PineValue> listA,
+        IReadOnlyList<PineValue> listB)
     {
+        int totalCount = 0;
+
         for (int i = 0; i < listA.Count; i++)
         {
-            if (Eq(listA[i], listB[i]) != PineVMValues.TrueValue)
+            var (itemEq, itemCount) = BasicsEqRecursive(listA[i], listB[i]);
+
+            if (!itemEq)
             {
-                return PineVMValues.FalseValue;
+                return (false, totalCount + itemCount);
             }
+
+            totalCount += itemCount + 1;
         }
 
-        return PineVMValues.TrueValue;
+        return (true, totalCount);
     }
 
-    static PineValue ListMember(PineValue environment)
+    static PrecompiledResult.FinalValue ListMember(
+        PineValue environment,
+        PineVMParseCache parseCache)
     {
         var item = PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 0]);
         var list = PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 1]);
@@ -756,50 +789,80 @@ public class Precompiled
         return ListMember(item, list);
     }
 
-    static PineValue ListMember(PineValue item, PineValue list)
+    static PrecompiledResult.FinalValue ListMember(PineValue item, PineValue list)
     {
         if (list is PineValue.ListValue listValue)
         {
+            int totalCount = 0;
+
             for (var i = 0; i < listValue.Elements.Count; ++i)
             {
-                if (Eq(listValue.Elements[i], item) == PineVMValues.TrueValue)
+                var (itemEq, itemEqStackFrameCount) = BasicsEqRecursive(item, listValue.Elements[i]);
+
+                totalCount += itemEqStackFrameCount;
+
+                if (itemEq)
                 {
-                    return PineVMValues.TrueValue;
+                    return new PrecompiledResult.FinalValue(
+                        PineVMValues.TrueValue,
+                        StackFrameCount: totalCount);
                 }
             }
+
+            return new PrecompiledResult.FinalValue(
+                PineVMValues.FalseValue,
+                StackFrameCount: totalCount);
         }
 
-        return PineVMValues.FalseValue;
+        return new PrecompiledResult.FinalValue(
+            PineVMValues.FalseValue,
+            StackFrameCount: 0);
     }
 
-    static PineValue AssocListGet(PineValue environment)
+    static PrecompiledResult.FinalValue CommonAssocListGet(
+        PineValue environment,
+        PineVMParseCache parseCache)
     {
         var key = PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 0]);
         var list = PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 1]);
 
-        return AssocListGet(key, list);
+        return CommonAssocListGetRecursive(key, list);
     }
 
-    static PineValue AssocListGet(PineValue key, PineValue list)
+    static PrecompiledResult.FinalValue CommonAssocListGetRecursive(
+        PineValue key,
+        PineValue list)
     {
         if (list is PineValue.ListValue listValue)
         {
+            int totalCount = 0;
+
             for (var i = 0; i < listValue.Elements.Count; ++i)
             {
                 if (listValue.Elements[i] is PineValue.ListValue itemList && 1 < itemList.Elements.Count)
                 {
-                    if (Eq(key, itemList.Elements[0]) == PineVMValues.TrueValue)
+                    var (itemEq, itemEqStackFrameCount) = BasicsEqRecursive(key, itemList.Elements[0]);
+
+                    totalCount += itemEqStackFrameCount;
+
+                    if (itemEq)
                     {
-                        return Tag_Just_Value(itemList.Elements[1]);
+                        return new PrecompiledResult.FinalValue(
+                            Tag_Just_Value(itemList.Elements[1]),
+                            StackFrameCount: totalCount);
                     }
                 }
             }
         }
 
-        return Tag_Nothing_Value;
+        return new PrecompiledResult.FinalValue(
+            Tag_Nothing_Value,
+            StackFrameCount: 0);
     }
 
-    static PineValue DictGet(PineValue environment)
+    static PineValue DictGet(
+        PineValue environment,
+        PineVMParseCache parseCache)
     {
         var targetKey = PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 0]);
         var dict = PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 1]);
@@ -846,7 +909,9 @@ public class Precompiled
         throw new ParseExpressionException("Error in case-of block: No matching branch.");
     }
 
-    static PineValue DictSizeHelp(PineValue environment)
+    static PineValue DictSizeHelp(
+        PineValue environment,
+        PineVMParseCache parseCache)
     {
         static long sizeHelp(
             long n,
@@ -883,7 +948,9 @@ public class Precompiled
     }
 
 
-    static PineValue ElmCompiledRecordAccess(PineValue environment)
+    static PineValue ElmCompiledRecordAccess(
+        PineValue environment,
+        PineVMParseCache parseCache)
     {
         var fieldNameValue = PineVM.ValueFromPathInValueOrEmptyList(environment, [1]);
         var remainingFieldsValue = PineVM.ValueFromPathInValueOrEmptyList(environment, [2]);
@@ -912,13 +979,15 @@ public class Precompiled
         throw new ParseExpressionException("invalid record access - field name not found");
     }
 
-    static PineValue CountPineValueContent(PineValue environment)
+    static PrecompiledResult.FinalValue CountPineValueContent(
+        PineValue environment,
+        PineVMParseCache parseCache)
     {
         var valueArgument =
             PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 0]);
 
         var (nodeCount, byteCount) =
-            CountEncodedPineValueContent(valueArgument);
+            CountEncodedPineValueContentRecursive(valueArgument);
 
         var returnValue =
             PineValue.List(
@@ -927,10 +996,25 @@ public class Precompiled
                 PineValueAsInteger.ValueFromSignedInteger(byteCount)
                 ]);
 
-        return returnValue;
+        return
+            new PrecompiledResult.FinalValue(
+                returnValue,
+                StackFrameCount: nodeCount);
     }
 
-    static (long, long) CountEncodedPineValueContent(PineValue encodedValue)
+    static readonly ConcurrentDictionary<PineValue, (long nodeCount, long byteCount)> countEncodedPineValueContentDict = new();
+
+    static (long nodeCount, long byteCount) CountEncodedPineValueContentRecursive(
+        PineValue encodedValue)
+    {
+        return
+            countEncodedPineValueContentDict.GetOrAdd(
+            encodedValue,
+            valueFactory: ComputeCountEncodedPineValueContentRecursive);
+    }
+
+    static (long nodeCount, long byteCount) ComputeCountEncodedPineValueContentRecursive(
+        PineValue encodedValue)
     {
         if (encodedValue is not PineValue.ListValue listValue)
         {
@@ -954,12 +1038,6 @@ public class Precompiled
 
         var tagArgument = tagArgumentsList.Elements[0];
 
-        if (listValue.Elements[0] == Tag_BlobValue_Value &&
-            tagArgument is PineValue.ListValue blobValueList)
-        {
-            return (0, blobValueList.Elements.Count);
-        }
-
         if (listValue.Elements[0] == Tag_ListValue_Value &&
             tagArgument is PineValue.ListValue listValueListList)
         {
@@ -969,7 +1047,7 @@ public class Precompiled
             for (var i = 0; i < listValueListList.Elements.Count; ++i)
             {
                 var (itemNodeCount, itemByteCount) =
-                    CountEncodedPineValueContent(listValueListList.Elements[i]);
+                    CountEncodedPineValueContentRecursive(listValueListList.Elements[i]);
 
                 nodeCount += itemNodeCount + 1;
                 byteCount += itemByteCount;
@@ -978,10 +1056,18 @@ public class Precompiled
             return (nodeCount, byteCount);
         }
 
+        if (listValue.Elements[0] == Tag_BlobValue_Value &&
+            tagArgument is PineValue.ListValue blobValueList)
+        {
+            return (0, blobValueList.Elements.Count);
+        }
+
         throw new ParseExpressionException("Error in case-of block: No matching branch.");
     }
 
-    static Func<PrecompiledResult>? ListMap(PineValue environment)
+    static Func<PrecompiledResult>? ListMap(
+        PineValue environment,
+        PineVMParseCache parseCache)
     {
         var argumentMapFunction =
             PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 0]);
@@ -996,10 +1082,10 @@ public class Precompiled
 
         if (itemsListValue.Elements.Count < 1)
         {
-            return () => new PrecompiledResult.FinalValue(PineValue.EmptyList);
+            return () => new PrecompiledResult.FinalValue(PineValue.EmptyList, StackFrameCount: 0);
         }
 
-        if (ElmInteractiveEnvironment.ParseFunctionRecordFromValueTagged(argumentMapFunction)
+        if (ElmInteractiveEnvironment.ParseFunctionRecordFromValueTagged(argumentMapFunction, parseCache)
             is not Result<string, ElmInteractiveEnvironment.FunctionRecord>.Ok functionRecordOk)
         {
             return null;
@@ -1076,7 +1162,9 @@ public class Precompiled
                         Callback: step)));
     }
 
-    static Func<PrecompiledResult>? ListConcatMap(PineValue environment)
+    static Func<PrecompiledResult>? ListConcatMap(
+        PineValue environment,
+        PineVMParseCache parseCache)
     {
         var argumentMapFunction =
             PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 0]);
@@ -1091,10 +1179,10 @@ public class Precompiled
 
         if (itemsListValue.Elements.Count < 1)
         {
-            return () => new PrecompiledResult.FinalValue(PineValue.EmptyList);
+            return () => new PrecompiledResult.FinalValue(PineValue.EmptyList, StackFrameCount: 0);
         }
 
-        if (ElmInteractiveEnvironment.ParseFunctionRecordFromValueTagged(argumentMapFunction)
+        if (ElmInteractiveEnvironment.ParseFunctionRecordFromValueTagged(argumentMapFunction, parseCache)
             is not Result<string, ElmInteractiveEnvironment.FunctionRecord>.Ok functionRecordOk)
         {
             return null;
@@ -1154,7 +1242,9 @@ public class Precompiled
                         Callback: step)));
     }
 
-    static Func<PrecompiledResult>? ListFoldl(PineValue environment)
+    static Func<PrecompiledResult>? ListFoldl(
+        PineValue environment,
+        PineVMParseCache parseCache)
     {
         var argumentMapFunction =
             PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 0]);
@@ -1172,10 +1262,10 @@ public class Precompiled
 
         if (itemsListValue.Elements.Count < 1)
         {
-            return () => new PrecompiledResult.FinalValue(argumentAggregate);
+            return () => new PrecompiledResult.FinalValue(argumentAggregate, StackFrameCount: 0);
         }
 
-        if (ElmInteractiveEnvironment.ParseFunctionRecordFromValueTagged(argumentMapFunction)
+        if (ElmInteractiveEnvironment.ParseFunctionRecordFromValueTagged(argumentMapFunction, parseCache)
             is not Result<string, ElmInteractiveEnvironment.FunctionRecord>.Ok functionRecordOk)
         {
             return null;
@@ -1250,9 +1340,9 @@ public class Precompiled
                         Callback: step)));
     }
 
-
-    static Func<PrecompiledResult>? AdaptivePartialApplication(
-        PineValue environment)
+    static Func<PrecompiledResult>? ElmCompiledAdaptivePartialApplication(
+        PineValue environment,
+        PineVMParseCache parseCache)
     {
         if (environment is not PineValue.ListValue envList)
             return null;
@@ -1268,7 +1358,7 @@ public class Precompiled
 
         if (newArgumentsList.Elements.Count is 0)
         {
-            return () => new PrecompiledResult.FinalValue(taggedFunctionRecordList);
+            return () => new PrecompiledResult.FinalValue(taggedFunctionRecordList, StackFrameCount: 0);
         }
 
         if (taggedFunctionRecordList.Elements.Count < 2)
@@ -1342,28 +1432,28 @@ public class Precompiled
                 ExpressionValue: functionRecord.Elements[0]);
     }
 
-    static readonly PineValue Tag_BlobValue_Value =
+    private static readonly PineValue Tag_BlobValue_Value =
         PineValueAsString.ValueFromString("BlobValue");
 
-    static readonly PineValue Tag_ListValue_Value =
+    private static readonly PineValue Tag_ListValue_Value =
         PineValueAsString.ValueFromString("ListValue");
 
-    static readonly PineValue ElmCompilerFunctionTagValue =
+    private static readonly PineValue ElmCompilerFunctionTagValue =
         PineValueAsString.ValueFromString("Function");
 
-    static readonly PineValue Tag_EQ_Value =
-        ElmValueEncoding.ElmValueAsPineValue(new ElmValue.ElmTag("EQ", []));
+    private static readonly PineValue Tag_EQ_Value =
+        ElmValueEncoding.ElmValueAsPineValue(ElmValue.TagInstance("EQ", []));
 
-    static readonly PineValue Tag_LT_Value =
-        ElmValueEncoding.ElmValueAsPineValue(new ElmValue.ElmTag("LT", []));
+    private static readonly PineValue Tag_LT_Value =
+        ElmValueEncoding.ElmValueAsPineValue(ElmValue.TagInstance("LT", []));
 
-    static readonly PineValue Tag_GT_Value =
-        ElmValueEncoding.ElmValueAsPineValue(new ElmValue.ElmTag("GT", []));
+    private static readonly PineValue Tag_GT_Value =
+        ElmValueEncoding.ElmValueAsPineValue(ElmValue.TagInstance("GT", []));
 
-    static readonly PineValue Tag_Nothing_Value =
-        ElmValueEncoding.ElmValueAsPineValue(new ElmValue.ElmTag("Nothing", []));
+    private static readonly PineValue Tag_Nothing_Value =
+        ElmValueEncoding.ElmValueAsPineValue(ElmValue.TagInstance("Nothing", []));
 
-    static PineValue Tag_Just_Value(PineValue justValue) =>
+    private static PineValue.ListValue Tag_Just_Value(PineValue justValue) =>
         PineValue.List(
             [
             PineValueAsString.ValueFromString("Just"),
@@ -1371,10 +1461,10 @@ public class Precompiled
             ]
         );
 
-    static readonly IImmutableDictionary<string, Expression> popularExpressionDictionary =
+    private static readonly IImmutableDictionary<string, Expression> popularExpressionDictionary =
         PopularExpression.BuildPopularExpressionDictionary();
 
-    static readonly IImmutableDictionary<string, PineValue> popularValueDictionary =
+    private static readonly IImmutableDictionary<string, PineValue> popularValueDictionary =
         PopularExpression.BuildPopularValueDictionary();
 
     private static readonly FrozenDictionary<Expression, IReadOnlyList<PrecompiledEntry>> PrecompiledDict =

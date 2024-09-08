@@ -405,9 +405,9 @@ public static class PineCSharpSyntaxFactory
             new PineVM.Expression.KernelApplication(
                 function: "skip",
                 input:
-                new PineVM.Expression.List(
+                PineVM.Expression.ListInstance(
                     [
-                    new PineVM.Expression.Literal(PineValueAsInteger.ValueFromSignedInteger(currentOffset)),
+                    PineVM.Expression.LiteralInstance(PineValueAsInteger.ValueFromSignedInteger(currentOffset)),
                         compositionExpr
                     ]));
 

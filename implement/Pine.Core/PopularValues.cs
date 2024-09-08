@@ -286,7 +286,7 @@ public static class PopularValues
     public static IEnumerable<ElmValue> PopularElmValuesSource()
     {
         static IReadOnlyList<ElmValue> ListOfCharsFromString(string s) =>
-            [.. s.Select(c => ElmValue.Char(c))];
+            [.. s.Select(c => ElmValue.CharInstance(c))];
 
         static IEnumerable<(string tagName, IReadOnlyList<ElmValue> tagArgs)> PopularTagUsages()
         {
@@ -335,7 +335,7 @@ public static class PopularValues
 
         foreach (var (tagName, tagArgs) in PopularTagUsages())
         {
-            yield return new ElmValue.ElmTag(tagName, tagArgs);
+            yield return ElmValue.TagInstance(tagName, tagArgs);
         }
 
         for (int i = 1; i < 4; i++)

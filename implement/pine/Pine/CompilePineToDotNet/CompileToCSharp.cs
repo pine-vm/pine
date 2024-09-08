@@ -687,8 +687,7 @@ public partial class CompileToCSharp
                         fromOk: compileOk =>
                         {
                             var subexpressionValue =
-                            ExpressionEncoding.EncodeExpressionAsValue(subexpression)
-                            .Extract(err => throw new Exception(err));
+                            ExpressionEncoding.EncodeExpressionAsValue(subexpression);
 
                             var expressionHash = CommonConversion.StringBase16(compilerCache.ComputeHash(subexpressionValue));
 
@@ -767,7 +766,7 @@ public partial class CompileToCSharp
                 specialResolution switch
                 {
                     ExprResolvedInFunction.ExprResolvedToLiteral resolvedAsLiteral =>
-                    CompileToCSharpExpression(new Expression.Literal(resolvedAsLiteral.Value)),
+                    CompileToCSharpExpression(Expression.LiteralInstance(resolvedAsLiteral.Value)),
 
                     ExprResolvedInFunction.ExprResolvedToFunctionParam resolvedToParam =>
                     Result<string, CompiledExpression>.ok(
@@ -1039,8 +1038,7 @@ public partial class CompileToCSharp
         ExpressionCompilationEnvironment environment)
     {
         var parseAndEvalExprValue =
-            ExpressionEncoding.EncodeExpressionAsValue(parseAndEvalExpr)
-            .Extract(err => throw new Exception(err));
+            ExpressionEncoding.EncodeExpressionAsValue(parseAndEvalExpr);
 
         var parseAndEvalExprHash =
             CommonConversion.StringBase16(compilerCache.ComputeHash(parseAndEvalExprValue));
@@ -1397,8 +1395,7 @@ public partial class CompileToCSharp
     }
 
     public static Result<string, CompiledExpressionId> CompiledExpressionId(Expression expression) =>
-        ExpressionEncoding.EncodeExpressionAsValue(expression)
-        .Map(CompiledExpressionId);
+        CompiledExpressionId(ExpressionEncoding.EncodeExpressionAsValue(expression));
 
     public static CompiledExpressionId CompiledExpressionId(PineValue expressionValue)
     {
@@ -1445,7 +1442,7 @@ public partial class CompileToCSharp
                     Expression.List list =>
                     list.items.Select(e => TransformPineExpressionWithOptionalReplacement(findReplacement, e))
                     .ListCombine()
-                    .Map(elements => (Expression)new Expression.List([.. elements])),
+                    .Map(elements => (Expression)Expression.ListInstance([.. elements])),
 
                     Expression.Conditional conditional =>
                     TransformPineExpressionWithOptionalReplacement(
@@ -1460,7 +1457,7 @@ public partial class CompileToCSharp
                         findReplacement,
                         conditional.falseBranch)
                     .Map(transformedIfFalse =>
-                    (Expression)new Expression.Conditional(
+                    (Expression)Expression.ConditionalInstance(
                         transformedCondition,
                         falseBranch: transformedIfFalse,
                         trueBranch: transformedIfTrue)))),

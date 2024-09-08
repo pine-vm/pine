@@ -12,7 +12,7 @@ public class ElmValueTests
     public void Test_ElmValue_as_pine_value_roundtrips()
     {
         var testCases = (IReadOnlyList<ElmValue>)[
-            ElmValue.Char('a'),
+            ElmValue.CharInstance('a'),
             ElmValue.Integer(42),
             ElmValue.String("Hello, world!"),
             new ElmValue.ElmList([
@@ -27,8 +27,8 @@ public class ElmValueTests
 
             new ElmValue.ElmString("Hello, world 👋"),
 
-            new ElmValue.ElmTag("True", []),
-            new ElmValue.ElmTag("False", []),
+            ElmValue.TagInstance("True", []),
+            ElmValue.TagInstance("False", []),
 
             new ElmValue.ElmList([
                 new ElmValue.ElmList([
@@ -61,7 +61,7 @@ public class ElmValueTests
             [
                 (ElmValue.Integer(42), "42"),
 
-                (ElmValue.Char('a'), "'a'"),
+                (ElmValue.CharInstance('a'), "'a'"),
 
                 (ElmValue.String("Hello, world!"), "\"Hello, world!\""),
 
@@ -77,16 +77,16 @@ public class ElmValueTests
                     ("gamma", ElmValue.Integer(3))]),
                 "{ alfa = 1, beta = 2, gamma = 3 }"),
 
-                (new ElmValue.ElmTag("Just", [ElmValue.Integer(43)]),
+                (ElmValue.TagInstance("Just", [ElmValue.Integer(43)]),
                 "Just 43"),
 
-                (new ElmValue.ElmTag("Nothing", []),
+                (ElmValue.TagInstance("Nothing", []),
                 "Nothing"),
 
-                (new ElmValue.ElmTag("Just", [new ElmValue.ElmTag("Nothing", [])]),
+                (ElmValue.TagInstance("Just", [ElmValue.TagInstance("Nothing", [])]),
                 "Just Nothing"),
 
-                (new ElmValue.ElmTag("Just", [new ElmValue.ElmTag("Just", [ElmValue.Integer(47)])]),
+                (ElmValue.TagInstance("Just", [ElmValue.TagInstance("Just", [ElmValue.Integer(47)])]),
                 "Just (Just 47)"),
             ];
 

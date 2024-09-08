@@ -15,7 +15,7 @@ public class EncodePineExpressionAsJsonTests
         IReadOnlyList<Expression> testCases =
             [
             Expression.EnvironmentInstance,
-            new Expression.List([]),
+            Expression.ListInstance([]),
 
             new Expression.Literal(
                 PineValueAsInteger.ValueFromSignedInteger(1)),
@@ -33,15 +33,15 @@ public class EncodePineExpressionAsJsonTests
 
             // Function 'isPineList' from the core libraries.
             new Expression.KernelApplication(
-            input: new Expression.List(
+            input: Expression.ListInstance(
                 [new Expression.KernelApplication(
-                    input: new Expression.List(
+                    input: Expression.ListInstance(
                         [new Expression.Literal(
                             PineValueAsInteger.ValueFromSignedInteger(
                                 0)), new Expression.KernelApplication(
                             input: new Expression.KernelApplication(
                                 input: new Expression.KernelApplication(
-                                    input: new Expression.List(
+                                    input: Expression.ListInstance(
                                         [new Expression.Literal(
                                             PineValueAsInteger.ValueFromSignedInteger(
                                                 1)), new Expression.Environment()]),
@@ -72,7 +72,7 @@ public class EncodePineExpressionAsJsonTests
         IReadOnlyList<IReadOnlyList<Expression>> testCases =
             [
             [Expression.EnvironmentInstance],
-            [new Expression.List([])],
+            [Expression.ListInstance([])],
 
             [new Expression.Literal(
                 PineValueAsInteger.ValueFromSignedInteger(1))],

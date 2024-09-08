@@ -27,7 +27,7 @@ public class PineValueCompositionTests
                         (name: "ABC ä 😀",
                         component: TreeNodeWithStringPath.Blob(new byte[]{0,1,2,3}) ),
                     ]),
-                expectedOutput = PineValue.List(
+                expectedOutput = (PineValue)PineValue.List(
                     [
                         PineValue.List(
                             [
@@ -64,13 +64,16 @@ public class PineValueCompositionTests
         {
             new
             {
-                input = PineValue.Blob([0,1,2]),
+                input =
+                PineValue.Blob([0,1,2]),
+
                 expectedOutput = Result<IReadOnlyList<(int index, string name)>, TreeNodeWithStringPath>.ok(
                     TreeNodeWithStringPath.Blob(new byte[]{0,1,2}))
             },
             new
             {
-                input = PineValue.List(
+                input =
+                (PineValue)PineValue.List(
                     elements:
                     [
                         PineValue.List(

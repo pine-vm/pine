@@ -15,6 +15,8 @@ namespace TestElmTime;
 [TestClass]
 public class PGOTests
 {
+    static readonly PineVMParseCache ParseCache = new PineVMParseCache();
+
     [TestMethod]
     public void PGO_reduces_Elm_record_access()
     {
@@ -59,7 +61,8 @@ public class PGOTests
             ElmInteractiveEnvironment.ParseFunctionFromElmModule(
                 interactiveEnvironment: interactiveEnvironmentValue,
                 moduleName: "Test",
-                declarationName: "usingRecordAccess")
+                declarationName: "usingRecordAccess",
+                ParseCache)
             .Extract(err => throw new Exception(err));
 
         var usingRecordAccessScenarios = new[]
@@ -334,8 +337,7 @@ public class PGOTests
             {
                 var exprValueHash =
                     PineValueHashTree.ComputeHash(
-                        ExpressionEncoding.EncodeExpressionAsValue(exprEnvClasses.Key)
-                        .Extract(err => throw new Exception(err)));
+                        ExpressionEncoding.EncodeExpressionAsValue(exprEnvClasses.Key));
 
                 for (var i = 0; i < exprEnvClasses.Value.Count; i++)
                 {
@@ -445,7 +447,8 @@ public class PGOTests
             ElmInteractiveEnvironment.ParseFunctionFromElmModule(
                 interactiveEnvironment: interactiveEnvironmentValue,
                 moduleName: "Test",
-                declarationName: "usingRecordUpdate")
+                declarationName: "usingRecordUpdate",
+                ParseCache)
             .Extract(err => throw new Exception(err));
 
         var recordUpdateScenarios = new[]
@@ -815,8 +818,7 @@ public class PGOTests
             {
                 var exprValueHash =
                     PineValueHashTree.ComputeHash(
-                        ExpressionEncoding.EncodeExpressionAsValue(exprEnvClasses.Key)
-                        .Extract(err => throw new Exception(err)));
+                        ExpressionEncoding.EncodeExpressionAsValue(exprEnvClasses.Key));
 
                 for (var i = 0; i < exprEnvClasses.Value.Count; i++)
                 {
@@ -946,7 +948,8 @@ public class PGOTests
             ElmInteractiveEnvironment.ParseFunctionFromElmModule(
                 interactiveEnvironment: interactiveEnvironmentValue,
                 moduleName: "Test",
-                declarationName: "usingListMap")
+                declarationName: "usingListMap",
+                ParseCache)
             .Extract(err => throw new Exception(err));
 
         {
@@ -977,7 +980,8 @@ public class PGOTests
                     ElmInteractiveEnvironment.ParseFunctionFromElmModule(
                         interactiveEnvironment: interactiveEnvironmentValue,
                         moduleName: functionToInspect.moduleName,
-                        declarationName: functionToInspect.declarationName)
+                        declarationName: functionToInspect.declarationName,
+                        ParseCache)
                     .Extract(err => throw new Exception(err));
 
                 var functionValueHash = PineValueHashTree.ComputeHash(functionValue);
@@ -1215,8 +1219,7 @@ public class PGOTests
             {
                 var exprValueHash =
                     PineValueHashTree.ComputeHash(
-                        ExpressionEncoding.EncodeExpressionAsValue(exprEnvClasses.Key)
-                        .Extract(err => throw new Exception(err)));
+                        ExpressionEncoding.EncodeExpressionAsValue(exprEnvClasses.Key));
 
                 for (var i = 0; i < exprEnvClasses.Value.Count; i++)
                 {
@@ -1363,14 +1366,16 @@ public class PGOTests
             ElmInteractiveEnvironment.ParseFunctionFromElmModule(
                 interactiveEnvironment: interactiveEnvironmentValue,
                 moduleName: "Test",
-                declarationName: "usingDictFold")
+                declarationName: "usingDictFold",
+                ParseCache)
             .Extract(err => throw new Exception(err));
 
         var (_, dictFromListFunction) =
             ElmInteractiveEnvironment.ParseFunctionFromElmModule(
                 interactiveEnvironment: interactiveEnvironmentValue,
                 moduleName: "Dict",
-                declarationName: "fromList")
+                declarationName: "fromList",
+                ParseCache)
             .Extract(err => throw new Exception(err));
 
         {
@@ -1406,7 +1411,8 @@ public class PGOTests
                     ElmInteractiveEnvironment.ParseFunctionFromElmModule(
                         interactiveEnvironment: interactiveEnvironmentValue,
                         moduleName: functionToInspect.moduleName,
-                        declarationName: functionToInspect.declarationName)
+                        declarationName: functionToInspect.declarationName,
+                        ParseCache)
                     .Extract(err => throw new Exception(err));
 
                 var functionValueHash = PineValueHashTree.ComputeHash(functionValue);
@@ -1596,8 +1602,7 @@ public class PGOTests
             {
                 var exprValueHash =
                     PineValueHashTree.ComputeHash(
-                        ExpressionEncoding.EncodeExpressionAsValue(exprEnvClasses.Key)
-                        .Extract(err => throw new Exception(err)));
+                        ExpressionEncoding.EncodeExpressionAsValue(exprEnvClasses.Key));
 
                 for (var i = 0; i < exprEnvClasses.Value.Count; i++)
                 {

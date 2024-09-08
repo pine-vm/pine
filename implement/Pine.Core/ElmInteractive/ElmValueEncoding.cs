@@ -1,6 +1,5 @@
 using Pine.PineVM;
 using System;
-using System.Collections.Frozen;
 using System.Collections.Generic;
 using System.Linq;
 
@@ -19,45 +18,32 @@ public static class ElmValueEncoding
         if (pineValue == PineVMValues.FalseValue)
             return ElmValue.FalseValue;
 
-        return pineValue switch
+        if (pineValue is PineValue.BlobValue blobValue)
         {
-            PineValue.BlobValue blobValue =>
-            PineBlobValueAsElmValue(blobValue),
+            return PineBlobValueAsElmValue(blobValue);
+        }
 
-            PineValue.ListValue listValue =>
-            PineListValueAsElmValue(listValue),
+        if (pineValue is PineValue.ListValue listValue)
+        {
+            return PineListValueAsElmValue(listValue);
+        }
 
-            _ =>
-            throw new NotImplementedException(
-                "Not implemented for value type: " + pineValue.GetType().FullName)
-        };
+        throw new NotImplementedException(
+            "Not implemented for value type: " + pineValue.GetType().FullName);
     }
 
     private static readonly ElmValue EmptyBlob = new ElmValue.ElmInternal("empty-blob");
 
     private static readonly ElmValue EmptyList = new ElmValue.ElmList([]);
 
-    private static readonly IReadOnlyList<Result<string, ElmValue>> InternedBlobSingle =
+    private static readonly IReadOnlyList<Result<string, ElmValue>> ReusedBlobSingle =
         [..Enumerable.Range(0, 0xff)
         .Select(b => PineBlobValueAsElmValue((PineValue.BlobValue)PineValue.Blob([(byte)b])))];
 
-    private static readonly IReadOnlyList<Result<string, ElmValue>> InternedBlobTuple =
+    private static readonly IReadOnlyList<Result<string, ElmValue>> ReusedBlobTuple =
         [..Enumerable.Range(0, 0xff)
         .SelectMany(b1 => Enumerable.Range(0, 0xff)
         .Select(b2 => PineBlobValueAsElmValue((PineValue.BlobValue)PineValue.Blob([(byte)b1, (byte)b2]))))];
-
-    private static readonly IReadOnlyList<PineValue.ListValue> InternedListPineValues =
-        [..PopularValues.PopularStrings
-        .Select(s => (PineValue.ListValue) PineValueAsString.ValueFromString(s)),
-        ..PineValue.InternedBlobs
-        .Select(b => (PineValue.ListValue)ElmValueAsPineValue(ElmValueInterop.PineValueEncodedAsInElmCompiler(b)))
-        ];
-
-    private static readonly FrozenDictionary<PineValue.ListValue, Result<string, ElmValue>> InternedListElmValues =
-        InternedListPineValues
-        .ToFrozenDictionary(
-            keySelector: list => list,
-            elementSelector: PineListValueAsElmValue);
 
     public static Result<string, ElmValue> PineBlobValueAsElmValue(
         PineValue.BlobValue blobValue) =>
@@ -65,10 +51,10 @@ public static class ElmValueEncoding
         ?
         EmptyBlob
         :
-        blobValue.Bytes.Length is 1 && InternedBlobSingle is { } internedBlobSingle ?
+        blobValue.Bytes.Length is 1 && ReusedBlobSingle is { } internedBlobSingle ?
         internedBlobSingle[blobValue.Bytes.Span[0]]
         :
-        blobValue.Bytes.Length is 2 && InternedBlobTuple is { } internedBlobTuple ?
+        blobValue.Bytes.Length is 2 && ReusedBlobTuple is { } internedBlobTuple ?
         internedBlobTuple[blobValue.Bytes.Span[0] * 0xff + blobValue.Bytes.Span[1]]
         :
         (blobValue.Bytes.Span[0] switch
@@ -88,7 +74,7 @@ public static class ElmValueEncoding
             new ElmValue.ElmInternal("___error_skipped_large_blob___")
             :
             PineValueAsInteger.UnsignedIntegerFromValue(blobValue)
-            .Map(bigInt => ElmValue.Char((int)bigInt))
+            .Map(bigInt => ElmValue.CharInstance((int)bigInt))
         });
 
     public static Result<string, ElmValue> PineListValueAsElmValue(PineValue.ListValue listValue)
@@ -96,8 +82,8 @@ public static class ElmValueEncoding
         if (listValue.Elements.Count is 0)
             return EmptyList;
 
-        if (InternedListElmValues?.TryGetValue(listValue, out var interned) ?? false && interned is not null)
-            return interned;
+        if (ReusedInstances.Instance.ElmValueDecoding?.TryGetValue(listValue, out var reused) ?? false)
+            return reused;
 
         {
             if (listValue.Elements.Count is 2)
@@ -223,7 +209,7 @@ public static class ElmValueEncoding
                                         }
 
                                         if (!failedTagArguments)
-                                            return new ElmValue.ElmTag(tagName, tagArgumentsListResults);
+                                            return ElmValue.TagInstance(tagName, tagArgumentsListResults);
                                     }
                                 }
                             }
@@ -249,7 +235,8 @@ public static class ElmValueEncoding
             if (itemAsElmValueResult is Result<string, ElmValue>.Err err)
                 return "Failed to convert list item [" + i + "]: " + err.Value;
 
-            throw new NotImplementedException("Unexpected result type: " + itemAsElmValueResult.GetType().FullName);
+            throw new NotImplementedException(
+                "Unexpected result type: " + itemAsElmValueResult.GetType().FullName);
         }
 
         if (itemsAsElmValues.Length is 0)
@@ -394,15 +381,26 @@ public static class ElmValueEncoding
         return recordFields;
     }
 
-    public static PineValue ElmValueAsPineValue(ElmValue elmValue)
+    public static PineValue ElmValueAsPineValue(ElmValue elmValue) =>
+        ElmValueAsPineValue(
+            elmValue,
+            ReusedInstances.Instance.ElmValueEncoding);
+
+    public static PineValue ElmValueAsPineValue(
+        ElmValue elmValue,
+        IReadOnlyDictionary<ElmValue, PineValue>? reusableEncoding)
     {
+        if (reusableEncoding?.TryGetValue(elmValue, out var reused) ?? false)
+            return reused;
+
         return
             elmValue switch
             {
                 ElmValue.ElmList elmList =>
-                PineValue.List([.. elmList.Elements.Select(ElmValueAsPineValue)]),
+                PineValue.List(
+                    [.. elmList.Elements.Select(item => ElmValueAsPineValue(item, reusableEncoding))]),
 
-                ElmValue.CharObject elmChar =>
+                ElmValue.ElmChar elmChar =>
                 PineValueAsInteger.ValueFromUnsignedInteger(elmChar.Value)
                 .Extract(err => throw new Exception(err)),
 
@@ -417,11 +415,12 @@ public static class ElmValueEncoding
                 ElmValue.ElmTag elmTag =>
                 PineValue.List(
                     [PineValueAsString.ValueFromString(elmTag.TagName),
-                        PineValue.List([..elmTag.Arguments.Select(ElmValueAsPineValue)])]),
+                        PineValue.List(
+                            [..elmTag.Arguments.Select(item => ElmValueAsPineValue(item,reusableEncoding))])]),
 
                 ElmValue.ElmRecord elmRecord =>
                 ElmRecordAsPineValue(
-                    [.. elmRecord.Fields.Select(field => (field.FieldName, ElmValueAsPineValue(field.Value)))]),
+                    [.. elmRecord.Fields.Select(field => (field.FieldName, ElmValueAsPineValue(field.Value, reusableEncoding)))]),
 
                 _ =>
                 throw new NotImplementedException(

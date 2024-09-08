@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Frozen;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
@@ -33,7 +32,7 @@ public class PineVM : IPineVM
 
     private readonly bool disablePrecompiled;
 
-    private readonly PineVMParseCache parseCache = new();
+    public readonly PineVMParseCache parseCache = new();
 
     private readonly IReadOnlyDictionary<PineValue, Func<EvalExprDelegate, PineValue, Result<string, PineValue>>>? overrideInvocations;
 
@@ -651,7 +650,7 @@ public class PineVM : IPineVM
                             conditional.trueBranch,
                             underConditional: true);
 
-                        return new Expression.Conditional(
+                        return Expression.ConditionalInstance(
                             condition: conditionInlined,
                             falseBranch: falseBranchInlined,
                             trueBranch: trueBranchInlined);
@@ -696,14 +695,14 @@ public class PineVM : IPineVM
                     {
                         if (indexPath is ExprMappedToParentEnv.LiteralInParentEnv asLiteral)
                         {
-                            return new Expression.Literal(asLiteral.Value);
+                            return Expression.LiteralInstance(asLiteral.Value);
                         }
 
                         if (indexPath is ExprMappedToParentEnv.PathInParentEnv pathInParentEnv)
                         {
                             if (envConstraintId?.TryGetValue(pathInParentEnv.Path) is { } value)
                             {
-                                return new Expression.Literal(value);
+                                return Expression.LiteralInstance(value);
                             }
                         }
                     }
@@ -1344,7 +1343,7 @@ public class PineVM : IPineVM
                 var frameParseAndEvalCount = parseAndEvalCount - currentFrame.BeginParseAndEvalCount;
                 var frameStackFrameCount = stackFrameCount - currentFrame.BeginStackFrameCount;
 
-                if (frameInstructionCount + frameStackFrameCount * 100 > 1_000 && EvalCache is { } evalCache)
+                if (frameInstructionCount + frameStackFrameCount * 100 > 700 && EvalCache is { } evalCache)
                 {
                     evalCache.TryAdd(
                         new EvalCacheEntryKey(currentFrameExprValue, currentFrame.EnvironmentValue),
@@ -1366,8 +1365,7 @@ public class PineVM : IPineVM
             if (stack.Count is 0)
             {
                 var rootExprValue =
-                    ExpressionEncoding.EncodeExpressionAsValue(rootExpression)
-                    .Extract(err => throw new Exception("Failed to encode root expression: " + err));
+                    ExpressionEncoding.EncodeExpressionAsValue(rootExpression);
 
                 return new EvaluationReport(
                     ExpressionValue: rootExprValue,
@@ -1540,13 +1538,16 @@ public class PineVM : IPineVM
                     }
 
                     if (!disablePrecompiled &&
-                        Precompiled.SelectPrecompiled(parseOk.Value, environmentValue) is { } precompiledDelegate)
+                        Precompiled.SelectPrecompiled(parseOk.Value, environmentValue, parseCache) is { } precompiledDelegate)
                     {
                         var precompiledResult = precompiledDelegate();
 
                         switch (precompiledResult)
                         {
                             case Precompiled.PrecompiledResult.FinalValue finalValue:
+
+                                stackFrameCount += finalValue.StackFrameCount;
+
                                 currentFrame.PushInstructionResult(finalValue.Value);
 
                                 continue;
