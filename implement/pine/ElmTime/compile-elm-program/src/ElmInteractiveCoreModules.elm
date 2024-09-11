@@ -345,10 +345,7 @@ always a _ =
 
 not : Bool -> Bool
 not bool =
-    if Pine_kernel.equal [ bool, True ] then
-        False
-    else
-        True
+    Pine_kernel.equal [ bool, False ]
 
 
 {-| Compare any two comparable values. Comparable values include `String`,
