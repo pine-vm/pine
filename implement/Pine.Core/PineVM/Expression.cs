@@ -18,6 +18,13 @@ public delegate ParseExprDelegate OverrideParseExprDelegate(ParseExprDelegate pa
 [JsonConverter(typeof(JsonConverterForChoiceType))]
 public abstract record Expression
 {
+    public abstract int SubexpressionCount { get; }
+
+    /// <summary>
+    /// True if the expression itself or any its subexpressions is of type <see cref="Environment"/>.
+    /// </summary>
+    public abstract bool ReferencesEnvironment { get; }
+
     public static readonly Expression EnvironmentInstance = new Environment();
 
     public static readonly Literal LiteralEmptyListInstance =
@@ -76,12 +83,21 @@ public abstract record Expression
 
     public record Literal(
         PineValue Value)
-        : Expression;
+        : Expression
+    {
+        public override int SubexpressionCount { get; } = 0;
+
+        public override bool ReferencesEnvironment { get; } = false;
+    }
 
     public record List
         : Expression
     {
         private readonly int slimHashCode;
+
+        public override int SubexpressionCount { get; }
+
+        public override bool ReferencesEnvironment { get; } = false;
 
         public IReadOnlyList<Expression> items { get; }
 
@@ -96,6 +112,16 @@ public abstract record Expression
             items = listKey.Items;
 
             slimHashCode = listKey.slimHashCode;
+
+            SubexpressionCount = items.Count;
+
+            for (int i = 0; i < items.Count; ++i)
+            {
+                SubexpressionCount += items[i].SubexpressionCount;
+
+                if (items[i].ReferencesEnvironment)
+                    ReferencesEnvironment = true;
+            }
         }
 
         public virtual bool Equals(List? other)
@@ -156,16 +182,54 @@ public abstract record Expression
         }
     }
 
-    public record ParseAndEval(
-        Expression encoded,
-        Expression environment)
-        : Expression;
-
-    public record KernelApplication(
-        string function,
-        Expression input)
+    public record ParseAndEval
         : Expression
     {
+        public Expression encoded { get; }
+
+        public Expression environment { get; }
+
+        public override int SubexpressionCount { get; }
+
+        public override bool ReferencesEnvironment { get; }
+
+        public ParseAndEval(
+            Expression encoded,
+            Expression environment)
+        {
+            this.encoded = encoded;
+            this.environment = environment;
+
+            SubexpressionCount =
+                encoded.SubexpressionCount + environment.SubexpressionCount + 2;
+
+            ReferencesEnvironment =
+                encoded.ReferencesEnvironment || environment.ReferencesEnvironment;
+        }
+    }
+
+    public record KernelApplication
+        : Expression
+    {
+        public string function { get; }
+
+        public Expression input { get; }
+
+        public override int SubexpressionCount { get; }
+
+        public override bool ReferencesEnvironment { get; }
+
+        public KernelApplication(
+            string function,
+            Expression input)
+        {
+            this.function = function;
+            this.input = input;
+
+            SubexpressionCount = input.SubexpressionCount + 1;
+            ReferencesEnvironment = input.ReferencesEnvironment;
+        }
+
         public virtual bool Equals(KernelApplication? other)
         {
             if (other is not { } notNull)
@@ -198,6 +262,10 @@ public abstract record Expression
 
         public Expression trueBranch { get; }
 
+        public override int SubexpressionCount { get; }
+
+        public override bool ReferencesEnvironment { get; }
+
         internal Conditional(
             Expression condition,
             Expression falseBranch,
@@ -215,6 +283,17 @@ public abstract record Expression
             trueBranch = conditionalStruct.TrueBranch;
 
             slimHashCode = conditionalStruct.slimHashCode;
+
+            SubexpressionCount =
+                condition.SubexpressionCount +
+                falseBranch.SubexpressionCount +
+                trueBranch.SubexpressionCount +
+                3;
+
+            ReferencesEnvironment =
+                condition.ReferencesEnvironment ||
+                falseBranch.ReferencesEnvironment ||
+                trueBranch.ReferencesEnvironment;
         }
 
         public virtual bool Equals(Conditional? other)
@@ -279,15 +358,64 @@ public abstract record Expression
         }
     }
 
-    public record Environment : Expression;
+    public record Environment : Expression
+    {
+        public override int SubexpressionCount { get; } = 0;
 
-    public record StringTag(
-        string tag,
-        Expression tagged)
-        : Expression;
+        public override bool ReferencesEnvironment { get; } = true;
+    }
+
+    public record StringTag
+        : Expression
+    {
+        public string tag { get; }
+
+        public Expression tagged { get; }
+
+        public override int SubexpressionCount { get; }
+
+        public override bool ReferencesEnvironment { get; }
+
+        public readonly int slimHashCode;
+
+        public StringTag(
+            string tag,
+            Expression tagged)
+        {
+            this.tag = tag;
+            this.tagged = tagged;
+
+            SubexpressionCount = tagged.SubexpressionCount + 1;
+            ReferencesEnvironment = tagged.ReferencesEnvironment;
+
+            slimHashCode = HashCode.Combine(tag, tagged);
+        }
+
+        public override int GetHashCode() =>
+            slimHashCode;
+
+        public virtual bool Equals(StringTag? other)
+        {
+            if (ReferenceEquals(other, this))
+                return true;
+
+            if (other is null)
+                return false;
+
+            return
+                other.slimHashCode == slimHashCode &&
+                other.tag == tag &&
+                other.tagged == tagged;
+        }
+    }
 
     public record StackReferenceExpression(int offset)
-        : Expression;
+        : Expression
+    {
+        public override int SubexpressionCount { get; } = 0;
+
+        public override bool ReferencesEnvironment { get; } = false;
+    }
 
     /// <summary>
     /// Fusion of the two applications of the kernel functions 'skip' and 'head',
@@ -296,8 +424,14 @@ public abstract record Expression
     public record KernelApplications_Skip_Head_Path(
         ReadOnlyMemory<int> SkipCounts,
         Expression Argument)
-        : Expression
+    : Expression
     {
+        public override int SubexpressionCount { get; } =
+            Argument.SubexpressionCount + 1;
+
+        public override bool ReferencesEnvironment { get; } =
+            Argument.ReferencesEnvironment;
+
         public virtual bool Equals(KernelApplications_Skip_Head_Path? other)
         {
             if (other is null)
@@ -328,47 +462,73 @@ public abstract record Expression
     public record KernelApplication_Equal_Two(
         Expression left,
         Expression right)
-        : Expression;
+        : Expression
+    {
+        public override int SubexpressionCount { get; } =
+            left.SubexpressionCount + right.SubexpressionCount + 2;
 
-    /// <summary>
-    /// Returns true if the expression is independent of the environment, that is none of the expressions in the tree contain an <see cref="Environment"/>.
-    /// </summary>
-    public static bool IsIndependent(Expression expression) =>
-        expression switch
+        public override bool ReferencesEnvironment { get; } =
+            left.ReferencesEnvironment || right.ReferencesEnvironment;
+    }
+
+    public static IReadOnlySet<Expression> CollectAllComponentsFromRoots(
+        IEnumerable<Expression> roots)
+    {
+        var components = new HashSet<Expression>();
+
+        var stack = new Stack<Expression>(roots);
+
+        while (stack.TryPop(out var expression))
         {
-            Environment =>
-            false,
+            if (components.Contains(expression))
+                continue;
 
-            Literal =>
-            true,
+            components.Add(expression);
 
-            List list =>
-            list.items.All(IsIndependent),
+            IReadOnlyList<Expression> childItems =
+                expression switch
+                {
+                    List listExpression =>
+                    listExpression.items,
 
-            ParseAndEval decodeAndEvaluate =>
-            IsIndependent(decodeAndEvaluate.encoded) && IsIndependent(decodeAndEvaluate.environment),
+                    Conditional conditionalExpression =>
+                    [
+                        conditionalExpression.condition,
+                        conditionalExpression.falseBranch,
+                        conditionalExpression.trueBranch
+                    ],
 
-            KernelApplication kernelApplication =>
-            IsIndependent(kernelApplication.input),
+                    KernelApplication kernelApplicationExpression =>
+                    [kernelApplicationExpression.input],
 
-            Conditional conditional =>
-            IsIndependent(conditional.condition) && IsIndependent(conditional.trueBranch) && IsIndependent(conditional.falseBranch),
+                    ParseAndEval parseAndEval =>
+                    [parseAndEval.environment, parseAndEval.encoded],
 
-            StringTag stringTag =>
-            IsIndependent(stringTag.tagged),
+                    StringTag stringTagExpression =>
+                    [stringTagExpression.tagged],
 
-            StackReferenceExpression =>
-            false,
+                    Literal =>
+                    [],
 
-            KernelApplications_Skip_Head_Path fused =>
-            IsIndependent(fused.Argument),
+                    Environment =>
+                    [],
 
-            KernelApplication_Equal_Two fused =>
-            IsIndependent(fused.left) && IsIndependent(fused.right),
+                    StackReferenceExpression =>
+                    [],
 
-            _ =>
-            throw new NotImplementedException(),
-        };
+                    _ =>
+                    throw new NotImplementedException(
+                        "Unexpected expression type: " + expression.GetType())
+                };
+
+            foreach (var item in childItems)
+            {
+                stack.Push(item);
+            }
+        }
+
+        return components;
+    }
 
     public static IEnumerable<Expression> EnumerateSelfAndDescendants(
         Expression expression) =>
@@ -444,7 +604,8 @@ public abstract record Expression
                     break;
 
                 default:
-                    throw new NotImplementedException("Unknown expression type: " + expression.GetType().FullName);
+                    throw new NotImplementedException(
+                        "Unknown expression type: " + expression.GetType().FullName);
             }
         }
     }

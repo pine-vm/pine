@@ -597,7 +597,7 @@ public class PineVM : IPineVM
                 return inlinedFinal;
             }
 
-            if (Expression.IsIndependent(parseAndEvalExpr.encoded))
+            if (!parseAndEvalExpr.encoded.ReferencesEnvironment)
             {
                 if (CompilePineToDotNet.ReducePineExpression.TryEvaluateExpressionIndependent(parseAndEvalExpr.encoded) is
                     Result<string, PineValue>.Ok evalExprOk)
@@ -1201,11 +1201,14 @@ public class PineVM : IPineVM
                 if (ExpressionLargeEnoughForCSE(list.items[i]))
                     return true;
             }
-
-            return false;
         }
 
-        return false;
+        if (expression is Expression.StringTag stringTag)
+        {
+            return ExpressionLargeEnoughForCSE(stringTag.tagged);
+        }
+
+        return 10 < expression.SubexpressionCount;
     }
 
     public static Expression? TryFuseStep(Expression expression)
@@ -1253,9 +1256,11 @@ public class PineVM : IPineVM
             return null;
         */
 
+        if (skipCountValueExpr.ReferencesEnvironment)
+            return null;
+
         if (Expression.EnumerateSelfAndDescendants(skipCountValueExpr)
             .Any(desc =>
-            desc is Expression.Environment ||
             desc is Expression.ParseAndEval ||
             desc is Expression.StackReferenceExpression))
         {

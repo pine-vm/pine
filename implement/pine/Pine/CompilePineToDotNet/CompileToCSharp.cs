@@ -1251,7 +1251,7 @@ public partial class CompileToCSharp
                     });
         }
 
-        if (Expression.IsIndependent(parseAndEvalExpr.encoded))
+        if (!parseAndEvalExpr.encoded.ReferencesEnvironment)
         {
             return
                 ReducePineExpression.TryEvaluateExpressionIndependent(parseAndEvalExpr.encoded)

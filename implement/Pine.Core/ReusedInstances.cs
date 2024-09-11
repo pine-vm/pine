@@ -10,8 +10,7 @@ public record ReusedInstances(
     IEnumerable<Expression> expressionRootsSource)
 {
     public static readonly ReusedInstances Instance =
-        new(
-            expressionRootsSource: ExpressionsSource());
+        new(expressionRootsSource: ExpressionsSource());
 
     public FrozenDictionary<PineValue.ListValue.ListValueStruct, PineValue.ListValue>? ListValues { private set; get; }
 
@@ -155,24 +154,12 @@ public record ReusedInstances(
             var expressionsRoots =
                 expressionRootsSource.ToList();
 
-
-            var allExpressionDescendants = new HashSet<Expression>();
-
-            /*
-             * TODO: Optimize collecting all components and sorting by size.
-             * */
-
-            foreach (var expressionRoot in expressionsRoots)
-            {
-                foreach (var descendant in Expression.EnumerateSelfAndDescendants(expressionRoot))
-                {
-                    allExpressionDescendants.Add(descendant);
-                }
-            }
+            var allExpressionDescendants =
+                Expression.CollectAllComponentsFromRoots(expressionsRoots);
 
             var allDescendantsOrdered =
                 allExpressionDescendants
-                .OrderBy(expression => Expression.EnumerateSelfAndDescendants(expression).Count())
+                .OrderBy(expression => expression.SubexpressionCount)
                 .ToList();
 
             var reusedInstancesInConstruction = new Dictionary<Expression, Expression>();

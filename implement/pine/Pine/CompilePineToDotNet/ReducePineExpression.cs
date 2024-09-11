@@ -140,7 +140,7 @@ public class ReducePineExpression
 
         Expression? AttemptReduceViaEval()
         {
-            if (Expression.IsIndependent(expression))
+            if (!expression.ReferencesEnvironment)
             {
                 try
                 {
@@ -148,7 +148,7 @@ public class ReducePineExpression
                         TryEvaluateExpressionIndependent(expression)
                         .Unpack(
                             fromErr: _ => null,
-                            fromOk: literalValue => Expression.LiteralInstance(literalValue));
+                            fromOk: Expression.LiteralInstance);
                 }
                 catch (ParseExpressionException)
                 {
@@ -166,6 +166,12 @@ public class ReducePineExpression
         switch (expression)
         {
             case Expression.KernelApplication rootKernelApp:
+
+                Expression.KernelApplication continueWithReducedInput(Expression newInput) =>
+                    new(
+                        function: rootKernelApp.function,
+                        input: newInput);
+
                 switch (rootKernelApp.function)
                 {
                     case nameof(KernelFunction.equal):
@@ -286,17 +292,14 @@ public class ReducePineExpression
                                                         var aggregateSkipCount = outerSkipCountClamped + innerSkipCountClamped;
 
                                                         return
-                                                            rootKernelApp
-                                                            with
-                                                            {
-                                                                input = Expression.ListInstance(
+                                                            continueWithReducedInput(
+                                                                Expression.ListInstance(
                                                                     [
                                                                     Expression.LiteralInstance(
                                                                         PineValueAsInteger.ValueFromSignedInteger(aggregateSkipCount)),
                                                                     innerSkipInputList.items[1]
                                                                     ]
-                                                                )
-                                                            };
+                                                                ));
                                                     }
                                                 }
                                             }
@@ -362,11 +365,7 @@ public class ReducePineExpression
                                         }
 
                                         return
-                                            rootKernelApp
-                                            with
-                                            {
-                                                input = Expression.ListInstance(nonEmptyItems)
-                                            };
+                                            continueWithReducedInput(Expression.ListInstance(nonEmptyItems));
                                     }
                                 }
 
@@ -464,7 +463,7 @@ public class ReducePineExpression
                             conditional.condition,
                             envConstraintId: envConstraintId);
 
-                    if (Expression.IsIndependent(condition))
+                    if (!condition.ReferencesEnvironment)
                     {
                         return
                             TryEvaluateExpressionIndependent(condition)
@@ -628,11 +627,9 @@ public class ReducePineExpression
 
                     return
                         (
-                        kernelApp
-                        with
-                        {
-                            input = argumentTransform.expr
-                        },
+                        new Expression.KernelApplication(
+                            function: kernelApp.function,
+                            input: argumentTransform.expr),
                         argumentTransform.referencesOriginalEnv);
                 }
 
