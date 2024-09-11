@@ -121,7 +121,7 @@
                     {
                       "List": [
                         [
-                          { "Literal": [ 2 ] },
+                          { "Literal": [ 1 ] },
                           {
                             "KernelApplication": [
                               "head",

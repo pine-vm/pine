@@ -357,7 +357,7 @@
                                                   [
                                                     [
                                                       { "ListAsString": "Literal" },
-                                                      [ 7 ]
+                                                      [ 6 ]
                                                     ],
                                                     [
                                                       { "ListAsString": "KernelApplication" },
@@ -404,7 +404,7 @@
                                         [
                                           [
                                             { "ListAsString": "Literal" },
-                                            [ 7 ]
+                                            [ 6 ]
                                           ],
                                           [
                                             { "ListAsString": "KernelApplication" },
@@ -440,7 +440,7 @@
                                             [
                                               [
                                                 { "ListAsString": "Literal" },
-                                                [ 4 ]
+                                                [ 3 ]
                                               ],
                                               [
                                                 { "ListAsString": "KernelApplication" },
@@ -503,7 +503,7 @@
                                                                   [
                                                                     [
                                                                       { "ListAsString": "Literal" },
-                                                                      [ 5 ]
+                                                                      [ 4 ]
                                                                     ],
                                                                     [
                                                                       { "ListAsString": "KernelApplication" },
@@ -553,7 +553,7 @@
                                                                   [
                                                                     [
                                                                       { "ListAsString": "Literal" },
-                                                                      [ 6 ]
+                                                                      [ 5 ]
                                                                     ],
                                                                     [
                                                                       { "ListAsString": "KernelApplication" },
@@ -680,29 +680,6 @@
                                     "head",
                                     {
                                       "KernelApplication": [
-                                        "skip",
-                                        {
-                                          "List": [
-                                            [
-                                              { "Literal": [ 4 ] },
-                                              {
-                                                "KernelApplication": [
-                                                  "head",
-                                                  { "Environment": [] }
-                                                ]
-                                              }
-                                            ]
-                                          ]
-                                        }
-                                      ]
-                                    }
-                                  ]
-                                },
-                                {
-                                  "KernelApplication": [
-                                    "head",
-                                    {
-                                      "KernelApplication": [
                                         "head",
                                         {
                                           "KernelApplication": [
@@ -767,7 +744,7 @@
                                             {
                                               "List": [
                                                 [
-                                                  { "Literal": [ 3 ] },
+                                                  { "Literal": [ 2 ] },
                                                   {
                                                     "KernelApplication": [
                                                       "head",

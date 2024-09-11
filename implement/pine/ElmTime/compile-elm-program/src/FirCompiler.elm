@@ -344,7 +344,7 @@ emitExpressionInDeclarationBlock stackBefore blockDeclarations mainExpression =
                         needsAdaptiveApplication =
                             case stackBefore.environmentFunctions of
                                 [] ->
-                                    expressionNeedsAdaptiveApplication mainExprInnerExpr
+                                    expressionNeedsAdaptiveApplication [] mainExprInnerExpr
 
                                 _ ->
                                     {-
@@ -446,17 +446,88 @@ emitDeclarationBlock stackBefore blockDeclarations (DeclBlockClosureCaptures con
         forwardedDecls =
             List.map Tuple.first stackBefore.environmentFunctions
 
+        emittedImports : List ( ( List String, String ), EnvironmentFunctionEntry, Pine.Expression )
+        emittedImports =
+            emittedImportsFromRoots
+                rootDependencies
+                stackBefore
+                dependenciesRelations
+                blockDeclarations
+
+        blockDeclarationsParsed : List ( String, DeclBlockFunctionEntry )
+        blockDeclarationsParsed =
+            List.map (Tuple.mapSecond parseFunctionParameters) blockDeclarations
+
+        knownFunctionParamCounts : List ( ( List String, String ), Int )
+        knownFunctionParamCounts =
+            List.concat
+                [ List.map
+                    (\( declName, DeclBlockFunctionEntry declParams _ ) ->
+                        ( ( [], declName )
+                        , List.length declParams
+                        )
+                    )
+                    blockDeclarationsParsed
+                , List.map
+                    (\( ( moduleName, declName ), EnvironmentFunctionEntry paramCount _, _ ) ->
+                        ( ( moduleName, declName )
+                        , paramCount
+                        )
+                    )
+                    emittedImports
+                ]
+
         usedAvailableEmittedForInternals : List ( ( List String, String ), EnvironmentFunctionEntry, Pine.Expression )
         usedAvailableEmittedForInternals =
             case forwardedDecls of
                 [] ->
                     let
+                        emittedImportsDependingOnGeneric : List String
+                        emittedImportsDependingOnGeneric =
+                            List.filterMap
+                                (\( ( _, declName ), EnvironmentFunctionEntry _ importedFunctionEnv, _ ) ->
+                                    case importedFunctionEnv of
+                                        LocalEnvironment localEnv ->
+                                            if List.member ( [], environmentFunctionPartialApplicationName ) localEnv then
+                                                Just declName
+
+                                            else
+                                                Nothing
+
+                                        _ ->
+                                            Nothing
+                                )
+                                emittedImports
+
                         contentsDependOnFunctionApplication : Bool
                         contentsDependOnFunctionApplication =
-                            List.any
-                                (\( _, declExpression ) -> expressionNeedsAdaptiveApplication declExpression)
-                                blockDeclarations
-                                || List.any expressionNeedsAdaptiveApplication rootDependencies
+                            if
+                                List.any
+                                    (\( _, EnvironmentFunctionEntry _ importedFunctionEnv, _ ) ->
+                                        case importedFunctionEnv of
+                                            LocalEnvironment localEnv ->
+                                                List.member ( [], environmentFunctionPartialApplicationName ) localEnv
+
+                                            _ ->
+                                                False
+                                    )
+                                    emittedImports
+                            then
+                                True
+
+                            else if
+                                List.any
+                                    (\( declName, declExpression ) ->
+                                        expressionNeedsAdaptiveApplication knownFunctionParamCounts declExpression
+                                    )
+                                    blockDeclarations
+                            then
+                                True
+
+                            else
+                                List.any
+                                    (\rootDep -> expressionNeedsAdaptiveApplication knownFunctionParamCounts rootDep)
+                                    rootDependencies
                     in
                     if contentsDependOnFunctionApplication then
                         [ ( ( [], environmentFunctionPartialApplicationName )
@@ -474,14 +545,6 @@ emitDeclarationBlock stackBefore blockDeclarations (DeclBlockClosureCaptures con
                        in a parent scope.
                     -}
                     []
-
-        emittedImports : List ( ( List String, String ), EnvironmentFunctionEntry, Pine.Expression )
-        emittedImports =
-            emittedImportsFromRoots
-                rootDependencies
-                stackBefore
-                dependenciesRelations
-                blockDeclarations
 
         usedAvailableEmitted : List ( ( List String, String ), EnvironmentFunctionEntry, Pine.Expression )
         usedAvailableEmitted =
@@ -860,8 +923,8 @@ emittedImportsFromRoots rootDependencies emitStack dependenciesRelations blockDe
 
 {-| Searches the tree of subexpressions for any that might require adaptive application.
 -}
-expressionNeedsAdaptiveApplication : Expression -> Bool
-expressionNeedsAdaptiveApplication expression =
+expressionNeedsAdaptiveApplication : List ( ( List String, String ), Int ) -> Expression -> Bool
+expressionNeedsAdaptiveApplication knownFunctionParamCounts expression =
     {-
        This function seems brittle because it needs to match the behavior of others, such as emitFunctionApplication.
        Changing something in the selection for inlining might require changes here as well.
@@ -872,50 +935,93 @@ expressionNeedsAdaptiveApplication expression =
             False
 
         ListExpression list ->
-            List.any expressionNeedsAdaptiveApplication list
+            List.any
+                (\item -> expressionNeedsAdaptiveApplication knownFunctionParamCounts item)
+                list
 
         KernelApplicationExpression _ input ->
-            expressionNeedsAdaptiveApplication input
+            expressionNeedsAdaptiveApplication knownFunctionParamCounts input
 
         ConditionalExpression condition falseBranch trueBranch ->
-            expressionNeedsAdaptiveApplication condition
-                || expressionNeedsAdaptiveApplication trueBranch
-                || expressionNeedsAdaptiveApplication falseBranch
+            expressionNeedsAdaptiveApplication knownFunctionParamCounts condition
+                || expressionNeedsAdaptiveApplication knownFunctionParamCounts trueBranch
+                || expressionNeedsAdaptiveApplication knownFunctionParamCounts falseBranch
 
         FunctionExpression _ functionBody ->
-            expressionNeedsAdaptiveApplication functionBody
+            expressionNeedsAdaptiveApplication knownFunctionParamCounts functionBody
 
         FunctionApplicationExpression funcExpr args ->
+            let
+                continueForOtherFunction () =
+                    case args of
+                        [] ->
+                            expressionNeedsAdaptiveApplication knownFunctionParamCounts funcExpr
+
+                        _ ->
+                            True
+            in
             case funcExpr of
                 LiteralExpression _ ->
                     {-
                        Whether that function should be inlined or not, in any case we should not need
                        to supply the generic function for adaptive application.
                     -}
-                    List.any expressionNeedsAdaptiveApplication args
+                    List.any
+                        (\arg -> expressionNeedsAdaptiveApplication knownFunctionParamCounts arg)
+                        args
+
+                ReferenceExpression moduleName declName ->
+                    case Common.assocListGet ( moduleName, declName ) knownFunctionParamCounts of
+                        Nothing ->
+                            continueForOtherFunction ()
+
+                        Just paramCount ->
+                            if paramCount == List.length args then
+                                expressionNeedsAdaptiveApplication knownFunctionParamCounts funcExpr
+
+                            else
+                                continueForOtherFunction ()
+
+                StringTagExpression _ tagged ->
+                    expressionNeedsAdaptiveApplication knownFunctionParamCounts tagged
 
                 _ ->
-                    case args of
-                        [] ->
-                            expressionNeedsAdaptiveApplication funcExpr
-
-                        _ ->
-                            True
+                    continueForOtherFunction ()
 
         DeclarationBlockExpression declarations innerExpression ->
+            let
+                blockFunctionParamCounts : List ( ( List String, String ), Int )
+                blockFunctionParamCounts =
+                    List.map
+                        (\( declName, declExpr ) ->
+                            ( ( [], declName )
+                            , case parseFunctionParameters declExpr of
+                                DeclBlockFunctionEntry params _ ->
+                                    List.length params
+                            )
+                        )
+                        declarations
+
+                newKnownFunctionParamCounts : List ( ( List String, String ), Int )
+                newKnownFunctionParamCounts =
+                    List.concat
+                        [ blockFunctionParamCounts
+                        , knownFunctionParamCounts
+                        ]
+            in
             List.any
-                (\( _, decl ) -> expressionNeedsAdaptiveApplication decl)
+                (\( _, decl ) -> expressionNeedsAdaptiveApplication newKnownFunctionParamCounts decl)
                 declarations
-                || expressionNeedsAdaptiveApplication innerExpression
+                || expressionNeedsAdaptiveApplication newKnownFunctionParamCounts innerExpression
 
         ReferenceExpression _ _ ->
             False
 
         StringTagExpression _ tagged ->
-            expressionNeedsAdaptiveApplication tagged
+            expressionNeedsAdaptiveApplication knownFunctionParamCounts tagged
 
         PineFunctionApplicationExpression _ argument ->
-            expressionNeedsAdaptiveApplication argument
+            expressionNeedsAdaptiveApplication knownFunctionParamCounts argument
 
 
 {-| Derive an ordered list of recursion domains from a dictionary of dependencies with their transitive dependencies.

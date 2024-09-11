@@ -209,20 +209,8 @@
                                       "head",
                                       {
                                         "KernelApplication": [
-                                          "skip",
-                                          {
-                                            "List": [
-                                              [
-                                                { "Literal": [ 1 ] },
-                                                {
-                                                  "KernelApplication": [
-                                                    "head",
-                                                    { "Environment": [] }
-                                                  ]
-                                                }
-                                              ]
-                                            ]
-                                          }
+                                          "head",
+                                          { "Environment": [] }
                                         ]
                                       }
                                     ]
@@ -264,20 +252,8 @@
                                                       "head",
                                                       {
                                                         "KernelApplication": [
-                                                          "skip",
-                                                          {
-                                                            "List": [
-                                                              [
-                                                                { "Literal": [ 1 ] },
-                                                                {
-                                                                  "KernelApplication": [
-                                                                    "head",
-                                                                    { "Environment": [] }
-                                                                  ]
-                                                                }
-                                                              ]
-                                                            ]
-                                                          }
+                                                          "head",
+                                                          { "Environment": [] }
                                                         ]
                                                       }
                                                     ]
@@ -381,7 +357,7 @@
                         {
                           "List": [
                             [
-                              { "Literal": [ 2 ] },
+                              { "Literal": [ 1 ] },
                               {
                                 "KernelApplication": [
                                   "head",

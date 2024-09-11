@@ -137,7 +137,7 @@ public class Precompiled
         var listMemberExpressionValue =
             ExpressionEncoding.EncodeExpressionAsValue(listMemberExpression);
 
-        var eqExposedValue = popularValueDictionary["eq.exposed"];
+        var basicsEqExposedValue = popularValueDictionary["Basics.eq.exposed"];
 
 
         var dictGetExpression = popularExpressionDictionary["dictGet"];
@@ -151,7 +151,7 @@ public class Precompiled
             ExpressionEncoding.EncodeExpressionAsValue(dictGetAfterCompareExpression);
 
 
-        var compareExposedValue = popularValueDictionary["compare.exposed"];
+        var compareExposedValue = popularValueDictionary["Basics.compare.exposed"];
 
 
         var assocListGetExpression = popularExpressionDictionary["assocListGet"];
@@ -210,7 +210,6 @@ public class Precompiled
                     [0],
                     PineValue.List(
                         [
-                        adaptivePartialApplicationExpressionValue,
                         compareStringsExpressionValue,
                         isPineListExpressionValue,
                         compareExpressionValue,
@@ -232,7 +231,6 @@ public class Precompiled
                     [0],
                     PineValue.List(
                         [
-                        adaptivePartialApplicationExpressionValue,
                         dictToListExpressionValue,
                         dictKeysExpressionValue,
                         isPineBlobExpressionValue,
@@ -256,8 +254,7 @@ public class Precompiled
                     [0],
                     PineValue.List(
                         [
-                        adaptivePartialApplicationExpressionValue,
-                        eqExposedValue,
+                        basicsEqExposedValue,
                         listMemberExpressionValue,
                         ]))
                     ]);
@@ -282,7 +279,6 @@ public class Precompiled
                     [0],
                     PineValue.List(
                         [
-                        adaptivePartialApplicationExpressionValue,
                         listMapExpressionValue,
                         ]))
                     ]);
@@ -324,7 +320,6 @@ public class Precompiled
                     [0],
                     PineValue.List(
                         [
-                        adaptivePartialApplicationExpressionValue,
                         listFoldlExpressionValue,
                         ]))
                     ]);
@@ -345,8 +340,7 @@ public class Precompiled
                     [0],
                     PineValue.List(
                         [
-                        adaptivePartialApplicationExpressionValue,
-                        eqExposedValue,
+                        basicsEqExposedValue,
                         assocListGetExpressionValue,
                         ]))
                     ]);
@@ -366,7 +360,6 @@ public class Precompiled
                     [0],
                     PineValue.List(
                         [
-                        adaptivePartialApplicationExpressionValue,
                         compareExposedValue,
                         dictGetExpressionValue,
                         dictGetAfterCompareExpressionValue,
@@ -444,7 +437,6 @@ public class Precompiled
                     [0],
                     PineValue.List(
                         [
-                        adaptivePartialApplicationExpressionValue,
                         countPineValueContentExpressionValue,
                         countPineListValueContentExpressionValue,
                         ]))
