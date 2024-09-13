@@ -1164,7 +1164,7 @@ public class Program
                 var elmEngineType = elmEngineOption.parseElmEngineTypeFromOption();
 
                 console.WriteLine(
-                    "---- Elm Interactive v" + AppVersionId + " using engine based on " + elmEngineType + " ----");
+                    "---- Elm Interactive v" + AppVersionId + " ----");
 
                 var contextAppPaths = contextAppOption.Values;
 
