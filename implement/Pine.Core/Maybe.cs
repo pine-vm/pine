@@ -1,7 +1,7 @@
 using System;
 using System.Text.Json.Serialization;
 
-namespace Pine;
+namespace Pine.Core;
 
 /// <summary>
 /// A choice type that represents values that may or may not exist.

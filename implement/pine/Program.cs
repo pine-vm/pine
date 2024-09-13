@@ -3,6 +3,7 @@ using ElmTime.JavaScript;
 using McMaster.Extensions.CommandLineUtils;
 using Microsoft.AspNetCore.Hosting;
 using Pine;
+using Pine.Core;
 using Pine.PineVM;
 using System;
 using System.Collections.Generic;
@@ -18,7 +19,7 @@ namespace ElmTime;
 
 public class Program
 {
-    public static string AppVersionId => "0.3.18";
+    public static string AppVersionId => "0.3.19";
 
     private static int AdminInterfaceDefaultPort => 4000;
 
@@ -1026,8 +1027,8 @@ public class Program
 
                             var syntaxContainerConfig =
                             new Pine.CompilePineToDotNet.SyntaxContainerConfig(
-                                containerTypeName: "container_type",
-                                dictionaryMemberName: "compiled_expressions_dictionary");
+                                ContainerTypeName: "container_type",
+                                DictionaryMemberName: "compiled_expressions_dictionary");
 
                             var compileResult =
                             ElmInteractive.InteractiveSessionPine.CompileForProfiledScenarios(

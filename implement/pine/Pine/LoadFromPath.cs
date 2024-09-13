@@ -1,3 +1,5 @@
+using Pine.Core;
+
 namespace Pine;
 
 public static class LoadFromPath

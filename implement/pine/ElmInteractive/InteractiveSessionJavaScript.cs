@@ -1,5 +1,5 @@
 using ElmTime.JavaScript;
-using Pine;
+using Pine.Core;
 using System;
 using System.Collections.Generic;
 using static ElmTime.ElmInteractive.IInteractiveSession;

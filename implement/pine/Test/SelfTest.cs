@@ -4,6 +4,7 @@ using System.Linq;
 using ElmTime.ElmInteractive;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Pine;
+using Pine.Core;
 
 namespace ElmTime.Test;
 

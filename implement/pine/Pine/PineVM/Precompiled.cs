@@ -1,4 +1,5 @@
 using ElmTime.ElmInteractive;
+using Pine.Core;
 using Pine.ElmInteractive;
 using System;
 using System.Collections.Concurrent;
@@ -610,7 +611,7 @@ public class Precompiled
         throw new ParseExpressionException("Error in case-of block: No matching branch.");
     }
 
-    static PrecompiledResult BasicsEq(
+    static PrecompiledResult.FinalValue BasicsEq(
         PineValue environment,
         PineVMParseCache parseCache)
     {
@@ -620,7 +621,7 @@ public class Precompiled
         return BasicsEq(argA, argB);
     }
 
-    static PrecompiledResult BasicsEq(PineValue a, PineValue b)
+    static PrecompiledResult.FinalValue BasicsEq(PineValue a, PineValue b)
     {
         var (isEq, stackFrameCount) = BasicsEqRecursive(a, b);
 
@@ -682,7 +683,7 @@ public class Precompiled
         throw new ParseExpressionException("Error in case-of block: No matching branch.");
     }
 
-    static PineValue DictToList(PineValue dict)
+    static PineValue.ListValue DictToList(PineValue dict)
     {
         return PineValue.List(DictToListRecursive(dict));
     }
@@ -714,11 +715,6 @@ public class Precompiled
         }
 
         throw new ParseExpressionException("Error in case-of block: No matching branch.");
-    }
-
-    static PineValue DictKeys(PineValue dict)
-    {
-        return PineValue.List(DictKeysRecursive(dict));
     }
 
     static IReadOnlyList<PineValue> DictKeysRecursive(PineValue dict)

@@ -1,7 +1,7 @@
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
-using Pine;
+using Pine.Core;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
@@ -54,11 +54,11 @@ public class CompilePineToDotNetTests
     {
         var syntax =
             Pine.CompilePineToDotNet.CompileTypeSyntax.TypeSyntaxFromType(
-                typeof(Pine.PineVM.EvalExprDelegate),
+                typeof(EvalExprDelegate),
                 usings: []);
 
         Assert.AreEqual(
-            "Pine.PineVM.EvalExprDelegate",
+            "Pine.Core.EvalExprDelegate",
             syntax.ToFullString());
     }
 
@@ -71,7 +71,7 @@ public class CompilePineToDotNetTests
                 usings: []);
 
         Assert.AreEqual(
-            "Pine.Result<System.String,System.Int32>",
+            "Pine.Core.Result<System.String,System.Int32>",
             syntax.ToFullString());
     }
 
@@ -84,7 +84,7 @@ public class CompilePineToDotNetTests
                 usings: []);
 
         Assert.AreEqual(
-            "System.Collections.Generic.IReadOnlyDictionary<Pine.PineValue,System.String>",
+            "System.Collections.Generic.IReadOnlyDictionary<Pine.Core.PineValue,System.String>",
             syntax.ToFullString());
     }
 
@@ -93,9 +93,9 @@ public class CompilePineToDotNetTests
     public void Test_compile_specialized_for_kernel_head()
     {
         var pineExpression =
-            new Pine.PineVM.Expression.KernelApplication(
-                function: nameof(Pine.PineVM.KernelFunction.head),
-                input: new Pine.PineVM.Expression.Environment());
+            new Expression.KernelApplication(
+                function: nameof(KernelFunction.head),
+                input: new Expression.Environment());
 
         var compiledFormattedExpression =
             CompiledFormattedCSharp(
@@ -105,7 +105,7 @@ public class CompilePineToDotNetTests
                         EnvItemsParamNames: [([], "environment")],
                         ArgumentEvalGenericName: "eval"),
                     CompilationUnit: new Pine.CompilePineToDotNet.CompilationUnitEnv(
-                        AvailableExpr: ImmutableDictionary<Pine.PineVM.Expression, Pine.CompilePineToDotNet.CompilationUnitEnvExprEntry>.Empty,
+                        AvailableExpr: ImmutableDictionary<Expression, Pine.CompilePineToDotNet.CompilationUnitEnvExprEntry>.Empty,
                         DefaultInterface: new Pine.CompilePineToDotNet.ExprFunctionCompilationInterface(EnvItemsParamNames: [], ArgumentEvalGenericName: "eval"))));
 
         var expectedSyntaxText = """
@@ -137,7 +137,7 @@ public class CompilePineToDotNetTests
     }
 
     static Pine.CompilePineToDotNet.CompiledExpression CompiledFormattedCSharp(
-        Pine.PineVM.Expression expression,
+        Expression expression,
         Pine.CompilePineToDotNet.FunctionCompilationEnv environment)
     {
         var compiledExpression =
@@ -166,60 +166,60 @@ public class CompilePineToDotNetTests
     {
         var testCases = new[]
         {
-            ((Pine.PineVM.Expression)new Pine.PineVM.Expression.Environment(),
+            ((Expression)new Expression.Environment(),
             (Pine.PineVM.ExprMappedToParentEnv?)new Pine.PineVM.ExprMappedToParentEnv.PathInParentEnv([])),
 
-            (Pine.PineVM.Expression.ListInstance([]),
+            (Expression.ListInstance([]),
             null),
 
-            (new Pine.PineVM.Expression.KernelApplication(
-                function: nameof(Pine.PineVM.KernelFunction.head),
-                input: new Pine.PineVM.Expression.Environment()),
+            (new Expression.KernelApplication(
+                function: nameof(KernelFunction.head),
+                input: new Expression.Environment()),
                 new Pine.PineVM.ExprMappedToParentEnv.PathInParentEnv([0])),
 
-            (new Pine.PineVM.Expression.KernelApplication(
-                function: nameof(Pine.PineVM.KernelFunction.head),
-                input: new Pine.PineVM.Expression.KernelApplication(
-                    function: nameof(Pine.PineVM.KernelFunction.head),
-                    input: new Pine.PineVM.Expression.Environment())),
+            (new Expression.KernelApplication(
+                function: nameof(KernelFunction.head),
+                input: new Expression.KernelApplication(
+                    function: nameof(KernelFunction.head),
+                    input: new Expression.Environment())),
                 new Pine.PineVM.ExprMappedToParentEnv.PathInParentEnv([0, 0])),
 
-            (new Pine.PineVM.Expression.KernelApplication(
-                function: nameof(Pine.PineVM.KernelFunction.head),
-                input: new Pine.PineVM.Expression.KernelApplication(
+            (new Expression.KernelApplication(
+                function: nameof(KernelFunction.head),
+                input: new Expression.KernelApplication(
                     function: "skip",
-                    input: Pine.PineVM.Expression.ListInstance(
-                        [ Pine.PineVM.Expression.LiteralInstance(PineValueAsInteger.ValueFromSignedInteger(13)),
-                        Pine.PineVM.Expression.EnvironmentInstance
+                    input: Expression.ListInstance(
+                        [ Expression.LiteralInstance(PineValueAsInteger.ValueFromSignedInteger(13)),
+                        Expression.EnvironmentInstance
                         ]))),
                 new Pine.PineVM.ExprMappedToParentEnv.PathInParentEnv([13])),
 
-            (new Pine.PineVM.Expression.KernelApplication(
-                function: nameof(Pine.PineVM.KernelFunction.head),
-                input: new Pine.PineVM.Expression.KernelApplication(
+            (new Expression.KernelApplication(
+                function: nameof(KernelFunction.head),
+                input: new Expression.KernelApplication(
                     function: "skip",
-                    input: Pine.PineVM.Expression.ListInstance(
-                        [ new Pine.PineVM.Expression.Literal(PineValueAsInteger.ValueFromSignedInteger(21)),
-                        new Pine.PineVM.Expression.KernelApplication(
-                            function: nameof(Pine.PineVM.KernelFunction.head),
-                            input: new Pine.PineVM.Expression.KernelApplication(
+                    input: Expression.ListInstance(
+                        [ new Expression.Literal(PineValueAsInteger.ValueFromSignedInteger(21)),
+                        new Expression.KernelApplication(
+                            function: nameof(KernelFunction.head),
+                            input: new Expression.KernelApplication(
                                 function: "skip",
-                                input: Pine.PineVM.Expression.ListInstance(
-                                    [ new Pine.PineVM.Expression.Literal(PineValueAsInteger.ValueFromSignedInteger(17)),
-                                    new Pine.PineVM.Expression.Environment()
+                                input: Expression.ListInstance(
+                                    [ new Expression.Literal(PineValueAsInteger.ValueFromSignedInteger(17)),
+                                    new Expression.Environment()
                                     ])))
                         ]))),
                 new Pine.PineVM.ExprMappedToParentEnv.PathInParentEnv([17,21])),
 
-            (new Pine.PineVM.Expression.KernelApplication(
-                function: nameof(Pine.PineVM.KernelFunction.head),
-                input: new Pine.PineVM.Expression.KernelApplication(
+            (new Expression.KernelApplication(
+                function: nameof(KernelFunction.head),
+                input: new Expression.KernelApplication(
                     function: "skip",
-                    input: Pine.PineVM.Expression.ListInstance(
-                        [ new Pine.PineVM.Expression.Literal(PineValueAsInteger.ValueFromSignedInteger(23)),
-                        new Pine.PineVM.Expression.KernelApplication(
-                            function: nameof(Pine.PineVM.KernelFunction.head),
-                            input: new Pine.PineVM.Expression.Environment())
+                    input: Expression.ListInstance(
+                        [ new Expression.Literal(PineValueAsInteger.ValueFromSignedInteger(23)),
+                        new Expression.KernelApplication(
+                            function: nameof(KernelFunction.head),
+                            input: new Expression.Environment())
                         ]))),
                 new Pine.PineVM.ExprMappedToParentEnv.PathInParentEnv([0,23])),
         };
@@ -252,8 +252,8 @@ public class CompilePineToDotNetTests
             new
             {
                 expr =
-                (Pine.PineVM.Expression)
-                new Pine.PineVM.Expression.Environment(),
+                (Expression)
+                new Expression.Environment(),
 
                 envConstraint =
                 Pine.PineVM.EnvConstraintId.Create(
@@ -266,10 +266,10 @@ public class CompilePineToDotNetTests
             new
             {
                 expr =
-                (Pine.PineVM.Expression)
-                new Pine.PineVM.Expression.KernelApplication(
-                    function: nameof(Pine.PineVM.KernelFunction.head),
-                    input: new Pine.PineVM.Expression.Environment()),
+                (Expression)
+                new Expression.KernelApplication(
+                    function: nameof(KernelFunction.head),
+                    input: new Expression.Environment()),
 
                 envConstraint =
                 Pine.PineVM.EnvConstraintId.Create(
@@ -282,16 +282,16 @@ public class CompilePineToDotNetTests
             new
             {
                 expr =
-                (Pine.PineVM.Expression)
-                new Pine.PineVM.Expression.KernelApplication(
-                    function: nameof(Pine.PineVM.KernelFunction.head),
+                (Expression)
+                new Expression.KernelApplication(
+                    function: nameof(KernelFunction.head),
                     input:
-                    new Pine.PineVM.Expression.KernelApplication(
+                    new Expression.KernelApplication(
                         function:"skip",
-                        input: Pine.PineVM.Expression.ListInstance(
+                        input: Expression.ListInstance(
                             [
-                            new Pine.PineVM.Expression.Literal(PineValueAsInteger.ValueFromSignedInteger(13)),
-                            new Pine.PineVM.Expression.Environment()
+                            new Expression.Literal(PineValueAsInteger.ValueFromSignedInteger(13)),
+                            new Expression.Environment()
                             ]))),
 
                 envConstraint =

@@ -1,6 +1,6 @@
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using MoreLinq;
-using Pine;
+using Pine.Core;
 using System.Linq;
 
 namespace TestElmTime;

@@ -4,7 +4,7 @@ using System.Collections.Immutable;
 using System.Linq;
 using System.Security.Cryptography;
 
-namespace Pine;
+namespace Pine.Core;
 
 public static class PineValueHashTree
 {

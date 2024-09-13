@@ -1,6 +1,5 @@
 using Microsoft.VisualStudio.TestTools.UnitTesting;
-using Pine;
-using Pine.PineVM;
+using Pine.Core;
 
 namespace TestElmTime;
 

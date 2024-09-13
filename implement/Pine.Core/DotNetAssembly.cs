@@ -5,7 +5,7 @@ using System.Diagnostics;
 using System.Linq;
 using System.Reflection;
 
-namespace Pine;
+namespace Pine.Core;
 
 public class DotNetAssembly
 {

@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Security.Cryptography;
 
-namespace Pine;
+namespace Pine.Core;
 
 public class CommonConversion
 {

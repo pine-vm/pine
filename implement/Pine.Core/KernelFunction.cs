@@ -1,9 +1,10 @@
+using Pine.PineVM;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
 
-namespace Pine.PineVM;
+namespace Pine.Core;
 
 #pragma warning disable IDE1006
 
@@ -221,7 +222,7 @@ public static class KernelFunction
 
             var reversed = blobValue.Bytes.ToArray();
 
-            MemoryExtensions.Reverse(reversed.AsMemory().Span);
+            reversed.AsMemory().Span.Reverse();
 
             return PineValue.Blob(reversed);
         }

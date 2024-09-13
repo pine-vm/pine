@@ -6,6 +6,7 @@ using System;
 using System.Linq;
 using System.Collections.Immutable;
 using System.Collections.Generic;
+using Pine.Core;
 
 namespace Pine.CompilePineToDotNet;
 
@@ -28,7 +29,7 @@ public static class PineCSharpSyntaxFactory
     };
 
     public static StatementSyntax BranchForEnvId(
-        PineVM.Expression expr,
+        Expression expr,
         PineVM.EnvConstraintId envConstraint,
         FunctionCompilationEnv compilationEnv,
         StatementSyntax[]? prependStatments)
@@ -37,12 +38,12 @@ public static class PineCSharpSyntaxFactory
             CompileToCSharp.InvocationExpressionForCompiledExpressionFunction(
                 currentEnv: new ExpressionCompilationEnvironment(
                     FunctionEnvironment: compilationEnv,
-                    LetBindings: ImmutableDictionary<PineVM.Expression, LetBinding>.Empty,
+                    LetBindings: ImmutableDictionary<Expression, LetBinding>.Empty,
                     ParentEnvironment: null,
                     EnvConstraint: envConstraint),
                 invokedExpr: expr,
                 envConstraint: envConstraint,
-                parseAndEvalEnvExpr: new PineVM.Expression.Environment())
+                parseAndEvalEnvExpr: new Expression.Environment())
             .Extract(err => throw new Exception(err));
 
         var branchInvocationBlock =
@@ -386,8 +387,8 @@ public static class PineCSharpSyntaxFactory
                             SyntaxFactory.Argument(messageExpr)))));
     }
 
-    public static PineVM.Expression BuildPineExpressionToGetItemFromPath(
-        PineVM.Expression compositionExpr,
+    public static Expression BuildPineExpressionToGetItemFromPath(
+        Expression compositionExpr,
         IReadOnlyList<int> path)
     {
         if (path.Count is 0)
@@ -402,17 +403,17 @@ public static class PineCSharpSyntaxFactory
             ?
             compositionExpr
             :
-            new PineVM.Expression.KernelApplication(
+            new Expression.KernelApplication(
                 function: "skip",
                 input:
-                PineVM.Expression.ListInstance(
+                Expression.ListInstance(
                     [
-                    PineVM.Expression.LiteralInstance(PineValueAsInteger.ValueFromSignedInteger(currentOffset)),
+                    Expression.LiteralInstance(PineValueAsInteger.ValueFromSignedInteger(currentOffset)),
                         compositionExpr
                     ]));
 
         var currentExpr =
-            new PineVM.Expression.KernelApplication(
+            new Expression.KernelApplication(
                 function: "head",
                 input: skippedExpr);
 
@@ -504,7 +505,7 @@ public static class PineCSharpSyntaxFactory
     }
 
     public static ExpressionSyntax PineValueFromBoolExpression(ExpressionSyntax expressionSyntax) =>
-        InvocationExpressionOnPineVMKernelFunctionClass(nameof(PineVM.KernelFunction.ValueFromBool))
+        InvocationExpressionOnPineVMKernelFunctionClass(nameof(KernelFunction.ValueFromBool))
         .WithArgumentList(
             SyntaxFactory.ArgumentList(
                 SyntaxFactory.SingletonSeparatedList(
@@ -543,7 +544,7 @@ public static class PineCSharpSyntaxFactory
                         SyntaxKind.SimpleMemberAccessExpression,
                         SyntaxFactory.IdentifierName("Pine"),
                         SyntaxFactory.IdentifierName("PineVM")),
-                    SyntaxFactory.IdentifierName(nameof(PineVM.KernelFunction))),
+                    SyntaxFactory.IdentifierName(nameof(KernelFunction))),
                 SyntaxFactory.IdentifierName(memberIdentifierName)));
 
     public static QualifiedNameSyntax EvalExprDelegateTypeSyntax =>
@@ -551,12 +552,12 @@ public static class PineCSharpSyntaxFactory
             SyntaxFactory.QualifiedName(
                 SyntaxFactory.IdentifierName("Pine"),
                 SyntaxFactory.IdentifierName("PineVM")),
-            SyntaxFactory.IdentifierName(nameof(PineVM.EvalExprDelegate)));
+            SyntaxFactory.IdentifierName(nameof(EvalExprDelegate)));
 
     public static QualifiedNameSyntax ExpressionEncodingClassQualifiedNameSyntax =>
         SyntaxFactory.QualifiedName(
             SyntaxFactory.QualifiedName(
                 SyntaxFactory.IdentifierName("Pine"),
                 SyntaxFactory.IdentifierName("PineVM")),
-            SyntaxFactory.IdentifierName(nameof(PineVM.ExpressionEncoding)));
+            SyntaxFactory.IdentifierName(nameof(ExpressionEncoding)));
 }

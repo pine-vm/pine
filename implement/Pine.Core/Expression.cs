@@ -4,7 +4,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json.Serialization;
 
-namespace Pine.PineVM;
+namespace Pine.Core;
 
 public delegate Result<string, PineValue> EvalExprDelegate(Expression expression, PineValue environment);
 

@@ -1,5 +1,6 @@
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
+using Pine.Core;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
@@ -9,7 +10,7 @@ namespace Pine.CompilePineToDotNet;
 
 public record CompiledExpression(
     ExpressionSyntax Syntax,
-    ImmutableDictionary<PineVM.Expression, LetBinding> LetBindings,
+    ImmutableDictionary<Expression, LetBinding> LetBindings,
     CompiledExpressionDependencies Dependencies)
 {
     public CompiledExpressionDependencies DependenciesIncludingLetBindings() =>
@@ -17,7 +18,7 @@ public record CompiledExpression(
             EnumerateLetBindingsTransitive().Values.Select(binding => binding.Expression.Dependencies)
             .Prepend(Dependencies));
 
-    public ImmutableDictionary<PineVM.Expression, LetBinding> EnumerateLetBindingsTransitive() =>
+    public ImmutableDictionary<Expression, LetBinding> EnumerateLetBindingsTransitive() =>
         Union([LetBindings, .. LetBindings.Values.Select(binding => binding.Expression.EnumerateLetBindingsTransitive())]);
 
     public static CompiledExpression WithTypeGenericValue(ExpressionSyntax syntax) =>
@@ -25,17 +26,17 @@ public record CompiledExpression(
 
     public static CompiledExpression WithTypeGenericValue(
         ExpressionSyntax syntax,
-        ImmutableDictionary<PineVM.Expression, LetBinding> letBindings,
+        ImmutableDictionary<Expression, LetBinding> letBindings,
         CompiledExpressionDependencies dependencies) =>
         new(
             syntax,
             LetBindings: letBindings,
             Dependencies: dependencies);
 
-    public static readonly ImmutableDictionary<PineVM.Expression, LetBinding> NoLetBindings =
-        ImmutableDictionary<PineVM.Expression, LetBinding>.Empty;
+    public static readonly ImmutableDictionary<Expression, LetBinding> NoLetBindings =
+        ImmutableDictionary<Expression, LetBinding>.Empty;
 
-    public CompiledExpression MergeBindings(IReadOnlyDictionary<PineVM.Expression, LetBinding> bindings) =>
+    public CompiledExpression MergeBindings(IReadOnlyDictionary<Expression, LetBinding> bindings) =>
         this
         with
         {
@@ -124,9 +125,9 @@ public record CompiledExpression(
 
     public static IReadOnlyList<(LetBinding letBinding, LocalDeclarationStatementSyntax declarationSyntax)>
         VariableDeclarationsForLetBindings(
-        IReadOnlyDictionary<PineVM.Expression, LetBinding> availableLetBindings,
+        IReadOnlyDictionary<Expression, LetBinding> availableLetBindings,
         IReadOnlyCollection<ExpressionSyntax> usagesSyntaxes,
-        Func<PineVM.Expression, bool>? excludeBinding)
+        Func<Expression, bool>? excludeBinding)
     {
         var usedLetBindings =
             usagesSyntaxes
@@ -168,9 +169,9 @@ public record CompiledExpression(
             .ToImmutableArray();
     }
 
-    public static IEnumerable<KeyValuePair<PineVM.Expression, LetBinding>> EnumerateUsedLetBindingsTransitive(
+    public static IEnumerable<KeyValuePair<Expression, LetBinding>> EnumerateUsedLetBindingsTransitive(
         ExpressionSyntax usageRoot,
-        IReadOnlyDictionary<PineVM.Expression, LetBinding> availableBindings)
+        IReadOnlyDictionary<Expression, LetBinding> availableBindings)
     {
         foreach (var identiferName in usageRoot.DescendantNodesAndSelf().OfType<IdentifierNameSyntax>())
         {
@@ -256,14 +257,14 @@ public record LetBinding(
 
 public record CompiledExpressionDependencies(
     ImmutableHashSet<PineValue> Values,
-    IImmutableSet<(string hash, PineVM.Expression expression)> Expressions,
-    IImmutableDictionary<PineVM.Expression, CompiledExpressionId> ExpressionFunctions)
+    IImmutableSet<(string hash, Expression expression)> Expressions,
+    IImmutableDictionary<Expression, CompiledExpressionId> ExpressionFunctions)
 {
     public static readonly CompiledExpressionDependencies Empty = new(
         Values: [],
         Expressions: [],
         ExpressionFunctions:
-        ImmutableDictionary<PineVM.Expression, CompiledExpressionId>.Empty);
+        ImmutableDictionary<Expression, CompiledExpressionId>.Empty);
 
     public static (T, CompiledExpressionDependencies) WithNoDependencies<T>(T other) => (other, Empty);
 

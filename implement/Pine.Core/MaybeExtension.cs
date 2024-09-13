@@ -1,6 +1,6 @@
 using System.Collections.Generic;
 
-namespace Pine;
+namespace Pine.Core;
 
 public static class MaybeExtension
 {

@@ -1,6 +1,6 @@
 ﻿using Jint;
 using Jint.Native;
-using Pine;
+using Pine.Core;
 
 namespace ElmTime.JavaScript;
 

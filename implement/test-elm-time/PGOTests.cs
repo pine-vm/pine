@@ -1,7 +1,7 @@
 using ElmTime.ElmInteractive;
 using ElmTime.ElmSyntax;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
-using Pine;
+using Pine.Core;
 using Pine.ElmInteractive;
 using Pine.PineVM;
 using System;

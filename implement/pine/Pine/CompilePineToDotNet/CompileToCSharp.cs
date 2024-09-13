@@ -1,6 +1,7 @@
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
+using Pine.Core;
 using Pine.PineVM;
 using System;
 using System.Collections.Generic;
@@ -13,8 +14,8 @@ using System.Text;
 namespace Pine.CompilePineToDotNet;
 
 public record SyntaxContainerConfig(
-    string containerTypeName,
-    string dictionaryMemberName);
+    string ContainerTypeName,
+    string DictionaryMemberName);
 
 public record CompileCSharpClassResult(
     SyntaxContainerConfig SyntaxContainerConfig,
@@ -179,7 +180,7 @@ public partial class CompileToCSharp
 
             var queue = new Queue<Expression>(expressions);
 
-            while (queue.Any())
+            while (queue.Count is not 0)
             {
                 var expression = queue.Dequeue();
 
@@ -394,7 +395,7 @@ public partial class CompileToCSharp
                 var dictionaryMemberDeclaration =
                     SyntaxFactory.MethodDeclaration(
                         dictionaryMemberType,
-                        identifier: containerConfig.dictionaryMemberName)
+                        identifier: containerConfig.DictionaryMemberName)
                         .WithModifiers(
                             SyntaxFactory.TokenList(
                                 SyntaxFactory.Token(SyntaxKind.StaticKeyword),
@@ -470,7 +471,7 @@ public partial class CompileToCSharp
                     new CompileCSharpClassResult(
                         SyntaxContainerConfig: containerConfig,
                         ClassDeclarationSyntax:
-                        SyntaxFactory.ClassDeclaration(containerConfig.containerTypeName)
+                        SyntaxFactory.ClassDeclaration(containerConfig.ContainerTypeName)
                             .WithMembers(
                                 SyntaxFactory.List(
                                     [dictionaryMemberDeclaration

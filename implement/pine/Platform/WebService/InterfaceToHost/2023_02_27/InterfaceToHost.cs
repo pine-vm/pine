@@ -40,13 +40,13 @@ public record NotifyWhenPosixTimeHasArrivedRequestStructure(long minimumPosixTim
 
 public record Result<ErrT, OkT>(ErrT? Err = default, OkT? Ok = default)
 {
-    public Pine.Result<ErrT, OkT> AsPineResult()
+    public Pine.Core.Result<ErrT, OkT> AsPineResult()
     {
         if (Ok is { } ok)
-            return Pine.Result<ErrT, OkT>.ok(ok);
+            return Pine.Core.Result<ErrT, OkT>.ok(ok);
 
         if (Err is { } err)
-            return Pine.Result<ErrT, OkT>.err(err);
+            return Pine.Core.Result<ErrT, OkT>.err(err);
 
         throw new NotImplementedException();
     }
@@ -54,12 +54,12 @@ public record Result<ErrT, OkT>(ErrT? Err = default, OkT? Ok = default)
 
 public record Maybe<JustT>(object? Nothing = default, JustT? Just = default)
 {
-    public Pine.Maybe<JustT> AsPineMaybe()
+    public Pine.Core.Maybe<JustT> AsPineMaybe()
     {
         if (Just is { } just)
             return just;
 
-        return Pine.Maybe<JustT>.nothing();
+        return Pine.Core.Maybe<JustT>.nothing();
     }
 }
 

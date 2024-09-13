@@ -2,8 +2,8 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
-
-using ExpressionUsageRecord = System.Collections.Generic.Dictionary<Pine.PineValue, Pine.PineVM.ExpressionEnvUsageRecord>;
+using Pine.Core;
+using ExpressionUsageRecord = System.Collections.Generic.Dictionary<Pine.Core.PineValue, Pine.PineVM.ExpressionEnvUsageRecord>;
 
 namespace Pine.PineVM;
 

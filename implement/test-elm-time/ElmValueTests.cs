@@ -1,5 +1,5 @@
 ﻿using Microsoft.VisualStudio.TestTools.UnitTesting;
-using Pine;
+using Pine.Core;
 using Pine.ElmInteractive;
 using System.Collections.Generic;
 

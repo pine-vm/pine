@@ -1,4 +1,5 @@
 using Microsoft.VisualStudio.TestTools.UnitTesting;
+using Pine.Core;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
@@ -42,8 +43,8 @@ public class LoadFromGitHubTests
             loadedFilesNamesAndContents
             .Select(fileNameAndContent =>
                 (fileNameAndContent.fileName,
-                    Pine.CommonConversion.StringBase16(
-                        Pine.CommonConversion.HashSHA256(fileNameAndContent.fileContent)).ToLowerInvariant()))
+                    CommonConversion.StringBase16(
+                        CommonConversion.HashSHA256(fileNameAndContent.fileContent)).ToLowerInvariant()))
             .ToImmutableList();
 
         CollectionAssert.AreEquivalent(
@@ -76,8 +77,8 @@ public class LoadFromGitHubTests
             loadedFilesNamesAndContents
             .Select(fileNameAndContent =>
                 (fileNameAndContent.fileName,
-                    fileHash: Pine.CommonConversion.StringBase16(
-                        Pine.CommonConversion.HashSHA256(fileNameAndContent.fileContent)).ToLowerInvariant()))
+                    fileHash: CommonConversion.StringBase16(
+                        CommonConversion.HashSHA256(fileNameAndContent.fileContent)).ToLowerInvariant()))
             .ToImmutableList();
 
         foreach (var expectedFileNameAndHash in expectedFilesNamesAndHashes)
@@ -106,7 +107,7 @@ public class LoadFromGitHubTests
         Assert.IsNotNull(blobContent, "Found blobContent.");
 
         Assert.AreEqual(expectedFileHash,
-            Pine.CommonConversion.StringBase16FromByteArray(SHA256.HashData(blobContent.Span))
+            CommonConversion.StringBase16FromByteArray(SHA256.HashData(blobContent.Span))
             .ToLowerInvariant(),
             "Loaded blob content hash equals expected hash.");
     }
@@ -192,8 +193,8 @@ public class LoadFromGitHubTests
                 var responseContentBytes = response.Content.ReadAsByteArrayAsync().Result;
 
                 return
-                    Pine.PineValueComposition.ToFlatDictionaryWithPathComparer(
-                        Pine.PineValueComposition.SortedTreeFromSetOfBlobsWithCommonFilePath(
+                    PineValueComposition.ToFlatDictionaryWithPathComparer(
+                        PineValueComposition.SortedTreeFromSetOfBlobsWithCommonFilePath(
                             Pine.ZipArchive.EntriesFromZipArchive(responseContentBytes))
                         .EnumerateBlobsTransitive());
             }
@@ -203,7 +204,7 @@ public class LoadFromGitHubTests
                     Pine.LoadFromGitHubOrGitLab.LoadFromUrl(
                         sourceUrl: "https://github.com/pine-vm/pine/blob/30c482748f531899aac2b2d4895e5f0e52258be7/README.md",
                         getRepositoryFilesPartialForCommit:
-                        request => Pine.Result<string, IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>>>.ok(consultServer(request)))
+                        request => Result<string, IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>>>.ok(consultServer(request)))
                     .Extract(error => throw new Exception("Failed to load from GitHub: " + error));
 
                 var blobContent =
@@ -213,7 +214,7 @@ public class LoadFromGitHubTests
                 Assert.IsNotNull(blobContent, "Found blobContent.");
 
                 Assert.AreEqual("e80817b2aa00350dff8f00207083b3b21b0726166dd695475be512ce86507238",
-                    Pine.CommonConversion.StringBase16FromByteArray(SHA256.HashData(blobContent.Span))
+                    CommonConversion.StringBase16FromByteArray(SHA256.HashData(blobContent.Span))
                     .ToLowerInvariant(),
                     "Loaded blob content hash equals expected hash.");
             }
@@ -225,7 +226,7 @@ public class LoadFromGitHubTests
                     Pine.LoadFromGitHubOrGitLab.LoadFromUrl(
                         sourceUrl: "https://github.com/pine-vm/pine/blob/30c482748f531899aac2b2d4895e5f0e52258be7/azure-pipelines.yml",
                         getRepositoryFilesPartialForCommit:
-                        request => Pine.Result<string, IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>>>.ok(consultServer(request)))
+                        request => Result<string, IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>>>.ok(consultServer(request)))
                     .Extract(error => throw new Exception("Failed to load from GitHub: " + error));
 
                 var blobContent =
@@ -235,7 +236,7 @@ public class LoadFromGitHubTests
                 Assert.IsNotNull(blobContent, "Found blobContent.");
 
                 Assert.AreEqual("a328195ad75edf2bcc8df48b3d59db93ecc19b95b6115597c282900e1cf18cbc",
-                    Pine.CommonConversion.StringBase16FromByteArray(SHA256.HashData(blobContent.Span))
+                    CommonConversion.StringBase16FromByteArray(SHA256.HashData(blobContent.Span))
                     .ToLowerInvariant(),
                     "Loaded blob content hash equals expected hash.");
 

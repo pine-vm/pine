@@ -1,6 +1,7 @@
 using ElmTime.StateShim.InterfaceToHost;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Pine;
+using Pine.Core;
 using Pine.Json;
 using System;
 using System.Collections.Immutable;

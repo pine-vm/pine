@@ -1,10 +1,9 @@
-using Pine.ElmInteractive;
 using System;
 using System.Collections.Frozen;
 using System.Collections.Generic;
 using System.Linq;
 
-namespace Pine;
+namespace Pine.Core;
 
 /// <summary>
 /// The <see cref="PineValue"/> type describes values processed by Pine programs.
@@ -14,7 +13,7 @@ namespace Pine;
 /// For conversion between the generic value type and common data types, see <see cref="PineValueAsInteger"/>, <see cref="PineValueAsString"/>, and <see cref="PineValueComposition"/>.
 /// <para/>
 /// There is also a standard representation of program code and expressions as Pine values, 
-/// and you can see a reference implementation of this encoding at <see cref="PineVM.ExpressionEncoding.ParseExpressionFromValue"/>.
+/// and you can see a reference implementation of this encoding at <see cref="ExpressionEncoding.ParseExpressionFromValueDefault(PineValue)"/>.
 /// </summary>
 public abstract record PineValue : IEquatable<PineValue>
 {
@@ -22,9 +21,15 @@ public abstract record PineValue : IEquatable<PineValue>
      * C# 12 does not support mapping from collection expression to ReadOnlyMemory<byte>,
      * therefore provide an additional overload.
      * */
+    /// <summary>
+    /// Construct a blob value from a sequence of bytes.
+    /// </summary>
     public static PineValue Blob(byte[] bytes) =>
         Blob((ReadOnlyMemory<byte>)bytes);
 
+    /// <summary>
+    /// Construct a blob value from a sequence of bytes.
+    /// </summary>
     public static PineValue Blob(ReadOnlyMemory<byte> bytes) =>
         bytes.Length is 0
         ?
@@ -40,6 +45,9 @@ public abstract record PineValue : IEquatable<PineValue>
         :
         new BlobValue(bytes);
 
+    /// <summary>
+    /// Construct a list value from a sequence of other values.
+    /// </summary>
     public static ListValue List(IReadOnlyList<PineValue> elements)
     {
         if (elements.Count is 0)
@@ -58,8 +66,14 @@ public abstract record PineValue : IEquatable<PineValue>
         return new ListValue(asStruct);
     }
 
+    /// <summary>
+    /// List value containing zero elements.
+    /// </summary>
     public static readonly ListValue EmptyList = new([]);
 
+    /// <summary>
+    /// Blob value containing zero bytes.
+    /// </summary>
     public static readonly BlobValue EmptyBlob = new(ReadOnlyMemory<byte>.Empty);
 
     private static readonly BlobValue[] ReusedBlobSingle =
@@ -87,6 +101,9 @@ public abstract record PineValue : IEquatable<PineValue>
 
         public readonly long BlobsBytesCount;
 
+        /// <summary>
+        /// Construct a list value from a sequence of other values.
+        /// </summary>
         public ListValue(IReadOnlyList<PineValue> elements)
             : this(new ListValueStruct(elements))
         {
@@ -166,15 +183,21 @@ public abstract record PineValue : IEquatable<PineValue>
             return true;
         }
 
-        public override int GetHashCode() => slimHashCode;
+        public override int GetHashCode() =>
+            slimHashCode;
 
-
+        /// <summary>
+        /// Value type variant of <see cref="ListValue"/>.
+        /// </summary>
         public readonly record struct ListValueStruct
         {
             internal readonly int slimHashCode;
 
             public IReadOnlyList<PineValue> Elements { get; }
 
+            /// <summary>
+            /// Construct a list value from a sequence of other values.
+            /// </summary>
             public ListValueStruct(IReadOnlyList<PineValue> elements)
             {
                 Elements = elements;
@@ -238,8 +261,8 @@ public abstract record PineValue : IEquatable<PineValue>
 
             return ReferenceEquals(this, other)
                 ||
-                (slimHashCode == other.slimHashCode &&
-                Bytes.Span.SequenceEqual(other.Bytes.Span));
+                slimHashCode == other.slimHashCode &&
+                Bytes.Span.SequenceEqual(other.Bytes.Span);
         }
 
         public override int GetHashCode() => slimHashCode;

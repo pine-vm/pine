@@ -1,5 +1,6 @@
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
+using Pine.Core;
 using System;
 using System.Collections.Generic;
 
@@ -53,9 +54,9 @@ public partial class PineVMConfiguration
                                                     SyntaxFactory.MemberAccessExpression(
                                                         SyntaxKind.SimpleMemberAccessExpression,
                                                         SyntaxFactory.IdentifierName(syntaxContainerConfig
-                                                            .containerTypeName),
+                                                            .ContainerTypeName),
                                                         SyntaxFactory.IdentifierName(syntaxContainerConfig
-                                                            .dictionaryMemberName))))))))));
+                                                            .DictionaryMemberName))))))))));
 
         var configurationClassDeclarationInNamespace =
             SyntaxFactory.NamespaceDeclaration(

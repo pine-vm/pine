@@ -2,7 +2,7 @@ using System;
 using System.Collections.Frozen;
 using System.Collections.Generic;
 
-namespace Pine;
+namespace Pine.Core;
 
 public static class PineValueAsString
 {

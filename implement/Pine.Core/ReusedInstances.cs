@@ -4,7 +4,7 @@ using System.Collections.Frozen;
 using System.Collections.Generic;
 using System.Linq;
 
-namespace Pine;
+namespace Pine.Core;
 
 public record ReusedInstances(
     IEnumerable<Expression> expressionRootsSource)
@@ -541,7 +541,11 @@ public record ReusedInstances(
                     elmTag.Arguments,
 
                     ElmValue.ElmInternal =>
-                    []
+                    [],
+
+                    _ =>
+                    throw new System.NotImplementedException(
+                        "Unexpected ElmValue type: " + elmValue.GetType())
                 };
 
             foreach (var item in childItems)

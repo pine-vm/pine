@@ -12,6 +12,7 @@
 #r "Pine.Core"
 #r "pine"
 
+using Pine.Core;
 using Pine;
 using System;
 using System.Collections.Generic;
@@ -179,9 +180,9 @@ ResponseStructure GetResponseFromRequest(RequestStructure request)
                         };
                     }
 
-                    var composition = Pine.PineValueComposition.FromTreeWithStringPath(loadFromGitOk.tree);
+                    var composition = PineValueComposition.FromTreeWithStringPath(loadFromGitOk.tree);
 
-                    var compositionId = Pine.CommonConversion.StringBase16(Pine.PineValueHashTree.ComputeHash(composition));
+                    var compositionId = CommonConversion.StringBase16(PineValueHashTree.ComputeHash(composition));
 
                     var blobs =
                         loadFromGitOk.tree.EnumerateBlobsTransitive()
@@ -193,7 +194,7 @@ ResponseStructure GetResponseFromRequest(RequestStructure request)
                     {
                         return new ResponseStructure
                         {
-                            ErrorResponse = ImmutableList.Create("Composition " + compositionId + " from " + urlInCommit + " exceeds supported limits: " + limitName)
+                            ErrorResponse = ["Composition " + compositionId + " from " + urlInCommit + " exceeds supported limits: " + limitName]
                         };
                     }
 
@@ -367,10 +368,10 @@ string MakePlatformSpecificPath(IReadOnlyList<string> path) =>
     string.Join(System.IO.Path.DirectorySeparatorChar.ToString(), path);
 
 static public byte[] GetElmExecutableFile =>
-    Pine.CommonConversion.DecompressGzip(GetElmExecutableFileCompressedGzip).ToArray();
+    CommonConversion.DecompressGzip(GetElmExecutableFileCompressedGzip).ToArray();
 
 static public byte[] GetElmExecutableFileCompressedGzip =>
-    Pine.BlobLibrary.GetBlobWithSHA256(Pine.CommonConversion.ByteArrayFromStringBase16(
+    Pine.BlobLibrary.GetBlobWithSHA256(CommonConversion.ByteArrayFromStringBase16(
         System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.Linux)
         ?
         /*

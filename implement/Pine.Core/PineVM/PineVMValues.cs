@@ -1,3 +1,5 @@
+using Pine.Core;
+
 namespace Pine.PineVM;
 
 public static class PineVMValues

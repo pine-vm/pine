@@ -1,5 +1,5 @@
 using Microsoft.VisualStudio.TestTools.UnitTesting;
-using Pine;
+using Pine.Core;
 using System.Net.Http;
 using System.Threading.Tasks;
 

@@ -5,6 +5,7 @@ using System.Collections.Immutable;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Pine.Core;
 
 namespace Pine.PineVM;
 
@@ -283,8 +284,8 @@ public class DynamicPGOShare : IDisposable
 
         var syntaxContainerConfig =
             new CompilePineToDotNet.SyntaxContainerConfig(
-                containerTypeName: "container_type",
-                dictionaryMemberName: "compiled_expressions_dictionary");
+                ContainerTypeName: "container_type",
+                DictionaryMemberName: "compiled_expressions_dictionary");
 
         var compileToAssemblyResult =
             CompilePineToDotNet.CompileToCSharp.CompileExpressionsToCSharpClass(

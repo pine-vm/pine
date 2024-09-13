@@ -2,7 +2,7 @@ using Pine.ElmInteractive;
 using System.Collections.Generic;
 using System.Linq;
 
-namespace Pine;
+namespace Pine.Core;
 
 public static class PopularValues
 {

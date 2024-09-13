@@ -5,7 +5,7 @@ using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using System.Text.RegularExpressions;
 
-namespace Pine;
+namespace Pine.Core;
 
 public static class EnumerableExtension
 {
@@ -61,7 +61,7 @@ public static class EnumerableExtension
     {
         public bool Equals(T? x, T? y)
         {
-            return ReferenceEquals(x, y) || (x != null && y != null && x.SequenceEqual(y));
+            return ReferenceEquals(x, y) || x != null && y != null && x.SequenceEqual(y);
         }
 
         public int GetHashCode(T obj) => 0;
@@ -111,7 +111,7 @@ public static class EnumerableExtension
     }
 
     public static IEnumerable<string> OrderByNatural(this IEnumerable<string> items, StringComparer? stringComparer = null) =>
-        OrderByNatural(items, s => s, stringComparer);
+        items.OrderByNatural(s => s, stringComparer);
 
     public static IEnumerable<T> OrderByNatural<T>(this IEnumerable<T> items, Func<T, string> selector, StringComparer? stringComparer = null)
     {

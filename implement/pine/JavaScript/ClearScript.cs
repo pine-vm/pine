@@ -7,6 +7,7 @@ using System.Linq;
 using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using ElmTime.NativeDependency;
+using Pine.Core;
 
 namespace ElmTime.JavaScript;
 

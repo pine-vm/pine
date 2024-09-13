@@ -2,8 +2,12 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 
-namespace Pine;
+namespace Pine.Core;
 
+/// <summary>
+/// Standard encoding of integers in Pine.
+/// This integer encoding corresponds to kernel functions like <see cref="KernelFunction.add_int(PineValue)"/> and <see cref="KernelFunction.skip(PineValue)"/>.
+/// </summary>
 public static class PineValueAsInteger
 {
     /// <summary>

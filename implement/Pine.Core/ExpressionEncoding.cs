@@ -1,26 +1,15 @@
 ﻿using System.Collections.Generic;
 using System;
 using System.Linq;
-using System.Collections.Immutable;
 
-namespace Pine.PineVM;
+namespace Pine.Core;
 
+/// <summary>
+/// The standard encoding of Pine expressions as Pine values.
+/// This is the encoding used to map from data to code when evaluating a <see cref="Expression.ParseAndEval"/> expression.
+/// </summary>
 public static class ExpressionEncoding
 {
-    private static readonly IReadOnlyDictionary<string, Func<PineValue, PineValue>> NamedKernelFunctions =
-        ImmutableDictionary<string, Func<PineValue, PineValue>>.Empty
-        .SetItem(nameof(KernelFunction.equal), KernelFunction.equal)
-        .SetItem(nameof(KernelFunction.negate), KernelFunction.negate)
-        .SetItem(nameof(KernelFunction.length), KernelFunction.length)
-        .SetItem(nameof(KernelFunction.skip), KernelFunction.skip)
-        .SetItem(nameof(KernelFunction.take), KernelFunction.take)
-        .SetItem(nameof(KernelFunction.reverse), KernelFunction.reverse)
-        .SetItem(nameof(KernelFunction.concat), KernelFunction.concat)
-        .SetItem(nameof(KernelFunction.head), KernelFunction.head)
-        .SetItem(nameof(KernelFunction.add_int), KernelFunction.add_int)
-        .SetItem(nameof(KernelFunction.mul_int), KernelFunction.mul_int)
-        .SetItem(nameof(KernelFunction.is_sorted_ascending_int), KernelFunction.is_sorted_ascending_int);
-
     public static PineValue.ListValue EncodeExpressionAsValue(Expression expression) =>
         ReusedInstances.Instance.ExpressionEncodings?.TryGetValue(expression, out var encoded) ?? false && encoded is not null
         ?

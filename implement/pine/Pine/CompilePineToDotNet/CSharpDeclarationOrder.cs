@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
+using Pine.Core;
 
 namespace Pine.CompilePineToDotNet;
 
@@ -207,11 +208,11 @@ public class CSharpDeclarationOrder
         return orderedLists;
     }
 
-    public static IEnumerable<PineVM.Expression> OrderExpressionsByContainment(IEnumerable<PineVM.Expression> expressions)
+    public static IEnumerable<Expression> OrderExpressionsByContainment(IEnumerable<Expression> expressions)
     {
         var descendantLists =
             expressions
-            .SelectMany(PineVM.Expression.EnumerateSelfAndDescendants)
+            .SelectMany(Expression.EnumerateSelfAndDescendants)
             .ToImmutableList();
 
         var ordered =

@@ -4,6 +4,7 @@ using System.Collections.Immutable;
 using System.Linq;
 using System.Text;
 using System.Text.Json;
+using Pine.Core;
 
 namespace Pine.PineVM;
 

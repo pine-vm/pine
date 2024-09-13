@@ -1,6 +1,7 @@
 using ElmTime.Elm019;
 using ElmTime.JavaScript;
 using Pine;
+using Pine.Core;
 using Pine.ElmInteractive;
 using System;
 using System.Collections.Concurrent;
@@ -10,7 +11,7 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using System.Text.Json.Serialization;
-using static Pine.PineValueComposition;
+using static Pine.Core.PineValueComposition;
 
 namespace ElmTime.ElmInteractive;
 

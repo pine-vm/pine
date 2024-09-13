@@ -1,7 +1,7 @@
 using System.Numerics;
 using System.Runtime.CompilerServices;
 
-namespace Pine;
+namespace Pine.Core;
 
 /// <summary>
 /// https://github.com/dotnet/runtime/blob/e05944dd74118db06d6987fe2724813950725737/src/libraries/System.Private.CoreLib/src/System/Text/UnicodeUtility.cs
@@ -26,7 +26,7 @@ public class UnicodeUtility
         // So now the range [ FFEF0800..FFFFFFFF ] contains all valid code points,
         // excluding surrogates. This allows us to perform a single comparison.
 
-        return ((value - 0x110000u) ^ 0xD800u) >= 0xFFEF0800u;
+        return (value - 0x110000u ^ 0xD800u) >= 0xFFEF0800u;
     }
 
     public static bool IsValidUnicodeScalar(BigInteger value) =>
