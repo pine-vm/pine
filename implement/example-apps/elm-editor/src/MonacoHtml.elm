@@ -53,15 +53,63 @@ monacoHtmlDocumentFromCdnUrl cdnUrlToMin =
         return monaco?.editor?.getModels()[0];
     }
 
-    function monacoEditorSetContent(newValue, language) {
+    function monacoEditorSetContent(newValue, language, uri) {
 
         if(typeof monaco != "object")
             return;
 
-        var textModel = monaco?.editor?.getModels()[0];
+        const editor =
+            monaco.editor?.getEditors()[0];
 
-        textModel?.setValue(newValue);
-        monaco?.editor?.setModelLanguage(textModel, language);
+        if(typeof editor != "object") {
+
+            console.error("No editor found to set content.");
+
+            return;
+        }
+
+        let monacoUri =
+            monaco.Uri.parse(uri)
+
+        var textModel =
+            monaco.editor?.getModel(monacoUri);
+
+        const reuseModel =
+            textModel?.uri.toString() === uri
+
+        /*
+        console.log("previous model:");
+        console.log(textModel);
+
+        console.log("equal: " + (textModel?.uri.toString() === uri));
+        */
+
+        if(!reuseModel) {
+
+            console.log("Creating new model for " + monacoUri);
+
+            const modelsToDispose =
+                monaco.editor?.getModels() ?? [];
+
+            modelsToDispose.forEach(model => {
+
+                console.log("Previous model uri: " + model.uri);
+
+                model.dispose();
+            });
+
+            textModel =
+                monaco.editor?.createModel(newValue, language, monacoUri);
+
+            editor.setModel(textModel);
+        }
+
+        if(textModel == null) {
+            return;
+        }
+
+        textModel.setValue(newValue);
+        monaco.editor?.setModelLanguage(textModel, language);
     }
 
     function monacoEditorSetModelMarkers(markers) {
@@ -146,8 +194,13 @@ monacoHtmlDocumentFromCdnUrl cdnUrlToMin =
     }
 
     function dispatchMessage(message) {
-        if(message.SetContent)
-            monacoEditorSetContent(message.SetContent[0].value, message.SetContent[0].language);
+        if(message.SetContent) {
+
+            monacoEditorSetContent(
+                message.SetContent[0].value,
+                message.SetContent[0].language,
+                message.SetContent[0].uri);
+        }
 
         if(message.SetModelMarkers)
             monacoEditorSetModelMarkers(message.SetModelMarkers[0]);
@@ -163,32 +216,32 @@ monacoHtmlDocumentFromCdnUrl cdnUrlToMin =
     }
 
     function editorEventOnDidFocusEditorWidget() {
-        parent?.messageFromMonacoFrame?.({"DidFocusEditorWidgetEvent":[]});
+        parent?.messageFromMonacoFrame?.({ DidFocusEditorWidgetEvent: []});
     }
 
     function editorActionCloseEditor() {
-        parent?.messageFromMonacoFrame?.({"EditorActionCloseEditorEvent":[]});
+        parent?.messageFromMonacoFrame?.({ EditorActionCloseEditorEvent:[]});
     }
 
     function editorActionFormatDocument() {
-        parent?.messageFromMonacoFrame?.({"EditorActionFormatDocumentEvent":[]});
+        parent?.messageFromMonacoFrame?.({ EditorActionFormatDocumentEvent: []});
     }
 
     function editorActionCompile() {
-        parent?.messageFromMonacoFrame?.({"EditorActionCompileEvent":[]});
+        parent?.messageFromMonacoFrame?.({ EditorActionCompileEvent: []});
     }
 
     function editorActionInspectSyntax() {
-        parent?.messageFromMonacoFrame?.({"EditorActionInspectSyntaxEvent":[]});
+        parent?.messageFromMonacoFrame?.({ EditorActionInspectSyntaxEvent: []});
     }
 
-    function editorProvideCompletionItemsFromRangeAndLeadingText(range, textUntilPosition, cursorLineNumber) {
+    function editorProvideCompletionItemsFromRangeAndLeadingText(uri, range, textUntilPosition, cursorLineNumber) {
 
         return new Promise(function (resolve, reject) {
 
-            var timeout =
+            const timeout =
                 setTimeout(() => {
-                    var message = "Did not get completion items from Elm within " + getCompletionItemsTimeoutMilliseconds + " milliseconds.";
+                    const message = "Did not get completion items from Elm within " + getCompletionItemsTimeoutMilliseconds + " milliseconds.";
 
                 console.error(message);
                 reject(message);
@@ -199,8 +252,8 @@ monacoHtmlDocumentFromCdnUrl cdnUrlToMin =
             {
                 clearTimeout(timeout);
 
-                var completionItemsForMonaco =
-                    completionItemsFromElm.map(item => monacoCompletionItemFromElmMonacoCompletionItem(range, item));
+                const completionItemsForMonaco =
+                    completionItemsFromElm.map(item => monacoCompletionItemFromElmMonacoCompletionItem(range, item))
 
                 resolve({ suggestions: completionItemsForMonaco ?? [] });
 
@@ -208,18 +261,23 @@ monacoHtmlDocumentFromCdnUrl cdnUrlToMin =
             }
 
             parent?.messageFromMonacoFrame?.({
-                "RequestCompletionItemsEvent":
-                    [{"textUntilPosition":textUntilPosition,"cursorLineNumber":cursorLineNumber}]});
+                RequestCompletionItemsEvent:
+                    [
+                    { uri: uri
+                    , textUntilPosition: textUntilPosition
+                    , cursorLineNumber: cursorLineNumber
+                    }
+                    ]});
         });
     }
 
-    function editorProvideHoverFromPosition(position, lineText, word) {
+    function editorProvideHoverFromPosition(uri, position, lineText, word) {
 
         return new Promise(function (resolve, reject) {
 
-            var timeout =
+            const timeout =
                 setTimeout(() => {
-                    var message = "Did not get hover from Elm within " + getHoverTimeoutMilliseconds + " milliseconds.";
+                    const message = "Did not get hover from Elm within " + getHoverTimeoutMilliseconds + " milliseconds.";
 
                 console.error(message);
                 reject(message);
@@ -229,7 +287,8 @@ monacoHtmlDocumentFromCdnUrl cdnUrlToMin =
             {
                 clearTimeout(timeout);
 
-                var contents = hoverFromElm.map(content => ({ value: content }));
+                const contents =
+                    hoverFromElm.map(content => ({ value: content }))
 
                 resolve({ contents: contents ?? [] });
 
@@ -237,11 +296,15 @@ monacoHtmlDocumentFromCdnUrl cdnUrlToMin =
             }
 
             parent?.messageFromMonacoFrame?.({
-                "RequestHoverEvent":
-                    [{"positionLineNumber":position.lineNumber,
-                    "positionColumn":position.column,
-                    "lineText": lineText,
-                    "word": word.word}]});
+                RequestHoverEvent:
+                    [
+                    { uri: uri
+                    , positionLineNumber: position.lineNumber
+                    , positionColumn: position.column
+                    , lineText: lineText
+                    , word: word.word
+                    }
+                    ]});
         });
     }
 
@@ -286,27 +349,41 @@ monacoHtmlDocumentFromCdnUrl cdnUrlToMin =
 
         monaco.languages.registerCompletionItemProvider('Elm', {
             provideCompletionItems: function(model, position) {
-                // find out if we are completing a property in the 'dependencies' object.
-                var textUntilPosition = model.getValueInRange({startLineNumber: 1, startColumn: 1, endLineNumber: position.lineNumber, endColumn: position.column});
 
-                var word = model.getWordUntilPosition(position);
-                var range = {
+                const uri =
+                    model.uri.toString()
+
+                console.log("position:");
+                console.log(position);
+
+                // find out if we are completing a property in the 'dependencies' object.
+                const textUntilPosition =
+                    model.getValueInRange({startLineNumber: 1, startColumn: 1, endLineNumber: position.lineNumber, endColumn: position.column})
+
+                const word =
+                    model.getWordUntilPosition(position)
+
+                const range = {
                     startLineNumber: position.lineNumber,
                     endLineNumber: position.lineNumber,
                     startColumn: word.startColumn,
                     endColumn: word.endColumn
                 };
 
-                return editorProvideCompletionItemsFromRangeAndLeadingText(range, textUntilPosition, position.lineNumber);
+                return editorProvideCompletionItemsFromRangeAndLeadingText(
+                    uri,
+                    range,
+                    textUntilPosition,
+                    position.lineNumber);
             },
 
-            triggerCharacters: ["."," "]
+            triggerCharacters: [".", " "]
         });
 
         monaco.editor.onDidCreateModel(function(model) {
             function forwardDidChangeContent() {
             
-                var textModelValue = model.getValue();
+                const textModelValue = model.getValue();
 
                 // console.log("onDidChangeContent:\\n" + textModelValue);
 
@@ -316,7 +393,7 @@ monacoHtmlDocumentFromCdnUrl cdnUrlToMin =
                 };
 
                 parent?.messageFromMonacoFrame?.({
-                    "DidChangeContentEvent" : [ eventRecord ]
+                    DidChangeContentEvent : [ eventRecord ]
                     });
             }
 
@@ -327,18 +404,26 @@ monacoHtmlDocumentFromCdnUrl cdnUrlToMin =
             handle = setTimeout(() => forwardDidChangeContent(), 400);
             });
 
-            parent?.messageFromMonacoFrame?.({"CompletedSetupEvent":[]});
+            parent?.messageFromMonacoFrame?.({CompletedSetupEvent: []});
         });
 
 
         monaco.languages.registerHoverProvider('Elm', {
             provideHover: function (model, position) {
-                var textUntilPosition = model.getValueInRange({startLineNumber: 1, startColumn: 1, endLineNumber: position.lineNumber, endColumn: position.column});
 
-                var lineText = model.getLineContent(position.lineNumber);
-                var word = model.getWordAtPosition(position);
+                const uri =
+                    model.uri.toString()
 
-                return editorProvideHoverFromPosition(position, lineText, word);
+                const textUntilPosition =
+                    model.getValueInRange({startLineNumber: 1, startColumn: 1, endLineNumber: position.lineNumber, endColumn: position.column});
+
+                const lineText =
+                    model.getLineContent(position.lineNumber);
+
+                const word =
+                    model.getWordAtPosition(position);
+
+                return editorProvideHoverFromPosition(uri, position, lineText, word);
             }
         });
 

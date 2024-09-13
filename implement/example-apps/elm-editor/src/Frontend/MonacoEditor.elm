@@ -15,6 +15,7 @@ type MessageToEditor
 type alias SetContentStruct =
     { value : String
     , language : String
+    , uri : String
     }
 
 
@@ -37,13 +38,15 @@ type alias DidChangeContentEventStruct =
 
 
 type alias RequestCompletionItemsStruct =
-    { textUntilPosition : String
+    { uri : String
+    , textUntilPosition : String
     , cursorLineNumber : Int
     }
 
 
 type alias RequestHoverStruct =
-    { positionLineNumber : Int
+    { uri : String
+    , positionLineNumber : Int
     , positionColumn : Int
     , lineText : String
     , word : String

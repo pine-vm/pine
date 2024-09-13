@@ -221,7 +221,7 @@ type Event
 
 type WorkspaceEventStructure
     = MonacoEditorEvent Json.Decode.Value
-    | UserInputChangeTextInEditor String
+    | UserInputChangeTextInEditor { uri : String } String
     | UserInputOpenFileInEditor ( List String, String )
     | UserInputFormat
     | UserInputCancelFormatting
@@ -830,7 +830,7 @@ updateWorkspaceAfterEvent stateBeforeApplyEvent stateAfterEvent =
 
                 Just textForEditor ->
                     let
-                        ( _, fileName ) =
+                        ( directoryPath, fileName ) =
                             fileLocation
 
                         fileLocationOpenedBeforeEvent =
@@ -858,6 +858,7 @@ updateWorkspaceAfterEvent stateBeforeApplyEvent stateAfterEvent =
                                         , language =
                                             Maybe.withDefault "txt"
                                                 (Maybe.map monacoLanguageNameForFileContent fileContentType)
+                                        , uri = monacoUriForFilePath directoryPath fileName
                                         }
                                     )
 
@@ -955,7 +956,9 @@ fileLocationOpenInEditorFromWorkspace =
     fileOpenedInEditorFromWorkspace >> Maybe.map Tuple.first
 
 
-fileOpenedInEditorFromWorkspace : WorkspaceActiveStruct -> Maybe ( ( List String, String ), FileTreeInWorkspace.BlobNodeWithCache )
+fileOpenedInEditorFromWorkspace :
+    WorkspaceActiveStruct
+    -> Maybe ( ( List String, String ), FileTreeInWorkspace.BlobNodeWithCache )
 fileOpenedInEditorFromWorkspace workspaceActive =
     case workspaceActive.editing.fileLocationOpenInEditor of
         Nothing ->
@@ -1002,7 +1005,7 @@ updateWorkspaceWithoutCmdToUpdateEditor updateConfig event stateBefore =
                 , Cmd.none
                 )
 
-        UserInputChangeTextInEditor inputText ->
+        UserInputChangeTextInEditor editorScope inputText ->
             ( case stateBefore.editing.fileLocationOpenInEditor of
                 Nothing ->
                     stateBefore
@@ -1011,14 +1014,21 @@ updateWorkspaceWithoutCmdToUpdateEditor updateConfig event stateBefore =
                     let
                         filePath =
                             directoryPath ++ [ fileName ]
+
+                        expectedUri =
+                            monacoUriForFilePath directoryPath fileName
                     in
-                    { stateBefore
-                        | fileTree =
-                            stateBefore.fileTree
-                                |> FileTreeInWorkspace.setBlobAtPathInSortedFileTreeFromBytes ( filePath, fileContentFromString inputText )
-                        , lastTextReceivedFromEditor = Just inputText
-                        , elmFormat = Nothing
-                    }
+                    if editorScope.uri /= expectedUri then
+                        stateBefore
+
+                    else
+                        { stateBefore
+                            | fileTree =
+                                stateBefore.fileTree
+                                    |> FileTreeInWorkspace.setBlobAtPathInSortedFileTreeFromBytes ( filePath, fileContentFromString inputText )
+                            , lastTextReceivedFromEditor = Just inputText
+                            , elmFormat = Nothing
+                        }
             , Cmd.none
             )
 
@@ -1043,7 +1053,10 @@ updateWorkspaceWithoutCmdToUpdateEditor updateConfig event stateBefore =
                 Ok decodedMonacoEditorEvent ->
                     case decodedMonacoEditorEvent of
                         Frontend.MonacoEditor.DidChangeContentEvent content ->
-                            stateBefore |> updateWorkspaceWithoutCmdToUpdateEditor updateConfig (UserInputChangeTextInEditor content.textModelValue)
+                            stateBefore
+                                |> updateWorkspaceWithoutCmdToUpdateEditor
+                                    updateConfig
+                                    (UserInputChangeTextInEditor { uri = content.uri } content.textModelValue)
 
                         Frontend.MonacoEditor.CompletedSetupEvent ->
                             ( { stateBefore | lastTextReceivedFromEditor = Nothing }, Cmd.none )
@@ -3501,6 +3514,11 @@ viewOutputPaneContentFromCompilationComplete workspace compilation loweringCompl
     }
 
 
+monacoUriForFilePath : List String -> String -> String
+monacoUriForFilePath directoryPath fileName =
+    "file:///" ++ String.join "/" (directoryPath ++ [ fileName ])
+
+
 compileHtmlDocumentForEmbedding : { htmlFromElmMake : String } -> String
 compileHtmlDocumentForEmbedding { htmlFromElmMake } =
     let
@@ -4076,9 +4094,13 @@ titlebarMenuEntryLabel menuEntry =
             "Workspace"
 
 
-setContentInMonacoEditorCmd : { text : String, language : String } -> Cmd WorkspaceEventStructure
+setContentInMonacoEditorCmd : { text : String, language : String, uri : String } -> Cmd WorkspaceEventStructure
 setContentInMonacoEditorCmd content =
-    Frontend.MonacoEditor.SetContent { value = content.text, language = content.language }
+    Frontend.MonacoEditor.SetContent
+        { value = content.text
+        , language = content.language
+        , uri = content.uri
+        }
         |> CompilationInterface.GenerateJsonConverters.jsonEncodeMessageToMonacoEditor
         |> sendMessageToMonacoFrame
 
