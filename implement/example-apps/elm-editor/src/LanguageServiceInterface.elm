@@ -40,11 +40,13 @@ type alias RequestInWorkspace =
 type Request
     = ProvideHoverRequest ProvideHoverRequestStruct
     | ProvideCompletionItemsRequest ProvideCompletionItemsRequestStruct
+    | ProvideDefinitionRequest ProvideHoverRequestStruct
 
 
 type Response
     = ProvideHoverResponse (List String)
     | ProvideCompletionItemsResponse (List Frontend.MonacoEditor.MonacoCompletionItem)
+    | ProvideDefinitionResponse (List LocationUnderFilePath)
 
 
 type alias ProvideHoverRequestStruct =
@@ -59,4 +61,14 @@ type alias ProvideCompletionItemsRequestStruct =
     { filePathOpenedInEditor : List String
     , cursorLineNumber : Int
     , textUntilPosition : String
+    }
+
+
+type alias ProvideDefinitionRequestStruct =
+    ProvideHoverRequestStruct
+
+
+type alias LocationUnderFilePath =
+    { filePath : List String
+    , range : Frontend.MonacoEditor.MonacoRange
     }

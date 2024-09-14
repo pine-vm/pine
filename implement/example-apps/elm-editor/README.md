@@ -15,11 +15,19 @@ https://youtu.be/x6RpeuLtiXY
 
 ## Overview of Features
 
+The functionality offered in Elm Editor includes the following:
+
 + Viewing and editing all Elm module files and the `elm.json` file.
-+ Checking programs for problems such as Elm compiler errors.
++ Automatically checks programs and highlights problems in the code editor.
++ Formatting Elm and JSON files.
 + Saving and sharing the current state of a workspace, including all files.
 + Importing complete workspaces from public git repositories.
-+ For frontend web apps, viewing and testing the app in an iframe.
++ Efficient navigation using editor features such as 'Go to Definition'
+
+For frontend web apps, Elm Editor offers these features in addition:
+
++ Execute, view, and test your program live directly using the integrated preview.
++ Time travel debugger.
 
 ## Project Organization and Implementation
 

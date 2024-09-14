@@ -45,6 +45,7 @@ monacoHtmlDocumentFromCdnUrl cdnUrlToMin =
     getHoverTimeoutMilliseconds = 1500;
     provideCompletionItemsEventFromElm = function(){};
     provideHoverEventFromElm = function(){};
+    provideDefinitionEventFromElm = function(){};
 
     function getEditorModel() {
         if(typeof monaco != "object")
@@ -53,7 +54,7 @@ monacoHtmlDocumentFromCdnUrl cdnUrlToMin =
         return monaco?.editor?.getModels()[0];
     }
 
-    function monacoEditorSetContent(newValue, language, uri) {
+    function monacoEditorOpenDocument(openDocument) {
 
         if(typeof monaco != "object")
             return;
@@ -63,26 +64,19 @@ monacoHtmlDocumentFromCdnUrl cdnUrlToMin =
 
         if(typeof editor != "object") {
 
-            console.error("No editor found to set content.");
+            console.error("No editor found to open document.");
 
             return;
         }
 
         let monacoUri =
-            monaco.Uri.parse(uri)
+            monaco.Uri.parse(openDocument.uri)
 
         var textModel =
             monaco.editor?.getModel(monacoUri);
 
         const reuseModel =
-            textModel?.uri.toString() === uri
-
-        /*
-        console.log("previous model:");
-        console.log(textModel);
-
-        console.log("equal: " + (textModel?.uri.toString() === uri));
-        */
+            textModel?.uri.toString() === openDocument.uri
 
         if(!reuseModel) {
 
@@ -99,7 +93,7 @@ monacoHtmlDocumentFromCdnUrl cdnUrlToMin =
             });
 
             textModel =
-                monaco.editor?.createModel(newValue, language, monacoUri);
+                monaco.editor?.createModel(openDocument.value, openDocument.language, monacoUri);
 
             editor.setModel(textModel);
         }
@@ -108,8 +102,11 @@ monacoHtmlDocumentFromCdnUrl cdnUrlToMin =
             return;
         }
 
-        textModel.setValue(newValue);
-        monaco.editor?.setModelLanguage(textModel, language);
+        textModel.setValue(openDocument.value);
+        monaco.editor?.setModelLanguage(textModel, openDocument.language);
+
+        editor.revealPositionInCenter(openDocument.position);
+        editor.setPosition(openDocument.position);
     }
 
     function monacoEditorSetModelMarkers(markers) {
@@ -121,10 +118,18 @@ monacoHtmlDocumentFromCdnUrl cdnUrlToMin =
     }
 
     function monacoEditorRevealPositionInCenter(position) {
-        if (typeof theEditor === 'undefined')
-            return;
 
-        theEditor?.revealPositionInCenter(position);
+        const editor =
+            monaco.editor?.getEditors()[0];
+
+        if(typeof editor != "object") {
+
+            console.error("No editor found.");
+
+            return;
+        }
+
+        editor.revealPositionInCenter(position);
     }
 
     function monacoMarkerFromElmMonacoMarker(elmMonacoMarker) {
@@ -194,12 +199,10 @@ monacoHtmlDocumentFromCdnUrl cdnUrlToMin =
     }
 
     function dispatchMessage(message) {
-        if(message.SetContent) {
+        if(message.OpenDocumentEvent) {
 
-            monacoEditorSetContent(
-                message.SetContent[0].value,
-                message.SetContent[0].language,
-                message.SetContent[0].uri);
+            monacoEditorOpenDocument(
+                message.OpenDocumentEvent[0]);
         }
 
         if(message.SetModelMarkers)
@@ -213,6 +216,9 @@ monacoHtmlDocumentFromCdnUrl cdnUrlToMin =
 
         if(message.ProvideHoverEvent)
             provideHoverEventFromElm(message.ProvideHoverEvent[0]);
+
+        if(message.ProvideDefinitionEvent)
+            provideDefinitionEventFromElm(message.ProvideDefinitionEvent[0]);
     }
 
     function editorEventOnDidFocusEditorWidget() {
@@ -308,6 +314,45 @@ monacoHtmlDocumentFromCdnUrl cdnUrlToMin =
         });
     }
 
+    function editorProvideDefinitionFromPosition(uri, position, lineText, word) {
+
+        return new Promise(function (resolve, reject) {
+
+            const timeout =
+                setTimeout(() => {
+                    const message = "Did not get definition from Elm within " + getHoverTimeoutMilliseconds + " milliseconds.";
+
+                console.error(message);
+                reject(message);
+            }, getHoverTimeoutMilliseconds);
+
+            provideDefinitionEventFromElm = function(responseFromElm)
+            {
+                clearTimeout(timeout);
+
+                const responseForResolve = responseFromElm
+
+                console.log("responseForResolve", responseForResolve);
+
+                resolve(responseForResolve);
+
+                provideDefinitionEventFromElm = function(){};
+            }
+
+            parent?.messageFromMonacoFrame?.({
+                RequestDefinitionEvent:
+                    [
+                    { uri : uri
+                    , positionLineNumber: position.lineNumber
+                    , positionColumn: position.column
+                    , lineText: lineText
+                    , word: word.word
+                    }
+                    ]});
+        });
+    }
+
+
 
 </script>
 
@@ -346,6 +391,33 @@ monacoHtmlDocumentFromCdnUrl cdnUrlToMin =
             });
 
         monaco.languages.setMonarchTokensProvider('Elm', window.elm_monarch);
+
+        monaco.editor.registerEditorOpener({
+            openCodeEditor: function (source, resource, selectionOrPosition) {
+
+                const uri =
+                    resource.toString();
+
+                console.log('Resource uri: ', uri);
+                console.log('selectionOrPosition: ', selectionOrPosition);
+
+
+                [lineNumber, column] =
+                    Object.hasOwn(selectionOrPosition, 'startLineNumber')
+                        ? [selectionOrPosition.startLineNumber, selectionOrPosition.startColumn]
+                        : [selectionOrPosition.lineNumber, selectionOrPosition.column]
+
+                parent?.messageFromMonacoFrame?.({
+                    OpenCodeEditorEvent:
+                        [
+                        { uri: uri
+                        , position: { lineNumber: lineNumber, column: column }
+                        }
+                        ]});
+
+                return true;
+            }
+        });
 
         monaco.languages.registerCompletionItemProvider('Elm', {
             provideCompletionItems: function(model, position) {
@@ -424,6 +496,25 @@ monacoHtmlDocumentFromCdnUrl cdnUrlToMin =
                     model.getWordAtPosition(position);
 
                 return editorProvideHoverFromPosition(uri, position, lineText, word);
+            }
+        });
+
+        monaco.languages.registerDefinitionProvider('Elm', {
+            provideDefinition: function (model, position) {
+
+                const uri =
+                    model.uri.toString()
+
+                const textUntilPosition =
+                    model.getValueInRange({startLineNumber: 1, startColumn: 1, endLineNumber: position.lineNumber, endColumn: position.column});
+
+                const lineText =
+                    model.getLineContent(position.lineNumber)
+
+                const word =
+                    model.getWordAtPosition(position)
+
+                return editorProvideDefinitionFromPosition(uri, position, lineText, word);
             }
         });
 

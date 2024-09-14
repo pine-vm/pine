@@ -5,17 +5,22 @@ module Frontend.MonacoEditor exposing (..)
 
 
 type MessageToEditor
-    = SetContent SetContentStruct
+    = OpenDocumentEvent OpenDocumentEventStruct
     | SetModelMarkers (List EditorMarker)
-    | RevealPositionInCenter { lineNumber : Int, column : Int }
+    | RevealPositionInCenter MonacoPosition
     | ProvideCompletionItemsEvent (List MonacoCompletionItem)
     | ProvideHoverEvent (List String)
+      {-
+         <https://microsoft.github.io/monaco-editor/typedoc/interfaces/languages.DefinitionProvider.html#provideDefinition.provideDefinition-1>
+      -}
+    | ProvideDefinitionEvent (List MonacoLocation)
 
 
-type alias SetContentStruct =
+type alias OpenDocumentEventStruct =
     { value : String
     , language : String
     , uri : String
+    , position : MonacoPosition
     }
 
 
@@ -29,6 +34,8 @@ type MessageFromEditor
     | EditorActionInspectSyntaxEvent
     | RequestCompletionItemsEvent RequestCompletionItemsStruct
     | RequestHoverEvent RequestHoverStruct
+    | RequestDefinitionEvent RequestHoverStruct
+    | OpenCodeEditorEvent OpenCodeEditorEventStruct
 
 
 type alias DidChangeContentEventStruct =
@@ -50,6 +57,12 @@ type alias RequestHoverStruct =
     , positionColumn : Int
     , lineText : String
     , word : String
+    }
+
+
+type alias OpenCodeEditorEventStruct =
+    { uri : String
+    , position : MonacoPosition
     }
 
 
@@ -92,3 +105,32 @@ type CompletionItemKind
     | FunctionCompletionItemKind
     | ModuleCompletionItemKind
     | StructCompletionItemKind
+
+
+type alias MonacoLocation =
+    {-
+       <https://microsoft.github.io/monaco-editor/typedoc/interfaces/languages.Location.html>
+    -}
+    { range : MonacoRange
+    , uri : String
+    }
+
+
+type alias MonacoPosition =
+    {-
+       <https://microsoft.github.io/monaco-editor/typedoc/interfaces/IPosition.html>
+    -}
+    { lineNumber : Int
+    , column : Int
+    }
+
+
+type alias MonacoRange =
+    {-
+       <https://microsoft.github.io/monaco-editor/typedoc/interfaces/IRange.html>
+    -}
+    { startLineNumber : Int
+    , startColumn : Int
+    , endLineNumber : Int
+    , endColumn : Int
+    }

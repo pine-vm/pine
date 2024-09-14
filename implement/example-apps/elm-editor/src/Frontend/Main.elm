@@ -115,7 +115,7 @@ type WorkspaceStateStruct
 
 type alias WorkspaceActiveStruct =
     { fileTree : FileTreeInWorkspace.FileTreeNode
-    , editing : { fileLocationOpenInEditor : Maybe ( List String, String ) }
+    , editing : Maybe EditingViewStruct
     , decodeMessageFromMonacoEditorError : Maybe Json.Decode.Error
     , lastTextReceivedFromEditor : Maybe String
     , compilation : Maybe CompilationState
@@ -123,6 +123,12 @@ type alias WorkspaceActiveStruct =
     , elmFormat : Maybe ElmFormatState
     , viewEnlargedPane : Maybe WorkspacePane
     , enableInspectionOnCompile : Bool
+    }
+
+
+type alias EditingViewStruct =
+    { fileLocation : ( List String, String )
+    , openPosition : Frontend.MonacoEditor.MonacoPosition
     }
 
 
@@ -735,11 +741,15 @@ setWorkspaceStateInUrlForBookmark { createDiffIfBaseAvailable } workspaceActive 
                     |> Maybe.andThen Result.toMaybe
 
         filePathToOpen =
-            case workspaceActive.editing.fileLocationOpenInEditor of
+            case workspaceActive.editing of
                 Nothing ->
                     Nothing
 
-                Just ( directoryPath, fileName ) ->
+                Just editing ->
+                    let
+                        ( directoryPath, fileName ) =
+                            editing.fileLocation
+                    in
                     Just (directoryPath ++ [ fileName ])
     in
     state.url
@@ -797,7 +807,10 @@ updateWorkspace :
 updateWorkspace updateConfig event stateBeforeApplyingEvent =
     let
         ( stateAfterApplyEvent, eventCmd ) =
-            updateWorkspaceWithoutCmdToUpdateEditor updateConfig event stateBeforeApplyingEvent
+            updateWorkspaceWithoutCmdToUpdateEditor
+                updateConfig
+                event
+                stateBeforeApplyingEvent
 
         ( state, afterEventCmd ) =
             updateWorkspaceAfterEvent stateBeforeApplyingEvent stateAfterApplyEvent
@@ -819,11 +832,7 @@ updateWorkspaceAfterEvent stateBeforeApplyEvent stateAfterEvent =
         Nothing ->
             ( stateAfterEvent, Cmd.none )
 
-        Just fileOpenInEditor ->
-            let
-                ( fileLocation, fileContent ) =
-                    fileOpenInEditor
-            in
+        Just ( editing, fileContent ) ->
             case stringFromFileContent fileContent.asBytes of
                 Nothing ->
                     ( stateAfterEvent, Cmd.none )
@@ -831,13 +840,13 @@ updateWorkspaceAfterEvent stateBeforeApplyEvent stateAfterEvent =
                 Just textForEditor ->
                     let
                         ( directoryPath, fileName ) =
-                            fileLocation
+                            editing.fileLocation
 
                         fileLocationOpenedBeforeEvent =
                             fileLocationOpenInEditorFromWorkspace stateBeforeApplyEvent
 
                         fileLocationChanged =
-                            fileLocationOpenedBeforeEvent /= Just fileLocation
+                            fileLocationOpenedBeforeEvent /= Just editing
 
                         compilationChanged =
                             stateBeforeApplyEvent.compilation /= stateAfterEvent.compilation
@@ -848,17 +857,25 @@ updateWorkspaceAfterEvent stateBeforeApplyEvent stateAfterEvent =
 
                         setTextToEditorCmd : Maybe (Cmd WorkspaceEventStructure)
                         setTextToEditorCmd =
-                            if Just textForEditor == state.lastTextReceivedFromEditor then
+                            if
+                                (Just textForEditor == state.lastTextReceivedFromEditor)
+                                    && not fileLocationChanged
+                            then
                                 Nothing
 
                             else
                                 Just
                                     (setContentInMonacoEditorCmd
-                                        { text = textForEditor
+                                        { value = textForEditor
                                         , language =
-                                            Maybe.withDefault "txt"
-                                                (Maybe.map monacoLanguageNameForFileContent fileContentType)
-                                        , uri = monacoUriForFilePath directoryPath fileName
+                                            case fileContentType of
+                                                Nothing ->
+                                                    "txt"
+
+                                                Just contentType ->
+                                                    monacoLanguageNameForFileContent contentType
+                                        , uri = monacoUriForDirectoryPathAndFileName directoryPath fileName
+                                        , position = editing.openPosition
                                         }
                                     )
 
@@ -884,7 +901,7 @@ updateWorkspaceAfterEvent stateBeforeApplyEvent stateAfterEvent =
                                                                 loweringErrors
                                                                     |> editorDocumentMarkersFromFailedLowering
                                                                         { compileRequest = compilation.origin.requestFromUser
-                                                                        , fileOpenInEditor = fileOpenInEditor
+                                                                        , fileOpenInEditor = ( editing.fileLocation, fileContent )
                                                                         }
 
                                                     elmMakeMarkers =
@@ -893,7 +910,7 @@ updateWorkspaceAfterEvent stateBeforeApplyEvent stateAfterEvent =
                                                             |> Maybe.andThen .reportFromJson
                                                             |> editorDocumentMarkersFromElmMakeReport
                                                                 { elmMakeRequest = loweringComplete.elmMakeRequest
-                                                                , fileOpenInEditor = fileOpenInEditor
+                                                                , fileOpenInEditor = ( editing.fileLocation, fileContent )
                                                                 }
                                                 in
                                                 [ loweringMarkers, elmMakeMarkers ]
@@ -951,23 +968,23 @@ monacoLanguageNameForFileContent fileContent =
             "css"
 
 
-fileLocationOpenInEditorFromWorkspace : WorkspaceActiveStruct -> Maybe ( List String, String )
+fileLocationOpenInEditorFromWorkspace : WorkspaceActiveStruct -> Maybe EditingViewStruct
 fileLocationOpenInEditorFromWorkspace =
     fileOpenedInEditorFromWorkspace >> Maybe.map Tuple.first
 
 
 fileOpenedInEditorFromWorkspace :
     WorkspaceActiveStruct
-    -> Maybe ( ( List String, String ), FileTreeInWorkspace.BlobNodeWithCache )
+    -> Maybe ( EditingViewStruct, FileTreeInWorkspace.BlobNodeWithCache )
 fileOpenedInEditorFromWorkspace workspaceActive =
-    case workspaceActive.editing.fileLocationOpenInEditor of
+    case workspaceActive.editing of
         Nothing ->
             Nothing
 
-        Just filePathOpenedInEditor ->
+        Just editing ->
             let
                 ( directoryPath, fileName ) =
-                    filePathOpenedInEditor
+                    editing.fileLocation
             in
             case
                 FileTree.getBlobAtPathFromFileTree
@@ -978,7 +995,7 @@ fileOpenedInEditorFromWorkspace workspaceActive =
                     Nothing
 
                 Just fileContent ->
-                    Just ( filePathOpenedInEditor, fileContent )
+                    Just ( editing, fileContent )
 
 
 updateWorkspaceWithoutCmdToUpdateEditor :
@@ -1001,22 +1018,31 @@ updateWorkspaceWithoutCmdToUpdateEditor updateConfig event stateBefore =
                     editing =
                         stateBefore.editing
                   in
-                  { stateBefore | editing = { editing | fileLocationOpenInEditor = Just fileLocation } }
+                  { stateBefore
+                    | editing =
+                        Just
+                            { fileLocation = fileLocation
+                            , openPosition = defaultEditorOpenPosition
+                            }
+                  }
                 , Cmd.none
                 )
 
         UserInputChangeTextInEditor editorScope inputText ->
-            ( case stateBefore.editing.fileLocationOpenInEditor of
+            ( case stateBefore.editing of
                 Nothing ->
                     stateBefore
 
-                Just ( directoryPath, fileName ) ->
+                Just editing ->
                     let
+                        ( directoryPath, fileName ) =
+                            editing.fileLocation
+
                         filePath =
                             directoryPath ++ [ fileName ]
 
                         expectedUri =
-                            monacoUriForFilePath directoryPath fileName
+                            monacoUriForDirectoryPathAndFileName directoryPath fileName
                     in
                     if editorScope.uri /= expectedUri then
                         stateBefore
@@ -1034,12 +1060,19 @@ updateWorkspaceWithoutCmdToUpdateEditor updateConfig event stateBefore =
 
         UserInputRevealPositionInEditor revealPositionInEditor ->
             ( stateBefore
-            , if (stateBefore |> fileOpenedInEditorFromWorkspace |> Maybe.map Tuple.first) == Just revealPositionInEditor.fileLocation then
-                revealPositionInCenterInMonacoEditorCmd
-                    { lineNumber = revealPositionInEditor.lineNumber, column = revealPositionInEditor.column }
+            , case fileOpenedInEditorFromWorkspace stateBefore of
+                Nothing ->
+                    Cmd.none
 
-              else
-                Cmd.none
+                Just ( editing, _ ) ->
+                    if editing.fileLocation == revealPositionInEditor.fileLocation then
+                        revealPositionInCenterInMonacoEditorCmd
+                            { lineNumber = revealPositionInEditor.lineNumber
+                            , column = revealPositionInEditor.column
+                            }
+
+                    else
+                        Cmd.none
             )
 
         MonacoEditorEvent monacoEditorEvent ->
@@ -1079,6 +1112,12 @@ updateWorkspaceWithoutCmdToUpdateEditor updateConfig event stateBefore =
                         Frontend.MonacoEditor.RequestHoverEvent requestHoverEvent ->
                             updateToProvideHoverRequest requestHoverEvent stateBefore
 
+                        Frontend.MonacoEditor.RequestDefinitionEvent requestDefinitionEvent ->
+                            updateToProvideDefinitionRequest requestDefinitionEvent stateBefore
+
+                        Frontend.MonacoEditor.OpenCodeEditorEvent openCodeEditorEvent ->
+                            updateForOpenCodeEditorRequest openCodeEditorEvent stateBefore
+
                         Frontend.MonacoEditor.DidFocusEditorWidgetEvent ->
                             ( stateBefore, Cmd.none )
 
@@ -1111,7 +1150,7 @@ updateWorkspaceWithoutCmdToUpdateEditor updateConfig event stateBefore =
                     stateBefore.editing
               in
               { stateBefore
-                | editing = { editing | fileLocationOpenInEditor = Nothing }
+                | editing = Nothing
                 , elmFormat = Nothing
               }
             , Cmd.none
@@ -1120,7 +1159,7 @@ updateWorkspaceWithoutCmdToUpdateEditor updateConfig event stateBefore =
         BackendElmFormatResponseEvent formatResponseEvent ->
             case stateBefore.elmFormat of
                 Just (ElmFormatInProgress formatStart) ->
-                    ( if Just formatResponseEvent.fileLocation /= stateBefore.editing.fileLocationOpenInEditor then
+                    ( if Just formatResponseEvent.fileLocation /= Maybe.map .fileLocation stateBefore.editing then
                         stateBefore
 
                       else
@@ -1212,6 +1251,9 @@ updateWorkspaceWithoutCmdToUpdateEditor updateConfig event stateBefore =
 
                                         LanguageServiceInterface.ProvideCompletionItemsResponse completionItems ->
                                             provideCompletionItemsInMonacoEditorCmd completionItems
+
+                                        LanguageServiceInterface.ProvideDefinitionResponse locationsInFiles ->
+                                            provideDefinitionInMonacoEditorCmd locationsInFiles
                             in
                             ( stateBefore
                             , cmd
@@ -1328,15 +1370,46 @@ updateToProvideHoverRequest :
     -> WorkspaceActiveStruct
     -> ( WorkspaceActiveStruct, Cmd WorkspaceEventStructure )
 updateToProvideHoverRequest request workspaceStateBefore =
-    case workspaceStateBefore.editing.fileLocationOpenInEditor of
+    case workspaceStateBefore.editing of
         Nothing ->
             ( workspaceStateBefore
             , Cmd.none
             )
 
-        Just ( directoryPath, fileName ) ->
+        Just editing ->
+            let
+                ( directoryPath, fileName ) =
+                    editing.fileLocation
+            in
             updateForRequestToLanguageService
                 (LanguageServiceInterface.ProvideHoverRequest
+                    { filePathOpenedInEditor = directoryPath ++ [ fileName ]
+                    , positionLineNumber = request.positionLineNumber
+                    , positionColumn = request.positionColumn
+                    , lineText = request.lineText
+                    }
+                )
+                workspaceStateBefore
+
+
+updateToProvideDefinitionRequest :
+    Frontend.MonacoEditor.RequestHoverStruct
+    -> WorkspaceActiveStruct
+    -> ( WorkspaceActiveStruct, Cmd WorkspaceEventStructure )
+updateToProvideDefinitionRequest request workspaceStateBefore =
+    case workspaceStateBefore.editing of
+        Nothing ->
+            ( workspaceStateBefore
+            , Cmd.none
+            )
+
+        Just editing ->
+            let
+                ( directoryPath, fileName ) =
+                    editing.fileLocation
+            in
+            updateForRequestToLanguageService
+                (LanguageServiceInterface.ProvideDefinitionRequest
                     { filePathOpenedInEditor = directoryPath ++ [ fileName ]
                     , positionLineNumber = request.positionLineNumber
                     , positionColumn = request.positionColumn
@@ -1351,11 +1424,15 @@ updateToProvideCompletionItemsRequest :
     -> WorkspaceActiveStruct
     -> ( WorkspaceActiveStruct, Cmd WorkspaceEventStructure )
 updateToProvideCompletionItemsRequest request workspaceStateBefore =
-    case workspaceStateBefore.editing.fileLocationOpenInEditor of
+    case workspaceStateBefore.editing of
         Nothing ->
             ( workspaceStateBefore, Cmd.none )
 
-        Just ( directoryPath, fileName ) ->
+        Just editing ->
+            let
+                ( directoryPath, fileName ) =
+                    editing.fileLocation
+            in
             updateForRequestToLanguageService
                 (LanguageServiceInterface.ProvideCompletionItemsRequest
                     { filePathOpenedInEditor = directoryPath ++ [ fileName ]
@@ -1364,6 +1441,48 @@ updateToProvideCompletionItemsRequest request workspaceStateBefore =
                     }
                 )
                 workspaceStateBefore
+
+
+updateForOpenCodeEditorRequest :
+    Frontend.MonacoEditor.OpenCodeEditorEventStruct
+    -> WorkspaceActiveStruct
+    -> ( WorkspaceActiveStruct, Cmd WorkspaceEventStructure )
+updateForOpenCodeEditorRequest request workspaceStateBefore =
+    case findFileLocationFromUri request.uri workspaceStateBefore of
+        Nothing ->
+            ( workspaceStateBefore
+            , Cmd.none
+            )
+
+        Just fileLocation ->
+            ( { workspaceStateBefore
+                | editing =
+                    Just
+                        { fileLocation = fileLocation
+                        , openPosition = request.position
+                        }
+              }
+            , Cmd.none
+            )
+
+
+findFileLocationFromUri : String -> WorkspaceActiveStruct -> Maybe ( List String, String )
+findFileLocationFromUri uri workspaceState =
+    case
+        workspaceState.fileTree
+            |> FileTree.flatListOfBlobsFromFileTreeNode
+            |> List.Extra.find (\( filePath, _ ) -> monacoUriForFilePath filePath == uri)
+    of
+        Nothing ->
+            Nothing
+
+        Just ( filePath, _ ) ->
+            case List.reverse filePath of
+                [] ->
+                    Nothing
+
+                fileName :: directoryPathReversed ->
+                    Just ( List.reverse directoryPathReversed, fileName )
 
 
 updateForRequestToLanguageService :
@@ -1617,7 +1736,7 @@ elmFormatCmdFromState state =
         Nothing ->
             Nothing
 
-        Just ( fileLocation, fileContent ) ->
+        Just ( editing, fileContent ) ->
             case stringFromFileContent fileContent.asBytes of
                 Nothing ->
                     Nothing
@@ -1640,7 +1759,8 @@ elmFormatCmdFromState state =
                         jsonDecoder
                         (Result.map Tuple.second
                             >> (\result ->
-                                    BackendElmFormatResponseEvent { fileLocation = fileLocation, result = result }
+                                    BackendElmFormatResponseEvent
+                                        { fileLocation = editing.fileLocation, result = result }
                                )
                         )
                     )
@@ -1744,12 +1864,15 @@ prepareCompileForFileOpenedInEditor :
     WorkspaceActiveStruct
     -> Maybe { requestFromUserIdentity : ElmMakeRequestStructure, compile : () -> CompilationState }
 prepareCompileForFileOpenedInEditor workspace =
-    case workspace.editing.fileLocationOpenInEditor of
+    case workspace.editing of
         Nothing ->
             Nothing
 
-        Just ( entryPointDirectoryPath, entryPointFileName ) ->
+        Just editing ->
             let
+                ( entryPointDirectoryPath, entryPointFileName ) =
+                    editing.fileLocation
+
                 entryPointFilePath =
                     entryPointDirectoryPath ++ [ entryPointFileName ]
 
@@ -2033,7 +2156,7 @@ view state =
                                     ]
 
                         workspaceView =
-                            case workspaceActive.editing.fileLocationOpenInEditor of
+                            case workspaceActive.editing of
                                 Nothing ->
                                     { editorPaneHeader =
                                         [ Element.text "Choose a file to open in the editor" ]
@@ -2061,8 +2184,11 @@ view state =
                                                 ]
                                     }
 
-                                Just ( directoryPath, fileName ) ->
+                                Just editing ->
                                     let
+                                        ( directoryPath, fileName ) =
+                                            editing.fileLocation
+
                                         fileContentType : Maybe FileContentType
                                         fileContentType =
                                             FileEditor.fileContentTypeFromFileName fileName
@@ -3255,8 +3381,11 @@ viewOutputPaneContentFromCompilationComplete workspace compilation loweringCompl
                 Nothing ->
                     Nothing
 
-                Just ( directoryPath, fileName ) ->
+                Just editing ->
                     let
+                        ( directoryPath, fileName ) =
+                            editing.fileLocation
+
                         filePathOpenedInEditor =
                             directoryPath ++ [ fileName ]
                     in
@@ -3514,9 +3643,14 @@ viewOutputPaneContentFromCompilationComplete workspace compilation loweringCompl
     }
 
 
-monacoUriForFilePath : List String -> String -> String
-monacoUriForFilePath directoryPath fileName =
-    "file:///" ++ String.join "/" (directoryPath ++ [ fileName ])
+monacoUriForDirectoryPathAndFileName : List String -> String -> String
+monacoUriForDirectoryPathAndFileName directoryPath fileName =
+    monacoUriForFilePath (directoryPath ++ [ fileName ])
+
+
+monacoUriForFilePath : List String -> String
+monacoUriForFilePath filePath =
+    "file:///" ++ String.join "/" filePath
 
 
 compileHtmlDocumentForEmbedding : { htmlFromElmMake : String } -> String
@@ -4094,13 +4228,10 @@ titlebarMenuEntryLabel menuEntry =
             "Workspace"
 
 
-setContentInMonacoEditorCmd : { text : String, language : String, uri : String } -> Cmd WorkspaceEventStructure
-setContentInMonacoEditorCmd content =
-    Frontend.MonacoEditor.SetContent
-        { value = content.text
-        , language = content.language
-        , uri = content.uri
-        }
+setContentInMonacoEditorCmd : Frontend.MonacoEditor.OpenDocumentEventStruct -> Cmd WorkspaceEventStructure
+setContentInMonacoEditorCmd openDocument =
+    Frontend.MonacoEditor.OpenDocumentEvent
+        openDocument
         |> CompilationInterface.GenerateJsonConverters.jsonEncodeMessageToMonacoEditor
         |> sendMessageToMonacoFrame
 
@@ -4133,6 +4264,24 @@ provideHoverInMonacoEditorCmd =
         >> sendMessageToMonacoFrame
 
 
+provideDefinitionInMonacoEditorCmd : List LanguageServiceInterface.LocationUnderFilePath -> Cmd WorkspaceEventStructure
+provideDefinitionInMonacoEditorCmd locationsInFiles =
+    let
+        monacoLocations : List Frontend.MonacoEditor.MonacoLocation
+        monacoLocations =
+            List.map
+                (\locationInFile ->
+                    { uri = monacoUriForFilePath locationInFile.filePath
+                    , range = locationInFile.range
+                    }
+                )
+                locationsInFiles
+    in
+    Frontend.MonacoEditor.ProvideDefinitionEvent monacoLocations
+        |> CompilationInterface.GenerateJsonConverters.jsonEncodeMessageToMonacoEditor
+        |> sendMessageToMonacoFrame
+
+
 monacoEditorElement : State -> Element.Element event
 monacoEditorElement _ =
     Html.iframe
@@ -4156,7 +4305,16 @@ initWorkspaceFromFileTreeAndFileSelection :
     -> WorkspaceActiveStruct
 initWorkspaceFromFileTreeAndFileSelection { fileTree, fileLocationOpenInEditor } =
     { fileTree = fileTree
-    , editing = { fileLocationOpenInEditor = fileLocationOpenInEditor }
+    , editing =
+        case fileLocationOpenInEditor of
+            Nothing ->
+                Nothing
+
+            Just fileLocation ->
+                Just
+                    { fileLocation = fileLocation
+                    , openPosition = defaultEditorOpenPosition
+                    }
     , decodeMessageFromMonacoEditorError = Nothing
     , lastTextReceivedFromEditor = Nothing
     , compilation = Nothing
@@ -4164,6 +4322,13 @@ initWorkspaceFromFileTreeAndFileSelection { fileTree, fileLocationOpenInEditor }
     , elmFormat = Nothing
     , viewEnlargedPane = Nothing
     , enableInspectionOnCompile = False
+    }
+
+
+defaultEditorOpenPosition : Frontend.MonacoEditor.MonacoPosition
+defaultEditorOpenPosition =
+    { lineNumber = 1
+    , column = 1
     }
 
 

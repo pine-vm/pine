@@ -96,6 +96,13 @@ handleRequest requestInWorkspace stateBefore =
                             provideCompletionItemsRequest
                             languageServiceState
                         )
+
+                LanguageServiceInterface.ProvideDefinitionRequest provideDefinitionRequest ->
+                    LanguageServiceInterface.ProvideDefinitionResponse
+                        (LanguageService.provideDefinition
+                            provideDefinitionRequest
+                            languageServiceState
+                        )
     in
     ( Ok serviceResponse
     , languageServiceState
