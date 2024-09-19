@@ -9,7 +9,7 @@ namespace ElmTime;
 public static class UserSecrets
 {
     private static string FileStoreDirectory =>
-        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "elm-time", "user-secrets");
+        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "pine", "user-secrets");
 
     private static IFileStore FileStore => new FileStoreFromSystemIOFile(FileStoreDirectory);
 

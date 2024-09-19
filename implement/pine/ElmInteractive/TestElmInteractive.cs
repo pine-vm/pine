@@ -160,7 +160,7 @@ public class TestElmInteractive
                 (!failedSteps.IsEmpty ? "Failed" : "Passed") + "!",
                 string.Join(", ", overallStats.Select(stat => stat.label + ": " + stat.value)),
                 scenarios.ScenariosTreeCompositionHash[..10] +
-                " (elm-time " + Program.AppVersionId + " with Elm compiler " + interactiveConfig.CompilerId + ")"),
+                " (Pine " + Program.AppVersionId + " with Elm compiler " + interactiveConfig.CompilerId + ")"),
             color: !failedSteps.IsEmpty ? IConsole.TextColor.Red : IConsole.TextColor.Green);
 
         var failedScenarios =
