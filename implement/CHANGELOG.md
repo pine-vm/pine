@@ -28,3 +28,8 @@ But how do we expand the code analysis to cover the condition expressions? Initi
 
 So far, I expected to develop the standard expression encoding into a form completely representable in a file system tree. With such an encoding, we could take a tree from the file system and directly feed it into Parse&Eval. However, I changed my mind about the tradeoffs and now change the encoding in the opposite direction, optimizing for compactness and symmetry with the Elm value encoding.
 If we still want to (re)use file systems to model syntax trees, we will add a mapping for such a form later, meaning there would be another hash code for that encoding.
+
+## 2024-09-19 - Basic Support for Elm Float Type
+
+Expand the Elm compiler and core libraries to support `Float` literals and `String.toFloat`
+

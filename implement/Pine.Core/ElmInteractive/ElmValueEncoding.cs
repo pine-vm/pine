@@ -144,6 +144,33 @@ public static class ElmValueEncoding
                 }
 
                 {
+                    // Optimize for the case of an Elm Float.
+
+                    if (listValue.Elements[0] == ElmValue.ElmFloatTypeTagNameAsValue)
+                    {
+                        var tagArgumentList = listValue.Elements[1];
+
+                        if (tagArgumentList is not PineValue.ListValue tagArgumentsList)
+                            return "Failed to convert value under Float tag: Expected a list of tag arguments";
+
+                        if (tagArgumentsList.Elements.Count is not 2)
+                            return "Failed to convert value under Float tag: Expected a list of tag arguments with two elements";
+
+                        var numeratorValue = tagArgumentsList.Elements[0];
+
+                        var denominatorValue = tagArgumentsList.Elements[1];
+
+                        if (PineValueAsInteger.SignedIntegerFromValueStrict(numeratorValue) is not Result<string, System.Numerics.BigInteger>.Ok numeratorOk)
+                            return "Failed to parse numerator under Float tag";
+
+                        if (PineValueAsInteger.SignedIntegerFromValueStrict(denominatorValue) is not Result<string, System.Numerics.BigInteger>.Ok denominatorOk)
+                            return "Failed to parse denominator under Float tag";
+
+                        return ElmValue.ElmFloat.Normalized(numeratorOk.Value, denominatorOk.Value);
+                    }
+                }
+
+                {
                     // Optimize, especially for the case of an Elm Tag.
 
                     if (listValue.Elements[0] is PineValue.ListValue tagNameValue &&
@@ -422,6 +449,15 @@ public static class ElmValueEncoding
                 ElmValue.ElmRecord elmRecord =>
                 ElmRecordAsPineValue(
                     [.. elmRecord.Fields.Select(field => (field.FieldName, ElmValueAsPineValue(field.Value, reusableEncoding)))]),
+
+                ElmValue.ElmFloat elmFloat =>
+                PineValue.List(
+                    [ElmValue.ElmFloatTypeTagNameAsValue,
+                    PineValue.List(
+                        [
+                        PineValueAsInteger.ValueFromSignedInteger(elmFloat.Numerator),
+                        PineValueAsInteger.ValueFromSignedInteger(elmFloat.Denominator)
+                        ])]),
 
                 _ =>
                 throw new NotImplementedException(

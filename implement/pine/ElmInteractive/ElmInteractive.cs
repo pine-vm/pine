@@ -425,7 +425,7 @@ public class ElmInteractive
         PineValue response) =>
         ElmValueEncoding.PineValueAsElmValue(response)
         .MapError(err => "Failed to convert Pine value to Elm value: " + err)
-        .Map(elmValue => new EvaluatedStruct(ElmValue.ElmValueAsExpression(elmValue).expressionString));
+        .Map(elmValue => new EvaluatedStruct(ElmValue.RenderAsElmExpression(elmValue).expressionString));
 
     public record PineValueJson
     {

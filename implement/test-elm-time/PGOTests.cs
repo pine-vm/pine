@@ -366,7 +366,7 @@ public class PGOTests
                                 fromOk:
                                 elmValue =>
                                 {
-                                    var asExprString = ElmValue.ElmValueAsExpression(elmValue).expressionString;
+                                    var asExprString = ElmValue.RenderAsElmExpression(elmValue).expressionString;
 
                                     if (asExprString.Length < 100)
                                         return asExprString;
@@ -847,7 +847,7 @@ public class PGOTests
                                 fromOk:
                                 elmValue =>
                                 {
-                                    var asExprString = ElmValue.ElmValueAsExpression(elmValue).expressionString;
+                                    var asExprString = ElmValue.RenderAsElmExpression(elmValue).expressionString;
 
                                     if (asExprString.Length < 100)
                                         return asExprString;
@@ -1248,7 +1248,7 @@ public class PGOTests
                                 fromOk:
                                 elmValue =>
                                 {
-                                    var asExprString = ElmValue.ElmValueAsExpression(elmValue).expressionString;
+                                    var asExprString = ElmValue.RenderAsElmExpression(elmValue).expressionString;
 
                                     if (asExprString.Length < 100)
                                         return asExprString;
@@ -1631,7 +1631,7 @@ public class PGOTests
                                 fromOk:
                                 elmValue =>
                                 {
-                                    var asExprString = ElmValue.ElmValueAsExpression(elmValue).expressionString;
+                                    var asExprString = ElmValue.RenderAsElmExpression(elmValue).expressionString;
 
                                     if (asExprString.Length < 100)
                                         return asExprString;

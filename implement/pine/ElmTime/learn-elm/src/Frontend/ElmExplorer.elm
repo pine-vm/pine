@@ -465,7 +465,7 @@ parseAsFunctionRecord nodeValue =
                     Err ("Failed to parse function: " ++ err)
 
                 Ok elmValue ->
-                    case ElmInteractive.elmValueAsExpression elmValue of
+                    case ElmInteractive.renderAsElmExpression elmValue of
                         ( expressionText, _ ) ->
                             Ok
                                 { children = Dict.empty

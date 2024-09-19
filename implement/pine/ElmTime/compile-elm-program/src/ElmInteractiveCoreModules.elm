@@ -48,7 +48,14 @@ type String
     = String (List Char.Char)
 
     -- We need another tag to prevent the compiler from assuming that the condition for tag 'String' is always true.
-    | AnyOtherKind
+    | AnyOtherKind_String
+
+
+type Elm_Float
+    = Elm_Float Int Int
+
+    -- We need another tag to prevent the compiler from assuming that the condition for tag 'String' is always true.
+    | AnyOtherKind_Float
 
 
 {-| Represents the relative ordering of two things.
@@ -509,6 +516,64 @@ isPineList a =
 
 isPineBlob a =
     Pine_kernel.equal [ Pine_kernel.take [ 0, a ], Pine_kernel.take [ 0, 0 ] ]
+
+
+toFloat : Int -> Float
+toFloat int =
+    Elm_Float int 1
+
+
+floor : Float -> Int
+floor number =
+    case number of
+    Elm_Float numerator denom ->
+        if Pine_kernel.is_sorted_ascending_int [ numerator, 0 ] then
+            -- TODO
+            [ numerator, denom ]
+        else
+            ratioFloor numerator denom
+
+    _ ->
+        number
+
+
+ratioFloor : Int -> Int -> Int
+ratioFloor numerator denom =
+    let
+        (multiplier, denomProd) =
+            findMultiplierToDecimal 1 denom
+    in
+    idiv
+        (Pine_kernel.mul_int [ numerator, multiplier ])
+        denomProd
+
+
+findMultiplierToDecimal : Int -> Int -> (Int, Int, Int)
+findMultiplierToDecimal factor denom =
+    let
+        denomProd =
+            Pine_kernel.mul_int [ denom, factor ]
+
+        lowerPowerOfTen =
+            findLowerPowerOfTen denomProd
+    in
+    if Pine_kernel.equal [ pow 10 lowerPowerOfTen, denomProd ] then
+        (factor, denomProd)
+
+    else
+        findMultiplierToDecimal
+            (Pine_kernel.add_int [ factor, 1 ])
+            denom
+
+
+findLowerPowerOfTen : Int -> Int
+findLowerPowerOfTen int =
+    if Pine_kernel.is_sorted_ascending_int [ int, 9 ] then
+        0
+
+    else
+        Pine_kernel.add_int [ findLowerPowerOfTen (idiv int 10), 1 ]
+
 
 """
     , """
@@ -1162,6 +1227,13 @@ type String
     = String (List Char.Char)
 
 
+type Elm_Float
+    = Elm_Float Int Int
+
+    -- We need another tag to prevent the compiler from assuming that the condition for tag 'String' is always true.
+    | AnyOtherKind_Float
+
+
 toList : String -> List Char
 toList (String chars) =
     chars
@@ -1567,6 +1639,53 @@ lines string =
 foldr : (Char -> b -> b) -> b -> String -> b
 foldr func acc (String list) =
     List.foldr func acc list
+
+
+toFloat : String -> Maybe Float
+toFloat string =
+    if startsWith "-" string
+    then
+        case toFloat (dropLeft 1 string) of
+        Nothing ->
+            Nothing
+
+        Just (Elm_Float numAbs denom) ->
+            Just (Elm_Float (-numAbs) denom)
+    else
+        case split "." string of
+            [] ->
+                Nothing
+
+            [ whole ] ->
+                case toInt whole of
+                    Nothing ->
+                        Nothing
+
+                    Just numerator ->
+                        Just (Elm_Float numerator 1)
+
+            [ beforeSep, afterSep ] ->
+                case toInt beforeSep of
+                    Nothing ->
+                        Nothing
+
+                    Just beforeSepInt ->
+                        case toInt afterSep of
+                            Nothing ->
+                                Nothing
+
+                            Just afterSepInt ->
+                                let
+                                    denom =
+                                        Basics.pow 10 (length afterSep)
+
+                                    numerator =
+                                        beforeSepInt * denom + afterSepInt
+                                in
+                                Just (Elm_Float numerator denom)
+
+            _ ->
+                Nothing
 
 
 """

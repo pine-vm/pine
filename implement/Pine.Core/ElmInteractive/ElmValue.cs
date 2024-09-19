@@ -1,4 +1,4 @@
-using Pine.Core;
+﻿using Pine.Core;
 using System;
 using System.Collections.Frozen;
 using System.Collections.Generic;
@@ -21,6 +21,7 @@ public abstract record ElmValue
         | ElmString String
         | ElmTag String (List ElmValue)
         | ElmRecord (List ( String, ElmValue ))
+        | ElmFloat BigInt.BigInt BigInt.BigInt
         | ElmInternal String
 
      * */
@@ -32,7 +33,7 @@ public abstract record ElmValue
     public static readonly ElmValue FalseValue = TagInstance("False", []);
 
     override public string ToString() =>
-        GetType().Name + " : " + ElmValueAsExpression(this).expressionString;
+        GetType().Name + " : " + RenderAsElmExpression(this).expressionString;
 
     public const string ElmRecordTypeTagName = "Elm_Record";
 
@@ -43,6 +44,8 @@ public abstract record ElmValue
     public const string ElmDictEmptyTagName = "RBEmpty_elm_builtin";
 
     public const string ElmDictNotEmptyTagName = "RBNode_elm_builtin";
+
+    public const string ElmFloatTypeTagName = "Elm_Float";
 
     public static readonly PineValue ElmRecordTypeTagNameAsValue =
         PineValueAsString.ValueFromString(ElmRecordTypeTagName);
@@ -58,6 +61,9 @@ public abstract record ElmValue
 
     public static readonly PineValue ElmDictNotEmptyTagNameAsValue =
         PineValueAsString.ValueFromString(ElmDictNotEmptyTagName);
+
+    public static readonly PineValue ElmFloatTypeTagNameAsValue =
+        PineValueAsString.ValueFromString(ElmFloatTypeTagName);
 
     public static ElmValue Integer(System.Numerics.BigInteger Value) =>
         ReusedIntegerInstances?.TryGetValue(Value, out var reusedInstance) ?? false && reusedInstance is not null ?
@@ -235,7 +241,7 @@ public abstract record ElmValue
         }
 
         public override string ToString() =>
-            GetType().Name + " : " + ElmValueAsExpression(this).expressionString;
+            GetType().Name + " : " + RenderAsElmExpression(this).expressionString;
     }
 
     public record ElmList
@@ -297,7 +303,7 @@ public abstract record ElmValue
         }
 
         public override string ToString() =>
-            GetType().Name + " : " + ElmValueAsExpression(this).expressionString;
+            GetType().Name + " : " + RenderAsElmExpression(this).expressionString;
     }
 
     public record ElmString(string Value)
@@ -352,10 +358,93 @@ public abstract record ElmValue
         }
 
         public override string ToString() =>
-            GetType().Name + " : " + ElmValueAsExpression(this).expressionString;
+            GetType().Name + " : " + RenderAsElmExpression(this).expressionString;
 
         public ElmValue? this[string fieldName] =>
             Fields.FirstOrDefault(field => field.FieldName == fieldName).Value;
+    }
+
+    /// <summary>
+    /// The Elm compiler included with Pine models the 'Float' type from Elm as a rational number,
+    /// expressed as the quotient or fraction ⁠of two integers, a numerator and a denominator.
+    /// </summary>
+    public record ElmFloat
+        : ElmValue
+    {
+        /// <summary>
+        /// The numerator part of the rational number.
+        /// </summary>
+        public System.Numerics.BigInteger Numerator { get; }
+
+        /// <summary>
+        /// The denominator part of the rational number.
+        /// </summary>
+        public System.Numerics.BigInteger Denominator { get; }
+
+        private ElmFloat(
+            System.Numerics.BigInteger Numerator,
+            System.Numerics.BigInteger Denominator)
+        {
+            this.Numerator = Numerator;
+            this.Denominator = Denominator;
+        }
+
+        /// <summary>
+        /// Store components verbatim without normalization.
+        /// </summary>
+        public static ElmFloat NotNormalized(
+            System.Numerics.BigInteger Numerator,
+            System.Numerics.BigInteger Denominator) =>
+            new(Numerator, Denominator);
+
+        /// <summary>
+        /// Normalize the numerator and denominator to a canonical representation:
+        /// <list>
+        /// <item>Shrink numerator and denominator if possible to the most compact representation.</item>
+        /// <item>Ensure sign is always on the numerator part.</item>
+        /// </list>
+        /// </summary>
+        public static ElmFloat Normalized(
+            System.Numerics.BigInteger Numerator,
+            System.Numerics.BigInteger Denominator)
+        {
+            var sign = Numerator.Sign * Denominator.Sign;
+
+            var divisor =
+                Numerator == 0 || Denominator == 0
+                ?
+                1
+                :
+                System.Numerics.BigInteger.GreatestCommonDivisor(Numerator, Denominator);
+
+            return new ElmFloat(
+                Numerator: System.Numerics.BigInteger.Abs(Numerator) / divisor * sign,
+                Denominator: System.Numerics.BigInteger.Abs(Denominator) / divisor);
+        }
+
+        public static ElmFloat Convert(double fromDouble)
+        {
+            if (Math.Floor(fromDouble) == fromDouble)
+                return Normalized(new System.Numerics.BigInteger(fromDouble), 1);
+
+            var abs = Math.Abs(fromDouble);
+
+            var absString = abs.ToString(System.Globalization.CultureInfo.InvariantCulture);
+
+            var separatorIndex = absString.IndexOf('.');
+
+            var fractionalDigits = absString[(separatorIndex + 1)..];
+
+            var denominator = Math.Pow(10, fractionalDigits.Length);
+
+            var numeratorAbs = new System.Numerics.BigInteger(abs * denominator);
+
+            return Normalized(
+                Numerator: fromDouble < 0 ? -numeratorAbs : numeratorAbs,
+                Denominator: new System.Numerics.BigInteger(denominator));
+        }
+
+        override public int ContainedNodesCount { get; } = 0;
     }
 
     public record ElmInternal(string Value)
@@ -378,7 +467,7 @@ public abstract record ElmValue
             Maybe<int>.nothing()
         };
 
-    public static (string expressionString, bool needsParens) ElmValueAsExpression(
+    public static (string expressionString, bool needsParens) RenderAsElmExpression(
         ElmValue elmValue)
     {
         return
@@ -393,10 +482,10 @@ public abstract record ElmValue
                 ElmList list =>
                 ElmListItemsLookLikeTupleItems(list.Elements).WithDefault(false)
                 ?
-                ("(" + string.Join(",", list.Elements.Select(item => ElmValueAsExpression(item).expressionString)) + ")",
+                ("(" + string.Join(",", list.Elements.Select(item => RenderAsElmExpression(item).expressionString)) + ")",
                 needsParens: false)
                 :
-                ("[" + string.Join(",", list.Elements.Select(item => ElmValueAsExpression(item).expressionString)) + "]",
+                ("[" + string.Join(",", list.Elements.Select(item => RenderAsElmExpression(item).expressionString)) + "]",
                 needsParens: false),
 
                 ElmString stringValue =>
@@ -408,11 +497,17 @@ public abstract record ElmValue
                 ("{}", needsParens: false)
                 :
                 ("{ " + string.Join(", ", record.Fields.Select(field =>
-                field.FieldName + " = " + ElmValueAsExpression(field.Value).expressionString)) + " }",
+                field.FieldName + " = " + RenderAsElmExpression(field.Value).expressionString)) + " }",
                 needsParens: false),
 
                 ElmTag tag =>
                 ElmTagAsExpression(tag.TagName, tag.Arguments),
+
+                ElmFloat elmFloat =>
+                (Convert.ToString(
+                    (double)elmFloat.Numerator / (double)elmFloat.Denominator,
+                    System.Globalization.CultureInfo.InvariantCulture),
+                needsParens: false),
 
                 ElmInternal internalValue =>
                 ("<" + internalValue.Value + ">", needsParens: false),
@@ -508,7 +603,7 @@ public abstract record ElmValue
                 var setElements = singleArgumentDictToList.Select(field => field.key).ToList();
 
                 return
-                    ("Set.fromList [" + string.Join(",", setElements.Select(ElmValueAsExpression).Select(applyNeedsParens)) + "]",
+                    ("Set.fromList [" + string.Join(",", setElements.Select(RenderAsElmExpression).Select(applyNeedsParens)) + "]",
                     needsParens: true);
             }
         }
@@ -528,7 +623,7 @@ public abstract record ElmValue
                     (false, ""),
 
                     _ =>
-                    (true, " " + string.Join(" ", arguments.Select(ElmValueAsExpression).Select(applyNeedsParens)))
+                    (true, " " + string.Join(" ", arguments.Select(RenderAsElmExpression).Select(applyNeedsParens)))
                 };
 
             return (tagName + argumentsString, needsParens);
@@ -538,7 +633,7 @@ public abstract record ElmValue
             ("Dict.fromList [" +
             string.Join(",",
             dictToList
-            .Select(field => "(" + ElmValueAsExpression(field.key).expressionString + "," + ElmValueAsExpression(field.value).expressionString + ")")) + "]",
+            .Select(field => "(" + RenderAsElmExpression(field.key).expressionString + "," + RenderAsElmExpression(field.value).expressionString + ")")) + "]",
             needsParens: true);
     }
 

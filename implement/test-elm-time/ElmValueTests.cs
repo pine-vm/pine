@@ -9,7 +9,7 @@ namespace TestElmTime;
 public class ElmValueTests
 {
     [TestMethod]
-    public void Test_ElmValue_as_pine_value_roundtrips()
+    public void Elm_value_encoding_roundtrips()
     {
         var testCases = (IReadOnlyList<ElmValue>)[
             ElmValue.CharInstance('a'),
@@ -39,6 +39,11 @@ public class ElmValueTests
                     ElmValue.Integer(43),
                     ElmValue.Integer(47)]),
             ]),
+
+            ElmValue.ElmFloat.Convert(0),
+            ElmValue.ElmFloat.Convert(0.3),
+            ElmValue.ElmFloat.Convert(1.7),
+            ElmValue.ElmFloat.Convert(-0.5),
         ];
 
         foreach (var testCase in testCases)
@@ -54,7 +59,7 @@ public class ElmValueTests
     }
 
     [TestMethod]
-    public void Test_ElmValueAsExpression()
+    public void Elm_value_display_as_expression()
     {
         var testCases =
             (IReadOnlyList<(ElmValue, string)>)
@@ -88,11 +93,24 @@ public class ElmValueTests
 
                 (ElmValue.TagInstance("Just", [ElmValue.TagInstance("Just", [ElmValue.Integer(47)])]),
                 "Just (Just 47)"),
+
+                (ElmValue.ElmFloat.Convert(0),
+                "0"),
+
+                (ElmValue.ElmFloat.Convert(0.3),
+                "0.3"),
+
+                (ElmValue.ElmFloat.Convert(1.7),
+                "1.7"),
+
+                (ElmValue.ElmFloat.Convert(-0.5),
+                "-0.5"),
             ];
 
         foreach (var (elmValue, expectedExpression) in testCases)
         {
-            var (expressionString, needsParens) = ElmValue.ElmValueAsExpression(elmValue);
+            var (expressionString, _) =
+                ElmValue.RenderAsElmExpression(elmValue);
 
             Assert.AreEqual(expectedExpression, expressionString);
         }

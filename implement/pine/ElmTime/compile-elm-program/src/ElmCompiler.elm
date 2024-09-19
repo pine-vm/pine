@@ -9,6 +9,7 @@ module ElmCompiler exposing
     , compilationAndEmitStackFromModulesInCompilation
     , compileElmSyntaxExpression
     , compileElmSyntaxFunction
+    , elmFloatTypeTagName
     , elmRecordTypeTagName
     , elmRecordTypeTagNameAsValue
     , elmStringTypeTagName
@@ -141,6 +142,11 @@ elmRecordTypeTagNameAsValue =
     Pine.valueFromString elmRecordTypeTagName
 
 
+elmFloatTypeTagName : String
+elmFloatTypeTagName =
+    "Elm_Float"
+
+
 autoImportedModulesNames : List (List String)
 autoImportedModulesNames =
     autoImportedModulesExposingTagsNames
@@ -195,6 +201,8 @@ elmValuesToExposeToGlobalDefault =
     , ( "negate", [ "Basics" ] )
     , ( "abs", [ "Basics" ] )
     , ( "clamp", [ "Basics" ] )
+    , ( "toFloat", [ "Basics" ] )
+    , ( "floor", [ "Basics" ] )
     , ( "(::)", [ "List" ] )
     , ( "Nothing", [ "Maybe" ] )
     , ( "Just", [ "Maybe" ] )
@@ -956,16 +964,24 @@ compileElmSyntaxExpression stackBefore elmExpression =
             Ok (LiteralExpression (Pine.valueFromInt integer))
 
         Elm.Syntax.Expression.Negation (Elm.Syntax.Node.Node _ negatedElmExpression) ->
-            case compileElmSyntaxExpression stack negatedElmExpression of
-                Err error ->
-                    Err ("Failed to compile negated expression: " ++ error)
+            case negatedElmExpression of
+                Elm.Syntax.Expression.Floatable negatedFloat ->
+                    Ok (LiteralExpression (valueFromFloat -negatedFloat))
 
-                Ok negatedExpression ->
-                    Ok
-                        (KernelApplicationExpression
-                            "negate"
-                            negatedExpression
-                        )
+                Elm.Syntax.Expression.Integer negatedInteger ->
+                    Ok (LiteralExpression (Pine.valueFromInt -negatedInteger))
+
+                _ ->
+                    case compileElmSyntaxExpression stack negatedElmExpression of
+                        Err error ->
+                            Err ("Failed to compile negated expression: " ++ error)
+
+                        Ok negatedExpression ->
+                            Ok
+                                (KernelApplicationExpression
+                                    "negate"
+                                    negatedExpression
+                                )
 
         Elm.Syntax.Expression.FunctionOrValue moduleName localName ->
             compileElmFunctionOrValueLookup ( moduleName, localName ) stack
@@ -1105,11 +1121,11 @@ compileElmSyntaxExpression stackBefore elmExpression =
         Elm.Syntax.Expression.UnitExpr ->
             Ok (ListExpression [])
 
+        Elm.Syntax.Expression.Floatable float ->
+            Ok (LiteralExpression (valueFromFloat float))
+
         Elm.Syntax.Expression.GLSLExpression _ ->
             Err "Unsupported type of expression: GLSLExpression"
-
-        Elm.Syntax.Expression.Floatable _ ->
-            Err "Unsupported type of expression: Floatable"
 
         Elm.Syntax.Expression.Operator operator ->
             Err ("Unsupported type of expression: Operator: " ++ operator)
@@ -3648,6 +3664,44 @@ valueFromString string =
         [ elmStringTypeTagNameAsValue
         , Pine.ListValue [ Pine.valueFromString string ]
         ]
+
+
+valueFromFloat : Float -> Pine.Value
+valueFromFloat float =
+    let
+        ( numerator, denominator ) =
+            searchRatioForFloat float
+    in
+    Pine.ListValue
+        [ Pine.valueFromString elmFloatTypeTagName
+        , Pine.ListValue [ Pine.valueFromInt numerator, Pine.valueFromInt denominator ]
+        ]
+
+
+searchRatioForFloat : Float -> ( Int, Int )
+searchRatioForFloat float =
+    if float < 0 then
+        let
+            ( numeratorAbs, denom ) =
+                searchRatioForPositiveFloat 1 -float
+        in
+        ( -numeratorAbs, denom )
+
+    else
+        searchRatioForPositiveFloat 1 float
+
+
+searchRatioForPositiveFloat : Int -> Float -> ( Int, Int )
+searchRatioForPositiveFloat denom float =
+    let
+        prod =
+            toFloat denom * float
+    in
+    if toFloat (floor prod) == prod then
+        ( floor prod, denom )
+
+    else
+        searchRatioForPositiveFloat (denom + 1) float
 
 
 separateEnvironmentDeclarations :

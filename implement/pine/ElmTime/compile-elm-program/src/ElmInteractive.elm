@@ -13,16 +13,15 @@ import ElmCompiler
         , ElmModuleInCompilation
         , ProjectParsedElmFile
         , compilationAndEmitStackFromModulesInCompilation
+        , elmFloatTypeTagName
         , elmRecordTypeTagName
         , elmStringTypeTagName
-        , expressionForDeconstructions
         , stringStartsWithUpper
         )
 import FirCompiler
     exposing
         ( EmitStack
         , Expression(..)
-        , parseFunctionParameters
         )
 import Json.Decode
 import Json.Encode
@@ -59,6 +58,7 @@ type ElmValue
     | ElmString String
     | ElmTag String (List ElmValue)
     | ElmRecord (List ( String, ElmValue ))
+    | ElmFloat BigInt.BigInt BigInt.BigInt
     | ElmInternal String
 
 
@@ -69,11 +69,11 @@ submissionResponseFromResponsePineValue responseValue =
             Err ("Failed to encode as Elm value: " ++ error)
 
         Ok valueAsElmValue ->
-            Ok { displayText = Tuple.first (elmValueAsExpression valueAsElmValue) }
+            Ok { displayText = Tuple.first (renderAsElmExpression valueAsElmValue) }
 
 
-elmValueAsExpression : ElmValue -> ( String, { needsParens : Bool } )
-elmValueAsExpression elmValue =
+renderAsElmExpression : ElmValue -> ( String, { needsParens : Bool } )
+renderAsElmExpression elmValue =
     let
         applyNeedsParens : ( String, { needsParens : Bool } ) -> String
         applyNeedsParens ( expressionString, { needsParens } ) =
@@ -86,12 +86,12 @@ elmValueAsExpression elmValue =
     case elmValue of
         ElmList list ->
             if Maybe.withDefault False (elmListItemsLookLikeTupleItems list) then
-                ( "(" ++ (list |> List.map (elmValueAsExpression >> Tuple.first) |> String.join ",") ++ ")"
+                ( "(" ++ (list |> List.map (renderAsElmExpression >> Tuple.first) |> String.join ",") ++ ")"
                 , { needsParens = False }
                 )
 
             else
-                ( "[" ++ (list |> List.map (elmValueAsExpression >> Tuple.first) |> String.join ",") ++ "]"
+                ( "[" ++ (list |> List.map (renderAsElmExpression >> Tuple.first) |> String.join ",") ++ "]"
                 , { needsParens = False }
                 )
 
@@ -119,7 +119,7 @@ elmValueAsExpression elmValue =
                     ++ (fields
                             |> List.map
                                 (\( fieldName, fieldValue ) ->
-                                    fieldName ++ " = " ++ Tuple.first (elmValueAsExpression fieldValue)
+                                    fieldName ++ " = " ++ Tuple.first (renderAsElmExpression fieldValue)
                                 )
                             |> String.join ", "
                        )
@@ -131,7 +131,7 @@ elmValueAsExpression elmValue =
             let
                 defaultForTag () =
                     ( tagName
-                        :: (tagArguments |> List.map (elmValueAsExpression >> applyNeedsParens))
+                        :: (tagArguments |> List.map (renderAsElmExpression >> applyNeedsParens))
                         |> String.join " "
                     , { needsParens = tagArguments /= [] }
                     )
@@ -149,7 +149,7 @@ elmValueAsExpression elmValue =
                                 ( "Set.fromList ["
                                     ++ String.join ","
                                         (setElements
-                                            |> List.map (elmValueAsExpression >> Tuple.first)
+                                            |> List.map (renderAsElmExpression >> Tuple.first)
                                         )
                                     ++ "]"
                                 , { needsParens = True }
@@ -175,15 +175,25 @@ elmValueAsExpression elmValue =
                                     |> List.map
                                         (\( key, value ) ->
                                             "("
-                                                ++ Tuple.first (elmValueAsExpression key)
+                                                ++ Tuple.first (renderAsElmExpression key)
                                                 ++ ","
-                                                ++ Tuple.first (elmValueAsExpression value)
+                                                ++ Tuple.first (renderAsElmExpression value)
                                                 ++ ")"
                                         )
                                 )
                             ++ "]"
                         , { needsParens = True }
                         )
+
+        ElmFloat numerator denominator ->
+            ( case elmFloatToFloat numerator denominator of
+                Nothing ->
+                    "Failed conversion of float"
+
+                Just asFloat ->
+                    String.fromFloat asFloat
+            , { needsParens = False }
+            )
 
         ElmInternal desc ->
             ( "<" ++ desc ++ ">"
@@ -214,8 +224,31 @@ elmValueAsJson elmValue =
         ElmTag tagName tagArguments ->
             Json.Encode.list identity [ Json.Encode.string tagName, Json.Encode.list elmValueAsJson tagArguments ]
 
+        ElmFloat numerator denominator ->
+            case elmFloatToFloat numerator denominator of
+                Nothing ->
+                    Json.Encode.string "Failed conversion of float"
+
+                Just asFloat ->
+                    Json.Encode.float asFloat
+
         ElmInternal _ ->
-            Json.Encode.string (Tuple.first (elmValueAsExpression elmValue))
+            Json.Encode.string (Tuple.first (renderAsElmExpression elmValue))
+
+
+elmFloatToFloat : BigInt.BigInt -> BigInt.BigInt -> Maybe Float
+elmFloatToFloat numerator denominator =
+    case String.toInt (BigInt.toString numerator) of
+        Nothing ->
+            Nothing
+
+        Just numeratorInt ->
+            case String.toInt (BigInt.toString denominator) of
+                Nothing ->
+                    Nothing
+
+                Just denominatorInt ->
+                    Just (toFloat numeratorInt / toFloat denominatorInt)
 
 
 pineValueAsElmValue : Pine.Value -> Result String ElmValue
@@ -298,6 +331,14 @@ pineValueAsElmValue pineValue =
                                                             Err "Unexpected shape of tag arguments"
                                                     )
                                                         |> Result.mapError ((++) "Failed to extract value under String tag: ")
+
+                                                else if tagName == elmFloatTypeTagName then
+                                                    case tagArguments of
+                                                        [ ElmInteger numerator, ElmInteger denominator ] ->
+                                                            Ok (ElmFloat numerator denominator)
+
+                                                        _ ->
+                                                            Err "Unexpected shape under Float tag"
 
                                                 else
                                                     Ok (ElmTag tagName tagArguments)

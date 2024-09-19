@@ -1,12 +1,10 @@
 module ElmInteractiveTests exposing (..)
 
 import BigInt
-import Dict
 import ElmCompiler
 import ElmInteractive exposing (ElmCoreModulesExtent(..), InteractiveContext(..))
 import ElmInteractiveParser
 import Expect
-import FirCompiler
 import Json.Encode
 import Pine
 import Test
@@ -23,6 +21,114 @@ interactiveScenarios =
                     , previousSubmissions = []
                     , submission = """  "just a literal ✔️"  """
                     , expectedValueElmExpression = "\"just a literal ✔️\""
+                    }
+        , Test.test "Literal float whole" <|
+            \_ ->
+                expectationForElmInteractiveScenario
+                    { context =
+                        CustomModulesContext { includeCoreModules = Nothing, modulesTexts = [] }
+                    , previousSubmissions = []
+                    , submission = """  1.0  """
+                    , expectedValueElmExpression = "1"
+                    }
+        , Test.test "Literal float 0.5" <|
+            \_ ->
+                expectationForElmInteractiveScenario
+                    { context =
+                        CustomModulesContext { includeCoreModules = Nothing, modulesTexts = [] }
+                    , previousSubmissions = []
+                    , submission = """  0.5  """
+                    , expectedValueElmExpression = "0.5"
+                    }
+        , Test.test "Literal float 1.5" <|
+            \_ ->
+                expectationForElmInteractiveScenario
+                    { context =
+                        CustomModulesContext { includeCoreModules = Nothing, modulesTexts = [] }
+                    , previousSubmissions = []
+                    , submission = """  1.5  """
+                    , expectedValueElmExpression = "1.5"
+                    }
+        , Test.test "Literal float -0.7" <|
+            \_ ->
+                expectationForElmInteractiveScenario
+                    { context =
+                        CustomModulesContext { includeCoreModules = Nothing, modulesTexts = [] }
+                    , previousSubmissions = []
+                    , submission = """  -0.7  """
+                    , expectedValueElmExpression = "-0.7"
+                    }
+        , Test.test "floor 0" <|
+            \_ ->
+                expectationForElmInteractiveScenario
+                    { context =
+                        CustomModulesContext { includeCoreModules = Just OnlyCoreModules, modulesTexts = [] }
+                    , previousSubmissions = []
+                    , submission = """ floor 0  """
+                    , expectedValueElmExpression = "0"
+                    }
+        , Test.test "floor 0.1" <|
+            \_ ->
+                expectationForElmInteractiveScenario
+                    { context =
+                        CustomModulesContext { includeCoreModules = Just OnlyCoreModules, modulesTexts = [] }
+                    , previousSubmissions = []
+                    , submission = """ floor 0.1  """
+                    , expectedValueElmExpression = "0"
+                    }
+        , Test.test "floor 0.5" <|
+            \_ ->
+                expectationForElmInteractiveScenario
+                    { context =
+                        CustomModulesContext { includeCoreModules = Just OnlyCoreModules, modulesTexts = [] }
+                    , previousSubmissions = []
+                    , submission = """ floor 0.5  """
+                    , expectedValueElmExpression = "0"
+                    }
+        , Test.test "floor 1.7" <|
+            \_ ->
+                expectationForElmInteractiveScenario
+                    { context =
+                        CustomModulesContext { includeCoreModules = Just OnlyCoreModules, modulesTexts = [] }
+                    , previousSubmissions = []
+                    , submission = """ floor 1.7  """
+                    , expectedValueElmExpression = "1"
+                    }
+        , Test.test "String.toFloat empty" <|
+            \_ ->
+                expectationForElmInteractiveScenario
+                    { context =
+                        CustomModulesContext { includeCoreModules = Just OnlyCoreModules, modulesTexts = [] }
+                    , previousSubmissions = []
+                    , submission = """ String.toFloat ""  """
+                    , expectedValueElmExpression = "Nothing"
+                    }
+        , Test.test "toFloat 0" <|
+            \_ ->
+                expectationForElmInteractiveScenario
+                    { context =
+                        CustomModulesContext { includeCoreModules = Just OnlyCoreModules, modulesTexts = [] }
+                    , previousSubmissions = []
+                    , submission = """ String.toFloat "0"  """
+                    , expectedValueElmExpression = "Just 0"
+                    }
+        , Test.test "toFloat 1" <|
+            \_ ->
+                expectationForElmInteractiveScenario
+                    { context =
+                        CustomModulesContext { includeCoreModules = Just OnlyCoreModules, modulesTexts = [] }
+                    , previousSubmissions = []
+                    , submission = """ String.toFloat "1"  """
+                    , expectedValueElmExpression = "Just 1"
+                    }
+        , Test.test "toFloat 0.7" <|
+            \_ ->
+                expectationForElmInteractiveScenario
+                    { context =
+                        CustomModulesContext { includeCoreModules = Just OnlyCoreModules, modulesTexts = [] }
+                    , previousSubmissions = []
+                    , submission = """ String.toFloat "0.7"  """
+                    , expectedValueElmExpression = "Just 0.7"
                     }
         , Test.test "Just a literal List String" <|
             \_ ->
