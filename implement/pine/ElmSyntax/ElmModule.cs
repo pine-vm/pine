@@ -63,14 +63,28 @@ public static class ElmModule
                 elementSelector: parsedModule => parsedModule,
                 keyComparer: EnumerableExtension.EqualityComparer<IReadOnlyList<string>>());
 
-        IEnumerable<IReadOnlyList<string>> EnumerateImportsOfModuleTransitive(IReadOnlyList<string> moduleName) =>
-            !parsedModulesByName.TryGetValue(moduleName, out (string moduleText, ParsedModule parsedModule) value) ?
-            []
-            : value.parsedModule.ImportedModulesNames
-            .SelectMany(
-                importedModuleName =>
-                EnumerateImportsOfModuleTransitive(importedModuleName)
-                .Prepend(importedModuleName));
+        IReadOnlySet<IReadOnlyList<string>> ListImportsOfModuleTransitive(IReadOnlyList<string> moduleName)
+        {
+            var queue =
+                new Queue<IReadOnlyList<string>>([moduleName]);
+
+            var set =
+                new HashSet<IReadOnlyList<string>>(EnumerableExtension.EqualityComparer<IReadOnlyList<string>>());
+
+            while (queue.TryDequeue(out var currentModuleName))
+            {
+                if (set.Add(currentModuleName) &&
+                    parsedModulesByName.TryGetValue(currentModuleName, out var currentModule))
+                {
+                    foreach (var importedModuleName in currentModule.parsedModule.ImportedModulesNames)
+                    {
+                        queue.Enqueue(importedModuleName);
+                    }
+                }
+            }
+
+            return set;
+        }
 
         var parsedRootModules =
             parsedModules
@@ -81,23 +95,23 @@ public static class ElmModule
             parsedRootModules
             .OrderByDescending(parsedModule => parsedModule.moduleText.Length)
             .SelectMany(rootModule =>
-            EnumerateImportsOfModuleTransitive(rootModule.parsedModule.ModuleName)
+            ListImportsOfModuleTransitive(rootModule.parsedModule.ModuleName)
             .Prepend(rootModule.parsedModule.ModuleName))
             .Intersect(
                 parsedModules.Select(pm => pm.parsedModule.ModuleName),
                 EnumerableExtension.EqualityComparer<IReadOnlyList<string>>())
             .ToImmutableHashSet(EnumerableExtension.EqualityComparer<IReadOnlyList<string>>());
 
-        var includedModulesNamesWithDeps =
-            (IReadOnlyList<IReadOnlyList<string>>)
+        IReadOnlyList<IReadOnlyList<string>> includedModulesNamesWithDeps =
             [
-                .. includedModulesNames.SelectMany(moduleName => EnumerateImportsOfModuleTransitive(moduleName).Prepend(moduleName)),
-                .. ElmCoreAutoImportedModulesNames.Reverse()
-                ];
+                .. ElmCoreAutoImportedModulesNames,
+                .. includedModulesNames
+                .SelectMany(moduleName => ListImportsOfModuleTransitive(moduleName).Prepend(moduleName))
+                .OrderBy(moduleName => ListImportsOfModuleTransitive(moduleName).Count),
+            ];
 
         var includedModulesNamesOrdered =
             includedModulesNamesWithDeps
-            .Reverse()
             .Distinct(EnumerableExtension.EqualityComparer<IReadOnlyList<string>>())
             .Intersect(
                 includedModulesNames,
