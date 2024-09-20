@@ -2726,29 +2726,34 @@ sourceModuleNameFromImports ( moduleName, declName ) compilation =
     case moduleName of
         [] ->
             if List.member declName compilation.localAvailableDeclarations then
-                Ok moduleName
+                Ok []
 
             else
-                case Common.assocListGet declName compilation.exposedDeclarations of
-                    Just moduleNames ->
-                        case moduleNames of
-                            [ singleModuleName ] ->
-                                Ok singleModuleName
-
-                            _ ->
-                                Err
-                                    (String.join ""
-                                        [ "Ambiguous reference to '"
-                                        , declName
-                                        , "': Found "
-                                        , String.fromInt (List.length moduleNames)
-                                        , " matching modules: "
-                                        , String.join ", " (List.map (String.join ".") moduleNames)
-                                        ]
-                                    )
+                case Common.assocListGet declName compilation.localTypeDeclarations of
+                    Just _ ->
+                        Ok []
 
                     Nothing ->
-                        Ok moduleName
+                        case Common.assocListGet declName compilation.exposedDeclarations of
+                            Just moduleNames ->
+                                case moduleNames of
+                                    [ singleModuleName ] ->
+                                        Ok singleModuleName
+
+                                    _ ->
+                                        Err
+                                            (String.join ""
+                                                [ "Ambiguous reference to '"
+                                                , declName
+                                                , "': Found "
+                                                , String.fromInt (List.length moduleNames)
+                                                , " matching modules: "
+                                                , String.join ", " (List.map (String.join ".") moduleNames)
+                                                ]
+                                            )
+
+                            Nothing ->
+                                Ok moduleName
 
         _ ->
             case Dict.get moduleName compilation.moduleAliases of
