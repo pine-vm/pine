@@ -1,4 +1,4 @@
-﻿using Pine.Core;
+using Pine.Core;
 using System;
 using System.Collections.Frozen;
 using System.Collections.Generic;
@@ -516,70 +516,6 @@ public abstract record ElmValue
                 throw new NotImplementedException(
                     "Not implemented for value type: " + elmValue.GetType().FullName)
             };
-    }
-
-    public static Result<string, ElmRecord> ElmValueAsElmRecord(ElmValue elmValue)
-    {
-        return elmValue switch
-        {
-            ElmList recordFieldList =>
-            recordFieldList.Elements.Select(TryMapToRecordField).ListCombine()
-            .AndThen(recordFields =>
-            {
-                var recordFieldsNames = recordFields.Select(field => field.fieldName).ToImmutableArray();
-
-                var recordFieldsNamesOrdered =
-                    recordFieldsNames.OrderBy(name => name, StringComparer.Ordinal).ToImmutableArray();
-
-                if (recordFieldsNamesOrdered.SequenceEqual(recordFieldsNames))
-                    return new ElmRecord(recordFields);
-                else
-                    return
-                    (Result<string, ElmRecord>)
-                    ("Unexpected order of " + recordFieldsNames.Length + " fields: " + string.Join(", ", recordFieldsNames));
-            }),
-
-            _ =>
-            "Value is not a list."
-        };
-    }
-
-    private static Result<string, (string fieldName, ElmValue fieldValue)> TryMapToRecordField(ElmValue fieldElmValue)
-    {
-        if (fieldElmValue is ElmList fieldListItems)
-        {
-            if (fieldListItems.Elements.Count is 2)
-            {
-                var fieldNameValue = fieldListItems.Elements[0];
-                var fieldValue = fieldListItems.Elements[1];
-
-                Result<string, (string, ElmValue)> continueWithFieldName(string fieldName) =>
-                    (0 < fieldName.Length && !char.IsUpper(fieldName[0]))
-                    ?
-                    (fieldName, fieldValue)
-                    :
-                    "Field name does start with uppercase: '" + fieldName + "'";
-
-                return fieldNameValue switch
-                {
-                    ElmList fieldNameValueList =>
-                    TryMapElmValueToString(fieldNameValueList)
-                    .Map(continueWithFieldName)
-                    .WithDefault((Result<string, (string, ElmValue)>)
-                        "Failed parsing field name value."),
-
-                    ElmString fieldName =>
-                    continueWithFieldName(fieldName.Value),
-
-                    _ =>
-                    "Unexpected type in field name value."
-                };
-            }
-            else
-                return "Unexpected number of list items: " + fieldListItems.Elements.Count;
-        }
-        else
-            return "Not a list.";
     }
 
     public static (string expressionString, bool needsParens) ElmTagAsExpression(
