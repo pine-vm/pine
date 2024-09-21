@@ -893,8 +893,24 @@ exposedDeclarationsFromImportStatements explicitImports availableModules =
 
                                                     else
                                                         []
+
+                                                topLevelNameMapped =
+                                                    {-
+                                                       2024-09-21:
+                                                       Looks like stil4m/elm-syntax v 7.3.2 does not include the parens for entries exposing an operator.
+                                                       Therefore we add parens here for these cases so that lookups work.
+                                                    -}
+                                                    if nameLooksLikeOperator topLevelName then
+                                                        if not (String.startsWith "(" topLevelName) then
+                                                            "(" ++ topLevelName ++ ")"
+
+                                                        else
+                                                            topLevelName
+
+                                                    else
+                                                        topLevelName
                                             in
-                                            topLevelName :: choiceTypeTagNames
+                                            topLevelNameMapped :: choiceTypeTagNames
                                         )
                                         topLevels
                     in
@@ -923,6 +939,60 @@ exposedDeclarationsFromImportStatements explicitImports availableModules =
         )
         Dict.empty
         explicitImports
+
+
+nameLooksLikeOperator : String -> Bool
+nameLooksLikeOperator declName =
+    String.any charIndicatesOperator declName
+
+
+charIndicatesOperator : Char -> Bool
+charIndicatesOperator char =
+    case char of
+        '(' ->
+            True
+
+        ')' ->
+            True
+
+        '.' ->
+            True
+
+        '=' ->
+            True
+
+        '|' ->
+            True
+
+        '&' ->
+            True
+
+        '<' ->
+            True
+
+        '>' ->
+            True
+
+        '+' ->
+            True
+
+        '-' ->
+            True
+
+        '*' ->
+            True
+
+        '/' ->
+            True
+
+        '?' ->
+            True
+
+        '^' ->
+            True
+
+        _ ->
+            False
 
 
 mapTypeDeclarationForImport : Bool -> ElmModuleTypeDeclaration -> ElmModuleTypeDeclaration

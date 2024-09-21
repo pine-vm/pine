@@ -1515,7 +1515,7 @@ digitValueFromChar char =
         _ ->
             Nothing
 
-            
+
 fromIntAsList : Int -> List Char
 fromIntAsList int =
     if Pine_kernel.is_sorted_ascending_int [ 0, int ] then
@@ -1686,6 +1686,11 @@ toFloat string =
 
             _ ->
                 Nothing
+
+
+any : (Char -> Bool) -> String -> Bool
+any predicate (String chars) =
+    List.any predicate chars
 
 
 """
