@@ -1,0 +1,1 @@
+{ alfa = 47, beta = 41, gamma = 49 }

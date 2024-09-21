@@ -3501,24 +3501,41 @@ compileElmRecordConstructor recordFieldNames =
     in
     \arguments ->
         if List.length arguments == List.length recordFieldNamesStringAndValue then
+            let
+                recordFieldsOrdered : List ( String, Pine.Value, Expression )
+                recordFieldsOrdered =
+                    List.sortBy
+                        (\( fieldName, _, _ ) -> fieldName)
+                        (List.map2
+                            (\( fieldName, fieldNameValue ) argument ->
+                                ( fieldName, fieldNameValue, argument )
+                            )
+                            recordFieldNamesStringAndValue
+                            arguments
+                        )
+            in
             ListExpression
                 [ LiteralExpression elmRecordTypeTagNameAsValue
                 , ListExpression
                     [ ListExpression
-                        (List.map2
-                            (\( _, fieldNameValue ) argument ->
+                        (List.map
+                            (\( _, fieldNameValue, argument ) ->
                                 ListExpression
                                     [ LiteralExpression fieldNameValue
                                     , argument
                                     ]
                             )
-                            recordFieldNamesStringAndValue
-                            arguments
+                            recordFieldsOrdered
                         )
                     ]
                 ]
 
         else
+            let
+                recordFieldsOrdered : List ( String, Pine.Value )
+                recordFieldsOrdered =
+                    List.sortBy Tuple.first recordFieldNamesStringAndValue
+            in
             FunctionApplicationExpression
                 (FunctionExpression
                     (List.map (\( fieldName, _ ) -> [ ( fieldName, [] ) ])
@@ -3535,7 +3552,7 @@ compileElmRecordConstructor recordFieldNames =
                                             , ReferenceExpression [] fieldName
                                             ]
                                     )
-                                    recordFieldNamesStringAndValue
+                                    recordFieldsOrdered
                                 )
                             ]
                         ]

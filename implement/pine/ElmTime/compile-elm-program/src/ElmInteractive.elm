@@ -328,7 +328,11 @@ pineValueAsElmValue pineValue =
                                                                 |> Maybe.withDefault (Err "Failed to map chars")
 
                                                         _ ->
-                                                            Err "Unexpected shape of tag arguments"
+                                                            Err
+                                                                ("Unexpected shape of tag arguments ("
+                                                                    ++ String.fromInt (List.length tagArguments)
+                                                                    ++ "): "
+                                                                )
                                                     )
                                                         |> Result.mapError ((++) "Failed to extract value under String tag: ")
 
@@ -416,7 +420,12 @@ elmValueAsElmRecord elmValue =
                         Ok (ElmRecord recordFields)
 
                     else
-                        Err "Unexpected order of fields."
+                        Err
+                            ("Unexpected order of "
+                                ++ String.fromInt (List.length recordFieldsNames)
+                                ++ " fields: "
+                                ++ String.join ", " recordFieldsNames
+                            )
 
                 Err parseFieldError ->
                     Err ("Failed to parse field: " ++ parseFieldError)
