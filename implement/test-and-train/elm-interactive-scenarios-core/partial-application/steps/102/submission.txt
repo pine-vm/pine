@@ -1,0 +1,1 @@
+partially_applied_a = function_with_two_parameters "argument 0"

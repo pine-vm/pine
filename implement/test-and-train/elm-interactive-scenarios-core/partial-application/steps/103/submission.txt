@@ -1,0 +1,1 @@
+partially_applied_a "argument 1"
