@@ -3445,25 +3445,25 @@ reportEmittedDeclarationsForErrorMsg emittedDeclarations =
         emittedDeclarations
 
 
-compileElmChoiceTypeTagConstructor : ( String, Int ) -> (List Expression -> Expression)
-compileElmChoiceTypeTagConstructor ( tagName, argumentsCount ) =
-    let
-        tagNameAsValue =
-            Pine.valueFromString tagName
+compileElmChoiceTypeTagConstructor : ( String, Int ) -> List Expression -> Expression
+compileElmChoiceTypeTagConstructor ( tagName, argumentsCount ) arguments =
+    if List.length arguments == argumentsCount then
+        let
+            tagNameAsValue =
+                Pine.valueFromString tagName
+        in
+        inlineElmSyntaxValueConstructor
+            tagNameAsValue
+            arguments
 
-        ( _, genericContructorValue ) =
-            compileElmChoiceTypeTagConstructorValue ( tagName, argumentsCount )
-    in
-    \arguments ->
-        if List.length arguments == argumentsCount then
-            inlineElmSyntaxValueConstructor
-                tagNameAsValue
-                arguments
-
-        else
-            applicableDeclarationFromConstructorExpression
-                (LiteralExpression genericContructorValue)
-                arguments
+    else
+        let
+            ( _, genericContructorValue ) =
+                compileElmChoiceTypeTagConstructorValue ( tagName, argumentsCount )
+        in
+        applicableDeclarationFromConstructorExpression
+            (LiteralExpression genericContructorValue)
+            arguments
 
 
 applicableDeclarationFromConstructorExpression : Expression -> (List Expression -> Expression)
