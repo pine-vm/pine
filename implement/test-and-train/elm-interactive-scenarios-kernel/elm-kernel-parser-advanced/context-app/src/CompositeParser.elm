@@ -23,3 +23,23 @@ signedInt =
             |= Parser.Advanced.int () ()
         , Parser.Advanced.int () ()
         ]
+
+
+negatedInt : Parser.Advanced.Parser () () Int
+negatedInt =
+    Parser.Advanced.succeed negate
+        |. Parser.Advanced.symbol negateToken
+        |= Parser.Advanced.int () ()
+
+
+signedInt_without_infix : Parser.Advanced.Parser () () Int
+signedInt_without_infix =
+    Parser.Advanced.oneOf
+        [ (|=)
+            ((|.)
+                (Parser.Advanced.succeed negate)
+                (Parser.Advanced.symbol negateToken)
+            )
+            (Parser.Advanced.int () ())
+        , Parser.Advanced.int () ()
+        ]

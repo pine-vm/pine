@@ -690,10 +690,51 @@ chompBase10Helper offset chars =
                     offset
 
 
-isSubString : String -> Int -> Int -> Int -> String -> (Int, Int, Int)
+isSubString : String -> Int -> Int -> Int -> String -> ( Int, Int, Int )
 isSubString (String smallChars) offset row col (String bigChars) =
-  -- TODO
-  (-11, -13, -17)
+    let
+        bigCharsFromOffset =
+            List.drop offset bigChars
+
+        ( newOffset, newRow, newCol, matched ) =
+            isSubStringHelper smallChars bigCharsFromOffset offset row col
+    in
+    if matched then
+        ( newOffset, newRow, newCol )
+
+    else
+        ( -1, row, col )
+
+
+isSubStringHelper : List Char -> List Char -> Int -> Int -> Int -> ( Int, Int, Int, Bool )
+isSubStringHelper smallChars bigChars offset row col =
+    case ( smallChars, bigChars ) of
+        ( [], _ ) ->
+            ( offset, row, col, True )
+
+        ( _, [] ) ->
+            ( offset, row, col, False )
+
+        ( sChar :: sRest, bChar :: bRest ) ->
+            if Pine_kernel.equal [ sChar, bChar ] then
+                let
+                    ( newRow, newCol ) =
+                        if Pine_kernel.equal [ sChar, 10 ] then
+                            -- ASCII code for '\\n'
+                            ( Pine_kernel.add_int [ row, 1 ], 1 )
+
+                        else
+                            ( row, Pine_kernel.add_int [ col, 1 ] )
+                in
+                isSubStringHelper
+                    sRest
+                    bRest
+                    (Pine_kernel.add_int [offset, 1])
+                    newRow
+                    newCol
+
+            else
+                ( offset, row, col, False )
 
 
 isSubChar : (Char -> Bool) -> Int -> String -> Int
