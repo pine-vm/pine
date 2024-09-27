@@ -1,0 +1,1 @@
+ModuleA.same_module_partially_applied_b 41
