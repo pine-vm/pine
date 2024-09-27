@@ -1675,29 +1675,21 @@ emitApplyFunctionFromCurrentEnvironment compilation ( moduleName, functionName )
 
                 LocalEnvironment localEnvExpectedDecls ->
                     let
-                        currentEnv : List ( List String, String )
-                        currentEnv =
-                            List.map Tuple.first compilation.environmentFunctions
-
-                        currentEnvCoversExpected : Bool
-                        currentEnvCoversExpected =
-                            List.take (List.length localEnvExpectedDecls) currentEnv == localEnvExpectedDecls
-
                         buildEnvironmentRecursive :
                             List Pine.Expression
                             -> List ( List String, String )
                             -> Result String Pine.Expression
-                        buildEnvironmentRecursive alreadyMapped remainingToBeMapped =
-                            case remainingToBeMapped of
+                        buildEnvironmentRecursive alreadyMapped remaining =
+                            case remaining of
                                 [] ->
                                     Ok (Pine.ListExpression alreadyMapped)
 
-                                nextExpectedFunctionName :: remainingExpectedFunctions ->
-                                    case currentEnvironmentFunctionEntryFromName nextExpectedFunctionName of
+                                qualifiedName :: remainingNext ->
+                                    case currentEnvironmentFunctionEntryFromName qualifiedName of
                                         Nothing ->
                                             let
                                                 ( expectModuleName, expectDeclName ) =
-                                                    nextExpectedFunctionName
+                                                    qualifiedName
                                             in
                                             Err
                                                 ("Function '"
@@ -1718,19 +1710,27 @@ emitApplyFunctionFromCurrentEnvironment compilation ( moduleName, functionName )
                                                       ]
                                                     ]
                                                 )
-                                                remainingExpectedFunctions
+                                                remainingNext
 
                         buildExpectedEnvironmentResult =
-                            if currentEnvCoversExpected then
-                                case localEnvExpectedDecls of
-                                    [] ->
-                                        Ok (Pine.ListExpression [])
-
-                                    _ ->
-                                        Ok getEnvFunctionsExpression
+                            if localEnvExpectedDecls == [] then
+                                Ok (Pine.ListExpression [])
 
                             else
-                                buildEnvironmentRecursive [] localEnvExpectedDecls
+                                let
+                                    currentEnv : List ( List String, String )
+                                    currentEnv =
+                                        List.map Tuple.first compilation.environmentFunctions
+
+                                    currentEnvCoversExpected : Bool
+                                    currentEnvCoversExpected =
+                                        List.take (List.length localEnvExpectedDecls) currentEnv == localEnvExpectedDecls
+                                in
+                                if currentEnvCoversExpected then
+                                    Ok getEnvFunctionsExpression
+
+                                else
+                                    buildEnvironmentRecursive [] localEnvExpectedDecls
                     in
                     case buildExpectedEnvironmentResult of
                         Err err ->
