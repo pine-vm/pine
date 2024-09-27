@@ -1,1 +1,1 @@
-String.trimRight "   testing   "
+String.trimRight "   testing 13   "
