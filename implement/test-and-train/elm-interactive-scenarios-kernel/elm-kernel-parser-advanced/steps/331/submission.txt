@@ -1,0 +1,3 @@
+Parser.Advanced.run
+    (Parser.Advanced.symbol CompositeParser.negateToken)
+    "-"

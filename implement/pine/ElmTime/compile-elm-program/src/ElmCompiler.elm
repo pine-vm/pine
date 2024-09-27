@@ -806,7 +806,7 @@ compilationAndEmitStackFromModulesInCompilation availableModules { moduleAliases
                                     case FirCompiler.parseFunctionRecordFromValueTagged functionValue of
                                         Err _ ->
                                             ( 0
-                                            , FirCompiler.LocalEnvironment []
+                                            , FirCompiler.IndependentEnvironment
                                             )
 
                                         Ok (FirCompiler.ParsedFunctionValue _ _ parameterCount _ _) ->
@@ -3256,7 +3256,7 @@ emitRecursionDomain { exposedDeclarationsNames, allModuleDeclarations, importedF
                                                         in
                                                         case
                                                             evaluateAsIndependentExpression
-                                                                (if parameterCount < 1 then
+                                                                (if parameterCount == 0 && newEnvFunctionsValues == [] then
                                                                     FirCompiler.emitWrapperForPartialApplicationZero
                                                                         { getFunctionInnerExpression = getFunctionInnerExpression
                                                                         , getEnvFunctionsExpression = envFunctionsExpression

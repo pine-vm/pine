@@ -1,1 +1,1 @@
-Parser.Advanced.run (Parser.succeed "test") "unrelated"
+Parser.Advanced.run (Parser.Advanced.succeed "test") "unrelated"
