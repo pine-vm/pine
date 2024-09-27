@@ -1,0 +1,1 @@
+Parser.run  CompositeParser.boolean  "(true || false)"

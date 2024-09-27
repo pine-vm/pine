@@ -1,0 +1,1 @@
+Parser.run  (Parser.getChompedString  CompositeParser.elmLineComment)  "-- first line comment\n-- second line comment"

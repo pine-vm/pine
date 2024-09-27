@@ -1340,19 +1340,24 @@ joinOnList sep chunks =
 
 
 slice : Int -> Int -> String -> String
-slice start end string =
+slice start end (String chars) =
     let
         absoluteIndex relativeIndex =
             if Pine_kernel.is_sorted_ascending_int [ 0, relativeIndex ] then
                 relativeIndex
 
             else
-                relativeIndex + length string
+                Pine_kernel.add_int [ relativeIndex, Pine_kernel.length chars ]
 
         absoluteStart =
             absoluteIndex start
     in
-    fromList (List.take (absoluteIndex end - absoluteStart) (List.drop absoluteStart (toList string)))
+    String
+        (Pine_kernel.take
+            [ absoluteIndex end - absoluteStart
+            , Pine_kernel.skip [ absoluteStart, chars ]
+            ]
+        )
 
 
 left : Int -> String -> String

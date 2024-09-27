@@ -657,10 +657,52 @@ consumeBaseHelper base offset chars total =
           (offset, total)
 
 
-consumeBase16 : Int -> String -> (Int, Int)
+consumeBase16 : Int -> String -> ( Int, Int )
 consumeBase16 offset (String chars) =
-  -- TODO
-  (-1, -1)
+    consumeBase16Helper offset chars 0
+
+
+consumeBase16Helper : Int -> List Char -> Int -> ( Int, Int )
+consumeBase16Helper offset chars total =
+    if offset >= List.length chars then
+        ( offset, total )
+
+    else
+        case Pine_kernel.skip [ offset, chars ] of
+            char :: _ ->
+                let
+                    code =
+                        Char.toCode char
+
+                    digit =
+                        if Pine_kernel.is_sorted_ascending_int [ 48, code, 57 ] then
+                            -- '0' to '9'
+                            Just (code - 48)
+
+                        else if Pine_kernel.is_sorted_ascending_int [ 65, code, 70 ] then
+                            -- 'A' to 'F'
+                            Just (code - 55)
+
+                        else if Pine_kernel.is_sorted_ascending_int [ 97, code, 102 ] then
+                            -- 'a' to 'f'
+                            Just (code - 87)
+
+                        else
+                            Nothing
+                in
+                case digit of
+                    Just d ->
+                        consumeBase16Helper
+                          (offset + 1)
+                          chars
+                          (16 * total + d)
+
+                    Nothing ->
+                        ( offset, total )
+
+            [] ->
+                ( offset, total )
+
 
 
 chompBase10 : Int -> String -> Int
@@ -754,10 +796,62 @@ isSubChar predicate offset (String chars) =
         -1
 
 
-findSubString : String -> Int -> Int -> Int -> String -> (Int, Int, Int)
+findSubString : String -> Int -> Int -> Int -> String -> ( Int, Int, Int )
 findSubString (String smallChars) offset row col (String bigChars) =
-  -- TODO
-  (-11, -13, -17)
+    let
+        newOffset =
+            indexOf smallChars bigChars offset
+
+        targetOffset =
+            if newOffset == -1 then
+                List.length bigChars
+
+            else
+                newOffset + List.length smallChars
+
+        ( newRow, newCol ) =
+            updateRowColOverRange offset targetOffset bigChars row col
+    in
+    ( newOffset, newRow, newCol )
+
+
+indexOf : List Char -> List Char -> Int -> Int
+indexOf smallChars bigChars offset =
+    if offset > List.length bigChars - List.length smallChars then
+        -1
+
+    else if startsWith smallChars (List.drop offset bigChars) then
+        offset
+
+    else
+        indexOf smallChars bigChars (offset + 1)
+
+
+startsWith : List Char -> List Char -> Bool
+startsWith patternList stringList =
+    Pine_kernel.equal
+        [ Pine_kernel.take [ Pine_kernel.length patternList, stringList ]
+        , patternList
+        ]
+
+
+updateRowColOverRange : Int -> Int -> List Char -> Int -> Int -> ( Int, Int )
+updateRowColOverRange currentOffset targetOffset chars row col =
+    if currentOffset >= targetOffset then
+        ( row, col )
+
+    else
+        case List.head (List.drop currentOffset chars) of
+            Just char ->
+                if char == 10 then
+                    -- ASCII code for '\\n'
+                    updateRowColOverRange (currentOffset + 1) targetOffset chars (row + 1) 1
+
+                else
+                    updateRowColOverRange (currentOffset + 1) targetOffset chars row (col + 1)
+
+            Nothing ->
+                ( row, col )
 
 
 isAsciiCode : Int -> Int -> String -> Bool
@@ -1664,7 +1758,7 @@ chompUntil (Token str expecting) =
   Parser <| \\s ->
     let
       (newOffset, newRow, newCol) =
-        findSubString str s.offset s.row s.col s.src
+        Elm.Kernel.Parser.findSubString str s.offset s.row s.col s.src
     in
     if newOffset == -1 then
       Bad False (fromInfo newRow newCol expecting s.context)
