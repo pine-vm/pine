@@ -1,11 +1,10 @@
 # Pine
 
-Pine is a runtime for the Elm programming language.    
-It's built on .NET and runs on Linux, Windows, and macOS.
+Pine is a runtime for the Elm programming language. It runs Elm applications on Linux, Windows, and macOS.
 
 + Pine supports building and running Elm programs natively on .NET without JavaScript.
 + The Elm compilation interfaces support the customization of code generation at build time.
-+ Pine comes bundled with a web server and database management system for building full-stack web applications.
++ Pine comes bundled with an integrated web server and database management system, simplifying the development and operation of web services.
 
 ## Web Services
 
