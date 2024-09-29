@@ -24,6 +24,7 @@ public static class PopularValues
     private static IEnumerable<string> PopularStringsSource =>
     [
         "Elm_Record",
+        "Elm_Bytes",
 
         "Basics",
         "List",

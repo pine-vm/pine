@@ -21,6 +21,7 @@ public abstract record ElmValue
         | ElmString String
         | ElmTag String (List ElmValue)
         | ElmRecord (List ( String, ElmValue ))
+        | ElmBytes Bytes
         | ElmFloat BigInt.BigInt BigInt.BigInt
         | ElmInternal String
 
@@ -37,6 +38,8 @@ public abstract record ElmValue
 
     public const string ElmRecordTypeTagName = "Elm_Record";
 
+    public const string ElmBytesTypeTagName = "Elm_Bytes";
+
     public const string ElmStringTypeTagName = "String";
 
     public const string ElmSetTypeTagName = "Set_elm_builtin";
@@ -49,6 +52,9 @@ public abstract record ElmValue
 
     public static readonly PineValue ElmRecordTypeTagNameAsValue =
         PineValueAsString.ValueFromString(ElmRecordTypeTagName);
+
+    public static readonly PineValue ElmBytesTypeTagNameAsValue =
+        PineValueAsString.ValueFromString(ElmBytesTypeTagName);
 
     public static readonly PineValue ElmStringTypeTagNameAsValue =
         PineValueAsString.ValueFromString(ElmStringTypeTagName);
@@ -365,6 +371,35 @@ public abstract record ElmValue
     }
 
     /// <summary>
+    /// Elm Bytes type from https://package.elm-lang.org/packages/elm/bytes/latest/
+    /// </summary>
+    public record ElmBytes(ReadOnlyMemory<byte> Value)
+        : ElmValue
+    {
+        /// <summary>
+        /// The number of contained nodes is always zero for the 'Bytes' variant.
+        /// </summary>
+        public override int ContainedNodesCount { get; } = 0;
+
+
+        /// <inheritdoc/>
+        public virtual bool Equals(ElmBytes? otherBytes)
+        {
+            if (otherBytes is null)
+                return false;
+
+            if (Value.Length != otherBytes.Value.Length)
+                return false;
+
+            return Value.Span.SequenceEqual(otherBytes.Value.Span);
+        }
+
+        /// <inheritdoc/>
+        public override int GetHashCode() =>
+            Value.GetHashCode();
+    }
+
+    /// <summary>
     /// The Elm compiler included with Pine models the 'Float' type from Elm as a rational number,
     /// expressed as the quotient or fraction ⁠of two integers, a numerator and a denominator.
     /// </summary>
@@ -502,6 +537,9 @@ public abstract record ElmValue
 
                 ElmTag tag =>
                 ElmTagAsExpression(tag.TagName, tag.Arguments),
+
+                ElmBytes bytes =>
+                ("<" + bytes.Value.Length + " bytes>", needsParens: false),
 
                 ElmFloat elmFloat =>
                 (Convert.ToString(

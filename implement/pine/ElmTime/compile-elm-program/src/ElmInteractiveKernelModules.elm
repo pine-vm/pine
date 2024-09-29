@@ -8,16 +8,19 @@ module Bytes exposing (..)
 
 
 type Bytes
-    = Bytes (List Int)
+    = Elm_Bytes Int
 
 
 width : Bytes -> Int
 width bytes =
     case bytes of
-    Bytes list -> Pine_kernel.length list
+      Elm_Bytes list ->
+        Pine_kernel.length list
 
 
-type Endianness = LE | BE
+type Endianness
+  = LE
+  | BE
 
 """
     , """
@@ -37,10 +40,10 @@ type Encoder
 
 encode : Encoder -> Bytes.Bytes
 encode builder =
-    Bytes.Bytes (encodeBlob builder)
+    Bytes.Elm_Bytes (encodeBlob builder)
 
 
-encodeBlob : Encoder -> List Int
+encodeBlob : Encoder -> Int
 encodeBlob builder =
   case builder of
     U8    n ->
@@ -61,15 +64,20 @@ encodeBlob builder =
                 Pine_kernel.take [ 4, (Pine_kernel.reverse (Pine_kernel.skip [ 1, n ])) ]
         in
         if (e == Bytes.LE)
-        then littleEndian
-        else Pine_kernel.reverse littleEndian
+        then
+            littleEndian
+        else
+            Pine_kernel.reverse littleEndian
 
     SequenceEncoder bs ->
-        Pine_kernel.concat (List.map encodeBlob bs)
+        if bs == []
+        then
+            Pine_kernel.take [ 0, 0 ]
+        else
+            Pine_kernel.concat (List.map encodeBlob bs)
 
-    BytesEncoder bs ->
-        case bs of
-        Bytes.Bytes blob -> blob
+    BytesEncoder (Bytes.Elm_Bytes blob) ->
+        blob
 
 
 -- INTEGERS
@@ -78,8 +86,8 @@ encodeBlob builder =
 {-| Encode integers from `0` to `255` in one byte.
 -}
 unsignedInt8 : Int -> Encoder
-unsignedInt8 =
-  U8
+unsignedInt8 int =
+  U8 int
 
 
 {-| Encode integers from `0` to `65535` in two bytes.
@@ -97,13 +105,221 @@ unsignedInt32 =
 
 
 bytes : Bytes.Bytes -> Encoder
-bytes =
-  Bytes.Bytes
+bytes bytes =
+  BytesEncoder bytes
 
 
 sequence : List Encoder -> Encoder
 sequence builders =
-  SequenceEncoder builders
+    SequenceEncoder builders
+
+
+string : String -> Encoder
+string (String chars)=
+    let
+      blob =
+        encodeCharsAsBlob chars
+    in
+    BytesEncoder (Bytes.Elm_Bytes blob)
+
+
+encodeCharsAsBlob : List Char -> Int
+encodeCharsAsBlob chars =
+    encodeCharsAsBlobRec
+        (Pine_kernel.take [ 0, 0 ])
+        chars
+
+
+encodeCharsAsBlobRec : Int -> List Char -> Int
+encodeCharsAsBlobRec prefix chars =
+    case chars of
+        [] ->
+            prefix
+
+        char :: rest ->
+            let
+                code =
+                    Char.toCode char
+
+                charUtf8 =
+                    if Pine_kernel.is_sorted_ascending_int [ code, 0x7f ] then
+                        -- 1-byte encoding
+                        char
+
+                    else if Pine_kernel.is_sorted_ascending_int [ code, 0x7ff ] then
+                        -- 2-byte encoding
+                        let
+                            byte1 =
+                                0xC0 + (code // 64)
+
+                            byte2 =
+                                0x80 + modBy 64 code
+                        in
+                        Pine_kernel.concat
+                            [ Pine_kernel.take [ 1, Pine_kernel.reverse byte1 ]
+                            , Pine_kernel.take [ 1, Pine_kernel.reverse byte2 ]
+                            ]
+
+                    else if Pine_kernel.is_sorted_ascending_int [ code, 0xffff ] then
+                        -- 3-byte encoding
+                        let
+                            byte1 =
+                                0xE0 + (code // 4096)
+
+                            byte2 =
+                                0x80 + modBy 64 (code // 64)
+
+                            byte3 =
+                                0x80 + modBy 64 code
+                        in
+                        Pine_kernel.concat
+                            [ Pine_kernel.take [ 1, Pine_kernel.reverse byte1 ]
+                            , Pine_kernel.take [ 1, Pine_kernel.reverse byte2 ]
+                            , Pine_kernel.take [ 1, Pine_kernel.reverse byte3 ]
+                            ]
+
+                    else
+                        -- 4-byte encoding for code points >= 0x10000
+                        let
+                            byte1 =
+                                0xF0 + (code // 262144)
+
+                            byte2 =
+                                0x80 + modBy 64 (code // 4096)
+
+                            byte3 =
+                                0x80 + modBy 64 (code // 64)
+
+                            byte4 =
+                                0x80 + modBy 64 code
+                        in
+                        Pine_kernel.concat
+                            [ Pine_kernel.take [ 1, Pine_kernel.reverse byte1 ]
+                            , Pine_kernel.take [ 1, Pine_kernel.reverse byte2 ]
+                            , Pine_kernel.take [ 1, Pine_kernel.reverse byte3 ]
+                            , Pine_kernel.take [ 1, Pine_kernel.reverse byte4 ]
+                            ]
+            in
+            encodeCharsAsBlobRec
+                (Pine_kernel.concat [ prefix, charUtf8 ])
+                rest
+
+
+getStringWidth : String -> Int
+getStringWidth (String chars) =
+    Pine_kernel.length
+        (encodeCharsAsBlob chars)
+
+
+"""
+    , """
+module Bytes.Decode exposing (..)
+
+
+import Bytes
+
+
+-- PARSER
+
+
+{-| Describes how to turn a sequence of bytes into a nice Elm value.
+-}
+type Decoder a
+    = Decoder (Bytes -> Int -> ( Int, a ))
+
+
+{-| Turn a sequence of bytes into a nice Elm value.
+
+    -- decode (unsignedInt16 BE) <0007> == Just 7
+    -- decode (unsignedInt16 LE) <0700> == Just 7
+    -- decode (unsignedInt16 BE) <0700> == Just 1792
+    -- decode (unsignedInt32 BE) <0700> == Nothing
+
+
+
+The `Decoder` specifies exactly how this should happen. This process may fail
+if the sequence of bytes is corrupted or unexpected somehow. The examples above
+show a case where there are not enough bytes.
+
+-}
+decode : Decoder a -> Bytes -> Maybe a
+decode (Decoder decoder) bytes =
+    let
+        (Bytes.Elm_Bytes blob) =
+            bytes
+
+        ( offset, result ) =
+            decoder bytes 0
+
+        blobLength =
+            Pine_kernel.length blob
+    in
+    if Pine_kernel.is_sorted_ascending_int [ 0, offset, blobLength ]
+    then
+        Just result
+    else
+        Nothing
+
+
+{-| Decode one byte into an integer from `0` to `255`.
+-}
+unsignedInt8 : Decoder Int
+unsignedInt8 =
+    Decoder
+        (\\(Bytes.Elm_Bytes blob) offset ->
+            let
+                byte =
+                    Pine_kernel.take [ 1, Pine_kernel.skip [ offset, blob ] ]
+            in
+            ( Pine_kernel.add_int [ offset, 1 ]
+            , Pine_kernel.concat [ Pine_kernel.take [ 1, 0 ], byte ]
+            )
+        )
+
+
+succeed : a -> Decoder a
+succeed a =
+    Decoder (\\_ offset -> ( offset, a ))
+
+
+map : (a -> b) -> Decoder a -> Decoder b
+map func (Decoder decodeA) =
+    Decoder
+        (\\bites offset ->
+            let
+                ( aOffset, a ) =
+                    decodeA bites offset
+            in
+            ( aOffset, func a )
+        )
+
+
+type Step state a
+    = Loop state
+    | Done a
+
+
+loop : state -> (state -> Decoder (Step state a)) -> Decoder a
+loop state callback =
+    Decoder (loopHelp state callback)
+
+
+loopHelp : state -> (state -> Decoder (Step state a)) -> Bytes -> Int -> ( Int, a )
+loopHelp state callback bites offset =
+    let
+        (Decoder decoder) =
+            callback state
+
+        ( newOffset, step ) =
+            decoder bites offset
+    in
+    case step of
+        Loop newState ->
+            loopHelp newState callback bites newOffset
+
+        Done result ->
+            ( newOffset, result )
+
 
 """
     , """

@@ -40,6 +40,11 @@ public class ElmValueTests
                     ElmValue.Integer(47)]),
             ]),
 
+            new ElmValue.ElmBytes(System.ReadOnlyMemory<byte>.Empty),
+            new ElmValue.ElmBytes((byte[])[0]),
+            new ElmValue.ElmBytes((byte[])[11, 13, 17]),
+            new ElmValue.ElmBytes((byte[])[0, 13, 17]),
+
             ElmValue.ElmFloat.Convert(0),
             ElmValue.ElmFloat.Convert(0.3),
             ElmValue.ElmFloat.Convert(1.7),
@@ -93,6 +98,18 @@ public class ElmValueTests
 
                 (ElmValue.TagInstance("Just", [ElmValue.TagInstance("Just", [ElmValue.Integer(47)])]),
                 "Just (Just 47)"),
+
+                (new ElmValue.ElmBytes(System.ReadOnlyMemory<byte>.Empty),
+                "<0 bytes>"),
+
+                (new ElmValue.ElmBytes((byte[])[0]),
+                "<1 bytes>"),
+
+                (new ElmValue.ElmBytes((byte[])[11, 13, 17]),
+                "<3 bytes>"),
+
+                (new ElmValue.ElmBytes((byte[])[0, 13, 17]),
+                "<3 bytes>"),
 
                 (ElmValue.ElmFloat.Convert(0),
                 "0"),

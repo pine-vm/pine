@@ -144,6 +144,26 @@ public static class ElmValueEncoding
                 }
 
                 {
+                    // case of Bytes.Bytes
+
+                    if (listValue.Elements[0] == ElmValue.ElmBytesTypeTagNameAsValue)
+                    {
+                        var tagArgumentsValue = listValue.Elements[1];
+
+                        if (tagArgumentsValue is not PineValue.ListValue tagArgumentsList)
+                            return "Failed to convert value under Bytes tag: Expected a list of tag arguments";
+
+                        if (tagArgumentsList.Elements.Count is not 1)
+                            return "Failed to convert value under Bytes tag: Expected a list of tag arguments with single item";
+
+                        if (tagArgumentsList.Elements[0] is not PineValue.BlobValue blobValue)
+                            return "Failed to convert value under Bytes tag: Expected blob value in tag argument";
+
+                        return new ElmValue.ElmBytes(blobValue.Bytes);
+                    }
+                }
+
+                {
                     // Optimize for the case of an Elm Float.
 
                     if (listValue.Elements[0] == ElmValue.ElmFloatTypeTagNameAsValue)
@@ -332,6 +352,7 @@ public static class ElmValueEncoding
                     recordFields[i] = (fieldName.Value, fieldValueOk.Value);
                     continue;
                 }
+
                 return "Failed decoding field value: " + fieldValueResult;
             }
 
@@ -449,6 +470,11 @@ public static class ElmValueEncoding
                 ElmValue.ElmRecord elmRecord =>
                 ElmRecordAsPineValue(
                     [.. elmRecord.Fields.Select(field => (field.FieldName, ElmValueAsPineValue(field.Value, reusableEncoding)))]),
+
+                ElmValue.ElmBytes elmBytes =>
+                PineValue.List(
+                    [ElmValue.ElmBytesTypeTagNameAsValue,
+                    PineValue.List([PineValue.Blob(elmBytes.Value)])]),
 
                 ElmValue.ElmFloat elmFloat =>
                 PineValue.List(

@@ -9,6 +9,7 @@ module ElmCompiler exposing
     , compilationAndEmitStackFromModulesInCompilation
     , compileElmSyntaxExpression
     , compileElmSyntaxFunction
+    , elmBytesTypeTagNameAsValue
     , elmFloatTypeTagName
     , elmRecordTypeTagName
     , elmRecordTypeTagNameAsValue
@@ -140,6 +141,16 @@ elmRecordTypeTagName =
 elmRecordTypeTagNameAsValue : Pine.Value
 elmRecordTypeTagNameAsValue =
     Pine.valueFromString elmRecordTypeTagName
+
+
+elmBytesTypeTagName : String
+elmBytesTypeTagName =
+    "Elm_Bytes"
+
+
+elmBytesTypeTagNameAsValue : Pine.Value
+elmBytesTypeTagNameAsValue =
+    Pine.valueFromString elmBytesTypeTagName
 
 
 elmFloatTypeTagName : String

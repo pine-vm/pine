@@ -1,0 +1,1 @@
+encodedBytes = Bytes.Encode.encode  (Bytes.Encode.string "🌲")

@@ -13,6 +13,7 @@ import ElmCompiler
         , ElmModuleInCompilation
         , ProjectParsedElmFile
         , compilationAndEmitStackFromModulesInCompilation
+        , elmBytesTypeTagNameAsValue
         , elmFloatTypeTagName
         , elmRecordTypeTagName
         , elmStringTypeTagName
@@ -58,6 +59,7 @@ type ElmValue
     | ElmString String
     | ElmTag String (List ElmValue)
     | ElmRecord (List ( String, ElmValue ))
+    | ElmBytes (List Int)
     | ElmFloat BigInt.BigInt BigInt.BigInt
     | ElmInternal String
 
@@ -185,6 +187,11 @@ renderAsElmExpression elmValue =
                         , { needsParens = True }
                         )
 
+        ElmBytes blob ->
+            ( "<" ++ String.fromInt (List.length blob) ++ " bytes>"
+            , { needsParens = False }
+            )
+
         ElmFloat numerator denominator ->
             ( case elmFloatToFloat numerator denominator of
                 Nothing ->
@@ -219,10 +226,24 @@ elmValueAsJson elmValue =
             Json.Encode.list elmValueAsJson list
 
         ElmRecord fields ->
-            Json.Encode.list (\( fieldName, fieldValue ) -> Json.Encode.list identity [ Json.Encode.string fieldName, elmValueAsJson fieldValue ]) fields
+            Json.Encode.list
+                (\( fieldName, fieldValue ) ->
+                    Json.Encode.list identity [ Json.Encode.string fieldName, elmValueAsJson fieldValue ]
+                )
+                fields
 
         ElmTag tagName tagArguments ->
-            Json.Encode.list identity [ Json.Encode.string tagName, Json.Encode.list elmValueAsJson tagArguments ]
+            Json.Encode.list identity
+                [ Json.Encode.string tagName
+                , Json.Encode.list elmValueAsJson tagArguments
+                ]
+
+        ElmBytes blob ->
+            Json.Encode.object
+                [ ( "Elm_Bytes"
+                  , Json.Encode.list Json.Encode.int blob
+                  )
+                ]
 
         ElmFloat numerator denominator ->
             case elmFloatToFloat numerator denominator of
@@ -291,70 +312,88 @@ pineValueAsElmValue pineValue =
                                 |> Ok
 
             Pine.ListValue list ->
-                case list |> List.map pineValueAsElmValue |> Result.Extra.combine of
-                    Err error ->
-                        Err ("Failed to combine list: " ++ error)
+                let
+                    genericList () =
+                        case list |> List.map pineValueAsElmValue |> Result.Extra.combine of
+                            Err error ->
+                                Err ("Failed to combine list: " ++ error)
 
-                    Ok listValues ->
-                        let
-                            resultAsList =
-                                Ok (ElmList listValues)
-                        in
-                        if listValues == [] then
-                            resultAsList
+                            Ok listValues ->
+                                let
+                                    resultAsList =
+                                        Ok (ElmList listValues)
+                                in
+                                if listValues == [] then
+                                    resultAsList
 
-                        else
-                            case listValues of
-                                [ ElmList tagNameChars, ElmList tagArguments ] ->
-                                    case tryMapElmValueToString tagNameChars of
-                                        Just tagName ->
-                                            if stringStartsWithUpper tagName then
-                                                if tagName == elmRecordTypeTagName then
-                                                    (case tagArguments of
-                                                        [ recordValue ] ->
-                                                            elmValueAsElmRecord recordValue
+                                else
+                                    case listValues of
+                                        [ ElmList tagNameChars, ElmList tagArguments ] ->
+                                            case tryMapElmValueToString tagNameChars of
+                                                Just tagName ->
+                                                    if stringStartsWithUpper tagName then
+                                                        if tagName == elmRecordTypeTagName then
+                                                            (case tagArguments of
+                                                                [ recordValue ] ->
+                                                                    elmValueAsElmRecord recordValue
 
-                                                        _ ->
-                                                            Err ("Wrong number of tag arguments: " ++ String.fromInt (List.length tagArguments))
-                                                    )
-                                                        |> Result.mapError ((++) "Failed to extract value under record tag: ")
+                                                                _ ->
+                                                                    Err ("Wrong number of tag arguments: " ++ String.fromInt (List.length tagArguments))
+                                                            )
+                                                                |> Result.mapError ((++) "Failed to extract value under record tag: ")
 
-                                                else if tagName == elmStringTypeTagName then
-                                                    (case tagArguments of
-                                                        [ ElmList charsList ] ->
-                                                            charsList
-                                                                |> tryMapElmValueToString
-                                                                |> Maybe.map (ElmString >> Ok)
-                                                                |> Maybe.withDefault (Err "Failed to map chars")
+                                                        else if tagName == elmStringTypeTagName then
+                                                            (case tagArguments of
+                                                                [ ElmList charsList ] ->
+                                                                    charsList
+                                                                        |> tryMapElmValueToString
+                                                                        |> Maybe.map (ElmString >> Ok)
+                                                                        |> Maybe.withDefault (Err "Failed to map chars")
 
-                                                        _ ->
-                                                            Err
-                                                                ("Unexpected shape of tag arguments ("
-                                                                    ++ String.fromInt (List.length tagArguments)
-                                                                    ++ "): "
-                                                                )
-                                                    )
-                                                        |> Result.mapError ((++) "Failed to extract value under String tag: ")
+                                                                _ ->
+                                                                    Err
+                                                                        ("Unexpected shape of tag arguments ("
+                                                                            ++ String.fromInt (List.length tagArguments)
+                                                                            ++ "): "
+                                                                        )
+                                                            )
+                                                                |> Result.mapError ((++) "Failed to extract value under String tag: ")
 
-                                                else if tagName == elmFloatTypeTagName then
-                                                    case tagArguments of
-                                                        [ ElmInteger numerator, ElmInteger denominator ] ->
-                                                            Ok (ElmFloat numerator denominator)
+                                                        else if tagName == elmFloatTypeTagName then
+                                                            case tagArguments of
+                                                                [ ElmInteger numerator, ElmInteger denominator ] ->
+                                                                    Ok (ElmFloat numerator denominator)
 
-                                                        _ ->
-                                                            Err "Unexpected shape under Float tag"
+                                                                _ ->
+                                                                    Err "Unexpected shape under Float tag"
 
-                                                else
-                                                    Ok (ElmTag tagName tagArguments)
+                                                        else
+                                                            Ok (ElmTag tagName tagArguments)
 
-                                            else
-                                                resultAsList
+                                                    else
+                                                        resultAsList
 
-                                        Nothing ->
+                                                Nothing ->
+                                                    resultAsList
+
+                                        _ ->
                                             resultAsList
+                in
+                case list of
+                    [ tagValue, Pine.ListValue tagArguments ] ->
+                        if tagValue == elmBytesTypeTagNameAsValue then
+                            case tagArguments of
+                                [ Pine.BlobValue blob ] ->
+                                    Ok (ElmBytes blob)
 
                                 _ ->
-                                    resultAsList
+                                    genericList ()
+
+                        else
+                            genericList ()
+
+                    _ ->
+                        genericList ()
 
 
 elmValueAsElmRecord : ElmValue -> Result String ElmValue
@@ -613,13 +652,13 @@ json_encode_pineValue dictionary value =
                 (\entryName entryValue aggregate ->
                     case entryValue of
                         Pine.BlobValue blob ->
-                            if List.length blob < 3 then
-                                aggregate
+                               if List.length blob < 3 then
+                                   aggregate
 
-                            else
-                                { aggregate
-                                    | blobDict = Dict.insert blob entryName aggregate.blobDict
-                                }
+                               else
+                            { aggregate
+                                | blobDict = Dict.insert blob entryName aggregate.blobDict
+                            }
 
                         Pine.ListValue list ->
                             if list == [] then
@@ -726,78 +765,78 @@ json_encode_pineValue_Internal dictionary value =
                     jsonEncodeEmptyBlob
 
                 _ ->
-                    if List.length blob < 3 then
-                        case intFromBlobValueStrict blob of
-                            Err _ ->
-                                defaultBlobEncoding ()
+                       if List.length blob < 3 then
+                               case intFromBlobValueStrict blob of
+                                   Err _ ->
+                                       defaultBlobEncoding ()
 
-                            Ok asInt ->
-                                Json.Encode.object
-                                    [ ( "BlobAsInt"
-                                      , Json.Encode.int asInt
-                                      )
-                                    ]
+                                   Ok asInt ->
+                                       Json.Encode.object
+                                           [ ( "BlobAsInt"
+                                             , Json.Encode.int asInt
+                                             )
+                                           ]
 
-                    else
-                        tryFindReference ()
+                       else
+                    tryFindReference ()
 
 
 intFromBlobValueStrict : List Int -> Result String Int
 intFromBlobValueStrict blobBytes =
-    case blobBytes of
-        [] ->
-            Err "Empty blob does not encode an integer."
+        case blobBytes of
+            [] ->
+                Err "Empty blob does not encode an integer."
 
-        [ _ ] ->
-            Err "Blob with only one byte does not encode an integer."
+            [ _ ] ->
+                Err "Blob with only one byte does not encode an integer."
 
-        sign :: absFirst :: following ->
-            let
-                computeAbsValue () =
-                    if following == [] then
-                        Ok absFirst
+            sign :: absFirst :: following ->
+                let
+                    computeAbsValue () =
+                        if following == [] then
+                            Ok absFirst
 
-                    else if absFirst == 0 then
-                        Err "Avoid ambiguous leading zero."
+                        else if absFirst == 0 then
+                            Err "Avoid ambiguous leading zero."
 
-                    else
-                        case following of
-                            [ b1 ] ->
-                                Ok ((absFirst * 256) + b1)
+                        else
+                            case following of
+                                [ b1 ] ->
+                                    Ok ((absFirst * 256) + b1)
 
-                            [ b1, b2 ] ->
-                                Ok ((absFirst * 65536) + (b1 * 256) + b2)
+                                [ b1, b2 ] ->
+                                    Ok ((absFirst * 65536) + (b1 * 256) + b2)
 
-                            [ b1, b2, b3 ] ->
-                                Ok ((absFirst * 16777216) + (b1 * 65536) + (b2 * 256) + b3)
+                                [ b1, b2, b3 ] ->
+                                    Ok ((absFirst * 16777216) + (b1 * 65536) + (b2 * 256) + b3)
 
-                            [ b1, b2, b3, b4 ] ->
-                                Ok ((absFirst * 4294967296) + (b1 * 16777216) + (b2 * 65536) + (b3 * 256) + b4)
+                                [ b1, b2, b3, b4 ] ->
+                                    Ok ((absFirst * 4294967296) + (b1 * 16777216) + (b2 * 65536) + (b3 * 256) + b4)
 
-                            [ b1, b2, b3, b4, b5 ] ->
-                                Ok ((absFirst * 1099511627776) + (b1 * 4294967296) + (b2 * 16777216) + (b3 * 65536) + (b4 * 256) + b5)
+                                [ b1, b2, b3, b4, b5 ] ->
+                                    Ok ((absFirst * 1099511627776) + (b1 * 4294967296) + (b2 * 16777216) + (b3 * 65536) + (b4 * 256) + b5)
 
-                            _ ->
-                                Err "Failed to map to int - unsupported number of bytes"
-            in
-            case sign of
-                4 ->
-                    computeAbsValue ()
+                                _ ->
+                                    Err "Failed to map to int - unsupported number of bytes"
+                in
+                case sign of
+                    4 ->
+                        computeAbsValue ()
 
-                2 ->
-                    case computeAbsValue () of
-                        Err err ->
-                            Err err
+                    2 ->
+                        case computeAbsValue () of
+                            Err err ->
+                                Err err
 
-                        Ok absValue ->
-                            if absValue == 0 then
-                                Err "Avoid ambiguous negative zero."
+                            Ok absValue ->
+                                if absValue == 0 then
+                                    Err "Avoid ambiguous negative zero."
 
-                            else
-                                Ok -absValue
+                                else
+                                    Ok -absValue
 
-                _ ->
-                    Err ("Unexpected value for sign byte: " ++ String.fromInt sign)
+                    _ ->
+                        Err ("Unexpected value for sign byte: " ++ String.fromInt sign)
 
 
 jsonEncodeEmptyList : Json.Encode.Value
