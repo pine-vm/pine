@@ -96,8 +96,10 @@ public class ElmValueInterop
 
         for (var i = 0; i < byteItems.Count; i++)
         {
-            if (byteItems[i] is not ElmValue.ElmInteger byteElement)
-                return "Invalid element in BlobValue tag at index " + i;
+            var itemValue = byteItems[i];
+
+            if (itemValue is not ElmValue.ElmInteger byteElement)
+                return "Invalid element in BlobValue tag at index " + i + ": " + itemValue.ToString();
 
             bytes[i] = (byte)byteElement.Value;
         }
