@@ -38,13 +38,13 @@ public static class ElmValueEncoding
     private static readonly ElmValue EmptyList = new ElmValue.ElmList([]);
 
     private static readonly IReadOnlyList<Result<string, ElmValue>> ReusedBlobSingle =
-        [..Enumerable.Range(0, 0xff)
+        [..Enumerable.Range(0, 0x1_00)
         .Select(b => PineBlobValueAsElmValue((PineValue.BlobValue)PineValue.Blob([(byte)b])))];
 
     private static readonly IReadOnlyList<Result<string, ElmValue>> ReusedBlobTuple =
-        [..Enumerable.Range(0, 0xff)
-        .SelectMany(b1 => Enumerable.Range(0, 0xff)
-        .Select(b2 => PineBlobValueAsElmValue((PineValue.BlobValue)PineValue.Blob([(byte)b1, (byte)b2]))))];
+        [..Enumerable.Range(0, 0x1_00_00)
+        .Select(twoBytes =>
+        PineBlobValueAsElmValue((PineValue.BlobValue)PineValue.Blob([(byte)(twoBytes >> 8), (byte)twoBytes])))];
 
     public static Result<string, ElmValue> PineBlobValueAsElmValue(
         PineValue.BlobValue blobValue) =>
@@ -56,7 +56,7 @@ public static class ElmValueEncoding
         internedBlobSingle[blobValue.Bytes.Span[0]]
         :
         blobValue.Bytes.Length is 2 && ReusedBlobTuple is { } internedBlobTuple ?
-        internedBlobTuple[blobValue.Bytes.Span[0] * 0xff + blobValue.Bytes.Span[1]]
+        internedBlobTuple[blobValue.Bytes.Span[0] * 0x100 + blobValue.Bytes.Span[1]]
         :
         (blobValue.Bytes.Span[0] switch
         {
