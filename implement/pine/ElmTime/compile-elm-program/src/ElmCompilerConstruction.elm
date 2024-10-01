@@ -163,23 +163,31 @@ buildPineExpressionSyntax config expression =
         printValueSyntax : Pine.Value -> List String
         printValueSyntax literal =
             case literal of
-                Pine.ListValue listValues ->
-                    case listValues of
+                Pine.ListValue itemsValues ->
+                    case itemsValues of
                         [] ->
                             [ "Pine.ListValue []" ]
 
                         firstListItem :: otherListItems ->
-                            case Pine.stringFromValue literal of
-                                Ok asString ->
-                                    [ "Pine.valueFromString " ++ "\"" ++ asString ++ "\"" ]
-
-                                Err _ ->
+                            let
+                                genericList () =
                                     "Pine.ListValue"
                                         :: (("[ " ++ String.join "\n" (printValueSyntax firstListItem))
                                                 :: List.map (printValueSyntax >> String.join "\n" >> (++) ", ") otherListItems
                                                 ++ [ "]" ]
                                                 |> List.map indentString
                                            )
+                            in
+                            if otherListItems == [] then
+                                genericList ()
+
+                            else
+                                case Pine.stringFromValue literal of
+                                    Ok asString ->
+                                        [ "Pine.valueFromString " ++ "\"" ++ asString ++ "\"" ]
+
+                                    Err _ ->
+                                        genericList ()
 
                 Pine.BlobValue blob ->
                     case Pine.bigIntFromBlobValue blob of
