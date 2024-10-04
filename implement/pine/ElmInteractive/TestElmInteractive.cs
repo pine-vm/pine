@@ -307,6 +307,19 @@ public class TestElmInteractive
                                     }
                                 }
 
+                                if (sessionStep.step.ExpectedErrorContains is { } expectedErrorContains)
+                                {
+                                    var errorText =
+                                    "Assertion failed: Expected error containing '" + expectedErrorContains +
+                                    "', but submission succeeded";
+
+                                    return
+                                    (Result<InteractiveScenarioTestStepFailure, InteractiveScenarioTestStepSuccess>)
+                                    new InteractiveScenarioTestStepFailure(
+                                        submission: sessionStep.step.Submission,
+                                        errorAsText: errorText);
+                                }
+
                                 return new InteractiveScenarioTestStepSuccess.SubmissionResponseOk(submissionResultOk);
                             });
                     }

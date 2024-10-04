@@ -6,24 +6,16 @@ import Dict
 import Elm.Syntax.Declaration
 import Elm.Syntax.Expression
 import Elm.Syntax.File
-import Elm.Syntax.ModuleName
 import ElmCompiler
     exposing
-        ( CompilationStack
-        , ElmModuleInCompilation
-        , ProjectParsedElmFile
-        , compilationAndEmitStackFromModulesInCompilation
+        ( ProjectParsedElmFile
         , elmBytesTypeTagNameAsValue
         , elmFloatTypeTagName
         , elmRecordTypeTagName
         , elmStringTypeTagName
         , stringStartsWithUpper
         )
-import FirCompiler
-    exposing
-        ( EmitStack
-        , Expression(..)
-        )
+import FirCompiler exposing (Expression(..))
 import Json.Decode
 import Json.Encode
 import List.Extra
@@ -594,54 +586,6 @@ parsedElmFileRecordFromSeparatelyParsedSyntax ( fileText, parsedModule ) =
     { fileText = fileText
     , parsedModule = parsedModule
     }
-
-
-compilationAndEmitStackFromInteractiveEnvironment :
-    { modules : Dict.Dict Elm.Syntax.ModuleName.ModuleName ElmModuleInCompilation
-    , otherDeclarations : List ( String, Pine.Value )
-    }
-    -> ( CompilationStack, EmitStack )
-compilationAndEmitStackFromInteractiveEnvironment environmentDeclarations =
-    let
-        interactiveImplicitImportStatements =
-            environmentDeclarations.modules
-                |> Dict.keys
-                |> List.map
-                    (\moduleName ->
-                        { canonicalModuleName = moduleName
-                        , localModuleName = moduleName
-                        , exposingList = Nothing
-                        }
-                    )
-
-        ( defaultCompilationStack, emitStack ) =
-            compilationAndEmitStackFromModulesInCompilation
-                environmentDeclarations.modules
-                { moduleAliases = Dict.empty
-                , parsedImports = interactiveImplicitImportStatements
-                , localTypeDeclarations = []
-                , selfModuleName = []
-                }
-
-        compilationStack =
-            { defaultCompilationStack
-                | inlineableDeclarations =
-                    List.concat
-                        [ defaultCompilationStack.inlineableDeclarations
-                        , List.map
-                            (\( declName, declValue ) ->
-                                ( declName
-                                , ElmCompiler.applicableDeclarationFromConstructorExpression
-                                    (LiteralExpression declValue)
-                                )
-                            )
-                            environmentDeclarations.otherDeclarations
-                        ]
-            }
-    in
-    ( compilationStack
-    , emitStack
-    )
 
 
 json_encode_pineValue : Dict.Dict String Pine.Value -> Pine.Value -> Json.Encode.Value

@@ -19,6 +19,36 @@ import Pine
 import Result.Extra
 
 
+encodeInteractiveSubmissionAsPineValue : ElmCompiler.InteractiveSubmission -> Result String Pine.Value
+encodeInteractiveSubmissionAsPineValue submission =
+    case submission of
+        ElmCompiler.ExpressionSubmission expr ->
+            case encodeElmSyntaxExpressionAsPineValue expr of
+                Err err ->
+                    Err ("Failed encoding expression: " ++ err)
+
+                Ok exprValue ->
+                    Ok
+                        (encodeTagAsPineValue
+                            "ExpressionSubmission"
+                            [ exprValue
+                            ]
+                        )
+
+        ElmCompiler.DeclarationSubmission decl ->
+            case encodeElmSyntaxDeclarationAsPineValue decl of
+                Err err ->
+                    Err ("Failed encoding declaration: " ++ err)
+
+                Ok declValue ->
+                    Ok
+                        (encodeTagAsPineValue
+                            "DeclarationSubmission"
+                            [ declValue
+                            ]
+                        )
+
+
 encodeElmSyntaxFileAsPineValue : Elm.Syntax.File.File -> Result String Pine.Value
 encodeElmSyntaxFileAsPineValue elmSyntaxFile =
     case
@@ -435,8 +465,12 @@ encodeElmSyntaxExpressionAsPineValue expression =
                             ]
                     )
 
-        Elm.Syntax.Expression.Floatable _ ->
-            Err "Unsupported expression: Floatable"
+        Elm.Syntax.Expression.Floatable float ->
+            Ok
+                (encodeTagAsPineValue "Floatable"
+                    [ ElmCompiler.valueFromFloat float
+                    ]
+                )
 
         Elm.Syntax.Expression.GLSLExpression string_ ->
             Ok (encodeTagAsPineValue "GLSLExpression" [ encodeElmStringAsPineValue string_ ])

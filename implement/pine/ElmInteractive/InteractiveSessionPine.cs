@@ -1,6 +1,6 @@
-using ElmTime.JavaScript;
 using Pine;
 using Pine.Core;
+using Pine.ElmInteractive;
 using Pine.PineVM;
 using System;
 using System.Collections.Concurrent;
@@ -17,15 +17,25 @@ public class InteractiveSessionPine : IInteractiveSession
 
     private System.Threading.Tasks.Task<Result<string, PineValue>> buildPineEvalContextTask;
 
-    private readonly Lazy<IJavaScriptEngine> compileElmPreparedJavaScriptEngine;
+    private readonly Result<string, Elm.ElmCompiler> buildCompilerResult;
 
     private ElmInteractive.CompilationCache lastCompilationCache = ElmInteractive.CompilationCache.Empty;
 
     private readonly IPineVM pineVM;
 
-    private readonly PineVMCache? pineVMCache;
-
     private static readonly ConcurrentDictionary<ElmInteractive.CompileInteractiveEnvironmentResult, ElmInteractive.CompileInteractiveEnvironmentResult> compiledEnvironmentCache = new();
+
+    private static readonly ConcurrentDictionary<PineValue, PineValue> encodedForCompilerCache = new();
+
+    private static PineValue EncodeValueForCompiler(PineValue pineValue)
+    {
+        return encodedForCompilerCache.GetOrAdd(
+            pineValue,
+            valueFactory:
+            pineValue =>
+            ElmValueEncoding.ElmValueAsPineValue(
+                ElmValueInterop.PineValueEncodedAsInElmCompiler(pineValue)));
+    }
 
     public InteractiveSessionPine(
         TreeNodeWithStringPath compileElmProgramCodeFiles,
@@ -63,14 +73,12 @@ public class InteractiveSessionPine : IInteractiveSession
         (IPineVM pineVM, PineVMCache? pineVMCache) pineVMAndCache)
     {
         pineVM = pineVMAndCache.pineVM;
-        pineVMCache = pineVMAndCache.pineVMCache;
 
-        compileElmPreparedJavaScriptEngine =
-        new(() => ElmInteractive.PrepareJavaScriptEngineToEvaluateElm(
-            compileElmProgramCodeFiles: compileElmProgramCodeFiles,
-            InteractiveSessionJavaScript.JavaScriptEngineFlavor.V8));
+        buildCompilerResult =
+            Elm.ElmCompiler.GetElmCompilerAsync(compileElmProgramCodeFiles).Result;
 
-        buildPineEvalContextTask = System.Threading.Tasks.Task.Run(() =>
+        buildPineEvalContextTask =
+            System.Threading.Tasks.Task.Run(() =>
             CompileInteractiveEnvironment(
                 initialState: initialState,
                 appCodeTree: appCodeTree));
@@ -112,41 +120,83 @@ public class InteractiveSessionPine : IInteractiveSession
                 not null => CommonConversion.StringBase16(PineValueHashTree.ComputeHashNotSorted(appCodeTree))
             };
 
+        if (buildCompilerResult is not Result<string, Elm.ElmCompiler>.Ok elmCompiler)
+        {
+            if (buildCompilerResult is Result<string, Elm.ElmCompiler>.Err err)
+            {
+                return "Failed to build Elm compiler: " + err.Value;
+            }
+
+            throw new NotImplementedException(
+                "Unexpected compiler result type: " + buildCompilerResult.GetType());
+        }
+
         try
         {
-            return compileEvalContextCache.GetOrAdd(
-                key: appCodeTreeHash,
-                valueFactory: _ =>
+            return
+                CompileInteractiveEnvironment(
+                    elmCompiler.Value.CompileElmPreparedJavaScriptEngine,
+                    lastCompilationCache,
+                    initialState,
+                    appCodeTree)
+                .Map(ok =>
                 {
-                    var compileInteractiveEnvironmentResults =
-                    lastCompilationCache.CompileInteractiveEnvironmentResults
-                    .Union(compiledEnvironmentCache.Keys);
+                    lastCompilationCache = ok.compilationCache;
 
-                    var resultWithCache =
-                        ElmInteractive.CompileInteractiveEnvironment(
-                            compileElmPreparedJavaScriptEngine.Value,
-                            initialState: initialState,
-                            appCodeTree: appCodeTree,
-                            lastCompilationCache with
-                            {
-                                CompileInteractiveEnvironmentResults = compileInteractiveEnvironmentResults
-                            });
-
-                    lastCompilationCache = resultWithCache.Unpack(fromErr: _ => lastCompilationCache, fromOk: ok => ok.compilationCache);
-
-                    foreach (var compileEnvironmentResult in lastCompilationCache.CompileInteractiveEnvironmentResults)
-                    {
-                        compiledEnvironmentCache[compileEnvironmentResult] = compileEnvironmentResult;
-                    }
-
-                    return resultWithCache.Map(withCache => withCache.compileResult);
+                    return ok.compileResult;
                 });
         }
         finally
         {
             // Build JavaScript engine and warm-up anyway.
-            System.Threading.Tasks.Task.Run(() => compileElmPreparedJavaScriptEngine.Value.Evaluate("0"));
+            System.Threading.Tasks.Task.Run(() => elmCompiler.Value.CompileElmPreparedJavaScriptEngine.Evaluate("0"));
         }
+    }
+
+    public static Result<string, (PineValue compileResult, ElmInteractive.CompilationCache compilationCache)>
+        CompileInteractiveEnvironment(
+        JavaScript.IJavaScriptEngine compileElmPreparedJavaScriptEngine,
+        ElmInteractive.CompilationCache lastCompilationCache,
+        PineValue? initialState,
+        TreeNodeWithStringPath? appCodeTree)
+    {
+        var appCodeTreeHash =
+            appCodeTree switch
+            {
+                null => "",
+                not null => CommonConversion.StringBase16(PineValueHashTree.ComputeHashNotSorted(appCodeTree))
+            };
+
+        var compileResult =
+            compileEvalContextCache.GetOrAdd(
+            key: appCodeTreeHash,
+            valueFactory: _ =>
+            {
+                var compileInteractiveEnvironmentResults =
+                lastCompilationCache.CompileInteractiveEnvironmentResults
+                .Union(compiledEnvironmentCache.Keys);
+
+                var resultWithCache =
+                    ElmInteractive.CompileInteractiveEnvironment(
+                        compileElmPreparedJavaScriptEngine,
+                        initialState: initialState,
+                        appCodeTree: appCodeTree,
+                        lastCompilationCache with
+                        {
+                            CompileInteractiveEnvironmentResults = compileInteractiveEnvironmentResults
+                        });
+
+                lastCompilationCache = resultWithCache.Unpack(fromErr: _ => lastCompilationCache, fromOk: ok => ok.compilationCache);
+
+                foreach (var compileEnvironmentResult in lastCompilationCache.CompileInteractiveEnvironmentResults)
+                {
+                    compiledEnvironmentCache[compileEnvironmentResult] = compileEnvironmentResult;
+                }
+
+                return resultWithCache.Map(withCache => withCache.compileResult);
+            });
+
+        return compileResult.Map(compileResult => (compileResult, lastCompilationCache));
     }
 
     public Result<string, SubmissionResponse> Submit(string submission)
@@ -171,77 +221,151 @@ public class InteractiveSessionPine : IInteractiveSession
                     label + " duration: " + CommandLineInterface.FormatIntegerForDisplay(clock.ElapsedMilliseconds) + " ms");
 
             return
+                buildCompilerResult
+                .MapError(err => "Failed to build compiler: " + err)
+                .AndThen(elmCompiler =>
                 buildPineEvalContextTask.Result
                 .MapError(error => "Failed to build initial Pine eval context: " + error)
                 .AndThen(buildPineEvalContextOk =>
                 {
                     clock.Restart();
 
-                    var compileSubmissionResult =
-                        ElmInteractive.CompileInteractiveSubmission(
-                            compileElmPreparedJavaScriptEngine.Value,
-                            environment: buildPineEvalContextOk,
+                    var parseSubmissionResult =
+                        ElmInteractive.ParseInteractiveSubmission(
+                            elmCompiler.CompileElmPreparedJavaScriptEngine,
                             submission: submission,
-                            addInspectionLogEntry: compileEntry => addInspectionLogEntry?.Invoke("Compile: " + compileEntry),
-                            compilationCacheBefore: lastCompilationCache);
-
-                    logDuration("compile");
+                            addInspectionLogEntry: compileEntry => addInspectionLogEntry?.Invoke("Parse: " + compileEntry));
 
                     return
-                    compileSubmissionResult
+                    parseSubmissionResult
                     .MapError(error => "Failed to parse submission: " + error)
-                    .AndThen(compileSubmissionOk =>
+                    .AndThen(parsedSubmissionOk =>
                     {
-                        lastCompilationCache = compileSubmissionOk.cache;
-
                         return
-                        ExpressionEncoding.ParseExpressionFromValueDefault(compileSubmissionOk.compiledValue)
-                        .MapError(error => "Failed to decode expression: " + error)
-                        .AndThen(decodeExpressionOk =>
+                        ElmValueEncoding.PineValueAsElmValue(parsedSubmissionOk)
+                        .MapError(error => "Failed parsing result as Elm value: " + error)
+                        .AndThen(parsedSubmissionAsElmValue =>
                         {
+                            logDuration("parse");
+
                             clock.Restart();
 
-                            var evalResult = pineVM.EvaluateExpression(decodeExpressionOk, buildPineEvalContextOk);
+                            var environmentEncodedForCompiler =
+                                EncodeValueForCompiler(buildPineEvalContextOk);
 
-                            logDuration("eval");
+                            logDuration("compile - encode environment");
+
+                            clock.Restart();
+
+                            var compileParsedResult =
+                                ElmInteractiveEnvironment.ApplyFunction(
+                                    pineVM,
+                                    elmCompiler.CompileParsedInteractiveSubmission,
+                                    arguments:
+                                    [
+                                        environmentEncodedForCompiler,
+                                        parsedSubmissionOk
+                                    ]);
+
+                            if (compileParsedResult is not Result<string, PineValue>.Ok compileParsedOk)
+                            {
+                                return
+                                "Failed compiling parsed submission (" +
+                                parsedSubmissionAsElmValue + "): " +
+                                compileParsedResult.Unpack(err => err, ok => "Not an err");
+                            }
+
+                            logDuration("compile - apply");
+
+                            clock.Restart();
+
+                            var compileParsedOkAsElmValue =
+                            ElmValueEncoding.PineValueAsElmValue(compileParsedOk.Value)
+                            .Extract(err => throw new Exception("Failed decoding as Elm value: " + err));
+
+                            logDuration("compile - decode result");
+
+                            clock.Restart();
+
+                            if (compileParsedOkAsElmValue is not ElmValue.ElmTag compiledResultTag)
+                            {
+                                return "Unexpected return value: No tag: " + compileParsedOkAsElmValue;
+                            }
+
+                            if (compiledResultTag.TagName is not "Ok" || compiledResultTag.Arguments.Count is not 1)
+                            {
+                                return "Failed compile: " + compiledResultTag;
+                            }
+
+                            logDuration("compile - decode expression");
+
+                            clock.Restart();
 
                             return
-                            evalResult
-                            .MapError(error => "Failed to evaluate expression in PineVM: " + error)
-                            .AndThen(evalOk =>
-                            {
-                                if (evalOk is not PineValue.ListValue evalResultListComponent)
+                                ElmValueEncoding.PineValueAsElmValue(compileParsedOk.Value)
+                                .MapError(error => "Failed decoding parse result as Elm value: " + error)
+                                .AndThen(compileParsedOkAsElmValue =>
                                 {
+                                    if (compileParsedOkAsElmValue is not ElmValue.ElmTag compiledResultTag)
+                                    {
+                                        return "Unexpected return value: No tag: " + compileParsedOkAsElmValue;
+                                    }
+
+                                    if (compiledResultTag.TagName is not "Ok" || compiledResultTag.Arguments.Count is not 1)
+                                    {
+                                        return "Failed compile: " + compiledResultTag;
+                                    }
+
                                     return
-                                    "Type mismatch: Pine expression evaluated to a blob";
-                                }
+                                    ElmValueInterop.ElmValueFromCompilerDecodedAsExpression(compiledResultTag.Arguments[0])
+                                    .MapError(error => "Failed decoding compiled expression: " + error)
+                                    .AndThen(resultingExpr =>
+                                    {
+                                        clock.Restart();
 
-                                if (evalResultListComponent.Elements.Count != 2)
-                                {
-                                    return
-                                    "Type mismatch: Pine expression evaluated to a list with unexpected number of elements: " +
-                                    evalResultListComponent.Elements.Count +
-                                    " instead of 2";
-                                }
+                                        var evalResult = pineVM.EvaluateExpression(resultingExpr, buildPineEvalContextOk);
 
-                                buildPineEvalContextTask = System.Threading.Tasks.Task.FromResult(
-                                    Result<string, PineValue>.ok(evalResultListComponent.Elements[0]));
+                                        logDuration("eval");
 
-                                clock.Restart();
+                                        return
+                                        evalResult
+                                        .MapError(error => "Failed to evaluate expression in PineVM: " + error)
+                                        .AndThen(evalOk =>
+                                        {
+                                            if (evalOk is not PineValue.ListValue evalResultListComponent)
+                                            {
+                                                return
+                                                "Type mismatch: Pine expression evaluated to a blob";
+                                            }
 
-                                var parseSubmissionResponseResult =
-                                    ElmInteractive.SubmissionResponseFromResponsePineValue(
-                                        response: evalResultListComponent.Elements[1]);
+                                            if (evalResultListComponent.Elements.Count is not 2)
+                                            {
+                                                return
+                                                "Type mismatch: Pine expression evaluated to a list with unexpected number of elements: " +
+                                                evalResultListComponent.Elements.Count +
+                                                " instead of 2";
+                                            }
 
-                                logDuration("parse-result");
+                                            buildPineEvalContextTask = System.Threading.Tasks.Task.FromResult(
+                                                Result<string, PineValue>.ok(evalResultListComponent.Elements[0]));
 
-                                return
-                                parseSubmissionResponseResult
-                                .MapError(error => "Failed to parse submission response: " + error);
-                            });
+                                            clock.Restart();
+
+                                            var parseSubmissionResponseResult =
+                                                ElmInteractive.SubmissionResponseFromResponsePineValue(
+                                                    response: evalResultListComponent.Elements[1]);
+
+                                            logDuration("parse-result");
+
+                                            return
+                                            parseSubmissionResponseResult
+                                            .MapError(error => "Failed to parse submission response: " + error);
+                                        });
+                                    });
+                                });
                         });
                     });
-                });
+                }));
         }
     }
 
@@ -255,8 +379,6 @@ public class InteractiveSessionPine : IInteractiveSession
 
     void IDisposable.Dispose()
     {
-        if (compileElmPreparedJavaScriptEngine.IsValueCreated)
-            compileElmPreparedJavaScriptEngine.Value?.Dispose();
     }
 
     public static Result<string, Pine.CompilePineToDotNet.CompileCSharpClassResult> CompileForProfiledScenarios(

@@ -4,11 +4,16 @@ module ElmCompiler exposing
     , ElmModuleChoiceTypeTag(..)
     , ElmModuleInCompilation
     , ElmModuleTypeDeclaration(..)
+    , InteractiveSubmission(..)
     , ProjectParsedElmFile
     , applicableDeclarationFromConstructorExpression
+    , buildExpressionForNewStateAndResponse
+    , compilationAndEmitStackFromInteractiveEnvironment
     , compilationAndEmitStackFromModulesInCompilation
+    , compileAndEvalParsedInteractiveSubmission
     , compileElmSyntaxExpression
     , compileElmSyntaxFunction
+    , compileParsedInteractiveSubmission
     , elmBytesTypeTagNameAsValue
     , elmFloatTypeTagName
     , elmRecordTypeTagName
@@ -22,8 +27,10 @@ module ElmCompiler exposing
     , parseTypeDeclarationFromValueTagged
     , pineFunctionForRecordAccessAsValue
     , pineFunctionForRecordUpdateAsValue
+    , responseExpressionFromString
     , separateEnvironmentDeclarations
     , stringStartsWithUpper
+    , valueFromFloat
     , valueFromString
     )
 
@@ -121,6 +128,11 @@ type ElmModuleChoiceType
 
 type ElmModuleChoiceTypeTag
     = ElmModuleChoiceTypeTag Int
+
+
+type InteractiveSubmission
+    = ExpressionSubmission Elm.Syntax.Expression.Expression
+    | DeclarationSubmission Elm.Syntax.Declaration.Declaration
 
 
 elmStringTypeTagName : String
@@ -4047,3 +4059,206 @@ stringStartsWithUpper string =
 
         Just ( firstChar, _ ) ->
             Char.isUpper firstChar
+
+
+compileAndEvalParsedInteractiveSubmission : Pine.Value -> InteractiveSubmission -> Result String Pine.Value
+compileAndEvalParsedInteractiveSubmission environment submission =
+    case compileParsedInteractiveSubmission environment submission of
+        Err err ->
+            Err ("Failed compile: " ++ err)
+
+        Ok expression ->
+            case Pine.evaluateExpression (Pine.EvalEnvironment environment) expression of
+                Err err ->
+                    Err ("Failed eval: " ++ Pine.displayStringFromPineError err)
+
+                Ok val ->
+                    Ok val
+
+
+compileParsedInteractiveSubmission : Pine.Value -> InteractiveSubmission -> Result String Pine.Expression
+compileParsedInteractiveSubmission environment submission =
+    case getDeclarationsFromEnvironment environment of
+        Err err ->
+            Err ("Failed to get declarations from environment: " ++ err)
+
+        Ok ( _, declsFromEnv ) ->
+            case separateEnvironmentDeclarations declsFromEnv of
+                Err error ->
+                    Err ("Failed to separate declarations from environment: " ++ error)
+
+                Ok environmentDeclarations ->
+                    let
+                        ( defaultCompilationStack, emitStack ) =
+                            compilationAndEmitStackFromInteractiveEnvironment
+                                { modules =
+                                    Dict.map (\_ ( _, parsedModule ) -> parsedModule)
+                                        environmentDeclarations.modules
+                                , otherDeclarations = environmentDeclarations.otherDeclarations
+                                }
+                    in
+                    case submission of
+                        DeclarationSubmission elmDeclaration ->
+                            case elmDeclaration of
+                                Elm.Syntax.Declaration.FunctionDeclaration functionDeclaration ->
+                                    let
+                                        (Elm.Syntax.Node.Node _ declarationName) =
+                                            (Elm.Syntax.Node.value functionDeclaration.declaration).name
+
+                                        compilationStack =
+                                            { defaultCompilationStack
+                                                | inlineableDeclarations =
+                                                    List.filter
+                                                        (\( inlineableName, _ ) -> inlineableName /= declarationName)
+                                                        defaultCompilationStack.inlineableDeclarations
+                                            }
+                                    in
+                                    case
+                                        compileElmSyntaxFunction compilationStack functionDeclaration
+                                    of
+                                        Err err ->
+                                            Err ("Failed to compile Elm function declaration: " ++ err)
+
+                                        Ok ( _, functionDeclarationCompilation ) ->
+                                            case
+                                                FirCompiler.emitExpressionInDeclarationBlock
+                                                    emitStack
+                                                    [ ( declarationName, functionDeclarationCompilation ) ]
+                                                    functionDeclarationCompilation
+                                            of
+                                                Err err ->
+                                                    Err err
+
+                                                Ok declExpression ->
+                                                    case FirCompiler.evaluateAsIndependentExpression declExpression of
+                                                        Err err ->
+                                                            Err ("Failed to compile Elm function declaration: " ++ err)
+
+                                                        Ok declValue ->
+                                                            Ok
+                                                                (buildExpressionForNewStateAndResponse
+                                                                    { newStateExpression =
+                                                                        Pine.KernelApplicationExpression
+                                                                            "concat"
+                                                                            (Pine.ListExpression
+                                                                                [ Pine.ListExpression
+                                                                                    [ Pine.LiteralExpression
+                                                                                        (Pine.valueFromContextExpansionWithName
+                                                                                            ( declarationName
+                                                                                            , declValue
+                                                                                            )
+                                                                                        )
+                                                                                    ]
+                                                                                , Pine.EnvironmentExpression
+                                                                                ]
+                                                                            )
+                                                                    , responseExpression =
+                                                                        responseExpressionFromString ("Declared '" ++ declarationName ++ "'")
+                                                                    }
+                                                                )
+
+                                Elm.Syntax.Declaration.AliasDeclaration _ ->
+                                    Err "Alias declaration as submission is not implemented"
+
+                                Elm.Syntax.Declaration.CustomTypeDeclaration _ ->
+                                    Err "Choice type declaration as submission is not implemented"
+
+                                Elm.Syntax.Declaration.PortDeclaration _ ->
+                                    Err "Port declaration as submission is not implemented"
+
+                                Elm.Syntax.Declaration.InfixDeclaration _ ->
+                                    Err "Infix declaration as submission is not implemented"
+
+                                Elm.Syntax.Declaration.Destructuring _ _ ->
+                                    Err "Destructuring as submission is not implemented"
+
+                        ExpressionSubmission elmExpression ->
+                            case
+                                case compileElmSyntaxExpression defaultCompilationStack elmExpression of
+                                    Err err ->
+                                        Err err
+
+                                    Ok compiledExpr ->
+                                        FirCompiler.emitExpressionInDeclarationBlock
+                                            emitStack
+                                            []
+                                            compiledExpr
+                            of
+                                Err error ->
+                                    Err ("Failed to compile Elm to Pine expression: " ++ error)
+
+                                Ok pineExpression ->
+                                    Ok
+                                        (buildExpressionForNewStateAndResponse
+                                            { newStateExpression = Pine.environmentExpr
+                                            , responseExpression = pineExpression
+                                            }
+                                        )
+
+
+compilationAndEmitStackFromInteractiveEnvironment :
+    { modules : Dict.Dict Elm.Syntax.ModuleName.ModuleName ElmModuleInCompilation
+    , otherDeclarations : List ( String, Pine.Value )
+    }
+    -> ( CompilationStack, EmitStack )
+compilationAndEmitStackFromInteractiveEnvironment environmentDeclarations =
+    let
+        interactiveImplicitImportStatements =
+            environmentDeclarations.modules
+                |> Dict.keys
+                |> List.map
+                    (\moduleName ->
+                        { canonicalModuleName = moduleName
+                        , localModuleName = moduleName
+                        , exposingList = Nothing
+                        }
+                    )
+
+        ( defaultCompilationStack, emitStack ) =
+            compilationAndEmitStackFromModulesInCompilation
+                environmentDeclarations.modules
+                { moduleAliases = Dict.empty
+                , parsedImports = interactiveImplicitImportStatements
+                , localTypeDeclarations = []
+                , selfModuleName = []
+                }
+
+        compilationStack =
+            { defaultCompilationStack
+                | inlineableDeclarations =
+                    List.concat
+                        [ defaultCompilationStack.inlineableDeclarations
+                        , List.map
+                            (\( declName, declValue ) ->
+                                ( declName
+                                , applicableDeclarationFromConstructorExpression
+                                    (LiteralExpression declValue)
+                                )
+                            )
+                            environmentDeclarations.otherDeclarations
+                        ]
+            }
+    in
+    ( compilationStack
+    , emitStack
+    )
+
+
+buildExpressionForNewStateAndResponse :
+    { newStateExpression : Pine.Expression, responseExpression : Pine.Expression }
+    -> Pine.Expression
+buildExpressionForNewStateAndResponse config =
+    Pine.ListExpression
+        [ config.newStateExpression
+        , config.responseExpression
+        ]
+
+
+responseExpressionFromString : String -> Pine.Expression
+responseExpressionFromString str =
+    Pine.LiteralExpression
+        (Pine.ListValue
+            [ Pine.valueFromString "String"
+            , Pine.ListValue [ Pine.valueFromString str ]
+            ]
+        )

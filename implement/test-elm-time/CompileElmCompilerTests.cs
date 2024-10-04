@@ -16,31 +16,7 @@ namespace TestElmTime;
 public class CompileElmCompilerTests
 {
     static IReadOnlyList<string> CompilerPackageSources =>
-        [
-            /*
-             * Maybe.Extra is used in the overall app but not in the Elm compiler.
-             * 
-            "https://github.com/elm-community/maybe-extra/tree/2a9e2c6143dcee04180b265c840b6052b0a053c2/",
-            */
-
-            /*
-             * elm-syntax/tree/f7d9be0a1f346b22dfaa7b55679659874c72714b contains a module List.Extra
-             * 
-            "https://github.com/elm-community/list-extra/tree/5a083cf0400260537adef75f96fbd48bfcedc7c0/",
-            */
-
-            /*
-            "https://github.com/Viir/result-extra/tree/e3b2e4358ac701d66e75ccbfdc4256513dc70694",
-            */
-
-            "https://github.com/Viir/elm-bigint/tree/d452b489c5795f8deed19658a7b8f7bf5ef1e9a4/",
-
-            /*
-             * Remove usages of Json.Decode and Json.Encode to speed up bootstrapping of the Elm compiler.
-             * Also, remove parsing portion and minimize dependencies in general for the first stage of bootstrapping.
-             * */
-            "https://github.com/Viir/elm-syntax/tree/6e7011a54323c046624ebddf0802d40366aae3bb/"
-        ];
+        Elm.ElmCompiler.CompilerPackageSources;
 
     [TestMethod]
     public void Test_call_Basics_modBy()
@@ -702,7 +678,7 @@ public class CompileElmCompilerTests
                 decl_name : String
                 decl_name =
                     "Just a literal"
-
+                
                 """;
 
             var simpleElmModuleParsed =
@@ -909,30 +885,30 @@ public class CompileElmCompilerTests
         }
         */
 
-        /*
-         * Begin a dedicated training phase, compiling a small Elm module and then doing code-analysis
-         * and PGO for the entirety based on that simple scenario.
-         * */
+            /*
+             * Begin a dedicated training phase, compiling a small Elm module and then doing code-analysis
+             * and PGO for the entirety based on that simple scenario.
+             * */
 
         /*
-         
-        Console.WriteLine("Begin training with Elm compiler...");
 
-        var analysisEvalCache = new PineVMCache();
+            Console.WriteLine("Begin training with Elm compiler...");
 
-        var profilingVM =
-            new ProfilingPineVM(
+            var analysisEvalCache = new PineVMCache();
+
+            var profilingVM =
+                new ProfilingPineVM(
                 overrideParseExpression: analysisEvalCache.BuildParseExprDelegate,
-                evalCache: analysisEvalCache.EvalCache,
-                analysisEvalCache: analysisEvalCache);
+                    evalCache: analysisEvalCache.EvalCache,
+                    analysisEvalCache: analysisEvalCache);
 
-        var trainingProfilingStopwatch = System.Diagnostics.Stopwatch.StartNew();
+            var trainingProfilingStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
-        {
-            // Compile reduced version of 'Basics' module
+            {
+                // Compile reduced version of 'Basics' module
 
-            const string simpleElmModuleText =
-                """
+                const string simpleElmModuleText =
+                    """
                 module ReducedBasics exposing
                   ( Int
                   , (+), (-), (*), (/), (//)
@@ -968,142 +944,142 @@ public class CompileElmCompilerTests
 
                 """;
 
-            var simpleElmModuleParsed =
-                TryParseModuleText(simpleElmModuleText)
-                .Extract(err => throw new Exception("Failed parsing simple module: " + err));
+                var simpleElmModuleParsed =
+                    TryParseModuleText(simpleElmModuleText)
+                    .Extract(err => throw new Exception("Failed parsing simple module: " + err));
 
-            var simpleModuleNameFlat = string.Join(".", simpleElmModuleParsed.Key);
+                var simpleModuleNameFlat = string.Join(".", simpleElmModuleParsed.Key);
 
-            var simpleElmModuleAppCodeTree =
-                compilerProgramOnlyElmJson
-                .SetNodeAtPathSorted(
-                    ["src", .. simpleElmModuleParsed.Key.SkipLast(1), simpleElmModuleParsed.Key.Last() + ".elm"],
-                    TreeNodeWithStringPath.Blob(Encoding.UTF8.GetBytes(simpleElmModuleText)));
+                var simpleElmModuleAppCodeTree =
+                    compilerProgramOnlyElmJson
+                    .SetNodeAtPathSorted(
+                        ["src", .. simpleElmModuleParsed.Key.SkipLast(1), simpleElmModuleParsed.Key.Last() + ".elm"],
+                        TreeNodeWithStringPath.Blob(Encoding.UTF8.GetBytes(simpleElmModuleText)));
 
-            using var newCompilerInteractiveSession =
-                new InteractiveSessionPine(
-                    compileElmProgramCodeFiles: compilerProgram,
-                    initialState: null,
-                    appCodeTree: simpleElmModuleAppCodeTree,
-                    caching: true,
-                    autoPGO: null);
+                using var newCompilerInteractiveSession =
+                    new InteractiveSessionPine(
+                        compileElmProgramCodeFiles: compilerProgram,
+                        initialState: null,
+                        appCodeTree: simpleElmModuleAppCodeTree,
+                        caching: true,
+                        autoPGO: null);
 
-            var jsSessionState = newCompilerInteractiveSession.CurrentEnvironmentValue();
+                var jsSessionState = newCompilerInteractiveSession.CurrentEnvironmentValue();
 
-            var jsSessionParsedEnv =
-                ElmInteractiveEnvironment.ParseInteractiveEnvironment(jsSessionState)
-                .Extract(err => throw new Exception(err));
+                var jsSessionParsedEnv =
+                    ElmInteractiveEnvironment.ParseInteractiveEnvironment(jsSessionState)
+                    .Extract(err => throw new Exception(err));
 
-            var jsSimpleModuleCompiled =
-                jsSessionParsedEnv
-                .Modules.Single(m => m.moduleName == simpleModuleNameFlat);
+                var jsSimpleModuleCompiled =
+                    jsSessionParsedEnv
+                    .Modules.Single(m => m.moduleName == simpleModuleNameFlat);
 
-            var pineSessionStateWrapped =
-                CompileOneElmModule(
+                var pineSessionStateWrapped =
+                    CompileOneElmModule(
                     prevEnvValue: pineValueEmptyListElmValue,
-                    simpleElmModuleParsed.Value.moduleText,
-                    simpleElmModuleParsed.Value.parsed,
-                    pineVM: profilingVM.PineVM)
-                .Extract(err => throw new Exception("Failed compiling simple module: " + err));
+                        simpleElmModuleParsed.Value.moduleText,
+                        simpleElmModuleParsed.Value.parsed,
+                        pineVM: profilingVM.PineVM)
+                    .Extract(err => throw new Exception("Failed compiling simple module: " + err));
 
-            var pineSessionState =
+                var pineSessionState =
                 ElmValueInterop.ElmValueDecodedAsInElmCompiler(pineSessionStateWrapped)
-                .Extract(err => throw new Exception("Failed unwrapping pine session state: " + err));
+                    .Extract(err => throw new Exception("Failed unwrapping pine session state: " + err));
 
-            var pineSessionParsedEnv =
-                ElmInteractiveEnvironment.ParseInteractiveEnvironment(pineSessionState)
-                .Extract(err => throw new Exception("Failed parsing environment: " + err));
+                var pineSessionParsedEnv =
+                    ElmInteractiveEnvironment.ParseInteractiveEnvironment(pineSessionState)
+                    .Extract(err => throw new Exception("Failed parsing environment: " + err));
 
-            var pineSimpleModuleCompiled =
-                pineSessionParsedEnv
-                .Modules.Single(m => m.moduleName == simpleModuleNameFlat);
-
-            Assert.AreEqual(
-                jsSimpleModuleCompiled.moduleContent.FunctionDeclarations.Count,
-                pineSimpleModuleCompiled.moduleContent.FunctionDeclarations.Count,
-                "Compiled simple module declarations count");
-
-            foreach (var declName in jsSimpleModuleCompiled.moduleContent.FunctionDeclarations.Keys)
-            {
-                var jsDeclValue = jsSimpleModuleCompiled.moduleContent.FunctionDeclarations[declName];
-                var pineDeclValue = pineSimpleModuleCompiled.moduleContent.FunctionDeclarations[declName];
+                var pineSimpleModuleCompiled =
+                    pineSessionParsedEnv
+                    .Modules.Single(m => m.moduleName == simpleModuleNameFlat);
 
                 Assert.AreEqual(
-                    jsDeclValue,
-                    pineDeclValue,
-                    "Compiled reduced Basics module declaration " + declName);
+                    jsSimpleModuleCompiled.moduleContent.FunctionDeclarations.Count,
+                    pineSimpleModuleCompiled.moduleContent.FunctionDeclarations.Count,
+                    "Compiled simple module declarations count");
+
+                foreach (var declName in jsSimpleModuleCompiled.moduleContent.FunctionDeclarations.Keys)
+                {
+                    var jsDeclValue = jsSimpleModuleCompiled.moduleContent.FunctionDeclarations[declName];
+                    var pineDeclValue = pineSimpleModuleCompiled.moduleContent.FunctionDeclarations[declName];
+
+                    Assert.AreEqual(
+                        jsDeclValue,
+                        pineDeclValue,
+                        "Compiled reduced Basics module declaration " + declName);
+                }
+
+                Assert.AreEqual(
+                    jsSimpleModuleCompiled.moduleValue,
+                    pineSimpleModuleCompiled.moduleValue,
+                    "Compiled reduced Basics module value");
             }
 
-            Assert.AreEqual(
-                jsSimpleModuleCompiled.moduleValue,
-                pineSimpleModuleCompiled.moduleValue,
-                "Compiled reduced Basics module value");
-        }
+            trainingProfilingStopwatch.Stop();
 
-        trainingProfilingStopwatch.Stop();
-
-        var exprUsageCombinations = profilingVM.ExprEnvUsagesFlat;
+            var exprUsageCombinations = profilingVM.ExprEnvUsagesFlat;
 
         var totalSampleCount = exprUsageCombinations.Sum(sample => sample.Value.OrigEvalDurations.Count);
 
-        Console.WriteLine(
-            "Ran training scenario on profiling VM in " +
-            trainingProfilingStopwatch.Elapsed.TotalSeconds.ToString("0.00") + " seconds and collected " +
-            exprUsageCombinations.Count + " unique combinations from " + totalSampleCount + " execution samples.");
+            Console.WriteLine(
+                "Ran training scenario on profiling VM in " +
+                trainingProfilingStopwatch.Elapsed.TotalSeconds.ToString("0.00") + " seconds and collected " +
+                exprUsageCombinations.Count + " unique combinations from " + totalSampleCount + " execution samples.");
 
         var limitSampleCount = 100;
 
-        var samplesUniqueExpressions =
-            exprUsageCombinations
-            .Select(sample => sample.Key)
-            .Distinct()
-            .ToImmutableArray();
+            var samplesUniqueExpressions =
+                exprUsageCombinations
+                .Select(sample => sample.Key)
+                .Distinct()
+                .ToImmutableArray();
 
-        var exprUsageCombinationsAfterFilter =
-            exprUsageCombinations
-            .Where(report => report.Value.ParseAndEvalCountMax < 100)
-            .ToImmutableArray();
+            var exprUsageCombinationsAfterFilter =
+                exprUsageCombinations
+                .Where(report => report.Value.ParseAndEvalCountMax < 100)
+                .ToImmutableArray();
 
-        var includedSamples =
-            DynamicPGOShare.SubsequenceWithEvenDistribution(
-                [.. exprUsageCombinationsAfterFilter], limitSampleCount);
+            var includedSamples =
+                DynamicPGOShare.SubsequenceWithEvenDistribution(
+                    [.. exprUsageCombinationsAfterFilter], limitSampleCount);
 
-        var trainingAnalysisStopwatch = System.Diagnostics.Stopwatch.StartNew();
+            var trainingAnalysisStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
-        IReadOnlyList<ExpressionUsageAnalysis> expressionUsages =
-            [..includedSamples
-            .Select(sample => sample.Value.Analysis.Value.ToMaybe())
-            .WhereNotNothing()
-            .SelectMany(usage => usage)];
+            IReadOnlyList<ExpressionUsageAnalysis> expressionUsages =
+                [..includedSamples
+                .Select(sample => sample.Value.Analysis.Value.ToMaybe())
+                .WhereNotNothing()
+                .SelectMany(usage => usage)];
 
-        trainingAnalysisStopwatch.Stop();
+            trainingAnalysisStopwatch.Stop();
 
-        Console.WriteLine(
-            "Completed analysis in " +
-            trainingAnalysisStopwatch.Elapsed.TotalSeconds.ToString("0.00") + " seconds and collected " +
-            expressionUsages.Count + " usages");
+            Console.WriteLine(
+                "Completed analysis in " +
+                trainingAnalysisStopwatch.Elapsed.TotalSeconds.ToString("0.00") + " seconds and collected " +
+                expressionUsages.Count + " usages");
 
         var usageProfiles = ProfilingPineVM.UsageProfileDictionaryFromListOfUsages(expressionUsages);
 
-        var compilation =
-            DynamicPGOShare.GetOrCreateCompilationForProfiles(
-                inputProfiles: [usageProfiles],
-                limitCompiledExpressionsCount: 160,
-                previousCompilations: []);
+            var compilation =
+                DynamicPGOShare.GetOrCreateCompilationForProfiles(
+                    inputProfiles: [usageProfiles],
+                    limitCompiledExpressionsCount: 160,
+                    previousCompilations: []);
 
-        var compiledParseExpressionOverrides =
-            compilation.DictionaryResult
-            .Extract(err => throw new Exception("Failed compilation: " + err));
+            var compiledParseExpressionOverrides =
+                compilation.DictionaryResult
+                .Extract(err => throw new Exception("Failed compilation: " + err));
 
-        Console.WriteLine(
-            "Compiled dictionary contains " + compiledParseExpressionOverrides.Count + " entries");
+            Console.WriteLine(
+                "Compiled dictionary contains " + compiledParseExpressionOverrides.Count + " entries");
 
 
-        var compiledPineVMCache = new PineVMCache();
+            var compiledPineVMCache = new PineVMCache();
 
         var compiledPineVM = PineVM.Construct(
             parseExpressionOverrides: compiledParseExpressionOverrides,
-            evalCache: compiledPineVMCache.EvalCache);
+                    evalCache: compiledPineVMCache.EvalCache);
 
         */
 

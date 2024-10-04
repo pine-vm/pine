@@ -384,6 +384,43 @@ public class ElmInteractive
         return response.Map(value => (value, compilationCacheTask.Result));
     }
 
+
+    public static Result<string, PineValue> ParseInteractiveSubmission(
+        IJavaScriptEngine evalElmPreparedJavaScriptEngine,
+        string submission,
+        Action<string>? addInspectionLogEntry)
+    {
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+
+        void logDuration(string label) =>
+            addInspectionLogEntry?.Invoke(
+                label + " duration: " + CommandLineInterface.FormatIntegerForDisplay(clock.ElapsedMilliseconds) + " ms");
+
+        clock.Restart();
+
+        var responseJson =
+            evalElmPreparedJavaScriptEngine.CallFunction("parseInteractiveSubmissionToPineValue", submission).ToString()!;
+
+        logDuration("JavaScript function");
+
+        clock.Restart();
+
+        var responseStructure =
+            System.Text.Json.JsonSerializer.Deserialize<Result<string, PineValueJson>>(
+                responseJson,
+                options: compilerInterfaceJsonSerializerOptions)!;
+
+        var response =
+            responseStructure
+            .Map(fromJson => ParsePineValueFromJson(
+                fromJson,
+                parentDictionary: null));
+
+        logDuration("Deserialize (from " + CommandLineInterface.FormatIntegerForDisplay(responseJson.Length) + " chars) and " + nameof(ParsePineValueFromJson));
+
+        return response;
+    }
+
     public record CompilationCache(
         IImmutableDictionary<PineValue, PineValueMappedForTransport> ValueMappedForTransportCache,
         IImmutableDictionary<PineValue, (PineValueJson, IReadOnlyDictionary<string, PineValue>)> ValueJsonCache,
@@ -855,6 +892,10 @@ public class ElmInteractive
 
                 (functionNameInElm: "ElmInteractiveMain.compileInteractiveEnvironment",
                 publicName: "compileInteractiveEnvironment",
+                arity: 1),
+
+                (functionNameInElm: "ElmInteractiveMain.parseInteractiveSubmissionToPineValue",
+                publicName: "parseInteractiveSubmissionToPineValue",
                 arity: 1),
 
                 (functionNameInElm: "ElmInteractiveMain.compileInteractiveSubmission",

@@ -4,10 +4,12 @@ import Base64
 import Bytes
 import Dict
 import Elm.Syntax.File
+import ElmCompiler
 import ElmInteractive
 import ElmInteractiveCoreModules
 import ElmInteractiveKernelModules
 import ElmInteractiveParser
+import EncodeElmSyntaxAsPineValue
 import Json.Decode
 import Json.Encode
 import Parser
@@ -54,6 +56,15 @@ parseElmModuleTextToPineValue moduleTextJson =
 parseElmModuleText : String -> Result (List Parser.DeadEnd) Elm.Syntax.File.File
 parseElmModuleText =
     ElmInteractiveParser.parseElmModuleText
+
+
+parseInteractiveSubmissionToPineValue : String -> String
+parseInteractiveSubmissionToPineValue submission =
+    ElmInteractiveParser.parseInteractiveSubmissionFromString submission
+        |> Result.andThen EncodeElmSyntaxAsPineValue.encodeInteractiveSubmissionAsPineValue
+        |> Result.map (json_encode_pineValue Dict.empty)
+        |> json_encode_Result Json.Encode.string identity
+        |> Json.Encode.encode 0
 
 
 evaluateSubmissionInInteractive : String -> String
@@ -207,6 +218,8 @@ main =
             , e = submissionResponseFromResponsePineValue
             , f = getDefaultElmCoreModulesTexts
             , g = parseElmModuleTextToPineValue
+            , h = parseInteractiveSubmissionToPineValue
+            , i = ElmCompiler.compileAndEvalParsedInteractiveSubmission
             }
                 |> always ( (), Cmd.none )
                 |> always

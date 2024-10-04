@@ -16,13 +16,18 @@ public class ElmInteractiveTests
 
     private static string PathToKernelScenariosDirectory => @"./../../../../test-and-train/elm-interactive-scenarios-kernel";
 
+    public static TreeNodeWithStringPath CompileElmProgramCodeFiles =>
+        ElmTime.ElmInteractive.IInteractiveSession.CompileElmProgramCodeFilesDefault.Value;
+
+    private static readonly Lazy<ElmTime.JavaScript.IJavaScriptEngine> compileElmPreparedJavaScriptEngine =
+        new(() => ElmTime.ElmInteractive.ElmInteractive.PrepareJavaScriptEngineToEvaluateElm(
+            compileElmProgramCodeFiles: CompileElmProgramCodeFiles,
+            ElmTime.ElmInteractive.InteractiveSessionJavaScript.JavaScriptEngineFlavor.V8));
+
     [TestMethod]
     [Timeout(1000 * 60 * 50)]
     public void TestElmInteractiveScenarios()
     {
-        var (optimizingPineVM, pineVMCache) =
-            ElmTime.ElmInteractive.InteractiveSessionPine.BuildPineVM(caching: true, autoPGO: null);
-
         var console = (IConsole)StaticConsole.Instance;
 
         var scenarios =
@@ -59,10 +64,11 @@ public class ElmInteractiveTests
 
         ElmTime.ElmInteractive.IInteractiveSession newInteractiveSessionFromAppCode(TreeNodeWithStringPath? appCodeTree) =>
             new ElmTime.ElmInteractive.InteractiveSessionPine(
-                compileElmProgramCodeFiles: ElmTime.ElmInteractive.IInteractiveSession.CompileElmProgramCodeFilesDefault.Value,
+                compileElmProgramCodeFiles: CompileElmProgramCodeFiles,
                 initialState: null,
                 appCodeTree: appCodeTree,
-                optimizingPineVM);
+                caching: true,
+                autoPGO: null);
 
         {
             var warmupStopwatch = System.Diagnostics.Stopwatch.StartNew();
@@ -143,7 +149,7 @@ public class ElmInteractiveTests
 
         ElmTime.ElmInteractive.IInteractiveSession newInteractiveSessionFromAppCode(TreeNodeWithStringPath? appCodeTree) =>
             new ElmTime.ElmInteractive.InteractiveSessionPine(
-                compileElmProgramCodeFiles: ElmTime.ElmInteractive.IInteractiveSession.CompileElmProgramCodeFilesDefault.Value,
+                compileElmProgramCodeFiles: CompileElmProgramCodeFiles,
                 initialState: null,
                 appCodeTree: appCodeTree,
                 dynamicPGOShare.GetVMAutoUpdating());
@@ -180,6 +186,50 @@ public class ElmInteractiveTests
                     fromOk: ok => ok.InteractiveResponse.DisplayText);
 
             Assert.AreEqual(expected: """["123","34567834567"]""", responseDisplayText);
+        }
+    }
+
+    [TestMethod]
+    public void Parse_interactive_submission()
+    {
+        {
+            var parseResult =
+                ElmTime.ElmInteractive.ElmInteractive.ParseInteractiveSubmission(
+                    evalElmPreparedJavaScriptEngine: compileElmPreparedJavaScriptEngine.Value,
+                    submission: "test",
+                    addInspectionLogEntry: null);
+
+            var parseResultOk =
+                parseResult
+                .Extract(err => throw new Exception("Unexpected parsing error: " + err));
+
+            var asElmValue =
+                Pine.ElmInteractive.ElmValueEncoding.PineValueAsElmValue(parseResultOk)
+                .Extract(err => throw new Exception("Failed parsing result as Elm value: " + err));
+
+            Assert.AreEqual(
+                "ExpressionSubmission (FunctionOrValue [] \"test\")",
+                Pine.ElmInteractive.ElmValue.RenderAsElmExpression(asElmValue).expressionString);
+        }
+
+        {
+            var parseResult =
+                ElmTime.ElmInteractive.ElmInteractive.ParseInteractiveSubmission(
+                    evalElmPreparedJavaScriptEngine: compileElmPreparedJavaScriptEngine.Value,
+                    submission: "test = 123",
+                    addInspectionLogEntry: null);
+
+            var parseResultOk =
+                parseResult
+                .Extract(err => throw new Exception("Unexpected parsing error: " + err));
+
+            var asElmValue =
+                Pine.ElmInteractive.ElmValueEncoding.PineValueAsElmValue(parseResultOk)
+                .Extract(err => throw new Exception("Failed parsing result as Elm value: " + err));
+
+            Assert.AreEqual(
+                "DeclarationSubmission (FunctionDeclaration { declaration = Node { end = { column = 11, row = 6 }, start = { column = 1, row = 6 } } { arguments = [], expression = Node { end = { column = 11, row = 6 }, start = { column = 8, row = 6 } } (Integer 123), name = Node { end = { column = 5, row = 6 }, start = { column = 1, row = 6 } } \"test\" }, documentation = Nothing, signature = Nothing })",
+                Pine.ElmInteractive.ElmValue.RenderAsElmExpression(asElmValue).expressionString);
         }
     }
 }

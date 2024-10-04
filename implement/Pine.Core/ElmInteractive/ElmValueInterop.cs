@@ -136,4 +136,238 @@ public class ElmValueInterop
 
         return PineValue.List(items);
     }
+
+    public static Result<string, Expression> ElmValueFromCompilerDecodedAsExpression(ElmValue elmValue)
+    {
+        if (elmValue is ElmValue.ElmTag tag)
+        {
+            if (tag.TagName is "LiteralExpression")
+            {
+                if (tag.Arguments.Count is not 1)
+                {
+                    return "Invalid arguments for tag " + tag.TagName + ": " + tag;
+                }
+
+                var firstArgument = tag.Arguments[0];
+
+                var literalValueResult = ElmValueDecodedAsInElmCompiler(firstArgument);
+
+                if (literalValueResult is Result<string, PineValue>.Ok literalValueOk)
+                {
+                    return Expression.LiteralInstance(literalValueOk.Value);
+                }
+
+                if (literalValueResult is Result<string, PineValue>.Err literalValueErr)
+                {
+                    return literalValueErr.Value;
+                }
+
+                throw new NotImplementedException(
+                    "Unexpected result type for literal value: " + literalValueResult.GetType().FullName);
+            }
+
+            if (tag.TagName is "ListExpression")
+            {
+                if (tag.Arguments.Count is not 1)
+                {
+                    return "Invalid arguments for tag " + tag.TagName + ": " + tag;
+                }
+
+                var firstArgument = tag.Arguments[0];
+
+                if (firstArgument is not ElmValue.ElmList firstList)
+                {
+                    return "Invalid arguments for tag " + tag.TagName + ": " + tag;
+                }
+
+                var items = new Expression[firstList.Elements.Count];
+
+                for (var i = 0; i < firstList.Elements.Count; i++)
+                {
+                    var itemResult = ElmValueFromCompilerDecodedAsExpression(firstList.Elements[i]);
+
+                    if (itemResult is Result<string, Expression>.Ok itemOk)
+                    {
+                        items[i] = itemOk.Value;
+                        continue;
+                    }
+
+                    if (itemResult is Result<string, Expression>.Err itemErr)
+                    {
+                        return "Failed for list item [" + i + "]: " + itemErr.Value;
+                    }
+
+                    throw new NotImplementedException(
+                        "Unexpected result type for list item: " + itemResult.GetType().FullName);
+                }
+
+                return Expression.ListInstance(items);
+            }
+
+            if (tag.TagName is "ParseAndEvalExpression")
+            {
+                if (tag.Arguments.Count is not 2)
+                {
+                    return "Invalid arguments for tag " + tag.TagName + ": " + tag;
+                }
+
+                var encoded = tag.Arguments[0];
+                var environment = tag.Arguments[1];
+
+                var encodedResult = ElmValueFromCompilerDecodedAsExpression(encoded);
+
+                if (encodedResult is Result<string, Expression>.Err encodedErr)
+                {
+                    return "Failed for parse and eval encoded: " + encodedErr.Value;
+                }
+
+                if (encodedResult is not Result<string, Expression>.Ok encodedOk)
+                {
+                    throw new NotImplementedException(
+                        "Unexpected result type for encoded: " + encodedResult.GetType().FullName);
+                }
+
+                var environmentResult = ElmValueFromCompilerDecodedAsExpression(environment);
+
+                if (environmentResult is Result<string, Expression>.Err environmentErr)
+                {
+                    return "Failed for parse and eval environment: " + environmentErr.Value;
+                }
+
+                if (environmentResult is not Result<string, Expression>.Ok environmentOk)
+                {
+                    throw new NotImplementedException(
+                        "Unexpected result type for environment: " + environmentResult.GetType().FullName);
+                }
+
+                return new Expression.ParseAndEval(encodedOk.Value, environmentOk.Value);
+            }
+
+            if (tag.TagName is "KernelApplicationExpression")
+            {
+                if (tag.Arguments.Count is not 2)
+                {
+                    return "Invalid arguments for tag " + tag.TagName + ": " + tag;
+                }
+
+                var function = tag.Arguments[0];
+                var environment = tag.Arguments[1];
+
+                if (function is not ElmValue.ElmString functionString)
+                {
+                    return "Invalid arguments for tag " + tag.TagName + ": " + tag;
+                }
+
+                var environmentResult = ElmValueFromCompilerDecodedAsExpression(environment);
+
+                if (environmentResult is Result<string, Expression>.Err environmentErr)
+                {
+                    return "Failed for kernel application environment: " + environmentErr.Value;
+                }
+
+                if (environmentResult is not Result<string, Expression>.Ok environmentOk)
+                {
+                    throw new NotImplementedException(
+                        "Unexpected result type for environment: " + environmentResult.GetType().FullName);
+                }
+
+                return new Expression.KernelApplication(functionString.Value, environmentOk.Value);
+            }
+
+            if (tag.TagName is "ConditionalExpression")
+            {
+                if (tag.Arguments.Count is not 3)
+                {
+                    return "Invalid arguments for tag " + tag.TagName + ": " + tag;
+                }
+
+                var condition = tag.Arguments[0];
+                var falseBranch = tag.Arguments[1];
+                var trueBranch = tag.Arguments[2];
+
+                var conditionResult = ElmValueFromCompilerDecodedAsExpression(condition);
+
+                if (conditionResult is Result<string, Expression>.Err conditionErr)
+                {
+                    return "Failed for conditional condition: " + conditionErr.Value;
+                }
+
+                if (conditionResult is not Result<string, Expression>.Ok conditionOk)
+                {
+                    throw new NotImplementedException(
+                        "Unexpected result type for condition: " + conditionResult.GetType().FullName);
+                }
+
+                var falseBranchResult = ElmValueFromCompilerDecodedAsExpression(falseBranch);
+
+                if (falseBranchResult is Result<string, Expression>.Err falseBranchErr)
+                {
+                    return "Failed for conditional false branch: " + falseBranchErr.Value;
+                }
+
+                if (falseBranchResult is not Result<string, Expression>.Ok falseBranchOk)
+                {
+                    throw new NotImplementedException(
+                        "Unexpected result type for false branch: " + falseBranchResult.GetType().FullName);
+                }
+
+                var trueBranchResult = ElmValueFromCompilerDecodedAsExpression(trueBranch);
+
+                if (trueBranchResult is Result<string, Expression>.Err trueBranchErr)
+                {
+                    return "Failed for conditional true branch: " + trueBranchErr.Value;
+                }
+
+                if (trueBranchResult is not Result<string, Expression>.Ok trueBranchOk)
+                {
+                    throw new NotImplementedException(
+                        "Unexpected result type for true branch: " + trueBranchResult.GetType().FullName);
+                }
+
+                return Expression.ConditionalInstance(
+                    condition: conditionOk.Value,
+                    falseBranch: falseBranchOk.Value,
+                    trueBranch: trueBranchOk.Value);
+            }
+
+            if (tag.TagName is "EnvironmentExpression")
+            {
+                return Expression.EnvironmentInstance;
+            }
+
+            if (tag.TagName is "StringTagExpression")
+            {
+                if (tag.Arguments.Count is not 2)
+                {
+                    return "Invalid arguments for tag " + tag.TagName + ": " + tag;
+                }
+
+                var stringtag = tag.Arguments[0];
+                var stringTagged = tag.Arguments[1];
+
+                if (stringtag is not ElmValue.ElmString stringtagString)
+                {
+                    return "Invalid arguments for tag " + tag.TagName + ": " + tag;
+                }
+
+                var stringTaggedResult = ElmValueFromCompilerDecodedAsExpression(stringTagged);
+
+                if (stringTaggedResult is Result<string, Expression>.Err stringTaggedErr)
+                {
+                    return "Failed for string tag stringTagged: " + stringTaggedErr.Value;
+                }
+
+                if (stringTaggedResult is not Result<string, Expression>.Ok stringTaggedOk)
+                {
+                    throw new NotImplementedException(
+                        "Unexpected result type for stringTagged: " + stringTaggedResult.GetType().FullName);
+                }
+
+                return new Expression.StringTag(stringtagString.Value, stringTaggedOk.Value);
+            }
+        }
+
+        throw new NotImplementedException(
+            "Unsupported ElmValue: " + elmValue.GetType().FullName);
+    }
 }
