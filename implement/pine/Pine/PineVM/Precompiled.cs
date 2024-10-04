@@ -79,6 +79,20 @@ public class Precompiled
     {
         if (PrecompiledDict?.TryGetValue(expression, out var envItems) ?? false)
         {
+            /*
+            {
+                // Ensure that the key is the same instance as the expression.
+                // This should always be the case when we include the precompiled expression dictionary into the source of reused instances.
+                var actualKey = PrecompiledDict.Keys.First(key => key == expression);
+
+                if (!ReferenceEquals(actualKey, expression))
+                {
+                    throw new InvalidOperationException(
+                        "PrecompiledDict key is not the same instance as the expression: " + actualKey);
+                }
+            }
+            */
+
             foreach (var envItem in envItems)
             {
                 if (envItem.EnvConstraint.SatisfiedByValue(environment))
@@ -221,7 +235,7 @@ public class Precompiled
             yield return
                 new KeyValuePair<Expression, IReadOnlyList<PrecompiledEntry>>(
                     compareExpression,
-                    [PrecompiledEntry.FinalValueForAnyEnvironment(compareExpressionEnvClass, Compare)]);
+                    [PrecompiledEntry.FinalValueForAnyEnvironment(compareExpressionEnvClass, BasicsCompare)]);
         }
 
         {
@@ -450,17 +464,17 @@ public class Precompiled
         }
     }
 
-    static PineValue Compare(
+    static PineValue BasicsCompare(
         PineValue environment,
         PineVMParseCache parseCache)
     {
         var argA = PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 0]);
         var argB = PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 1]);
 
-        return Compare(argA, argB);
+        return BasicsCompare(argA, argB);
     }
 
-    static PineValue Compare(PineValue a, PineValue b)
+    static PineValue BasicsCompare(PineValue a, PineValue b)
     {
         if (a == b)
         {
@@ -476,6 +490,77 @@ public class Precompiled
                 CompareStrings(
                     PineVM.ValueFromPathInValueOrEmptyList(a, [1, 0]),
                     PineVM.ValueFromPathInValueOrEmptyList(b, [1, 0]));
+        }
+
+        if (aTag == ElmValue.ElmFloatTypeTagNameAsValue && bTag == ElmValue.ElmFloatTypeTagNameAsValue)
+        {
+            var aTagArgs = PineVM.ValueFromPathInValueOrEmptyList(a, [1]);
+            var bTagArgs = PineVM.ValueFromPathInValueOrEmptyList(b, [1]);
+
+            var numA = PineVM.ValueFromPathInValueOrEmptyList(aTagArgs, [0]);
+            var denomA = PineVM.ValueFromPathInValueOrEmptyList(aTagArgs, [1]);
+
+            var numB = PineVM.ValueFromPathInValueOrEmptyList(bTagArgs, [0]);
+            var denomB = PineVM.ValueFromPathInValueOrEmptyList(bTagArgs, [1]);
+
+            var leftProduct = KernelFunction.mul_int(numA, denomB);
+            var rightProduct = KernelFunction.mul_int(numB, denomA);
+
+            if (leftProduct == rightProduct)
+            {
+                return Tag_EQ_Value;
+            }
+
+            if (KernelFunction.is_sorted_ascending_int(PineValue.List([leftProduct, rightProduct])) == PineVMValues.TrueValue)
+            {
+                return Tag_LT_Value;
+            }
+
+            return Tag_GT_Value;
+        }
+
+        if (aTag == ElmValue.ElmFloatTypeTagNameAsValue)
+        {
+            var aTagArgs = PineVM.ValueFromPathInValueOrEmptyList(a, [1]);
+
+            var numA = PineVM.ValueFromPathInValueOrEmptyList(aTagArgs, [0]);
+            var denomA = PineVM.ValueFromPathInValueOrEmptyList(aTagArgs, [1]);
+
+            var rightProduct = KernelFunction.mul_int(denomA, b);
+
+            if (numA == rightProduct)
+            {
+                return Tag_EQ_Value;
+            }
+
+            if (KernelFunction.is_sorted_ascending_int(PineValue.List([numA, rightProduct])) == PineVMValues.TrueValue)
+            {
+                return Tag_LT_Value;
+            }
+
+            return Tag_GT_Value;
+        }
+
+        if (bTag == ElmValue.ElmFloatTypeTagNameAsValue)
+        {
+            var bTagArgs = PineVM.ValueFromPathInValueOrEmptyList(b, [1]);
+
+            var numB = PineVM.ValueFromPathInValueOrEmptyList(bTagArgs, [0]);
+            var denomB = PineVM.ValueFromPathInValueOrEmptyList(bTagArgs, [1]);
+
+            var leftProduct = KernelFunction.mul_int(a, denomB);
+
+            if (leftProduct == numB)
+            {
+                return Tag_EQ_Value;
+            }
+
+            if (KernelFunction.is_sorted_ascending_int(PineValue.List([leftProduct, numB])) == PineVMValues.TrueValue)
+            {
+                return Tag_LT_Value;
+            }
+
+            return Tag_GT_Value;
         }
 
         if (a is PineValue.ListValue)
@@ -522,7 +607,7 @@ public class Precompiled
                     var itemA = listA.Elements[i];
                     var itemB = listB.Elements[i];
 
-                    var itemOrder = Compare(itemA, itemB);
+                    var itemOrder = BasicsCompare(itemA, itemB);
 
                     if (itemOrder != Tag_EQ_Value)
                     {
@@ -637,47 +722,71 @@ public class Precompiled
             return (true, 0);
         }
 
+        var aTag = PineVM.ValueFromPathInValueOrEmptyList(a, [0]);
+        var bTag = PineVM.ValueFromPathInValueOrEmptyList(b, [0]);
+
+        var aTagArgs = PineVM.ValueFromPathInValueOrEmptyList(a, [1]);
+        var bTagArgs = PineVM.ValueFromPathInValueOrEmptyList(b, [1]);
+
+        if (aTag == ElmValue.ElmFloatTypeTagNameAsValue &&
+            aTagArgs is PineValue.ListValue argsList && argsList.Elements.Count is 2)
+        {
+            var numAValue = argsList.Elements[0];
+            var denAValue = argsList.Elements[1];
+
+            return (numAValue == b && denAValue == IntegerOneValue, 0);
+        }
+
+        if (bTag == ElmValue.ElmFloatTypeTagNameAsValue &&
+            bTagArgs is PineValue.ListValue argsListB && argsListB.Elements.Count is 2)
+        {
+            var numBValue = argsListB.Elements[0];
+            var denBValue = argsListB.Elements[1];
+
+            return (a == numBValue && IntegerOneValue == denBValue, 0);
+        }
+
         if (a is PineValue.BlobValue)
         {
             return (false, 0);
         }
 
-        if (a is PineValue.ListValue listA && b is PineValue.ListValue listB)
         {
-            if (listA.Elements.Count != listB.Elements.Count)
+            if (a is PineValue.ListValue listA && b is PineValue.ListValue listB)
             {
-                return (false, 0);
+                if (listA.Elements.Count != listB.Elements.Count)
+                {
+                    return (false, 0);
+                }
+
+                if (aTag == ElmValue.ElmStringTypeTagNameAsValue)
+                {
+                    return (false, 0);
+                }
+
+                if (aTag == ElmValue.ElmDictNotEmptyTagNameAsValue)
+                {
+                    var dictAList = DictToListRecursive(a);
+                    var dictBList = DictToListRecursive(b);
+
+                    return
+                        (PineValue.List(dictAList) == PineValue.List(dictBList), dictAList.Count + dictBList.Count);
+                }
+
+                if (aTag == ElmValue.ElmSetTypeTagNameAsValue)
+                {
+                    var dictA = PineVM.ValueFromPathInValueOrEmptyList(a, [1, 0]);
+                    var dictB = PineVM.ValueFromPathInValueOrEmptyList(b, [1, 0]);
+
+                    var dictAKeys = DictKeysRecursive(dictA);
+                    var dictBKeys = DictKeysRecursive(dictB);
+
+                    return
+                        (PineValue.List(dictAKeys) == PineValue.List(dictBKeys), dictAKeys.Count + dictBKeys.Count);
+                }
+
+                return ListsEqualRecursive(listA.Elements, listB.Elements);
             }
-
-            var aTag = PineVM.ValueFromPathInValueOrEmptyList(a, [0]);
-
-            if (aTag == ElmValue.ElmStringTypeTagNameAsValue)
-            {
-                return (false, 0);
-            }
-
-            if (aTag == ElmValue.ElmDictNotEmptyTagNameAsValue)
-            {
-                var dictAList = DictToListRecursive(a);
-                var dictBList = DictToListRecursive(b);
-
-                return
-                    (PineValue.List(dictAList) == PineValue.List(dictBList), dictAList.Count + dictBList.Count);
-            }
-
-            if (aTag == ElmValue.ElmSetTypeTagNameAsValue)
-            {
-                var dictA = PineVM.ValueFromPathInValueOrEmptyList(a, [1, 0]);
-                var dictB = PineVM.ValueFromPathInValueOrEmptyList(b, [1, 0]);
-
-                var dictAKeys = DictKeysRecursive(dictA);
-                var dictBKeys = DictKeysRecursive(dictB);
-
-                return
-                    (PineValue.List(dictAKeys) == PineValue.List(dictBKeys), dictAKeys.Count + dictBKeys.Count);
-            }
-
-            return ListsEqualRecursive(listA.Elements, listB.Elements);
         }
 
         throw new ParseExpressionException("Error in case-of block: No matching branch.");
@@ -876,7 +985,7 @@ public class Precompiled
             var left = PineVM.ValueFromPathInValueOrEmptyList(dictNotEmptyArgs, [3]);
             var right = PineVM.ValueFromPathInValueOrEmptyList(dictNotEmptyArgs, [4]);
 
-            var comparison = Compare(targetKey, key);
+            var comparison = BasicsCompare(targetKey, key);
 
             if (comparison == Tag_LT_Value)
             {
@@ -1419,6 +1528,9 @@ public class Precompiled
                 EnvironmentValue: newEnvironment,
                 ExpressionValue: functionRecord.Elements[0]);
     }
+
+    private static readonly PineValue IntegerOneValue =
+        PineValueAsInteger.ValueFromSignedInteger(1);
 
     private static readonly PineValue Tag_BlobValue_Value =
         PineValueAsString.ValueFromString("BlobValue");

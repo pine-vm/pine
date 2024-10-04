@@ -3775,10 +3775,14 @@ valueFromFloat float =
         ( numerator, denominator ) =
             searchRatioForFloat float
     in
-    Pine.ListValue
-        [ Pine.valueFromString elmFloatTypeTagName
-        , Pine.ListValue [ Pine.valueFromInt numerator, Pine.valueFromInt denominator ]
-        ]
+    if denominator == 1 then
+        Pine.valueFromInt numerator
+
+    else
+        Pine.ListValue
+            [ Pine.valueFromString elmFloatTypeTagName
+            , Pine.ListValue [ Pine.valueFromInt numerator, Pine.valueFromInt denominator ]
+            ]
 
 
 searchRatioForFloat : Float -> ( Int, Int )

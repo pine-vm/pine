@@ -69,30 +69,46 @@ eq a b =
     if Pine_kernel.equal [ a, b ] then
         True
 
-    else if isPineBlob a then
-        False
-
     else
-        if Pine_kernel.equal [ Pine_kernel.length a, Pine_kernel.length b ] then
-            case a of
-                String _ ->
+        case ( a, b ) of
+            ( Elm_Float numA denomA, intB ) ->
+                if Pine_kernel.equal [ numA, intB ] then
+                    Pine_kernel.equal [ denomA, 1 ]
+
+                else
                     False
 
-                RBNode_elm_builtin _ _ _ _ _ ->
-                    Pine_kernel.equal [ dictToList a, dictToList b ]
+            ( intA, Elm_Float numB denomB ) ->
+                if Pine_kernel.equal [ intA, numB ] then
+                    Pine_kernel.equal [ denomB, 1 ]
 
-                Set_elm_builtin dictA ->
-                    let
-                        (Set_elm_builtin dictB) =
-                            b
-                    in
-                    Pine_kernel.equal [ dictKeys dictA, dictKeys dictB ]
+                else
+                    False
 
-                _ ->
-                    listsEqualRecursive a b
+            _ ->
+                if isPineBlob a then
+                    False
 
-        else
-            False
+                else if Pine_kernel.equal [ Pine_kernel.length a, Pine_kernel.length b ] then
+                    case a of
+                        String _ ->
+                            False
+
+                        RBNode_elm_builtin _ _ _ _ _ ->
+                            Pine_kernel.equal [ dictToList a, dictToList b ]
+
+                        Set_elm_builtin dictA ->
+                            let
+                                (Set_elm_builtin dictB) =
+                                    b
+                            in
+                            Pine_kernel.equal [ dictKeys dictA, dictKeys dictB ]
+
+                        _ ->
+                            listsEqualRecursive a b
+
+                else
+                    False
 
 
 listsEqualRecursive : List comparable -> List comparable -> Bool
@@ -147,7 +163,35 @@ sub a b =
 
 mul : number -> number -> number
 mul a b =
-    Pine_kernel.mul_int [ a, b ]
+    case ( a, b ) of
+        ( Elm_Float numA denomA, Elm_Float numB denomB ) ->
+            let
+                newNumerator =
+                    Pine_kernel.mul_int [ numA, numB ]
+
+                newDenominator =
+                    Pine_kernel.mul_int [ denomA, denomB ]
+            in
+            simplifyFraction (Elm_Float newNumerator newDenominator)
+
+        ( Elm_Float numA denomA, intB ) ->
+            let
+                newNumerator =
+                    Pine_kernel.mul_int [ numA, intB ]
+            in
+            simplifyFraction (Elm_Float newNumerator denomA)
+
+
+        ( intA, Elm_Float numB denomB ) ->
+            let
+                newNumerator =
+                    Pine_kernel.mul_int [ intA, numB ]
+            in
+            simplifyFraction (Elm_Float newNumerator denomB)
+
+
+        _ ->
+            Pine_kernel.mul_int [ a, b ]
 
 
 idiv : Int -> Int -> Int
@@ -216,6 +260,34 @@ idivHelper dividend divisor quotient =
         quotient
 
 
+simplifyFraction : Float -> number
+simplifyFraction (Elm_Float numerator denominator) =
+    let
+        gcdValue =
+            gcd (abs numerator) (abs denominator)
+
+        simplifiedNumerator =
+            idiv numerator gcdValue
+
+        simplifiedDenominator =
+            idiv denominator gcdValue
+    in
+    if Pine_kernel.equal [ simplifiedDenominator, 1 ] then
+        simplifiedNumerator
+
+    else
+        Elm_Float simplifiedNumerator simplifiedDenominator
+
+
+gcd : Int -> Int -> Int
+gcd a b =
+    if Pine_kernel.equal [ b, 0 ] then
+        a
+
+    else
+        gcd b (modBy b a)
+
+
 pow : Int -> Int -> Int
 pow base exponent =
     if Pine_kernel.is_sorted_ascending_int [ exponent, 0 ] then
@@ -260,29 +332,18 @@ append a b =
 
 lt : comparable -> comparable -> Bool
 lt a b =
-    if isPineBlob a then
-        Pine_kernel.negate (Pine_kernel.is_sorted_ascending_int [ b, a ])
-
-    else
-        Pine_kernel.equal [ compare a b, LT ]
+    Pine_kernel.equal [ compare a b, LT ]
 
 
 gt : comparable -> comparable -> Bool
 gt a b =
-    if isPineBlob a then
-        Pine_kernel.negate (Pine_kernel.is_sorted_ascending_int [ a, b ])
-
-    else
-        Pine_kernel.equal [ compare a b, GT ]
+    Pine_kernel.equal [ compare a b, GT ]
 
 
 le : comparable -> comparable -> Bool
 le a b =
     if Pine_kernel.equal [ a, b ] then
         True
-
-    else if isPineBlob a then
-        Pine_kernel.is_sorted_ascending_int [ a, b ]
 
     else
         Pine_kernel.equal [ compare a b, LT ]
@@ -292,9 +353,6 @@ ge : comparable -> comparable -> Bool
 ge a b =
     if Pine_kernel.equal [ a, b ] then
         True
-
-    else if isPineBlob a then
-        Pine_kernel.is_sorted_ascending_int [ b, a ]
 
     else
         Pine_kernel.equal [ compare a b, GT ]
@@ -372,6 +430,58 @@ compare a b =
         case ( a, b ) of
             ( String stringA, String stringB ) ->
                 compareStrings stringA stringB
+
+            ( Elm_Float numA denomA, Elm_Float numB denomB ) ->
+                let
+                    leftProduct =
+                        Pine_kernel.mul_int [ numA, denomB ]
+
+                    rightProduct =
+                        Pine_kernel.mul_int [ numB, denomA ]
+                in
+                if Pine_kernel.equal [ leftProduct, rightProduct ] then
+                    EQ
+
+                else if Pine_kernel.is_sorted_ascending_int [ leftProduct, rightProduct ] then
+                    LT
+
+                else
+                    GT
+
+            ( Elm_Float numA denomA, intB ) ->
+                let
+                    leftProduct =
+                        numA
+
+                    rightProduct =
+                        Pine_kernel.mul_int [ denomA, intB ]
+                in
+                if Pine_kernel.equal [ leftProduct, rightProduct ] then
+                    EQ
+
+                else if Pine_kernel.is_sorted_ascending_int [ leftProduct, rightProduct ] then
+                    LT
+
+                else
+                    GT
+
+
+            ( intA, Elm_Float numB denomB ) ->
+                let
+                    leftProduct =
+                        Pine_kernel.mul_int [ intA, denomB ]
+
+                    rightProduct =
+                        numB
+                in
+                if Pine_kernel.equal [ leftProduct, rightProduct ] then
+                    EQ
+
+                else if Pine_kernel.is_sorted_ascending_int [ leftProduct, rightProduct ] then
+                    LT
+
+                else
+                    GT
 
             _ ->
                 if isPineList a then
@@ -473,7 +583,12 @@ remainderBy divisor dividend =
 -}
 negate : number -> number
 negate n =
-    Pine_kernel.negate n
+    case n of
+        Elm_Float numerator denominator ->
+            Elm_Float (Pine_kernel.negate numerator) denominator
+
+        _ ->
+            Pine_kernel.negate n
 
 
 {-| Get the [absolute value][abs] of a number.
@@ -518,23 +633,29 @@ isPineBlob a =
     Pine_kernel.equal [ Pine_kernel.take [ 0, a ], Pine_kernel.take [ 0, 0 ] ]
 
 
-toFloat : Int -> Float
-toFloat int =
-    Elm_Float int 1
+toFloat : number -> Float
+toFloat number =
+    case number of
+        Elm_Float _ _ ->
+            number
+
+        _ ->
+            Elm_Float number 1
 
 
 floor : Float -> Int
 floor number =
     case number of
-    Elm_Float numerator denom ->
-        if Pine_kernel.is_sorted_ascending_int [ numerator, 0 ] then
-            -- TODO
-            [ numerator, denom ]
-        else
-            ratioFloor numerator denom
+        Elm_Float numerator denom ->
+            if Pine_kernel.is_sorted_ascending_int [ 0, numerator ] then
+                ratioFloor numerator denom
 
-    _ ->
-        number
+            else
+                Pine_kernel.negate
+                    (ratioFloor (Pine_kernel.negate numerator) denom)
+
+        _ ->
+            number
 
 
 ratioFloor : Int -> Int -> Int
