@@ -839,23 +839,22 @@ public class ElmInteractive
         InteractiveSessionJavaScript.JavaScriptEngineFlavor javaScriptEngineFlavor) =>
         PrepareJavaScriptEngineToEvaluateElm(
             compileElmProgramCodeFiles,
-            javaScriptEngineFactory: javaScriptEngineFlavor switch
+            javaScriptEngine: javaScriptEngineFlavor switch
             {
                 InteractiveSessionJavaScript.JavaScriptEngineFlavor.Jint =>
-                JavaScriptEngineJintOptimizedForElmApps.Create,
+                JavaScriptEngineJintOptimizedForElmApps.Create(),
 
                 InteractiveSessionJavaScript.JavaScriptEngineFlavor.V8 =>
-                JavaScriptEngineFromJavaScriptEngineSwitcher.ConstructJavaScriptEngine,
+                JavaScriptEngineFromJavaScriptEngineSwitcher.ConstructJavaScriptEngine(),
 
-                _ => throw new NotImplementedException("Not implemented: " + javaScriptEngineFlavor)
+                _ =>
+                throw new NotImplementedException("Not implemented: " + javaScriptEngineFlavor)
             });
 
     public static IJavaScriptEngine PrepareJavaScriptEngineToEvaluateElm(
         TreeNodeWithStringPath compileElmProgramCodeFiles,
-        Func<IJavaScriptEngine> javaScriptEngineFactory)
+        IJavaScriptEngine javaScriptEngine)
     {
-        var javaScriptEngine = javaScriptEngineFactory();
-
         javaScriptEngine.Evaluate(JavaScriptToEvaluateElmFromCompilerCachedTask(compileElmProgramCodeFiles).Result);
 
         return javaScriptEngine;

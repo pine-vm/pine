@@ -86,7 +86,7 @@ public class ElmCompiler : IDisposable
         var compileElmPreparedJavaScriptEngine =
             ElmTime.ElmInteractive.ElmInteractive.PrepareJavaScriptEngineToEvaluateElm(
                 compileElmProgramCodeFiles: compilerSourceFiles,
-                JavaScriptEngineFromJavaScriptEngineSwitcher.ConstructJavaScriptEngine);
+                JavaScriptEngineFromJavaScriptEngineSwitcher.ConstructJavaScriptEngine());
 
         var compilerPackageSourcesTrees =
             CompilerPackageSources
