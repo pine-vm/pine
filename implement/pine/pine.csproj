@@ -53,7 +53,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <EmbeddedResource Include="ElmTime\compile-elm-program\**" />
+    <EmbeddedResource
+      Include="ElmTime\compile-elm-program\**\*.elm;ElmTime\compile-elm-program\**\*.json;" />
   </ItemGroup>
 
   <ItemGroup>
