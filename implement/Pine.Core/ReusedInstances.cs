@@ -343,9 +343,15 @@ public record ReusedInstances(
         {
             var encodedDict = new Dictionary<ElmValue, PineValue>();
 
-            foreach (var item in ElmValues)
+            var elmValuesSorted =
+                ElmValues
+                .OrderBy(ev => ev.ContainedNodesCount)
+                .ToList();
+
+            foreach (var item in elmValuesSorted)
             {
-                encodedDict[item] = ElmInteractive.ElmValueEncoding.ElmValueAsPineValue(item);
+                encodedDict[item] =
+                    ElmInteractive.ElmValueEncoding.ElmValueAsPineValue(item, encodedDict);
             }
 
             ElmValueEncoding =
