@@ -37,9 +37,6 @@ public class Program
         string[] args,
         DynamicPGOShare dynamicPGOShare)
     {
-        Elm019Binaries.OverrideElmMakeHomeDirectory = ElmMakeHomeDirectoryPath;
-        Elm019Binaries.ElmMakeResultCacheFileStoreDefault = ElmMakeResultCacheFileStoreDefault;
-
         LoadFromGitHubOrGitLab.RepositoryFilesPartialForCommitCacheDefault =
             new CacheByFileName(new FileStoreFromSystemIOFile(Path.Combine(Filesystem.CacheDirectory, "git", "partial-for-commit", "zip")));
 
@@ -2169,13 +2166,6 @@ public class Program
             _ =>
             throw new NotImplementedException($"Unexpected engine type value: {elmEngineTypeCLI}"),
         };
-
-    public static string ElmMakeHomeDirectoryPath =>
-        Path.Combine(Filesystem.CacheDirectory, "elm-make-home");
-
-    public static IFileStore ElmMakeResultCacheFileStoreDefault =>
-        new FileStoreFromSystemIOFile(
-            Path.Combine(Filesystem.CacheDirectory, "elm-make-result-cache", AppVersionId));
 
     public static void DotNetConsoleWriteLineUsingColor(string line, ConsoleColor color)
     {

@@ -15,11 +15,20 @@ namespace ElmTime.Elm019;
 /// </summary>
 public static class Elm019Binaries
 {
-    public static string? OverrideElmMakeHomeDirectory = null;
+    public static string? OverrideElmMakeHomeDirectory { get; set; } =
+        ElmMakeHomeDirectoryPathInit;
 
-    public static IFileStore? ElmMakeResultCacheFileStoreDefault = null;
+    public static IFileStore? ElmMakeResultCacheFileStoreDefault { get; set; } =
+        ElmMakeResultCacheFileStoreDefaultInit;
 
     private static string? _elmHomeDirectory;
+
+    public static string ElmMakeHomeDirectoryPathInit =>
+        Path.Combine(Filesystem.CacheDirectory, "elm-make-home");
+
+    public static IFileStore ElmMakeResultCacheFileStoreDefaultInit =>
+        new FileStoreFromSystemIOFile(
+            Path.Combine(Filesystem.CacheDirectory, "elm-make-result-cache", Program.AppVersionId));
 
     public record ElmMakeOk(ReadOnlyMemory<byte> producedFile);
 
