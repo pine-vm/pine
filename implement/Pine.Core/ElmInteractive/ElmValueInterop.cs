@@ -7,6 +7,12 @@ namespace Pine.ElmInteractive;
 
 public class ElmValueInterop
 {
+    public static readonly PineValue String_Nothing_Value =
+        PineValueAsString.ValueFromString("Nothing");
+
+    public static readonly PineValue String_Just_Value =
+        PineValueAsString.ValueFromString("Just");
+
     public static ElmValue PineValueEncodedAsInElmCompiler(
         PineValue pineValue) =>
         PineValueEncodedAsInElmCompiler(
@@ -369,5 +375,48 @@ public class ElmValueInterop
 
         throw new NotImplementedException(
             "Unsupported ElmValue: " + elmValue.GetType().FullName);
+    }
+
+    public static T ParseElmMaybeValue<T>(
+        PineValue pineValue,
+        Func<T> nothing,
+        Func<PineValue, T> just,
+        Func<string, T> invalid)
+    {
+        if (pineValue is not PineValue.ListValue listValue)
+        {
+            return invalid("Root is not a list");
+        }
+
+        if (listValue.Elements.Count is not 2)
+        {
+            return invalid("Root list does not have 2 elements");
+        }
+
+        var tagValue = listValue.Elements[0];
+
+        if (tagValue == String_Nothing_Value)
+        {
+            return nothing();
+        }
+
+        if (tagValue == String_Just_Value)
+        {
+            var tagArgumentsValue = listValue.Elements[1];
+
+            if (tagArgumentsValue is not PineValue.ListValue tagArgumentsListValue)
+            {
+                return invalid("Just tag arguments is not a list");
+            }
+
+            if (tagArgumentsListValue.Elements.Count is not 1)
+            {
+                return invalid("Just tag arguments does not have 1 element");
+            }
+
+            return just(tagArgumentsListValue.Elements[0]);
+        }
+
+        return invalid("Not tagged with Nothing or Just");
     }
 }

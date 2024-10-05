@@ -2,6 +2,7 @@ using ElmTime.ElmInteractive;
 using ElmTime.ElmSyntax;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Pine.Core;
+using Pine.Elm;
 using Pine.ElmInteractive;
 using Pine.PineVM;
 using System;
@@ -41,7 +42,7 @@ public class PGOTests
 
         using var interactiveSession =
             new InteractiveSessionPine(
-                IInteractiveSession.CompileElmProgramCodeFilesDefault.Value,
+                ElmCompiler.CompilerSourceFilesDefault.Value,
                 initialState: null,
                 appCodeTree: appCodeTree,
                 caching: true,
@@ -100,13 +101,13 @@ public class PGOTests
                 record =
                 new ElmValue.ElmRecord(
                     [
-                    ("alfa", ElmValue.String("Arancino")),
-                    ("delta", ElmValue.String("Bruschetta"))
+                    ("alfa", ElmValue.StringInstance("Arancino")),
+                    ("delta", ElmValue.StringInstance("Bruschetta"))
                     ]),
 
                 fieldId = 0,
 
-                expected = ElmValueEncoding.ElmValueAsPineValue(ElmValue.String("Arancino"))
+                expected = ElmValueEncoding.ElmValueAsPineValue(ElmValue.StringInstance("Arancino"))
             },
 
             new
@@ -114,13 +115,13 @@ public class PGOTests
                 record =
                 new ElmValue.ElmRecord(
                     [
-                    ("alfa", ElmValue.String("hello")),
-                    ("delta", ElmValue.String("world"))
+                    ("alfa", ElmValue.StringInstance("hello")),
+                    ("delta", ElmValue.StringInstance("world"))
                     ]),
 
                 fieldId = 1,
 
-                expected = ElmValueEncoding.ElmValueAsPineValue(ElmValue.String("world"))
+                expected = ElmValueEncoding.ElmValueAsPineValue(ElmValue.StringInstance("world"))
             },
 
             new
@@ -174,7 +175,7 @@ public class PGOTests
                 record =
                 new ElmValue.ElmRecord(
                     [
-                    ("alfa", ElmValue.String("Arancino")),
+                    ("alfa", ElmValue.StringInstance("Arancino")),
                     ("beta", ElmValue.Integer(43)),
                     ("gamma", ElmValue.Integer(47)),
                     ("delta", ElmValue.Integer(49)),
@@ -182,7 +183,7 @@ public class PGOTests
 
                 fieldId = 0,
 
-                expected = ElmValueEncoding.ElmValueAsPineValue( ElmValue.String("Arancino"))
+                expected = ElmValueEncoding.ElmValueAsPineValue( ElmValue.StringInstance("Arancino"))
             },
 
             new
@@ -190,15 +191,15 @@ public class PGOTests
                 record =
                 new ElmValue.ElmRecord(
                     [
-                    ("alfa", ElmValue.String("Arancini")),
-                    ("beta", ElmValue.String("Bruschette")),
+                    ("alfa", ElmValue.StringInstance("Arancini")),
+                    ("beta", ElmValue.StringInstance("Bruschette")),
                     ("gamma", ElmValue.Integer(123)),
-                    ("delta", ElmValue.String("Dolmades")),
+                    ("delta", ElmValue.StringInstance("Dolmades")),
                     ]),
 
                 fieldId = 1,
 
-                expected = ElmValueEncoding.ElmValueAsPineValue(ElmValue.String("Dolmades"))
+                expected = ElmValueEncoding.ElmValueAsPineValue(ElmValue.StringInstance("Dolmades"))
             },
 
             new
@@ -238,10 +239,10 @@ public class PGOTests
                 record =
                 new ElmValue.ElmRecord(
                     [
-                    ("alfa", ElmValue.String("Arancino")),
-                    ("beta", ElmValue.String("Bruschetta")),
+                    ("alfa", ElmValue.StringInstance("Arancino")),
+                    ("beta", ElmValue.StringInstance("Bruschetta")),
                     ("other", ElmValue.Integer(101)),
-                    ("delta", ElmValue.String("Dolmades")),
+                    ("delta", ElmValue.StringInstance("Dolmades")),
                     ]),
 
                 fieldId = 3,
@@ -427,7 +428,7 @@ public class PGOTests
 
         using var interactiveSession =
             new InteractiveSessionPine(
-                IInteractiveSession.CompileElmProgramCodeFilesDefault.Value,
+                ElmCompiler.CompilerSourceFilesDefault.Value,
                 initialState: null,
                 appCodeTree: appCodeTree,
                 caching: true,
@@ -500,19 +501,19 @@ public class PGOTests
                 record =
                 new ElmValue.ElmRecord(
                     [
-                    ("alfa", ElmValue.String("Arancino")),
-                    ("delta", ElmValue.String("Bruschetta"))
+                    ("alfa", ElmValue.StringInstance("Arancino")),
+                    ("delta", ElmValue.StringInstance("Bruschetta"))
                     ]),
 
                 fieldId = 0,
 
-                fieldValue = ElmValue.String("Pane"),
+                fieldValue = ElmValue.StringInstance("Pane"),
 
                 expected =
                 new ElmValue.ElmRecord(
                     [
-                    ("alfa", ElmValue.String("Pane")),
-                    ("delta", ElmValue.String("Bruschetta"))
+                    ("alfa", ElmValue.StringInstance("Pane")),
+                    ("delta", ElmValue.StringInstance("Bruschetta"))
                     ])
             },
 
@@ -521,19 +522,19 @@ public class PGOTests
                 record =
                 new ElmValue.ElmRecord(
                     [
-                    ("alfa", ElmValue.String("hello")),
-                    ("delta", ElmValue.String("world"))
+                    ("alfa", ElmValue.StringInstance("hello")),
+                    ("delta", ElmValue.StringInstance("world"))
                     ]),
 
                 fieldId = 1,
 
-                fieldValue = ElmValue.String("mondo"),
+                fieldValue = ElmValue.StringInstance("mondo"),
 
                 expected =
                 new ElmValue.ElmRecord(
                     [
-                    ("alfa", ElmValue.String("hello")),
-                    ("delta", ElmValue.String("mondo"))
+                    ("alfa", ElmValue.StringInstance("hello")),
+                    ("delta", ElmValue.StringInstance("mondo"))
                     ])
             },
 
@@ -613,7 +614,7 @@ public class PGOTests
                 record =
                 new ElmValue.ElmRecord(
                     [
-                    ("alfa", ElmValue.String("Arancino")),
+                    ("alfa", ElmValue.StringInstance("Arancino")),
                     ("beta", ElmValue.Integer(43)),
                     ("gamma", ElmValue.Integer(47)),
                     ("delta", ElmValue.Integer(49)),
@@ -621,12 +622,12 @@ public class PGOTests
 
                 fieldId = 0,
 
-                fieldValue = ElmValue.String("Acciughe"),
+                fieldValue = ElmValue.StringInstance("Acciughe"),
 
                 expected =
                 new ElmValue.ElmRecord(
                     [
-                    ("alfa", ElmValue.String("Acciughe")),
+                    ("alfa", ElmValue.StringInstance("Acciughe")),
                     ("beta", ElmValue.Integer(43)),
                     ("gamma", ElmValue.Integer(47)),
                     ("delta", ElmValue.Integer(49)),
@@ -638,23 +639,23 @@ public class PGOTests
                 record =
                 new ElmValue.ElmRecord(
                     [
-                    ("alfa", ElmValue.String("Arancini")),
-                    ("beta", ElmValue.String("Bruschette")),
+                    ("alfa", ElmValue.StringInstance("Arancini")),
+                    ("beta", ElmValue.StringInstance("Bruschette")),
                     ("gamma", ElmValue.Integer(123)),
-                    ("delta", ElmValue.String("Dolmades")),
+                    ("delta", ElmValue.StringInstance("Dolmades")),
                     ]),
 
                 fieldId = 1,
 
-                fieldValue = ElmValue.String("Dragoncello"),
+                fieldValue = ElmValue.StringInstance("Dragoncello"),
 
                 expected =
                 new ElmValue.ElmRecord(
                     [
-                    ("alfa", ElmValue.String("Arancini")),
-                    ("beta", ElmValue.String("Bruschette")),
+                    ("alfa", ElmValue.StringInstance("Arancini")),
+                    ("beta", ElmValue.StringInstance("Bruschette")),
                     ("gamma", ElmValue.Integer(123)),
-                    ("delta", ElmValue.String("Dragoncello")),
+                    ("delta", ElmValue.StringInstance("Dragoncello")),
                     ])
             },
 
@@ -713,10 +714,10 @@ public class PGOTests
                 record =
                 new ElmValue.ElmRecord(
                     [
-                    ("alfa", ElmValue.String("Arancino")),
-                    ("beta", ElmValue.String("Bruschetta")),
+                    ("alfa", ElmValue.StringInstance("Arancino")),
+                    ("beta", ElmValue.StringInstance("Bruschetta")),
                     ("other", ElmValue.Integer(101)),
-                    ("delta", ElmValue.String("Dolmades")),
+                    ("delta", ElmValue.StringInstance("Dolmades")),
                     ]),
 
                 fieldId = 3,
@@ -726,10 +727,10 @@ public class PGOTests
                 expected =
                 new ElmValue.ElmRecord(
                     [
-                    ("alfa", ElmValue.String("Arancino")),
-                    ("beta", ElmValue.String("Bruschetta")),
+                    ("alfa", ElmValue.StringInstance("Arancino")),
+                    ("beta", ElmValue.StringInstance("Bruschetta")),
                     ("other", ElmValue.Integer(131)),
-                    ("delta", ElmValue.String("Dolmades")),
+                    ("delta", ElmValue.StringInstance("Dolmades")),
                     ])
             },
         };
@@ -928,7 +929,7 @@ public class PGOTests
 
         using var interactiveSession =
             new InteractiveSessionPine(
-                IInteractiveSession.CompileElmProgramCodeFilesDefault.Value,
+                ElmCompiler.CompilerSourceFilesDefault.Value,
                 initialState: null,
                 appCodeTree: appCodeTree,
                 caching: true,
@@ -1018,8 +1019,8 @@ public class PGOTests
                 list =
                 new ElmValue.ElmList(
                     [
-                    new ElmValue.ElmList([ElmValue.String("alfa"), ElmValue.Integer(31)]),
-                    new ElmValue.ElmList([ElmValue.String("beta"), ElmValue.Integer(41)]),
+                    new ElmValue.ElmList([ElmValue.StringInstance("alfa"), ElmValue.Integer(31)]),
+                    new ElmValue.ElmList([ElmValue.StringInstance("beta"), ElmValue.Integer(41)]),
                     ]),
 
                 functionId = 0,
@@ -1027,8 +1028,8 @@ public class PGOTests
                 expected =
                 new ElmValue.ElmList(
                     [
-                    ElmValue.String("alfa"),
-                    ElmValue.String("beta"),
+                    ElmValue.StringInstance("alfa"),
+                    ElmValue.StringInstance("beta"),
                     ]),
             },
 
@@ -1037,8 +1038,8 @@ public class PGOTests
                 list =
                 new ElmValue.ElmList(
                     [
-                    new ElmValue.ElmList([ElmValue.String("alfa"), ElmValue.Integer(31)]),
-                    new ElmValue.ElmList([ElmValue.String("beta"), ElmValue.Integer(41)]),
+                    new ElmValue.ElmList([ElmValue.StringInstance("alfa"), ElmValue.Integer(31)]),
+                    new ElmValue.ElmList([ElmValue.StringInstance("beta"), ElmValue.Integer(41)]),
                     ]),
 
                 functionId = 1,
@@ -1046,8 +1047,8 @@ public class PGOTests
                 expected =
                 new ElmValue.ElmList(
                     [
-                    ElmValue.String("alfaalfaalfa"),
-                    ElmValue.String("betabetabeta"),
+                    ElmValue.StringInstance("alfaalfaalfa"),
+                    ElmValue.StringInstance("betabetabeta"),
                     ]),
             },
 
@@ -1056,8 +1057,8 @@ public class PGOTests
                 list =
                 new ElmValue.ElmList(
                     [
-                    new ElmValue.ElmList([ElmValue.String("alfa"), ElmValue.Integer(31)]),
-                    new ElmValue.ElmList([ElmValue.String("beta"), ElmValue.Integer(41)]),
+                    new ElmValue.ElmList([ElmValue.StringInstance("alfa"), ElmValue.Integer(31)]),
+                    new ElmValue.ElmList([ElmValue.StringInstance("beta"), ElmValue.Integer(41)]),
                     ]),
 
                 functionId = 11,
@@ -1065,8 +1066,8 @@ public class PGOTests
                 expected =
                 new ElmValue.ElmList(
                     [
-                    ElmValue.String("afla"),
-                    ElmValue.String("ateb"),
+                    ElmValue.StringInstance("afla"),
+                    ElmValue.StringInstance("ateb"),
                     ]),
             },
 
@@ -1075,14 +1076,14 @@ public class PGOTests
                 list =
                 new ElmValue.ElmList(
                     [
-                    new ElmValue.ElmList([ElmValue.String("Focaccia"), ElmValue.Integer(31)]),
-                    new ElmValue.ElmList([ElmValue.String("Pizza"), ElmValue.Integer(41)]),
-                    new ElmValue.ElmList([ElmValue.String("Arancino"), ElmValue.Integer(71)]),
-                    new ElmValue.ElmList([ElmValue.String("Lasagna"), ElmValue.Integer(43)]),
-                    new ElmValue.ElmList([ElmValue.String("Risotto"), ElmValue.Integer(47)]),
-                    new ElmValue.ElmList([ElmValue.String("Pasta"), ElmValue.Integer(49)]),
-                    new ElmValue.ElmList([ElmValue.String("Gelato"), ElmValue.Integer(73)]),
-                    new ElmValue.ElmList([ElmValue.String("Tiramisu"), ElmValue.Integer(79)]),
+                    new ElmValue.ElmList([ElmValue.StringInstance("Focaccia"), ElmValue.Integer(31)]),
+                    new ElmValue.ElmList([ElmValue.StringInstance("Pizza"), ElmValue.Integer(41)]),
+                    new ElmValue.ElmList([ElmValue.StringInstance("Arancino"), ElmValue.Integer(71)]),
+                    new ElmValue.ElmList([ElmValue.StringInstance("Lasagna"), ElmValue.Integer(43)]),
+                    new ElmValue.ElmList([ElmValue.StringInstance("Risotto"), ElmValue.Integer(47)]),
+                    new ElmValue.ElmList([ElmValue.StringInstance("Pasta"), ElmValue.Integer(49)]),
+                    new ElmValue.ElmList([ElmValue.StringInstance("Gelato"), ElmValue.Integer(73)]),
+                    new ElmValue.ElmList([ElmValue.StringInstance("Tiramisu"), ElmValue.Integer(79)]),
                     ]),
 
                 functionId = 0,
@@ -1090,14 +1091,14 @@ public class PGOTests
                 expected =
                 new ElmValue.ElmList(
                     [
-                    ElmValue.String("Focaccia"),
-                    ElmValue.String("Pizza"),
-                    ElmValue.String("Arancino"),
-                    ElmValue.String("Lasagna"),
-                    ElmValue.String("Risotto"),
-                    ElmValue.String("Pasta"),
-                    ElmValue.String("Gelato"),
-                    ElmValue.String("Tiramisu"),
+                    ElmValue.StringInstance("Focaccia"),
+                    ElmValue.StringInstance("Pizza"),
+                    ElmValue.StringInstance("Arancino"),
+                    ElmValue.StringInstance("Lasagna"),
+                    ElmValue.StringInstance("Risotto"),
+                    ElmValue.StringInstance("Pasta"),
+                    ElmValue.StringInstance("Gelato"),
+                    ElmValue.StringInstance("Tiramisu"),
                     ]),
             },
 
@@ -1286,7 +1287,7 @@ public class PGOTests
         {
             var largerListOutput =
                 Enumerable.Range(0, 1000)
-                .Select(index => ElmValue.String("item-" + index))
+                .Select(index => ElmValue.StringInstance("item-" + index))
                 .ToImmutableArray();
 
             var largerListInput =
@@ -1344,7 +1345,7 @@ public class PGOTests
 
         using var interactiveSession =
             new InteractiveSessionPine(
-                IInteractiveSession.CompileElmProgramCodeFilesDefault.Value,
+                ElmCompiler.CompilerSourceFilesDefault.Value,
                 initialState: null,
                 appCodeTree: appCodeTree,
                 caching: true,
@@ -1449,8 +1450,8 @@ public class PGOTests
                 list =
                 new ElmValue.ElmList(
                     [
-                    new ElmValue.ElmList([ElmValue.String("alfa"), ElmValue.Integer(31)]),
-                    new ElmValue.ElmList([ElmValue.String("beta"), ElmValue.Integer(41)]),
+                    new ElmValue.ElmList([ElmValue.StringInstance("alfa"), ElmValue.Integer(31)]),
+                    new ElmValue.ElmList([ElmValue.StringInstance("beta"), ElmValue.Integer(41)]),
                     ]),
 
                 functionId = 0,
@@ -1458,8 +1459,8 @@ public class PGOTests
                 expected =
                 new ElmValue.ElmList(
                     [
-                    new ElmValue.ElmList([ElmValue.Integer(41), ElmValue.String("beta")]),
-                    new ElmValue.ElmList([ElmValue.Integer(31), ElmValue.String("alfa")]),
+                    new ElmValue.ElmList([ElmValue.Integer(41), ElmValue.StringInstance("beta")]),
+                    new ElmValue.ElmList([ElmValue.Integer(31), ElmValue.StringInstance("alfa")]),
                     ]),
             },
 
@@ -1468,9 +1469,9 @@ public class PGOTests
                 list =
                 new ElmValue.ElmList(
                     [
-                    new ElmValue.ElmList([ElmValue.String("alfa"), ElmValue.Integer(31)]),
-                    new ElmValue.ElmList([ElmValue.String("gamma"), ElmValue.Integer(41)]),
-                    new ElmValue.ElmList([ElmValue.String("beta"), ElmValue.Integer(47)]),
+                    new ElmValue.ElmList([ElmValue.StringInstance("alfa"), ElmValue.Integer(31)]),
+                    new ElmValue.ElmList([ElmValue.StringInstance("gamma"), ElmValue.Integer(41)]),
+                    new ElmValue.ElmList([ElmValue.StringInstance("beta"), ElmValue.Integer(47)]),
                     ]),
 
                 functionId = 0,
@@ -1478,9 +1479,9 @@ public class PGOTests
                 expected =
                 new ElmValue.ElmList(
                     [
-                    new ElmValue.ElmList([ElmValue.Integer(41), ElmValue.String("gamma")]),
-                    new ElmValue.ElmList([ElmValue.Integer(47), ElmValue.String("beta")]),
-                    new ElmValue.ElmList([ElmValue.Integer(31), ElmValue.String("alfa")]),
+                    new ElmValue.ElmList([ElmValue.Integer(41), ElmValue.StringInstance("gamma")]),
+                    new ElmValue.ElmList([ElmValue.Integer(47), ElmValue.StringInstance("beta")]),
+                    new ElmValue.ElmList([ElmValue.Integer(31), ElmValue.StringInstance("alfa")]),
                     ]),
             },
         };
@@ -1563,7 +1564,7 @@ public class PGOTests
                 .Select(index =>
                 new ElmValue.ElmList(
                     [
-                    ElmValue.String("key-" + index),
+                    ElmValue.StringInstance("key-" + index),
                     ElmValue.Integer(100 + index)
                     ]))
                 .ToImmutableArray();
@@ -1675,12 +1676,12 @@ public class PGOTests
             var largerListOutput =
                 largerList
                 .OrderByDescending(item => item.itemKey)
-                .Select(item => new ElmValue.ElmList([ElmValue.Integer(item.itemValue), ElmValue.String(item.itemKey)]))
+                .Select(item => new ElmValue.ElmList([ElmValue.Integer(item.itemValue), ElmValue.StringInstance(item.itemKey)]))
                 .ToImmutableArray();
 
             var largerListInput =
                 largerList
-                .Select(item => new ElmValue.ElmList([ElmValue.String(item.itemKey), ElmValue.Integer(item.itemValue)]))
+                .Select(item => new ElmValue.ElmList([ElmValue.StringInstance(item.itemKey), ElmValue.Integer(item.itemValue)]))
                 .ToImmutableArray();
 
             var scenarioReport =
@@ -1704,7 +1705,7 @@ public class PGOTests
     public static TreeNodeWithStringPath AppCodeTreeForElmModules(
         IReadOnlyList<string> elmModuleTexts)
     {
-        var compilerProgram = IInteractiveSession.CompileElmProgramCodeFilesDefault.Value;
+        var compilerProgram = ElmCompiler.CompilerSourceFilesDefault.Value;
 
         var elmJson =
             """

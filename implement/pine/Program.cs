@@ -1,9 +1,12 @@
 using ElmTime.Elm019;
+using ElmTime.ElmInteractive;
 using ElmTime.JavaScript;
 using McMaster.Extensions.CommandLineUtils;
 using Microsoft.AspNetCore.Hosting;
 using Pine;
 using Pine.Core;
+using Pine.Elm;
+using Pine.Elm.Platform;
 using Pine.PineVM;
 using System;
 using System.Collections.Generic;
@@ -19,7 +22,7 @@ namespace ElmTime;
 
 public class Program
 {
-    public static string AppVersionId => "0.3.19";
+    public static string AppVersionId => "0.3.20";
 
     private static int AdminInterfaceDefaultPort => 4000;
 
@@ -65,6 +68,7 @@ public class Program
 
         AddSelfTestCommand(app);
 
+        var runCommand = AddRunCommand(app);
         var runServerCommand = AddRunServerCommand(app, dynamicPGOShare);
 
         var deployCommand = AddDeployCommand(app);
@@ -149,9 +153,10 @@ public class Program
                 },
                 new
                 {
-                    title = "Operate servers and maintain live systems:",
+                    title = "Run apps, operate servers and maintain live systems:",
                     commands = new[]
                     {
+                        runCommand,
                         runServerCommand,
                         deployCommand,
                         copyAppStateCommand,
@@ -305,7 +310,7 @@ public class Program
                 dynamicPGOShare: null,
                 runServerCommand,
                 defaultFromEnvironmentVariablePrefix: "web_server",
-                defaultEngineConsideringEnvironmentVariable: fromEnv => fromEnv ?? ElmInteractive.ElmEngineTypeCLI.JavaScript_V8);
+                defaultEngineConsideringEnvironmentVariable: fromEnv => fromEnv ?? ElmEngineTypeCLI.JavaScript_V8);
 
             runServerCommand.OnExecute(() =>
             {
@@ -339,6 +344,170 @@ public class Program
                 webHost.WaitForShutdown();
             });
         });
+
+    private static CommandLineApplication AddRunCommand(
+        CommandLineApplication app) =>
+        app.Command("run", runCommand =>
+        {
+            runCommand.Description = "Run an Elm app.";
+            runCommand.UnrecognizedArgumentHandling = UnrecognizedArgumentHandling.Throw;
+
+            var entryPointArgument =
+            runCommand.Argument(
+                "entry-point-module",
+                "Path to the Elm module containing the program declaration.")
+            .IsRequired(allowEmptyStrings: false);
+
+            var inputDirectoryOption =
+            runCommand.Option(
+                "--input-directory",
+                "Specify the input directory containing the Elm files. Defaults to the current working directory.",
+                CommandOptionType.SingleValue);
+
+            runCommand.OnExecute(() =>
+            {
+                var entryPoint =
+                entryPointArgument.Value ??
+                throw new Exception("Missing argument for entry point Elm module file");
+
+                var entryPointFilePath = entryPoint.Split(['/', '\\']);
+
+                var inputDirectory = inputDirectoryOption.Value() ?? Environment.CurrentDirectory;
+
+                try
+                {
+                    return
+                    RunElmAppOnCommandLine(inputDirectory, entryPoint)
+                    .Extract(err =>
+                    {
+                        Console.Error.WriteLine(err);
+                        return -1;
+                    });
+                }
+                catch (Exception ex)
+                {
+                    Console.Error.WriteLine("Failed to run app with runtime exception: " + ex);
+                    return -2;
+                }
+            });
+        });
+
+    private static Result<string, int> RunElmAppOnCommandLine(
+        string inputDirectory,
+        string entryPoint)
+    {
+        var entryPointFilePath = entryPoint.Split(['/', '\\']);
+
+        var loadInputDirectoryFailedFiles =
+        new Dictionary<IReadOnlyList<string>, IOException>(
+            comparer: EnumerableExtension.EqualityComparer<IReadOnlyList<string>>());
+
+        var loadInputDirectoryResult =
+            LoadComposition.LoadFromPathResolvingNetworkDependencies(
+                inputDirectory,
+                ignoreFileOnIOException: (filePath, ioException) =>
+                {
+                    loadInputDirectoryFailedFiles[filePath] = ioException;
+                    return true;
+                })
+            .LogToActions(Console.WriteLine);
+
+        return
+        loadInputDirectoryResult
+        .AndThen(sourceFiles =>
+        {
+            if (sourceFiles.tree.GetNodeAtPath(entryPointFilePath) is not TreeNodeWithStringPath entryPointNode)
+            {
+                return Result<string, int>.err(
+                    "Did not find the entry point module '" + entryPoint + "' in the input directory.");
+            }
+
+            if (entryPointNode is not TreeNodeWithStringPath.BlobNode entryPointBlob)
+            {
+                return
+                    "The entry point module '" + entryPoint + "' is not a file in the input directory.";
+            }
+
+            var entryPointFileText = Encoding.UTF8.GetString(entryPointBlob.Bytes.Span);
+
+            var parseModuleNameResult =
+            ElmSyntax.ElmModule.ParseModuleName(entryPointFileText);
+
+            if (parseModuleNameResult.IsErrOrNull() is { } err)
+            {
+                return
+                    "Failed to parse the module name from the entry point module '" + entryPoint + "': " + err;
+            }
+
+            if (parseModuleNameResult.IsOkOrNull() is not { } elmModuleName)
+            {
+                return "Unexpected return type parsing module name: " + parseModuleNameResult.GetType();
+            }
+
+            var envVarDict = Environment.GetEnvironmentVariables();
+
+            var environmentVariables =
+            envVarDict.Keys.OfType<string>()
+            .Select(envVarKey => new KeyValuePair<string, string>(envVarKey, envVarDict[envVarKey].ToString()))
+            .ToImmutableArray();
+
+            Console.WriteLine("Starting Elm app from " + entryPoint + " using runtime version " + AppVersionId + " ...");
+
+            var appConfig =
+                CommandLineAppConfig.ConfigFromSourceFilesAndModuleName(
+                    sourceFiles.tree,
+                    elmModuleName);
+
+            var mutatingCliApp =
+                new MutatingCommandLineApp(
+                    appConfig,
+                    environment: new CommandLineAppConfig.CommandLineAppInitEnvironment(
+                        CommandLine: Environment.CommandLine,
+                        EnvironmentVariables: environmentVariables));
+
+            int? processSubmission(string submission)
+            {
+                var appEventResponse = mutatingCliApp.EventStdIn(Encoding.UTF8.GetBytes(submission));
+
+                if (appEventResponse is null)
+                {
+                    return null;
+                }
+
+                {
+                    var outputTexts =
+                        mutatingCliApp.DequeueStdOut()
+                        .Select(outputBatch => Encoding.UTF8.GetString(outputBatch.Span))
+                        .ToImmutableArray();
+
+                    Console.WriteLine(string.Concat(outputTexts));
+                }
+
+                {
+                    var errTexts =
+                        mutatingCliApp.DequeueStdErr()
+                        .Select(errBatch => Encoding.UTF8.GetString(errBatch.Span))
+                        .ToImmutableArray();
+
+                    Console.Error.WriteLine(string.Concat(errTexts));
+                }
+
+                return appEventResponse.Exit;
+            }
+
+            ReadLine.HistoryEnabled = true;
+
+            while (true)
+            {
+                var submission = ReadLine.Read();
+
+                var maybeExitCode = processSubmission(submission);
+
+                if (maybeExitCode.HasValue)
+                    return maybeExitCode.Value;
+            }
+        });
+    }
 
     private static CommandLineApplication AddDeployCommand(CommandLineApplication app) =>
         app.Command("deploy", deployCommand =>
@@ -871,7 +1040,7 @@ public class Program
                 interactiveCommand,
                 defaultFromEnvironmentVariablePrefix: "interactive",
                 defaultEngineConsideringEnvironmentVariable:
-                fromEnv => fromEnv ?? ElmInteractive.IInteractiveSession.DefaultImplementation);
+                fromEnv => fromEnv ?? IInteractiveSession.DefaultImplementation);
 
             var submitOption =
                 interactiveCommand.Option(
@@ -1006,7 +1175,7 @@ public class Program
                                 [.. namedDistinctScenarios.Select(scenario => (scenario.Key, scenario.Value.loadedScenario.component))]);
 
                         var parsedScenarios =
-                        ElmInteractive.TestElmInteractive.ParseElmInteractiveScenarios(
+                        TestElmInteractive.ParseElmInteractiveScenarios(
                             aggregateCompositionTree,
                             console);
 
@@ -1031,7 +1200,7 @@ public class Program
                                 DictionaryMemberName: "compiled_expressions_dictionary");
 
                             var compileResult =
-                            ElmInteractive.InteractiveSessionPine.CompileForProfiledScenarios(
+                            InteractiveSessionPine.CompileForProfiledScenarios(
                                 compileElmProgramCodeFiles: compileElmProgramCodeFiles,
                                 profilingScenarios,
                                 syntaxContainerConfig: syntaxContainerConfig,
@@ -1124,7 +1293,7 @@ public class Program
                                 }
                             }
 
-                            return ElmInteractive.IInteractiveSession.Create(
+                            return IInteractiveSession.Create(
                                 compileElmProgramCodeFiles: compileElmProgramCodeFiles,
                                 appCodeTree: appCodeTree,
                                 elmEngineType);
@@ -1148,7 +1317,7 @@ public class Program
                         }
 
                         var scenariosResults =
-                        ElmInteractive.TestElmInteractive.TestElmInteractiveScenarios(
+                        TestElmInteractive.TestElmInteractiveScenarios(
                             parsedScenarios,
                             interactiveConfig,
                             console: console,
@@ -1248,13 +1417,13 @@ public class Program
                                 fromBlob: _ => throw new Exception("Unexpected blob"),
                                 fromTree: tree =>
                                 tree.Select(stepDirectory =>
-                                ElmInteractive.TestElmInteractive.ParseScenarioStep(stepDirectory.itemValue)
+                                TestElmInteractive.ParseScenarioStep(stepDirectory.itemValue)
                                 .Extract(fromErr: error => throw new Exception(error)).Submission))
                                 .ToImmutableList();
                         })
                 };
 
-                using var interactiveSession = ElmInteractive.IInteractiveSession.Create(
+                using var interactiveSession = IInteractiveSession.Create(
                     compileElmProgramCodeFiles: compileElmProgramCodeFiles,
                     appCodeTree: contextAppCodeTree,
                     engineType: elmEngineType);
@@ -1932,7 +2101,7 @@ public class Program
     private static (CommandOption elmCompilerOption, Func<Pine.IConsole, TreeNodeWithStringPath> loadElmCompilerFromOption)
         AddElmCompilerOptionOnCommand(CommandLineApplication cmd)
     {
-        var defaultCompiler = ElmInteractive.IInteractiveSession.CompileElmProgramCodeFilesDefault.Value;
+        var defaultCompiler = ElmCompiler.CompilerSourceFilesDefault.Value;
 
         var elmCompilerOption =
             cmd.Option(
@@ -1954,7 +2123,7 @@ public class Program
                     .tree;
             }
 
-            return ElmInteractive.IInteractiveSession.CompileElmProgramCodeFilesDefault.Value!;
+            return ElmCompiler.CompilerSourceFilesDefault.Value!;
         }
 
         return (elmCompilerOption, parseElmCompilerFromOption);
@@ -1981,18 +2150,18 @@ public class Program
         ElmInteractive.ElmEngineTypeCLI elmEngineTypeCLI) =>
         elmEngineTypeCLI switch
         {
-            ElmInteractive.ElmEngineTypeCLI.JavaScript_Jint =>
+            ElmEngineTypeCLI.JavaScript_Jint =>
             new ElmInteractive.ElmEngineType.JavaScript_Jint(),
 
-            ElmInteractive.ElmEngineTypeCLI.JavaScript_V8 =>
+            ElmEngineTypeCLI.JavaScript_V8 =>
             new ElmInteractive.ElmEngineType.JavaScript_V8(),
 
-            ElmInteractive.ElmEngineTypeCLI.Pine =>
+            ElmEngineTypeCLI.Pine =>
             new ElmInteractive.ElmEngineType.Pine(
                 Caching: true,
                 DynamicPGOShare: dynamicPGOShare),
 
-            ElmInteractive.ElmEngineTypeCLI.Pine_without_cache =>
+            ElmEngineTypeCLI.Pine_without_cache =>
             new ElmInteractive.ElmEngineType.Pine(
                 Caching: false,
                 DynamicPGOShare: dynamicPGOShare),

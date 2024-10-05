@@ -107,7 +107,7 @@ public static class ElmValueEncoding
                         var mapToStringResult = PineValueAsString.StringFromValue(charsList);
 
                         if (mapToStringResult is Result<string, string>.Ok ok)
-                            return ElmValue.String(ok.Value);
+                            return ElmValue.StringInstance(ok.Value);
 
                         if (mapToStringResult is Result<string, string>.Err err)
                             return "Failed to convert value under String tag: Failed mapping char " + err.Value;

@@ -1,6 +1,6 @@
 # Pine
 
-Pine is a runtime for the Elm programming language. It runs Elm applications on Linux, Windows, and macOS.
+Pine is a free, open-source, cross-platform Elm runtime environment that lets developers create servers, web apps, and command line tools.
 
 + Pine supports building and running Elm programs natively on .NET without JavaScript.
 + The Elm compilation interfaces support the customization of code generation at build time.

@@ -11,11 +11,6 @@ public interface IInteractiveSession : IDisposable
 
     static ElmEngineTypeCLI DefaultImplementation => ElmEngineTypeCLI.Pine;
 
-    static public readonly Lazy<TreeNodeWithStringPath> CompileElmProgramCodeFilesDefault =
-        new(() => PineValueComposition.SortedTreeFromSetOfBlobsWithStringPath(
-            ElmInteractive.LoadCompileElmProgramCodeFiles()
-            .Extract(error => throw new NotImplementedException(nameof(ElmInteractive.LoadCompileElmProgramCodeFiles) + ": " + error))));
-
     static IInteractiveSession Create(
         TreeNodeWithStringPath compileElmProgramCodeFiles,
         TreeNodeWithStringPath? appCodeTree,

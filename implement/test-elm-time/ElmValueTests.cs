@@ -14,7 +14,7 @@ public class ElmValueTests
         var testCases = (IReadOnlyList<ElmValue>)[
             ElmValue.CharInstance('a'),
             ElmValue.Integer(42),
-            ElmValue.String("Hello, world!"),
+            ElmValue.StringInstance("Hello, world!"),
             new ElmValue.ElmList([
                 ElmValue.Integer(31),
                 ElmValue.Integer(37),
@@ -73,7 +73,7 @@ public class ElmValueTests
 
                 (ElmValue.CharInstance('a'), "'a'"),
 
-                (ElmValue.String("Hello, world!"), "\"Hello, world!\""),
+                (ElmValue.StringInstance("Hello, world!"), "\"Hello, world!\""),
 
                 (new ElmValue.ElmList([
                 ElmValue.Integer(31),

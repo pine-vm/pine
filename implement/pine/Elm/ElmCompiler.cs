@@ -1,6 +1,5 @@
 using ElmTime.ElmInteractive;
 using ElmTime.JavaScript;
-using Pine;
 using Pine.Core;
 using System;
 using System.Collections.Concurrent;
@@ -10,11 +9,16 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace Elm;
+namespace Pine.Elm;
 
 public class ElmCompiler : IDisposable
 {
     private static readonly ConcurrentDictionary<TreeNodeWithStringPath, Task<Result<string, ElmCompiler>>> buildCompilerFromSource = new();
+
+    static public readonly Lazy<TreeNodeWithStringPath> CompilerSourceFilesDefault =
+        new(() => PineValueComposition.SortedTreeFromSetOfBlobsWithStringPath(
+            ElmTime.ElmInteractive.ElmInteractive.LoadCompileElmProgramCodeFiles()
+            .Extract(error => throw new NotImplementedException(nameof(ElmTime.ElmInteractive.ElmInteractive.LoadCompileElmProgramCodeFiles) + ": " + error))));
 
     public static IReadOnlyList<string> CompilerPackageSources =>
     [
@@ -49,7 +53,7 @@ public class ElmCompiler : IDisposable
 
     public ElmInteractiveEnvironment.FunctionRecord CompileParsedInteractiveSubmission { get; }
 
-    private static readonly Pine.PineVM.PineVMParseCache parseCache = new();
+    private static readonly PineVM.PineVMParseCache parseCache = new();
 
     private ElmCompiler(
         IJavaScriptEngine compileElmPreparedJavaScriptEngine,
@@ -80,7 +84,7 @@ public class ElmCompiler : IDisposable
     public static Result<string, ElmCompiler> BuildElmCompiler(TreeNodeWithStringPath compilerSourceFiles)
     {
         var compileElmPreparedJavaScriptEngine =
-            ElmInteractive.PrepareJavaScriptEngineToEvaluateElm(
+            ElmTime.ElmInteractive.ElmInteractive.PrepareJavaScriptEngineToEvaluateElm(
                 compileElmProgramCodeFiles: compilerSourceFiles,
                 JavaScriptEngineFromJavaScriptEngineSwitcher.ConstructJavaScriptEngine);
 
@@ -102,7 +106,7 @@ public class ElmCompiler : IDisposable
             .ToImmutableArray();
 
         var elmCoreLibraryModulesTexts =
-            ElmInteractive.GetDefaultElmCoreModulesTexts(compileElmPreparedJavaScriptEngine);
+            ElmTime.ElmInteractive.ElmInteractive.GetDefaultElmCoreModulesTexts(compileElmPreparedJavaScriptEngine);
 
         var elmModulesTexts = elmCoreLibraryModulesTexts;
 
@@ -141,7 +145,7 @@ public class ElmCompiler : IDisposable
         return
             InteractiveSessionPine.CompileInteractiveEnvironment(
                 compileElmPreparedJavaScriptEngine,
-                lastCompilationCache: ElmInteractive.CompilationCache.Empty,
+                lastCompilationCache: ElmTime.ElmInteractive.ElmInteractive.CompilationCache.Empty,
                 initialState: null,
                 compilerWithPackagesTree)
             .AndThen(compiledEnv =>

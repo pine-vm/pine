@@ -268,7 +268,7 @@ public record ReusedInstances(
                         ElmValue.Integer(elmInteger.Value),
 
                         ElmValue.ElmString elmString =>
-                        ElmValue.String(elmString.Value),
+                        ElmValue.StringInstance(elmString.Value),
 
                         ElmValue.ElmList elmList =>
                         new ElmValue.ElmList(

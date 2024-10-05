@@ -12,6 +12,24 @@ public static class ResultExtension
             fromErr: _ => Maybe<OkT>.nothing(),
             fromOk: Maybe<OkT>.just);
 
+    public static ErrT? IsErrOrNull<ErrT, OkT>(this Result<ErrT, OkT> result)
+        where ErrT : class
+    {
+        if (result is Result<ErrT, OkT>.Err error)
+            return error.Value;
+
+        return null;
+    }
+
+    public static OkT? IsOkOrNull<ErrT, OkT>(this Result<ErrT, OkT> result)
+        where OkT : class
+    {
+        if (result is Result<ErrT, OkT>.Ok ok)
+            return ok.Value;
+
+        return null;
+    }
+
     public static Result<ErrT, IReadOnlyList<OkT>> ListCombine<ErrT, OkT>(this IEnumerable<Result<ErrT, OkT>> list)
     {
         var okList = new List<OkT>();

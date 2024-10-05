@@ -33,3 +33,7 @@ If we still want to (re)use file systems to model syntax trees, we will add a ma
 
 Expand the Elm compiler and core libraries to support `Float` literals and `String.toFloat`
 
+## 2024-10-05 - Basic Support for Elm Command-Line Applications
+
++ Added a framework to integrate the various interfaces we want to use in command-line interface applications (`Platform.CommandLineApp`), including stdIn/stdOut/stdErr streams and environment variables.
++ Introduced the `pine  run` command as a common way to run an app.

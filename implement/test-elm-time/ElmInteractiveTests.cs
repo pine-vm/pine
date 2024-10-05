@@ -1,6 +1,7 @@
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Pine;
 using Pine.Core;
+using Pine.Elm;
 using System;
 using System.Collections.Immutable;
 using System.IO;
@@ -17,7 +18,7 @@ public class ElmInteractiveTests
     private static string PathToKernelScenariosDirectory => @"./../../../../test-and-train/elm-interactive-scenarios-kernel";
 
     public static TreeNodeWithStringPath CompileElmProgramCodeFiles =>
-        ElmTime.ElmInteractive.IInteractiveSession.CompileElmProgramCodeFilesDefault.Value;
+        ElmCompiler.CompilerSourceFilesDefault.Value;
 
     private static readonly Lazy<ElmTime.JavaScript.IJavaScriptEngine> compileElmPreparedJavaScriptEngine =
         new(() => ElmTime.ElmInteractive.ElmInteractive.PrepareJavaScriptEngineToEvaluateElm(

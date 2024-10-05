@@ -2,6 +2,7 @@ using ElmTime.ElmInteractive;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Pine;
 using Pine.Core;
+using Pine.Elm;
 using Pine.ElmInteractive;
 using Pine.PineVM;
 using System;
@@ -16,14 +17,14 @@ namespace TestElmTime;
 public class CompileElmCompilerTests
 {
     static IReadOnlyList<string> CompilerPackageSources =>
-        Elm.ElmCompiler.CompilerPackageSources;
+        ElmCompiler.CompilerPackageSources;
 
     [TestMethod]
     public void Test_call_Basics_modBy()
     {
         using var pgoShare = new DynamicPGOShare();
 
-        var compilerProgram = IInteractiveSession.CompileElmProgramCodeFilesDefault.Value;
+        var compilerProgram = ElmCompiler.CompilerSourceFilesDefault.Value;
 
         using var interactiveSession =
             new InteractiveSessionPine(
@@ -124,7 +125,7 @@ public class CompileElmCompilerTests
 
             """;
 
-        var compilerProgram = IInteractiveSession.CompileElmProgramCodeFilesDefault.Value;
+        var compilerProgram = ElmCompiler.CompilerSourceFilesDefault.Value;
 
         using var compilerJavaScript =
             ElmInteractive.PrepareJavaScriptEngineToEvaluateElm(
@@ -289,7 +290,7 @@ public class CompileElmCompilerTests
     {
         using var pgoShare = new DynamicPGOShare();
 
-        var compilerProgram = IInteractiveSession.CompileElmProgramCodeFilesDefault.Value;
+        var compilerProgram = ElmCompiler.CompilerSourceFilesDefault.Value;
 
         using var interactiveSession =
             new InteractiveSessionPine(
@@ -351,7 +352,7 @@ public class CompileElmCompilerTests
             limitSampleCountPerSubmissionDefault: 100);
         */
 
-        var compilerProgram = IInteractiveSession.CompileElmProgramCodeFilesDefault.Value;
+        var compilerProgram = ElmCompiler.CompilerSourceFilesDefault.Value;
 
         using var compileJavaScriptEngine =
             ElmInteractive.PrepareJavaScriptEngineToEvaluateElm(

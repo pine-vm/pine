@@ -50,15 +50,15 @@ public class DotNetAssembly
         IReadOnlyList<string> directoryPath,
         Assembly assembly)
     {
-        var manifestEmbeddedProvider = new Microsoft.Extensions.FileProviders.ManifestEmbeddedFileProvider(assembly);
+        var manifestEmbeddedProvider =
+            new Microsoft.Extensions.FileProviders.ManifestEmbeddedFileProvider(assembly);
 
         var directoryPathString = string.Join("/", directoryPath);
 
         var directoryContents = manifestEmbeddedProvider.GetDirectoryContents(directoryPathString);
 
         if (!directoryContents.Exists)
-            return Result<string, TreeNodeWithStringPath>.err(
-                "Did not find a directory at path '" + directoryPathString + "'");
+            return "Did not find a directory at path '" + directoryPathString + "'";
 
         return
             LoadTreeFromManifestEmbeddedFileProviderFileInfo(
@@ -91,7 +91,7 @@ public class DotNetAssembly
                 item.IsDirectory ?
                 loadSubdirectory(item.Name)
                 :
-                Result<string, TreeNodeWithStringPath>.ok(fromFile(item));
+                fromFile(item);
 
                 return (item.Name, itemResult);
             })

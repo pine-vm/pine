@@ -10,7 +10,7 @@ view : Element.Element e
 view =
     [ "Run Elm Everywhere"
         |> headingElementFromLevel 2
-    , "Pine is a runtime for the Elm programming language. It runs Elm applications on Linux, Windows, and macOS."
+    , "Pine is a free, open-source, cross-platform Elm runtime environment that lets developers create servers, web apps, and command line tools."
         |> View.paragraphFromText
     ]
         |> Element.column

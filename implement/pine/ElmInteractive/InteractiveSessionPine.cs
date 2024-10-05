@@ -1,5 +1,6 @@
 using Pine;
 using Pine.Core;
+using Pine.Elm;
 using Pine.ElmInteractive;
 using Pine.PineVM;
 using System;
@@ -17,7 +18,7 @@ public class InteractiveSessionPine : IInteractiveSession
 
     private System.Threading.Tasks.Task<Result<string, PineValue>> buildPineEvalContextTask;
 
-    private readonly Result<string, Elm.ElmCompiler> buildCompilerResult;
+    private readonly Result<string, ElmCompiler> buildCompilerResult;
 
     private ElmInteractive.CompilationCache lastCompilationCache = ElmInteractive.CompilationCache.Empty;
 
@@ -75,7 +76,7 @@ public class InteractiveSessionPine : IInteractiveSession
         pineVM = pineVMAndCache.pineVM;
 
         buildCompilerResult =
-            Elm.ElmCompiler.GetElmCompilerAsync(compileElmProgramCodeFiles).Result;
+            ElmCompiler.GetElmCompilerAsync(compileElmProgramCodeFiles).Result;
 
         buildPineEvalContextTask =
             System.Threading.Tasks.Task.Run(() =>
@@ -109,6 +110,7 @@ public class InteractiveSessionPine : IInteractiveSession
 
     private static readonly ConcurrentDictionary<string, Result<string, PineValue>> compileEvalContextCache = new();
 
+
     private Result<string, PineValue> CompileInteractiveEnvironment(
         PineValue? initialState,
         TreeNodeWithStringPath? appCodeTree)
@@ -120,9 +122,9 @@ public class InteractiveSessionPine : IInteractiveSession
                 not null => CommonConversion.StringBase16(PineValueHashTree.ComputeHashNotSorted(appCodeTree))
             };
 
-        if (buildCompilerResult is not Result<string, Elm.ElmCompiler>.Ok elmCompiler)
+        if (buildCompilerResult is not Result<string, ElmCompiler>.Ok elmCompiler)
         {
-            if (buildCompilerResult is Result<string, Elm.ElmCompiler>.Err err)
+            if (buildCompilerResult is Result<string, ElmCompiler>.Err err)
             {
                 return "Failed to build Elm compiler: " + err.Value;
             }

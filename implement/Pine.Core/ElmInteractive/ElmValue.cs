@@ -71,13 +71,19 @@ public abstract record ElmValue
     public static readonly PineValue ElmFloatTypeTagNameAsValue =
         PineValueAsString.ValueFromString(ElmFloatTypeTagName);
 
+    public static ElmValue ListInstance(IReadOnlyList<ElmValue> Elements) =>
+        new ElmList(Elements);
+
+    public static ElmValue TupleInstance(ElmValue Item1, ElmValue Item2) =>
+        ListInstance([Item1, Item2]);
+
     public static ElmValue Integer(System.Numerics.BigInteger Value) =>
         ReusedIntegerInstances?.TryGetValue(Value, out var reusedInstance) ?? false && reusedInstance is not null ?
         reusedInstance
         :
         new ElmInteger(Value);
 
-    public static ElmValue String(string Value) =>
+    public static ElmValue StringInstance(string Value) =>
         ReusedStringInstances?.TryGetValue(Value, out var reusedInstance) ?? false && reusedInstance is not null ?
         reusedInstance
         :
@@ -112,7 +118,7 @@ public abstract record ElmValue
         PopularValues.PopularStrings
         .ToFrozenDictionary(
             keySelector: s => s,
-            elementSelector: String);
+            elementSelector: StringInstance);
 
     private static readonly IReadOnlyList<ElmValue> ReusedCharInstances =
         [..Enumerable.Range(0, 4000)
