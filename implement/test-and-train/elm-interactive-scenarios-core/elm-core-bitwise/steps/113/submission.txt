@@ -1,0 +1,1 @@
+Bitwise.and  1234  1234

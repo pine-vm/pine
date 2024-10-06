@@ -115,10 +115,10 @@ sequence builders =
 
 
 string : String -> Encoder
-string (String chars)=
+string (String chars) =
     let
-      blob =
-        encodeCharsAsBlob chars
+        blob =
+            encodeCharsAsBlob chars
     in
     BytesEncoder (Bytes.Elm_Bytes blob)
 
@@ -150,10 +150,16 @@ encodeCharsAsBlobRec prefix chars =
                         -- 2-byte encoding
                         let
                             byte1 =
-                                0xC0 + (code // 64)
+                                Pine_kernel.add_int
+                                    [ 0xC0
+                                    , code // 64
+                                    ]
 
                             byte2 =
-                                0x80 + modBy 64 code
+                                Pine_kernel.add_int
+                                    [ 0x80
+                                    , Pine_kernel.bit_and [ 63, code ]
+                                    ]
                         in
                         Pine_kernel.concat
                             [ Pine_kernel.take [ 1, Pine_kernel.reverse byte1 ]
@@ -167,10 +173,16 @@ encodeCharsAsBlobRec prefix chars =
                                 0xE0 + (code // 4096)
 
                             byte2 =
-                                0x80 + modBy 64 (code // 64)
+                                Pine_kernel.add_int
+                                    [ 0x80
+                                    , Pine_kernel.bit_and [ 63, code // 64 ]
+                                    ]
 
                             byte3 =
-                                0x80 + modBy 64 code
+                                Pine_kernel.add_int
+                                    [ 0x80
+                                    , Pine_kernel.bit_and [ 63, code ]
+                                    ]
                         in
                         Pine_kernel.concat
                             [ Pine_kernel.take [ 1, Pine_kernel.reverse byte1 ]
@@ -182,16 +194,28 @@ encodeCharsAsBlobRec prefix chars =
                         -- 4-byte encoding for code points >= 0x10000
                         let
                             byte1 =
-                                0xF0 + (code // 262144)
+                                Pine_kernel.add_int
+                                    [ 0xF0
+                                    , code // 262144
+                                    ]
 
                             byte2 =
-                                0x80 + modBy 64 (code // 4096)
+                                Pine_kernel.add_int
+                                    [ 0x80
+                                    , Pine_kernel.bit_and [ 63, code // 4096 ]
+                                    ]
 
                             byte3 =
-                                0x80 + modBy 64 (code // 64)
+                                Pine_kernel.add_int
+                                    [ 0x80
+                                    , Pine_kernel.bit_and [ 63, code // 64 ]
+                                    ]
 
                             byte4 =
-                                0x80 + modBy 64 code
+                                Pine_kernel.add_int
+                                    [ 0x80
+                                    , Pine_kernel.bit_and [ 63, code ]
+                                    ]
                         in
                         Pine_kernel.concat
                             [ Pine_kernel.take [ 1, Pine_kernel.reverse byte1 ]

@@ -1,0 +1,1 @@
+Bitwise.and  255  11

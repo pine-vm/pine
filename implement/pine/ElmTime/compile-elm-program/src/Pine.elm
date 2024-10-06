@@ -35,6 +35,7 @@ module Pine exposing
     )
 
 import BigInt
+import Bitwise
 import Dict
 import Hex
 
@@ -234,6 +235,9 @@ kernelFunctions =
           )
         , ( "is_sorted_ascending_int"
           , kernelFunction_is_sorted_ascending_int
+          )
+        , ( "bit_and"
+          , kernelFunction_bit_and
           )
         ]
 
@@ -465,6 +469,49 @@ kernelFunction_is_sorted_ascending_int value =
 
                         Ok firstInt ->
                             is_sorted_ascending_int_recursive rest firstInt
+
+
+kernelFunction_bit_and : Value -> Value
+kernelFunction_bit_and value =
+    case value of
+        ListValue ((BlobValue first) :: rest) ->
+            kernelFunction_bit_and_recursive first rest
+
+        _ ->
+            listValue_Empty
+
+
+kernelFunction_bit_and_recursive : List Int -> List Value -> Value
+kernelFunction_bit_and_recursive blob arguments =
+    case arguments of
+        next :: rest ->
+            case next of
+                BlobValue nextBlob ->
+                    kernelFunction_bit_and_recursive (bit_and_tuple [] blob nextBlob) rest
+
+                _ ->
+                    listValue_Empty
+
+        [] ->
+            BlobValue blob
+
+
+bit_and_tuple : List Int -> List Int -> List Int -> List Int
+bit_and_tuple merged first second =
+    case first of
+        [] ->
+            List.reverse merged
+
+        firstFirst :: firstRest ->
+            case second of
+                [] ->
+                    []
+
+                secondFirst :: secondRest ->
+                    bit_and_tuple
+                        (Bitwise.and firstFirst secondFirst :: merged)
+                        firstRest
+                        secondRest
 
 
 list_all_same : a -> List a -> Bool

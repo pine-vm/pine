@@ -2985,4 +2985,16 @@ partition isGood (Set_elm_builtin dict) =
     (Set_elm_builtin dict1, Set_elm_builtin dict2)
 
 """
+    , """
+module Bitwise exposing
+  ( and, or, xor, complement
+  , shiftLeftBy, shiftRightBy, shiftRightZfBy
+  )
+
+
+and : Int -> Int -> Int
+and a b =
+    Pine_kernel.bit_and [ a, b ]
+
+"""
     ]

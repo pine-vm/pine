@@ -2100,6 +2100,9 @@ public class PineVM : IPineVM
             nameof(KernelFunction.is_sorted_ascending_int) =>
             KernelFunction.is_sorted_ascending_int(inputValue),
 
+            nameof(KernelFunction.bit_and) =>
+            KernelFunction.bit_and(inputValue),
+
             _ =>
             throw new ParseExpressionException(
                 "Did not find kernel function '" + function + "'")

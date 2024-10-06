@@ -395,6 +395,64 @@ public static class KernelFunction
         throw new NotImplementedException("Unexpected value type: " + value.GetType().FullName);
     }
 
+    public static PineValue bit_and(PineValue value)
+    {
+        if (value is not PineValue.ListValue argumentsList)
+        {
+            return PineValue.EmptyList;
+        }
+
+        if (argumentsList.Elements.Count is 0)
+        {
+            return PineValue.EmptyList;
+        }
+
+        if (argumentsList.Elements[0] is not PineValue.BlobValue firstBlob)
+        {
+            return PineValue.EmptyList;
+        }
+
+        if (argumentsList.Elements.Count is 1)
+        {
+            return firstBlob;
+        }
+
+        var workspace = firstBlob.Bytes.ToArray();
+
+        var remainingLength = workspace.Length;
+
+        for (var i = 1; i < argumentsList.Elements.Count; ++i)
+        {
+            if (argumentsList.Elements[i] is not PineValue.BlobValue blobValue)
+            {
+                return PineValue.EmptyList;
+            }
+
+            var currentLength = blobValue.Bytes.Length;
+
+            if (remainingLength < currentLength)
+            {
+                currentLength = remainingLength;
+            }
+
+            for (var j = 0; j < currentLength; ++j)
+            {
+                workspace[j] &= blobValue.Bytes.Span[j];
+            }
+
+            remainingLength = currentLength;
+        }
+
+        var truncated = workspace;
+
+        if (remainingLength < truncated.Length)
+        {
+            truncated = truncated[..remainingLength];
+        }
+
+        return PineValue.Blob(truncated);
+    }
+
     private static PineValue KernelFunctionExpectingListOfBigIntAndProducingBigInt(
         Func<IReadOnlyList<BigInteger>, BigInteger> aggregate,
         PineValue value) =>
