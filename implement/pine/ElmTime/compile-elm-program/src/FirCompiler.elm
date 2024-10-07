@@ -254,21 +254,21 @@ emitExpressionInDeclarationBlock :
     -> Result String Pine.Expression
 emitExpressionInDeclarationBlock stackBefore blockDeclarations mainExpression =
     let
-        blockDeclarationsDependencies : Dict.Dict String (List String)
+        blockDeclarationsDependencies : List ( String, List String )
         blockDeclarationsDependencies =
-            List.foldl
-                (\( declName, declExpression ) aggregate ->
-                    Dict.insert
-                        declName
-                        (listUnboundReferencesInExpression declExpression [])
-                        aggregate
+            List.map
+                (\( declName, declExpression ) ->
+                    ( declName
+                    , listUnboundReferencesInExpression declExpression []
                 )
-                Dict.empty
+                )
                 blockDeclarations
 
         mainExpressionOuterDependencies : List String
         mainExpressionOuterDependencies =
-            listTransitiveDependenciesOfExpression blockDeclarationsDependencies mainExpression
+            listTransitiveDependenciesOfExpression
+                (Dict.fromList blockDeclarationsDependencies)
+                mainExpression
 
         usedBlockDeclarations : List ( String, Expression )
         usedBlockDeclarations =
@@ -286,7 +286,7 @@ emitExpressionInDeclarationBlock stackBefore blockDeclarations mainExpression =
         closureCaptures : List ( String, EnvironmentDeconstructionEntry )
         closureCaptures =
             List.filter
-                (\( declName, deconstruction ) ->
+                (\( declName, _ ) ->
                     List.member declName mainExpressionOuterDependencies
                 )
                 stackBefore.environmentDeconstructions
@@ -339,8 +339,10 @@ emitExpressionInDeclarationBlock stackBefore blockDeclarations mainExpression =
                         )
                         mainExpressionImports
             in
-            case mainDependsOnImport of
-                False ->
+            if mainDependsOnImport then
+                continueEmitBlock ()
+
+            else
                     let
                         needsAdaptiveApplication =
                             case stackBefore.environmentFunctions of
@@ -354,15 +356,11 @@ emitExpressionInDeclarationBlock stackBefore blockDeclarations mainExpression =
                                     -}
                                     False
                     in
-                    case needsAdaptiveApplication of
-                        True ->
+                if needsAdaptiveApplication then
                             continueEmitBlock ()
 
-                        False ->
+                else
                             emitExpression stackBefore mainExprInnerExpr
-
-                True ->
-                    continueEmitBlock ()
 
         _ ->
             continueEmitBlock ()
@@ -483,23 +481,6 @@ emitDeclarationBlock stackBefore blockDeclarations (DeclBlockClosureCaptures con
             case forwardedDecls of
                 [] ->
                     let
-                        emittedImportsDependingOnGeneric : List String
-                        emittedImportsDependingOnGeneric =
-                            List.filterMap
-                                (\( ( _, declName ), EnvironmentFunctionEntry _ importedFunctionEnv, _ ) ->
-                                    case importedFunctionEnv of
-                                        LocalEnvironment localEnv ->
-                                            if List.member ( [], environmentFunctionPartialApplicationName ) localEnv then
-                                                Just declName
-
-                                            else
-                                                Nothing
-
-                                        _ ->
-                                            Nothing
-                                )
-                                emittedImports
-
                         contentsDependOnFunctionApplication : Bool
                         contentsDependOnFunctionApplication =
                             if
@@ -518,7 +499,7 @@ emitDeclarationBlock stackBefore blockDeclarations (DeclBlockClosureCaptures con
 
                             else if
                                 List.any
-                                    (\( declName, declExpression ) ->
+                                    (\( _, declExpression ) ->
                                         expressionNeedsAdaptiveApplication knownFunctionParamCounts declExpression
                                     )
                                     blockDeclarations
