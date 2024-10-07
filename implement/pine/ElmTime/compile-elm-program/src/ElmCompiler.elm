@@ -1451,10 +1451,47 @@ compileElmSyntaxLetBlock stackBefore letBlock =
 
                         Ok expression ->
                             Ok
-                                (DeclarationBlockExpression
+                                (inlineDeclBlockIfSimple
                                     (List.concat letEntries)
                                     expression
                                 )
+
+
+inlineDeclBlockIfSimple : List ( String, Expression ) -> Expression -> Expression
+inlineDeclBlockIfSimple blockDecls expression =
+    let
+        aggregateRefs : List String
+        aggregateRefs =
+            List.concatMap
+                (\declExpr ->
+                    FirCompiler.listUnboundReferencesInExpression declExpr []
+                )
+                (expression :: List.map Tuple.second blockDecls)
+
+        refsBlockDeclMoreThanOnce : Bool
+        refsBlockDeclMoreThanOnce =
+            List.any
+                (\( declName, _ ) ->
+                    Common.listCount
+                        (\ref -> ref == declName)
+                        aggregateRefs
+                        > 1
+                )
+                blockDecls
+    in
+    {-
+       There is no need to check for recursive references in the block declarations separately,
+       because no recursive references can be reachable is the reference count is less than 2.
+    -}
+    if refsBlockDeclMoreThanOnce then
+        DeclarationBlockExpression
+            blockDecls
+            expression
+
+    else
+        FirCompiler.inlineLocalReferences
+            blockDecls
+            expression
 
 
 compileElmSyntaxLetDeclaration :

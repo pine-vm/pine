@@ -202,3 +202,17 @@ listUniqueHelp remaining accumulator =
 
             else
                 listUniqueHelp rest (first :: accumulator)
+
+
+listCount : (a -> Bool) -> List a -> Int
+listCount predicate list =
+    case list of
+        [] ->
+            0
+
+        first :: rest ->
+            if predicate first then
+                1 + listCount predicate rest
+
+            else
+                listCount predicate rest

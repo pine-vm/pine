@@ -24,6 +24,7 @@ module FirCompiler exposing
     , estimatePineValueSize
     , evaluateAsIndependentExpression
     , getTransitiveDependencies
+    , inlineLocalReferences
     , listFunctionAppExpressions
     , listItemFromIndexExpression
     , listItemFromIndexExpression_Pine
@@ -2432,6 +2433,88 @@ listFunctionAppExpressions expr =
 
         PineFunctionApplicationExpression _ argument ->
             listFunctionAppExpressions argument
+
+
+inlineLocalReferences : List ( String, Expression ) -> Expression -> Expression
+inlineLocalReferences references expression =
+    case expression of
+        FunctionApplicationExpression funcExpr args ->
+            FunctionApplicationExpression
+                (inlineLocalReferences references funcExpr)
+                (List.map (inlineLocalReferences references) args)
+
+        LiteralExpression _ ->
+            expression
+
+        ListExpression list ->
+            ListExpression (List.map (inlineLocalReferences references) list)
+
+        KernelApplicationExpression funcName argument ->
+            KernelApplicationExpression funcName (inlineLocalReferences references argument)
+
+        ConditionalExpression condition falseBranch trueBranch ->
+            ConditionalExpression
+                (inlineLocalReferences references condition)
+                (inlineLocalReferences references falseBranch)
+                (inlineLocalReferences references trueBranch)
+
+        FunctionExpression params functionBody ->
+            let
+                allParamNames =
+                    List.concatMap (List.map Tuple.first) params
+
+                referencesForInnerExpression =
+                    {-
+                       Implement shadowing by removing the declarations from the references list.
+                    -}
+                    List.filter
+                        (\( name, _ ) ->
+                            not (List.member name allParamNames)
+                        )
+                        references
+            in
+            FunctionExpression
+                params
+                (inlineLocalReferences referencesForInnerExpression functionBody)
+
+        ReferenceExpression moduleName functionName ->
+            if moduleName == [] then
+                case Common.assocListGet functionName references of
+                    Nothing ->
+                        ReferenceExpression moduleName functionName
+
+                    Just inlinedExpr ->
+                        inlineLocalReferences references inlinedExpr
+
+            else
+                ReferenceExpression moduleName functionName
+
+        DeclarationBlockExpression declarations innerExpression ->
+            let
+                referencesForInnerExpression =
+                    {-
+                       Implement shadowing by removing the declarations from the references list.
+                    -}
+                    List.filter
+                        (\( name, _ ) ->
+                            not (List.member name (List.map Tuple.first declarations))
+                        )
+                        references
+            in
+            DeclarationBlockExpression
+                (List.map
+                    (\( name, declExpr ) ->
+                        ( name, inlineLocalReferences references declExpr )
+                    )
+                    declarations
+                )
+                (inlineLocalReferences referencesForInnerExpression innerExpression)
+
+        StringTagExpression tag tagged ->
+            StringTagExpression tag (inlineLocalReferences references tagged)
+
+        PineFunctionApplicationExpression pineExpr argExpr ->
+            PineFunctionApplicationExpression pineExpr (inlineLocalReferences references argExpr)
 
 
 evaluateAsIndependentExpression : Pine.Expression -> Result String Pine.Value
