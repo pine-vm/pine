@@ -313,6 +313,158 @@ unsignedInt8 =
         )
 
 
+string : Int -> Decoder String
+string length =
+    Decoder
+        (\\(Bytes.Elm_Bytes blob) offset ->
+            let
+                bytes =
+                    Pine_kernel.take [ length, Pine_kernel.skip [ offset, blob ] ]
+            in
+            ( Pine_kernel.add_int [ offset, length ]
+            , decodeBlobAsChars bytes
+            )
+        )
+
+
+decodeBlobAsChars : Int -> String
+decodeBlobAsChars blob =
+    decodeBlobAsCharsRec 0 blob []
+
+
+decodeBlobAsCharsRec : Int -> Int -> List Char -> String
+decodeBlobAsCharsRec offset blob chars =
+    if Pine_kernel.is_sorted_ascending_int [ Pine_kernel.length blob, offset ]
+    then
+        String.fromList (List.reverse chars)
+    else
+        let
+            ( char, bytesConsumed ) =
+                decodeUtf8Char blob offset
+        in
+        decodeBlobAsCharsRec
+            (offset + bytesConsumed)
+            blob
+            (char :: chars)
+
+
+decodeUtf8Char : Int -> Int -> ( Int, Int )
+decodeUtf8Char blob offset =
+    let
+        firstByte =
+            Pine_kernel.take [ 1, Pine_kernel.skip [ offset, blob ] ]
+
+        firstByteInt =
+            Pine_kernel.concat [ Pine_kernel.take [ 1, 0 ], firstByte ]
+    in
+    if Pine_kernel.is_sorted_ascending_int [ firstByteInt, 0x7f ] then
+        -- 1-byte character (ASCII)
+        ( firstByte, 1 )
+
+    else if Pine_kernel.equal [ Pine_kernel.bit_and [ firstByteInt, 0xE0 ], 0xC0 ] then
+        -- 2-byte character
+        let
+            byte2 =
+                Pine_kernel.take [ 1, Pine_kernel.skip [ Pine_kernel.add_int [ offset, 1 ], blob ] ]
+
+            byte2Int =
+                Pine_kernel.concat [ Pine_kernel.take [ 1, 0 ], byte2 ]
+
+            firstFiveBits =
+                Pine_kernel.bit_and [ firstByteInt, 0x1F ]
+
+            secondSixBits =
+                Pine_kernel.bit_and [ byte2Int, 0x3F ]
+
+            charCode =
+                Pine_kernel.add_int
+                    [ Pine_kernel.mul_int [ firstFiveBits, 64 ] -- Multiply by 2^6
+                    , secondSixBits
+                    ]
+        in
+        ( Pine_kernel.skip [ 1, charCode ], 2 )
+
+    else if Pine_kernel.equal [ Pine_kernel.bit_and [ firstByteInt, 0xF0 ], 0xE0 ] then
+        -- 3-byte character
+        let
+            byte2 =
+                Pine_kernel.take [ 1, Pine_kernel.skip [ Pine_kernel.add_int [ offset, 1 ], blob ] ]
+
+            byte2Int =
+                Pine_kernel.concat [ Pine_kernel.take [ 1, 0 ], byte2 ]
+
+            byte3 =
+                Pine_kernel.take [ 1, Pine_kernel.skip [ Pine_kernel.add_int [ offset, 2 ], blob ] ]
+
+            byte3Int =
+                Pine_kernel.concat [ Pine_kernel.take [ 1, 0 ], byte3 ]
+
+            firstFourBits =
+                Pine_kernel.bit_and [ firstByteInt, 0x0F ]
+
+            secondSixBits =
+                Pine_kernel.bit_and [ byte2Int, 0x3F ]
+
+            thirdSixBits =
+                Pine_kernel.bit_and [ byte3Int, 0x3F ]
+
+            charCode =
+                Pine_kernel.add_int
+                    [ Pine_kernel.mul_int [ firstFourBits, 4096 ] -- Multiply by 2^12
+                    , Pine_kernel.mul_int [ secondSixBits, 64 ]    -- Multiply by 2^6
+                    , thirdSixBits
+                    ]
+        in
+        ( Pine_kernel.skip [ 1, charCode ], 3 )
+
+    else if Pine_kernel.equal [ Pine_kernel.bit_and [ firstByteInt, 0xF8 ], 0xF0 ] then
+        -- 4-byte character
+        let
+            byte2 =
+                Pine_kernel.take [ 1, Pine_kernel.skip [ Pine_kernel.add_int [ offset, 1 ], blob ] ]
+
+            byte2Int =
+                Pine_kernel.concat [ Pine_kernel.take [ 1, 0 ], byte2 ]
+
+            byte3 =
+                Pine_kernel.take [ 1, Pine_kernel.skip [ Pine_kernel.add_int [ offset, 2 ], blob ] ]
+
+            byte3Int =
+                Pine_kernel.concat [ Pine_kernel.take [ 1, 0 ], byte3 ]
+
+            byte4 =
+                Pine_kernel.take [ 1, Pine_kernel.skip [ Pine_kernel.add_int [ offset, 3 ], blob ] ]
+
+            byte4Int =
+                Pine_kernel.concat [ Pine_kernel.take [ 1, 0 ], byte4 ]
+
+            firstThreeBits =
+                Pine_kernel.bit_and [ firstByteInt, 0x07 ]
+
+            secondSixBits =
+                Pine_kernel.bit_and [ byte2Int, 0x3F ]
+
+            thirdSixBits =
+                Pine_kernel.bit_and [ byte3Int, 0x3F ]
+
+            fourthSixBits =
+                Pine_kernel.bit_and [ byte4Int, 0x3F ]
+
+            charCode =
+                Pine_kernel.add_int
+                    [ Pine_kernel.mul_int [ firstThreeBits, 262144 ] -- Multiply by 2^18
+                    , Pine_kernel.mul_int [ secondSixBits, 4096 ]    -- Multiply by 2^12
+                    , Pine_kernel.mul_int [ thirdSixBits, 64 ]       -- Multiply by 2^6
+                    , fourthSixBits
+                    ]
+        in
+        ( Pine_kernel.skip [ 1, charCode ], 4 )
+
+    else
+        -- Invalid UTF-8 sequence; use replacement character
+        ( Pine_kernel.skip [ 1, 0xFFFD ], 1 )
+
+
 succeed : a -> Decoder a
 succeed a =
     Decoder (\\_ offset -> ( offset, a ))

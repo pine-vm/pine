@@ -1,0 +1,1 @@
+Bytes.Decode.decode  (DecodeExtra.list  2  Bytes.Decode.unsignedInt8)  (Bytes.Encode.encode  (Bytes.Encode.string "ä"))

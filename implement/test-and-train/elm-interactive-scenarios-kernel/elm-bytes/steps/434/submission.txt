@@ -1,0 +1,1 @@
+Bytes.Decode.decode (Bytes.Decode.string 2) (Bytes.Encode.encode (Bytes.Encode.string "Ä"))
