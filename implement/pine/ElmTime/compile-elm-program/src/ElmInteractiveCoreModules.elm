@@ -2996,5 +2996,10 @@ and : Int -> Int -> Int
 and a b =
     Pine_kernel.bit_and [ a, b ]
 
+
+or : Int -> Int -> Int
+or a b =
+    Pine_kernel.bit_or [ a, b ]
+
 """
     ]

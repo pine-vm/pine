@@ -417,9 +417,8 @@ public static class KernelFunction
             return firstBlob;
         }
 
-        var workspace = firstBlob.Bytes.ToArray();
-
-        var remainingLength = workspace.Length;
+        var commonLength = firstBlob.Bytes.Length;
+        var otherBlobs = new PineValue.BlobValue[argumentsList.Elements.Count - 1];
 
         for (var i = 1; i < argumentsList.Elements.Count; ++i)
         {
@@ -428,29 +427,94 @@ public static class KernelFunction
                 return PineValue.EmptyList;
             }
 
-            var currentLength = blobValue.Bytes.Length;
+            otherBlobs[i - 1] = blobValue;
 
-            if (remainingLength < currentLength)
-            {
-                currentLength = remainingLength;
-            }
-
-            for (var j = 0; j < currentLength; ++j)
-            {
-                workspace[j] &= blobValue.Bytes.Span[j];
-            }
-
-            remainingLength = currentLength;
+            commonLength =
+                blobValue.Bytes.Length < commonLength
+                ?
+                blobValue.Bytes.Length
+                :
+                commonLength;
         }
 
-        var truncated = workspace;
+        var resultArray =
+            firstBlob.Bytes.Slice(firstBlob.Bytes.Length - commonLength, commonLength)
+            .ToArray();
 
-        if (remainingLength < truncated.Length)
+        for (var i = 0; i < otherBlobs.Length; ++i)
         {
-            truncated = truncated[..remainingLength];
+            var blob = otherBlobs[i];
+
+            var blobOffset = blob.Bytes.Length - commonLength;
+
+            for (var j = 0; j < commonLength; ++j)
+            {
+                resultArray[j] &= blob.Bytes.Span[j + blobOffset];
+            }
         }
 
-        return PineValue.Blob(truncated);
+        return PineValue.Blob(resultArray);
+    }
+
+    public static PineValue bit_or(PineValue value)
+    {
+        if (value is not PineValue.ListValue argumentsList)
+        {
+            return PineValue.EmptyList;
+        }
+
+        if (argumentsList.Elements.Count is 0)
+        {
+            return PineValue.EmptyList;
+        }
+
+        if (argumentsList.Elements[0] is not PineValue.BlobValue firstBlob)
+        {
+            return PineValue.EmptyList;
+        }
+
+        if (argumentsList.Elements.Count is 1)
+        {
+            return firstBlob;
+        }
+
+        var maxLength = firstBlob.Bytes.Length;
+        var otherBlobs = new PineValue.BlobValue[argumentsList.Elements.Count - 1];
+
+        for (var i = 1; i < argumentsList.Elements.Count; ++i)
+        {
+            if (argumentsList.Elements[i] is not PineValue.BlobValue blobValue)
+            {
+                return PineValue.EmptyList;
+            }
+
+            otherBlobs[i - 1] = blobValue;
+
+            maxLength =
+                maxLength < blobValue.Bytes.Length
+                ?
+                blobValue.Bytes.Length
+                :
+                maxLength;
+        }
+
+        var resultArray = new byte[maxLength];
+
+        firstBlob.Bytes.CopyTo(resultArray.AsMemory(resultArray.Length - firstBlob.Bytes.Length));
+
+        for (var i = 0; i < otherBlobs.Length; ++i)
+        {
+            var blob = otherBlobs[i];
+
+            var blobOffset = blob.Bytes.Length - maxLength;
+
+            for (var j = 0; j < maxLength; ++j)
+            {
+                resultArray[j] |= blob.Bytes.Span[j + blobOffset];
+            }
+        }
+
+        return PineValue.Blob(resultArray);
     }
 
     private static PineValue KernelFunctionExpectingListOfBigIntAndProducingBigInt(

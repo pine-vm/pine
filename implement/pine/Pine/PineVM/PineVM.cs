@@ -2103,6 +2103,9 @@ public class PineVM : IPineVM
             nameof(KernelFunction.bit_and) =>
             KernelFunction.bit_and(inputValue),
 
+            nameof(KernelFunction.bit_or) =>
+            KernelFunction.bit_or(inputValue),
+
             _ =>
             throw new ParseExpressionException(
                 "Did not find kernel function '" + function + "'")

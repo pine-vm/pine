@@ -125,114 +125,126 @@ string (String chars) =
 
 encodeCharsAsBlob : List Char -> Int
 encodeCharsAsBlob chars =
-    encodeCharsAsBlobRec
-        (Pine_kernel.take [ 0, 0 ])
-        chars
+    if chars == [] then
+        -- 'concat' on an empty list would not yield a blob
+        emptyBlob
+
+    else
+        Pine_kernel.concat
+            (List.map encodeCharAsBlob chars)
 
 
-encodeCharsAsBlobRec : Int -> List Char -> Int
-encodeCharsAsBlobRec prefix chars =
-    case chars of
-        [] ->
-            prefix
+encodeCharAsBlob : Char -> Int
+encodeCharAsBlob char =
+    let
+        code =
+            Char.toCode char
+    in
+    if Pine_kernel.is_sorted_ascending_int [ code, 0x7f ] then
+        -- 1-byte encoding
+        char
 
-        char :: rest ->
-            let
-                code =
-                    Char.toCode char
+    else if Pine_kernel.is_sorted_ascending_int [ code, 0x7ff ] then
+        -- 2-byte encoding
+        let
+            byte1 =
+                Pine_kernel.bit_or
+                    [ 0xC0
+                    , code // 64
+                    ]
 
-                charUtf8 =
-                    if Pine_kernel.is_sorted_ascending_int [ code, 0x7f ] then
-                        -- 1-byte encoding
-                        char
+            byte2 =
+                Pine_kernel.bit_or
+                    [ maskSingleByteMSB
+                    , Pine_kernel.bit_and [ 63, code ]
+                    ]
+        in
+        Pine_kernel.concat
+            [ Pine_kernel.bit_and [ byte1, maskSingleByte ]
+            , Pine_kernel.bit_and [ byte2, maskSingleByte ]
+            ]
 
-                    else if Pine_kernel.is_sorted_ascending_int [ code, 0x7ff ] then
-                        -- 2-byte encoding
-                        let
-                            byte1 =
-                                Pine_kernel.add_int
-                                    [ 0xC0
-                                    , code // 64
-                                    ]
+    else if Pine_kernel.is_sorted_ascending_int [ code, 0xffff ] then
+        -- 3-byte encoding
+        let
+            byte1 =
+                Pine_kernel.bit_or
+                    [ 0xE0
+                    , code // 4096
+                    ]
 
-                            byte2 =
-                                Pine_kernel.add_int
-                                    [ 0x80
-                                    , Pine_kernel.bit_and [ 63, code ]
-                                    ]
-                        in
-                        Pine_kernel.concat
-                            [ Pine_kernel.take [ 1, Pine_kernel.reverse byte1 ]
-                            , Pine_kernel.take [ 1, Pine_kernel.reverse byte2 ]
-                            ]
+            byte2 =
+                Pine_kernel.bit_or
+                    [ maskSingleByteMSB
+                    , Pine_kernel.bit_and [ 63, code // 64 ]
+                    ]
 
-                    else if Pine_kernel.is_sorted_ascending_int [ code, 0xffff ] then
-                        -- 3-byte encoding
-                        let
-                            byte1 =
-                                0xE0 + (code // 4096)
+            byte3 =
+                Pine_kernel.bit_or
+                    [ maskSingleByteMSB
+                    , Pine_kernel.bit_and [ 63, code ]
+                    ]
+        in
+        Pine_kernel.concat
+            [ Pine_kernel.bit_and [ byte1, maskSingleByte ]
+            , Pine_kernel.bit_and [ byte2, maskSingleByte ]
+            , Pine_kernel.bit_and [ byte3, maskSingleByte ]
+            ]
 
-                            byte2 =
-                                Pine_kernel.add_int
-                                    [ 0x80
-                                    , Pine_kernel.bit_and [ 63, code // 64 ]
-                                    ]
+    else
+        -- 4-byte encoding for code points >= 0x10000
+        let
+            byte1 =
+                Pine_kernel.bit_or
+                    [ Pine_kernel.bit_and [ 0xF0, maskSingleByte ]
+                    , code // 262144
+                    ]
 
-                            byte3 =
-                                Pine_kernel.add_int
-                                    [ 0x80
-                                    , Pine_kernel.bit_and [ 63, code ]
-                                    ]
-                        in
-                        Pine_kernel.concat
-                            [ Pine_kernel.take [ 1, Pine_kernel.reverse byte1 ]
-                            , Pine_kernel.take [ 1, Pine_kernel.reverse byte2 ]
-                            , Pine_kernel.take [ 1, Pine_kernel.reverse byte3 ]
-                            ]
+            byte2 =
+                Pine_kernel.bit_or
+                    [ maskSingleByteMSB
+                    , Pine_kernel.bit_and [ 63, code // 4096 ]
+                    ]
 
-                    else
-                        -- 4-byte encoding for code points >= 0x10000
-                        let
-                            byte1 =
-                                Pine_kernel.add_int
-                                    [ 0xF0
-                                    , code // 262144
-                                    ]
+            byte3 =
+                Pine_kernel.bit_or
+                    [ maskSingleByteMSB
+                    , Pine_kernel.bit_and [ 63, code // 64 ]
+                    ]
 
-                            byte2 =
-                                Pine_kernel.add_int
-                                    [ 0x80
-                                    , Pine_kernel.bit_and [ 63, code // 4096 ]
-                                    ]
-
-                            byte3 =
-                                Pine_kernel.add_int
-                                    [ 0x80
-                                    , Pine_kernel.bit_and [ 63, code // 64 ]
-                                    ]
-
-                            byte4 =
-                                Pine_kernel.add_int
-                                    [ 0x80
-                                    , Pine_kernel.bit_and [ 63, code ]
-                                    ]
-                        in
-                        Pine_kernel.concat
-                            [ Pine_kernel.take [ 1, Pine_kernel.reverse byte1 ]
-                            , Pine_kernel.take [ 1, Pine_kernel.reverse byte2 ]
-                            , Pine_kernel.take [ 1, Pine_kernel.reverse byte3 ]
-                            , Pine_kernel.take [ 1, Pine_kernel.reverse byte4 ]
-                            ]
-            in
-            encodeCharsAsBlobRec
-                (Pine_kernel.concat [ prefix, charUtf8 ])
-                rest
+            byte4 =
+                Pine_kernel.bit_or
+                    [ maskSingleByteMSB
+                    , Pine_kernel.bit_and [ 63, code ]
+                    ]
+        in
+        Pine_kernel.concat
+            [ Pine_kernel.bit_and [ byte1, maskSingleByte ]
+            , Pine_kernel.bit_and [ byte2, maskSingleByte ]
+            , Pine_kernel.bit_and [ byte3, maskSingleByte ]
+            , Pine_kernel.bit_and [ byte4, maskSingleByte ]
+            ]
 
 
 getStringWidth : String -> Int
 getStringWidth (String chars) =
     Pine_kernel.length
         (encodeCharsAsBlob chars)
+
+
+maskSingleByte : Int
+maskSingleByte =
+    Pine_kernel.skip [ 1, 0xff ]
+
+
+maskSingleByteMSB : Int
+maskSingleByteMSB =
+    Pine_kernel.skip [ 1, 0x80 ]
+
+
+emptyBlob : Int
+emptyBlob =
+    Pine_kernel.take [ 0, 0 ]
 
 
 """

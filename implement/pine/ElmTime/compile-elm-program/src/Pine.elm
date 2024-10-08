@@ -239,6 +239,9 @@ kernelFunctions =
         , ( "bit_and"
           , kernelFunction_bit_and
           )
+        , ( "bit_or"
+          , kernelFunction_bit_or
+          )
         ]
 
 
@@ -481,13 +484,48 @@ kernelFunction_bit_and value =
             listValue_Empty
 
 
+kernelFunction_bit_or : Value -> Value
+kernelFunction_bit_or value =
+    case value of
+        ListValue ((BlobValue first) :: rest) ->
+            kernelFunction_bit_or_recursive first rest
+
+        _ ->
+            listValue_Empty
+
+
 kernelFunction_bit_and_recursive : List Int -> List Value -> Value
 kernelFunction_bit_and_recursive blob arguments =
     case arguments of
         next :: rest ->
             case next of
                 BlobValue nextBlob ->
-                    kernelFunction_bit_and_recursive (bit_and_tuple [] blob nextBlob) rest
+                    kernelFunction_bit_and_recursive
+                        (bit_and_tuple []
+                            (List.reverse blob)
+                            (List.reverse nextBlob)
+                        )
+                        rest
+
+                _ ->
+                    listValue_Empty
+
+        [] ->
+            BlobValue blob
+
+
+kernelFunction_bit_or_recursive : List Int -> List Value -> Value
+kernelFunction_bit_or_recursive blob arguments =
+    case arguments of
+        next :: rest ->
+            case next of
+                BlobValue nextBlob ->
+                    kernelFunction_bit_and_recursive
+                        (bit_or_tuple []
+                            (List.reverse blob)
+                            (List.reverse nextBlob)
+                        )
+                        rest
 
                 _ ->
                     listValue_Empty
@@ -500,16 +538,34 @@ bit_and_tuple : List Int -> List Int -> List Int -> List Int
 bit_and_tuple merged first second =
     case first of
         [] ->
-            List.reverse merged
+            merged
 
         firstFirst :: firstRest ->
             case second of
                 [] ->
-                    []
+                    merged
 
                 secondFirst :: secondRest ->
                     bit_and_tuple
                         (Bitwise.and firstFirst secondFirst :: merged)
+                        firstRest
+                        secondRest
+
+
+bit_or_tuple : List Int -> List Int -> List Int -> List Int
+bit_or_tuple merged first second =
+    case first of
+        [] ->
+            merged
+
+        firstFirst :: firstRest ->
+            case second of
+                [] ->
+                    merged
+
+                secondFirst :: secondRest ->
+                    bit_and_tuple
+                        (Bitwise.or firstFirst secondFirst :: merged)
                         firstRest
                         secondRest
 
