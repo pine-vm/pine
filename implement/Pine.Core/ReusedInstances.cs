@@ -119,20 +119,18 @@ public record ReusedInstances(
                  * Thus, we only need to rebuild shallowly the current list.
                  * */
 
-                var rebuiltItems = new PineValue[oldInstance.Elements.Count];
+                var rebuiltItems = oldInstance.Elements.ToArray();
 
-                for (var i = 0; i < oldInstance.Elements.Count; i++)
+                for (var i = 0; i < rebuiltItems.Length; i++)
                 {
-                    var listItem = oldInstance.Elements[i];
+                    var listItem = rebuiltItems[i];
 
-                    var rebuiltItem =
-                        listItem is PineValue.ListValue oldItemAsList
-                        ?
-                        reusedListsDictInConstruction[oldItemAsList]
-                        :
-                        listItem;
+                    if (listItem is not PineValue.ListValue oldItemAsList)
+                        continue;
 
-                    rebuiltItems[i] = rebuiltItem;
+                    listItem = reusedListsDictInConstruction[oldItemAsList];
+
+                    rebuiltItems[i] = listItem;
                 }
 
                 var rebuilt =
