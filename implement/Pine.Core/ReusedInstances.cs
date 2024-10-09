@@ -84,9 +84,13 @@ public record ReusedInstances(
                 tempEncodingDict[valueInCompiler] = encodedInCompilerElm;
             }
 
+            var sourceElmValues =
+                tempEncodingDict.Values
+                .Concat(PopularValues.PopularElmValuesSource());
+
             var tempElmValueEncodingDict = new Dictionary<ElmValue, PineValue>();
 
-            foreach (var elmValue in tempEncodingDict.Values.OrderBy(ev => ev.ContainedNodesCount))
+            foreach (var elmValue in sourceElmValues.OrderBy(ev => ev.ContainedNodesCount))
             {
                 tempElmValueEncodingDict[elmValue] =
                     ElmInteractive.ElmValueEncoding.ElmValueAsPineValue(
@@ -97,8 +101,7 @@ public record ReusedInstances(
             var (allListsComponents, _) =
                 CollectAllComponentsFromRoots(
                     valuesExpectedInCompilerLists
-                    .Concat(tempElmValueEncodingDict.Values)
-                    .Concat(PopularValues.PopularElmValuesSource().Select(ElmInteractive.ElmValueEncoding.ElmValueAsPineValue)));
+                    .Concat(tempElmValueEncodingDict.Values));
 
             var allListsComponentsSorted =
                 allListsComponents
