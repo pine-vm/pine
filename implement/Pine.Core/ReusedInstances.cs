@@ -96,7 +96,7 @@ public record ReusedInstances(
 
             var (allListsComponents, _) =
                 CollectAllComponentsFromRoots(
-                    valuesExpectedInCompilerSorted
+                    valuesExpectedInCompilerLists
                     .Concat(tempElmValueEncodingDict.Values)
                     .Concat(PopularValues.PopularElmValuesSource().Select(ElmInteractive.ElmValueEncoding.ElmValueAsPineValue)));
 
