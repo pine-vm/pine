@@ -37,6 +37,11 @@ jobs:
         dotnet clean ./implement/PineTest/Pine.UnitTests/Pine.UnitTests.csproj && dotnet nuget locals all --clear
         dotnet clean ./implement/test-elm-time/test-elm-time.csproj && dotnet nuget locals all --clear
 
+    - name: Prebuild
+      working-directory: ./implement/
+      run: |
+        dotnet  run  --project ./prebuild/prebuild.csproj
+
     - name: Run Pine tests with dotnet test
       run: |
         dotnet test ./implement/PineTest/Pine.UnitTests/Pine.UnitTests.csproj --logger "trx"  --diag "./implement/PineTest/Pine.UnitTests/TestResults/diag-log.txt"  --verbosity  diagnostic

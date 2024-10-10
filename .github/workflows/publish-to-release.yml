@@ -41,8 +41,13 @@ jobs:
     - name: Clean package cache as a temporary workaround for https://github.com/actions/setup-dotnet/issues/155
       run: dotnet clean ./implement/test-elm-time/test-elm-time.csproj && dotnet nuget locals all --clear
 
+    - name: Prebuild
+      working-directory: ./implement/
+      run: |
+        dotnet  run  --project ./prebuild/prebuild.csproj
+
     - name: dotnet publish
-      run: dotnet publish -c Debug -r ${{ matrix.publish-runtime-id }} --self-contained true -p:PublishSingleFile=true -p:PublishReadyToRun=true -p:PublishReadyToRunShowWarnings=true  --output ./dotnet-build  ./implement/pine
+      run: dotnet publish -c Release -r ${{ matrix.publish-runtime-id }} --self-contained true -p:PublishSingleFile=true -p:PublishReadyToRun=true -p:PublishReadyToRunShowWarnings=true  --output ./dotnet-build  ./implement/pine
 
     - name: Copy artifacts to publish
       shell: pwsh

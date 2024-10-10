@@ -199,10 +199,24 @@ public abstract record PineValue : IEquatable<PineValue>
             /// Construct a list value from a sequence of other values.
             /// </summary>
             public ListValueStruct(IReadOnlyList<PineValue> elements)
+                :
+                this(elements, ComputeSlimHashCode(elements))
+            {
+            }
+
+            public ListValueStruct(ListValue instance)
+                :
+                this(instance.Elements, instance.slimHashCode)
+            {
+            }
+
+            private ListValueStruct(
+                IReadOnlyList<PineValue> elements,
+                int slimHashCode)
             {
                 Elements = elements;
 
-                slimHashCode = ComputeSlimHashCode(elements);
+                this.slimHashCode = slimHashCode;
             }
 
             public bool Equals(ListValueStruct other)
