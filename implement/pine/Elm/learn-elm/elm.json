@@ -2,7 +2,7 @@
     "type": "application",
     "source-directories": [
         "src",
-        "./../compile-elm-program/src"
+        "./../elm-compiler/src"
     ],
     "elm-version": "0.19.1",
     "dependencies": {

@@ -54,7 +54,7 @@
 
   <ItemGroup>
     <EmbeddedResource
-      Include="ElmTime\compile-elm-program\**\*.elm;ElmTime\compile-elm-program\**\*.json;" />
+      Include="Elm\elm-compiler\**\*.elm;Elm\elm-compiler\**\*.json;" />
   </ItemGroup>
 
   <ItemGroup>

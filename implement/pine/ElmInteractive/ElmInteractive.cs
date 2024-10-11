@@ -918,7 +918,7 @@ public class ElmInteractive
 
     public static Result<string, IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>>> LoadCompileElmProgramCodeFiles() =>
         DotNetAssembly.LoadDirectoryFilesFromManifestEmbeddedFileProviderAsDictionary(
-            directoryPath: ["ElmTime", "compile-elm-program"],
+            directoryPath: ["Elm", "elm-compiler"],
             assembly: typeof(ElmInteractive).Assembly);
 
     private record EvaluateSubmissionResponseStructure

@@ -7,6 +7,6 @@ Elm Silent Teacher is a game teaching the basics of programming. Through a serie
 The default course teaches syntax and the core library of Elm, a programming language used to build websites, games, bots, and other kinds of apps.
 
 + To try an example course, visit <https://silent-teacher.netlify.app/>
-+ Elm Silent Teacher is open-source; you can find the code at <https://github.com/pine-vm/pine/tree/main/implement/pine/ElmTime/learn-elm>
-+ You can modify the exercises and customize the learning path in the [`Exercise` module](https://github.com/pine-vm/pine/blob/main/implement/pine/ElmTime/learn-elm/src/Frontend/ElmSilentTeacher/Exercise.elm)
++ Elm Silent Teacher is open-source; you can find the code at <https://github.com/pine-vm/pine/tree/main/implement/pine/Elm/learn-elm>
++ You can modify the exercises and customize the learning path in the [`Exercise` module](https://github.com/pine-vm/pine/blob/main/implement/pine/Elm/learn-elm/src/Frontend/ElmSilentTeacher/Exercise.elm)
 + A blog post on Elm Silent Teacher is at <https://michaelrätzel.com/blog/elm-silent-teacher-an-interactive-way-to-learn-elm>

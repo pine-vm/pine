@@ -100,4 +100,4 @@ jobs:
       # elm-test-rs also wrote the following before crashing:
       # elm: security: createProcess: runInteractiveProcess: exec: does not exist (No such file or directory)
       if: ${{ !contains( matrix.environment, 'macos') }}
-      run: ./publish/pine  elm-test-rs  ./implement/pine/ElmTime/compile-elm-program
+      run: ./publish/pine  elm-test-rs  ./implement/pine/Elm/elm-compiler
