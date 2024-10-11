@@ -717,6 +717,315 @@ string jsonValue =
             Err (temporaryStubErrorNotImplemented jsonValue)
 
 
+list : Decoder a -> Decoder (List a)
+list decoder jsonValue =
+    case jsonValue of
+        ArrayValue values ->
+            decodeListRecursively [] decoder values
+
+        _ ->
+            Err (temporaryStubErrorNotImplemented jsonValue)
+
+
+decodeListRecursively : List a -> Decoder a -> List Value -> Result Error (List a)
+decodeListRecursively result decoder values =
+    case values of
+        [] ->
+            Ok (List.reverse result)
+
+        value :: rest ->
+            case decoder value of
+                Ok a ->
+                    decodeListRecursively (a :: result) decoder rest
+
+                Err err ->
+                    Err err
+
+
+field : String -> Decoder a -> Decoder a
+field key decoder jsonValue =
+    case jsonValue of
+        ObjectValue fields ->
+            case List.filter (\\( k, _ ) -> k == key) fields of
+                [ (_, value) ] ->
+                    decoder value
+
+                _ ->
+                    Err (Failure ("Expecting an object with a field named `" ++ key ++ "`") jsonValue)
+
+        _ ->
+            Err (temporaryStubErrorNotImplemented jsonValue)
+
+
+map : (a -> b) -> Decoder a -> Decoder b
+map func decoder jsonValue =
+    case decoder jsonValue of
+        Ok a ->
+            Ok (func a)
+
+        Err err ->
+            Err err
+
+
+
+map2 :
+    (a -> b -> value)
+    -> Decoder a
+    -> Decoder b
+    -> Decoder value
+map2 func decoderA decoderB jsonValue =
+    case ( decoderA jsonValue, decoderB jsonValue ) of
+        ( Ok a, Ok b ) ->
+            Ok (func a b)
+
+        ( Err err, _ ) ->
+            Err err
+
+        ( _, Err err ) ->
+            Err err
+
+
+map3 :
+    (a -> b -> c -> value)
+    -> Decoder a
+    -> Decoder b
+    -> Decoder c
+    -> Decoder value
+map3 func decoderA decoderB decoderC jsonValue =
+    case ( decoderA jsonValue, decoderB jsonValue, decoderC jsonValue ) of
+        ( Ok a, Ok b, Ok c ) ->
+            Ok (func a b c)
+
+        ( Err err, _, _ ) ->
+            Err err
+
+        ( _, Err err, _ ) ->
+            Err err
+
+        ( _, _, Err err ) ->
+            Err err
+
+
+map4 :
+    (a -> b -> c -> d -> value)
+    -> Decoder a
+    -> Decoder b
+    -> Decoder c
+    -> Decoder d
+    -> Decoder value
+map4 func decoderA decoderB decoderC decoderD jsonValue =
+    case ( decoderA jsonValue, decoderB jsonValue, decoderC jsonValue, decoderD jsonValue ) of
+        ( Ok a, Ok b, Ok c, Ok d ) ->
+            Ok (func a b c d)
+
+        ( Err err, _, _, _ ) ->
+            Err err
+
+        ( _, Err err, _, _ ) ->
+            Err err
+
+        ( _, _, Err err, _ ) ->
+            Err err
+
+        ( _, _, _, Err err ) ->
+            Err err
+
+
+map5 :
+    (a -> b -> c -> d -> e -> value)
+    -> Decoder a
+    -> Decoder b
+    -> Decoder c
+    -> Decoder d
+    -> Decoder e
+    -> Decoder value
+map5 func decoderA decoderB decoderC decoderD decoderE jsonValue =
+    case ( decoderA jsonValue, decoderB jsonValue, decoderC jsonValue, decoderD jsonValue, decoderE jsonValue ) of
+        ( Ok a, Ok b, Ok c, Ok d, Ok e ) ->
+            Ok (func a b c d e)
+
+        ( Err err, _, _, _, _ ) ->
+            Err err
+
+        ( _, Err err, _, _, _ ) ->
+            Err err
+
+        ( _, _, Err err, _, _ ) ->
+            Err err
+
+        ( _, _, _, Err err, _ ) ->
+            Err err
+
+        ( _, _, _, _, Err err ) ->
+            Err err
+
+
+map6 :
+    (a -> b -> c -> d -> e -> f -> value)
+    -> Decoder a
+    -> Decoder b
+    -> Decoder c
+    -> Decoder d
+    -> Decoder e
+    -> Decoder f
+    -> Decoder value
+map6 func decoderA decoderB decoderC decoderD decoderE decoderF jsonValue =
+    case ( decoderA jsonValue, decoderB jsonValue, decoderC jsonValue, decoderD jsonValue, decoderE jsonValue, decoderF jsonValue ) of
+        ( Ok a, Ok b, Ok c, Ok d, Ok e, Ok f ) ->
+            Ok (func a b c d e f)
+
+        ( Err err, _, _, _, _, _ ) ->
+            Err err
+
+        ( _, Err err, _, _, _, _ ) ->
+            Err err
+
+        ( _, _, Err err, _, _, _ ) ->
+            Err err
+
+        ( _, _, _, Err err, _, _ ) ->
+            Err err
+
+        ( _, _, _, _, Err err, _ ) ->
+            Err err
+
+        ( _, _, _, _, _, Err err ) ->
+            Err err
+
+
+map7 :
+    (a -> b -> c -> d -> e -> f -> g -> value)
+    -> Decoder a
+    -> Decoder b
+    -> Decoder c
+    -> Decoder d
+    -> Decoder e
+    -> Decoder f
+    -> Decoder g
+    -> Decoder value
+map7 func decoderA decoderB decoderC decoderD decoderE decoderF decoderG jsonValue =
+    case ( decoderA jsonValue, decoderB jsonValue, decoderC jsonValue, decoderD jsonValue, decoderE jsonValue, decoderF jsonValue, decoderG jsonValue ) of
+        ( Ok a, Ok b, Ok c, Ok d, Ok e, Ok f, Ok g ) ->
+            Ok (func a b c d e f g)
+
+        ( Err err, _, _, _, _, _, _ ) ->
+            Err err
+
+        ( _, Err err, _, _, _, _, _ ) ->
+            Err err
+
+        ( _, _, Err err, _, _, _, _ ) ->
+            Err err
+
+        ( _, _, _, Err err, _, _, _ ) ->
+            Err err
+
+        ( _, _, _, _, Err err, _, _ ) ->
+            Err err
+
+        ( _, _, _, _, _, Err err, _ ) ->
+            Err err
+
+        ( _, _, _, _, _, _, Err err ) ->
+            Err err
+
+
+map8 :
+    (a -> b -> c -> d -> e -> f -> g -> h -> value)
+    -> Decoder a
+    -> Decoder b
+    -> Decoder c
+    -> Decoder d
+    -> Decoder e
+    -> Decoder f
+    -> Decoder g
+    -> Decoder h
+    -> Decoder value
+map8 func decoderA decoderB decoderC decoderD decoderE decoderF decoderG decoderH jsonValue =
+    case ( decoderA jsonValue, decoderB jsonValue, decoderC jsonValue, decoderD jsonValue, decoderE jsonValue, decoderF jsonValue, decoderG jsonValue, decoderH jsonValue ) of
+        ( Ok a, Ok b, Ok c, Ok d, Ok e, Ok f, Ok g, Ok h ) ->
+            Ok (func a b c d e f g h)
+
+        ( Err err, _, _, _, _, _, _, _ ) ->
+            Err err
+
+        ( _, Err err, _, _, _, _, _, _ ) ->
+            Err err
+
+        ( _, _, Err err, _, _, _, _, _ ) ->
+            Err err
+
+        ( _, _, _, Err err, _, _, _, _ ) ->
+            Err err
+
+        ( _, _, _, _, Err err, _, _, _ ) ->
+            Err err
+
+        ( _, _, _, _, _, Err err, _, _ ) ->
+            Err err
+
+        ( _, _, _, _, _, _, Err err, _ ) ->
+            Err err
+
+        ( _, _, _, _, _, _, _, Err err ) ->
+            Err err
+
+
+andThen : (a -> Decoder b) -> Decoder a -> Decoder b
+andThen callback decoder jsonValue =
+    case decoder jsonValue of
+        Ok a ->
+            callback a jsonValue
+
+        Err err ->
+            Err err
+
+
+oneOf : List (Decoder a) -> Decoder a
+oneOf decoders jsonValue =
+    case decoders of
+        [] ->
+            Err (Failure "oneOf used with an empty list of decoders" jsonValue)
+
+        _ ->
+            oneOfRecursively [] decoders jsonValue
+
+
+oneOfRecursively : List Error -> List (Decoder a) -> Value -> Result Error a
+oneOfRecursively errors decoders jsonValue =
+    case decoders of
+        [] ->
+            Err (OneOf errors)
+
+        decoder :: rest ->
+            case decoder jsonValue of
+                Ok a ->
+                    Ok a
+
+                Err err ->
+                    oneOfRecursively (err :: errors) rest jsonValue
+
+
+nullable : Decoder a -> Decoder (Maybe a)
+nullable decoder jsonValue =
+    case jsonValue of
+        NullValue ->
+            Ok Nothing
+
+        _ ->
+            case decoder jsonValue of
+                Ok a ->
+                    Ok (Just a)
+
+                Err err ->
+                    Err err
+
+
+lazy : (() -> Decoder a) -> Decoder a
+lazy callback jsonValue =
+    callback () jsonValue
+
+
 {-| Ignore the JSON and produce a certain Elm value.
 
     decodeString (succeed 42) "true"    == Ok 42
@@ -1001,7 +1310,124 @@ parseObject : Parser (List ( String, Value ))
 parseObject str =
     -- Object parsing logic goes here
     -- Similar to `parseArray`, but also needs to handle the colon (:) separating keys and values.
-    ( Err "Object parsing not implemented", 0 )
+    parseObjectHelper [] str
+        |> Tuple.mapFirst (Result.map List.reverse)
+
+
+parseObjectHelper : List ( String, Value ) -> Parser (List ( String, Value ))
+parseObjectHelper previousItems str =
+    let
+        strTrimmed =
+            dropWhileList isCharRemovedOnTrim str
+
+        trimmedLength =
+            List.length str - List.length strTrimmed
+    in
+    case strTrimmed of
+        [] ->
+            ( Err "Unexpected end of input while parsing object"
+            , 0
+            )
+
+        '}' :: rest ->
+            ( Ok previousItems
+            , trimmedLength + 1
+            )
+
+        _ ->
+            parseObjectHelperTrimmedNotEmpty previousItems strTrimmed
+                |> Tuple.mapSecond ((+) trimmedLength)
+
+
+parseObjectHelperTrimmedNotEmpty : List ( String, Value ) -> Parser (List ( String, Value ))
+parseObjectHelperTrimmedNotEmpty previousItems strTrimmed =
+    case strTrimmed of
+        [] ->
+            ( Err "Unexpected end of input while parsing object", 0 )
+
+        '"' :: rest ->
+            -- Parse the key string
+            let
+                ( keyResult, keyConsumed ) =
+                    parseString rest
+            in
+            case keyResult of
+                Err err ->
+                    ( Err ("Error parsing object key: " ++ err), keyConsumed + 1 )
+
+                Ok keyChars ->
+                    let
+                        keyString =
+                            String.fromList keyChars
+
+                        totalKeyConsumed =
+                            keyConsumed + 1
+
+                        -- plus 1 for the starting '"'
+                        afterKey =
+                            List.drop totalKeyConsumed strTrimmed
+
+                        afterKeyTrimmed =
+                            dropWhileList isCharRemovedOnTrim afterKey
+
+                        trimmedLength =
+                            List.length afterKey - List.length afterKeyTrimmed
+
+                        totalConsumedKey =
+                            totalKeyConsumed + trimmedLength
+                    in
+                    case afterKeyTrimmed of
+                        ':' :: afterColon ->
+                            let
+                                afterColonTrimmed =
+                                    dropWhileList isCharRemovedOnTrim afterColon
+
+                                trimmedAfterColonLength =
+                                    List.length afterColon - List.length afterColonTrimmed
+
+                                totalConsumedSoFar =
+                                    totalConsumedKey + 1 + trimmedAfterColonLength
+
+                                ( valueResult, valueConsumed ) =
+                                    parseValue afterColonTrimmed
+                            in
+                            case valueResult of
+                                Err err ->
+                                    ( Err ("Error parsing object value: " ++ err), totalConsumedSoFar + valueConsumed )
+
+                                Ok value ->
+                                    let
+                                        afterValue =
+                                            List.drop valueConsumed afterColonTrimmed
+
+                                        afterValueTrimmed =
+                                            dropWhileList isCharRemovedOnTrim afterValue
+
+                                        trimmedAfterValueLength =
+                                            List.length afterValue - List.length afterValueTrimmed
+
+                                        totalConsumed =
+                                            totalConsumedSoFar + valueConsumed + trimmedAfterValueLength
+                                    in
+                                    case afterValueTrimmed of
+                                        ',' :: restAfterComma ->
+                                            parseObjectHelper (( keyString, value ) :: previousItems) restAfterComma
+                                                |> Tuple.mapSecond ((+) (totalConsumed + 1))
+
+                                        '}' :: restAfterBrace ->
+                                            ( Ok (( keyString, value ) :: previousItems), totalConsumed + 1 )
+
+                                        [] ->
+                                            ( Err "Unexpected end of input while parsing object", totalConsumed )
+
+                                        _ ->
+                                            ( Err "Expected ',' or '}' after object value", totalConsumed )
+
+                        _ ->
+                            ( Err "Expected ':' after object key", totalConsumedKey )
+
+        _ ->
+            ( Err "Expected '""' to start object key", 0 )
 
 
 listStartsWith : List a -> List a -> Bool
