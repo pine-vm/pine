@@ -303,13 +303,13 @@ public static class KernelFunction
             PineValue.EmptyList
         };
 
-    public static PineValue add_int(PineValue value) =>
+    public static PineValue int_add(PineValue value) =>
         KernelFunctionExpectingListOfBigIntAndProducingBigInt(
             integers =>
             integers.Aggregate(seed: BigInteger.Zero, func: (aggregate, next) => aggregate + next),
             value);
 
-    public static PineValue add_int(PineValue summandA, PineValue summandB)
+    public static PineValue int_add(PineValue summandA, PineValue summandB)
     {
         if (SignedIntegerFromValueRelaxed(summandA) is not { } intA)
             return PineValue.EmptyList;
@@ -317,19 +317,19 @@ public static class KernelFunction
         if (SignedIntegerFromValueRelaxed(summandB) is not { } intB)
             return PineValue.EmptyList;
 
-        return add_int(intA, intB);
+        return int_add(intA, intB);
     }
 
-    public static PineValue add_int(BigInteger summandA, BigInteger summandB) =>
+    public static PineValue int_add(BigInteger summandA, BigInteger summandB) =>
         PineValueAsInteger.ValueFromSignedInteger(summandA + summandB);
 
-    public static PineValue mul_int(PineValue value) =>
+    public static PineValue int_mul(PineValue value) =>
         KernelFunctionExpectingListOfBigIntAndProducingBigInt(
             integers =>
             integers.Aggregate(seed: BigInteger.One, func: (aggregate, next) => aggregate * next),
             value);
 
-    public static PineValue mul_int(PineValue factorA, PineValue factorB)
+    public static PineValue int_mul(PineValue factorA, PineValue factorB)
     {
         if (SignedIntegerFromValueRelaxed(factorA) is not { } intA)
             return PineValue.EmptyList;
@@ -337,10 +337,10 @@ public static class KernelFunction
         if (SignedIntegerFromValueRelaxed(factorB) is not { } intB)
             return PineValue.EmptyList;
 
-        return mul_int(intA, intB);
+        return int_mul(intA, intB);
     }
 
-    public static PineValue mul_int(BigInteger factorA, BigInteger factorB) =>
+    public static PineValue int_mul(BigInteger factorA, BigInteger factorB) =>
         PineValueAsInteger.ValueFromSignedInteger(factorA * factorB);
 
     public static PineValue is_sorted_ascending_int(PineValue value)

@@ -2091,11 +2091,11 @@ public class PineVM : IPineVM
             nameof(KernelFunction.negate) =>
             KernelFunction.negate(inputValue),
 
-            nameof(KernelFunction.add_int) =>
-            KernelFunction.add_int(inputValue),
+            nameof(KernelFunction.int_add) =>
+            KernelFunction.int_add(inputValue),
 
-            nameof(KernelFunction.mul_int) =>
-            KernelFunction.mul_int(inputValue),
+            nameof(KernelFunction.int_mul) =>
+            KernelFunction.int_mul(inputValue),
 
             nameof(KernelFunction.is_sorted_ascending_int) =>
             KernelFunction.is_sorted_ascending_int(inputValue),

@@ -503,8 +503,8 @@ public class Precompiled
             var numB = PineVM.ValueFromPathInValueOrEmptyList(bTagArgs, [0]);
             var denomB = PineVM.ValueFromPathInValueOrEmptyList(bTagArgs, [1]);
 
-            var leftProduct = KernelFunction.mul_int(numA, denomB);
-            var rightProduct = KernelFunction.mul_int(numB, denomA);
+            var leftProduct = KernelFunction.int_mul(numA, denomB);
+            var rightProduct = KernelFunction.int_mul(numB, denomA);
 
             if (leftProduct == rightProduct)
             {
@@ -526,7 +526,7 @@ public class Precompiled
             var numA = PineVM.ValueFromPathInValueOrEmptyList(aTagArgs, [0]);
             var denomA = PineVM.ValueFromPathInValueOrEmptyList(aTagArgs, [1]);
 
-            var rightProduct = KernelFunction.mul_int(denomA, b);
+            var rightProduct = KernelFunction.int_mul(denomA, b);
 
             if (numA == rightProduct)
             {
@@ -548,7 +548,7 @@ public class Precompiled
             var numB = PineVM.ValueFromPathInValueOrEmptyList(bTagArgs, [0]);
             var denomB = PineVM.ValueFromPathInValueOrEmptyList(bTagArgs, [1]);
 
-            var leftProduct = KernelFunction.mul_int(a, denomB);
+            var leftProduct = KernelFunction.int_mul(a, denomB);
 
             if (leftProduct == numB)
             {

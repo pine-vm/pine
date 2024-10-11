@@ -307,7 +307,7 @@ unsignedInt8 =
                 byte =
                     Pine_kernel.take [ 1, Pine_kernel.skip [ offset, blob ] ]
             in
-            ( Pine_kernel.add_int [ offset, 1 ]
+            ( Pine_kernel.int_add [ offset, 1 ]
             , Pine_kernel.concat [ Pine_kernel.take [ 1, 0 ], byte ]
             )
         )
@@ -321,7 +321,7 @@ string length =
                 bytes =
                     Pine_kernel.take [ length, Pine_kernel.skip [ offset, blob ] ]
             in
-            ( Pine_kernel.add_int [ offset, length ]
+            ( Pine_kernel.int_add [ offset, length ]
             , decodeBlobAsChars bytes
             )
         )
@@ -365,7 +365,7 @@ decodeUtf8Char blob offset =
         -- 2-byte character
         let
             byte2 =
-                Pine_kernel.take [ 1, Pine_kernel.skip [ Pine_kernel.add_int [ offset, 1 ], blob ] ]
+                Pine_kernel.take [ 1, Pine_kernel.skip [ Pine_kernel.int_add [ offset, 1 ], blob ] ]
 
             byte2Int =
                 Pine_kernel.concat [ Pine_kernel.take [ 1, 0 ], byte2 ]
@@ -377,8 +377,8 @@ decodeUtf8Char blob offset =
                 Pine_kernel.bit_and [ byte2Int, 0x3F ]
 
             charCode =
-                Pine_kernel.add_int
-                    [ Pine_kernel.mul_int [ firstFiveBits, 64 ] -- Multiply by 2^6
+                Pine_kernel.int_add
+                    [ Pine_kernel.int_mul [ firstFiveBits, 64 ] -- Multiply by 2^6
                     , secondSixBits
                     ]
         in
@@ -388,13 +388,13 @@ decodeUtf8Char blob offset =
         -- 3-byte character
         let
             byte2 =
-                Pine_kernel.take [ 1, Pine_kernel.skip [ Pine_kernel.add_int [ offset, 1 ], blob ] ]
+                Pine_kernel.take [ 1, Pine_kernel.skip [ Pine_kernel.int_add [ offset, 1 ], blob ] ]
 
             byte2Int =
                 Pine_kernel.concat [ Pine_kernel.take [ 1, 0 ], byte2 ]
 
             byte3 =
-                Pine_kernel.take [ 1, Pine_kernel.skip [ Pine_kernel.add_int [ offset, 2 ], blob ] ]
+                Pine_kernel.take [ 1, Pine_kernel.skip [ Pine_kernel.int_add [ offset, 2 ], blob ] ]
 
             byte3Int =
                 Pine_kernel.concat [ Pine_kernel.take [ 1, 0 ], byte3 ]
@@ -409,9 +409,9 @@ decodeUtf8Char blob offset =
                 Pine_kernel.bit_and [ byte3Int, 0x3F ]
 
             charCode =
-                Pine_kernel.add_int
-                    [ Pine_kernel.mul_int [ firstFourBits, 4096 ] -- Multiply by 2^12
-                    , Pine_kernel.mul_int [ secondSixBits, 64 ]    -- Multiply by 2^6
+                Pine_kernel.int_add
+                    [ Pine_kernel.int_mul [ firstFourBits, 4096 ] -- Multiply by 2^12
+                    , Pine_kernel.int_mul [ secondSixBits, 64 ]    -- Multiply by 2^6
                     , thirdSixBits
                     ]
         in
@@ -421,19 +421,19 @@ decodeUtf8Char blob offset =
         -- 4-byte character
         let
             byte2 =
-                Pine_kernel.take [ 1, Pine_kernel.skip [ Pine_kernel.add_int [ offset, 1 ], blob ] ]
+                Pine_kernel.take [ 1, Pine_kernel.skip [ Pine_kernel.int_add [ offset, 1 ], blob ] ]
 
             byte2Int =
                 Pine_kernel.concat [ Pine_kernel.take [ 1, 0 ], byte2 ]
 
             byte3 =
-                Pine_kernel.take [ 1, Pine_kernel.skip [ Pine_kernel.add_int [ offset, 2 ], blob ] ]
+                Pine_kernel.take [ 1, Pine_kernel.skip [ Pine_kernel.int_add [ offset, 2 ], blob ] ]
 
             byte3Int =
                 Pine_kernel.concat [ Pine_kernel.take [ 1, 0 ], byte3 ]
 
             byte4 =
-                Pine_kernel.take [ 1, Pine_kernel.skip [ Pine_kernel.add_int [ offset, 3 ], blob ] ]
+                Pine_kernel.take [ 1, Pine_kernel.skip [ Pine_kernel.int_add [ offset, 3 ], blob ] ]
 
             byte4Int =
                 Pine_kernel.concat [ Pine_kernel.take [ 1, 0 ], byte4 ]
@@ -451,10 +451,10 @@ decodeUtf8Char blob offset =
                 Pine_kernel.bit_and [ byte4Int, 0x3F ]
 
             charCode =
-                Pine_kernel.add_int
-                    [ Pine_kernel.mul_int [ firstThreeBits, 262144 ] -- Multiply by 2^18
-                    , Pine_kernel.mul_int [ secondSixBits, 4096 ]    -- Multiply by 2^12
-                    , Pine_kernel.mul_int [ thirdSixBits, 64 ]       -- Multiply by 2^6
+                Pine_kernel.int_add
+                    [ Pine_kernel.int_mul [ firstThreeBits, 262144 ] -- Multiply by 2^18
+                    , Pine_kernel.int_mul [ secondSixBits, 4096 ]    -- Multiply by 2^12
+                    , Pine_kernel.int_mul [ thirdSixBits, 64 ]       -- Multiply by 2^6
                     , fourthSixBits
                     ]
         in
@@ -1049,14 +1049,14 @@ consumeBaseHelper base offset chars total =
       nextChar :: _ ->
         let
           digit =
-            Pine_kernel.add_int [ Char.toCode nextChar, -48 ]
+            Pine_kernel.int_add [ Char.toCode nextChar, -48 ]
         in
         if Pine_kernel.is_sorted_ascending_int [ 0, digit, base ] then
           consumeBaseHelper
             base
-            (Pine_kernel.add_int [ offset, 1 ])
+            (Pine_kernel.int_add [ offset, 1 ])
             chars
-            (Pine_kernel.add_int [ Pine_kernel.mul_int [ base, total ], digit ])
+            (Pine_kernel.int_add [ Pine_kernel.int_mul [ base, total ], digit ])
         else
           (offset, total)
 
@@ -1130,7 +1130,7 @@ chompBase10Helper offset chars =
                 in
                 if Pine_kernel.is_sorted_ascending_int [ 48, code, 57 ] then
                     chompBase10Helper
-                      (Pine_kernel.add_int [ offset, 1 ])
+                      (Pine_kernel.int_add [ offset, 1 ])
                       chars
                 else
                     offset
@@ -1167,15 +1167,15 @@ isSubStringHelper smallChars bigChars offset row col =
                     ( newRow, newCol ) =
                         if Pine_kernel.equal [ sChar, 10 ] then
                             -- ASCII code for '\\n'
-                            ( Pine_kernel.add_int [ row, 1 ], 1 )
+                            ( Pine_kernel.int_add [ row, 1 ], 1 )
 
                         else
-                            ( row, Pine_kernel.add_int [ col, 1 ] )
+                            ( row, Pine_kernel.int_add [ col, 1 ] )
                 in
                 isSubStringHelper
                     sRest
                     bRest
-                    (Pine_kernel.add_int [offset, 1])
+                    (Pine_kernel.int_add [offset, 1])
                     newRow
                     newCol
 
@@ -1194,7 +1194,7 @@ isSubChar predicate offset (String chars) =
         if Pine_kernel.equal [ nextChar, 10 ] then
             -2 -- Special code for newline
         else
-            Pine_kernel.add_int [ offset, 1 ]
+            Pine_kernel.int_add [ offset, 1 ]
 
       else
         -1

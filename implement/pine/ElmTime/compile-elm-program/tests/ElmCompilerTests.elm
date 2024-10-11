@@ -359,7 +359,7 @@ emitClosureExpressionTests =
                                         ]
                                     )
                                 , FirCompiler.KernelApplicationExpression
-                                    "add_int"
+                                    "int_add"
                                     (FirCompiler.ListExpression
                                         [ FirCompiler.ReferenceExpression [] "remainingCount"
                                         , FirCompiler.LiteralExpression (Pine.valueFromInt -1)
@@ -453,7 +453,7 @@ emitClosureExpressionTests =
                                         ]
                                     )
                                 , FirCompiler.KernelApplicationExpression
-                                    "add_int"
+                                    "int_add"
                                     (FirCompiler.ListExpression
                                         [ FirCompiler.ReferenceExpression [] "remainingCount"
                                         , FirCompiler.LiteralExpression (Pine.valueFromInt -1)
@@ -729,7 +729,7 @@ emitClosureExpressionTests =
                                 )
                             , FirCompiler.ListExpression
                                 [ FirCompiler.KernelApplicationExpression
-                                    "add_int"
+                                    "int_add"
                                     (FirCompiler.ListExpression
                                         [ FirCompiler.ReferenceExpression [] "remainingCount"
                                         , FirCompiler.LiteralExpression (Pine.valueFromInt -1)
@@ -796,7 +796,7 @@ emitClosureExpressionTests =
                                     ]
                                 )
                             , FirCompiler.KernelApplicationExpression
-                                "add_int"
+                                "int_add"
                                 (FirCompiler.ListExpression
                                     [ FirCompiler.ReferenceExpression [] "remainingCount"
                                     , FirCompiler.LiteralExpression (Pine.valueFromInt -1)

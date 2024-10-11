@@ -229,13 +229,13 @@
                             [
                               {
                                 "KernelApplication": [
-                                  "add_int",
+                                  "int_add",
                                   {
                                     "List": [
                                       [
                                         {
                                           "KernelApplication": [
-                                            "add_int",
+                                            "int_add",
                                             {
                                               "List": [
                                                 [
@@ -358,7 +358,7 @@
                               },
                               {
                                 "KernelApplication": [
-                                  "add_int",
+                                  "int_add",
                                   {
                                     "List": [
                                       [

@@ -153,12 +153,12 @@ neq a b =
 
 add : number -> number -> number
 add a b =
-    Pine_kernel.add_int [ a, b ]
+    Pine_kernel.int_add [ a, b ]
 
 
 sub : number -> number -> number
 sub a b =
-    Pine_kernel.add_int [ a, Pine_kernel.negate b ]
+    Pine_kernel.int_add [ a, Pine_kernel.negate b ]
 
 
 mul : number -> number -> number
@@ -167,17 +167,17 @@ mul a b =
         ( Elm_Float numA denomA, Elm_Float numB denomB ) ->
             let
                 newNumerator =
-                    Pine_kernel.mul_int [ numA, numB ]
+                    Pine_kernel.int_mul [ numA, numB ]
 
                 newDenominator =
-                    Pine_kernel.mul_int [ denomA, denomB ]
+                    Pine_kernel.int_mul [ denomA, denomB ]
             in
             simplifyFraction (Elm_Float newNumerator newDenominator)
 
         ( Elm_Float numA denomA, intB ) ->
             let
                 newNumerator =
-                    Pine_kernel.mul_int [ numA, intB ]
+                    Pine_kernel.int_mul [ numA, intB ]
             in
             simplifyFraction (Elm_Float newNumerator denomA)
 
@@ -185,13 +185,13 @@ mul a b =
         ( intA, Elm_Float numB denomB ) ->
             let
                 newNumerator =
-                    Pine_kernel.mul_int [ intA, numB ]
+                    Pine_kernel.int_mul [ intA, numB ]
             in
             simplifyFraction (Elm_Float newNumerator denomB)
 
 
         _ ->
-            Pine_kernel.mul_int [ a, b ]
+            Pine_kernel.int_mul [ a, b ]
 
 
 idiv : Int -> Int -> Int
@@ -303,7 +303,7 @@ powHelper base exponent accumulator =
         accumulator
 
     else
-        powHelper base (Pine_kernel.add_int [ exponent, -1 ]) (Pine_kernel.mul_int [ base, accumulator ])
+        powHelper base (Pine_kernel.int_add [ exponent, -1 ]) (Pine_kernel.int_mul [ base, accumulator ])
 
 
 and : Bool -> Bool -> Bool
@@ -434,10 +434,10 @@ compare a b =
             ( Elm_Float numA denomA, Elm_Float numB denomB ) ->
                 let
                     leftProduct =
-                        Pine_kernel.mul_int [ numA, denomB ]
+                        Pine_kernel.int_mul [ numA, denomB ]
 
                     rightProduct =
-                        Pine_kernel.mul_int [ numB, denomA ]
+                        Pine_kernel.int_mul [ numB, denomA ]
                 in
                 if Pine_kernel.equal [ leftProduct, rightProduct ] then
                     EQ
@@ -454,7 +454,7 @@ compare a b =
                         numA
 
                     rightProduct =
-                        Pine_kernel.mul_int [ denomA, intB ]
+                        Pine_kernel.int_mul [ denomA, intB ]
                 in
                 if Pine_kernel.equal [ leftProduct, rightProduct ] then
                     EQ
@@ -469,7 +469,7 @@ compare a b =
             ( intA, Elm_Float numB denomB ) ->
                 let
                     leftProduct =
-                        Pine_kernel.mul_int [ intA, denomB ]
+                        Pine_kernel.int_mul [ intA, denomB ]
 
                     rightProduct =
                         numB
@@ -564,14 +564,14 @@ modBy divisor dividend =
             remainder
 
         else
-            Pine_kernel.add_int [ remainder, divisor ]
+            Pine_kernel.int_add [ remainder, divisor ]
 
 
 remainderBy : Int -> Int -> Int
 remainderBy divisor dividend =
-    Pine_kernel.add_int
+    Pine_kernel.int_add
         [ dividend
-        , Pine_kernel.negate (Pine_kernel.mul_int [ divisor, (idiv dividend divisor)])
+        , Pine_kernel.negate (Pine_kernel.int_mul [ divisor, (idiv dividend divisor)])
         ]
 
 
@@ -665,7 +665,7 @@ ratioFloor numerator denom =
             findMultiplierToDecimal 1 denom
     in
     idiv
-        (Pine_kernel.mul_int [ numerator, multiplier ])
+        (Pine_kernel.int_mul [ numerator, multiplier ])
         denomProd
 
 
@@ -673,7 +673,7 @@ findMultiplierToDecimal : Int -> Int -> (Int, Int, Int)
 findMultiplierToDecimal factor denom =
     let
         denomProd =
-            Pine_kernel.mul_int [ denom, factor ]
+            Pine_kernel.int_mul [ denom, factor ]
 
         lowerPowerOfTen =
             findLowerPowerOfTen denomProd
@@ -683,7 +683,7 @@ findMultiplierToDecimal factor denom =
 
     else
         findMultiplierToDecimal
-            (Pine_kernel.add_int [ factor, 1 ])
+            (Pine_kernel.int_add [ factor, 1 ])
             denom
 
 
@@ -693,7 +693,7 @@ findLowerPowerOfTen int =
         0
 
     else
-        Pine_kernel.add_int [ findLowerPowerOfTen (idiv int 10), 1 ]
+        Pine_kernel.int_add [ findLowerPowerOfTen (idiv int 10), 1 ]
 
 
 """
@@ -1468,7 +1468,7 @@ slice start end (String chars) =
                 relativeIndex
 
             else
-                Pine_kernel.add_int [ relativeIndex, Pine_kernel.length chars ]
+                Pine_kernel.int_add [ relativeIndex, Pine_kernel.length chars ]
 
         absoluteStart =
             absoluteIndex start
@@ -1582,7 +1582,7 @@ toIntFromList stringAsList =
             else
                 case toUnsignedIntFromList 0 valueString of
                     Just unsigned ->
-                        Just (Pine_kernel.mul_int [ signMultiplier, unsigned ])
+                        Just (Pine_kernel.int_mul [ signMultiplier, unsigned ])
 
                     Nothing ->
                         Nothing
@@ -1601,7 +1601,7 @@ toUnsignedIntFromList upper string =
 
             Just digitValue ->
                 toUnsignedIntFromList
-                    (Pine_kernel.add_int [ digitValue, Pine_kernel.mul_int [ upper, 10 ] ])
+                    (Pine_kernel.int_add [ digitValue, Pine_kernel.int_mul [ upper, 10 ] ])
                     following
 
 

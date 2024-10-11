@@ -227,11 +227,11 @@ kernelFunctions =
         , ( "head"
           , kernelFunction_head
           )
-        , ( "add_int"
-          , kernelFunction_add_int
+        , ( "int_add"
+          , kernelFunction_int_add
           )
-        , ( "mul_int"
-          , kernelFunction_mul_int
+        , ( "int_mul"
+          , kernelFunction_int_mul
           )
         , ( "is_sorted_ascending_int"
           , kernelFunction_is_sorted_ascending_int
@@ -404,18 +404,18 @@ kernelFunction_head value =
             BlobValue (List.take 1 bytes)
 
 
-kernelFunction_add_int : Value -> Value
-kernelFunction_add_int value =
+kernelFunction_int_add : Value -> Value
+kernelFunction_int_add value =
     case value of
         ListValue list ->
-            kernelFunction_add_int_list (BigInt.fromInt 0) list
+            kernelFunction_int_add_list (BigInt.fromInt 0) list
 
         _ ->
             listValue_Empty
 
 
-kernelFunction_add_int_list : BigInt.BigInt -> List Value -> Value
-kernelFunction_add_int_list aggregate list =
+kernelFunction_int_add_list : BigInt.BigInt -> List Value -> Value
+kernelFunction_int_add_list aggregate list =
     case list of
         [] ->
             valueFromBigInt aggregate
@@ -423,24 +423,24 @@ kernelFunction_add_int_list aggregate list =
         nextValue :: rest ->
             case bigIntFromValue nextValue of
                 Ok nextInt ->
-                    kernelFunction_add_int_list (BigInt.add aggregate nextInt) rest
+                    kernelFunction_int_add_list (BigInt.add aggregate nextInt) rest
 
                 Err _ ->
                     listValue_Empty
 
 
-kernelFunction_mul_int : Value -> Value
-kernelFunction_mul_int value =
+kernelFunction_int_mul : Value -> Value
+kernelFunction_int_mul value =
     case value of
         ListValue list ->
-            kernelFunction_mul_int_list (BigInt.fromInt 1) list
+            kernelFunction_int_mul_list (BigInt.fromInt 1) list
 
         _ ->
             listValue_Empty
 
 
-kernelFunction_mul_int_list : BigInt.BigInt -> List Value -> Value
-kernelFunction_mul_int_list aggregate list =
+kernelFunction_int_mul_list : BigInt.BigInt -> List Value -> Value
+kernelFunction_int_mul_list aggregate list =
     case list of
         [] ->
             valueFromBigInt aggregate
@@ -448,7 +448,7 @@ kernelFunction_mul_int_list aggregate list =
         nextValue :: rest ->
             case bigIntFromValue nextValue of
                 Ok nextInt ->
-                    kernelFunction_mul_int_list (BigInt.mul aggregate nextInt) rest
+                    kernelFunction_int_mul_list (BigInt.mul aggregate nextInt) rest
 
                 Err _ ->
                     listValue_Empty

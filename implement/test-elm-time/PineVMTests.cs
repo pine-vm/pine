@@ -963,7 +963,7 @@ public class PineVMTests
                         [
                             new Expression.KernelApplication
                             (
-                                function: nameof(KernelFunction.mul_int),
+                                function: nameof(KernelFunction.int_mul),
                                 input:
                                 Expression.ListInstance(
                                     [
@@ -974,7 +974,7 @@ public class PineVMTests
                             ),
                             new Expression.KernelApplication
                             (
-                                function: nameof(KernelFunction.mul_int),
+                                function: nameof(KernelFunction.int_mul),
                                 input:
                                 Expression.ListInstance(
                                     [
@@ -991,7 +991,7 @@ public class PineVMTests
                         condition:
                         new Expression.KernelApplication
                         (
-                            function: nameof(KernelFunction.mul_int),
+                            function: nameof(KernelFunction.int_mul),
                             input:
                             Expression.ListInstance(
                                 [
@@ -1011,7 +1011,7 @@ public class PineVMTests
                         StackInstruction.Eval(
                             new Expression.KernelApplication
                             (
-                                function: nameof(KernelFunction.mul_int),
+                                function: nameof(KernelFunction.int_mul),
                                 input:
                                 Expression.ListInstance(
                                     [

@@ -798,7 +798,7 @@ public class CompileElmCompilerTests
                         accumulator
 
                     else
-                        powHelper base (Pine_kernel.add_int [ exponent, -1 ]) (Pine_kernel.mul_int [ base, accumulator ])
+                        powHelper base (Pine_kernel.int_add [ exponent, -1 ]) (Pine_kernel.int_mul [ base, accumulator ])
 
 
                 replicate : appendable -> appendable

@@ -223,6 +223,10 @@ public static class PopularValues
         "concat",
         "add_int",
         "mul_int",
+        "int_add",
+        "int_mul",
+        "bit_and",
+        "bit_or",
         "list_head",
         "is_sorted_ascending_int",
 

@@ -6,7 +6,7 @@ namespace Pine.Core;
 
 /// <summary>
 /// Standard encoding of integers in Pine.
-/// This integer encoding corresponds to kernel functions like <see cref="KernelFunction.add_int(PineValue)"/> and <see cref="KernelFunction.skip(PineValue)"/>.
+/// This integer encoding corresponds to kernel functions like <see cref="KernelFunction.int_add(PineValue)"/> and <see cref="KernelFunction.skip(PineValue)"/>.
 /// </summary>
 public static class PineValueAsInteger
 {
