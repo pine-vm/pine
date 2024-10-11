@@ -28,14 +28,12 @@ public class Program
 
     private static int Main(string[] args)
     {
-        using var dynamicPGOShare = new DynamicPGOShare();
-
-        return MainLessDispose(args, dynamicPGOShare);
+        return MainLessDispose(args, dynamicPGOShare: null);
     }
 
     private static int MainLessDispose(
         string[] args,
-        DynamicPGOShare dynamicPGOShare)
+        DynamicPGOShare? dynamicPGOShare)
     {
         LoadFromGitHubOrGitLab.RepositoryFilesPartialForCommitCacheDefault =
             new CacheByFileName(new FileStoreFromSystemIOFile(Path.Combine(Filesystem.CacheDirectory, "git", "partial-for-commit", "zip")));
@@ -66,7 +64,7 @@ public class Program
         AddSelfTestCommand(app);
 
         var runCommand = AddRunCommand(app);
-        var runServerCommand = AddRunServerCommand(app, dynamicPGOShare);
+        var runServerCommand = AddRunServerCommand(app);
 
         var deployCommand = AddDeployCommand(app);
         var copyAppStateCommand = AddCopyAppStateCommand(app);
@@ -274,8 +272,7 @@ public class Program
         });
 
     private static CommandLineApplication AddRunServerCommand(
-        CommandLineApplication app,
-        DynamicPGOShare dynamicPGOShare) =>
+        CommandLineApplication app) =>
         app.Command("run-server", runServerCommand =>
         {
             runServerCommand.Description = "Run a server with a web-based admin interface. The HTTP API supports deployments, migrations, and other operations to manage your app.";
@@ -995,7 +992,7 @@ public class Program
 
     private static CommandLineApplication AddInteractiveCommand(
         CommandLineApplication app,
-        DynamicPGOShare dynamicPGOShare) =>
+        DynamicPGOShare? dynamicPGOShare) =>
         app.Command("interactive", interactiveCommand =>
         {
             interactiveCommand.AddName("repl");
