@@ -1320,6 +1320,31 @@ isAlphaNum char =
         isDigit char
 
 
+toUpper : Char -> Char
+toUpper char =
+    let
+        code =
+            Pine_kernel.concat [ Pine_kernel.take [ 1, 0 ], char ]
+    in
+    if Pine_kernel.is_sorted_ascending_int [ 0x61, code, 0x7A ] then
+        Pine_kernel.skip [ 1, Pine_kernel.int_add [ code, -0x20 ] ]
+
+    else
+        char
+
+
+toLower : Char -> Char
+toLower char =
+    let
+        code =
+            Pine_kernel.concat [ Pine_kernel.take [ 1, 0 ], char ]
+    in
+    if Pine_kernel.is_sorted_ascending_int [ 0x41, code, 0x5A ] then
+        Pine_kernel.skip [ 1, Pine_kernel.int_add [ code, 0x20 ] ]
+
+    else
+        char
+
 """
     , """
 module String exposing
@@ -1817,6 +1842,16 @@ toFloat string =
 any : (Char -> Bool) -> String -> Bool
 any predicate (String chars) =
     List.any predicate chars
+
+
+toUpper : String -> String
+toUpper (String chars) =
+    String (List.map Char.toUpper chars)
+
+
+toLower : String -> String
+toLower (String chars) =
+    String (List.map Char.toLower chars)
 
 
 """
