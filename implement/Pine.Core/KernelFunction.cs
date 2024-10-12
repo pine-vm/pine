@@ -392,7 +392,8 @@ public static class KernelFunction
             return ValueFromBool(true);
         }
 
-        throw new NotImplementedException("Unexpected value type: " + value.GetType().FullName);
+        throw new NotImplementedException(
+            "Unexpected value type: " + value.GetType().FullName);
     }
 
     public static PineValue bit_and(PineValue value)
@@ -550,10 +551,24 @@ public static class KernelFunction
         if (value is not PineValue.BlobValue blobValue)
             return null;
 
-        if (blobValue.Bytes.Length is < 2)
+        int leadingSpaces = 0;
+
+        for (var i = 0; i < blobValue.Bytes.Length; ++i)
+        {
+            if (blobValue.Bytes.Span[i] is 0)
+            {
+                ++leadingSpaces;
+            }
+            else
+            {
+                break;
+            }
+        }
+
+        if (blobValue.Bytes.Length - leadingSpaces is < 2)
             return null;
 
-        var abs = new BigInteger(blobValue.Bytes.Span[1..], isUnsigned: true, isBigEndian: true);
+        var abs = new BigInteger(blobValue.Bytes.Span[(leadingSpaces + 1)..], isUnsigned: true, isBigEndian: true);
 
         return
             blobValue.Bytes.Span[0] switch

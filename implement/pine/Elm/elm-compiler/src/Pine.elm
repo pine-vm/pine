@@ -1015,6 +1015,31 @@ intFromValue value =
                         2 ->
                             Ok -(intFromUnsignedBlobValue followingUnsigned firstUnsigned)
 
+                        0 ->
+                            -- Skip leading zero bytes
+                            case listSkipZeroBytes blobBytes of
+                                signAfterSpace :: firstUnsignedAfterSpace :: followingUnsignedAfterSpace ->
+                                    case signAfterSpace of
+                                        4 ->
+                                            Ok
+                                                (intFromUnsignedBlobValue
+                                                    followingUnsignedAfterSpace
+                                                    firstUnsignedAfterSpace
+                                                )
+
+                                        2 ->
+                                            Ok
+                                                -(intFromUnsignedBlobValue
+                                                    followingUnsignedAfterSpace
+                                                    firstUnsignedAfterSpace
+                                                 )
+
+                                        _ ->
+                                            Err ("Unexpected value for sign byte: " ++ String.fromInt sign)
+
+                                _ ->
+                                    Err "Blob needs at least two bytes after removing leading zeros."
+
                         _ ->
                             Err ("Unexpected value for sign byte: " ++ String.fromInt sign)
 
@@ -1056,8 +1081,35 @@ bigIntFromBlobValue blobValue =
                 2 ->
                     Ok (BigInt.negate (bigIntFromUnsignedBlobValue intValueBytes))
 
+                0 ->
+                    -- Skip leading zero bytes
+                    case listSkipZeroBytes blobValue of
+                        signAfterSpace :: intValueBytesAfterSpace ->
+                            case signAfterSpace of
+                                4 ->
+                                    Ok (bigIntFromUnsignedBlobValue intValueBytesAfterSpace)
+
+                                2 ->
+                                    Ok (BigInt.negate (bigIntFromUnsignedBlobValue intValueBytesAfterSpace))
+
+                                _ ->
+                                    Err ("Unexpected value for sign byte: " ++ String.fromInt sign)
+
+                        _ ->
+                            Err "Blob needs at least one byte after removing leading zeros."
+
                 _ ->
                     Err ("Unexpected value for sign byte: " ++ String.fromInt sign)
+
+
+listSkipZeroBytes : List Int -> List Int
+listSkipZeroBytes bytes =
+    case bytes of
+        0 :: rest ->
+            listSkipZeroBytes rest
+
+        _ ->
+            bytes
 
 
 bigIntFromUnsignedBlobValue : List Int -> BigInt.BigInt
