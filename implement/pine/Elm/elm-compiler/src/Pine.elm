@@ -234,8 +234,8 @@ kernelFunctions =
         , ( "int_mul"
           , kernelFunction_int_mul
           )
-        , ( "is_sorted_ascending_int"
-          , kernelFunction_is_sorted_ascending_int
+        , ( "int_is_sorted_asc"
+          , kernelFunction_int_is_sorted_asc
           )
         , ( "bit_and"
           , kernelFunction_bit_and
@@ -455,8 +455,8 @@ kernelFunction_int_mul_list aggregate list =
                     listValue_Empty
 
 
-kernelFunction_is_sorted_ascending_int : Value -> Value
-kernelFunction_is_sorted_ascending_int value =
+kernelFunction_int_is_sorted_asc : Value -> Value
+kernelFunction_int_is_sorted_asc value =
     case value of
         BlobValue bytes ->
             valueFromBool (List.sort bytes == bytes)
@@ -472,7 +472,7 @@ kernelFunction_is_sorted_ascending_int value =
                             listValue_Empty
 
                         Ok firstInt ->
-                            is_sorted_ascending_int_recursive rest firstInt
+                            int_is_sorted_asc_recursive rest firstInt
 
 
 kernelFunction_bit_and : Value -> Value
@@ -585,8 +585,8 @@ list_all_same item list =
                 False
 
 
-is_sorted_ascending_int_recursive : List Value -> Int -> Value
-is_sorted_ascending_int_recursive remaining previous =
+int_is_sorted_asc_recursive : List Value -> Int -> Value
+int_is_sorted_asc_recursive remaining previous =
     case remaining of
         [] ->
             trueValue
@@ -601,7 +601,7 @@ is_sorted_ascending_int_recursive remaining previous =
                         falseValue
 
                     else
-                        is_sorted_ascending_int_recursive rest nextInt
+                        int_is_sorted_asc_recursive rest nextInt
 
 
 evaluateParseAndEval : EvalEnvironment -> ( Expression, Expression ) -> Result (PathDescription String) Value

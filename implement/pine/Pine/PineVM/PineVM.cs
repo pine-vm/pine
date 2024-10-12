@@ -2097,8 +2097,8 @@ public class PineVM : IPineVM
             nameof(KernelFunction.int_mul) =>
             KernelFunction.int_mul(inputValue),
 
-            nameof(KernelFunction.is_sorted_ascending_int) =>
-            KernelFunction.is_sorted_ascending_int(inputValue),
+            nameof(KernelFunction.int_is_sorted_asc) =>
+            KernelFunction.int_is_sorted_asc(inputValue),
 
             nameof(KernelFunction.bit_and) =>
             KernelFunction.bit_and(inputValue),

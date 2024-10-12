@@ -343,7 +343,7 @@ public static class KernelFunction
     public static PineValue int_mul(BigInteger factorA, BigInteger factorB) =>
         PineValueAsInteger.ValueFromSignedInteger(factorA * factorB);
 
-    public static PineValue is_sorted_ascending_int(PineValue value)
+    public static PineValue int_is_sorted_asc(PineValue value)
     {
         if (value is PineValue.BlobValue blobValue)
         {

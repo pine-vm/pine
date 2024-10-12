@@ -228,7 +228,7 @@ public static class PopularValues
         "bit_and",
         "bit_or",
         "list_head",
-        "is_sorted_ascending_int",
+        "int_is_sorted_asc",
 
         "functionName",
         "argument",

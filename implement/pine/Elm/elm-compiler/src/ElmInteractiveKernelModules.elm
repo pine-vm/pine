@@ -140,11 +140,11 @@ encodeCharAsBlob char =
         code =
             Char.toCode char
     in
-    if Pine_kernel.is_sorted_ascending_int [ code, 0x7f ] then
+    if Pine_kernel.int_is_sorted_asc [ code, 0x7f ] then
         -- 1-byte encoding
         char
 
-    else if Pine_kernel.is_sorted_ascending_int [ code, 0x7ff ] then
+    else if Pine_kernel.int_is_sorted_asc [ code, 0x7ff ] then
         -- 2-byte encoding
         let
             byte1 =
@@ -164,7 +164,7 @@ encodeCharAsBlob char =
             , Pine_kernel.bit_and [ byte2, maskSingleByte ]
             ]
 
-    else if Pine_kernel.is_sorted_ascending_int [ code, 0xffff ] then
+    else if Pine_kernel.int_is_sorted_asc [ code, 0xffff ] then
         -- 3-byte encoding
         let
             byte1 =
@@ -290,7 +290,7 @@ decode (Decoder decoder) bytes =
         blobLength =
             Pine_kernel.length blob
     in
-    if Pine_kernel.is_sorted_ascending_int [ 0, offset, blobLength ]
+    if Pine_kernel.int_is_sorted_asc [ 0, offset, blobLength ]
     then
         Just result
     else
@@ -334,7 +334,7 @@ decodeBlobAsChars blob =
 
 decodeBlobAsCharsRec : Int -> Int -> List Char -> String
 decodeBlobAsCharsRec offset blob chars =
-    if Pine_kernel.is_sorted_ascending_int [ Pine_kernel.length blob, offset ]
+    if Pine_kernel.int_is_sorted_asc [ Pine_kernel.length blob, offset ]
     then
         String.fromList (List.reverse chars)
     else
@@ -357,7 +357,7 @@ decodeUtf8Char blob offset =
         firstByteInt =
             Pine_kernel.concat [ Pine_kernel.take [ 1, 0 ], firstByte ]
     in
-    if Pine_kernel.is_sorted_ascending_int [ firstByteInt, 0x7f ] then
+    if Pine_kernel.int_is_sorted_asc [ firstByteInt, 0x7f ] then
         -- 1-byte character (ASCII)
         ( firstByte, 1 )
 
@@ -1477,7 +1477,7 @@ consumeBaseHelper base offset chars total =
           digit =
             Pine_kernel.int_add [ Char.toCode nextChar, -48 ]
         in
-        if Pine_kernel.is_sorted_ascending_int [ 0, digit, base ] then
+        if Pine_kernel.int_is_sorted_asc [ 0, digit, base ] then
           consumeBaseHelper
             base
             (Pine_kernel.int_add [ offset, 1 ])
@@ -1505,15 +1505,15 @@ consumeBase16Helper offset chars total =
                         Char.toCode char
 
                     digit =
-                        if Pine_kernel.is_sorted_ascending_int [ 48, code, 57 ] then
+                        if Pine_kernel.int_is_sorted_asc [ 48, code, 57 ] then
                             -- '0' to '9'
                             Just (code - 48)
 
-                        else if Pine_kernel.is_sorted_ascending_int [ 65, code, 70 ] then
+                        else if Pine_kernel.int_is_sorted_asc [ 65, code, 70 ] then
                             -- 'A' to 'F'
                             Just (code - 55)
 
-                        else if Pine_kernel.is_sorted_ascending_int [ 97, code, 102 ] then
+                        else if Pine_kernel.int_is_sorted_asc [ 97, code, 102 ] then
                             -- 'a' to 'f'
                             Just (code - 87)
 
@@ -1542,7 +1542,7 @@ chompBase10 offset (String chars) =
 
 chompBase10Helper : Int -> List Char -> Int
 chompBase10Helper offset chars =
-    if Pine_kernel.is_sorted_ascending_int [ offset, Pine_kernel.length chars ] then
+    if Pine_kernel.int_is_sorted_asc [ offset, Pine_kernel.length chars ] then
         offset
     else
         case Pine_kernel.skip [ offset, chars ] of
@@ -1554,7 +1554,7 @@ chompBase10Helper offset chars =
                     code =
                       Char.toCode char
                 in
-                if Pine_kernel.is_sorted_ascending_int [ 48, code, 57 ] then
+                if Pine_kernel.int_is_sorted_asc [ 48, code, 57 ] then
                     chompBase10Helper
                       (Pine_kernel.int_add [ offset, 1 ])
                       chars

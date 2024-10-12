@@ -1,1 +1,1 @@
-Pine_kernel.is_sorted_ascending_int [ 0, 3, 1 ]
+Pine_kernel.int_is_sorted_asc [ 0, 3, 1 ]

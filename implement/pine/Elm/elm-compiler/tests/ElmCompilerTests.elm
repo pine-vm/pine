@@ -339,7 +339,7 @@ emitClosureExpressionTests =
               , { functionInnerExpr =
                     FirCompiler.ConditionalExpression
                         (FirCompiler.KernelApplicationExpression
-                            "is_sorted_ascending_int"
+                            "int_is_sorted_asc"
                             (FirCompiler.ListExpression
                                 [ FirCompiler.ReferenceExpression [] "remainingCount"
                                 , FirCompiler.LiteralExpression (Pine.valueFromInt 0)
@@ -420,7 +420,7 @@ emitClosureExpressionTests =
             [ ( "is_less_than_or_equal_to_zero"
               , { functionInnerExpr =
                     FirCompiler.KernelApplicationExpression
-                        "is_sorted_ascending_int"
+                        "int_is_sorted_asc"
                         (FirCompiler.ListExpression
                             [ FirCompiler.ReferenceExpression [] "num"
                             , FirCompiler.LiteralExpression (Pine.valueFromInt 0)
@@ -709,7 +709,7 @@ emitClosureExpressionTests =
               , { functionInnerExpr =
                     FirCompiler.ConditionalExpression
                         (FirCompiler.KernelApplicationExpression
-                            "is_sorted_ascending_int"
+                            "int_is_sorted_asc"
                             (FirCompiler.ListExpression
                                 [ FirCompiler.ReferenceExpression [] "remainingCount"
                                 , FirCompiler.LiteralExpression (Pine.valueFromInt 0)
@@ -777,7 +777,7 @@ emitClosureExpressionTests =
               , { functionInnerExpr =
                     FirCompiler.ConditionalExpression
                         (FirCompiler.KernelApplicationExpression
-                            "is_sorted_ascending_int"
+                            "int_is_sorted_asc"
                             (FirCompiler.ListExpression
                                 [ FirCompiler.ReferenceExpression [] "remainingCount"
                                 , FirCompiler.LiteralExpression (Pine.valueFromInt 0)

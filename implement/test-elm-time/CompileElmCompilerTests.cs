@@ -785,7 +785,7 @@ public class CompileElmCompilerTests
 
                 pow : Int -> Int -> Int
                 pow base exponent =
-                    if Pine_kernel.is_sorted_ascending_int [ exponent, 0 ] then
+                    if Pine_kernel.int_is_sorted_asc [ exponent, 0 ] then
                         1
 
                     else

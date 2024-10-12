@@ -413,7 +413,7 @@
                       "Conditional": [
                         {
                           "KernelApplication": [
-                            "is_sorted_ascending_int",
+                            "int_is_sorted_asc",
                             {
                               "List": [
                                 [

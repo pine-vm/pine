@@ -511,7 +511,7 @@ public class Precompiled
                 return Tag_EQ_Value;
             }
 
-            if (KernelFunction.is_sorted_ascending_int(PineValue.List([leftProduct, rightProduct])) == PineVMValues.TrueValue)
+            if (KernelFunction.int_is_sorted_asc(PineValue.List([leftProduct, rightProduct])) == PineVMValues.TrueValue)
             {
                 return Tag_LT_Value;
             }
@@ -533,7 +533,7 @@ public class Precompiled
                 return Tag_EQ_Value;
             }
 
-            if (KernelFunction.is_sorted_ascending_int(PineValue.List([numA, rightProduct])) == PineVMValues.TrueValue)
+            if (KernelFunction.int_is_sorted_asc(PineValue.List([numA, rightProduct])) == PineVMValues.TrueValue)
             {
                 return Tag_LT_Value;
             }
@@ -555,7 +555,7 @@ public class Precompiled
                 return Tag_EQ_Value;
             }
 
-            if (KernelFunction.is_sorted_ascending_int(PineValue.List([leftProduct, numB])) == PineVMValues.TrueValue)
+            if (KernelFunction.int_is_sorted_asc(PineValue.List([leftProduct, numB])) == PineVMValues.TrueValue)
             {
                 return Tag_LT_Value;
             }
@@ -568,7 +568,7 @@ public class Precompiled
             return CompareLists(a, b);
         }
 
-        if (KernelFunction.is_sorted_ascending_int(PineValue.List([a, b])) == PineVMValues.TrueValue)
+        if (KernelFunction.int_is_sorted_asc(PineValue.List([a, b])) == PineVMValues.TrueValue)
         {
             return Tag_LT_Value;
         }
