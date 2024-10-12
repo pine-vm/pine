@@ -17,6 +17,7 @@ module Pine exposing
     , evalEnvironmentFromList
     , evaluateExpression
     , falseValue
+    , intFromUnsignedBlobValue
     , intFromValue
     , kernelFunction_negate
     , parseExpressionFromValue

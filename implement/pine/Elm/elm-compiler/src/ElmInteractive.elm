@@ -294,11 +294,7 @@ pineValueAsElmValue pineValue =
                                     Ok (ElmInternal "___error_skipped_large_blob___")
 
                         else
-                            blobValue
-                                |> Pine.bigIntFromUnsignedBlobValue
-                                |> BigInt.toString
-                                |> String.toInt
-                                |> Maybe.withDefault 0
+                            Pine.intFromUnsignedBlobValue blobValue 0
                                 |> Char.fromCode
                                 |> ElmChar
                                 |> Ok
