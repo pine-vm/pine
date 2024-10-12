@@ -1,6 +1,7 @@
 module CompileElmAppTests exposing (..)
 
 import Bytes.Encode
+import Common
 import CompileBackendApp
 import CompileElmApp
 import Dict
@@ -512,7 +513,7 @@ type alias MixedRecord =
                 Test.test testName <|
                     \() ->
                         modulesTexts
-                            |> List.map
+                            |> Common.resultListMapCombine
                                 (\moduleText ->
                                     moduleText
                                         |> CompileElmApp.parseElmModuleText
@@ -528,7 +529,6 @@ type alias MixedRecord =
                                                     ++ CompileElmApp.parserDeadEndsToString moduleText error
                                             )
                                 )
-                            |> Result.Extra.combine
                             |> Result.andThen
                                 (\modules ->
                                     let

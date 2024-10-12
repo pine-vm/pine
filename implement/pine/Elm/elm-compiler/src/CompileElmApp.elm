@@ -795,7 +795,7 @@ mapJsonConvertersModuleText { originalSourceModules, sourceDirs } ( sourceFiles,
                                 _ ->
                                     Nothing
                         )
-                    |> List.map
+                    |> Common.resultListMapCombine
                         (\functionDeclaration ->
                             case functionDeclaration.signature of
                                 Nothing ->
@@ -839,7 +839,6 @@ mapJsonConvertersModuleText { originalSourceModules, sourceDirs } ( sourceFiles,
                                                     )
                                                 |> Result.mapError (mapLocatedInSourceFiles ((++) ("Failed to prepare mapping '" ++ functionName ++ "': ")))
                         )
-                    |> Result.Extra.combine
                     |> Result.andThen
                         (\functionsToReplace ->
                             let
@@ -1267,7 +1266,7 @@ mapSourceFilesModuleText sourceDirs ( sourceFiles, moduleFilePath, moduleText ) 
                             >> Elm.Syntax.Node.value
                             >> (\functionName -> not (List.member functionName sourceFilesInterfaceModuleAddedFunctionsNames))
                         )
-                    |> List.map
+                    |> Common.resultListMapCombine
                         (\functionDeclaration ->
                             prepareReplaceFunctionInSourceFilesModuleText
                                 sourceDirs
@@ -1278,7 +1277,6 @@ mapSourceFilesModuleText sourceDirs ( sourceFiles, moduleFilePath, moduleText ) 
                                 |> Result.map (Tuple.pair functionDeclaration)
                                 |> Result.mapError (Elm.Syntax.Node.Node (Elm.Syntax.Node.range functionDeclaration))
                         )
-                    |> Result.Extra.combine
                     |> Result.andThen
                         (\preparedFunctions ->
                             let
@@ -1643,7 +1641,7 @@ parseElmTypeAndDependenciesRecursivelyFromAnnotationInternal stack modules ( cur
         Elm.Syntax.TypeAnnotation.Record fieldsNodes ->
             fieldsNodes
                 |> List.map Elm.Syntax.Node.value
-                |> List.map
+                |> Common.resultListMapCombine
                     (\( fieldNameNode, fieldAnnotation ) ->
                         case
                             parseElmTypeAndDependenciesRecursivelyFromAnnotationInternal
@@ -1662,7 +1660,6 @@ parseElmTypeAndDependenciesRecursivelyFromAnnotationInternal stack modules ( cur
                             Ok ( fieldType, fieldTypeDeps ) ->
                                 Ok ( ( Elm.Syntax.Node.value fieldNameNode, fieldType ), fieldTypeDeps )
                     )
-                |> Result.Extra.combine
                 |> Result.map listTupleSecondDictUnion
                 |> Result.map
                     (\( fields, fieldsDependencies ) -> ( RecordElmType { fields = fields }, fieldsDependencies ))
@@ -1670,8 +1667,8 @@ parseElmTypeAndDependenciesRecursivelyFromAnnotationInternal stack modules ( cur
         Elm.Syntax.TypeAnnotation.Tupled tupled ->
             tupled
                 |> List.map (Elm.Syntax.Node.value >> Tuple.pair currentModule)
-                |> List.map (parseElmTypeAndDependenciesRecursivelyFromAnnotationInternal stack modules)
-                |> Result.Extra.combine
+                |> Common.resultListMapCombine
+                    (parseElmTypeAndDependenciesRecursivelyFromAnnotationInternal stack modules)
                 |> Result.map listTupleSecondDictUnion
                 |> Result.map
                     (\( items, itemsDependencies ) -> ( TupleElmType items, itemsDependencies ))
@@ -1846,10 +1843,10 @@ parseElmTypeAndDependenciesRecursivelyFromAnnotationInternalTyped stack modules 
                                                 else
                                                     choiceTypeDeclaration.constructors
                                                         |> List.map Elm.Syntax.Node.value
-                                                        |> List.map
+                                                        |> Common.resultListMapCombine
                                                             (\constructor ->
                                                                 constructor.arguments
-                                                                    |> List.map
+                                                                    |> Common.resultListMapCombine
                                                                         (\constructorArgument ->
                                                                             parseElmTypeAndDependenciesRecursivelyFromAnnotationInternal
                                                                                 { typesToIgnore = stack.typesToIgnore |> Set.insert typeName }
@@ -1857,7 +1854,6 @@ parseElmTypeAndDependenciesRecursivelyFromAnnotationInternalTyped stack modules 
                                                                                 ( instantiatedModule, Elm.Syntax.Node.value constructorArgument )
                                                                                 |> Result.mapError ((++) "Failed to parse argument: ")
                                                                         )
-                                                                    |> Result.Extra.combine
                                                                     |> Result.mapError
                                                                         ((++)
                                                                             ("Failed to parse constructor '"
@@ -1875,7 +1871,6 @@ parseElmTypeAndDependenciesRecursivelyFromAnnotationInternalTyped stack modules 
                                                                             )
                                                                         )
                                                             )
-                                                        |> Result.Extra.combine
                                                         |> Result.map listTupleSecondDictUnion
                                                         |> Result.map
                                                             (\( constructors, constructorsDeps ) ->
@@ -1905,8 +1900,8 @@ parseElmTypeAndDependenciesRecursivelyFromAnnotationInternalTyped stack modules 
             (\( instantiatedType, instantiatedDependencies, genericsNames ) ->
                 argumentsNodes
                     |> List.map (Elm.Syntax.Node.value >> Tuple.pair currentModule)
-                    |> List.map (parseElmTypeAndDependenciesRecursivelyFromAnnotationInternal stack modules)
-                    |> Result.Extra.combine
+                    |> Common.resultListMapCombine
+                        (parseElmTypeAndDependenciesRecursivelyFromAnnotationInternal stack modules)
                     |> Result.map listTupleSecondDictUnion
                     |> Result.andThen
                         (\( instanceArguments, instanceArgumentsDeps ) ->
@@ -1967,10 +1962,10 @@ tryConcretizeRecordInstance typeArguments recordType =
                         |> Result.andThen
                             (\concreteInstantiated ->
                                 instanceElmType.arguments
-                                    |> List.indexedMap
-                                        (\argIndex ->
-                                            tryConcretizeFieldType
-                                                >> Result.mapError
+                                    |> Common.resultListIndexedMapCombine
+                                        (\( argIndex, argVal ) ->
+                                            tryConcretizeFieldType argVal
+                                                |> Result.mapError
                                                     ((++)
                                                         ("Failed to concretize instance argument "
                                                             ++ String.fromInt argIndex
@@ -1978,7 +1973,6 @@ tryConcretizeRecordInstance typeArguments recordType =
                                                         )
                                                     )
                                         )
-                                    |> Result.Extra.combine
                                     |> Result.map
                                         (\concreteArguments ->
                                             InstanceElmType
@@ -1990,10 +1984,10 @@ tryConcretizeRecordInstance typeArguments recordType =
 
                 TupleElmType tupleElmType ->
                     tupleElmType
-                        |> List.indexedMap
-                            (\argIndex ->
-                                tryConcretizeFieldType
-                                    >> Result.mapError
+                        |> Common.resultListIndexedMapCombine
+                            (\( argIndex, argVal ) ->
+                                tryConcretizeFieldType argVal
+                                    |> Result.mapError
                                         ((++)
                                             ("Failed to concretize tuple element "
                                                 ++ String.fromInt argIndex
@@ -2001,12 +1995,11 @@ tryConcretizeRecordInstance typeArguments recordType =
                                             )
                                         )
                             )
-                        |> Result.Extra.combine
                         |> Result.map TupleElmType
 
                 RecordElmType recordElmType ->
                     recordElmType.fields
-                        |> List.map
+                        |> Common.resultListMapCombine
                             (\( fieldName, innerFieldType ) ->
                                 innerFieldType
                                     |> tryConcretizeFieldType
@@ -2019,7 +2012,6 @@ tryConcretizeRecordInstance typeArguments recordType =
                                         )
                                     |> Result.map (Tuple.pair fieldName)
                             )
-                        |> Result.Extra.combine
                         |> Result.map (\fields -> RecordElmType { fields = fields })
 
                 _ ->
@@ -3334,13 +3326,12 @@ elmModulesDictFromAppFiles =
 
 elmModulesDictFromModuleTexts : (List String -> List String) -> List String -> Result String (Dict.Dict (List String) SourceParsedElmModule)
 elmModulesDictFromModuleTexts filePathFromModuleName =
-    List.map
+    Common.resultListMapCombine
         (\moduleText ->
             parseElmModuleText moduleText
                 |> Result.map (Tuple.pair moduleText)
                 |> Result.mapError (parserDeadEndsToString moduleText)
         )
-        >> Result.Extra.combine
         >> Result.map
             (List.map
                 (\( moduleText, moduleSyntax ) ->
@@ -3456,8 +3447,7 @@ prepareReplaceFunctionInSourceFilesModuleText sourceDirs sourceFiles currentModu
                                                                 )
                                                 in
                                                 tree
-                                                    |> List.map buildTreeEntryExpression
-                                                    |> Result.Extra.combine
+                                                    |> Common.resultListMapCombine buildTreeEntryExpression
                                                     |> Result.map
                                                         (\entriesExpressions ->
                                                             "TreeNode\n"
@@ -4422,7 +4412,7 @@ parseElmMakeFunctionConfigFromRecordTreeInternal elmMakeConfig recordTree =
 
         RecordTreeBranch branch ->
             branch
-                |> List.map
+                |> Common.resultListMapCombine
                     (\( branchName, branchValue ) ->
                         (case integrateElmMakeFunctionRecordFieldName branchName elmMakeConfig of
                             Err _ ->
@@ -4433,7 +4423,6 @@ parseElmMakeFunctionConfigFromRecordTreeInternal elmMakeConfig recordTree =
                         )
                             |> Result.map (Tuple.pair branchName)
                     )
-                |> Result.Extra.combine
                 |> Result.map RecordTreeBranch
 
 
@@ -4520,14 +4509,13 @@ prepareRecordTreeEmitForTreeOrBlobUnderPath pathPrefix tree =
                     \valueBytes ->
                         mappedTree
                             |> enumerateLeavesFromRecordTree
-                            |> List.map
+                            |> Common.resultListMapCombine
                                 (\( _, leaf ) ->
                                     leaf.valueModule.buildExpression valueBytes
                                         |> Result.mapError ((++) ("Failed to build expression for field '" ++ leaf.valueModule.fieldName ++ "': "))
                                         |> Result.map
                                             (\expression -> ( leaf.valueModule.fieldName, { expression = expression } ))
                                 )
-                            |> Result.Extra.combine
                             |> Result.map Dict.fromList
                 }
             )
@@ -4754,7 +4742,7 @@ parseInterfaceRecordTree errorFromString integrateFieldName typeAnnotation seed 
     case typeAnnotation of
         RecordElmType record ->
             record.fields
-                |> List.map
+                |> Common.resultListMapCombine
                     (\( fieldName, fieldType ) ->
                         integrateFieldName fieldName seed
                             |> Result.mapError (Tuple.pair [ fieldName ])
@@ -4766,7 +4754,6 @@ parseInterfaceRecordTree errorFromString integrateFieldName typeAnnotation seed 
                                         |> Result.mapError (Tuple.mapFirst ((::) fieldName))
                                 )
                     )
-                |> Result.Extra.combine
                 |> Result.map RecordTreeBranch
 
         ChoiceElmType _ ->

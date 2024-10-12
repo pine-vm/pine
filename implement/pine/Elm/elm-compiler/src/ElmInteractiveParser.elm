@@ -1,5 +1,6 @@
 module ElmInteractiveParser exposing (..)
 
+import Common
 import Elm.Parser
 import Elm.Syntax.Declaration
 import Elm.Syntax.Expression
@@ -78,8 +79,7 @@ expandElmInteractiveEnvironmentWithModuleTexts :
             )
 expandElmInteractiveEnvironmentWithModuleTexts contextModulesTexts =
     contextModulesTexts
-        |> List.map parsedElmFileFromOnlyFileText
-        |> Result.Extra.combine
+        |> Common.resultListMapCombine parsedElmFileFromOnlyFileText
         |> Result.map
             (\parsedModules ->
                 ( parsedModules

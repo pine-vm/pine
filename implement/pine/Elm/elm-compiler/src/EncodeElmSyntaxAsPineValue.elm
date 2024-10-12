@@ -1,5 +1,6 @@
 module EncodeElmSyntaxAsPineValue exposing (..)
 
+import Common
 import Elm.Syntax.Declaration
 import Elm.Syntax.Exposing
 import Elm.Syntax.Expression
@@ -16,7 +17,6 @@ import Elm.Syntax.TypeAlias
 import Elm.Syntax.TypeAnnotation
 import ElmCompiler
 import Pine
-import Result.Extra
 
 
 encodeInteractiveSubmissionAsPineValue : ElmCompiler.InteractiveSubmission -> Result String Pine.Value
@@ -61,8 +61,8 @@ encodeElmSyntaxFileAsPineValue elmSyntaxFile =
 
         Ok moduleDefinitionValue ->
             elmSyntaxFile.declarations
-                |> List.map (encodeElmSyntaxNodeAsPineValueResult encodeElmSyntaxDeclarationAsPineValue)
-                |> Result.Extra.combine
+                |> Common.resultListMapCombine
+                    (encodeElmSyntaxNodeAsPineValueResult encodeElmSyntaxDeclarationAsPineValue)
                 |> Result.map
                     (\declarationsValues ->
                         encodeRecordAsPineValue
@@ -246,10 +246,9 @@ encodeElmSyntaxFunctionExpressionAsPineValue elmSyntaxFunctionExpression =
 
 encodeElmSyntaxFunctionImplementationAsPineValue : Elm.Syntax.Expression.FunctionImplementation -> Result String Pine.Value
 encodeElmSyntaxFunctionImplementationAsPineValue elmSyntaxFunctionImplementation =
-    List.map
-        (encodeElmSyntaxNodeAsPineValueResult encodeElmSyntaxPatternAsPineValue)
-        elmSyntaxFunctionImplementation.arguments
-        |> Result.Extra.combine
+    elmSyntaxFunctionImplementation.arguments
+        |> Common.resultListMapCombine
+            (encodeElmSyntaxNodeAsPineValueResult encodeElmSyntaxPatternAsPineValue)
         |> Result.andThen
             (\argumentsValues ->
                 encodeElmSyntaxNodeAsPineValueResult
@@ -285,8 +284,8 @@ encodeElmSyntaxExpressionAsPineValue expression =
 
         Elm.Syntax.Expression.ListExpr expressions ->
             expressions
-                |> List.map (encodeElmSyntaxNodeAsPineValueResult encodeElmSyntaxExpressionAsPineValue)
-                |> Result.Extra.combine
+                |> Common.resultListMapCombine
+                    (encodeElmSyntaxNodeAsPineValueResult encodeElmSyntaxExpressionAsPineValue)
                 |> Result.map
                     (\expressionsValues ->
                         encodeTagAsPineValue
@@ -296,8 +295,8 @@ encodeElmSyntaxExpressionAsPineValue expression =
 
         Elm.Syntax.Expression.Application expressions ->
             expressions
-                |> List.map (encodeElmSyntaxNodeAsPineValueResult encodeElmSyntaxExpressionAsPineValue)
-                |> Result.Extra.combine
+                |> Common.resultListMapCombine
+                    (encodeElmSyntaxNodeAsPineValueResult encodeElmSyntaxExpressionAsPineValue)
                 |> Result.map
                     (\expressionsValues ->
                         encodeTagAsPineValue
@@ -378,8 +377,8 @@ encodeElmSyntaxExpressionAsPineValue expression =
 
         Elm.Syntax.Expression.TupledExpression expressions ->
             expressions
-                |> List.map (encodeElmSyntaxNodeAsPineValueResult encodeElmSyntaxExpressionAsPineValue)
-                |> Result.Extra.combine
+                |> Common.resultListMapCombine
+                    (encodeElmSyntaxNodeAsPineValueResult encodeElmSyntaxExpressionAsPineValue)
                 |> Result.map
                     (\expressionsValues ->
                         encodeTagAsPineValue
@@ -425,8 +424,8 @@ encodeElmSyntaxExpressionAsPineValue expression =
 
         Elm.Syntax.Expression.RecordExpr recordSetters ->
             recordSetters
-                |> List.map (encodeElmSyntaxNodeAsPineValueResult encodeElmSyntaxRecordSetterAsPineValue)
-                |> Result.Extra.combine
+                |> Common.resultListMapCombine
+                    (encodeElmSyntaxNodeAsPineValueResult encodeElmSyntaxRecordSetterAsPineValue)
                 |> Result.map
                     (\recordSettersValues ->
                         encodeTagAsPineValue
@@ -454,8 +453,8 @@ encodeElmSyntaxExpressionAsPineValue expression =
 
         Elm.Syntax.Expression.RecordUpdateExpression stringNode recordSetters ->
             recordSetters
-                |> List.map (encodeElmSyntaxNodeAsPineValueResult encodeElmSyntaxRecordSetterAsPineValue)
-                |> Result.Extra.combine
+                |> Common.resultListMapCombine
+                    (encodeElmSyntaxNodeAsPineValueResult encodeElmSyntaxRecordSetterAsPineValue)
                 |> Result.map
                     (\recordSettersValues ->
                         encodeTagAsPineValue
@@ -522,8 +521,8 @@ encodeElmSyntaxRecordSetterAsPineValue ( stringNode, expressionNode ) =
 encodeElmSyntaxLambdaAsPineValue : Elm.Syntax.Expression.Lambda -> Result String Pine.Value
 encodeElmSyntaxLambdaAsPineValue lambda =
     lambda.args
-        |> List.map (encodeElmSyntaxNodeAsPineValueResult encodeElmSyntaxPatternAsPineValue)
-        |> Result.Extra.combine
+        |> Common.resultListMapCombine
+            (encodeElmSyntaxNodeAsPineValueResult encodeElmSyntaxPatternAsPineValue)
         |> Result.andThen
             (\argsValues ->
                 encodeElmSyntaxNodeAsPineValueResult
@@ -549,7 +548,7 @@ encodeElmSyntaxCaseBlockAsPineValue caseBlock =
         |> Result.andThen
             (\expressionValue ->
                 caseBlock.cases
-                    |> List.map
+                    |> Common.resultListMapCombine
                         (\( patternNode, expressionNode ) ->
                             encodeElmSyntaxNodeAsPineValueResult encodeElmSyntaxPatternAsPineValue patternNode
                                 |> Result.andThen
@@ -566,7 +565,6 @@ encodeElmSyntaxCaseBlockAsPineValue caseBlock =
                                                 )
                                     )
                         )
-                    |> Result.Extra.combine
                     |> Result.map
                         (\casesValues ->
                             encodeRecordAsPineValue
@@ -620,8 +618,7 @@ encodeElmSyntaxLetBlockAsPineValue letBlock =
                 letDeclarationNode
     in
     letBlock.declarations
-        |> List.map encodeLetDeclarationNodeAsPineValue
-        |> Result.Extra.combine
+        |> Common.resultListMapCombine encodeLetDeclarationNodeAsPineValue
         |> Result.andThen
             (\declarationsValues ->
                 encodeElmSyntaxNodeAsPineValueResult
@@ -663,8 +660,7 @@ encodeElmSyntaxPatternAsPineValue pattern =
 
         Elm.Syntax.Pattern.TuplePattern patterns ->
             patterns
-                |> List.map (encodeElmSyntaxNodeAsPineValueResult encodeElmSyntaxPatternAsPineValue)
-                |> Result.Extra.combine
+                |> Common.resultListMapCombine (encodeElmSyntaxNodeAsPineValueResult encodeElmSyntaxPatternAsPineValue)
                 |> Result.map
                     (\patternsValues ->
                         encodeTagAsPineValue
@@ -698,8 +694,8 @@ encodeElmSyntaxPatternAsPineValue pattern =
 
         Elm.Syntax.Pattern.ListPattern patterns ->
             patterns
-                |> List.map (encodeElmSyntaxNodeAsPineValueResult encodeElmSyntaxPatternAsPineValue)
-                |> Result.Extra.combine
+                |> Common.resultListMapCombine
+                    (encodeElmSyntaxNodeAsPineValueResult encodeElmSyntaxPatternAsPineValue)
                 |> Result.map
                     (\patternsValues ->
                         encodeTagAsPineValue
@@ -712,8 +708,8 @@ encodeElmSyntaxPatternAsPineValue pattern =
 
         Elm.Syntax.Pattern.NamedPattern qualifiedNameRef patterns ->
             patterns
-                |> List.map (encodeElmSyntaxNodeAsPineValueResult encodeElmSyntaxPatternAsPineValue)
-                |> Result.Extra.combine
+                |> Common.resultListMapCombine
+                    (encodeElmSyntaxNodeAsPineValueResult encodeElmSyntaxPatternAsPineValue)
                 |> Result.map
                     (\patternsValues ->
                         encodeTagAsPineValue

@@ -302,7 +302,9 @@ pineValueAsElmValue pineValue =
             Pine.ListValue list ->
                 let
                     genericList () =
-                        case list |> List.map pineValueAsElmValue |> Result.Extra.combine of
+                        case
+                            Common.resultListMapCombine pineValueAsElmValue list
+                        of
                             Err error ->
                                 Err ("Failed to combine list: " ++ error)
 
@@ -435,8 +437,7 @@ elmValueAsElmRecord elmValue =
         ElmList recordFieldList ->
             case
                 recordFieldList
-                    |> List.map tryMapToRecordField
-                    |> Result.Extra.combine
+                    |> Common.resultListMapCombine tryMapToRecordField
             of
                 Ok recordFields ->
                     let
@@ -832,7 +833,7 @@ resolveDictionaryToLiteralValues : Dict.Dict String PineValueSupportingReference
 resolveDictionaryToLiteralValues dictionary =
     dictionary
         |> Dict.toList
-        |> List.map
+        |> Common.resultListMapCombine
             (\( entryName, entryValue ) ->
                 resolvePineValueReferenceToLiteralRecursive Set.empty dictionary entryValue
                     |> Result.map (Tuple.pair entryName)
@@ -847,7 +848,6 @@ resolveDictionaryToLiteralValues dictionary =
                                 ++ ")"
                         )
             )
-        |> Result.Extra.combine
         |> Result.map Dict.fromList
 
 

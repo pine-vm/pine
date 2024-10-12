@@ -1,5 +1,6 @@
 module CompileElmAppWithStateShim exposing (..)
 
+import Common
 import CompileElmApp
     exposing
         ( AppFiles
@@ -30,7 +31,6 @@ import Elm.Syntax.Module
 import Elm.Syntax.Node
 import Elm.Syntax.Range
 import Elm.Syntax.TypeAnnotation
-import Result.Extra
 import Set
 
 
@@ -426,7 +426,7 @@ supportingTypesModules sourceDirs stateShimConfig originalSourceModules =
                             jsonConverterDeclarationsResults =
                                 stateShimConfig.jsonConverterDeclarationsConfigs
                                     |> Dict.toList
-                                    |> List.map
+                                    |> Common.resultListMapCombine
                                         (\( declarationName, converterConfig ) ->
                                             fromStateShimConfigJsonConverterConfig converterConfig
                                                 |> Result.map (Tuple.pair declarationName)
@@ -447,7 +447,6 @@ supportingTypesModules sourceDirs stateShimConfig originalSourceModules =
                                         |> Result.andThen
                                             (\stateShimResponseResultType ->
                                                 jsonConverterDeclarationsResults
-                                                    |> Result.Extra.combine
                                                     |> Result.map
                                                         (\jsonConverterDeclarations ->
                                                             { modules = typesModules

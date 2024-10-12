@@ -1,5 +1,6 @@
 module CompileBackendApp exposing (..)
 
+import Common
 import CompileElmApp
     exposing
         ( AppFiles
@@ -41,7 +42,6 @@ import Elm.Syntax.ModuleName
 import Elm.Syntax.Node
 import Elm.Syntax.Range
 import Elm.Syntax.TypeAnnotation
-import Result.Extra
 import Set
 
 
@@ -624,7 +624,7 @@ parseExposeFunctionsToAdminConfig { originalSourceModules, backendStateType } =
                             )
             in
             functionDeclarations
-                |> List.map
+                |> Common.resultListMapCombine
                     (\functionDeclaration ->
                         parseExposeFunctionsToAdminConfigFromDeclaration
                             { originalSourceModules = originalSourceModules
@@ -643,7 +643,6 @@ parseExposeFunctionsToAdminConfig { originalSourceModules, backendStateType } =
                                     )
                                 )
                     )
-                |> Result.Extra.combine
                 |> Result.mapError List.singleton
                 |> Result.map
                     (\parsedDeclarations ->
