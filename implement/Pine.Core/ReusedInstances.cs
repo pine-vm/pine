@@ -53,14 +53,6 @@ public record ReusedInstances(
     }
 
 
-    public record PrebuiltListEntry(
-        string Key,
-        PrebuiltListEntryValue Value);
-
-    public record PrebuiltListEntryValue(
-        string? BlobBytesBase64,
-        IReadOnlyList<string>? ListItemsKeys);
-
     const string expectedInCompilerKey = "expected-in-compiler-container";
 
     public static System.ReadOnlyMemory<byte> BuildPrecompiledDictFile(
@@ -71,11 +63,11 @@ public record ReusedInstances(
         return System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(entriesList);
     }
 
-    public static IReadOnlyList<PrebuiltListEntry> PrebuildListEntries(
+    public static IReadOnlyList<PineValueCompactBuild.ListEntry> PrebuildListEntries(
         PineListValueReusedInstances source)
     {
         var (_, allBlobs) =
-            CollectAllComponentsFromRoots(
+            PineValue.CollectAllComponentsFromRoots(
                 [.. source.PineValueLists.Values
                 ,..source.ValuesExpectedInCompilerLists
                 ,..source.ValuesExpectedInCompilerBlobs]);
@@ -92,9 +84,9 @@ public record ReusedInstances(
                 mutatedBlobsDict[blobValue] = entryKey;
 
                 return
-                new PrebuiltListEntry(
+                new PineValueCompactBuild.ListEntry(
                     Key: entryKey,
-                    new PrebuiltListEntryValue(
+                    new PineValueCompactBuild.ListEntryValue(
                         BlobBytesBase64: System.Convert.ToBase64String(blobValue.Bytes.Span),
                         ListItemsKeys: null));
             })
@@ -107,55 +99,18 @@ public record ReusedInstances(
             .OrderBy(l => l.NodesCount)
             .ToList();
 
-        var mutatedListDict = new Dictionary<PineValue.ListValue, string>();
-
-        string itemId(PineValue itemValue)
-        {
-            if (itemValue is PineValue.BlobValue itemBlob)
-                return mutatedBlobsDict[itemBlob];
-
-            if (itemValue is PineValue.ListValue itemList)
-                return mutatedListDict[itemList];
-
-            throw new System.NotImplementedException(
-                "Unexpected item value type: " + itemValue.GetType());
-        }
-
-        PrebuiltListEntryValue entryListFromItems(
-            IReadOnlyList<PineValue> itemValues)
-        {
-            var itemsIds = itemValues.Select(itemId).ToArray();
-
-            return new PrebuiltListEntryValue(
-                BlobBytesBase64: null,
-                ListItemsKeys: itemsIds);
-        }
-
-        var listEntriesList =
-            listsOrdered
-            .Select((listInstance, index) =>
-            {
-                var entryKey = "list-" + index.ToString();
-
-                mutatedListDict[listInstance] = entryKey;
-
-                return
-                    new PrebuiltListEntry(
-                        Key: entryKey,
-                        Value: entryListFromItems(listInstance.Elements));
-            })
-            .ToList();
+        var (basicItems, entryValueFromListItems) =
+            PineValueCompactBuild.PrebuildListEntries(
+                blobValues: allBlobs,
+                source.PineValueLists.Values.Concat(source.ValuesExpectedInCompilerLists).ToHashSet());
 
         var ventry =
-            new PrebuiltListEntry(
+            new PineValueCompactBuild.ListEntry(
                 Key: expectedInCompilerKey,
-                Value: entryListFromItems(
+                Value: entryValueFromListItems(
                     [.. source.ValuesExpectedInCompilerBlobs.Cast<PineValue>().Concat(source.ValuesExpectedInCompilerLists)]));
 
-        return
-            [..blobEntriesList
-            ,..listEntriesList
-            ,ventry];
+        return [.. basicItems, ventry];
     }
 
     public const string EmbeddedResourceFilePath = "prebuilt-artifact/reused-pine-values.json";
@@ -210,50 +165,18 @@ public record ReusedInstances(
     public static PineListValueReusedInstances LoadFromPrebuiltJson(System.ReadOnlyMemory<byte> json)
     {
         var parsed =
-            System.Text.Json.JsonSerializer.Deserialize<IReadOnlyList<PrebuiltListEntry>>(json.Span);
+            System.Text.Json.JsonSerializer.Deserialize<IReadOnlyList<PineValueCompactBuild.ListEntry>>(json.Span);
 
         return LoadFromPrebuilt(parsed);
     }
 
     public static PineListValueReusedInstances LoadFromPrebuilt(
-        IReadOnlyList<PrebuiltListEntry> entries)
+        IReadOnlyList<PineValueCompactBuild.ListEntry> entries)
     {
-        var mutatedDict = new Dictionary<string, PineValue>();
+        var overallDictionary =
+            PineValueCompactBuild.BuildDictionaryFromEntries(entries);
 
-        PineValue contructValue(
-            PrebuiltListEntryValue entryValue)
-        {
-            if (entryValue.BlobBytesBase64 is { } bytesBase64)
-            {
-                var bytes = System.Convert.FromBase64String(bytesBase64);
-
-                return PineValue.Blob(bytes);
-            }
-
-            if (entryValue.ListItemsKeys is { } listItemsKeys)
-            {
-                var items = new PineValue[listItemsKeys.Count];
-
-                for (int i = 0; i < items.Length; ++i)
-                {
-                    items[i] = mutatedDict[listItemsKeys[i]];
-                }
-
-                return PineValue.List(items);
-            }
-
-            throw new System.NotImplementedException(
-                "Unexpected entry type: " + entryValue.GetType());
-        }
-
-        for (var i = 0; i < entries.Count; ++i)
-        {
-            var entry = entries[i];
-
-            mutatedDict[entry.Key] = contructValue(entry.Value);
-        }
-
-        var valuesExpectedInCompilerContainer = mutatedDict[expectedInCompilerKey];
+        var valuesExpectedInCompilerContainer = overallDictionary[expectedInCompilerKey];
 
         if (valuesExpectedInCompilerContainer is not PineValue.ListValue valuesExpectedInCompilerList)
         {
@@ -271,7 +194,7 @@ public record ReusedInstances(
 
         var valueListsDict = new Dictionary<PineValue.ListValue.ListValueStruct, PineValue.ListValue>();
 
-        foreach (var item in mutatedDict)
+        foreach (var item in overallDictionary)
         {
             if (item.Key is expectedInCompilerKey)
                 continue;
@@ -283,11 +206,10 @@ public record ReusedInstances(
         }
 
         return new PineListValueReusedInstances(
-            listValuesExpectedInCompiler,
-            blobValuesExpectedInCompiler,
-            valueListsDict);
+            ValuesExpectedInCompilerLists: listValuesExpectedInCompiler,
+            ValuesExpectedInCompilerBlobs: blobValuesExpectedInCompiler,
+            PineValueLists: valueListsDict);
     }
-
 
     public record PineListValueReusedInstances(
         IReadOnlySet<PineValue.ListValue> ValuesExpectedInCompilerLists,
@@ -305,7 +227,7 @@ public record ReusedInstances(
             .ToList();
 
         var (valuesExpectedInCompilerLists, valuesExpectedInCompilerBlobs) =
-            CollectAllComponentsFromRoots(valueRootsFromProgramsSorted);
+            PineValue.CollectAllComponentsFromRoots(valueRootsFromProgramsSorted);
 
         IReadOnlyDictionary<PineValue.ListValue.ListValueStruct, PineValue.ListValue> PineValueLists;
 
@@ -337,7 +259,7 @@ public record ReusedInstances(
             }
 
             var (allListsComponents, _) =
-                CollectAllComponentsFromRoots(
+                PineValue.CollectAllComponentsFromRoots(
                     valuesExpectedInCompilerLists
                     .Concat(tempElmValueEncodingDict.Values));
 
@@ -742,34 +664,6 @@ public record ReusedInstances(
         }
 
         return elmValue;
-    }
-
-    public static (IReadOnlySet<PineValue.ListValue>, IReadOnlySet<PineValue.BlobValue>) CollectAllComponentsFromRoots(
-        IEnumerable<PineValue> roots)
-    {
-        var collectedBlobs = new HashSet<PineValue.BlobValue>(roots.OfType<PineValue.BlobValue>());
-        var collectedLists = new HashSet<PineValue.ListValue>();
-
-        var stack = new Stack<PineValue.ListValue>(roots.OfType<PineValue.ListValue>());
-
-        while (stack.TryPop(out var listValue))
-        {
-            if (collectedLists.Contains(listValue))
-                continue;
-
-            collectedLists.Add(listValue);
-
-            for (var i = 0; i < listValue.Elements.Count; i++)
-            {
-                if (listValue.Elements[i] is PineValue.ListValue childList)
-                    stack.Push(childList);
-
-                if (listValue.Elements[i] is PineValue.BlobValue childBlob)
-                    collectedBlobs.Add(childBlob);
-            }
-        }
-
-        return (collectedLists, collectedBlobs);
     }
 
     public static IReadOnlySet<ElmValue> CollectAllComponentsFromRoots(

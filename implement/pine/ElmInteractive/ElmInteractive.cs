@@ -78,22 +78,23 @@ public class ElmInteractive
             System.Text.Json.JsonSerializer.Deserialize<IReadOnlyList<string>>(responseJson)!;
     }
 
-    internal static Result<string, (PineValue compileResult, CompilationCache compilationCache)> CompileInteractiveEnvironment(
-        IJavaScriptEngine evalElmPreparedJavaScriptEngine,
+    public static Result<string, (PineValue compileResult, CompilationCache compilationCache)> CompileInteractiveEnvironment(
         PineValue? initialState,
         TreeNodeWithStringPath? appCodeTree,
         CompilationCache compilationCacheBefore)
     {
         var allModulesTexts =
+            /*
             GetDefaultElmCoreModulesTexts(evalElmPreparedJavaScriptEngine)
             .Concat(ModulesTextsFromAppCodeTree(appCodeTree) ?? [])
             .ToImmutableList();
+            */
+            ModulesTextsFromAppCodeTree(appCodeTree) ?? [];
 
         return
             CompileInteractiveEnvironmentForModulesCachingIncrements(
                 initialState: initialState,
                 elmModulesTextsBeforeSort: allModulesTexts,
-                evalElmPreparedJavaScriptEngine,
                 compilationCacheBefore)
             .Map(compileResultAndCache =>
             (compileResult: compileResultAndCache.compileResult.environmentPineValue,
@@ -104,7 +105,6 @@ public class ElmInteractive
         CompileInteractiveEnvironmentForModulesCachingIncrements(
         PineValue? initialState,
         IReadOnlyList<string> elmModulesTextsBeforeSort,
-        IJavaScriptEngine evalElmPreparedJavaScriptEngine,
         CompilationCache compilationCacheBefore)
     {
         if (initialState is not null)
@@ -146,6 +146,10 @@ public class ElmInteractive
             .Skip(closestBaseFromFile.Value.CompiledModules.Count)
             .ToImmutableList() :
             elmModulesTexts;
+
+        using var evalElmPreparedJavaScriptEngine =
+            Pine.Elm.ElmCompiler.JavaScriptEngineFromElmCompilerSourceFiles(
+                Pine.Elm.ElmCompiler.CompilerSourceContainerFilesDefault.Value);
 
         Result<string, (CompileInteractiveEnvironmentResult compileResult, CompilationCache compilationCache)> chooseInitResult()
         {
@@ -805,6 +809,9 @@ public class ElmInteractive
         if (sourceTree is null)
             return null;
 
+        if (sourceTree.GetNodeAtPath(["elm.json"]) is null)
+            return sourceTree;
+
         var sourceFiles = TreeToFlatDictionaryWithPathComparer(sourceTree);
 
         if (sourceFiles.Count == 0)
@@ -915,11 +922,6 @@ public class ElmInteractive
                 javascriptMinusCrashes,
                 listFunctionToPublish);
     }
-
-    public static Result<string, IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>>> LoadCompileElmProgramCodeFiles() =>
-        DotNetAssembly.LoadDirectoryFilesFromManifestEmbeddedFileProviderAsDictionary(
-            directoryPath: ["Elm", "elm-compiler"],
-            assembly: typeof(ElmInteractive).Assembly);
 
     private record EvaluateSubmissionResponseStructure
         (string? FailedToDecodeArguments = null,

@@ -5,6 +5,7 @@ using McMaster.Extensions.CommandLineUtils;
 using Microsoft.AspNetCore.Hosting;
 using Pine;
 using Pine.Core;
+using Pine.Core.Elm;
 using Pine.Elm;
 using Pine.Elm.Platform;
 using Pine.PineVM;
@@ -80,6 +81,8 @@ public class Program
         var describeCommand = AddDescribeCommand(app);
 
         var runCacheServerCmd = AddRunCacheServerCmd(app);
+
+        var compileInteractiveEnvCommand = AddCompileInteractiveEnvCommand(app);
 
         app.Command("user-secrets", userSecretsCmd =>
         {
@@ -728,6 +731,84 @@ public class Program
             });
         });
 
+    private static CommandLineApplication AddCompileInteractiveEnvCommand(CommandLineApplication app) =>
+        app.Command("compile-interactive-env", compileCommand =>
+        {
+            compileCommand.Description = "Compile an interactive environment from Elm modules into a Pine value";
+            compileCommand.UnrecognizedArgumentHandling = UnrecognizedArgumentHandling.Throw;
+
+            var envSourceOption =
+            compileCommand.Option(
+                template: "--env-source",
+                description: "Source to load Elm modules from.",
+                optionType: CommandOptionType.MultipleValue);
+
+            var outputCompactBuildOption =
+            compileCommand.Option(
+                template: "--output-compact-build",
+                description: "File path to save a compact build JSON containing the compiled environments.",
+                optionType: CommandOptionType.SingleOrNoValue);
+
+            compileCommand.OnExecute(() =>
+            {
+                var environmentsSourceTrees =
+                envSourceOption.Values
+                .Select(sourcePath =>
+                {
+                    var loadCompositionResult =
+                        LoadComposition.LoadFromPathResolvingNetworkDependencies(sourcePath)
+                        .LogToActions(Console.WriteLine)
+                        .Extract(error => throw new Exception("Failed to load from path '" + sourcePath + "': " + error));
+
+                    var fileTree = loadCompositionResult.tree;
+
+                    if (fileTree is TreeNodeWithStringPath.BlobNode sourceBlob)
+                    {
+                        var zipEntries = ZipArchive.EntriesFromZipArchive(sourceBlob.Bytes);
+
+                        fileTree = PineValueComposition.SortedTreeFromSetOfBlobsWithCommonFilePath(zipEntries);
+                    }
+
+                    return fileTree;
+                });
+
+                var compiledEnvironments =
+                environmentsSourceTrees
+                .Select(sourceTree =>
+                {
+                    var compiledEnv =
+                    ElmCompiler.LoadOrCompileInteractiveEnvironment(sourceTree)
+                    .Extract(err => throw new Exception("Failed compilation: " + err));
+
+                    return new KeyValuePair<TreeNodeWithStringPath, PineValue>(sourceTree, compiledEnv);
+                })
+                .ToImmutableDictionary();
+
+                var bundleResourceFile = BundledElmEnvironments.BuildBundleResourceFileJsonUtf8(compiledEnvironments);
+
+                if (outputCompactBuildOption.HasValue())
+                {
+                    var destFilePath = outputCompactBuildOption.Value();
+
+                    if (Path.GetDirectoryName(destFilePath) is { } destDirectory)
+                    {
+                        Directory.CreateDirectory(destDirectory);
+                    }
+
+                    File.WriteAllBytes(
+                        destFilePath,
+                        bundleResourceFile.ToArray());
+
+                    Console.WriteLine(
+                        "Saved compact build with " +
+                        CommandLineInterface.FormatIntegerForDisplay(bundleResourceFile.Length) +
+                        " bytes to " + destFilePath);
+                }
+
+                return 0;
+            });
+        });
+
     private static string LoadArgumentFromUserInterfaceAsJsonOrFileTextContext(string argumentFromCLI)
     {
         try
@@ -1266,7 +1347,7 @@ public class Program
                                 });
                         }
 
-                        ElmInteractive.IInteractiveSession newInteractiveSessionFromAppCode(TreeNodeWithStringPath? appCodeTree)
+                        IInteractiveSession newInteractiveSessionFromAppCode(TreeNodeWithStringPath? appCodeTree)
                         {
                             if (compileOption.HasValue() || saveCompiledCSharp is not null)
                             {
@@ -1279,7 +1360,7 @@ public class Program
                                         overrideInvocations: compiledDecodeExpressionOverrides,
                                         evalCache: vmCache.EvalCache);
 
-                                    return new ElmInteractive.InteractiveSessionPine(
+                                    return new InteractiveSessionPine(
                                         compileElmProgramCodeFiles: compileElmProgramCodeFiles,
                                         initialState: null,
                                         appCodeTree: appCodeTree,
@@ -1293,7 +1374,7 @@ public class Program
                                 elmEngineType);
                         }
 
-                        var interactiveConfig = new ElmInteractive.InteractiveSessionConfig(
+                        var interactiveConfig = new InteractiveSessionConfig(
                             CompilerId:
                             CommonConversion.StringBase16(PineValueHashTree.ComputeHashSorted(compileElmProgramCodeFiles))[..8],
                             newInteractiveSessionFromAppCode);
@@ -1483,7 +1564,7 @@ public class Program
                 {
                     console.WriteLine("Got option to save session state to " + saveToFile + "...");
 
-                    if (interactiveSession is not ElmInteractive.InteractiveSessionPine pineSession)
+                    if (interactiveSession is not InteractiveSessionPine pineSession)
                     {
                         console.WriteLine("Cannot save session state for this engine type: " + interactiveSession.GetType().Name);
                     }
@@ -2051,12 +2132,12 @@ public class Program
         .Argument("process-site", "Path to the admin interface of the server running the process.")
         .IsRequired(allowEmptyStrings: false);
 
-    private static (CommandOption elmEngineOption, Func<ElmInteractive.ElmEngineType> parseElmEngineTypeFromOption)
+    private static (CommandOption elmEngineOption, Func<ElmEngineType> parseElmEngineTypeFromOption)
         AddElmEngineOptionOnCommand(
         DynamicPGOShare? dynamicPGOShare,
         CommandLineApplication cmd,
         string? defaultFromEnvironmentVariablePrefix,
-        Func<ElmInteractive.ElmEngineTypeCLI?, ElmInteractive.ElmEngineTypeCLI> defaultEngineConsideringEnvironmentVariable)
+        Func<ElmEngineTypeCLI?, ElmEngineTypeCLI> defaultEngineConsideringEnvironmentVariable)
     {
         var defaultEngineFromEnvironmentVariable =
             defaultFromEnvironmentVariablePrefix switch
@@ -2070,16 +2151,16 @@ public class Program
         var elmEngineOption =
             cmd.Option(
                 template: "--elm-engine",
-                description: "Select the engine for running Elm programs (" + string.Join(", ", Enum.GetNames<ElmInteractive.ElmEngineTypeCLI>()) + "). Defaults to " + defaultEngine,
+                description: "Select the engine for running Elm programs (" + string.Join(", ", Enum.GetNames<ElmEngineTypeCLI>()) + "). Defaults to " + defaultEngine,
                 optionType: CommandOptionType.SingleValue,
                 inherited: true);
 
-        ElmInteractive.ElmEngineType parseElmEngineTypeFromOption()
+        ElmEngineType parseElmEngineTypeFromOption()
         {
             var cliName =
                 elmEngineOption?.Value() switch
                 {
-                    { } asString => Enum.Parse<ElmInteractive.ElmEngineTypeCLI>(asString, ignoreCase: true),
+                    { } asString => Enum.Parse<ElmEngineTypeCLI>(asString, ignoreCase: true),
                     null => defaultEngine,
                 };
 
@@ -2123,7 +2204,7 @@ public class Program
         return (elmCompilerOption, parseElmCompilerFromOption);
     }
 
-    public static ElmInteractive.ElmEngineTypeCLI? ElmEngineFromEnvironmentVariableWithPrefix(string? environmentVariablePrefix)
+    public static ElmEngineTypeCLI? ElmEngineFromEnvironmentVariableWithPrefix(string? environmentVariablePrefix)
     {
         var environmentVariable =
             environmentVariablePrefix?.TrimEnd('_') +
@@ -2133,32 +2214,32 @@ public class Program
         if (Environment.GetEnvironmentVariable(environmentVariable) is not { } asString)
             return null;
 
-        if (Enum.TryParse<ElmInteractive.ElmEngineTypeCLI>(asString, ignoreCase: true, out var cliName))
+        if (Enum.TryParse<ElmEngineTypeCLI>(asString, ignoreCase: true, out var cliName))
             return cliName;
 
         return null;
     }
 
-    public static ElmInteractive.ElmEngineType ParseElmEngineType(
+    public static ElmEngineType ParseElmEngineType(
         DynamicPGOShare? dynamicPGOShare,
-        ElmInteractive.ElmEngineTypeCLI elmEngineTypeCLI) =>
+        ElmEngineTypeCLI elmEngineTypeCLI) =>
         elmEngineTypeCLI switch
         {
             ElmEngineTypeCLI.JavaScript_Jint =>
-            new ElmInteractive.ElmEngineType.JavaScript_Jint(),
+            new ElmEngineType.JavaScript_Jint(),
 
             ElmEngineTypeCLI.JavaScript_V8 =>
-            new ElmInteractive.ElmEngineType.JavaScript_V8(),
+            new ElmEngineType.JavaScript_V8(),
 
             ElmEngineTypeCLI.Pine =>
-            new ElmInteractive.ElmEngineType.Pine(
+            new ElmEngineType.Pine(
                 Caching: true,
-                DynamicPGOShare: dynamicPGOShare),
+                DynamicPGOShare: null),
 
             ElmEngineTypeCLI.Pine_without_cache =>
-            new ElmInteractive.ElmEngineType.Pine(
+            new ElmEngineType.Pine(
                 Caching: false,
-                DynamicPGOShare: dynamicPGOShare),
+                DynamicPGOShare: null),
 
             _ =>
             throw new NotImplementedException($"Unexpected engine type value: {elmEngineTypeCLI}"),

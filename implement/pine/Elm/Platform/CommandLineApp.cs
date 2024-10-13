@@ -109,7 +109,7 @@ public record CommandLineAppConfig(
     {
         using var interactiveSession =
             new ElmTime.ElmInteractive.InteractiveSessionPine(
-                ElmCompiler.CompilerSourceFilesDefault.Value,
+                ElmCompiler.CompilerSourceContainerFilesDefault.Value,
                 initialState: null,
                 appCodeTree: sourceFiles,
                 caching: true,

@@ -1,24 +1,34 @@
 using ElmTime.ElmInteractive;
 using ElmTime.JavaScript;
 using Pine.Core;
+using Pine.Core.Elm;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Collections.Immutable;
+using System.Diagnostics;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
 namespace Pine.Elm;
 
-public class ElmCompiler : IDisposable
+public class ElmCompiler
 {
     private static readonly ConcurrentDictionary<TreeNodeWithStringPath, Task<Result<string, ElmCompiler>>> buildCompilerFromSource = new();
 
-    static public readonly Lazy<TreeNodeWithStringPath> CompilerSourceFilesDefault =
+    static public readonly Lazy<TreeNodeWithStringPath> CompilerSourceContainerFilesDefault =
         new(() => PineValueComposition.SortedTreeFromSetOfBlobsWithStringPath(
-            ElmTime.ElmInteractive.ElmInteractive.LoadCompileElmProgramCodeFiles()
-            .Extract(error => throw new NotImplementedException(nameof(ElmTime.ElmInteractive.ElmInteractive.LoadCompileElmProgramCodeFiles) + ": " + error))));
+            LoadElmCompilerSourceCodeFiles()
+            .Extract(error => throw new NotImplementedException(nameof(LoadElmCompilerSourceCodeFiles) + ": " + error))));
+
+    static public readonly Lazy<TreeNodeWithStringPath> CompilerSourceFilesDefault =
+        new(() => ElmCompilerFileTreeFromContainerFileTree(CompilerSourceContainerFilesDefault.Value));
+
+    public static Result<string, IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>>> LoadElmCompilerSourceCodeFiles() =>
+        DotNetAssembly.LoadDirectoryFilesFromManifestEmbeddedFileProviderAsDictionary(
+            directoryPath: ["Elm", "elm-compiler"],
+            assembly: typeof(ElmCompiler).Assembly);
 
     public static IReadOnlyList<string> CompilerPackageSources =>
     [
@@ -47,7 +57,7 @@ public class ElmCompiler : IDisposable
             "https://github.com/Viir/elm-syntax/tree/6e7011a54323c046624ebddf0802d40366aae3bb/"
     ];
 
-    public IJavaScriptEngine CompileElmPreparedJavaScriptEngine { get; }
+    public TreeNodeWithStringPath CompilerSourceFiles { get; }
 
     public PineValue CompilerEnvironment { get; }
 
@@ -56,11 +66,11 @@ public class ElmCompiler : IDisposable
     private static readonly PineVM.PineVMParseCache parseCache = new();
 
     private ElmCompiler(
-        IJavaScriptEngine compileElmPreparedJavaScriptEngine,
+        TreeNodeWithStringPath compilerSourceFiles,
         PineValue compilerEnvironment,
         ElmInteractiveEnvironment.FunctionRecord compileParsedInteractiveSubmission)
     {
-        CompileElmPreparedJavaScriptEngine = compileElmPreparedJavaScriptEngine;
+        CompilerSourceFiles = compilerSourceFiles;
         CompilerEnvironment = compilerEnvironment;
         CompileParsedInteractiveSubmission = compileParsedInteractiveSubmission;
     }
@@ -74,20 +84,25 @@ public class ElmCompiler : IDisposable
             compilerSourceFiles => Task.Run(() => BuildElmCompiler(compilerSourceFiles)));
     }
 
-    public void Dispose()
+    public static Result<string, ElmCompiler> BuildElmCompiler(
+        TreeNodeWithStringPath compilerSourceFiles)
     {
-        CompileElmPreparedJavaScriptEngine?.Dispose();
+        var compilerWithPackagesTree =
+            ElmCompilerFileTreeFromContainerFileTree(compilerSourceFiles);
 
-        GC.SuppressFinalize(this);
+        return
+            LoadOrCompileInteractiveEnvironment(compilerWithPackagesTree)
+            .AndThen(compiledEnv =>
+            {
+                return ElmCompilerFromEnvValue(
+                    compilerSourceFiles,
+                    compiledEnv);
+            });
     }
 
-    public static Result<string, ElmCompiler> BuildElmCompiler(TreeNodeWithStringPath compilerSourceFiles)
+    public static TreeNodeWithStringPath ElmCompilerFileTreeFromContainerFileTree(
+        TreeNodeWithStringPath containerFileTree)
     {
-        var compileElmPreparedJavaScriptEngine =
-            ElmTime.ElmInteractive.ElmInteractive.PrepareJavaScriptEngineToEvaluateElm(
-                compileElmProgramCodeFiles: compilerSourceFiles,
-                JavaScriptEngineFromJavaScriptEngineSwitcher.ConstructJavaScriptEngine());
-
         var compilerPackageSourcesTrees =
             CompilerPackageSources
             .Select(LoadFromGitHubOrGitLab.LoadFromUrl)
@@ -101,18 +116,13 @@ public class ElmCompiler : IDisposable
             blobAtPath.path.First() == "src" && blobAtPath.path.Last().ToLower().EndsWith(".elm"));
 
         var compilerAppCodeSourceFiles =
-            compilerSourceFiles.EnumerateBlobsTransitive()
+            containerFileTree.EnumerateBlobsTransitive()
             .Where(blobAtPath => blobAtPath.path.Last().ToLower().EndsWith(".elm"))
             .ToImmutableArray();
 
-        var elmCoreLibraryModulesTexts =
-            ElmTime.ElmInteractive.ElmInteractive.GetDefaultElmCoreModulesTexts(compileElmPreparedJavaScriptEngine);
-
-        var elmModulesTexts = elmCoreLibraryModulesTexts;
-
         var compilerProgramOnlyElmJson =
             TreeNodeWithStringPath.FilterNodes(
-                compilerSourceFiles,
+                containerFileTree,
                 nodePath => nodePath.SequenceEqual(["elm.json"]));
 
         var allAvailableElmFiles =
@@ -142,25 +152,97 @@ public class ElmCompiler : IDisposable
                 func: (aggregate, elmModule) =>
                 aggregate.SetNodeAtPathSorted(elmModule.path, TreeNodeWithStringPath.Blob(elmModule.blobContent)));
 
+        var compilerWithCoreModules =
+            MergeElmCoreModules(compilerWithPackagesTree);
+
+        return compilerWithCoreModules;
+    }
+
+    public static TreeNodeWithStringPath MergeElmCoreModules(
+        TreeNodeWithStringPath compilerWithPackagesTree)
+    {
+        using var compileElmPreparedJavaScriptEngine =
+            JavaScriptEngineFromElmCompilerSourceFiles(CompilerSourceContainerFilesDefault.Value);
+
+        var defaultElmCoreModulesTexts =
+            ElmTime.ElmInteractive.ElmInteractive.GetDefaultElmCoreModulesTexts(compileElmPreparedJavaScriptEngine);
+
+        var defaultElmCoreModules =
+            defaultElmCoreModulesTexts
+            .Select(moduleText =>
+            (moduleName: ElmTime.ElmSyntax.ElmModule.ParseModuleName(moduleText).Extract(err => throw new Exception(err)),
+            moduleText))
+            .ToImmutableArray();
+
+        var compilerWithCoreModules =
+            defaultElmCoreModules
+            .Aggregate(
+                seed: compilerWithPackagesTree,
+                func: (aggregate, elmModule) =>
+                {
+                    IReadOnlyList<string> filePath =
+                    ["src"
+                    , .. elmModule.moduleName.SkipLast(1)
+                    , elmModule.moduleName.Last() + ".elm"
+                    ];
+
+                    var fileContent = Encoding.UTF8.GetBytes(elmModule.moduleText);
+
+                    return aggregate.SetNodeAtPathSorted(filePath, TreeNodeWithStringPath.Blob(fileContent));
+                });
+
+        return compilerWithCoreModules;
+    }
+
+    public static Result<string, PineValue> LoadOrCompileInteractiveEnvironment(
+        TreeNodeWithStringPath compilerSourceFiles)
+    {
+        if (BundledElmEnvironments.BundledElmEnvironmentFromFileTree(compilerSourceFiles) is { } fromBundle)
+        {
+            return Result<string, PineValue>.ok(fromBundle);
+        }
+
+        return CompileInteractiveEnvironment(compilerSourceFiles);
+    }
+
+    public static Result<string, PineValue> CompileInteractiveEnvironment(
+        TreeNodeWithStringPath compilerSourceFiles)
+    {
         return
-            InteractiveSessionPine.CompileInteractiveEnvironment(
-                compileElmPreparedJavaScriptEngine,
-                lastCompilationCache: ElmTime.ElmInteractive.ElmInteractive.CompilationCache.Empty,
+            ElmTime.ElmInteractive.ElmInteractive.CompileInteractiveEnvironment(
                 initialState: null,
-                compilerWithPackagesTree)
-            .AndThen(compiledEnv =>
-            {
-                return
-                ElmInteractiveEnvironment.ParseFunctionFromElmModule(
-                        interactiveEnvironment: compiledEnv.compileResult,
-                        moduleName: "ElmCompiler",
-                        declarationName: "compileParsedInteractiveSubmission",
-                        parseCache)
-                .Map(parseModuleResponse =>
-                new ElmCompiler(
-                    compileElmPreparedJavaScriptEngine,
-                    compiledEnv.compileResult,
-                    parseModuleResponse.functionRecord));
-            });
+                appCodeTree: compilerSourceFiles,
+                compilationCacheBefore: ElmTime.ElmInteractive.ElmInteractive.CompilationCache.Empty)
+            .Map(result => result.compileResult);
+    }
+
+    public static IJavaScriptEngine JavaScriptEngineFromElmCompilerSourceFiles(
+        TreeNodeWithStringPath compilerSourceFiles)
+    {
+        var javaScriptEngine =
+            JavaScriptEngineFromJavaScriptEngineSwitcher.ConstructJavaScriptEngine();
+
+        ElmTime.ElmInteractive.ElmInteractive.PrepareJavaScriptEngineToEvaluateElm(
+            compileElmProgramCodeFiles: compilerSourceFiles,
+            javaScriptEngine);
+
+        return javaScriptEngine;
+    }
+
+    public static Result<string, ElmCompiler> ElmCompilerFromEnvValue(
+        TreeNodeWithStringPath compilerSourceFiles,
+        PineValue compiledEnv)
+    {
+        return
+            ElmInteractiveEnvironment.ParseFunctionFromElmModule(
+                interactiveEnvironment: compiledEnv,
+                moduleName: "ElmCompiler",
+                declarationName: "compileParsedInteractiveSubmission",
+                parseCache)
+            .Map(parseModuleResponse =>
+            new ElmCompiler(
+                compilerSourceFiles,
+                compiledEnv,
+                parseModuleResponse.functionRecord));
     }
 }

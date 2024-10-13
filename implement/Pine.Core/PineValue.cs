@@ -301,5 +301,34 @@ public abstract record PineValue : IEquatable<PineValue>
             _ =>
             throw new NotImplementedException()
         };
+
+
+    public static (IReadOnlySet<ListValue>, IReadOnlySet<BlobValue>) CollectAllComponentsFromRoots(
+        IEnumerable<PineValue> roots)
+    {
+        var collectedBlobs = new HashSet<BlobValue>(roots.OfType<BlobValue>());
+        var collectedLists = new HashSet<ListValue>();
+
+        var stack = new Stack<ListValue>(roots.OfType<ListValue>());
+
+        while (stack.TryPop(out var listValue))
+        {
+            if (collectedLists.Contains(listValue))
+                continue;
+
+            collectedLists.Add(listValue);
+
+            for (var i = 0; i < listValue.Elements.Count; i++)
+            {
+                if (listValue.Elements[i] is ListValue childList)
+                    stack.Push(childList);
+
+                if (listValue.Elements[i] is BlobValue childBlob)
+                    collectedBlobs.Add(childBlob);
+            }
+        }
+
+        return (collectedLists, collectedBlobs);
+    }
 }
 

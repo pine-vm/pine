@@ -8,6 +8,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Pine.Core\Pine.Core.csproj" />
+    <ProjectReference Include="..\pine\pine.csproj" />
   </ItemGroup>
 
 </Project>

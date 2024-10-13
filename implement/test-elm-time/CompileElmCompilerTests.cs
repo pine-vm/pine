@@ -125,7 +125,7 @@ public class CompileElmCompilerTests
 
             """;
 
-        var compilerProgram = ElmCompiler.CompilerSourceFilesDefault.Value;
+        var compilerProgram = ElmCompiler.CompilerSourceContainerFilesDefault.Value;
 
         using var compilerJavaScript =
             ElmInteractive.PrepareJavaScriptEngineToEvaluateElm(

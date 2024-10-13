@@ -24,6 +24,10 @@ steps:
       **/pine.csproj
       **/test-elm-time.csproj
 
+- script: dotnet  run  --project ./prebuild/prebuild.csproj
+  displayName: 'Prebuild'
+  workingDirectory: ./implement/
+
 - task: DotNetCoreCLI@2
   displayName: 'test'
   inputs:

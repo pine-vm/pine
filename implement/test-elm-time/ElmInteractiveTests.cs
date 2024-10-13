@@ -18,7 +18,7 @@ public class ElmInteractiveTests
     private static string PathToKernelScenariosDirectory => @"./../../../../test-and-train/elm-interactive-scenarios-kernel";
 
     public static TreeNodeWithStringPath CompileElmProgramCodeFiles =>
-        ElmCompiler.CompilerSourceFilesDefault.Value;
+        ElmCompiler.CompilerSourceContainerFilesDefault.Value;
 
     private static readonly Lazy<ElmTime.JavaScript.IJavaScriptEngine> compileElmPreparedJavaScriptEngine =
         new(() => ElmTime.ElmInteractive.ElmInteractive.PrepareJavaScriptEngineToEvaluateElm(

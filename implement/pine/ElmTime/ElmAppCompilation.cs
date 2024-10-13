@@ -1,5 +1,6 @@
 using ElmTime.Elm019;
 using ElmTime.JavaScript;
+using Pine.Core;
 using Pine.Json;
 using System;
 using System.Collections.Concurrent;
@@ -18,7 +19,6 @@ using CompilationIterationResult =
     Pine.Core.Result<
         System.Collections.Generic.IReadOnlyList<ElmTime.CompilerSerialInterface.LocatedCompilationError>,
         ElmTime.ElmAppCompilation.CompilationIterationSuccess>;
-using Pine.Core;
 
 namespace ElmTime
 {
@@ -503,7 +503,7 @@ namespace ElmTime
             new(LoadCompilerElmProgramCodeFilesForElmBackend);
 
         public static Result<string, IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>>> LoadCompilerElmProgramCodeFilesForElmBackend() =>
-            ElmInteractive.ElmInteractive.LoadCompileElmProgramCodeFiles();
+            Pine.Elm.ElmCompiler.LoadElmCompilerSourceCodeFiles();
 
         public static string CompileCompilationErrorsDisplayText(IReadOnlyList<LocatedCompilationError>? compilationErrors)
         {

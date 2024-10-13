@@ -28,6 +28,15 @@ public class InteractiveSessionPine : IInteractiveSession
 
     private static readonly ConcurrentDictionary<PineValue, PineValue> encodedForCompilerCache = new();
 
+    private static JavaScript.IJavaScriptEngine ParseSubmissionOrCompileDefaultJavaScriptEngine { get; } =
+        BuildParseSubmissionOrCompileDefaultJavaScriptEngine();
+
+    private static JavaScript.IJavaScriptEngine BuildParseSubmissionOrCompileDefaultJavaScriptEngine()
+    {
+        return ElmCompiler.JavaScriptEngineFromElmCompilerSourceFiles(
+            ElmCompiler.CompilerSourceContainerFilesDefault.Value);
+    }
+
     private static PineValue EncodeValueForCompiler(PineValue pineValue)
     {
         return encodedForCompilerCache.GetOrAdd(
@@ -133,26 +142,18 @@ public class InteractiveSessionPine : IInteractiveSession
                 "Unexpected compiler result type: " + buildCompilerResult.GetType());
         }
 
-        try
-        {
-            return
-                CompileInteractiveEnvironment(
-                    elmCompiler.Value.CompileElmPreparedJavaScriptEngine,
-                    lastCompilationCache,
-                    initialState,
-                    appCodeTree)
-                .Map(ok =>
-                {
-                    lastCompilationCache = ok.compilationCache;
+        return
+            CompileInteractiveEnvironment(
+                ParseSubmissionOrCompileDefaultJavaScriptEngine,
+                lastCompilationCache,
+                initialState,
+                appCodeTree)
+            .Map(ok =>
+            {
+                lastCompilationCache = ok.compilationCache;
 
-                    return ok.compileResult;
-                });
-        }
-        finally
-        {
-            // Build JavaScript engine and warm-up anyway.
-            System.Threading.Tasks.Task.Run(() => elmCompiler.Value.CompileElmPreparedJavaScriptEngine.Evaluate("0"));
-        }
+                return ok.compileResult;
+            });
     }
 
     public static Result<string, (PineValue compileResult, ElmInteractive.CompilationCache compilationCache)>
@@ -169,6 +170,9 @@ public class InteractiveSessionPine : IInteractiveSession
                 not null => CommonConversion.StringBase16(PineValueHashTree.ComputeHashNotSorted(appCodeTree))
             };
 
+        var appCodeTreeWithCoreModules =
+            ElmCompiler.MergeElmCoreModules(appCodeTree ?? TreeNodeWithStringPath.EmptyTree);
+
         var compileResult =
             compileEvalContextCache.GetOrAdd(
             key: appCodeTreeHash,
@@ -180,9 +184,8 @@ public class InteractiveSessionPine : IInteractiveSession
 
                 var resultWithCache =
                     ElmInteractive.CompileInteractiveEnvironment(
-                        compileElmPreparedJavaScriptEngine,
                         initialState: initialState,
-                        appCodeTree: appCodeTree,
+                        appCodeTree: appCodeTreeWithCoreModules,
                         lastCompilationCache with
                         {
                             CompileInteractiveEnvironmentResults = compileInteractiveEnvironmentResults
@@ -234,7 +237,7 @@ public class InteractiveSessionPine : IInteractiveSession
 
                     var parseSubmissionResult =
                         ElmInteractive.ParseInteractiveSubmission(
-                            elmCompiler.CompileElmPreparedJavaScriptEngine,
+                            ParseSubmissionOrCompileDefaultJavaScriptEngine,
                             submission: submission,
                             addInspectionLogEntry: compileEntry => addInspectionLogEntry?.Invoke("Parse: " + compileEntry));
 
