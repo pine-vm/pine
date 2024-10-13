@@ -63,16 +63,20 @@ public class ElmCompiler
 
     public ElmInteractiveEnvironment.FunctionRecord CompileParsedInteractiveSubmission { get; }
 
+    public ElmInteractiveEnvironment.FunctionRecord ExpandElmInteractiveEnvironmentWithModules { get; }
+
     private static readonly PineVM.PineVMParseCache parseCache = new();
 
     private ElmCompiler(
         TreeNodeWithStringPath compilerSourceFiles,
         PineValue compilerEnvironment,
-        ElmInteractiveEnvironment.FunctionRecord compileParsedInteractiveSubmission)
+        ElmInteractiveEnvironment.FunctionRecord compileParsedInteractiveSubmission,
+        ElmInteractiveEnvironment.FunctionRecord expandElmInteractiveEnvironmentWithModules)
     {
         CompilerSourceFiles = compilerSourceFiles;
         CompilerEnvironment = compilerEnvironment;
         CompileParsedInteractiveSubmission = compileParsedInteractiveSubmission;
+        ExpandElmInteractiveEnvironmentWithModules = expandElmInteractiveEnvironmentWithModules;
     }
 
     public static Task<Result<string, ElmCompiler>> GetElmCompilerAsync(
@@ -202,6 +206,10 @@ public class ElmCompiler
             return Result<string, PineValue>.ok(fromBundle);
         }
 
+        /*
+         * TODO: Load from cache
+         * */
+
         return CompileInteractiveEnvironment(compilerSourceFiles);
     }
 
@@ -239,10 +247,20 @@ public class ElmCompiler
                 moduleName: "ElmCompiler",
                 declarationName: "compileParsedInteractiveSubmission",
                 parseCache)
-            .Map(parseModuleResponse =>
+            .MapError(err => "Failed parsing function to compile interactive submission")
+            .AndThen(compileParsedInteractiveSubmission =>
+            ElmInteractiveEnvironment.ParseFunctionFromElmModule(
+                interactiveEnvironment: compiledEnv,
+                moduleName: "ElmCompiler",
+                declarationName: "expandElmInteractiveEnvironmentWithModules",
+                parseCache)
+            .Map(expandElmInteractiveEnvironmentWithModules =>
             new ElmCompiler(
                 compilerSourceFiles,
                 compiledEnv,
-                parseModuleResponse.functionRecord));
+                compileParsedInteractiveSubmission:
+                compileParsedInteractiveSubmission.functionRecord,
+                expandElmInteractiveEnvironmentWithModules:
+                expandElmInteractiveEnvironmentWithModules.functionRecord)));
     }
 }

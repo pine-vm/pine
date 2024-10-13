@@ -420,9 +420,37 @@ public class ElmInteractive
                 fromJson,
                 parentDictionary: null));
 
-        logDuration("Deserialize (from " + CommandLineInterface.FormatIntegerForDisplay(responseJson.Length) + " chars) and " + nameof(ParsePineValueFromJson));
+        logDuration(
+            "Deserialize (from " + CommandLineInterface.FormatIntegerForDisplay(responseJson.Length) +
+            " chars) and " + nameof(ParsePineValueFromJson));
 
         return response;
+    }
+
+    public static Result<string, PineValue> ParseElmModuleTextToPineValue(
+        string elmModuleText,
+        IJavaScriptEngine compilerJavaScriptEngine)
+    {
+        var jsonEncodedElmModuleText =
+            System.Text.Json.JsonSerializer.Serialize(elmModuleText);
+
+        var responseJson =
+            compilerJavaScriptEngine.CallFunction(
+                "parseElmModuleTextToPineValue",
+                jsonEncodedElmModuleText)
+            .ToString()!;
+
+        var responseResultStructure =
+            System.Text.Json.JsonSerializer.Deserialize<Result<string, ElmInteractive.PineValueJson>>(
+                responseJson,
+                compilerInterfaceJsonSerializerOptions)!;
+
+        return
+            responseResultStructure
+            .Map(responseStructure =>
+            ParsePineValueFromJson(
+                responseStructure,
+                parentDictionary: null));
     }
 
     public record CompilationCache(
@@ -792,7 +820,7 @@ public class ElmInteractive
         return dictionary;
     }
 
-    private static IReadOnlyList<string>? ModulesTextsFromAppCodeTree(TreeNodeWithStringPath? appCodeTree) =>
+    public static IReadOnlyList<string>? ModulesTextsFromAppCodeTree(TreeNodeWithStringPath? appCodeTree) =>
         appCodeTree == null ?
         null
         :

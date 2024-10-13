@@ -133,7 +133,7 @@ public class CompileElmCompilerTests
                 InteractiveSessionJavaScript.JavaScriptEngineFlavor.V8);
 
         var parsedModulePineValue =
-            ParseElmModuleTextToPineValue(elmModuleText, compilerJavaScript)
+            ElmInteractive.ParseElmModuleTextToPineValue(elmModuleText, compilerJavaScript)
             .Extract(err => throw new Exception(err));
 
         var responseAsElmValue =
@@ -259,32 +259,6 @@ public class CompileElmCompilerTests
         }
     }
 
-    public static Result<string, PineValue> ParseElmModuleTextToPineValue(
-        string elmModuleText,
-        ElmTime.JavaScript.IJavaScriptEngine compilerJavaScript)
-    {
-        var jsonEncodedElmModuleText =
-            System.Text.Json.JsonSerializer.Serialize(elmModuleText);
-
-        var responseJson =
-            compilerJavaScript.CallFunction(
-                "parseElmModuleTextToPineValue",
-                jsonEncodedElmModuleText)
-            .ToString()!;
-
-        var responseResultStructure =
-            System.Text.Json.JsonSerializer.Deserialize<Result<string, ElmInteractive.PineValueJson>>(
-                responseJson,
-                ElmInteractive.compilerInterfaceJsonSerializerOptions)!;
-
-        return
-            responseResultStructure
-            .Map(responseStructure =>
-            ElmInteractive.ParsePineValueFromJson(
-                responseStructure,
-                parentDictionary: null));
-    }
-
     [TestMethod]
     public void Test_call_String_split()
     {
@@ -312,7 +286,7 @@ public class CompileElmCompilerTests
 
         var pineVM = new PineVM();
 
-        var stringSplitFunction =
+        var (_, stringSplitFunction) =
             ElmInteractiveEnvironment.ParseFunctionFromElmModule(
                 interactiveEnvironment: interactiveEnvironmentValue,
                 moduleName: "String",
@@ -323,7 +297,7 @@ public class CompileElmCompilerTests
         var stringSplitApplicationResult =
             ElmInteractiveEnvironment.ApplyFunction(
                 pineVM,
-                stringSplitFunction.functionRecord,
+                stringSplitFunction,
                 arguments:
                 [ElmValueEncoding.ElmValueAsPineValue(new ElmValue.ElmString(",")),
                     ElmValueEncoding.ElmValueAsPineValue(new ElmValue.ElmString("pizza,risotto,focaccia"))]);
@@ -352,7 +326,7 @@ public class CompileElmCompilerTests
             limitSampleCountPerSubmissionDefault: 100);
         */
 
-        var compilerProgram = ElmCompiler.CompilerSourceFilesDefault.Value;
+        var compilerProgram = ElmCompiler.CompilerSourceContainerFilesDefault.Value;
 
         using var compileJavaScriptEngine =
             ElmInteractive.PrepareJavaScriptEngineToEvaluateElm(
@@ -414,7 +388,7 @@ public class CompileElmCompilerTests
                 aggregate.SetNodeAtPathSorted(elmModule.path, TreeNodeWithStringPath.Blob(elmModule.blobContent)));
 
         using var compilerInteractiveSession = new InteractiveSessionPine(
-            compileElmProgramCodeFiles: compilerProgram,
+            compilerSourceFiles: compilerProgram,
             initialState: null,
             appCodeTree: compilerWithPackagesTree,
             caching: true,
@@ -486,7 +460,7 @@ public class CompileElmCompilerTests
                 ElmTime.ElmSyntax.ElmModule.ParseModuleName(moduleText)
                 .MapError(err => "Failed parsing name for module " + moduleText.Split('\n', '\r').FirstOrDefault())
                 .AndThen(moduleName =>
-                ParseElmModuleTextToPineValue(moduleText, compileJavaScriptEngine)
+                ElmInteractive.ParseElmModuleTextToPineValue(moduleText, compileJavaScriptEngine)
                 .MapError(err => "Failed parsing module " + moduleName + ": " + err)
                 .Map(parsedModule => new KeyValuePair<IReadOnlyList<string>, (string moduleText, PineValue parsed)>(
                     moduleName, (moduleText, parsedModule))));
@@ -507,7 +481,7 @@ public class CompileElmCompilerTests
             .Select(result => result.Extract(err => throw new Exception(err)))
             .ToImmutableArray();
 
-        var declExpandInteractiveEnv =
+        var (_, declExpandInteractiveEnv) =
             ElmInteractiveEnvironment.ParseFunctionFromElmModule(
                 interactiveEnvironment: interactiveInitialState,
                 moduleName: "ElmCompiler",
@@ -555,7 +529,7 @@ public class CompileElmCompilerTests
             var compilerResponseValue =
                 ElmInteractiveEnvironment.ApplyFunction(
                     optimizingPineVM,
-                    declExpandInteractiveEnv.functionRecord,
+                    declExpandInteractiveEnv,
                     arguments:
                     /*
                      * 
@@ -607,7 +581,7 @@ public class CompileElmCompilerTests
             var applyFunctionResult =
                 ElmInteractiveEnvironment.ApplyFunction(
                     pineVM,
-                    declExpandInteractiveEnv.functionRecord,
+                    declExpandInteractiveEnv,
                     arguments:
                     /*
                      * 
@@ -696,7 +670,7 @@ public class CompileElmCompilerTests
 
             using var newCompilerInteractiveSession =
                 new InteractiveSessionPine(
-                    compileElmProgramCodeFiles: compilerProgram,
+                    compilerSourceFiles: compilerProgram,
                     initialState: null,
                     appCodeTree: simpleElmModuleAppCodeTree,
                     caching: true,
@@ -886,10 +860,10 @@ public class CompileElmCompilerTests
         }
         */
 
-            /*
-             * Begin a dedicated training phase, compiling a small Elm module and then doing code-analysis
-             * and PGO for the entirety based on that simple scenario.
-             * */
+        /*
+         * Begin a dedicated training phase, compiling a small Elm module and then doing code-analysis
+         * and PGO for the entirety based on that simple scenario.
+         * */
 
         /*
 
@@ -959,7 +933,7 @@ public class CompileElmCompilerTests
 
                 using var newCompilerInteractiveSession =
                     new InteractiveSessionPine(
-                        compileElmProgramCodeFiles: compilerProgram,
+                        compilerSourceFiles: compilerProgram,
                         initialState: null,
                         appCodeTree: simpleElmModuleAppCodeTree,
                         caching: true,

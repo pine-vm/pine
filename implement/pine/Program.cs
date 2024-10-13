@@ -1361,7 +1361,7 @@ public class Program
                                         evalCache: vmCache.EvalCache);
 
                                     return new InteractiveSessionPine(
-                                        compileElmProgramCodeFiles: compileElmProgramCodeFiles,
+                                        compilerSourceFiles: compileElmProgramCodeFiles,
                                         initialState: null,
                                         appCodeTree: appCodeTree,
                                         pineVMWithCompiledAssembly);
