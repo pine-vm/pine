@@ -56,7 +56,7 @@ public class PineValueCompactBuild
         return mutatedDict;
     }
 
-    public static (IReadOnlyList<ListEntry>,
+    public static (IReadOnlyList<ListEntry> listEntries,
         System.Func<IReadOnlyList<PineValue>, ListEntryValue> entryListFromItems)
         PrebuildListEntriesAllFromRoot(PineValue root) =>
         PrebuildListEntriesAllFromRoots(new HashSet<PineValue> { root });

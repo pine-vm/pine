@@ -293,7 +293,8 @@ public static class ElmValueEncoding
         return new ElmValue.ElmList(itemsAsElmValues);
     }
 
-    public static Result<string, (string, IReadOnlyList<PineValue>)> ParseAsTag(PineValue pineValue)
+    public static Result<string, (string tagName, IReadOnlyList<PineValue> tagArguments)> ParseAsTag(
+        PineValue pineValue)
     {
         if (pineValue is not PineValue.ListValue list)
             return "Value is not a list.";

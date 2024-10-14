@@ -22,17 +22,17 @@ public class InteractiveSessionPine : IInteractiveSession
 
     private readonly IPineVM pineVM;
 
-    private static readonly ConcurrentDictionary<EvalCacheEntryKey, PineValue> compileEnvPineVMCache = new();
-
     private static readonly IPineVM compileEnvPineVM =
-        /*
-         * TODO: Also add persistent cache incrementally adding Elm modules to the environment.
-         * */
-        new PineVM(evalCache: compileEnvPineVMCache);
+        new LockingPineVM(
+            new PineVMWithPersistentCache(
+                new FileStoreFromSystemIOFile(
+                    System.IO.Path.Combine(Filesystem.CacheDirectory, "elm-compiler-vm", Program.AppVersionId))));
 
     private static readonly ConcurrentDictionary<ElmInteractive.CompileInteractiveEnvironmentResult, ElmInteractive.CompileInteractiveEnvironmentResult> compiledEnvironmentCache = new();
 
     private static readonly ConcurrentDictionary<PineValue, PineValue> encodedForCompilerCache = new();
+
+    static ConcurrentDictionary<string, Result<string, KeyValuePair<IReadOnlyList<string>, PineValue>>> TryParseModuleTextCache = new();
 
     private static JavaScript.IJavaScriptEngine ParseSubmissionOrCompileDefaultJavaScriptEngine { get; } =
         BuildParseSubmissionOrCompileDefaultJavaScriptEngine();
@@ -161,26 +161,9 @@ public class InteractiveSessionPine : IInteractiveSession
         var appCodeTreeWithCoreModules =
             ElmCompiler.MergeElmCoreModules(appCodeTree ?? TreeNodeWithStringPath.EmptyTree);
 
-        Result<string, KeyValuePair<IReadOnlyList<string>, (string moduleText, PineValue parsed)>> TryParseModuleText(string moduleText)
-        {
-            return
-                ElmSyntax.ElmModule.ParseModuleName(moduleText)
-                .MapError(err => "Failed parsing name for module " + moduleText.Split('\n', '\r').FirstOrDefault())
-                .AndThen(moduleName =>
-                ElmInteractive.ParseElmModuleTextToPineValue(moduleText, ParseSubmissionOrCompileDefaultJavaScriptEngine)
-                .MapError(err => "Failed parsing module " + moduleName + ": " + err)
-                .Map(parsedModule => new KeyValuePair<IReadOnlyList<string>, (string moduleText, PineValue parsed)>(
-                    moduleName, (moduleText, parsedModule))));
-        }
-
-
-        var allModulesTexts =
-            ElmInteractive.ModulesTextsFromAppCodeTree(appCodeTreeWithCoreModules) ?? [];
-
-        var allModulesTextsOrdered =
-            ElmSyntax.ElmModule.ModulesTextOrderedForCompilationByDependencies(
-                rootModulesTexts: allModulesTexts,
-                availableModulesTexts: []);
+        var orderedModules =
+            AppSourceFileTreesForIncrementalCompilation(appCodeTreeWithCoreModules)
+            .ToImmutableArray();
 
         var initialStateElmValue =
             ElmValueInterop.PineValueEncodedAsInElmCompiler(PineValue.EmptyList);
@@ -190,16 +173,17 @@ public class InteractiveSessionPine : IInteractiveSession
 
         PineValue compiledNewEnvInCompiler = initialStateElmValueInCompiler;
 
-        foreach (var moduleText in allModulesTextsOrdered)
+        foreach (var compilationIncrement in orderedModules)
         {
-            var parseResult = TryParseModuleText(moduleText);
+            var parseResult =
+                CachedTryParseModuleText(compilationIncrement.sourceModule.ModuleText);
 
             if (parseResult.IsErrOrNull() is { } parseErr)
             {
-                return "Failed parsing module " + moduleText.Split('\n').FirstOrDefault() + ": " + parseErr;
+                return "Failed parsing module " + string.Join(".", compilationIncrement.sourceModule.ModuleName) + ": " + parseErr;
             }
 
-            if (parseResult is not Result<string, KeyValuePair<IReadOnlyList<string>, (string moduleText, PineValue parsed)>>.Ok parseOk)
+            if (parseResult is not Result<string, KeyValuePair<IReadOnlyList<string>, PineValue>>.Ok parseOk)
             {
                 throw new NotImplementedException(
                     "Unexpected parse result type: " + parseResult.GetType());
@@ -212,19 +196,19 @@ public class InteractiveSessionPine : IInteractiveSession
             var compileModuleResult =
                 CompileOneElmModule(
                     compiledNewEnvInCompiler,
-                    parsedModule.Value.moduleText,
-                    parsedModule.Value.parsed,
+                    compilationIncrement.sourceModule.ModuleText,
+                    parsedModule.Value,
                     elmCompiler,
                     pineVM: pineVM);
 
-            if (compileModuleResult is not Result<string, PineValue>.Ok compileModuleOk)
+            if (compileModuleResult.IsOkOrNull() is not { } compileModuleOk)
             {
                 return
                     "Compiling module " + parsedModuleNameFlat + " failed: " +
                     compileModuleResult.Unpack(fromErr: err => err, fromOk: _ => "no err");
             }
 
-            compiledNewEnvInCompiler = compileModuleOk.Value;
+            compiledNewEnvInCompiler = compileModuleOk;
         }
 
         var asElmValueResult =
@@ -258,6 +242,75 @@ public class InteractiveSessionPine : IInteractiveSession
         return compiledNewEnvValue;
     }
 
+    public record ParsedModule(
+        IReadOnlyList<string> FilePath,
+        IReadOnlyList<string> ModuleName,
+        string ModuleText);
+
+    public static IEnumerable<(TreeNodeWithStringPath tree, ParsedModule sourceModule)> AppSourceFileTreesForIncrementalCompilation(
+        TreeNodeWithStringPath appSourceFiles)
+    {
+        var compileableSourceModules =
+            ElmInteractive.ModulesFilePathsAndTextsFromAppCodeTree(appSourceFiles) ?? [];
+
+        var baseTree =
+            compileableSourceModules
+            .Aggregate(
+                seed: appSourceFiles,
+                func: (tree, compileableModule) => tree.RemoveNodeAtPath(compileableModule.filePath) ?? throw new Exception());
+
+        var compileableSourceModulesTexts =
+            compileableSourceModules
+            .Select(sm => sm.moduleText)
+            .ToImmutableArray();
+
+        var modulesTextsOrdered =
+            ElmSyntax.ElmModule.ModulesTextOrderedForCompilationByDependencies(
+                rootModulesTexts: compileableSourceModulesTexts,
+                availableModulesTexts: []);
+
+        var compileableSourceModulesOrdered =
+            modulesTextsOrdered
+            .Select(mt => compileableSourceModules.First(c => c.moduleText == mt))
+            .ToImmutableArray();
+
+        var mutatedTree = baseTree;
+
+        foreach (var sourceModule in compileableSourceModulesOrdered)
+        {
+            var moduleName =
+                ElmSyntax.ElmModule.ParseModuleName(sourceModule.moduleText)
+                .Extract(err => throw new Exception("Failed parsing module name: " + err));
+
+            mutatedTree =
+                mutatedTree.SetNodeAtPathSorted(sourceModule.filePath, TreeNodeWithStringPath.Blob(sourceModule.fileContent));
+
+            yield return
+                (mutatedTree,
+                new ParsedModule(
+                    FilePath: sourceModule.filePath,
+                    ModuleName: moduleName,
+                    ModuleText: sourceModule.moduleText));
+        }
+    }
+
+    static Result<string, KeyValuePair<IReadOnlyList<string>, PineValue>> CachedTryParseModuleText(string moduleText) =>
+        TryParseModuleTextCache
+        .GetOrAdd(
+            moduleText,
+            valueFactory: TryParseModuleText);
+
+    static Result<string, KeyValuePair<IReadOnlyList<string>, PineValue>> TryParseModuleText(string moduleText)
+    {
+        return
+            ElmSyntax.ElmModule.ParseModuleName(moduleText)
+            .MapError(err => "Failed parsing name for module " + moduleText.Split('\n', '\r').FirstOrDefault())
+            .AndThen(moduleName =>
+            ElmInteractive.ParseElmModuleTextToPineValue(moduleText, ParseSubmissionOrCompileDefaultJavaScriptEngine)
+            .MapError(err => "Failed parsing module " + moduleName + ": " + err)
+            .Map(parsedModule => new KeyValuePair<IReadOnlyList<string>, PineValue>(moduleName, parsedModule)));
+    }
+
     public static Result<string, PineValue> CompileOneElmModule(
         PineValue prevEnvValue,
         string moduleText,
@@ -272,7 +325,7 @@ public class InteractiveSessionPine : IInteractiveSession
                 arguments:
                 [
                     prevEnvValue,
-                        PineValue.List([ParsedElmFileRecordValue(moduleText, parsedModuleValue)])
+                    PineValue.List([ParsedElmFileRecordValue(moduleText, parsedModuleValue)])
                 ]
                 );
 
@@ -287,30 +340,32 @@ public class InteractiveSessionPine : IInteractiveSession
         if (parseAsTagResult is Result<string, (string, IReadOnlyList<PineValue>)>.Err parseAsTagErr)
             return "Failed to parse result as tag: " + parseAsTagErr.Value;
 
-        if (parseAsTagResult is not Result<string, (string, IReadOnlyList<PineValue>)>.Ok parseAsTagOk)
+        if (parseAsTagResult is not Result<string, (string tagName, IReadOnlyList<PineValue> tagArgs)>.Ok parseAsTagOk)
             throw new Exception("Unexpected result type: " + parseAsTagResult.GetType().FullName);
 
-        if (parseAsTagOk.Value.Item1 is not "Ok")
+        if (parseAsTagOk.Value.tagName is not "Ok")
+        {
             return
                 "Failed to extract environment: Tag not 'Ok': " +
                 ElmValueEncoding.PineValueAsElmValue(applyFunctionOk.Value)
                 .Unpack(
                     fromErr: err => "Failed to parse as Elm value: " + err,
                     fromOk: elmValue => ElmValue.RenderAsElmExpression(elmValue).expressionString);
+        }
 
         if (parseAsTagOk.Value.Item2.Count is not 1)
-            return "Failed to extract environment: Expected one element in the list, got " + parseAsTagOk.Value.Item2.Count;
+            return "Failed to extract environment: Expected one element in the list, got " + parseAsTagOk.Value.tagArgs.Count;
 
-        var parseAsRecordResult = ElmValueEncoding.ParsePineValueAsRecordTagged(parseAsTagOk.Value.Item2[0]);
+        var parseAsRecordResult = ElmValueEncoding.ParsePineValueAsRecordTagged(parseAsTagOk.Value.tagArgs[0]);
 
-        if (parseAsRecordResult is Result<string, IReadOnlyList<(string fieldName, PineValue fieldValue)>>.Err parseAsRecordErr)
-            return "Failed to parse as record: " + parseAsRecordErr.Value;
+        if (parseAsRecordResult.IsErrOrNull() is { } parseAsRecordError)
+            return "Failed to parse as record: " + parseAsRecordError;
 
-        if (parseAsRecordResult is not Result<string, IReadOnlyList<(string fieldName, PineValue fieldValue)>>.Ok parseAsRecordOk)
+        if (parseAsRecordResult.IsOkOrNull() is not { } recordFields)
             throw new Exception("Unexpected result type: " + parseAsRecordResult.GetType().FullName);
 
         var environmentValueField =
-            parseAsRecordOk.Value
+            recordFields
             .SingleOrDefault(f => f.fieldName is "environment")
             .fieldValue;
 
@@ -575,5 +630,146 @@ public class InteractiveSessionPine : IInteractiveSession
             ProfilingPineVM.UsageProfileDictionaryFromListOfUsages(expressionUsages);
 
         return pineExpressionsToOptimize;
+    }
+
+    public class LockingPineVM : IPineVM
+    {
+        private readonly IPineVM pineVM;
+
+        private readonly object pineVMLock = new();
+
+        public LockingPineVM(IPineVM pineVM)
+        {
+            this.pineVM = pineVM;
+        }
+
+        public Result<string, PineValue> EvaluateExpression(Expression expression, PineValue environment)
+        {
+            lock (pineVMLock)
+            {
+                return pineVM.EvaluateExpression(expression, environment);
+            }
+        }
+    }
+
+    public class PineVMWithPersistentCache : IPineVM
+    {
+        private readonly Dictionary<(Expression, PineValue), PineValue> evalCache = [];
+
+        private readonly Dictionary<EvalCacheEntryKey, PineValue> vmEvalCache = [];
+
+        private readonly IPineVM pineVM;
+
+        private readonly IFileStore fileStore;
+
+        public PineVMWithPersistentCache(IFileStore fileStore)
+        {
+            this.fileStore = fileStore;
+
+            pineVM = new PineVM(evalCache: vmEvalCache);
+        }
+
+        public Result<string, PineValue> EvaluateExpression(Expression expression, PineValue environment)
+        {
+            if (evalCache.TryGetValue((expression, environment), out var cachedResult))
+            {
+                return cachedResult;
+            }
+
+            var fileName = FileNameFromKey(expression, environment);
+
+            try
+            {
+                if (fileStore.GetFileContent([fileName]) is { } fileContent)
+                {
+                    var dictionaryEntries =
+                        System.Text.Json.JsonSerializer.Deserialize<IReadOnlyList<PineValueCompactBuild.ListEntry>>(fileContent.Span);
+
+                    var dictionary = PineValueCompactBuild.BuildDictionaryFromEntries(dictionaryEntries);
+
+                    // Since we write only with a single root, the one we are looking for must be the largest composition.
+
+                    var loadedValue = dictionary[dictionaryEntries.Last().Key];
+
+                    evalCache[(expression, environment)] = loadedValue;
+
+                    return loadedValue;
+                }
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine("Failed to read or parse cache file: " + e);
+            }
+
+            var evalResult = pineVM.EvaluateExpression(expression, environment);
+
+            if (evalResult.IsOkOrNull() is { } evalOk)
+            {
+                evalCache[(expression, environment)] = evalOk;
+
+                System.Threading.Tasks.Task.Run(() =>
+                {
+                    try
+                    {
+                        var compactBuild =
+                            PineValueCompactBuild.PrebuildListEntriesAllFromRoot(evalOk);
+
+                        var fileContent =
+                            System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(compactBuild.listEntries);
+
+                        fileStore.SetFileContent([fileName], fileContent);
+                    }
+                    catch (Exception e)
+                    {
+                        Console.WriteLine("Failed to write cache file: " + e);
+                    }
+                });
+            }
+
+            return evalResult;
+        }
+
+        public string FileNameFromKey(Expression expression, PineValue environment)
+        {
+            var exprValue = EncodeExpression(expression);
+
+            var exprHash = ComputeHash(exprValue);
+
+            var envHash = ComputeHash(environment);
+
+            return
+                CommonConversion.StringBase16(exprHash[..8]) + "_x_" +
+                CommonConversion.StringBase16(envHash[..8]);
+        }
+
+        readonly ConcurrentDictionary<Expression, PineValue> encodedExprCache = new();
+
+        public PineValue EncodeExpression(Expression expression)
+        {
+            return encodedExprCache.GetOrAdd(
+                expression,
+                valueFactory:
+                ExpressionEncoding.EncodeExpressionAsValue);
+        }
+
+        readonly ConcurrentDictionary<PineValue, ReadOnlyMemory<byte>> valueHashCache = new();
+
+        public ReadOnlyMemory<byte> ComputeHash(PineValue pineValue)
+        {
+            {
+                if (valueHashCache.TryGetValue(pineValue, out var hash))
+                {
+                    return hash;
+                }
+            }
+
+            {
+                var hash = PineValueHashTree.ComputeHash(pineValue, other => ComputeHash(other));
+
+                valueHashCache[pineValue] = hash;
+
+                return hash;
+            }
+        }
     }
 }
