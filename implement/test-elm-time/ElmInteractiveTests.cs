@@ -66,7 +66,6 @@ public class ElmInteractiveTests
         ElmTime.ElmInteractive.IInteractiveSession newInteractiveSessionFromAppCode(TreeNodeWithStringPath? appCodeTree) =>
             new ElmTime.ElmInteractive.InteractiveSessionPine(
                 compilerSourceFiles: CompileElmProgramCodeFiles,
-                initialState: null,
                 appCodeTree: appCodeTree,
                 caching: true,
                 autoPGO: null);
@@ -151,7 +150,6 @@ public class ElmInteractiveTests
         ElmTime.ElmInteractive.IInteractiveSession newInteractiveSessionFromAppCode(TreeNodeWithStringPath? appCodeTree) =>
             new ElmTime.ElmInteractive.InteractiveSessionPine(
                 compilerSourceFiles: CompileElmProgramCodeFiles,
-                initialState: null,
                 appCodeTree: appCodeTree,
                 dynamicPGOShare.GetVMAutoUpdating());
 

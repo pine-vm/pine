@@ -1362,7 +1362,6 @@ public class Program
 
                                     return new InteractiveSessionPine(
                                         compilerSourceFiles: compileElmProgramCodeFiles,
-                                        initialState: null,
                                         appCodeTree: appCodeTree,
                                         pineVMWithCompiledAssembly);
                                 }

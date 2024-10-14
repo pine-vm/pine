@@ -55,14 +55,12 @@ public class InteractiveSessionPine : IInteractiveSession
 
     public InteractiveSessionPine(
         TreeNodeWithStringPath compilerSourceFiles,
-        PineValue? initialState,
         TreeNodeWithStringPath? appCodeTree,
         bool caching,
         DynamicPGOShare? autoPGO)
         :
         this(
             compilerSourceFiles: compilerSourceFiles,
-            initialState: initialState,
             appCodeTree: appCodeTree,
             BuildPineVM(caching: caching, autoPGO: autoPGO))
     {
@@ -70,13 +68,11 @@ public class InteractiveSessionPine : IInteractiveSession
 
     public InteractiveSessionPine(
         TreeNodeWithStringPath compilerSourceFiles,
-        PineValue? initialState,
         TreeNodeWithStringPath? appCodeTree,
         IPineVM pineVM)
         :
         this(
             compilerSourceFiles: compilerSourceFiles,
-            initialState: initialState,
             appCodeTree: appCodeTree,
             (pineVM, pineVMCache: null))
     {
@@ -84,7 +80,6 @@ public class InteractiveSessionPine : IInteractiveSession
 
     private InteractiveSessionPine(
         TreeNodeWithStringPath compilerSourceFiles,
-        PineValue? initialState,
         TreeNodeWithStringPath? appCodeTree,
         (IPineVM pineVM, PineVMCache? pineVMCache) pineVMAndCache)
     {
@@ -95,9 +90,7 @@ public class InteractiveSessionPine : IInteractiveSession
 
         buildPineEvalContextTask =
             System.Threading.Tasks.Task.Run(() =>
-            CompileInteractiveEnvironment(
-                initialState: initialState,
-                appCodeTree: appCodeTree));
+            CompileInteractiveEnvironment(appCodeTree: appCodeTree));
     }
 
     public static (IPineVM, PineVMCache?) BuildPineVM(
@@ -125,7 +118,6 @@ public class InteractiveSessionPine : IInteractiveSession
 
 
     private Result<string, PineValue> CompileInteractiveEnvironment(
-        PineValue? initialState,
         TreeNodeWithStringPath? appCodeTree)
     {
         var appCodeTreeHash =
@@ -148,7 +140,6 @@ public class InteractiveSessionPine : IInteractiveSession
 
         return
             CompileInteractiveEnvironment(
-                initialState,
                 appCodeTree,
                 elmCompiler.Value,
                 compileEnvPineVM);
@@ -156,7 +147,6 @@ public class InteractiveSessionPine : IInteractiveSession
 
     public static Result<string, PineValue>
         CompileInteractiveEnvironment(
-        PineValue? initialState,
         TreeNodeWithStringPath? appCodeTree,
         ElmCompiler elmCompiler,
         IPineVM pineVM)
@@ -193,7 +183,7 @@ public class InteractiveSessionPine : IInteractiveSession
                 availableModulesTexts: []);
 
         var initialStateElmValue =
-            ElmValueInterop.PineValueEncodedAsInElmCompiler(initialState ?? PineValue.EmptyList);
+            ElmValueInterop.PineValueEncodedAsInElmCompiler(PineValue.EmptyList);
 
         var initialStateElmValueInCompiler =
             ElmValueEncoding.ElmValueAsPineValue(initialStateElmValue);
@@ -566,7 +556,6 @@ public class InteractiveSessionPine : IInteractiveSession
 
         var profilingSession = new InteractiveSessionPine(
             compilerSourceFiles: compileElmProgramCodeFiles,
-            initialState: null,
             appCodeTree: null,
             profilingVM.PineVM);
 

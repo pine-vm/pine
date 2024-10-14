@@ -43,7 +43,6 @@ public class PGOTests
         using var interactiveSession =
             new InteractiveSessionPine(
                 ElmCompiler.CompilerSourceFilesDefault.Value,
-                initialState: null,
                 appCodeTree: appCodeTree,
                 caching: true,
                 autoPGO: null);
@@ -429,7 +428,6 @@ public class PGOTests
         using var interactiveSession =
             new InteractiveSessionPine(
                 ElmCompiler.CompilerSourceFilesDefault.Value,
-                initialState: null,
                 appCodeTree: appCodeTree,
                 caching: true,
                 autoPGO: null);
@@ -930,7 +928,6 @@ public class PGOTests
         using var interactiveSession =
             new InteractiveSessionPine(
                 ElmCompiler.CompilerSourceFilesDefault.Value,
-                initialState: null,
                 appCodeTree: appCodeTree,
                 caching: true,
                 autoPGO: null);
@@ -1346,7 +1343,6 @@ public class PGOTests
         using var interactiveSession =
             new InteractiveSessionPine(
                 ElmCompiler.CompilerSourceFilesDefault.Value,
-                initialState: null,
                 appCodeTree: appCodeTree,
                 caching: true,
                 autoPGO: null);

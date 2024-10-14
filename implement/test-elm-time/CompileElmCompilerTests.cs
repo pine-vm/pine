@@ -29,7 +29,6 @@ public class CompileElmCompilerTests
         using var interactiveSession =
             new InteractiveSessionPine(
                 compilerProgram,
-                initialState: null,
                 appCodeTree: null,
                 caching: true,
                 autoPGO: pgoShare);
@@ -269,7 +268,6 @@ public class CompileElmCompilerTests
         using var interactiveSession =
             new InteractiveSessionPine(
                 compilerProgram,
-                initialState: null,
                 appCodeTree: null,
                 caching: true,
                 autoPGO: pgoShare);
@@ -389,7 +387,6 @@ public class CompileElmCompilerTests
 
         using var compilerInteractiveSession = new InteractiveSessionPine(
             compilerSourceFiles: compilerProgram,
-            initialState: null,
             appCodeTree: compilerWithPackagesTree,
             caching: true,
             autoPGO: null);
@@ -671,7 +668,6 @@ public class CompileElmCompilerTests
             using var newCompilerInteractiveSession =
                 new InteractiveSessionPine(
                     compilerSourceFiles: compilerProgram,
-                    initialState: null,
                     appCodeTree: simpleElmModuleAppCodeTree,
                     caching: true,
                     autoPGO: null);
