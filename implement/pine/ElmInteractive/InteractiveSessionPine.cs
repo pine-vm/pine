@@ -29,11 +29,15 @@ public class InteractiveSessionPine : IInteractiveSession
                 new FileStoreFromSystemIOFile(
                     System.IO.Path.Combine(Filesystem.CacheDirectory, "elm-compiler-vm", Program.AppVersionId))));
 
-    private static readonly ConcurrentDictionary<ElmInteractive.CompileInteractiveEnvironmentResult, ElmInteractive.CompileInteractiveEnvironmentResult> compiledEnvironmentCache = new();
+    private static readonly Dictionary<PineValue, PineValue> encodedForCompilerCache = new();
 
-    private static readonly ConcurrentDictionary<PineValue, PineValue> encodedForCompilerCache = new();
+    private static readonly Dictionary<ElmValue, PineValue> elmValueAsPineValueCache = new();
 
-    static ConcurrentDictionary<string, Result<string, KeyValuePair<IReadOnlyList<string>, PineValue>>> TryParseModuleTextCache = new();
+    private static readonly Dictionary<PineValue, ElmValue> pineValueEncodedAsInElmCompilerCache = new();
+
+    private static readonly object encodeValueForCompilerLock = new();
+
+    static readonly ConcurrentDictionary<string, Result<string, KeyValuePair<IReadOnlyList<string>, PineValue>>> TryParseModuleTextCache = new();
 
     private static JavaScript.IJavaScriptEngine ParseSubmissionOrCompileDefaultJavaScriptEngine { get; } =
         BuildParseSubmissionOrCompileDefaultJavaScriptEngine();
@@ -46,12 +50,30 @@ public class InteractiveSessionPine : IInteractiveSession
 
     private static PineValue EncodeValueForCompiler(PineValue pineValue)
     {
-        return encodedForCompilerCache.GetOrAdd(
-            pineValue,
-            valueFactory:
-            pineValue =>
-            ElmValueEncoding.ElmValueAsPineValue(
-                ElmValueInterop.PineValueEncodedAsInElmCompiler(pineValue)));
+        lock (encodeValueForCompilerLock)
+        {
+            if (encodedForCompilerCache.TryGetValue(pineValue, out var encoded))
+            {
+                return encoded;
+            }
+
+            encoded =
+                ElmValueEncoding.ElmValueAsPineValue(
+                    ElmValueInterop.PineValueEncodedAsInElmCompiler(
+                        pineValue,
+                        additionalReusableEncodings:
+                        pineValueEncodedAsInElmCompilerCache,
+                        reportNewEncoding:
+                        (pineValue, encoding) => pineValueEncodedAsInElmCompilerCache.TryAdd(pineValue, encoding)),
+                    additionalReusableEncodings:
+                    elmValueAsPineValueCache,
+                    reportNewEncoding:
+                    (elmValue, encoded) => elmValueAsPineValueCache.TryAdd(elmValue, encoded));
+
+            encodedForCompilerCache.TryAdd(pineValue, encoded);
+
+            return encoded;
+        }
     }
 
     public InteractiveSessionPine(

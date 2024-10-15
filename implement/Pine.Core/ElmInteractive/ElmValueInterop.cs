@@ -17,21 +17,32 @@ public class ElmValueInterop
         PineValue pineValue) =>
         PineValueEncodedAsInElmCompiler(
             pineValue,
-            ReusedInstances.Instance.ElmValueEncodedAsInElmCompiler);
+            additionalReusableEncodings: null,
+            reportNewEncoding: null);
 
     /// <summary>
     /// Encode as in https://github.com/pine-vm/pine/blob/ef26bed9aa54397e476545d9e30821565139d821/implement/pine/ElmTime/compile-elm-program/src/Pine.elm#L75-L77
     /// </summary>
     public static ElmValue PineValueEncodedAsInElmCompiler(
         PineValue pineValue,
-        IReadOnlyDictionary<PineValue, ElmValue>? reusableEncodings)
+        IReadOnlyDictionary<PineValue, ElmValue>? additionalReusableEncodings,
+        Action<PineValue, ElmValue>? reportNewEncoding)
     {
-        if (reusableEncodings?.TryGetValue(pineValue, out var reused) ?? false)
         {
-            return reused;
+            if (additionalReusableEncodings?.TryGetValue(pineValue, out var reused) ?? false)
+            {
+                return reused;
+            }
         }
 
-        return
+        {
+            if (ReusedInstances.Instance.ElmValueEncodedAsInElmCompiler?.TryGetValue(pineValue, out var reused) ?? false)
+            {
+                return reused;
+            }
+        }
+
+        var encoded =
             pineValue switch
             {
                 PineValue.BlobValue blobValue =>
@@ -42,12 +53,18 @@ public class ElmValueInterop
                 PineValue.ListValue listValue =>
                 ElmValue.TagInstance(
                     "ListValue",
-                    [new ElmValue.ElmList([.. listValue.Elements.Select(item => PineValueEncodedAsInElmCompiler(item, reusableEncodings))])]),
+                    [new ElmValue.ElmList(
+                        [.. listValue.Elements
+                        .Select(item => PineValueEncodedAsInElmCompiler(item, additionalReusableEncodings, reportNewEncoding))])]),
 
                 _ =>
                 throw new NotImplementedException(
                     "Unsupported PineValue: " + pineValue.GetType().FullName)
             };
+
+        reportNewEncoding?.Invoke(pineValue, encoded);
+
+        return encoded;
     }
 
     public static Result<string, PineValue> ElmValueDecodedAsInElmCompiler(ElmValue elmValue)

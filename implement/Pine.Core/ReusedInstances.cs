@@ -239,7 +239,9 @@ public record ReusedInstances(
                 var encodedInCompilerElm =
                     ElmValueInterop.PineValueEncodedAsInElmCompiler(
                         valueInCompiler,
-                        tempEncodingDict);
+                        tempEncodingDict,
+                        reportNewEncoding:
+                        (pineValue, encoding) => tempEncodingDict.TryAdd(pineValue, encoding));
 
                 tempEncodingDict[valueInCompiler] = encodedInCompilerElm;
             }
@@ -255,7 +257,9 @@ public record ReusedInstances(
                 tempElmValueEncodingDict[elmValue] =
                     ElmInteractive.ElmValueEncoding.ElmValueAsPineValue(
                         elmValue,
-                        tempElmValueEncodingDict);
+                        tempElmValueEncodingDict,
+                        reportNewEncoding:
+                        (elmValue, encoding) => tempElmValueEncodingDict.TryAdd(elmValue, encoding));
             }
 
             var (allListsComponents, _) =
@@ -498,7 +502,9 @@ public record ReusedInstances(
                 var reusedElmValue =
                     ElmValueInterop.PineValueEncodedAsInElmCompiler(
                         pineValue,
-                        encodedForCompilerDict);
+                        encodedForCompilerDict,
+                        reportNewEncoding:
+                        (pineValue, encoding) => encodedForCompilerDict.TryAdd(pineValue, encoding));
 
                 {
                     ElmValues.TryGetValue(reusedElmValue, out var refFromDict);
@@ -534,7 +540,11 @@ public record ReusedInstances(
             foreach (var item in elmValuesSorted)
             {
                 encodedDict[item] =
-                    ElmInteractive.ElmValueEncoding.ElmValueAsPineValue(item, encodedDict);
+                    ElmInteractive.ElmValueEncoding.ElmValueAsPineValue(
+                        item,
+                        encodedDict,
+                        reportNewEncoding:
+                        (elmValue, encoding) => encodedDict.TryAdd(elmValue, encoding));
             }
 
             ElmValueEncoding =
@@ -736,7 +746,9 @@ public record ReusedInstances(
             var pineValueEncoded =
                 ElmValueInterop.PineValueEncodedAsInElmCompiler(
                     pineValue,
-                    reusableEncodings: encodedForCompilerDict);
+                    additionalReusableEncodings: encodedForCompilerDict,
+                    reportNewEncoding:
+                    (pineValue, encoding) => encodedForCompilerDict.TryAdd(pineValue, encoding));
 
             encodedForCompilerDict[pineValue] = pineValueEncoded;
         }

@@ -434,21 +434,30 @@ public static class ElmValueEncoding
     public static PineValue ElmValueAsPineValue(ElmValue elmValue) =>
         ElmValueAsPineValue(
             elmValue,
-            ReusedInstances.Instance.ElmValueEncoding);
+            additionalReusableEncodings: null,
+            reportNewEncoding: null);
 
     public static PineValue ElmValueAsPineValue(
         ElmValue elmValue,
-        IReadOnlyDictionary<ElmValue, PineValue>? reusableEncoding)
+        IReadOnlyDictionary<ElmValue, PineValue>? additionalReusableEncodings,
+        Action<ElmValue, PineValue>? reportNewEncoding)
     {
-        if (reusableEncoding?.TryGetValue(elmValue, out var reused) ?? false)
-            return reused;
+        {
+            if (additionalReusableEncodings?.TryGetValue(elmValue, out var reused) ?? false)
+                return reused;
+        }
 
-        return
+        {
+            if (ReusedInstances.Instance.ElmValueEncoding?.TryGetValue(elmValue, out var reused) ?? false)
+                return reused;
+        }
+
+        var encoded =
             elmValue switch
             {
                 ElmValue.ElmList elmList =>
                 PineValue.List(
-                    [.. elmList.Elements.Select(item => ElmValueAsPineValue(item, reusableEncoding))]),
+                    [.. elmList.Elements.Select(item => ElmValueAsPineValue(item, additionalReusableEncodings, reportNewEncoding))]),
 
                 ElmValue.ElmChar elmChar =>
                 PineValueAsInteger.ValueFromUnsignedInteger(elmChar.Value)
@@ -466,11 +475,13 @@ public static class ElmValueEncoding
                 PineValue.List(
                     [PineValueAsString.ValueFromString(elmTag.TagName),
                         PineValue.List(
-                            [..elmTag.Arguments.Select(item => ElmValueAsPineValue(item,reusableEncoding))])]),
+                            [..elmTag.Arguments
+                            .Select(item => ElmValueAsPineValue(item,additionalReusableEncodings, reportNewEncoding))])]),
 
                 ElmValue.ElmRecord elmRecord =>
                 ElmRecordAsPineValue(
-                    [.. elmRecord.Fields.Select(field => (field.FieldName, ElmValueAsPineValue(field.Value, reusableEncoding)))]),
+                    [.. elmRecord.Fields
+                    .Select(field => (field.FieldName, ElmValueAsPineValue(field.Value, additionalReusableEncodings, reportNewEncoding)))]),
 
                 ElmValue.ElmBytes elmBytes =>
                 PineValue.List(
@@ -490,6 +501,10 @@ public static class ElmValueEncoding
                 throw new NotImplementedException(
                     "Not implemented for value type: " + elmValue.GetType().FullName)
             };
+
+        reportNewEncoding?.Invoke(elmValue, encoded);
+
+        return encoded;
     }
 
     public static PineValue ElmRecordAsPineValue(IReadOnlyList<(string FieldName, PineValue FieldValue)> fields) =>
