@@ -85,7 +85,7 @@ public static class ElmInteractiveEnvironment
     }
 
     public static Result<string, PineValue> ApplyFunction(
-        IPineVM pineVM,
+        Pine.Core.PineVM.IPineVM pineVM,
         FunctionRecord functionRecord,
         IReadOnlyList<PineValue> arguments)
     {

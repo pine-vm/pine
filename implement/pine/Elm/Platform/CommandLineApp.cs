@@ -177,7 +177,7 @@ public record CommandLineAppConfig(
     public static (PineValue, CommandLineAppEventResponse) Init(
         CommandLineAppConfig config,
         CommandLineAppInitEnvironment environment,
-        PineVM.IPineVM pineVM)
+        Core.PineVM.IPineVM pineVM)
     {
         var initRecord =
             new ElmValue.ElmRecord(
@@ -225,7 +225,7 @@ public record CommandLineAppConfig(
         CommandLineAppConfig config,
         ReadOnlyMemory<byte> input,
         PineValue stateBefore,
-        PineVM.IPineVM pineVM)
+        Core.PineVM.IPineVM pineVM)
     {
         var subscriptionsValue =
             ElmTime.ElmInteractive.ElmInteractiveEnvironment.ApplyFunction(

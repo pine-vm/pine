@@ -1,5 +1,6 @@
 using Pine;
 using Pine.Core;
+using Pine.Core.PineVM;
 using Pine.Elm;
 using Pine.ElmInteractive;
 using Pine.PineVM;
@@ -632,25 +633,6 @@ public class InteractiveSessionPine : IInteractiveSession
         return pineExpressionsToOptimize;
     }
 
-    public class LockingPineVM : IPineVM
-    {
-        private readonly IPineVM pineVM;
-
-        private readonly object pineVMLock = new();
-
-        public LockingPineVM(IPineVM pineVM)
-        {
-            this.pineVM = pineVM;
-        }
-
-        public Result<string, PineValue> EvaluateExpression(Expression expression, PineValue environment)
-        {
-            lock (pineVMLock)
-            {
-                return pineVM.EvaluateExpression(expression, environment);
-            }
-        }
-    }
 
     public class PineVMWithPersistentCache : IPineVM
     {

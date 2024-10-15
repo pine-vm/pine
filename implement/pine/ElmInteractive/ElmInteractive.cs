@@ -441,7 +441,7 @@ public class ElmInteractive
             .ToString()!;
 
         var responseResultStructure =
-            System.Text.Json.JsonSerializer.Deserialize<Result<string, ElmInteractive.PineValueJson>>(
+            System.Text.Json.JsonSerializer.Deserialize<Result<string, PineValueJson>>(
                 responseJson,
                 compilerInterfaceJsonSerializerOptions)!;
 

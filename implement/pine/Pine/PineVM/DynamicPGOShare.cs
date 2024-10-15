@@ -6,6 +6,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Pine.Core;
+using Pine.Core.PineVM;
 
 namespace Pine.PineVM;
 

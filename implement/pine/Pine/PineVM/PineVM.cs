@@ -3,15 +3,10 @@ using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 using Pine.Core;
+using Pine.Core.PineVM;
 
 namespace Pine.PineVM;
 
-public interface IPineVM
-{
-    Result<string, PineValue> EvaluateExpression(
-        Expression expression,
-        PineValue environment);
-}
 
 public record struct EvalCacheEntryKey(
     PineValue ExprValue,
