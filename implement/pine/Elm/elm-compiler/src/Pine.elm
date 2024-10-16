@@ -243,6 +243,18 @@ kernelFunctions =
         , ( "bit_or"
           , kernelFunction_bit_or
           )
+        , ( "bit_xor"
+          , kernelFunction_bit_xor
+          )
+        , ( "bit_not"
+          , kernelFunction_bit_not
+          )
+        , ( "bit_shift_left"
+          , kernelFunction_bit_shift_left
+          )
+        , ( "bit_shift_right"
+          , kernelFunction_bit_shift_right
+          )
         ]
 
 
@@ -535,6 +547,162 @@ kernelFunction_bit_or_recursive blob arguments =
             BlobValue blob
 
 
+kernelFunction_bit_xor : Value -> Value
+kernelFunction_bit_xor value =
+    case value of
+        ListValue ((BlobValue first) :: rest) ->
+            kernelFunction_bit_xor_recursive first rest
+
+        _ ->
+            listValue_Empty
+
+
+kernelFunction_bit_xor_recursive : List Int -> List Value -> Value
+kernelFunction_bit_xor_recursive blob arguments =
+    case arguments of
+        next :: rest ->
+            case next of
+                BlobValue nextBlob ->
+                    kernelFunction_bit_and_recursive
+                        (bit_xor_tuple []
+                            (List.reverse blob)
+                            (List.reverse nextBlob)
+                        )
+                        rest
+
+                _ ->
+                    listValue_Empty
+
+        [] ->
+            BlobValue blob
+
+
+kernelFunction_bit_not : Value -> Value
+kernelFunction_bit_not value =
+    case value of
+        BlobValue bytes ->
+            BlobValue
+                (List.map
+                    (\byte ->
+                        modBy 0x0100 (Bitwise.complement byte)
+                    )
+                    bytes
+                )
+
+        _ ->
+            listValue_Empty
+
+
+kernelFunction_bit_shift_left : Value -> Value
+kernelFunction_bit_shift_left value =
+    case value of
+        ListValue [ shiftValue, BlobValue bytes ] ->
+            case intFromValue shiftValue of
+                Ok shiftInt ->
+                    let
+                        offsetBytes =
+                            shiftInt // 8
+
+                        offsetBits =
+                            shiftInt - (offsetBytes * 8)
+
+                        beforeOffsetBytes =
+                            kernelFunction_bit_shift_left_recursive
+                                []
+                                (List.reverse (List.drop offsetBytes bytes))
+                                0
+                                offsetBits
+                    in
+                    BlobValue
+                        (List.concat
+                            [ beforeOffsetBytes
+                            , List.repeat offsetBytes 0
+                            ]
+                        )
+
+                Err _ ->
+                    listValue_Empty
+
+        _ ->
+            listValue_Empty
+
+
+kernelFunction_bit_shift_left_recursive : List Int -> List Int -> Int -> Int -> List Int
+kernelFunction_bit_shift_left_recursive bytesRight bytesLeft carryFromRight offset =
+    case bytesLeft of
+        byte :: rest ->
+            let
+                shiftedByte =
+                    Bitwise.and 0xFF
+                        (Bitwise.or
+                            (Bitwise.shiftLeftBy offset byte)
+                            carryFromRight
+                        )
+
+                nextCarry =
+                    Bitwise.shiftRightBy (8 - offset) byte
+            in
+            kernelFunction_bit_shift_left_recursive
+                (shiftedByte :: bytesRight)
+                rest
+                nextCarry
+                offset
+
+        [] ->
+            bytesRight
+
+
+kernelFunction_bit_shift_right : Value -> Value
+kernelFunction_bit_shift_right value =
+    case value of
+        ListValue [ shiftValue, BlobValue bytes ] ->
+            case intFromValue shiftValue of
+                Ok shiftInt ->
+                    let
+                        offsetBytes =
+                            shiftInt // 8
+
+                        offsetBits =
+                            shiftInt - (offsetBytes * 8)
+                    in
+                    BlobValue
+                        (kernelFunction_bit_shift_right_recursive
+                            []
+                            (List.reverse (List.drop offsetBytes bytes))
+                            0
+                            offsetBits
+                        )
+
+                Err _ ->
+                    listValue_Empty
+
+        _ ->
+            listValue_Empty
+
+
+kernelFunction_bit_shift_right_recursive : List Int -> List Int -> Int -> Int -> List Int
+kernelFunction_bit_shift_right_recursive bytesRight bytesLeft carryFromRight offset =
+    case bytesLeft of
+        byte :: rest ->
+            let
+                shiftedByte =
+                    Bitwise.or
+                        (Bitwise.shiftRightBy offset byte)
+                        carryFromRight
+
+                nextCarry =
+                    Bitwise.shiftLeftBy (8 - offset) byte
+            in
+            kernelFunction_bit_shift_right_recursive
+                (shiftedByte :: bytesRight)
+                rest
+                nextCarry
+                offset
+
+        [] ->
+            bytesRight
+
+
 bit_and_tuple : List Int -> List Int -> List Int -> List Int
 bit_and_tuple merged first second =
     case first of
@@ -567,6 +735,24 @@ bit_or_tuple merged first second =
                 secondFirst :: secondRest ->
                     bit_and_tuple
                         (Bitwise.or firstFirst secondFirst :: merged)
+                        firstRest
+                        secondRest
+
+
+bit_xor_tuple : List Int -> List Int -> List Int -> List Int
+bit_xor_tuple merged first second =
+    case first of
+        [] ->
+            merged
+
+        firstFirst :: firstRest ->
+            case second of
+                [] ->
+                    merged
+
+                secondFirst :: secondRest ->
+                    bit_and_tuple
+                        (Bitwise.xor firstFirst secondFirst :: merged)
                         firstRest
                         secondRest
 

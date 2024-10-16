@@ -3029,12 +3029,112 @@ module Bitwise exposing
 
 and : Int -> Int -> Int
 and a b =
-    Pine_kernel.bit_and [ a, b ]
+    Pine_kernel.concat
+        [ Pine_kernel.take [ 1, 0 ]
+        , Pine_kernel.bit_and
+            [ Pine_kernel.skip [ 1, a ]
+            , Pine_kernel.skip [ 1, b ]
+            ]
+        ]
 
 
 or : Int -> Int -> Int
 or a b =
-    Pine_kernel.bit_or [ a, b ]
+    Pine_kernel.concat
+        [ Pine_kernel.take [ 1, 0 ]
+        , Pine_kernel.bit_or
+            [ Pine_kernel.skip [ 1, a ]
+            , Pine_kernel.skip [ 1, b ]
+            ]
+        ]
+
+
+xor : Int -> Int -> Int
+xor a b =
+    Pine_kernel.concat
+        [ Pine_kernel.take [ 1, 0 ]
+        , Pine_kernel.bit_xor
+            [ Pine_kernel.skip [ 1, a ]
+            , Pine_kernel.skip [ 1, b ]
+            ]
+        ]
+
+
+complement : Int -> Int
+complement a =
+    Pine_kernel.concat
+        [ Pine_kernel.take [ 1, 0 ]
+        , Pine_kernel.bit_not (Pine_kernel.skip [ 1, a ])
+        ]
+
+
+shiftLeftBy : Int -> Int -> Int
+shiftLeftBy offset bytes =
+    let
+        sign =
+            Pine_kernel.take [ 1, bytes ]
+
+        withExtension =
+            Pine_kernel.concat
+                [ Pine_kernel.skip [ 1, 0 ]
+                , Pine_kernel.skip [ 1, 0 ]
+                , Pine_kernel.skip [ 1, 0 ]
+                , Pine_kernel.skip [ 1, 0 ]
+                , Pine_kernel.skip [ 1, 0 ]
+                , Pine_kernel.skip [ 1, bytes ]
+                ]
+
+        beforeTruncate =
+            Pine_kernel.bit_shift_left
+                [ offset
+                , withExtension
+                ]
+    in
+    Pine_kernel.concat
+        [ sign
+        , truncateLeadingZeros beforeTruncate
+        ]
+
+
+shiftRightBy : Int -> Int -> Int
+shiftRightBy offset bytes =
+    let
+        sign =
+            Pine_kernel.take [ 1, bytes ]
+
+        beforeTruncate =
+            Pine_kernel.bit_shift_right
+                [ offset
+                , Pine_kernel.skip [ 1, bytes ]
+                ]
+    in
+    Pine_kernel.concat
+        [ sign
+        , truncateLeadingZeros beforeTruncate
+        ]
+
+
+truncateLeadingZeros : Int -> Int
+truncateLeadingZeros bytes =
+    if
+        Pine_kernel.equal
+            [ Pine_kernel.length bytes
+            , 1
+            ]
+    then
+        bytes
+
+    else if
+        Pine_kernel.equal
+            [ Pine_kernel.take [ 1, bytes ]
+            , Pine_kernel.skip [ 1, 0 ]
+            ]
+    then
+        truncateLeadingZeros (Pine_kernel.skip [ 1, bytes ])
+
+    else
+        bytes
+
 
 """
     ]

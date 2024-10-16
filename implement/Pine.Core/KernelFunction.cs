@@ -507,12 +507,180 @@ public static class KernelFunction
         {
             var blob = otherBlobs[i];
 
+            var blobOffset = maxLength - blob.Bytes.Length;
+
+            for (var j = 0; j < blob.Bytes.Length; ++j)
+            {
+                resultArray[j + blobOffset] |= blob.Bytes.Span[j];
+            }
+        }
+
+        return PineValue.Blob(resultArray);
+    }
+
+    public static PineValue bit_xor(PineValue value)
+    {
+        if (value is not PineValue.ListValue argumentsList)
+        {
+            return PineValue.EmptyList;
+        }
+
+        if (argumentsList.Elements.Count is 0)
+        {
+            return PineValue.EmptyList;
+        }
+
+        if (argumentsList.Elements[0] is not PineValue.BlobValue firstBlob)
+        {
+            return PineValue.EmptyList;
+        }
+
+        if (argumentsList.Elements.Count is 1)
+        {
+            return firstBlob;
+        }
+
+        var maxLength = firstBlob.Bytes.Length;
+        var otherBlobs = new PineValue.BlobValue[argumentsList.Elements.Count - 1];
+
+        for (var i = 1; i < argumentsList.Elements.Count; ++i)
+        {
+            if (argumentsList.Elements[i] is not PineValue.BlobValue blobValue)
+            {
+                return PineValue.EmptyList;
+            }
+
+            otherBlobs[i - 1] = blobValue;
+
+            maxLength =
+                maxLength < blobValue.Bytes.Length
+                ?
+                blobValue.Bytes.Length
+                :
+                maxLength;
+        }
+
+        var resultArray = new byte[maxLength];
+
+        firstBlob.Bytes.CopyTo(resultArray.AsMemory(resultArray.Length - firstBlob.Bytes.Length));
+
+        for (var i = 0; i < otherBlobs.Length; ++i)
+        {
+            var blob = otherBlobs[i];
+
             var blobOffset = blob.Bytes.Length - maxLength;
 
             for (var j = 0; j < maxLength; ++j)
             {
-                resultArray[j] |= blob.Bytes.Span[j + blobOffset];
+                resultArray[j] ^= blob.Bytes.Span[j + blobOffset];
             }
+        }
+
+        return PineValue.Blob(resultArray);
+    }
+
+    public static PineValue bit_not(PineValue value)
+    {
+        if (value is not PineValue.BlobValue blobValue)
+        {
+            return PineValue.EmptyList;
+        }
+
+        var resultArray = new byte[blobValue.Bytes.Length];
+
+        for (var i = 0; i < resultArray.Length; ++i)
+        {
+            resultArray[i] = (byte)~blobValue.Bytes.Span[i];
+        }
+
+        return PineValue.Blob(resultArray);
+    }
+
+    public static PineValue bit_shift_left(PineValue value)
+    {
+        if (value is not PineValue.ListValue argumentsList)
+        {
+            return PineValue.EmptyList;
+        }
+
+        if (argumentsList.Elements.Count is not 2)
+        {
+            return PineValue.EmptyList;
+        }
+
+        if (SignedIntegerFromValueRelaxed(argumentsList.Elements[0]) is not { } shiftCount)
+        {
+            return PineValue.EmptyList;
+        }
+
+        if (argumentsList.Elements[1] is not PineValue.BlobValue blobValue)
+        {
+            return PineValue.EmptyList;
+        }
+
+        var offsetBytes = (int)(shiftCount / 8);
+        var offsetBits = (int)(shiftCount % 8);
+
+        var resultArray = new byte[blobValue.Bytes.Length];
+
+        byte previousCarry = 0;
+
+        for (var sourceIndex = blobValue.Bytes.Length - 1; offsetBytes <= sourceIndex; --sourceIndex)
+        {
+            var sourceByte = blobValue.Bytes.Span[sourceIndex];
+
+            var shifted = (byte)(sourceByte << offsetBits);
+
+            var destinationIndex = sourceIndex - offsetBytes;
+
+            resultArray[destinationIndex] = (byte)(shifted | previousCarry);
+
+            previousCarry = (byte)(sourceByte >> (8 - offsetBits));
+        }
+
+        return PineValue.Blob(resultArray);
+    }
+
+    public static PineValue bit_shift_right(PineValue value)
+    {
+        if (value is not PineValue.ListValue argumentsList)
+        {
+            return PineValue.EmptyList;
+        }
+
+        if (argumentsList.Elements.Count is not 2)
+        {
+            return PineValue.EmptyList;
+        }
+
+        if (SignedIntegerFromValueRelaxed(argumentsList.Elements[0]) is not { } shiftCount)
+        {
+            return PineValue.EmptyList;
+        }
+
+        if (argumentsList.Elements[1] is not PineValue.BlobValue blobValue)
+        {
+            return PineValue.EmptyList;
+        }
+
+        var offsetBytes = (int)(shiftCount / 8);
+        var offsetBits = (int)(shiftCount % 8);
+
+        var resultArray = new byte[blobValue.Bytes.Length];
+
+        byte previousCarry = 0;
+
+        for (var sourceIndex = 0; sourceIndex < blobValue.Bytes.Length - offsetBytes; ++sourceIndex)
+        {
+            var sourceByte = blobValue.Bytes.Span[sourceIndex];
+
+            var shifted = (byte)(sourceByte >> offsetBits);
+
+            var destinationIndex = sourceIndex + offsetBytes;
+
+            resultArray[destinationIndex] = (byte)(shifted | previousCarry);
+
+            previousCarry = (byte)(sourceByte << (8 - offsetBits));
         }
 
         return PineValue.Blob(resultArray);
