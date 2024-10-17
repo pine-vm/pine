@@ -568,11 +568,11 @@ public static class KernelFunction
         {
             var blob = otherBlobs[i];
 
-            var blobOffset = blob.Bytes.Length - maxLength;
+            var blobOffset = maxLength - blob.Bytes.Length;
 
-            for (var j = 0; j < maxLength; ++j)
+            for (var j = 0; j < blob.Bytes.Length; ++j)
             {
-                resultArray[j] ^= blob.Bytes.Span[j + blobOffset];
+                resultArray[j + blobOffset] ^= blob.Bytes.Span[j];
             }
         }
 

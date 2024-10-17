@@ -533,8 +533,9 @@ kernelFunction_bit_or_recursive blob arguments =
         next :: rest ->
             case next of
                 BlobValue nextBlob ->
-                    kernelFunction_bit_and_recursive
-                        (bit_or_tuple []
+                    kernelFunction_bit_or_recursive
+                        (bit_or_tuple
+                            []
                             (List.reverse blob)
                             (List.reverse nextBlob)
                         )
@@ -564,7 +565,8 @@ kernelFunction_bit_xor_recursive blob arguments =
             case next of
                 BlobValue nextBlob ->
                     kernelFunction_bit_and_recursive
-                        (bit_xor_tuple []
+                        (bit_xor_tuple
+                            []
                             (List.reverse blob)
                             (List.reverse nextBlob)
                         )
@@ -725,15 +727,21 @@ bit_or_tuple : List Int -> List Int -> List Int -> List Int
 bit_or_tuple merged first second =
     case first of
         [] ->
-            merged
+            List.concat
+                [ List.reverse second
+                , merged
+                ]
 
         firstFirst :: firstRest ->
             case second of
                 [] ->
-                    merged
+                    List.concat
+                        [ List.reverse first
+                        , merged
+                        ]
 
                 secondFirst :: secondRest ->
-                    bit_and_tuple
+                    bit_or_tuple
                         (Bitwise.or firstFirst secondFirst :: merged)
                         firstRest
                         secondRest
@@ -743,15 +751,21 @@ bit_xor_tuple : List Int -> List Int -> List Int -> List Int
 bit_xor_tuple merged first second =
     case first of
         [] ->
-            merged
+            List.concat
+                [ List.reverse second
+                , merged
+                ]
 
         firstFirst :: firstRest ->
             case second of
                 [] ->
-                    merged
+                    List.concat
+                        [ List.reverse first
+                        , merged
+                        ]
 
                 secondFirst :: secondRest ->
-                    bit_and_tuple
+                    bit_xor_tuple
                         (Bitwise.xor firstFirst secondFirst :: merged)
                         firstRest
                         secondRest
