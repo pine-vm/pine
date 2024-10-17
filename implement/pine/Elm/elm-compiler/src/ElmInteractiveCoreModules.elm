@@ -3026,15 +3026,29 @@ module Bitwise exposing
   , shiftLeftBy, shiftRightBy, shiftRightZfBy
   )
 
+{-
+   Emulate limits of JavaScript bitwise operations for backwards-compat
+
+   To provide an Elm core library that is backward-compatible with libraries and apps implemented for
+   classic environments, limit the functions in the `Bitwise` module to 32-bit.
+-}
+
 
 and : Int -> Int -> Int
 and a b =
     Pine_kernel.concat
         [ Pine_kernel.take [ 1, 0 ]
-        , Pine_kernel.bit_and
-            [ Pine_kernel.skip [ 1, a ]
-            , Pine_kernel.skip [ 1, b ]
-            ]
+        , Pine_kernel.reverse
+            (Pine_kernel.take
+                [ 4
+                , Pine_kernel.reverse
+                    (Pine_kernel.bit_and
+                        [ Pine_kernel.skip [ 1, a ]
+                        , Pine_kernel.skip [ 1, b ]
+                        ]
+                    )
+                ]
+            )
         ]
 
 
@@ -3042,10 +3056,17 @@ or : Int -> Int -> Int
 or a b =
     Pine_kernel.concat
         [ Pine_kernel.take [ 1, 0 ]
-        , Pine_kernel.bit_or
-            [ Pine_kernel.skip [ 1, a ]
-            , Pine_kernel.skip [ 1, b ]
-            ]
+        , Pine_kernel.reverse
+            (Pine_kernel.take
+                [ 4
+                , Pine_kernel.reverse
+                    (Pine_kernel.bit_or
+                        [ Pine_kernel.skip [ 1, a ]
+                        , Pine_kernel.skip [ 1, b ]
+                        ]
+                    )
+                ]
+            )
         ]
 
 
@@ -3053,10 +3074,17 @@ xor : Int -> Int -> Int
 xor a b =
     Pine_kernel.concat
         [ Pine_kernel.take [ 1, 0 ]
-        , Pine_kernel.bit_xor
-            [ Pine_kernel.skip [ 1, a ]
-            , Pine_kernel.skip [ 1, b ]
-            ]
+        , Pine_kernel.reverse
+            (Pine_kernel.take
+                [ 4
+                , Pine_kernel.reverse
+                    (Pine_kernel.bit_xor
+                        [ Pine_kernel.skip [ 1, a ]
+                        , Pine_kernel.skip [ 1, b ]
+                        ]
+                    )
+                ]
+            )
         ]
 
 
@@ -3079,8 +3107,6 @@ shiftLeftBy offset bytes =
                 [ Pine_kernel.skip [ 1, 0 ]
                 , Pine_kernel.skip [ 1, 0 ]
                 , Pine_kernel.skip [ 1, 0 ]
-                , Pine_kernel.skip [ 1, 0 ]
-                , Pine_kernel.skip [ 1, 0 ]
                 , Pine_kernel.skip [ 1, bytes ]
                 ]
 
@@ -3092,7 +3118,14 @@ shiftLeftBy offset bytes =
     in
     Pine_kernel.concat
         [ sign
-        , truncateLeadingZeros beforeTruncate
+        , truncateLeadingZeros
+            (Pine_kernel.reverse
+                (Pine_kernel.take
+                    [ 4
+                    , Pine_kernel.reverse beforeTruncate
+                    ]
+                )
+            )
         ]
 
 
