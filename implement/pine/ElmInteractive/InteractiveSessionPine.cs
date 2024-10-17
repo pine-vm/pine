@@ -352,16 +352,16 @@ public class InteractiveSessionPine : IInteractiveSession
                 ]
                 );
 
-        if (applyFunctionResult is Result<string, PineValue>.Err err)
-            return "Failed to apply function: " + err.Value;
+        if (applyFunctionResult.IsErrOrNull() is { } applyErr)
+            return "Failed to apply function: " + applyErr;
 
-        if (applyFunctionResult is not Result<string, PineValue>.Ok applyFunctionOk)
+        if (applyFunctionResult.IsOkOrNull() is not { } applyFunctionOk)
             throw new Exception("Unexpected result type: " + applyFunctionResult.GetType().FullName);
 
-        var parseAsTagResult = ElmValueEncoding.ParseAsTag(applyFunctionOk.Value);
+        var parseAsTagResult = ElmValueEncoding.ParseAsTag(applyFunctionOk);
 
-        if (parseAsTagResult is Result<string, (string, IReadOnlyList<PineValue>)>.Err parseAsTagErr)
-            return "Failed to parse result as tag: " + parseAsTagErr.Value;
+        if (parseAsTagResult.IsErrOrNull() is { } parseAsTagErr)
+            return "Failed to parse result as tag: " + parseAsTagErr;
 
         if (parseAsTagResult is not Result<string, (string tagName, IReadOnlyList<PineValue> tagArgs)>.Ok parseAsTagOk)
             throw new Exception("Unexpected result type: " + parseAsTagResult.GetType().FullName);
@@ -370,13 +370,13 @@ public class InteractiveSessionPine : IInteractiveSession
         {
             return
                 "Failed to extract environment: Tag not 'Ok': " +
-                ElmValueEncoding.PineValueAsElmValue(applyFunctionOk.Value)
+                ElmValueEncoding.PineValueAsElmValue(applyFunctionOk)
                 .Unpack(
                     fromErr: err => "Failed to parse as Elm value: " + err,
                     fromOk: elmValue => ElmValue.RenderAsElmExpression(elmValue).expressionString);
         }
 
-        if (parseAsTagOk.Value.Item2.Count is not 1)
+        if (parseAsTagOk.Value.tagArgs.Count is not 1)
             return "Failed to extract environment: Expected one element in the list, got " + parseAsTagOk.Value.tagArgs.Count;
 
         var parseAsRecordResult = ElmValueEncoding.ParsePineValueAsRecordTagged(parseAsTagOk.Value.tagArgs[0]);
@@ -475,7 +475,7 @@ public class InteractiveSessionPine : IInteractiveSession
                                         parsedSubmissionOk
                                     ]);
 
-                            if (compileParsedResult is not Result<string, PineValue>.Ok compileParsedOk)
+                            if (compileParsedResult.IsOkOrNull() is not { } compileParsedOk)
                             {
                                 return
                                 "Failed compiling parsed submission (" +
@@ -488,7 +488,7 @@ public class InteractiveSessionPine : IInteractiveSession
                             clock.Restart();
 
                             var compileParsedOkAsElmValue =
-                            ElmValueEncoding.PineValueAsElmValue(compileParsedOk.Value)
+                            ElmValueEncoding.PineValueAsElmValue(compileParsedOk)
                             .Extract(err => throw new Exception("Failed decoding as Elm value: " + err));
 
                             logDuration("compile - decode result");
@@ -510,7 +510,7 @@ public class InteractiveSessionPine : IInteractiveSession
                             clock.Restart();
 
                             return
-                                ElmValueEncoding.PineValueAsElmValue(compileParsedOk.Value)
+                                ElmValueEncoding.PineValueAsElmValue(compileParsedOk)
                                 .MapError(error => "Failed decoding parse result as Elm value: " + error)
                                 .AndThen(compileParsedOkAsElmValue =>
                                 {
