@@ -611,7 +611,11 @@ kernelFunction_bit_shift_left value =
                         beforeOffsetBytes =
                             kernelFunction_bit_shift_left_recursive
                                 []
-                                (List.reverse (List.drop offsetBytes bytes))
+                                (List.concat
+                                    [ List.reverse (List.drop offsetBytes bytes)
+                                    , List.repeat offsetBytes 0
+                                    ]
+                                )
                                 0
                                 offsetBits
                     in
@@ -631,6 +635,9 @@ kernelFunction_bit_shift_left value =
 
 kernelFunction_bit_shift_left_recursive : List Int -> List Int -> Int -> Int -> List Int
 kernelFunction_bit_shift_left_recursive bytesRight bytesLeft carryFromRight offset =
+    {-
+       Recursing from the right to the left.
+    -}
     case bytesLeft of
         byte :: rest ->
             let
@@ -670,7 +677,11 @@ kernelFunction_bit_shift_right value =
                     BlobValue
                         (kernelFunction_bit_shift_right_recursive
                             []
-                            (List.reverse (List.drop offsetBytes bytes))
+                            (List.concat
+                                [ List.repeat offsetBytes 0
+                                , List.reverse (List.drop offsetBytes (List.reverse bytes))
+                                ]
+                            )
                             0
                             offsetBits
                         )
@@ -683,26 +694,31 @@ kernelFunction_bit_shift_right value =
 
 
 kernelFunction_bit_shift_right_recursive : List Int -> List Int -> Int -> Int -> List Int
-kernelFunction_bit_shift_right_recursive bytesRight bytesLeft carryFromRight offset =
-    case bytesLeft of
+kernelFunction_bit_shift_right_recursive bytesLeft bytesRight carryFromLeft offset =
+    {-
+       Recursing from the left to the right.
+    -}
+    case bytesRight of
         byte :: rest ->
             let
                 shiftedByte =
-                    Bitwise.or
-                        (Bitwise.shiftRightBy offset byte)
-                        carryFromRight
+                    Bitwise.and 0xFF
+                        (Bitwise.or
+                            (Bitwise.shiftRightBy offset byte)
+                            carryFromLeft
+                        )
 
                 nextCarry =
                     Bitwise.shiftLeftBy (8 - offset) byte
             in
             kernelFunction_bit_shift_right_recursive
-                (shiftedByte :: bytesRight)
+                (shiftedByte :: bytesLeft)
                 rest
                 nextCarry
                 offset
 
         [] ->
-            bytesRight
+            List.reverse bytesLeft
 
 
 bit_and_tuple : List Int -> List Int -> List Int -> List Int

@@ -1,0 +1,1 @@
+Pine_kernel.length  (Pine_kernel.bit_or [ 0, 0 ])
