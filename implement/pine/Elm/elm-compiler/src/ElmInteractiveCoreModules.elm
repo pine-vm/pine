@@ -3147,6 +3147,65 @@ shiftRightBy offset bytes =
         ]
 
 
+shiftRightZfBy : Int -> Int -> Int
+shiftRightZfBy offset bytes =
+    let
+        sign =
+            Pine_kernel.take [ 1, bytes ]
+    in
+    if
+        Pine_kernel.equal
+            [ sign
+            , Pine_kernel.take [ 1, 0 ]
+            ]
+    then
+        let
+            beforeTruncate =
+                Pine_kernel.bit_shift_right
+                    [ offset
+                    , Pine_kernel.skip [ 1, bytes ]
+                    ]
+        in
+        Pine_kernel.concat
+            [ sign
+            , truncateLeadingZeros beforeTruncate
+            ]
+
+    else
+        let
+            fromTwosComplement32 =
+                Pine_kernel.bit_not
+                    (Pine_kernel.reverse
+                        (Pine_kernel.take
+                            [ 4
+                            , Pine_kernel.concat
+                                [ Pine_kernel.reverse
+                                    (Pine_kernel.skip
+                                        [ 1
+                                        , Pine_kernel.int_add
+                                            [ bytes
+                                            , 1
+                                            ]
+                                        ]
+                                    )
+                                , Pine_kernel.skip [ 2, 0x0000000100000000 ]
+                                ]
+                            ]
+                        )
+                    )
+
+            beforeTruncate =
+                Pine_kernel.bit_shift_right
+                    [ offset
+                    , fromTwosComplement32
+                    ]
+        in
+        Pine_kernel.concat
+            [ Pine_kernel.take [ 1, 0 ]
+            , truncateLeadingZeros beforeTruncate
+            ]
+
+
 truncateLeadingZeros : Int -> Int
 truncateLeadingZeros bytes =
     if

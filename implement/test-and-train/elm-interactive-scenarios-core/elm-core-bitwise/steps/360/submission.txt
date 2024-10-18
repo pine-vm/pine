@@ -1,0 +1,1 @@
+Bitwise.shiftRightZfBy  0  0
