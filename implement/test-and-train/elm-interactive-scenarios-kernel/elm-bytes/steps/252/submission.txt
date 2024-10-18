@@ -1,0 +1,1 @@
+Bytes.Decode.decode  (Bytes.Decode.unsignedInt16  Bytes.LE)  (Bytes.Encode.encode  (Bytes.Encode.sequence [ Bytes.Encode.unsignedInt8 41, Bytes.Encode.unsignedInt8 43 ]))

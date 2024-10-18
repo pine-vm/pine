@@ -31,7 +31,10 @@ import Bytes
 
 
 type Encoder
-  = U8 Int
+  = I8 Int
+  | I16 Endianness Int
+  | I32 Endianness Int
+  | U8 Int
   | U16 Endianness Int
   | U32 Endianness Int
   | SequenceEncoder (List Encoder)
@@ -45,39 +48,132 @@ encode builder =
 
 encodeBlob : Encoder -> Int
 encodeBlob builder =
-  case builder of
-    U8    n ->
-        Pine_kernel.take [ 1, (Pine_kernel.reverse n) ]
+    case builder of
+        I8 n ->
+            if Pine_kernel.int_is_sorted_asc [ 0, n ] then
+                Pine_kernel.take [ 1, Pine_kernel.reverse n ]
 
-    U16 e n ->
-        let
-            littleEndian =
-                Pine_kernel.take [ 2, (Pine_kernel.reverse (Pine_kernel.skip [ 1, n ])) ]
-        in
-        if (e == Bytes.LE)
-        then littleEndian
-        else Pine_kernel.reverse littleEndian
+            else
+                Pine_kernel.take
+                    [ 1
+                    , Pine_kernel.reverse
+                        (Pine_kernel.bit_not (Pine_kernel.int_add [ n, 1 ]))
+                    ]
 
-    U32 e n ->
-        let
-            littleEndian =
-                Pine_kernel.take [ 4, (Pine_kernel.reverse (Pine_kernel.skip [ 1, n ])) ]
-        in
-        if (e == Bytes.LE)
-        then
-            littleEndian
-        else
-            Pine_kernel.reverse littleEndian
+        I16 e n ->
+            let
+                littleEndian =
+                    if Pine_kernel.int_is_sorted_asc [ 0, n ] then
+                        Pine_kernel.take
+                            [ 2
+                            , Pine_kernel.concat
+                                [ Pine_kernel.reverse
+                                    (Pine_kernel.skip [ 1, n ])
+                                , Pine_kernel.skip [ 1, 0 ]
+                                ]
+                            ]
 
-    SequenceEncoder bs ->
-        if bs == []
-        then
-            Pine_kernel.take [ 0, 0 ]
-        else
-            Pine_kernel.concat (List.map encodeBlob bs)
+                    else
+                        Pine_kernel.take
+                            [ 2
+                            , Pine_kernel.concat
+                                [ Pine_kernel.reverse
+                                    (Pine_kernel.skip
+                                        [ 1
+                                        , Pine_kernel.bit_not (Pine_kernel.int_add [ n, 1 ])
+                                        ]
+                                    )
+                                , Pine_kernel.skip [ 1, 0xFF ]
+                                ]
+                            ]
+            in
+            if Pine_kernel.equal [ e, Bytes.LE ] then
+                littleEndian
 
-    BytesEncoder (Bytes.Elm_Bytes blob) ->
-        blob
+            else
+                Pine_kernel.reverse littleEndian
+
+        I32 e n ->
+            let
+                littleEndian =
+                    if Pine_kernel.int_is_sorted_asc [ 0, n ] then
+                        Pine_kernel.take
+                            [ 4
+                            , Pine_kernel.concat
+                                [ Pine_kernel.reverse
+                                    (Pine_kernel.skip [ 1, n ])
+                                , Pine_kernel.skip [ 2, 0x01000000 ]
+                                ]
+                            ]
+
+                    else
+                        Pine_kernel.take
+                            [ 4
+                            , Pine_kernel.concat
+                                [ Pine_kernel.reverse
+                                    (Pine_kernel.skip
+                                        [ 1
+                                        , Pine_kernel.bit_not (Pine_kernel.int_add [ n, 1 ])
+                                        ]
+                                    )
+                                , Pine_kernel.skip [ 1, 0x00FFFFFF ]
+                                ]
+                            ]
+            in
+            if Pine_kernel.equal [ e, Bytes.LE ] then
+                littleEndian
+
+            else
+                Pine_kernel.reverse littleEndian
+
+        U8 n ->
+            Pine_kernel.take [ 1, Pine_kernel.reverse n ]
+
+        U16 e n ->
+            let
+                littleEndian =
+                    Pine_kernel.take
+                        [ 2
+                        , Pine_kernel.concat
+                            [ Pine_kernel.reverse
+                                (Pine_kernel.skip [ 1, n ])
+                            , Pine_kernel.skip [ 1, 0 ]
+                            ]
+                        ]
+            in
+            if Pine_kernel.equal [ e, Bytes.LE ] then
+                littleEndian
+
+            else
+                Pine_kernel.reverse littleEndian
+
+        U32 e n ->
+            let
+                littleEndian =
+                    Pine_kernel.take
+                        [ 4
+                        , Pine_kernel.concat
+                            [ Pine_kernel.reverse
+                                (Pine_kernel.skip [ 1, n ])
+                            , Pine_kernel.skip [ 2, 0x01000000 ]
+                            ]
+                        ]
+            in
+            if Pine_kernel.equal [ e, Bytes.LE ] then
+                littleEndian
+
+            else
+                Pine_kernel.reverse littleEndian
+
+        SequenceEncoder bs ->
+            if Pine_kernel.equal [ bs, [] ] then
+                Pine_kernel.take [ 0, 0 ]
+
+            else
+                Pine_kernel.concat (List.map encodeBlob bs)
+
+        BytesEncoder (Bytes.Elm_Bytes blob) ->
+            blob
 
 
 -- INTEGERS
@@ -90,18 +186,33 @@ unsignedInt8 int =
   U8 int
 
 
+signedInt8 : Int -> Encoder
+signedInt8 int =
+  I8 int
+
+
 {-| Encode integers from `0` to `65535` in two bytes.
 -}
 unsignedInt16 : Endianness -> Int -> Encoder
-unsignedInt16 =
-  U16
+unsignedInt16 int =
+  U16 int
+
+
+signedInt16 : Endianness -> Int -> Encoder
+signedInt16 int =
+  I16 int
 
 
 {-| Encode integers from `0` to `4294967295` in four bytes.
 -}
 unsignedInt32 : Endianness -> Int -> Encoder
-unsignedInt32 =
-  U32
+unsignedInt32 int =
+  U32 int
+
+
+signedInt32 : Endianness -> Int -> Encoder
+signedInt32 int =
+  I32 int
 
 
 bytes : Bytes.Bytes -> Encoder
@@ -313,6 +424,162 @@ unsignedInt8 =
         )
 
 
+signedInt8 : Decoder Int
+signedInt8 =
+    Decoder
+        (\\(Bytes.Elm_Bytes blob) offset ->
+            let
+                byte =
+                    Pine_kernel.take [ 1, Pine_kernel.skip [ offset, blob ] ]
+
+                asInt =
+                    if Pine_kernel.equal [ Pine_kernel.bit_and [ byte, 0x80 ], 0 ] then
+                        Pine_kernel.concat [ Pine_kernel.take [ 1, 0 ], byte ]
+
+                    else
+                        Pine_kernel.int_add
+                            [ -1
+                            , Pine_kernel.concat
+                                [ Pine_kernel.take [ 1, -1 ]
+                                , Pine_kernel.bit_not byte
+                                ]
+                            ]
+            in
+            ( Pine_kernel.int_add [ offset, 1 ]
+            , asInt
+            )
+        )
+
+
+unsignedInt16 : Bytes.Endianness -> Decoder Int
+unsignedInt16 endianness =
+    Decoder
+        (\\(Bytes.Elm_Bytes blob) offset ->
+            let
+                bytes =
+                    Pine_kernel.take [ 2, Pine_kernel.skip [ offset, blob ] ]
+
+                asInt =
+                    if Pine_kernel.equal [ endianness, Bytes.LE ] then
+                        Pine_kernel.concat
+                            [ Pine_kernel.take [ 1, 0 ]
+                            , Pine_kernel.reverse bytes
+                            ]
+
+                    else
+                        Pine_kernel.concat
+                            [ Pine_kernel.take [ 1, 0 ]
+                            , bytes
+                            ]
+            in
+            ( Pine_kernel.int_add [ offset, 2 ]
+            , asInt
+            )
+        )
+
+
+signedInt16 : Bytes.Endianness -> Decoder Int
+signedInt16 endianness =
+    Decoder
+        (\\(Bytes.Elm_Bytes blob) offset ->
+            let
+                bytes =
+                    Pine_kernel.take [ 2, Pine_kernel.skip [ offset, blob ] ]
+
+                bytesOrdered =
+                    if Pine_kernel.equal [ endianness, Bytes.LE ] then
+                        Pine_kernel.reverse bytes
+
+                    else
+                        bytes
+
+                asInt =
+                    if
+                        Pine_kernel.equal
+                            [ Pine_kernel.bit_and [ bytesOrdered, 0x8000 ]
+                            , Pine_kernel.skip [ 2, 0x00010000 ]
+                            ]
+                    then
+                        Pine_kernel.concat [ Pine_kernel.take [ 1, 0 ], bytesOrdered ]
+
+                    else
+                        Pine_kernel.int_add
+                            [ -1
+                            , Pine_kernel.concat
+                                [ Pine_kernel.take [ 1, -1 ]
+                                , Pine_kernel.bit_not bytesOrdered
+                                ]
+                            ]
+            in
+            ( Pine_kernel.int_add [ offset, 2 ]
+            , asInt
+            )
+        )
+
+
+unsignedInt32 : Bytes.Endianness -> Decoder Int
+unsignedInt32 endianness =
+    Decoder
+        (\\(Bytes.Elm_Bytes blob) offset ->
+            let
+                bytes =
+                    Pine_kernel.take [ 4, Pine_kernel.skip [ offset, blob ] ]
+
+                asInt =
+                    if Pine_kernel.equal [ endianness, Bytes.LE ] then
+                        Pine_kernel.concat
+                            [ Pine_kernel.take [ 1, 0 ]
+                            , Pine_kernel.reverse bytes
+                            ]
+
+                    else
+                        Pine_kernel.concat [ Pine_kernel.take [ 1, 0 ], bytes ]
+            in
+            ( Pine_kernel.int_add [ offset, 4 ]
+            , asInt
+            )
+        )
+
+
+signedInt32 : Bytes.Endianness -> Decoder Int
+signedInt32 endianness =
+    Decoder
+        (\\(Bytes.Elm_Bytes blob) offset ->
+            let
+                bytes =
+                    Pine_kernel.take [ 4, Pine_kernel.skip [ offset, blob ] ]
+
+                bytesOrdered =
+                    if Pine_kernel.equal [ endianness, Bytes.LE ] then
+                        Pine_kernel.reverse bytes
+
+                    else
+                        bytes
+
+                asInt =
+                    if
+                        Pine_kernel.equal
+                            [ Pine_kernel.bit_and [ bytesOrdered, 0x80000000 ]
+                            , Pine_kernel.skip [ 2, 0x000100000000 ]
+                            ]
+                    then
+                        Pine_kernel.concat [ Pine_kernel.take [ 1, 0 ], bytesOrdered ]
+
+                    else
+                        Pine_kernel.int_add
+                            [ -1
+                            , Pine_kernel.concat
+                                [ Pine_kernel.take [ 1, -1 ]
+                                , Pine_kernel.bit_not bytesOrdered
+                                ]
+                            ]
+            in
+            ( Pine_kernel.int_add [ offset, 4 ]
+            , asInt
+            )
+        )
+
+
 string : Int -> Decoder String
 string length =
     Decoder
@@ -507,6 +774,115 @@ loopHelp state callback bites offset =
 
         Done result ->
             ( newOffset, result )
+
+
+map2 : (a -> b -> value) -> Decoder a -> Decoder b -> Decoder value
+map2 func (Decoder decodeA) (Decoder decodeB) =
+    Decoder
+        (\\bites offset ->
+            let
+                ( offsetA, a ) =
+                    decodeA bites offset
+
+                ( offsetB, b ) =
+                    decodeB bites offsetA
+            in
+            ( offsetB, func a b )
+        )
+
+
+map3 : (a -> b -> c -> value) -> Decoder a -> Decoder b -> Decoder c -> Decoder value
+map3 func (Decoder decodeA) (Decoder decodeB) (Decoder decodeC) =
+    Decoder
+        (\\bites offset ->
+            let
+                ( offsetA, a ) =
+                    decodeA bites offset
+
+                ( offsetB, b ) =
+                    decodeB bites offsetA
+
+                ( offsetC, c ) =
+                    decodeC bites offsetB
+            in
+            ( offsetC, func a b c )
+        )
+
+
+map4 :
+    (a -> b -> c -> d -> value)
+    -> Decoder a
+    -> Decoder b
+    -> Decoder c
+    -> Decoder d
+    -> Decoder value
+map4 func (Decoder decodeA) (Decoder decodeB) (Decoder decodeC) (Decoder decodeD) =
+    Decoder
+        (\\bites offset ->
+            let
+                ( offsetA, a ) =
+                    decodeA bites offset
+
+                ( offsetB, b ) =
+                    decodeB bites offsetA
+
+                ( offsetC, c ) =
+                    decodeC bites offsetB
+
+                ( offsetD, d ) =
+                    decodeD bites offsetC
+            in
+            ( offsetD, func a b c d )
+        )
+
+
+map5 :
+    (a -> b -> c -> d -> e -> value)
+    -> Decoder a
+    -> Decoder b
+    -> Decoder c
+    -> Decoder d
+    -> Decoder e
+    -> Decoder value
+map5 func (Decoder decodeA) (Decoder decodeB) (Decoder decodeC) (Decoder decodeD) (Decoder decodeE) =
+    Decoder
+        (\\bites offset ->
+            let
+                ( offsetA, a ) =
+                    decodeA bites offset
+
+                ( offsetB, b ) =
+                    decodeB bites offsetA
+
+                ( offsetC, c ) =
+                    decodeC bites offsetB
+
+                ( offsetD, d ) =
+                    decodeD bites offsetC
+
+                ( offsetE, e ) =
+                    decodeE bites offsetD
+            in
+            ( offsetE, func a b c d e )
+        )
+
+
+andThen : (a -> Decoder b) -> Decoder a -> Decoder b
+andThen callback (Decoder decodeA) =
+    Decoder
+        (\\bites offset ->
+            let
+                ( offsetA, a ) =
+                    decodeA bites offset
+
+                (Decoder decodeB) =
+                    callback a
+
+                ( offsetB, b ) =
+                    decodeB bites offsetA
+            in
+            ( offsetB, b )
+        )
 
 
 """

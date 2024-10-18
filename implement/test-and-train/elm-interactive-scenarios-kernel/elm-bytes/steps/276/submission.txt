@@ -1,0 +1,1 @@
+Bytes.Decode.decode  (Bytes.Decode.unsignedInt16  Bytes.BE)  (Bytes.Encode.encode  (Bytes.Encode.signedInt16  Bytes.BE  -7873))
