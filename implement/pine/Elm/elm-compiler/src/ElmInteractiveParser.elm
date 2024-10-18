@@ -222,22 +222,90 @@ parseElmModuleTextToPineValue elmModule =
 parseInteractiveSubmissionFromString : String -> Result String InteractiveSubmission
 parseInteractiveSubmissionFromString submission =
     let
+        charCouldBePartOfOperator : Char -> Bool
+        charCouldBePartOfOperator char =
+            case char of
+                '=' ->
+                    True
+
+                '/' ->
+                    True
+
+                '&' ->
+                    True
+
+                '*' ->
+                    True
+
+                '+' ->
+                    True
+
+                '.' ->
+                    True
+
+                '<' ->
+                    True
+
+                '>' ->
+                    True
+
+                '?' ->
+                    True
+
+                '^' ->
+                    True
+
+                '|' ->
+                    True
+
+                '-' ->
+                    True
+
+                _ ->
+                    False
+
+        computeCurlyBraceBalance : List Char -> Int
+        computeCurlyBraceBalance chars =
+            case chars of
+                [] ->
+                    0
+
+                first :: rest ->
+                    case first of
+                        '{' ->
+                            1 + computeCurlyBraceBalance rest
+
+                        '}' ->
+                            -1 + computeCurlyBraceBalance rest
+
+                        _ ->
+                            computeCurlyBraceBalance rest
+
         looksLikeDeclaration =
-            case String.split "=" submission of
-                leftOfEquals :: betweenFirstAndSecondEquals :: _ ->
-                    if betweenFirstAndSecondEquals == "" then
-                        -- Is operator '=='
-                        False
+            case String.split "=" (String.trim submission) of
+                beforeEquals :: afterEquals :: _ ->
+                    case String.uncons beforeEquals of
+                        Nothing ->
+                            False
 
-                    else
-                        case String.toList (String.reverse (String.trim leftOfEquals)) of
-                            [] ->
-                                False
+                        Just ( firstCharBeforeEquals, _ ) ->
+                            {-
+                               Note: The part before the equals sign can contain spaces, at least if the declaration is a function.
+                            -}
+                            case String.uncons afterEquals of
+                                Just ( charAfterEqualsSign, _ ) ->
+                                    Char.isLower firstCharBeforeEquals
+                                        && not (String.startsWith "let" beforeEquals)
+                                        {-
+                                           Account for expression containing equals sign as part of a record expression.
+                                           Example:
+                                           getAlfa { alfa = 31, beta = 37 }
+                                        -}
+                                        && (computeCurlyBraceBalance (String.toList beforeEquals) == 0)
+                                        && not (charCouldBePartOfOperator charAfterEqualsSign)
 
-                            lastCharBeforeEquals :: _ ->
-                                (Char.isAlphaNum lastCharBeforeEquals || lastCharBeforeEquals == '_')
-                                    && not (String.startsWith "let " (String.trim (String.replace "\n" " " leftOfEquals)))
-                                    && not (String.contains "{" leftOfEquals)
+                                Nothing ->
+                                    False
 
                 _ ->
                     False
