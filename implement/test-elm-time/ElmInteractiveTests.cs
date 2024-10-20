@@ -203,7 +203,7 @@ public class ElmInteractiveTests
                 .Extract(err => throw new Exception("Unexpected parsing error: " + err));
 
             var asElmValue =
-                Pine.ElmInteractive.ElmValueEncoding.PineValueAsElmValue(parseResultOk)
+                Pine.ElmInteractive.ElmValueEncoding.PineValueAsElmValue(parseResultOk, null, null)
                 .Extract(err => throw new Exception("Failed parsing result as Elm value: " + err));
 
             Assert.AreEqual(
@@ -223,7 +223,7 @@ public class ElmInteractiveTests
                 .Extract(err => throw new Exception("Unexpected parsing error: " + err));
 
             var asElmValue =
-                Pine.ElmInteractive.ElmValueEncoding.PineValueAsElmValue(parseResultOk)
+                Pine.ElmInteractive.ElmValueEncoding.PineValueAsElmValue(parseResultOk, null, null)
                 .Extract(err => throw new Exception("Failed parsing result as Elm value: " + err));
 
             Assert.AreEqual(

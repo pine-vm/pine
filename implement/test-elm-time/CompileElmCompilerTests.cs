@@ -137,7 +137,7 @@ public class CompileElmCompilerTests
             .Extract(err => throw new Exception(err));
 
         var responseAsElmValue =
-            ElmValueEncoding.PineValueAsElmValue(parsedModulePineValue)
+            ElmValueEncoding.PineValueAsElmValue(parsedModulePineValue, null, null)
             .Extract(err => throw new Exception(err));
 
         var responseAsExpression =
@@ -302,7 +302,10 @@ public class CompileElmCompilerTests
                     ElmValueEncoding.ElmValueAsPineValue(new ElmValue.ElmString("pizza,risotto,focaccia"))]);
 
         var stringSplitResultElmValue =
-            ElmValueEncoding.PineValueAsElmValue(stringSplitApplicationResult.Extract(err => throw new Exception(err)))
+            ElmValueEncoding.PineValueAsElmValue(
+                stringSplitApplicationResult.Extract(err => throw new Exception(err)),
+                null,
+                null)
             .Extract(err => throw new Exception(err));
 
         Assert.AreEqual(
@@ -430,7 +433,7 @@ public class CompileElmCompilerTests
                 .Extract(err => throw new Exception(err));
 
             var declarationValueAsElmValue =
-                ElmValueEncoding.PineValueAsElmValue(declarationValueResult)
+                ElmValueEncoding.PineValueAsElmValue(declarationValueResult, null, null)
                 .Extract(err => throw new Exception(err));
 
             var (declarationValueAsElmValueAsExpr, _) =
@@ -544,7 +547,7 @@ public class CompileElmCompilerTests
             Assert.IsNotNull(compilerResponseValue, "compilerResponseValue");
 
             var compilerResponseElm =
-                ElmValueEncoding.PineValueAsElmValue(compilerResponseValue)
+                ElmValueEncoding.PineValueAsElmValue(compilerResponseValue, null, null)
                 .Extract(err => throw new Exception(err));
 
             var compilerResponseValueString =
@@ -611,7 +614,7 @@ public class CompileElmCompilerTests
             if (parseAsTagOk.Value.Item1 is not "Ok")
                 return
                     "Failed to extract environment: Tag not 'Ok': " +
-                    ElmValueEncoding.PineValueAsElmValue(applyFunctionOk.Value)
+                    ElmValueEncoding.PineValueAsElmValue(applyFunctionOk.Value, null, null)
                     .Unpack(
                         fromErr: err => "Failed to parse as Elm value: " + err,
                         fromOk: elmValue => ElmValue.RenderAsElmExpression(elmValue).expressionString);
@@ -692,11 +695,17 @@ public class CompileElmCompilerTests
                 .Extract(err => throw new Exception("Failed compiling simple module: " + err));
 
             var pineSessionStateWrappedElm =
-                ElmValueEncoding.PineValueAsElmValue(pineSessionStateWrapped)
+                ElmValueEncoding.PineValueAsElmValue(
+                    pineSessionStateWrapped,
+                    null,
+                    null)
                 .Extract(err => throw new Exception("Failed unwrapping pine session state: " + err));
 
             var pineSessionState =
-                ElmValueInterop.ElmValueDecodedAsInElmCompiler(pineSessionStateWrappedElm)
+                ElmValueInterop.ElmValueDecodedAsInElmCompiler(
+                    pineSessionStateWrappedElm,
+                    null,
+                    null)
                 .Extract(err => throw new Exception("Failed unwrapping pine session state: " + err));
 
             var pineSessionParsedEnv =
@@ -1235,11 +1244,17 @@ public class CompileElmCompilerTests
             if (false)
             {
                 var compiledNewEnvInCompilerElm =
-                    ElmValueEncoding.PineValueAsElmValue(compiledNewEnvInCompiler)
+                    ElmValueEncoding.PineValueAsElmValue(
+                        compiledNewEnvInCompiler,
+                        null,
+                        null)
                     .Extract(err => throw new Exception(err));
 
                 var compiledNewEnvValue =
-                    ElmValueInterop.ElmValueDecodedAsInElmCompiler(compiledNewEnvInCompilerElm)
+                    ElmValueInterop.ElmValueDecodedAsInElmCompiler(
+                        compiledNewEnvInCompilerElm,
+                        null,
+                        null)
                     .Extract(err => throw new Exception(err));
 
                 Console.WriteLine(
@@ -1293,9 +1308,9 @@ public class CompileElmCompilerTests
             PineValue moduleEncodedInCompiler)
         {
             return
-                ElmValueEncoding.PineValueAsElmValue(moduleEncodedInCompiler)
+                ElmValueEncoding.PineValueAsElmValue(moduleEncodedInCompiler, null, null)
                 .AndThen(moduleAsElmValueEncodedInCompiler =>
-                ElmValueInterop.ElmValueDecodedAsInElmCompiler(moduleAsElmValueEncodedInCompiler)
+                ElmValueInterop.ElmValueDecodedAsInElmCompiler(moduleAsElmValueEncodedInCompiler, null, null)
                 .AndThen(modulePineValue =>
                 ElmInteractiveEnvironment.ParseNamedElmModule(modulePineValue)));
         }

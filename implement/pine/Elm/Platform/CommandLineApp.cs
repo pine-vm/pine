@@ -336,7 +336,7 @@ public record CommandLineAppConfig(
     public static CommandLineAppCommand ParseCommand(PineValue commandValue)
     {
         var commandElmValue =
-            ElmValueEncoding.PineValueAsElmValue(commandValue)
+            ElmValueEncoding.PineValueAsElmValue(commandValue, null, null)
             .Extract(err => throw new Exception("Failed parsing command value as Elm value: " + err));
 
         if (commandElmValue is not ElmValue.ElmTag commandTag)

@@ -56,7 +56,7 @@ public class ElmValueTests
             var pineValue = ElmValueEncoding.ElmValueAsPineValue(testCase);
 
             var roundtrip =
-                ElmValueEncoding.PineValueAsElmValue(pineValue)
+                ElmValueEncoding.PineValueAsElmValue(pineValue, null, null)
                 .Extract(err => throw new System.Exception(err));
 
             Assert.AreEqual(testCase, roundtrip);

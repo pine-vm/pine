@@ -24,7 +24,7 @@ public class ElmValueInteropTests
                 ElmValueInterop.PineValueEncodedAsInElmCompiler(testCase);
 
             var roundtrip =
-                ElmValueInterop.ElmValueDecodedAsInElmCompiler(encodedInCompiler)
+                ElmValueInterop.ElmValueDecodedAsInElmCompiler(encodedInCompiler, null, null)
                 .Extract(err => throw new System.Exception(err));
 
             Assert.AreEqual(testCase, roundtrip);

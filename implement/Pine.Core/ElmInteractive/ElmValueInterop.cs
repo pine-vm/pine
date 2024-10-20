@@ -67,14 +67,22 @@ public class ElmValueInterop
         return encoded;
     }
 
-    public static Result<string, PineValue> ElmValueDecodedAsInElmCompiler(ElmValue elmValue)
+    public static Result<string, PineValue> ElmValueDecodedAsInElmCompiler(
+        ElmValue elmValue,
+        IReadOnlyDictionary<ElmValue, PineValue>? additionalReusableDecodings,
+        Action<ElmValue, PineValue>? reportNewDecoding)
     {
         if (ReusedInstances.Instance.ElmValueDecodedAsInElmCompiler?.TryGetValue(elmValue, out var pineValue) ?? false)
         {
             return pineValue;
         }
 
-        return
+        if (additionalReusableDecodings?.TryGetValue(elmValue, out pineValue) ?? false)
+        {
+            return pineValue;
+        }
+
+        var decodeResult =
             elmValue switch
             {
                 ElmValue.ElmTag tag =>
@@ -94,7 +102,10 @@ public class ElmValueInterop
                     tag.Arguments switch
                     {
                     [ElmValue.ElmList firstArgument] =>
-                        ElmValueListValueDecodedAsInElmCompiler(firstArgument.Elements),
+                        ElmValueListValueDecodedAsInElmCompiler(
+                            firstArgument.Elements,
+                            additionalReusableDecodings,
+                            reportNewDecoding),
 
                         _ =>
                             "Invalid arguments for ListValue tag"
@@ -107,6 +118,13 @@ public class ElmValueInterop
                 _ =>
                 "Unsupported ElmValue: " + elmValue.GetType().FullName
             };
+
+        if (decodeResult.IsOkOrNull() is { } decodeOk)
+        {
+            reportNewDecoding?.Invoke(elmValue, decodeOk);
+        }
+
+        return decodeResult;
     }
 
     public static Result<string, PineValue> ElmValueBlobValueDecodedAsInElmCompiler(
@@ -131,7 +149,9 @@ public class ElmValueInterop
     }
 
     public static Result<string, PineValue> ElmValueListValueDecodedAsInElmCompiler(
-        IReadOnlyList<ElmValue> listItems)
+        IReadOnlyList<ElmValue> listItems,
+        IReadOnlyDictionary<ElmValue, PineValue>? additionalReusableEncodings,
+        Action<ElmValue, PineValue>? reportNewEncoding)
     {
         if (listItems.Count is 0)
             return PineValue.EmptyList;
@@ -140,7 +160,11 @@ public class ElmValueInterop
 
         for (var i = 0; i < listItems.Count; i++)
         {
-            var itemResult = ElmValueDecodedAsInElmCompiler(listItems[i]);
+            var itemResult =
+                ElmValueDecodedAsInElmCompiler(
+                    listItems[i],
+                    additionalReusableEncodings,
+                    reportNewEncoding);
 
             if (itemResult is Result<string, PineValue>.Ok itemOk)
             {
@@ -160,7 +184,10 @@ public class ElmValueInterop
         return PineValue.List(items);
     }
 
-    public static Result<string, Expression> ElmValueFromCompilerDecodedAsExpression(ElmValue elmValue)
+    public static Result<string, Expression> ElmValueFromCompilerDecodedAsExpression(
+        ElmValue elmValue,
+        IReadOnlyDictionary<ElmValue, PineValue>? literalAdditionalReusableEncodings,
+        Action<ElmValue, PineValue>? literalReportNewEncoding)
     {
         if (elmValue is ElmValue.ElmTag tag)
         {
@@ -173,7 +200,11 @@ public class ElmValueInterop
 
                 var firstArgument = tag.Arguments[0];
 
-                var literalValueResult = ElmValueDecodedAsInElmCompiler(firstArgument);
+                var literalValueResult =
+                    ElmValueDecodedAsInElmCompiler(
+                        firstArgument,
+                        literalAdditionalReusableEncodings,
+                        literalReportNewEncoding);
 
                 if (literalValueResult is Result<string, PineValue>.Ok literalValueOk)
                 {
@@ -207,7 +238,11 @@ public class ElmValueInterop
 
                 for (var i = 0; i < firstList.Elements.Count; i++)
                 {
-                    var itemResult = ElmValueFromCompilerDecodedAsExpression(firstList.Elements[i]);
+                    var itemResult =
+                        ElmValueFromCompilerDecodedAsExpression(
+                            firstList.Elements[i],
+                            literalAdditionalReusableEncodings,
+                            literalReportNewEncoding);
 
                     if (itemResult is Result<string, Expression>.Ok itemOk)
                     {
@@ -237,7 +272,11 @@ public class ElmValueInterop
                 var encoded = tag.Arguments[0];
                 var environment = tag.Arguments[1];
 
-                var encodedResult = ElmValueFromCompilerDecodedAsExpression(encoded);
+                var encodedResult =
+                    ElmValueFromCompilerDecodedAsExpression(
+                        encoded,
+                        literalAdditionalReusableEncodings,
+                        literalReportNewEncoding);
 
                 if (encodedResult is Result<string, Expression>.Err encodedErr)
                 {
@@ -250,7 +289,11 @@ public class ElmValueInterop
                         "Unexpected result type for encoded: " + encodedResult.GetType().FullName);
                 }
 
-                var environmentResult = ElmValueFromCompilerDecodedAsExpression(environment);
+                var environmentResult =
+                    ElmValueFromCompilerDecodedAsExpression(
+                        environment,
+                        literalAdditionalReusableEncodings,
+                        literalReportNewEncoding);
 
                 if (environmentResult is Result<string, Expression>.Err environmentErr)
                 {
@@ -281,7 +324,11 @@ public class ElmValueInterop
                     return "Invalid arguments for tag " + tag.TagName + ": " + tag;
                 }
 
-                var environmentResult = ElmValueFromCompilerDecodedAsExpression(environment);
+                var environmentResult =
+                    ElmValueFromCompilerDecodedAsExpression(
+                        environment,
+                        literalAdditionalReusableEncodings,
+                        literalReportNewEncoding);
 
                 if (environmentResult is Result<string, Expression>.Err environmentErr)
                 {
@@ -308,7 +355,11 @@ public class ElmValueInterop
                 var falseBranch = tag.Arguments[1];
                 var trueBranch = tag.Arguments[2];
 
-                var conditionResult = ElmValueFromCompilerDecodedAsExpression(condition);
+                var conditionResult =
+                    ElmValueFromCompilerDecodedAsExpression(
+                        condition,
+                        literalAdditionalReusableEncodings,
+                        literalReportNewEncoding);
 
                 if (conditionResult is Result<string, Expression>.Err conditionErr)
                 {
@@ -321,7 +372,11 @@ public class ElmValueInterop
                         "Unexpected result type for condition: " + conditionResult.GetType().FullName);
                 }
 
-                var falseBranchResult = ElmValueFromCompilerDecodedAsExpression(falseBranch);
+                var falseBranchResult =
+                    ElmValueFromCompilerDecodedAsExpression(
+                        falseBranch,
+                        literalAdditionalReusableEncodings,
+                        literalReportNewEncoding);
 
                 if (falseBranchResult is Result<string, Expression>.Err falseBranchErr)
                 {
@@ -334,7 +389,11 @@ public class ElmValueInterop
                         "Unexpected result type for false branch: " + falseBranchResult.GetType().FullName);
                 }
 
-                var trueBranchResult = ElmValueFromCompilerDecodedAsExpression(trueBranch);
+                var trueBranchResult =
+                    ElmValueFromCompilerDecodedAsExpression(
+                        trueBranch,
+                        literalAdditionalReusableEncodings,
+                        literalReportNewEncoding);
 
                 if (trueBranchResult is Result<string, Expression>.Err trueBranchErr)
                 {
@@ -373,7 +432,11 @@ public class ElmValueInterop
                     return "Invalid arguments for tag " + tag.TagName + ": " + tag;
                 }
 
-                var stringTaggedResult = ElmValueFromCompilerDecodedAsExpression(stringTagged);
+                var stringTaggedResult =
+                    ElmValueFromCompilerDecodedAsExpression(
+                        stringTagged,
+                        literalAdditionalReusableEncodings,
+                        literalReportNewEncoding);
 
                 if (stringTaggedResult is Result<string, Expression>.Err stringTaggedErr)
                 {

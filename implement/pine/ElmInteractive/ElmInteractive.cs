@@ -492,7 +492,7 @@ public class ElmInteractive
 
     public static Result<string, EvaluatedStruct> SubmissionResponseFromResponsePineValue(
         PineValue response) =>
-        ElmValueEncoding.PineValueAsElmValue(response)
+        ElmValueEncoding.PineValueAsElmValue(response, null, null)
         .MapError(err => "Failed to convert Pine value to Elm value: " + err)
         .Map(elmValue => new EvaluatedStruct(ElmValue.RenderAsElmExpression(elmValue).expressionString));
 

@@ -359,7 +359,7 @@ public class PGOTests
                         var envItemDisplayText =
                             CommonConversion.StringBase16(envItemValueHash)[..8] +
                             " - " +
-                            ElmValueEncoding.PineValueAsElmValue(envItem.Value)
+                            ElmValueEncoding.PineValueAsElmValue(envItem.Value, null, null)
                             .Unpack(
                                 fromErr: _ =>
                                 "???",
@@ -839,7 +839,7 @@ public class PGOTests
                         var envItemDisplayText =
                             CommonConversion.StringBase16(envItemValueHash)[..8] +
                             " - " +
-                            ElmValueEncoding.PineValueAsElmValue(envItem.Value)
+                            ElmValueEncoding.PineValueAsElmValue(envItem.Value, null, null)
                             .Unpack(
                                 fromErr: _ =>
                                 "???",
@@ -1239,7 +1239,7 @@ public class PGOTests
                         var envItemDisplayText =
                             CommonConversion.StringBase16(envItemValueHash)[..8] +
                             " - " +
-                            ElmValueEncoding.PineValueAsElmValue(envItem.Value)
+                            ElmValueEncoding.PineValueAsElmValue(envItem.Value, null, null)
                             .Unpack(
                                 fromErr: _ =>
                                 "???",
@@ -1621,7 +1621,7 @@ public class PGOTests
                         var envItemDisplayText =
                             CommonConversion.StringBase16(envItemValueHash)[..8] +
                             " - " +
-                            ElmValueEncoding.PineValueAsElmValue(envItem.Value)
+                            ElmValueEncoding.PineValueAsElmValue(envItem.Value, null, null)
                             .Unpack(
                                 fromErr: _ =>
                                 "???",
