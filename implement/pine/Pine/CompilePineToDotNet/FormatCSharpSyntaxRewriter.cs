@@ -263,7 +263,7 @@ public class FormatCSharpSyntaxRewriter(
             ?
             new SyntaxTriviaList(SyntaxFactory.LineFeed, indentationTrivia)
             :
-            new SyntaxTriviaList();
+            [];
 
         var parameters =
             node.Parameters

@@ -189,7 +189,7 @@ public class VolatileProcessCSharp : VolatileProcess
 
         private ImmutableList<AssemblyMetadata> resolvedAssemblies = [];
 
-        private static readonly ConcurrentBag<(AssemblyMetadata metadata, byte[] assembly)> globalResolvedAssemblies = new();
+        private static readonly ConcurrentBag<(AssemblyMetadata metadata, byte[] assembly)> globalResolvedAssemblies = [];
 
         private static readonly ConcurrentDictionary<string, Assembly> appdomainResolvedAssemblies = new();
 

@@ -24,7 +24,7 @@ public class InteractiveSessionJavaScript(
             compileElmProgramCodeFiles: compileElmProgramCodeFiles,
             javaScriptEngineFlavor));
 
-    private readonly IList<string> previousSubmissions = new List<string>();
+    private readonly IList<string> previousSubmissions = [];
 
     public Result<string, SubmissionResponse> Submit(string submission)
     {
