@@ -10,6 +10,7 @@ namespace ElmTime.Gui;
 
 public class MakeGuiCache
 {
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Usage", "VSTHRD011:Use AsyncLazy<T>", Justification = "<Pending>")]
     public static readonly Lazy<Task<Result<string, string>>> MakeGuiHtmlTask = new(() => Task.Run(MakeGuiHtml));
 
     public static Result<string, string> MakeGuiHtml() =>

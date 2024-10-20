@@ -18,7 +18,7 @@ public static class FileStoreExtension
         );
 
     public static IFileStoreReader ForSubdirectory(this IFileStoreReader originalFileStore, string directoryName) =>
-        ForSubdirectory(originalFileStore, ImmutableList.Create(directoryName));
+        ForSubdirectory(originalFileStore, [directoryName]);
 
     public static IFileStoreReader ForSubdirectory(
         this IFileStoreReader originalFileStore, IEnumerable<string> directoryPath) =>
@@ -41,7 +41,7 @@ public static class FileStoreExtension
         );
 
     public static IFileStoreWriter ForSubdirectory(this IFileStoreWriter originalFileStore, string directoryName) =>
-        ForSubdirectory(originalFileStore, ImmutableList.Create(directoryName));
+        ForSubdirectory(originalFileStore, [directoryName]);
 
     public static IFileStoreWriter ForSubdirectory(
         this IFileStoreWriter originalFileStore, IEnumerable<string> directoryPath) =>

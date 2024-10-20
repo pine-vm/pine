@@ -49,6 +49,7 @@
     <PackageReference Include="MSTest.TestFramework" Version="3.6.0" />
     <PackageReference Include="ReadLine" Version="2.0.1" />
     <PackageReference Include="SharpCompress" Version="0.38.0" />
+    <PackageReference Include="StreamJsonRpc" Version="2.19.27" />
     <PackageReference Include="TupleAsJsonArray" Version="1.0.2" />
   </ItemGroup>
 

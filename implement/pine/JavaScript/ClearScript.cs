@@ -37,6 +37,7 @@ public class ClearScriptV8
                     ExpectedFileName: "ClearScriptV8.osx-x64.dylib",
                     RemoteSources: ["https://www.nuget.org/api/v2/package/Microsoft.ClearScript.V8.Native.osx-x64/7.4.5"])]);
 
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Usage", "VSTHRD011:Use AsyncLazy<T>", Justification = "<Pending>")]
     public static readonly Lazy<Task> SetupTask = new(() =>
     {
         EnsureNativeLibrariesAvailableForCurrentPlatform();

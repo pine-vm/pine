@@ -36,6 +36,7 @@ public class LibGit2Sharp
                     ExpectedFileName: "libgit2-e632535.dylib",
                     RemoteSources: ["https://www.nuget.org/api/v2/package/LibGit2Sharp.NativeBinaries/2.0.320"])]);
 
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Usage", "VSTHRD011:Use AsyncLazy<T>", Justification = "<Pending>")]
     public static readonly Lazy<Task> SetupTask = new(() =>
     {
         EnsureNativeLibrariesAvailableForCurrentPlatform();

@@ -83,6 +83,7 @@ public class Program
         var runCacheServerCmd = AddRunCacheServerCmd(app);
 
         var compileInteractiveEnvCommand = AddCompileInteractiveEnvCommand(app);
+        var lspCommand = AddLanguageServerCommand(app);
 
         app.Command("user-secrets", userSecretsCmd =>
         {
@@ -728,6 +729,39 @@ public class Program
                         applyFunctionReport,
                         reportJsonSerializerOptions),
                     reportKind: "apply-function.json");
+            });
+        });
+
+    private static CommandLineApplication AddLanguageServerCommand(CommandLineApplication app) =>
+        app.Command("lang-server", langServerCommand =>
+        {
+            langServerCommand.AddName("lsp");
+
+            langServerCommand.Description = "Language server for Elm development environments.";
+            langServerCommand.UnrecognizedArgumentHandling = UnrecognizedArgumentHandling.Throw;
+
+            langServerCommand.OnExecute(() =>
+            {
+                Console.Error.WriteLine("Starting language server...");
+
+                var languageServer = new LanguageServer();
+
+                var rpcHandler =
+                    new StreamJsonRpc.HeaderDelimitedMessageHandler(
+                        sendingStream: Console.OpenStandardOutput(),
+                        receivingStream: Console.OpenStandardInput(),
+                        formatter: LanguageServerRpcTarget.JsonRpcMessageFormatterDefault());
+
+                using var jsonRpc = new StreamJsonRpc.JsonRpc(
+                    rpcHandler,
+                    target: new LanguageServerRpcTarget(languageServer));
+
+                jsonRpc.StartListening();
+
+                while (true)
+                {
+                    System.Threading.Thread.Sleep(TimeSpan.FromSeconds(1));
+                }
             });
         });
 
