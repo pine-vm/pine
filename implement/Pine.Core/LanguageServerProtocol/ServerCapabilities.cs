@@ -5,7 +5,8 @@ namespace Pine.Core.LanguageServerProtocol;
 /// </summary>
 public record ServerCapabilities(
     bool? DocumentFormattingProvider = null,
-    TextDocumentSyncKind? TextDocumentSync = null);
+    TextDocumentSyncKind? TextDocumentSync = null,
+    ServerCapabilitiesWorkspace? Workspace = null);
 
 /// <summary>
 /// https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#textDocumentSyncKind
@@ -28,3 +29,17 @@ public enum TextDocumentSyncKind
     /// </summary>
     Incremental = 2
 }
+
+/// <summary>
+/// https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#serverCapabilities
+/// </summary>
+public record ServerCapabilitiesWorkspace(
+    WorkspaceFoldersServerCapabilities? WorkspaceFolders = null);
+
+/// <summary>
+/// https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#workspaceFoldersServerCapabilities
+/// </summary>
+public record WorkspaceFoldersServerCapabilities(
+    bool? Supported,
+    bool? ChangeNotifications);
+

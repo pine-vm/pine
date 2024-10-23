@@ -1,4 +1,5 @@
-﻿using Microsoft.VisualStudio.TestTools.UnitTesting;
+using ElmTime.ElmSyntax;
+using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Pine.Core;
 using System.Collections.Generic;
 using System.Collections.Immutable;
@@ -42,13 +43,125 @@ public class ElmSyntaxTests
         foreach (var testCase in testCases)
         {
             var actualImports =
-                ElmTime.ElmSyntax.ElmModule.ParseModuleImportedModulesNames(testCase.moduleText)
+                ElmModule.ParseModuleImportedModulesNames(testCase.moduleText)
                 .ToImmutableHashSet(EnumerableExtension.EqualityComparer<IReadOnlyList<string>>());
 
             Assert.IsTrue(
                 actualImports.SequenceEqual(
                     testCase.expectedImports,
                     EnumerableExtension.EqualityComparer<IReadOnlyList<string>>()));
+        }
+    }
+
+    [TestMethod]
+    public void Enumerate_module_lines()
+    {
+        var testCases = new[]
+            {
+                new
+                {
+                    moduleText =
+                    "",
+
+                    expectedLines =
+                    (IReadOnlyList<string>)[""]
+                },
+
+                new
+                {
+                    moduleText =
+                    "focaccia\narancino",
+
+                    expectedLines =
+                    (IReadOnlyList<string>)["focaccia","arancino"]
+                },
+
+                new
+                {
+                    moduleText =
+                    "focaccia\narancino\n",
+
+                    expectedLines =
+                    (IReadOnlyList<string>)["focaccia","arancino",""]
+                },
+
+                new
+                {
+                    moduleText =
+                    "focaccia\rarancino",
+
+                    expectedLines =
+                    (IReadOnlyList<string>)["focaccia","arancino"]
+                },
+
+                new
+                {
+                    moduleText =
+                    "focaccia\r\narancino",
+
+                    expectedLines =
+                    (IReadOnlyList<string>)["focaccia","arancino"]
+                },
+
+                new
+                {
+                    moduleText =
+                    "focaccia\n\rarancino",
+
+                    expectedLines =
+                    (IReadOnlyList<string>)["focaccia","arancino"]
+                },
+
+                new
+                {
+                    moduleText =
+                    "focaccia\n\narancino",
+
+                    expectedLines =
+                    (IReadOnlyList<string>)["focaccia","","arancino"]
+                },
+
+                new
+                {
+                    moduleText =
+                    "focaccia\n\r\narancino",
+
+                    expectedLines =
+                    (IReadOnlyList<string>)["focaccia","","arancino"]
+                },
+
+                new
+                {
+                    moduleText =
+                    "focaccia\r\n\rarancino",
+
+                    expectedLines =
+                    (IReadOnlyList<string>)["focaccia","","arancino"]
+                },
+            };
+
+        foreach (var testCase in testCases)
+        {
+            IReadOnlyList<string> lines =
+                [.. ElmModule.ModuleLines(moduleText: testCase.moduleText)];
+
+            try
+            {
+                Assert.AreEqual(
+                    testCase.expectedLines.Count,
+                    lines.Count,
+                    "Number of lines");
+
+                Assert.IsTrue(
+                    lines.SequenceEqual(testCase.expectedLines),
+                    message: "Lines contents");
+            }
+            catch (System.Exception ex)
+            {
+                throw new System.Exception(
+                    "Failed for test case:\n" + testCase.moduleText,
+                    ex);
+            }
         }
     }
 }

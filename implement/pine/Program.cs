@@ -738,13 +738,61 @@ public class Program
             langServerCommand.AddName("lsp");
 
             langServerCommand.Description = "Language server for Elm development environments.";
+
+            /*
+             * TODO: Consider log details for unrecognized args to make integration with tools easier.
+             * */
             langServerCommand.UnrecognizedArgumentHandling = UnrecognizedArgumentHandling.Throw;
+
+            var logFileDirOption =
+            langServerCommand.Option("--log-dir", "Directory to create a new log file in", CommandOptionType.SingleValue);
+
+            var stdioOption =
+            /*
+             * The client in VSCode extension sample was observed to add this option automatically:
+             * https://github.com/microsoft/vscode-extension-samples/tree/7ce43a47d7a53935b093a0e10fc490ea6a3cec32/lsp-sample
+             * */
+            langServerCommand.Option(
+                "--stdio",
+                "Use standard input and standard output streams for communication",
+                CommandOptionType.NoValue);
 
             langServerCommand.OnExecute(() =>
             {
-                Console.Error.WriteLine("Starting language server...");
+                Stream? logFileStream = null;
 
-                var languageServer = new LanguageServer();
+                if (logFileDirOption.Value() is { } logFileDir)
+                {
+                    var logFileName =
+                    DateTimeOffset.UtcNow.ToString("yyyy-MM-dd-HH-mm-ss") + "-" + Environment.ProcessId + ".log";
+
+                    var logFilePath = Path.Combine(logFileDir, logFileName);
+
+                    Console.Error.WriteLine("Creating log file at " + logFilePath);
+
+                    Directory.CreateDirectory(logFileDir);
+
+                    logFileStream = new FileStream(path: logFilePath, FileMode.Create, FileAccess.ReadWrite, FileShare.Read);
+                }
+
+                void log(string content)
+                {
+                    var timeText = DateTimeOffset.UtcNow.ToString("HH-mm-ss.fff");
+
+                    var lineContent = timeText + ": " + content;
+
+                    Console.Error.WriteLine(lineContent);
+
+                    if (logFileStream is not null)
+                    {
+                        logFileStream.Write(Encoding.UTF8.GetBytes(lineContent + "\n"));
+                        logFileStream.Flush();
+                    }
+                }
+
+                log("Starting language server...");
+
+                var languageServer = new LanguageServer(logDelegate: log);
 
                 var rpcHandler =
                     new StreamJsonRpc.HeaderDelimitedMessageHandler(

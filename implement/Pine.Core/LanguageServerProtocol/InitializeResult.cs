@@ -4,4 +4,5 @@ namespace Pine.Core.LanguageServerProtocol;
 /// https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#initializeResult
 /// </summary>
 public record InitializeResult(
-    ServerCapabilities Capabilities);
+    ServerCapabilities Capabilities,
+    ParticipentInfo? ServerInfo);

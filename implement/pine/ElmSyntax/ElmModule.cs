@@ -1,4 +1,4 @@
-﻿using Pine.Core;
+using Pine.Core;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
@@ -159,8 +159,55 @@ public static class ElmModule
         }
     }
 
-    public static IEnumerable<string> ModuleLines(this string moduleText) =>
-        moduleText.Split('\n', '\r');
+    public static IEnumerable<string> ModuleLines(this string moduleText)
+    {
+        int lastLineStartIndex = 0;
+
+        for (int i = 0; i < moduleText.Length; i++)
+        {
+            var currentChar = moduleText[i];
+
+            if (currentChar is '\n')
+            {
+                var lineLength = i - lastLineStartIndex;
+
+                var lineText = moduleText.Substring(lastLineStartIndex, lineLength);
+
+                yield return lineText;
+
+                if (i + 1 < moduleText.Length && moduleText[i + 1] is '\r')
+                {
+                    ++i;
+                }
+
+                lastLineStartIndex = i + 1;
+
+                continue;
+            }
+
+            if (currentChar is '\r')
+            {
+                var lineLength = i - lastLineStartIndex;
+
+                var lineText = moduleText.Substring(lastLineStartIndex, lineLength);
+
+                yield return lineText;
+
+                if (i + 1 < moduleText.Length && moduleText[i + 1] is '\n')
+                {
+                    ++i;
+                }
+
+                lastLineStartIndex = i + 1;
+
+                continue;
+            }
+        }
+
+        var remainingText = moduleText[lastLineStartIndex..];
+
+        yield return remainingText;
+    }
 
 
     public static TreeNodeWithStringPath FilterAppCodeTreeForRootModulesAndDependencies(

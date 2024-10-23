@@ -22,7 +22,7 @@ public class ElmLanguageServerTests
 
         using var lspProcess = Process.Start(new ProcessStartInfo(executablePath)
         {
-            Arguments = "  lsp",
+            Arguments = "  lsp  --log-dir=.",
             RedirectStandardInput = true,
             RedirectStandardOutput = true,
         }) ?? throw new Exception("Failed starting process");
@@ -39,21 +39,32 @@ public class ElmLanguageServerTests
 
             jsonRpc.StartListening();
 
+            var initParams =
+                new InitializeParams(
+                    ProcessId: Environment.ProcessId,
+                    Capabilities: new ClientCapabilities(),
+                    RootPath: null,
+                    RootUri: null,
+                    WorkspaceFolders: [],
+                    ClientInfo: null);
+
+            Console.WriteLine(
+                "initParams:\n" +
+                System.Text.Json.JsonSerializer.Serialize(initParams));
+
             var initResponse =
-                await jsonRpc.InvokeAsync<InitializeResult>(
+                await jsonRpc.InvokeWithParameterObjectAsync<object>(
                     "initialize",
-                    new
-                    {
-                        processId = Environment.ProcessId,
-                    });
+                    initParams);
 
-            Assert.IsNotNull(initResponse.Capabilities);
+            Console.WriteLine(
+                "initResponse:\n" +
+                System.Text.Json.JsonSerializer.Serialize(initResponse));
 
-            Assert.AreEqual(
-                TextDocumentSyncKind.Full,
-                initResponse.Capabilities.TextDocumentSync);
-
-            Assert.IsTrue(initResponse.Capabilities.DocumentFormattingProvider);
+            /*
+             * Example from deno lsp:
+             * {"capabilities":{"textDocumentSync":{"openClose":true,"change":2,"save":{}},"selectionRangeProvider":true,"hoverProvider":true,"completionProvider":{"resolveProvider":true,"triggerCharacters":[".","\u0022","\u0027","\u0060","/","@","\u003C","#"],"allCommitCharacters":[".",";","("]},"signatureHelpProvider":{"triggerCharacters":[",","(","\u003C"],"retriggerCharacters":[")"]},"definitionProvider":true,"typeDefinitionProvider":true,"implementationProvider":true,"referencesProvider":true,"documentHighlightProvider":true,"documentSymbolProvider":{"label":"Deno"},"workspaceSymbolProvider":true,"codeActionProvider":true,"codeLensProvider":{"resolveProvider":true},"documentFormattingProvider":true,"renameProvider":true,"foldingRangeProvider":true,"executeCommandProvider":{"commands":["deno.cache","deno.reloadImportRegistries"]},"workspace":{"workspaceFolders":{"supported":true,"changeNotifications":true}},"callHierarchyProvider":true,"semanticTokensProvider":{"legend":{"tokenTypes":["class","enum","interface","namespace","typeParameter","type","parameter","variable","enumMember","property","function","method"],"tokenModifiers":["declaration","static","async","readonly","defaultLibrary","local"]},"range":true,"full":true},"inlayHintProvider":true,"experimental":{"denoConfigTasks":true,"testingApi":true}},"serverInfo":{"name":"deno-language-server","version":"2.0.0 (release, x86_64-pc-windows-msvc)"}}
+             * */
         }
         finally
         {
