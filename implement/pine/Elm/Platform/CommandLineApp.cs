@@ -13,6 +13,8 @@ namespace Pine.Elm.Platform;
 /// </summary>
 public class MutatingCommandLineApp
 {
+    public int? ExitCode { private set; get; } = null;
+
     private readonly ConcurrentQueue<ReadOnlyMemory<byte>> stdOut = new();
 
     private readonly ConcurrentQueue<ReadOnlyMemory<byte>> stdErr = new();
@@ -71,6 +73,7 @@ public class MutatingCommandLineApp
 
     private void MutateConsolidatingAppResponse(CommandLineAppConfig.CommandLineAppEventResponse eventResponse)
     {
+        ExitCode = ExitCode ?? eventResponse.Exit;
 
         foreach (var cmd in eventResponse.Commands)
         {
@@ -357,6 +360,21 @@ public record CommandLineAppConfig(
             }
 
             return new CommandLineAppCommand.SendToStdOutCmd(outputBytes.Value);
+        }
+
+        if (commandTag.TagName is "SendToStdErrCmd")
+        {
+            if (commandTag.Arguments.Count is not 1)
+            {
+                throw new Exception("Expected SendToStdErrCmd to have one argument.");
+            }
+
+            if (commandTag.Arguments[0] is not ElmValue.ElmBytes outputBytes)
+            {
+                throw new Exception("Expected SendToStdErrCmd argument to be bytes.");
+            }
+
+            return new CommandLineAppCommand.SendToStdErrCmd(outputBytes.Value);
         }
 
         throw new NotImplementedException(

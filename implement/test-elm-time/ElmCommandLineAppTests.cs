@@ -53,7 +53,7 @@ public class ElmCommandLineAppTests
 
         {
             mutatingCliApp.EventStdIn(
-                System.Text.Encoding.UTF8.GetBytes("Hello app!"));
+                System.Text.Encoding.UTF8.GetBytes("Hello"));
 
             var outputBatches =
                 mutatingCliApp.DequeueStdOut();
@@ -65,8 +65,51 @@ public class ElmCommandLineAppTests
                 .ToImmutableArray();
 
             Assert.AreEqual(
-                expected: "Received: Hello app!\n",
-                actual: string.Concat(outputTexts));
+                expected:
+                "Hello",
+                actual:
+                string.Concat(outputTexts));
+        }
+
+        {
+            mutatingCliApp.EventStdIn(
+                System.Text.Encoding.UTF8.GetBytes(" app!"));
+
+            var outputBatches =
+                mutatingCliApp.DequeueStdOut();
+
+            var outputTexts =
+                outputBatches
+                .Select(outputBatch =>
+                    System.Text.Encoding.UTF8.GetString(outputBatch.Span))
+                .ToImmutableArray();
+
+            Assert.AreEqual(
+                expected:
+                " app!",
+                actual:
+                string.Concat(outputTexts));
+        }
+
+
+        {
+            mutatingCliApp.EventStdIn(
+                System.Text.Encoding.UTF8.GetBytes("\n"));
+
+            var outputBatches =
+                mutatingCliApp.DequeueStdOut();
+
+            var outputTexts =
+                outputBatches
+                .Select(outputBatch =>
+                    System.Text.Encoding.UTF8.GetString(outputBatch.Span))
+                .ToImmutableArray();
+
+            Assert.AreEqual(
+                expected:
+                "\nReceived line:\nHello app!\n",
+                actual:
+                string.Concat(outputTexts));
         }
     }
 }

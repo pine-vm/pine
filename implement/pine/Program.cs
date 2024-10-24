@@ -410,101 +410,150 @@ public class Program
                 })
             .LogToActions(Console.WriteLine);
 
-        return
-        loadInputDirectoryResult
-        .AndThen(sourceFiles =>
+        if (loadInputDirectoryResult.IsErrOrNull() is { } loadErr)
         {
-            if (sourceFiles.tree.GetNodeAtPath(entryPointFilePath) is not TreeNodeWithStringPath entryPointNode)
+            Console.WriteLine("Failed loading: " + loadErr);
+
+            return 1;
+        }
+
+        if (loadInputDirectoryResult is not Result<string, (TreeNodeWithStringPath tree, LoadCompositionOrigin origin)>.Ok loadOk)
+        {
+            throw new Exception(
+                "Unexpected result type: " + loadInputDirectoryResult.GetType());
+        }
+
+        return RunElmAppOnCommandLine(loadOk.Value.tree, entryPointFilePath);
+    }
+
+    private static Result<string, int> RunElmAppOnCommandLine(
+        TreeNodeWithStringPath sourceFiles,
+        IReadOnlyList<string> entryPointFilePath)
+    {
+        if (sourceFiles.GetNodeAtPath(entryPointFilePath) is not TreeNodeWithStringPath entryPointNode)
+        {
+            return Result<string, int>.err(
+                "Did not find the entry point '" + string.Join("/", entryPointFilePath) + "' in the input directory.");
+        }
+
+        if (entryPointNode is not TreeNodeWithStringPath.BlobNode entryPointBlob)
+        {
+            return
+                "The entry point module '" + string.Join("/", entryPointFilePath) +
+                "' is not a file in the input directory.";
+        }
+
+        var entryPointFileText = Encoding.UTF8.GetString(entryPointBlob.Bytes.Span);
+
+        var parseModuleNameResult =
+        ElmSyntax.ElmModule.ParseModuleName(entryPointFileText);
+
+        if (parseModuleNameResult.IsErrOrNull() is { } err)
+        {
+            return
+                "Failed to parse the module name from the entry point module '" +
+                string.Join("/", entryPointFilePath) + "': " + err;
+        }
+
+        if (parseModuleNameResult.IsOkOrNull() is not { } elmModuleName)
+        {
+            return "Unexpected return type parsing module name: " + parseModuleNameResult.GetType();
+        }
+
+        var envVarDict = Environment.GetEnvironmentVariables();
+
+        var environmentVariables =
+        envVarDict.Keys.OfType<string>()
+        .Select(envVarKey => new KeyValuePair<string, string>(envVarKey, envVarDict[envVarKey].ToString()))
+        .ToImmutableArray();
+
+        Console.WriteLine(
+            "Starting Elm app from " + string.Join("/", entryPointFilePath) +
+            " using runtime version " + AppVersionId + " ...");
+
+        var appConfig =
+            CommandLineAppConfig.ConfigFromSourceFilesAndModuleName(
+                sourceFiles,
+                elmModuleName);
+
+        var mutatingCliApp =
+            new MutatingCommandLineApp(
+                appConfig,
+                environment: new CommandLineAppConfig.CommandLineAppInitEnvironment(
+                    CommandLine: Environment.CommandLine,
+                    EnvironmentVariables: environmentVariables));
+
+        // using var standardInput = Console.OpenStandardInput();
+        using var standardOutput = Console.OpenStandardOutput();
+        using var standardError = Console.OpenStandardError();
+
+        void processStandardInput(ReadOnlyMemory<byte> bytes)
+        {
+            if (bytes.Span.Length is not 0)
             {
-                return Result<string, int>.err(
-                    "Did not find the entry point module '" + entryPoint + "' in the input directory.");
+                var appEventResponse = mutatingCliApp.EventStdIn(bytes);
             }
 
-            if (entryPointNode is not TreeNodeWithStringPath.BlobNode entryPointBlob)
+            foreach (var outputItem in mutatingCliApp.DequeueStdOut())
             {
-                return
-                    "The entry point module '" + entryPoint + "' is not a file in the input directory.";
+                standardOutput.Write(outputItem.Span);
             }
 
-            var entryPointFileText = Encoding.UTF8.GetString(entryPointBlob.Bytes.Span);
-
-            var parseModuleNameResult =
-            ElmSyntax.ElmModule.ParseModuleName(entryPointFileText);
-
-            if (parseModuleNameResult.IsErrOrNull() is { } err)
+            foreach (var outputItem in mutatingCliApp.DequeueStdErr())
             {
-                return
-                    "Failed to parse the module name from the entry point module '" + entryPoint + "': " + err;
+                standardError.Write(outputItem.Span);
+            }
+        }
+
+        processStandardInput(ReadOnlyMemory<byte>.Empty);
+
+        var buffer = new byte[0x100_000];
+
+        while (true)
+        {
+            /*
+             * 2024-10-24:
+             * When testing on Windows 11, observed that `Read` on the stream obtained via Console.OpenStandardInput()
+             * Blocked until the user entered a line-break.
+             * We have not yet found a way to switch the interface into a 'raw' mode to avoid such a block.
+             * To avoid this block, we switch to Console.ReadKey for now.
+             *
+
+            var readCount = standardInput.Read(buffer);
+
+            if (readCount < 1)
+            {
+                continue;
             }
 
-            if (parseModuleNameResult.IsOkOrNull() is not { } elmModuleName)
+            var maybeExitCode = processStandardInput(buffer.AsMemory()[..readCount]);
+            */
+
+            var keys = new List<ReadOnlyMemory<byte>>(capacity: 100);
+
+            void readKey()
             {
-                return "Unexpected return type parsing module name: " + parseModuleNameResult.GetType();
+                var keyInfo = Console.ReadKey(intercept: true);
+
+                keys.Add(Encoding.UTF8.GetBytes([keyInfo.KeyChar]));
             }
 
-            var envVarDict = Environment.GetEnvironmentVariables();
+            readKey();
 
-            var environmentVariables =
-            envVarDict.Keys.OfType<string>()
-            .Select(envVarKey => new KeyValuePair<string, string>(envVarKey, envVarDict[envVarKey].ToString()))
-            .ToImmutableArray();
-
-            Console.WriteLine("Starting Elm app from " + entryPoint + " using runtime version " + AppVersionId + " ...");
-
-            var appConfig =
-                CommandLineAppConfig.ConfigFromSourceFilesAndModuleName(
-                    sourceFiles.tree,
-                    elmModuleName);
-
-            var mutatingCliApp =
-                new MutatingCommandLineApp(
-                    appConfig,
-                    environment: new CommandLineAppConfig.CommandLineAppInitEnvironment(
-                        CommandLine: Environment.CommandLine,
-                        EnvironmentVariables: environmentVariables));
-
-            int? processSubmission(string submission)
+            while (Console.KeyAvailable)
             {
-                var appEventResponse = mutatingCliApp.EventStdIn(Encoding.UTF8.GetBytes(submission));
-
-                if (appEventResponse is null)
-                {
-                    return null;
-                }
-
-                {
-                    var outputTexts =
-                        mutatingCliApp.DequeueStdOut()
-                        .Select(outputBatch => Encoding.UTF8.GetString(outputBatch.Span))
-                        .ToImmutableArray();
-
-                    Console.WriteLine(string.Concat(outputTexts));
-                }
-
-                {
-                    var errTexts =
-                        mutatingCliApp.DequeueStdErr()
-                        .Select(errBatch => Encoding.UTF8.GetString(errBatch.Span))
-                        .ToImmutableArray();
-
-                    Console.Error.WriteLine(string.Concat(errTexts));
-                }
-
-                return appEventResponse.Exit;
+                readKey();
             }
 
-            ReadLine.HistoryEnabled = true;
+            var asStandardInput = CommonConversion.Concat(keys);
 
-            while (true)
+            processStandardInput(asStandardInput);
+
+            if (mutatingCliApp.ExitCode is { } exitCode)
             {
-                var submission = ReadLine.Read();
-
-                var maybeExitCode = processSubmission(submission);
-
-                if (maybeExitCode.HasValue)
-                    return maybeExitCode.Value;
+                return exitCode;
             }
-        });
+        }
     }
 
     private static CommandLineApplication AddDeployCommand(CommandLineApplication app) =>
