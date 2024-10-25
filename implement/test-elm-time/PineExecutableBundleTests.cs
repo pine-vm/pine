@@ -12,7 +12,7 @@ public class PineExecutableBundleTests
             Pine.Elm.ElmCompiler.CompilerSourceFilesDefault.Value;
 
         var combinedSourceFiles =
-            Pine.Elm.ElmCompiler.ElmCompilerFileTreeFromContainerFileTree(compilerSourceFiles);
+            Pine.Elm.ElmCompiler.ElmCompilerFileTreeFromBundledFileTree(compilerSourceFiles);
 
         var freshEnvironment =
             Pine.Elm.ElmCompiler.CompileInteractiveEnvironment(combinedSourceFiles)

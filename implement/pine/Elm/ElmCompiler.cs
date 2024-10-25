@@ -23,7 +23,7 @@ public class ElmCompiler
             .Extract(error => throw new NotImplementedException(nameof(LoadElmCompilerSourceCodeFiles) + ": " + error))));
 
     static public readonly Lazy<TreeNodeWithStringPath> CompilerSourceFilesDefault =
-        new(() => ElmCompilerFileTreeFromContainerFileTree(CompilerSourceContainerFilesDefault.Value));
+        new(() => ElmCompilerFileTreeFromBundledFileTree(CompilerSourceContainerFilesDefault.Value));
 
     public static Result<string, IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>>> LoadElmCompilerSourceCodeFiles() =>
         DotNetAssembly.LoadDirectoryFilesFromManifestEmbeddedFileProviderAsDictionary(
@@ -92,7 +92,7 @@ public class ElmCompiler
         TreeNodeWithStringPath compilerSourceFiles)
     {
         var compilerWithPackagesTree =
-            ElmCompilerFileTreeFromContainerFileTree(compilerSourceFiles);
+            ElmCompilerFileTreeFromBundledFileTree(compilerSourceFiles);
 
         return
             LoadOrCompileInteractiveEnvironment(compilerWithPackagesTree)
@@ -104,8 +104,15 @@ public class ElmCompiler
             });
     }
 
-    public static TreeNodeWithStringPath ElmCompilerFileTreeFromContainerFileTree(
-        TreeNodeWithStringPath containerFileTree)
+    public static TreeNodeWithStringPath ElmCompilerFileTreeFromBundledFileTree(
+        TreeNodeWithStringPath bundledFileTree) =>
+        ElmCompilerFileTreeFromBundledFileTree(
+            bundledFileTree,
+            rootModuleFileNames: [["src", "ElmCompiler.elm"]]);
+
+    public static TreeNodeWithStringPath ElmCompilerFileTreeFromBundledFileTree(
+        TreeNodeWithStringPath bundledFileTree,
+        IReadOnlyList<IReadOnlyList<string>> rootModuleFileNames)
     {
         var compilerPackageSourcesTrees =
             CompilerPackageSources
@@ -120,13 +127,13 @@ public class ElmCompiler
             blobAtPath.path.First() == "src" && blobAtPath.path.Last().ToLower().EndsWith(".elm"));
 
         var compilerAppCodeSourceFiles =
-            containerFileTree.EnumerateBlobsTransitive()
+            bundledFileTree.EnumerateBlobsTransitive()
             .Where(blobAtPath => blobAtPath.path.Last().ToLower().EndsWith(".elm"))
             .ToImmutableArray();
 
         var compilerProgramOnlyElmJson =
             TreeNodeWithStringPath.FilterNodes(
-                containerFileTree,
+                bundledFileTree,
                 nodePath => nodePath.SequenceEqual(["elm.json"]));
 
         var allAvailableElmFiles =
@@ -135,14 +142,15 @@ public class ElmCompiler
             .Select(blobAtPath => (blobAtPath, moduleText: Encoding.UTF8.GetString(blobAtPath.blobContent.Span)))
             .ToImmutableArray();
 
-        var rootElmFile =
+        var rootElmFiles =
             allAvailableElmFiles
-            .First(c => c.blobAtPath.path.SequenceEqual(["src", "ElmCompiler.elm"]));
+            .Where(c => rootModuleFileNames.Any(root => c.blobAtPath.path.SequenceEqual(root)))
+            .ToImmutableArray();
 
         var elmModulesTextsForElmCompiler =
             ElmTime.ElmSyntax.ElmModule.ModulesTextOrderedForCompilationByDependencies(
-                rootModulesTexts: [rootElmFile.moduleText],
-                availableModulesTexts: [.. allAvailableElmFiles.Select(f => f.moduleText)]);
+                rootModulesTexts: [.. rootElmFiles.Select(file => file.moduleText)],
+                availableModulesTexts: [.. allAvailableElmFiles.Select(file => file.moduleText)]);
 
         var elmModulesForElmCompiler =
             elmModulesTextsForElmCompiler
