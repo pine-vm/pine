@@ -1137,7 +1137,7 @@ generateFunctionsForMultipleTypes config typeAnnotationsBeforeDeduplicating choi
 
         generatedFunctionsFromTypeAnnotations =
             typeAnnotationsBeforeDeduplicating
-                |> List.Extra.unique
+                |> Common.listUnique
                 |> List.concatMap config.generateFromTypeAnnotation
 
         generatedFunctionsFromChoiceTypes =
@@ -4850,7 +4850,7 @@ elmModuleNameFromFilePath sourceDirs filePath =
                         sourceDirs.mainSourceDirectoryPath
                             :: sourceDirs.secondarySourceDirectories
                 in
-                List.Extra.findMap
+                Common.listMapFind
                     (\sourceDir ->
                         if List.Extra.isPrefixOf sourceDir directoryName then
                             Just (List.drop (List.length sourceDir) directoryName ++ [ moduleNameLastItem ])

@@ -514,31 +514,37 @@ elmValueDictFoldr func acc dict =
 
 elmListItemsLookLikeTupleItems : List ElmValue -> Maybe Bool
 elmListItemsLookLikeTupleItems list =
-    if 3 < List.length list then
-        Just False
+    case list of
+        [] ->
+            Nothing
 
-    else
-        list
-            |> areAlmValueListItemTypesEqual
-            |> Maybe.map not
+        [ _ ] ->
+            Nothing
 
+        [ first, second ] ->
+            case areElmValueTypesEqual first second of
+                Just True ->
+                    Just False
 
-areAlmValueListItemTypesEqual : List ElmValue -> Maybe Bool
-areAlmValueListItemTypesEqual list =
-    let
-        pairsTypesEqual =
-            list
-                |> List.Extra.uniquePairs
-                |> List.map (\( left, right ) -> areElmValueTypesEqual left right)
-    in
-    if List.all ((==) (Just True)) pairsTypesEqual then
-        Just True
+                Just False ->
+                    Just True
 
-    else if List.any ((==) (Just False)) pairsTypesEqual then
-        Just False
+                Nothing ->
+                    Nothing
 
-    else
-        Nothing
+        [ first, second, third ] ->
+            case ( areElmValueTypesEqual first second, areElmValueTypesEqual first third ) of
+                ( Just False, _ ) ->
+                    Just True
+
+                ( _, Just False ) ->
+                    Just True
+
+                _ ->
+                    Nothing
+
+        _ ->
+            Just False
 
 
 areElmValueTypesEqual : ElmValue -> ElmValue -> Maybe Bool
