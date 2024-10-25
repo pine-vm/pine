@@ -70,23 +70,27 @@ public class ReducePineExpression
     public static Result<string, PineValue> TryEvaluateExpressionIndependent(
         Expression.ParseAndEval parseAndEvalExpr)
     {
-        if (TryEvaluateExpressionIndependent(parseAndEvalExpr.environment) is Result<string, PineValue>.Ok envOk)
+        if (TryEvaluateExpressionIndependent(parseAndEvalExpr.environment).IsOkOrNull() is { } envOk)
         {
             try
             {
+                /*
+                 * 2024-10-25: Disabled this approach after observing Stack overflow here.
+                 * 
                 return
                     new PineVM.PineVM()
                     .EvaluateExpressionDefaultLessStack(
                         parseAndEvalExpr,
                         PineValue.EmptyList,
                         stackPrevValues: ReadOnlyMemory<PineValue>.Empty);
+                */
             }
             catch (ParseExpressionException)
             {
                 /*
                 * A branch of a conditional expression might always fail to parse.
                 * This does not mean that the code would crash at runtime, since it is conditional.
-                * (The Elm compiler uses constructs like this to encoding crashing branches with a custom error message.)
+                * (The Elm compiler uses constructs like this to encode crashing branches with a custom error message.)
                 * */
             }
         }
