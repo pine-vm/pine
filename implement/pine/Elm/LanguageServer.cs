@@ -129,12 +129,12 @@ public class LanguageServer(System.Action<string>? logDelegate)
         IReadOnlyList<string> linesBefore =
             [.. textDocumentContentBefore.ModuleLines()];
 
-        TextEdit replaceWholeDocument(string newContent)
+        static TextEdit replaceWholeDocument(string newContent)
         {
             return new TextEdit(
                 Range: new Range(
                     Start: new Position(Line: 0, Character: 0),
-                    End: new Position(Line: (uint)linesBefore.Count, Character: 0)),
+                    End: new Position(Line: 999_999_999, Character: 999_999_999)),
                 NewText: newContent);
         }
 
