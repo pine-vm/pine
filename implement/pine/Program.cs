@@ -880,8 +880,32 @@ public class Program
                 description: "File path to save a compact build JSON containing the compiled environments.",
                 optionType: CommandOptionType.SingleOrNoValue);
 
+            var rootModuleFilePathOption =
+            compileCommand.Option(
+                template: "--root-file-path",
+                description: "Path to a file to use as the root to filter modules to include.",
+                optionType: CommandOptionType.MultipleValue);
+
+            var skipLoweringOption =
+            compileCommand.Option(
+                "--skip-lowering",
+                description: "Skip the lowering of CompilationInterface modules.",
+                optionType: CommandOptionType.NoValue);
+
+            var gzipOption =
+            compileCommand.Option(
+                "--gzip",
+                description: "Apply gzip compression",
+                optionType: CommandOptionType.NoValue);
+
             compileCommand.OnExecute(() =>
             {
+                IReadOnlyList<IReadOnlyList<string>> rootFilePaths =
+                    [..(rootModuleFilePathOption.Values ?? [])
+                    .WhereNotNull()
+                    .Select(flat => flat.Split('/', '\\'))
+                    ];
+
                 var environmentsSourceTrees =
                 envSourceOption.Values
                 .Select(sourcePath =>
@@ -901,38 +925,114 @@ public class Program
                     }
 
                     return fileTree;
-                });
+                })
+                .ToImmutableArray();
+
+                var aggregateElmModuleFiles =
+                environmentsSourceTrees
+                .SelectMany(tree => tree.EnumerateBlobsTransitive())
+                .Where(f => f.path.LastOrDefault()?.EndsWith(".elm", StringComparison.OrdinalIgnoreCase) ?? false)
+                .ToImmutableArray();
+
+                Console.WriteLine(
+                    "Loaded " + environmentsSourceTrees.Length + " source trees with " +
+                    aggregateElmModuleFiles.Length + " aggregate Elm module files.");
+
+                var skipLowering = skipLoweringOption.HasValue();
+
+                Console.WriteLine(
+                    "Compiling with lowering " +
+                    (skipLowering ? "disabled" : "enabled"));
+
+                Console.WriteLine(
+                    "Limiting the compilation to " + rootFilePaths.Count + " root files: " +
+                    string.Join(
+                        ", ",
+                        rootFilePaths.Select(path => string.Join("/", path))));
 
                 var compiledEnvironments =
                 environmentsSourceTrees
                 .Select(sourceTree =>
                 {
                     var compiledEnv =
-                    ElmCompiler.LoadOrCompileInteractiveEnvironment(sourceTree)
+                    ElmCompiler.LoadOrCompileInteractiveEnvironment(
+                        sourceTree,
+                        rootFilePaths: rootFilePaths,
+                        skipLowering: skipLowering)
                     .Extract(err => throw new Exception("Failed compilation: " + err));
 
                     return new KeyValuePair<TreeNodeWithStringPath, PineValue>(sourceTree, compiledEnv);
                 })
                 .ToImmutableDictionary();
 
-                var bundleResourceFile = BundledElmEnvironments.BuildBundleResourceFileJsonUtf8(compiledEnvironments);
+                foreach (var (sourceTree, compiledEnv) in compiledEnvironments)
+                {
+                    var sourceTreeHash = PineValueHashTree.ComputeHashSorted(sourceTree);
+
+                    var sourceTreeAllFiles =
+                    sourceTree
+                    .EnumerateBlobsTransitive()
+                    .ToImmutableArray();
+
+                    var sourceTreeElmModules =
+                    sourceTreeAllFiles
+                    .Where(f => f.path?.Last().EndsWith(".elm") ?? false)
+                    .ToImmutableArray();
+
+                    var environmentNodesCount =
+                    compiledEnv is PineValue.ListValue compiledEnvList
+                    ?
+                    compiledEnvList.NodesCount
+                    :
+                    0;
+
+                    Console.WriteLine(
+                        "Compiled source tree " + CommonConversion.StringBase16(sourceTreeHash).Substring(0, 8) +
+                        " containing " + sourceTreeAllFiles.Length +
+                        " files and " + sourceTreeElmModules.Length +
+                        " Elm modules into environment with " +
+                        CommandLineInterface.FormatIntegerForDisplay(environmentNodesCount) + " nodes.");
+                }
+
+                var (allListEntries, bundleResourceFile) =
+                BundledElmEnvironments.BuildBundleResourceFileJsonUtf8(compiledEnvironments);
+
+                Console.WriteLine(
+                    "Built bundle containing " +
+                    CommandLineInterface.FormatIntegerForDisplay(allListEntries.Count) +
+                    " list entries in " +
+                    CommandLineInterface.FormatIntegerForDisplay(bundleResourceFile.Length) + " bytes.");
+
+                var fileContent = bundleResourceFile;
+
+                if (gzipOption.HasValue())
+                {
+                    fileContent = BundledElmEnvironments.CompressResourceFile(fileContent);
+
+                    Console.WriteLine(
+                        "Applied gzip and compressed from " +
+                        CommandLineInterface.FormatIntegerForDisplay(bundleResourceFile.Length) +
+                        " to " +
+                        CommandLineInterface.FormatIntegerForDisplay(fileContent.Length) + " bytes");
+                }
 
                 if (outputCompactBuildOption.HasValue())
                 {
                     var destFilePath = outputCompactBuildOption.Value();
 
-                    if (Path.GetDirectoryName(destFilePath) is { } destDirectory)
+                    if (Path.GetDirectoryName(destFilePath) is { } destDirectory && destDirectory.Length is not 0)
                     {
                         Directory.CreateDirectory(destDirectory);
                     }
 
                     File.WriteAllBytes(
                         destFilePath,
-                        bundleResourceFile.ToArray());
+                        fileContent.ToArray());
 
                     Console.WriteLine(
                         "Saved compact build with " +
-                        CommandLineInterface.FormatIntegerForDisplay(bundleResourceFile.Length) +
+                        allListEntries.Count + " list entries in " +
+                        CommandLineInterface.FormatIntegerForDisplay(fileContent.Length) +
                         " bytes to " + destFilePath);
                 }
 

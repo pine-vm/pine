@@ -41,7 +41,15 @@ public class ElmInteractive
         string submission,
         IReadOnlyList<string>? previousLocalSubmissions = null)
     {
-        var modulesTexts = ModulesTextsFromAppCodeTree(appCodeTree);
+        var modulesTexts =
+            appCodeTree is null
+            ?
+            []
+            :
+            ModulesTextsFromAppCodeTree(
+                appCodeTree,
+                skipLowering: false,
+                rootFilePaths: []);
 
         var argumentsJson = System.Text.Json.JsonSerializer.Serialize(
             new
@@ -79,22 +87,29 @@ public class ElmInteractive
     }
 
     public static Result<string, (PineValue compileResult, CompilationCache compilationCache)> CompileInteractiveEnvironment(
-        PineValue? initialState,
         TreeNodeWithStringPath? appCodeTree,
+        IReadOnlyList<IReadOnlyList<string>> rootFilePaths,
+        bool skipLowering,
         CompilationCache compilationCacheBefore)
     {
-        var allModulesTexts =
+        var includedModulesTexts =
             /*
             GetDefaultElmCoreModulesTexts(evalElmPreparedJavaScriptEngine)
             .Concat(ModulesTextsFromAppCodeTree(appCodeTree) ?? [])
             .ToImmutableList();
             */
-            ModulesTextsFromAppCodeTree(appCodeTree) ?? [];
+            appCodeTree is null
+            ?
+            []
+            :
+            ModulesTextsFromAppCodeTree(
+                appCodeTree,
+                skipLowering,
+                rootFilePaths: rootFilePaths);
 
         return
             CompileInteractiveEnvironmentForModulesCachingIncrements(
-                initialState: initialState,
-                elmModulesTextsBeforeSort: allModulesTexts,
+                elmModulesTextsBeforeSort: includedModulesTexts,
                 compilationCacheBefore)
             .Map(compileResultAndCache =>
             (compileResult: compileResultAndCache.compileResult.environmentPineValue,
@@ -103,13 +118,9 @@ public class ElmInteractive
 
     private static Result<string, (CompileInteractiveEnvironmentResult compileResult, CompilationCache compilationCache)>
         CompileInteractiveEnvironmentForModulesCachingIncrements(
-        PineValue? initialState,
         IReadOnlyList<string> elmModulesTextsBeforeSort,
         CompilationCache compilationCacheBefore)
     {
-        if (initialState is not null)
-            throw new NotImplementedException("initialState is not implemented");
-
         var elmModulesTexts =
             ElmSyntax.ElmModule.ModulesTextOrderedForCompilationByDependencies(elmModulesTextsBeforeSort)
             .ToImmutableList();
@@ -820,42 +831,77 @@ public class ElmInteractive
         return dictionary;
     }
 
-    public static IReadOnlyList<string>? ModulesTextsFromAppCodeTree(TreeNodeWithStringPath? appCodeTree) =>
-        ModulesFilePathsAndTextsFromAppCodeTree(appCodeTree)
-        ?.Select(pathAndText => pathAndText.moduleText)
-        .ToImmutableArray();
-
-    public static IReadOnlyList<(IReadOnlyList<string> filePath, ReadOnlyMemory<byte> fileContent, string moduleText)>?
-        ModulesFilePathsAndTextsFromAppCodeTree(
-        TreeNodeWithStringPath? appCodeTree) =>
-        appCodeTree == null ?
-        null
-        :
-        CompileTree(appCodeTree) is { } compiledTree ?
-        TreeToFlatDictionaryWithPathComparer(compiledTree)
-        .Where(sourceFile => sourceFile.Key.Last().EndsWith(".elm"))
-        .Select(appCodeFile => (appCodeFile.Key, appCodeFile.Value, Encoding.UTF8.GetString(appCodeFile.Value.Span)))
-        .ToImmutableList()
-        :
-        null;
-
-    private static TreeNodeWithStringPath? CompileTree(TreeNodeWithStringPath? sourceTree)
+    public static IReadOnlyList<string> ModulesTextsFromAppCodeTree(
+        TreeNodeWithStringPath appCodeTree,
+        bool skipLowering,
+        IReadOnlyList<IReadOnlyList<string>> rootFilePaths)
     {
-        if (sourceTree is null)
-            return null;
+        var allModules =
+            ModulesFilePathsAndTextsFromAppCodeTree(appCodeTree, skipLowering)
+            .Where(file => !ShouldIgnoreSourceFile(file.filePath, file.fileContent))
+            .ToImmutableArray();
 
+        var rootModules =
+            allModules
+            .Where(c => rootFilePaths.Count is 0 || rootFilePaths.Any(rootFilePath => c.filePath.SequenceEqual(rootFilePath)))
+            .ToImmutableArray();
+
+        return
+            ElmSyntax.ElmModule.ModulesTextOrderedForCompilationByDependencies(
+                rootModulesTexts:
+                [.. rootModules.Select(m => m.moduleText)],
+                [.. allModules.Select(m => m.moduleText)]);
+    }
+
+    static bool ShouldIgnoreSourceFile(IReadOnlyList<string> filePath, ReadOnlyMemory<byte> fileContent)
+    {
+        /*
+         * Adapt to observation 2024-10-25:
+         * Unhandled exception. System.Exception: Failed compilation: Failed to prepare the initial context: Failed to compile elm module 'Reporter': Failed to compile declaration: Failed to compile function 'main': Failed to compile Elm function syntax: Did not find module 'ElmTestRunner.Reporter'. There are 18 declarations in this scope: Basics, Bitwise, Bytes, Bytes.Decode, Bytes.Encode, Char, Dict, Elm.Kernel.Parser, Hex, Json.Decode, Json.Encode, Kernel.Json.Decode, Kernel.Json.Encode, List, Maybe, Result, String, Tuple
+         * 
+         * It turns out a tool had created a "port module Reporter" and "port module Runner"
+         * in "elm-compiler\elm-stuff\tests-0.19.1\src\Reporter.elm"
+         * */
+
+        if (filePath.Contains("elm-stuff"))
+            return true;
+
+        return false;
+    }
+
+    public static IReadOnlyList<(IReadOnlyList<string> filePath, ReadOnlyMemory<byte> fileContent, string moduleText)>
+        ModulesFilePathsAndTextsFromAppCodeTree(
+        TreeNodeWithStringPath appCodeTree,
+        bool skipLowering)
+    {
+        var loweredTree =
+            skipLowering
+            ?
+            appCodeTree
+            :
+            CompileTree(appCodeTree);
+
+        return
+            [.. TreeToFlatDictionaryWithPathComparer(loweredTree)
+            .Where(sourceFile => sourceFile.Key.Last().EndsWith(".elm"))
+            .Select(appCodeFile => (appCodeFile.Key, appCodeFile.Value, Encoding.UTF8.GetString(appCodeFile.Value.Span)))
+            ];
+    }
+
+    private static TreeNodeWithStringPath CompileTree(TreeNodeWithStringPath sourceTree)
+    {
         if (sourceTree.GetNodeAtPath(["elm.json"]) is null)
             return sourceTree;
 
         var sourceFiles = TreeToFlatDictionaryWithPathComparer(sourceTree);
 
-        if (sourceFiles.Count == 0)
-            return null;
+        if (sourceFiles.Count is 0)
+            return sourceTree;
 
         var compilationRootFilePath = sourceFiles.FirstOrDefault(c => c.Key[c.Key.Count - 1].EndsWith(".elm")).Key;
 
-        if (compilationRootFilePath.Count == 0)
-            return null;
+        if (compilationRootFilePath.Count is 0)
+            return sourceTree;
 
         var compilationResult = ElmAppCompilation.AsCompletelyLoweredElmApp(
             sourceFiles: TreeToFlatDictionaryWithPathComparer(sourceTree),
@@ -909,10 +955,10 @@ public class ElmInteractive
         IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> compileElmProgramCodeFiles)
     {
         var elmMakeResult =
-        Elm019Binaries.ElmMakeToJavascript(
-            compileElmProgramCodeFiles,
-            workingDirectoryRelative: null,
-            ["src", "ElmInteractiveMain.elm"]);
+            Elm019Binaries.ElmMakeToJavascript(
+                compileElmProgramCodeFiles,
+                workingDirectoryRelative: null,
+                ["src", "ElmInteractiveMain.elm"]);
 
         var javascriptFromElmMake =
             Encoding.UTF8.GetString(

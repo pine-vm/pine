@@ -95,7 +95,10 @@ public class ElmCompiler
             ElmCompilerFileTreeFromBundledFileTree(compilerSourceFiles);
 
         return
-            LoadOrCompileInteractiveEnvironment(compilerWithPackagesTree)
+            LoadOrCompileInteractiveEnvironment(
+                compilerWithPackagesTree,
+                rootFilePaths: [],
+                skipLowering: true)
             .AndThen(compiledEnv =>
             {
                 return ElmCompilerFromEnvValue(
@@ -207,9 +210,12 @@ public class ElmCompiler
     }
 
     public static Result<string, PineValue> LoadOrCompileInteractiveEnvironment(
-        TreeNodeWithStringPath compilerSourceFiles)
+        TreeNodeWithStringPath compilerSourceFiles,
+        IReadOnlyList<IReadOnlyList<string>> rootFilePaths,
+        bool skipLowering)
     {
-        if (BundledElmEnvironments.BundledElmEnvironmentFromFileTree(compilerSourceFiles) is { } fromBundle)
+        if (rootFilePaths.Count is 0 &&
+            BundledElmEnvironments.BundledElmEnvironmentFromFileTree(compilerSourceFiles) is { } fromBundle)
         {
             return Result<string, PineValue>.ok(fromBundle);
         }
@@ -218,16 +224,23 @@ public class ElmCompiler
          * TODO: Load from cache
          * */
 
-        return CompileInteractiveEnvironment(compilerSourceFiles);
+        return
+            CompileInteractiveEnvironment(
+                compilerSourceFiles,
+                rootFilePaths: rootFilePaths,
+                skipLowering: skipLowering);
     }
 
     public static Result<string, PineValue> CompileInteractiveEnvironment(
-        TreeNodeWithStringPath compilerSourceFiles)
+        TreeNodeWithStringPath compilerSourceFiles,
+        IReadOnlyList<IReadOnlyList<string>> rootFilePaths,
+        bool skipLowering)
     {
         return
             ElmTime.ElmInteractive.ElmInteractive.CompileInteractiveEnvironment(
-                initialState: null,
                 appCodeTree: compilerSourceFiles,
+                rootFilePaths: rootFilePaths,
+                skipLowering: skipLowering,
                 compilationCacheBefore: ElmTime.ElmInteractive.ElmInteractive.CompilationCache.Empty)
             .Map(result => result.compileResult);
     }

@@ -56,6 +56,20 @@ public static class ElmModule
                 )))
             .ToImmutableList();
 
+        foreach (var module in parsedModules)
+        {
+            var modulesWithSameName =
+                parsedModules
+                .Where(parsedModule => parsedModule.parsedModule.ModuleName.SequenceEqual(module.parsedModule.ModuleName))
+                .ToImmutableList();
+
+            if (1 < modulesWithSameName.Count)
+            {
+                throw new Exception(
+                    "Multiple modules with the same name: " + string.Join(".", module.parsedModule.ModuleName));
+            }
+        }
+
         var parsedModulesByName =
             parsedModules
             .ToImmutableDictionary(
@@ -97,6 +111,7 @@ public static class ElmModule
             .SelectMany(rootModule =>
             ListImportsOfModuleTransitive(rootModule.parsedModule.ModuleName)
             .Prepend(rootModule.parsedModule.ModuleName))
+            .Concat(ElmCoreAutoImportedModulesNames)
             .Intersect(
                 parsedModules.Select(pm => pm.parsedModule.ModuleName),
                 EnumerableExtension.EqualityComparer<IReadOnlyList<string>>())

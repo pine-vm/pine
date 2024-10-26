@@ -15,7 +15,10 @@ public class PineExecutableBundleTests
             Pine.Elm.ElmCompiler.ElmCompilerFileTreeFromBundledFileTree(compilerSourceFiles);
 
         var freshEnvironment =
-            Pine.Elm.ElmCompiler.CompileInteractiveEnvironment(combinedSourceFiles)
+            Pine.Elm.ElmCompiler.CompileInteractiveEnvironment(
+                combinedSourceFiles,
+                rootFilePaths: [],
+                skipLowering: true)
             .Extract(err => throw new System.Exception(err));
 
         var elmCompiler =

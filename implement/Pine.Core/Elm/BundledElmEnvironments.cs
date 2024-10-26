@@ -101,7 +101,15 @@ public class BundledElmEnvironments
     public static void CompressAndWriteBundleFile(
         IReadOnlyDictionary<TreeNodeWithStringPath, PineValue> compiledEnvironments)
     {
-        var fileContent = CompressResourceFile(BuildBundleResourceFileJsonUtf8(compiledEnvironments));
+        var (allListEntries, uncompressed) =
+            BuildBundleResourceFileJsonUtf8(compiledEnvironments);
+
+        System.Console.WriteLine(
+            "Built " + CommandLineInterface.FormatIntegerForDisplay(allListEntries.Count) + " list entries for " +
+            compiledEnvironments.Count + " compiled environments with an uncompressed size of " +
+            CommandLineInterface.FormatIntegerForDisplay(uncompressed.Length) + " bytes.");
+
+        var fileContent = CompressResourceFile(uncompressed);
 
         CompressAndWriteBundleFile(fileContent);
     }
@@ -110,7 +118,7 @@ public class BundledElmEnvironments
         System.ReadOnlyMemory<byte> fileContent)
     {
         System.Console.WriteLine(
-        "Current working directory: " + System.Environment.CurrentDirectory);
+            "Current working directory: " + System.Environment.CurrentDirectory);
 
         var absolutePath = System.IO.Path.GetFullPath(ResourceFilePath);
 
@@ -143,7 +151,16 @@ public class BundledElmEnvironments
         return memoryStream.ToArray();
     }
 
-    public static System.ReadOnlyMemory<byte> BuildBundleResourceFileJsonUtf8(
+    public static (IReadOnlyList<PineValueCompactBuild.ListEntry>, System.ReadOnlyMemory<byte>) BuildBundleResourceFileJsonUtf8(
+        IReadOnlyDictionary<TreeNodeWithStringPath, PineValue> compiledEnvironments)
+    {
+        IReadOnlyList<PineValueCompactBuild.ListEntry> allEntries =
+            BuildBundleResourceFileListItems(compiledEnvironments);
+
+        return (allEntries, System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(allEntries));
+    }
+
+    public static IReadOnlyList<PineValueCompactBuild.ListEntry> BuildBundleResourceFileListItems(
         IReadOnlyDictionary<TreeNodeWithStringPath, PineValue> compiledEnvironments)
     {
         var (listValues, blobValues) =
@@ -174,11 +191,9 @@ public class BundledElmEnvironments
             })
             .ToImmutableArray();
 
-        IReadOnlyList<PineValueCompactBuild.ListEntry> allEntries =
+        return
             [..sharedValuesDict.listEntries
             , ..environmentEntries
             ];
-
-        return System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(allEntries);
     }
 }

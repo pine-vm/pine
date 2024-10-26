@@ -347,7 +347,7 @@ public class InteractiveSessionPine : IInteractiveSession
         TreeNodeWithStringPath appSourceFiles)
     {
         var compileableSourceModules =
-            ElmInteractive.ModulesFilePathsAndTextsFromAppCodeTree(appSourceFiles) ?? [];
+            ElmInteractive.ModulesFilePathsAndTextsFromAppCodeTree(appSourceFiles, skipLowering: false) ?? [];
 
         var baseTree =
             compileableSourceModules
