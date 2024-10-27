@@ -23,8 +23,16 @@ public static class PopularValues
 
     private static IEnumerable<string> PopularStringsSource =>
     [
+        "Pine",
+        "pine",
+        "Pine_kernel",
+
+        "Elm",
+        "elm",
+
         "Elm_Record",
         "Elm_Bytes",
+        "Elm_Float",
 
         "Basics",
         "List",
@@ -37,6 +45,11 @@ public static class PopularValues
         "Array",
         "Dict",
         "Set",
+        "Bytes",
+        "Encode",
+        "Decode",
+        "Bytes.Encode",
+        "Bytes.Decode",
         "Json",
         "Regex",
         "Time",
@@ -66,20 +79,11 @@ public static class PopularValues
         "floor",
         "ceiling",
         "truncate",
-        "(==)",
-        "(/=)",
-        "(<)",
-        "(>)",
-        "(<=)",
-        "(>=)",
         "max",
         "min",
         "compare",
         "not",
-        "(&&)",
-        "(||)",
         "xor",
-        "(++)",
         "modBy",
         "remainderBy",
         "negate",
@@ -105,10 +109,6 @@ public static class PopularValues
         "isInfinite",
         "identity",
         "always",
-        "(<|)",
-        "(|>)",
-        "(<<)",
-        "(>>)",
         "Never",
         "never",
 
@@ -124,6 +124,33 @@ public static class PopularValues
         "dictKeys",
         "dictFoldr",
 
+        "(==)",
+        "(/=)",
+        "(<)",
+        "(>)",
+        "(<=)",
+        "(>=)",
+        "(<|)",
+        "(|>)",
+        "(<<)",
+        "(>>)",
+        "(&&)",
+        "(||)",
+        "(++)",
+
+        "==",
+        "/=",
+        "<",
+        ">",
+        "<=",
+        ">=",
+        "<|",
+        "|>",
+        "<<",
+        ">>",
+        "&&",
+        "||",
+        "++",
 
         // From the Elm core Maybe module
         "Maybe",
@@ -176,6 +203,71 @@ public static class PopularValues
         // From the Elm core Set module
         "Set_elm_builtin",
 
+        // From the Elm core Bitwise module
+        "Bitwise",
+        "and",
+        "or",
+        "xor",
+        "complement",
+        "shiftLeftBy",
+        "shiftRightBy",
+        "shiftRightZfBy",
+
+        // From the Elm kernel Parser module
+        "Parser",
+        "DeadEnd",
+        "row",
+        "col",
+        "Expecting",
+        "ExpectingInt",
+        "ExpectingHex",
+        "ExpectingOctal",
+        "ExpectingBinary",
+        "ExpectingFloat",
+        "ExpectingNumber",
+        "ExpectingVariable",
+        "ExpectingSymbol",
+        "ExpectingKeyword",
+        "ExpectingEnd",
+        "UnexpectedChar",
+        "Problem",
+        "BadRepeat",
+
+        "int",
+        "hex",
+        "octal",
+        "binary",
+        "float",
+
+        "sequence",
+        "start",
+        "separator",
+        "end",
+        "spaces",
+        "item",
+        "trailing",
+
+        "Trailing",
+        "Forbidden",
+        "Optional",
+        "Mandatory",
+
+        "Nestable",
+        "NotNestable",
+
+        "State",
+        "src",
+        "offset",
+        "indent",
+        "context",
+        "row",
+        "col",
+
+        "direction",
+        "precedence",
+        "operator",
+
+
         // From the Pine module
         "Pine",
         "Value",
@@ -227,6 +319,7 @@ public static class PopularValues
         "int_mul",
         "bit_and",
         "bit_or",
+        "bit_xor",
         "list_head",
         "int_is_sorted_asc",
 
@@ -272,10 +365,67 @@ public static class PopularValues
         "InfixDeclaration",
         "Destructuring",
 
-        "FunctionOrValue",
-        "Function",
+
+        "UnitExpr",
         "Application",
+        "OperatorApplication",
+        "FunctionOrValue",
+        "IfBlock",
+        "PrefixOperator",
+        "Operator",
+        "Integer",
+        "Hex",
+        "Floatable",
+        "Negation",
+        "Literal",
+        "CharLiteral",
+        "TupledExpression",
+        "ParenthesizedExpression",
+        "LetExpression",
+        "CaseExpression",
+        "LambdaExpression",
+        "RecordExpr",
+        "ListExpr",
+        "RecordAccess",
+        "RecordAccessFunction",
+        "RecordUpdateExpression",
+        "GLSLExpression",
+
+        "Function",
         "Typed",
+
+        "LetDeclaration",
+        "LetFunction",
+        "LetDestructuring",
+
+
+        "Pattern",
+        "AllPattern",
+        "UnitPattern",
+        "CharPattern",
+        "StringPattern",
+        "IntPattern",
+        "HexPattern",
+        "FloatPattern",
+        "TuplePattern",
+        "RecordPattern",
+        "UnConsPattern",
+        "ListPattern",
+        "VarPattern",
+        "NamedPattern",
+        "AsPattern",
+        "ParenthesizedPattern",
+
+
+        "TypeAnnotation",
+        "GenericType",
+        "Typed",
+        "Unit",
+        "Tupled",
+        "Record",
+        "GenericRecord",
+        "FunctionTypeAnnotation",
+
 
         "row",
         "column",
@@ -285,7 +435,17 @@ public static class PopularValues
         "Node",
         "Range",
 
-        "name"
+        "name",
+
+        "InfixDirection",
+        "Left",
+        "Right",
+        "Non",
+
+        "(|=)",
+        "(|.)",
+        "|=",
+        "|.",
     ];
 
     public static IEnumerable<ElmValue> PopularElmValuesSource()
