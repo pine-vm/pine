@@ -182,28 +182,6 @@ parsedElmFileFromOnlyFileText fileText =
                 )
 
 
-parseElmModuleTextToJson : String -> String
-parseElmModuleTextToJson elmModule =
-    let
-        jsonValue =
-            case parseElmModuleText elmModule of
-                Err _ ->
-                    Json.Encode.object
-                        [ ( "Err"
-                          , Json.Encode.string "Failed to parse this as module text"
-                          )
-                        ]
-
-                Ok file ->
-                    Json.Encode.object
-                        [ ( "Ok"
-                          , Elm.Syntax.File.encode file
-                          )
-                        ]
-    in
-    Json.Encode.encode 0 jsonValue
-
-
 parseElmModuleTextToPineValue : String -> Result String Pine.Value
 parseElmModuleTextToPineValue elmModule =
     case parseElmModuleText elmModule of

@@ -5,10 +5,12 @@ import Bytes
 import Bytes.Decode
 import Bytes.Encode
 import Common
+import CompileElmAppListExtra
 import Dict
 import Elm.Parser
 import Elm.Processing
 import Elm.Syntax.Declaration
+import Elm.Syntax.Encode.TypeAnnotation
 import Elm.Syntax.Exposing
 import Elm.Syntax.Expression
 import Elm.Syntax.File
@@ -483,7 +485,7 @@ findSourceDirectories arguments =
                                                        Technically, the one containing compilationRootFilePath could also be one with parentLevel > 0.
                                                     -}
                                                     (c.parentLevel == 0)
-                                                        && List.Extra.isPrefixOf c.subdirectories compilationRootFilePathFromElmJson
+                                                        && CompileElmAppListExtra.isPrefixOf c.subdirectories compilationRootFilePathFromElmJson
                                                 )
                                             |> List.head
                                     of
@@ -499,7 +501,7 @@ findSourceDirectories arguments =
                                             let
                                                 secondarySourceDirectories =
                                                     parsedSourceDirs
-                                                        |> List.Extra.remove matchingSourceDirectory
+                                                        |> CompileElmAppListExtra.remove matchingSourceDirectory
                                                         |> List.map
                                                             (\parsedDir ->
                                                                 List.take (List.length currentDirectory - parsedDir.parentLevel) currentDirectory
@@ -596,10 +598,10 @@ applyLoweringUnderPrefix lowerModule { prefix, moduleNameEnd } errFromString sou
                     Ok intermediateFiles
 
                 Just moduleName ->
-                    if not (List.Extra.isPrefixOf prefix moduleName) then
+                    if not (CompileElmAppListExtra.isPrefixOf prefix moduleName) then
                         Ok intermediateFiles
 
-                    else if not (List.Extra.isSuffixOf moduleNameEnd moduleName) then
+                    else if not (CompileElmAppListExtra.isSuffixOf moduleNameEnd moduleName) then
                         Ok intermediateFiles
 
                     else
@@ -1916,7 +1918,7 @@ parseElmTypeAndDependenciesRecursivelyFromAnnotationInternalTyped stack modules 
 
                                          else
                                             tryConcretizeRecordInstance
-                                                (Dict.fromList (List.Extra.zip genericsNames instanceArguments))
+                                                (Dict.fromList (CompileElmAppListExtra.zip genericsNames instanceArguments))
                                                 recordType
                                                 |> Result.map
                                                     (\concretizedRecord ->
@@ -3357,7 +3359,7 @@ parseJsonConverterDeclarationType signature =
                     ++ detail
                     ++ "): "
                     ++ (Elm.Syntax.Node.value signature.typeAnnotation
-                            |> Elm.Syntax.TypeAnnotation.encode
+                            |> Elm.Syntax.Encode.TypeAnnotation.encode
                             |> Json.Encode.encode 0
                        )
                 )
@@ -4051,7 +4053,7 @@ findFileTreeNodeWithPathMatchingRepresentationInFunctionName sourceDirs sourceFi
                         , nodesWithRepresentations
                             |> List.filter (Tuple.first >> (==) representation)
                             |> List.map Tuple.second
-                            |> List.Extra.uniqueBy (Tuple.first >> .absolutePath)
+                            |> CompileElmAppListExtra.uniqueBy (Tuple.first >> .absolutePath)
                         )
                     )
                 |> Dict.fromList
@@ -4852,7 +4854,7 @@ elmModuleNameFromFilePath sourceDirs filePath =
                 in
                 Common.listMapFind
                     (\sourceDir ->
-                        if List.Extra.isPrefixOf sourceDir directoryName then
+                        if CompileElmAppListExtra.isPrefixOf sourceDir directoryName then
                             Just (List.drop (List.length sourceDir) directoryName ++ [ moduleNameLastItem ])
 
                         else

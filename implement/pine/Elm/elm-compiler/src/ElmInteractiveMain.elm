@@ -30,10 +30,6 @@ type alias CompileElmInteractiveEnvironmentRequest =
     }
 
 
-parseElmModuleTextToJson : String -> String
-parseElmModuleTextToJson =
-    ElmInteractiveParser.parseElmModuleTextToJson
-
 
 parseElmModuleTextToPineValue : String -> String
 parseElmModuleTextToPineValue moduleTextJson =
@@ -211,8 +207,7 @@ main =
     Platform.worker
         { init = always ( (), Cmd.none )
         , update =
-            { a = parseElmModuleTextToJson
-            , b = evaluateSubmissionInInteractive
+            { b = evaluateSubmissionInInteractive
             , c = compileInteractiveSubmission
             , d = compileInteractiveEnvironment
             , e = submissionResponseFromResponsePineValue
