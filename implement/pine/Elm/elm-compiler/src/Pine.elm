@@ -1203,15 +1203,20 @@ unsafeUnsignedBlobValueFromInt int =
     let
         recursiveFromInt : Int -> List Int -> List Int
         recursiveFromInt remaining aggregate =
-            if remaining < 0x0100 then
+            let
+                upper : Int
+                upper =
+                    remaining // 0x0100
+            in
+            if upper == 0 then
                 remaining :: aggregate
 
             else
                 let
                     lower =
-                        modBy 0x0100 remaining
+                        remaining - (upper * 0x0100)
                 in
-                recursiveFromInt (remaining // 0x0100) (lower :: aggregate)
+                recursiveFromInt upper (lower :: aggregate)
     in
     recursiveFromInt int []
 
