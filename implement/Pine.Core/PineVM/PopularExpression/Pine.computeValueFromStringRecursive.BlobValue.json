@@ -1,0 +1,76 @@
+{
+  "List": [
+    [
+      { "Literal": [ { "ListAsString": "BlobValue" } ] },
+      {
+        "List": [
+          [
+            {
+              "ParseAndEval": [
+                {
+                  "KernelApplication": [
+                    "head",
+                    {
+                      "KernelApplication": [
+                        "head",
+                        { "Environment": [] }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "List": [
+                    [
+                      { "List": [ [] ] },
+                      {
+                        "List": [
+                          [
+                            {
+                              "KernelApplication": [
+                                "concat",
+                                {
+                                  "List": [
+                                    [
+                                      { "Literal": [ { "AsBase64": "BA==" } ] },
+                                      {
+                                        "KernelApplication": [
+                                          "head",
+                                          {
+                                            "KernelApplication": [
+                                              "head",
+                                              {
+                                                "KernelApplication": [
+                                                  "skip",
+                                                  {
+                                                    "List": [
+                                                      [
+                                                        { "Literal": [ 1 ] },
+                                                        { "Environment": [] }
+                                                      ]
+                                                    ]
+                                                  }
+                                                ]
+                                              }
+                                            ]
+                                          }
+                                        ]
+                                      }
+                                    ]
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        ]
+                      }
+                    ]
+                  ]
+                }
+              ]
+            }
+          ]
+        ]
+      }
+    ]
+  ]
+}

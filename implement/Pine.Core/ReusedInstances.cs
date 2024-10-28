@@ -495,9 +495,20 @@ public record ReusedInstances(
 
             foreach (var pineValueBeforeRef in valuesExpectedInCompilerSorted)
             {
-                var pineValue =
-                    ReusedInstance(pineValueBeforeRef) ??
-                    throw new System.Exception("Expected reusable instance already set up for " + pineValueBeforeRef);
+                var pineValue = ReusedInstance(pineValueBeforeRef);
+
+                if (pineValue is null)
+                {
+                    if (pineValueBeforeRef is PineValue.BlobValue blobValue && 2 < blobValue.Bytes.Length)
+                    {
+                        pineValue = pineValueBeforeRef;
+                    }
+                    else
+                    {
+                        throw new System.Exception(
+                            "Expected reusable instance already set up for " + pineValueBeforeRef);
+                    }
+                }
 
                 var reusedElmValue =
                     ElmValueInterop.PineValueEncodedAsInElmCompiler(

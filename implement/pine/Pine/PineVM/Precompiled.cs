@@ -216,6 +216,24 @@ public class Precompiled
         var listFoldlExpressionValue =
             ExpressionEncoding.EncodeExpressionAsValue(listFoldlExpression);
 
+        var pineComputeValueFromStringRecursiveMainExpression =
+            popularExpressionDictionary["Pine.computeValueFromStringRecursive.main"];
+
+        var pineComputeValueFromStringRecursiveMainExpressionValue =
+            ExpressionEncoding.EncodeExpressionAsValue(pineComputeValueFromStringRecursiveMainExpression);
+
+        var pineComputeValueFromStringRecursiveFromIntExpression =
+            popularExpressionDictionary["Pine.computeValueFromStringRecursive.blobValueFromUnsignedInt"];
+
+        var pineComputeValueFromStringRecursiveFromIntExpressionValue =
+            ExpressionEncoding.EncodeExpressionAsValue(pineComputeValueFromStringRecursiveFromIntExpression);
+
+        var pineComputeValueFromStringRecursiveBlobWrapperExpression =
+            popularExpressionDictionary["Pine.computeValueFromStringRecursive.BlobValue"];
+
+        var pineComputeValueFromStringRecursiveBlobWrapperExpressionValue =
+            ExpressionEncoding.EncodeExpressionAsValue(pineComputeValueFromStringRecursiveBlobWrapperExpression);
+
 
         {
             var compareExpressionEnvClass =
@@ -461,6 +479,28 @@ public class Precompiled
                 new KeyValuePair<Expression, IReadOnlyList<PrecompiledEntry>>(
                     countPineValueContentExpression,
                     [new PrecompiledEntry(countPineValueContentEnvClass, CountPineValueContent)]);
+        }
+
+        {
+            var computeValueFromStringRecursiveEnvClass =
+                EnvConstraintId.Create(
+                    [
+                    new KeyValuePair<IReadOnlyList<int>, PineValue>(
+                    [0],
+                    PineValue.List(
+                        [
+                        pineComputeValueFromStringRecursiveFromIntExpressionValue,
+                        pineComputeValueFromStringRecursiveBlobWrapperExpressionValue,
+                        pineComputeValueFromStringRecursiveMainExpressionValue
+                        ]))
+                    ]);
+
+            yield return
+                new KeyValuePair<Expression, IReadOnlyList<PrecompiledEntry>>(
+                    pineComputeValueFromStringRecursiveMainExpression,
+                    [new PrecompiledEntry(
+                        computeValueFromStringRecursiveEnvClass,
+                        PineComputeValueFromStringRecursive)]);
         }
     }
 
@@ -1160,6 +1200,68 @@ public class Precompiled
         }
 
         throw new ParseExpressionException("Error in case-of block: No matching branch.");
+    }
+
+    static PrecompiledResult.FinalValue? PineComputeValueFromStringRecursive(
+        PineValue environment,
+        PineVMParseCache parseCache)
+    {
+        if (PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 0]) is not PineValue.ListValue mappedCharsList)
+        {
+            return null;
+        }
+
+        var stringArgument =
+            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 1]);
+
+        if (stringArgument is not PineValue.ListValue stringCharsList)
+        {
+            return null;
+        }
+
+        var mappedValues =
+            new PineValue[mappedCharsList.Elements.Count + stringCharsList.Elements.Count];
+
+        for (var i = 0; i < mappedCharsList.Elements.Count; ++i)
+        {
+            mappedValues[i] = mappedCharsList.Elements[i];
+        }
+
+        for (var i = 0; i < stringCharsList.Elements.Count; ++i)
+        {
+            if (stringCharsList.Elements[i] is not PineValue.BlobValue charBlobValue)
+            {
+                return null;
+            }
+
+            var blobValueIntegers = new PineValue[charBlobValue.Bytes.Length];
+
+            for (var j = 0; j < charBlobValue.Bytes.Length; ++j)
+            {
+                blobValueIntegers[j] = PineValue.Blob([4, charBlobValue.Bytes.Span[j]]);
+            }
+
+            var blobValue =
+                PineValue.List(
+                    [
+                    Tag_BlobValue_Value,
+                    PineValue.List([PineValue.List(blobValueIntegers)])
+                    ]);
+
+            mappedValues[mappedCharsList.Elements.Count + i] = blobValue;
+        }
+
+        var finalValue =
+            PineValue.List(
+                [
+                Tag_ListValue_Value,
+                PineValue.List([PineValue.List(mappedValues)])
+                ]);
+
+        return
+            new PrecompiledResult.FinalValue(
+                finalValue,
+                StackFrameCount: 3 + mappedValues.Length * 1);
     }
 
     static Func<PrecompiledResult>? ListMap(
