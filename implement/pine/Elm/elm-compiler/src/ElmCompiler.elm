@@ -2209,6 +2209,9 @@ compileElmSyntaxPattern compilation elmPattern =
         Elm.Syntax.Pattern.IntPattern int ->
             continueWithOnlyEqualsCondition (LiteralExpression (Pine.valueFromInt int))
 
+        Elm.Syntax.Pattern.HexPattern int ->
+            continueWithOnlyEqualsCondition (LiteralExpression (Pine.valueFromInt int))
+
         Elm.Syntax.Pattern.StringPattern string ->
             continueWithOnlyEqualsCondition (LiteralExpression (valueFromString string))
 
@@ -2266,9 +2269,6 @@ compileElmSyntaxPattern compilation elmPattern =
 
         Elm.Syntax.Pattern.FloatPattern _ ->
             Err "Unsupported type of pattern: FloatPattern"
-
-        Elm.Syntax.Pattern.HexPattern _ ->
-            Err "Unsupported type of pattern: HexPattern"
 
 
 {-| Uses simple type inference to search for optimized compilation of operator application.
@@ -2353,6 +2353,78 @@ searchCompileElmSyntaxOperatorOptimized stack operator leftExpr rightExpr =
                                             (ListExpression [ leftExprCompiled, rightExprCompiled ])
                                         )
                                     )
+
+        "//" ->
+            -- Operator (//) implies both operands are integers.
+            let
+                continueWithIntOnRight divisor =
+                    case compileElmSyntaxExpression stack leftExpr of
+                        Err err ->
+                            Just (Err err)
+
+                        Ok leftExprCompiled ->
+                            case divisor of
+                                0x0100 ->
+                                    Just
+                                        (Ok
+                                            (ConditionalExpression
+                                                (KernelApplicationExpression
+                                                    "equal"
+                                                    (ListExpression
+                                                        [ KernelApplicationExpression "length" leftExprCompiled
+                                                        , LiteralExpression (Pine.valueFromInt 2)
+                                                        ]
+                                                    )
+                                                )
+                                                (ConditionalExpression
+                                                    (KernelApplicationExpression
+                                                        "equal"
+                                                        (ListExpression
+                                                            [ KernelApplicationExpression "length" leftExprCompiled
+                                                            , LiteralExpression (Pine.valueFromInt 1)
+                                                            ]
+                                                        )
+                                                    )
+                                                    (ConditionalExpression
+                                                        (KernelApplicationExpression
+                                                            "equal"
+                                                            (ListExpression
+                                                                [ KernelApplicationExpression "length" leftExprCompiled
+                                                                , LiteralExpression (Pine.valueFromInt 0)
+                                                                ]
+                                                            )
+                                                        )
+                                                        (KernelApplicationExpression
+                                                            "reverse"
+                                                            (KernelApplicationExpression
+                                                                "skip"
+                                                                (ListExpression
+                                                                    [ LiteralExpression (Pine.valueFromInt 1)
+                                                                    , KernelApplicationExpression "reverse" leftExprCompiled
+                                                                    ]
+                                                                )
+                                                            )
+                                                        )
+                                                        (LiteralExpression Pine.listValue_Empty)
+                                                    )
+                                                    (LiteralExpression Pine.listValue_Empty)
+                                                )
+                                                (LiteralExpression (Pine.valueFromInt 0))
+                                            )
+                                        )
+
+                                _ ->
+                                    Nothing
+            in
+            case rightExpr of
+                Elm.Syntax.Expression.Integer divisor ->
+                    continueWithIntOnRight divisor
+
+                Elm.Syntax.Expression.Hex divisor ->
+                    continueWithIntOnRight divisor
+
+                _ ->
+                    Nothing
 
         "++" ->
             let

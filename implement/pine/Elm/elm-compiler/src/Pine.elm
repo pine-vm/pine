@@ -20,6 +20,7 @@ module Pine exposing
     , intFromUnsignedBlobValue
     , intFromValue
     , kernelFunction_negate
+    , listValue_Empty
     , parseExpressionFromValue
     , stringAsValue_Function
     , stringAsValue_List
