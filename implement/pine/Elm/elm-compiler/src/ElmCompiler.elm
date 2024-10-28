@@ -82,6 +82,7 @@ type alias CompilationStack =
     , exposedDeclarations : List ( String, List (List String) )
     , localAvailableDeclarations : List String
     , depth : Int
+    , knownTypes : List ( String, Elm.Syntax.TypeAnnotation.TypeAnnotation )
     }
 
 
@@ -611,6 +612,7 @@ compileElmModuleIntoNamedExports availableModules moduleToTranslate =
             , localAvailableDeclarations = localFunctionDeclarationsNames
             , localTypeDeclarations = compilationStackForImport.localTypeDeclarations
             , depth = 0
+            , knownTypes = []
             }
 
         exposedFunctionDecls : List String
@@ -808,6 +810,7 @@ compilationAndEmitStackFromModulesInCompilation availableModules { moduleAliases
             , exposedDeclarations = exposedDeclarations
             , localAvailableDeclarations = []
             , depth = 0
+            , knownTypes = []
             }
 
         importedFunctionsBeforeParse : List ( List String, List ( String, Pine.Value ) )
@@ -1386,8 +1389,29 @@ compileElmSyntaxLetBlock stackBefore letBlock =
         Common.resultListMapCombine
             (\(Elm.Syntax.Node.Node _ letDeclaration) ->
                 case letDeclaration of
-                    Elm.Syntax.Expression.LetFunction _ ->
-                        Ok []
+                    Elm.Syntax.Expression.LetFunction letFunction ->
+                        case letFunction.signature of
+                            Nothing ->
+                                Ok []
+
+                            Just (Elm.Syntax.Node.Node _ signature) ->
+                                let
+                                    (Elm.Syntax.Node.Node _ letFunctionDecl) =
+                                        letFunction.declaration
+
+                                    (Elm.Syntax.Node.Node _ declName) =
+                                        letFunctionDecl.name
+
+                                    (Elm.Syntax.Node.Node _ typeAnnotation) =
+                                        signature.typeAnnotation
+                                in
+                                Ok
+                                    [ ( declName
+                                      , ( Nothing
+                                        , Just typeAnnotation
+                                        )
+                                      )
+                                    ]
 
                     Elm.Syntax.Expression.LetDestructuring (Elm.Syntax.Node.Node _ pattern) (Elm.Syntax.Node.Node _ destructuredExpressionElm) ->
                         case compileElmSyntaxExpression stackBefore destructuredExpressionElm of
@@ -1404,8 +1428,12 @@ compileElmSyntaxLetBlock stackBefore letBlock =
                                             (List.map
                                                 (\( declName, deconsExpr ) ->
                                                     ( declName
-                                                    , applicableDeclarationFromConstructorExpression
-                                                        (expressionForDeconstructions deconsExpr destructuredExpression)
+                                                    , ( Just
+                                                            (applicableDeclarationFromConstructorExpression
+                                                                (expressionForDeconstructions deconsExpr destructuredExpression)
+                                                            )
+                                                      , Nothing
+                                                      )
                                                     )
                                                 )
                                                 compiledPattern.declarations
@@ -1418,9 +1446,39 @@ compileElmSyntaxLetBlock stackBefore letBlock =
 
         Ok newAvailableDeclarations ->
             let
+                newInlineableDecls : List ( String, List Expression -> Expression )
+                newInlineableDecls =
+                    List.concatMap
+                        (List.filterMap
+                            (\( declName, ( maybeInline, _ ) ) ->
+                                case maybeInline of
+                                    Nothing ->
+                                        Nothing
+
+                                    Just inlineFunc ->
+                                        Just ( declName, inlineFunc )
+                            )
+                        )
+                        newAvailableDeclarations
+
+                newTypeAnnotations : List ( String, Elm.Syntax.TypeAnnotation.TypeAnnotation )
+                newTypeAnnotations =
+                    List.concatMap
+                        (List.filterMap
+                            (\( declName, ( _, maybeTypeAnnotation ) ) ->
+                                case maybeTypeAnnotation of
+                                    Nothing ->
+                                        Nothing
+
+                                    Just typeAnnotation ->
+                                        Just ( declName, typeAnnotation )
+                            )
+                        )
+                        newAvailableDeclarations
+
                 inlineableDeclarations =
                     List.concat
-                        [ List.concat newAvailableDeclarations
+                        [ newInlineableDecls
                         , stackBefore.inlineableDeclarations
                         ]
 
@@ -1431,6 +1489,11 @@ compileElmSyntaxLetBlock stackBefore letBlock =
                             List.concat
                                 [ List.concatMap (List.map Tuple.first) newAvailableDeclarations
                                 , stackBefore.localAvailableDeclarations
+                                ]
+                        , knownTypes =
+                            List.concat
+                                [ newTypeAnnotations
+                                , stackBefore.knownTypes
                                 ]
                     }
             in
@@ -2284,6 +2347,56 @@ searchCompileElmSyntaxOperatorOptimized :
     -> Elm.Syntax.Expression.Expression
     -> Maybe (Result String Expression)
 searchCompileElmSyntaxOperatorOptimized stack operator leftExpr rightExpr =
+    let
+        exprGuaranteedToBeInt : Elm.Syntax.Expression.Expression -> Bool
+        exprGuaranteedToBeInt expr =
+            case expr of
+                Elm.Syntax.Expression.Integer _ ->
+                    True
+
+                Elm.Syntax.Expression.Hex _ ->
+                    True
+
+                Elm.Syntax.Expression.FunctionOrValue [] localName ->
+                    case Common.assocListGet localName stack.knownTypes of
+                        Just (Elm.Syntax.TypeAnnotation.Typed (Elm.Syntax.Node.Node _ ( [], "Int" )) []) ->
+                            True
+
+                        _ ->
+                            False
+
+                Elm.Syntax.Expression.OperatorApplication innerOp _ (Elm.Syntax.Node.Node _ innerLeft) (Elm.Syntax.Node.Node _ innerRight) ->
+                    case innerOp of
+                        "+" ->
+                            if exprGuaranteedToBeInt innerLeft then
+                                exprGuaranteedToBeInt innerRight
+
+                            else
+                                False
+
+                        "-" ->
+                            if exprGuaranteedToBeInt innerLeft then
+                                exprGuaranteedToBeInt innerRight
+
+                            else
+                                False
+
+                        "*" ->
+                            if exprGuaranteedToBeInt innerLeft then
+                                exprGuaranteedToBeInt innerRight
+
+                            else
+                                False
+
+                        "//" ->
+                            True
+
+                        _ ->
+                            False
+
+                _ ->
+                    False
+    in
     case operator of
         "==" ->
             {-
@@ -2425,6 +2538,99 @@ searchCompileElmSyntaxOperatorOptimized stack operator leftExpr rightExpr =
 
                 _ ->
                     Nothing
+
+        "+" ->
+            if exprGuaranteedToBeInt leftExpr then
+                if exprGuaranteedToBeInt rightExpr then
+                    case compileElmSyntaxExpression stack leftExpr of
+                        Err err ->
+                            Just (Err err)
+
+                        Ok leftExprCompiled ->
+                            case compileElmSyntaxExpression stack rightExpr of
+                                Err err ->
+                                    Just (Err err)
+
+                                Ok rightExprCompiled ->
+                                    Just
+                                        (Ok
+                                            (KernelApplicationExpression
+                                                "int_add"
+                                                (ListExpression
+                                                    [ leftExprCompiled
+                                                    , rightExprCompiled
+                                                    ]
+                                                )
+                                            )
+                                        )
+
+                else
+                    Nothing
+
+            else
+                Nothing
+
+        "*" ->
+            if exprGuaranteedToBeInt leftExpr then
+                if exprGuaranteedToBeInt rightExpr then
+                    case compileElmSyntaxExpression stack leftExpr of
+                        Err err ->
+                            Just (Err err)
+
+                        Ok leftExprCompiled ->
+                            case compileElmSyntaxExpression stack rightExpr of
+                                Err err ->
+                                    Just (Err err)
+
+                                Ok rightExprCompiled ->
+                                    Just
+                                        (Ok
+                                            (KernelApplicationExpression
+                                                "int_mul"
+                                                (ListExpression
+                                                    [ leftExprCompiled
+                                                    , rightExprCompiled
+                                                    ]
+                                                )
+                                            )
+                                        )
+
+                else
+                    Nothing
+
+            else
+                Nothing
+
+        "-" ->
+            if exprGuaranteedToBeInt leftExpr then
+                if exprGuaranteedToBeInt rightExpr then
+                    case compileElmSyntaxExpression stack leftExpr of
+                        Err err ->
+                            Just (Err err)
+
+                        Ok leftExprCompiled ->
+                            case compileElmSyntaxExpression stack rightExpr of
+                                Err err ->
+                                    Just (Err err)
+
+                                Ok rightExprCompiled ->
+                                    Just
+                                        (Ok
+                                            (KernelApplicationExpression
+                                                "int_add"
+                                                (ListExpression
+                                                    [ leftExprCompiled
+                                                    , KernelApplicationExpression "negate" rightExprCompiled
+                                                    ]
+                                                )
+                                            )
+                                        )
+
+                else
+                    Nothing
+
+            else
+                Nothing
 
         "++" ->
             let
