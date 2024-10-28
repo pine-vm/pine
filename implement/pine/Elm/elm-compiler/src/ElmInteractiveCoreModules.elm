@@ -215,6 +215,7 @@ idiv dividend divisor =
                 else
                     ( True, -divisor )
 
+            absQuotient : Int
             absQuotient =
                 idivHelper absDividend absDivisor 0
         in
@@ -222,39 +223,47 @@ idiv dividend divisor =
             absQuotient
 
         else
-            -absQuotient
+            Pine_kernel.negate absQuotient
 
 
 idivHelper : Int -> Int -> Int -> Int
 idivHelper dividend divisor quotient =
     let
+        scaledDivisor : Int
         scaledDivisor =
-            mul divisor 16
+            Pine_kernel.int_mul [ divisor, 16 ]
     in
     if Pine_kernel.int_is_sorted_asc [ scaledDivisor, dividend ] then
         let
+            scaledQuotient : Int
             scaledQuotient =
                 idivHelper
                     dividend
                     scaledDivisor
                     0
 
+            scaledQuotientSum : Int
             scaledQuotientSum =
-                mul scaledQuotient 16
+                Pine_kernel.int_mul [ scaledQuotient, 16 ]
 
+            remainder : Int
             remainder =
-                sub dividend (mul scaledQuotient scaledDivisor)
+                Pine_kernel.int_add
+                    [ dividend
+                    , Pine_kernel.negate (Pine_kernel.int_mul [ scaledQuotient, scaledDivisor ])
+                    ]
 
+            remainderQuotient : Int
             remainderQuotient =
                 idivHelper remainder divisor 0
         in
-        add scaledQuotientSum remainderQuotient
+        Pine_kernel.int_add [ scaledQuotientSum, remainderQuotient ]
 
     else if Pine_kernel.int_is_sorted_asc [ divisor, dividend ] then
         idivHelper
-            (sub dividend divisor)
+            (Pine_kernel.int_add [ dividend, Pine_kernel.negate divisor ])
             divisor
-            (add quotient 1)
+            (Pine_kernel.int_add [ quotient, 1 ])
 
     else
         quotient
@@ -1692,11 +1701,17 @@ fromUnsignedIntAsListHelper int lowerDigits =
 
     else
         let
+            upperDigitsValue : Int
             upperDigitsValue =
                 int // 10
 
             digitChar =
-                unsafeDigitCharacterFromValue (int - (upperDigitsValue * 10))
+                unsafeDigitCharacterFromValue
+                    (Pine_kernel.int_add
+                        [ int
+                        , Pine_kernel.negate (Pine_kernel.int_mul [ upperDigitsValue, 10 ])
+                        ]
+                    )
         in
         fromUnsignedIntAsListHelper upperDigitsValue (digitChar :: lowerDigits)
 
