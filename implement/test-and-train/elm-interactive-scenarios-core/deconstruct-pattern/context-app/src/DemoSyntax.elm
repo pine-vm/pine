@@ -11,8 +11,8 @@ type alias NodeContent =
 
 demoRange : Syntax.Range
 demoRange =
-    { start = { row = 1, column = 1 }
-    , end = { row = 1, column = 2 }
+    { start = { row = 11, column = 13 }
+    , end = { row = 17, column = 19 }
     }
 
 
@@ -42,3 +42,12 @@ concatNodeContentBeta nodes =
                     node
             in
             content.beta ++ "-" ++ concatNodeContentBeta rest
+
+
+nodeListRangeComponents : Syntax.Node a -> List Int
+nodeListRangeComponents (Syntax.Node { start, end } _) =
+    [ start.row
+    , start.column
+    , end.row
+    , end.column
+    ]

@@ -1,0 +1,8 @@
+let
+    syntaxNode : Syntax.Node ()
+    syntaxNode =
+        Syntax.Node
+            { start = { row = 43, column = 41 }, end = { row = 71, column = 73 } }
+            ()
+in
+DemoSyntax.nodeListRangeComponents syntaxNode

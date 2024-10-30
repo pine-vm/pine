@@ -1,0 +1,13 @@
+let
+    syntaxNodes : List (Syntax.Node ())
+    syntaxNodes =
+        [ Syntax.Node
+            { start = { row = 43, column = 41 }, end = { row = 71, column = 73 } }
+            ()
+        , Syntax.Node
+            { start = { row = 91, column = 97 }, end = { row = 13, column = 17 } }
+            ()
+        ]
+in
+syntaxNodes
+    |> List.map (\(Node { start } _) -> [ start.row, start.column ])
