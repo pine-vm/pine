@@ -13,6 +13,12 @@ public class ElmValueInterop
     public static readonly PineValue String_Just_Value =
         PineValueAsString.ValueFromString("Just");
 
+    public static readonly PineValue String_Err_Value =
+        PineValueAsString.ValueFromString("Err");
+
+    public static readonly PineValue String_Ok_Value =
+        PineValueAsString.ValueFromString("Ok");
+
     public static ElmValue PineValueEncodedAsInElmCompiler(
         PineValue pineValue) =>
         PineValueEncodedAsInElmCompiler(
@@ -186,10 +192,23 @@ public class ElmValueInterop
 
     public static Result<string, Expression> ElmValueFromCompilerDecodedAsExpression(
         ElmValue elmValue,
-        IReadOnlyDictionary<ElmValue, PineValue>? literalAdditionalReusableEncodings,
-        Action<ElmValue, PineValue>? literalReportNewEncoding)
+        IReadOnlyDictionary<ElmValue, Expression>? additionalReusableDecodings,
+        Action<ElmValue, Expression>? reportNewDecoding,
+        IReadOnlyDictionary<ElmValue, PineValue>? literalAdditionalReusableDecodings,
+        Action<ElmValue, PineValue>? literalReportNewDecoding)
     {
-        if (elmValue is ElmValue.ElmTag tag)
+        if (elmValue is not ElmValue.ElmTag tag)
+        {
+            return "Unexpected type of ElmValue: " + elmValue.GetType().FullName;
+        }
+
+        if (additionalReusableDecodings?.TryGetValue(elmValue, out var reusedDecoding) ?? false &&
+            reusedDecoding is not null)
+        {
+            return reusedDecoding;
+        }
+
+        Result<string, Expression> withoutReport()
         {
             if (tag.TagName is "LiteralExpression")
             {
@@ -203,8 +222,8 @@ public class ElmValueInterop
                 var literalValueResult =
                     ElmValueDecodedAsInElmCompiler(
                         firstArgument,
-                        literalAdditionalReusableEncodings,
-                        literalReportNewEncoding);
+                        literalAdditionalReusableDecodings,
+                        literalReportNewDecoding);
 
                 if (literalValueResult is Result<string, PineValue>.Ok literalValueOk)
                 {
@@ -241,8 +260,10 @@ public class ElmValueInterop
                     var itemResult =
                         ElmValueFromCompilerDecodedAsExpression(
                             firstList.Elements[i],
-                            literalAdditionalReusableEncodings,
-                            literalReportNewEncoding);
+                            additionalReusableDecodings,
+                            reportNewDecoding,
+                            literalAdditionalReusableDecodings,
+                            literalReportNewDecoding);
 
                     if (itemResult is Result<string, Expression>.Ok itemOk)
                     {
@@ -275,8 +296,10 @@ public class ElmValueInterop
                 var encodedResult =
                     ElmValueFromCompilerDecodedAsExpression(
                         encoded,
-                        literalAdditionalReusableEncodings,
-                        literalReportNewEncoding);
+                        additionalReusableDecodings,
+                        reportNewDecoding,
+                        literalAdditionalReusableDecodings,
+                        literalReportNewDecoding);
 
                 if (encodedResult is Result<string, Expression>.Err encodedErr)
                 {
@@ -292,8 +315,10 @@ public class ElmValueInterop
                 var environmentResult =
                     ElmValueFromCompilerDecodedAsExpression(
                         environment,
-                        literalAdditionalReusableEncodings,
-                        literalReportNewEncoding);
+                        additionalReusableDecodings,
+                        reportNewDecoding,
+                        literalAdditionalReusableDecodings,
+                        literalReportNewDecoding);
 
                 if (environmentResult is Result<string, Expression>.Err environmentErr)
                 {
@@ -327,8 +352,10 @@ public class ElmValueInterop
                 var environmentResult =
                     ElmValueFromCompilerDecodedAsExpression(
                         environment,
-                        literalAdditionalReusableEncodings,
-                        literalReportNewEncoding);
+                        additionalReusableDecodings,
+                        reportNewDecoding,
+                        literalAdditionalReusableDecodings,
+                        literalReportNewDecoding);
 
                 if (environmentResult is Result<string, Expression>.Err environmentErr)
                 {
@@ -358,8 +385,10 @@ public class ElmValueInterop
                 var conditionResult =
                     ElmValueFromCompilerDecodedAsExpression(
                         condition,
-                        literalAdditionalReusableEncodings,
-                        literalReportNewEncoding);
+                        additionalReusableDecodings,
+                        reportNewDecoding,
+                        literalAdditionalReusableDecodings,
+                        literalReportNewDecoding);
 
                 if (conditionResult is Result<string, Expression>.Err conditionErr)
                 {
@@ -375,8 +404,10 @@ public class ElmValueInterop
                 var falseBranchResult =
                     ElmValueFromCompilerDecodedAsExpression(
                         falseBranch,
-                        literalAdditionalReusableEncodings,
-                        literalReportNewEncoding);
+                        additionalReusableDecodings,
+                        reportNewDecoding,
+                        literalAdditionalReusableDecodings,
+                        literalReportNewDecoding);
 
                 if (falseBranchResult is Result<string, Expression>.Err falseBranchErr)
                 {
@@ -392,8 +423,10 @@ public class ElmValueInterop
                 var trueBranchResult =
                     ElmValueFromCompilerDecodedAsExpression(
                         trueBranch,
-                        literalAdditionalReusableEncodings,
-                        literalReportNewEncoding);
+                        additionalReusableDecodings,
+                        reportNewDecoding,
+                        literalAdditionalReusableDecodings,
+                        literalReportNewDecoding);
 
                 if (trueBranchResult is Result<string, Expression>.Err trueBranchErr)
                 {
@@ -435,8 +468,10 @@ public class ElmValueInterop
                 var stringTaggedResult =
                     ElmValueFromCompilerDecodedAsExpression(
                         stringTagged,
-                        literalAdditionalReusableEncodings,
-                        literalReportNewEncoding);
+                        additionalReusableDecodings,
+                        reportNewDecoding,
+                        literalAdditionalReusableDecodings,
+                        literalReportNewDecoding);
 
                 if (stringTaggedResult is Result<string, Expression>.Err stringTaggedErr)
                 {
@@ -451,10 +486,18 @@ public class ElmValueInterop
 
                 return new Expression.StringTag(stringtagString.Value, stringTaggedOk.Value);
             }
+
+            return "Unexpected tag name: " + tag.TagName;
         }
 
-        throw new NotImplementedException(
-            "Unsupported ElmValue: " + elmValue.GetType().FullName);
+        var decodeResult = withoutReport();
+
+        if (reportNewDecoding is not null && decodeResult.IsOkOrNull() is { } decodeOk)
+        {
+            reportNewDecoding(elmValue, decodeOk);
+        }
+
+        return decodeResult;
     }
 
     public static T ParseElmMaybeValue<T>(
@@ -498,5 +541,103 @@ public class ElmValueInterop
         }
 
         return invalid("Not tagged with Nothing or Just");
+    }
+
+    public static T ParseElmResultValue<T>(
+        PineValue pineValue,
+        Func<PineValue, T> err,
+        Func<PineValue, T> ok,
+        Func<string, T> invalid)
+    {
+        if (pineValue is not PineValue.ListValue listValue)
+        {
+            return invalid("Root is not a list");
+        }
+
+        if (listValue.Elements.Count is not 2)
+        {
+            return invalid("Root list does not have 2 elements");
+        }
+
+        var tagValue = listValue.Elements[0];
+
+        if (tagValue == String_Err_Value)
+        {
+            var tagArgumentsValue = listValue.Elements[1];
+
+            if (tagArgumentsValue is not PineValue.ListValue tagArgumentsListValue)
+            {
+                return invalid("Tag 'Err' arguments is not a list");
+            }
+
+            if (tagArgumentsListValue.Elements.Count is not 1)
+            {
+                return invalid(
+                    "Tag 'Err' arguments does not have 1 item, but " +
+                    tagArgumentsListValue.Elements.Count);
+            }
+
+            return err(tagArgumentsListValue.Elements[0]);
+        }
+
+        if (tagValue == String_Ok_Value)
+        {
+            var tagArgumentsValue = listValue.Elements[1];
+
+            if (tagArgumentsValue is not PineValue.ListValue tagArgumentsListValue)
+            {
+                return invalid("Tag 'Ok' arguments is not a list");
+            }
+
+            if (tagArgumentsListValue.Elements.Count is not 1)
+            {
+                return invalid(
+                    "Tag 'Ok' arguments does not have 1 item, but " +
+                    tagArgumentsListValue.Elements.Count);
+            }
+
+            return ok(tagArgumentsListValue.Elements[0]);
+        }
+
+        return invalid("Not tagged with Err or Ok");
+    }
+
+
+    public static T ParseElmValueAsCommonResult<T>(
+        ElmValue elmValue,
+        Func<ElmValue, T> err,
+        Func<ElmValue, T> ok,
+        Func<string, T> invalid)
+    {
+        if (elmValue is not ElmValue.ElmTag resultTag)
+        {
+            return invalid("Unexpected value type: No tag: " + elmValue.GetType());
+        }
+
+        if (resultTag.TagName is "Err")
+        {
+            if (resultTag.Arguments.Count is not 1)
+            {
+                return invalid(
+                    "Tag arguments does not have 1 item, but " +
+                    resultTag.Arguments.Count);
+            }
+
+            return err(resultTag.Arguments[0]);
+        }
+
+        if (resultTag.TagName is "Ok")
+        {
+            if (resultTag.Arguments.Count is not 1)
+            {
+                return invalid(
+                    "Tag arguments does not have 1 item, but " +
+                    resultTag.Arguments.Count);
+            }
+
+            return ok(resultTag.Arguments[0]);
+        }
+
+        return invalid("Tag name is neither 'Err' nor 'Ok', but " + resultTag.TagName);
     }
 }

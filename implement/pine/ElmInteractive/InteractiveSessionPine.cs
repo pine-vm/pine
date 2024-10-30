@@ -29,6 +29,10 @@ public class InteractiveSessionPine : IInteractiveSession
                 new FileStoreFromSystemIOFile(
                     System.IO.Path.Combine(Filesystem.CacheDirectory, "elm-compiler-vm", Program.AppVersionId))));
 
+    /*
+     * TODO: Move these caches to a dedicated scope to enable for better control over reuse/disposal.
+     * */
+
     private static readonly Dictionary<PineValue, PineValue> encodedForCompilerCache = [];
 
     private static readonly Dictionary<ElmValue, PineValue> elmValueAsPineValueCache = [];
@@ -39,7 +43,9 @@ public class InteractiveSessionPine : IInteractiveSession
 
     private static readonly Dictionary<ElmValue, PineValue> elmValueDecodedAsInElmCompilerCache = [];
 
-    private static readonly object encodeValueForCompilerLock = new();
+    private readonly Dictionary<ElmValue, Expression> elmValueDecodedAsExpressionElmCompilerCache = [];
+
+    private static readonly object encodingCachesLock = new();
 
     static readonly ConcurrentDictionary<string, Result<string, KeyValuePair<IReadOnlyList<string>, PineValue>>> TryParseModuleTextCache = new();
 
@@ -54,7 +60,7 @@ public class InteractiveSessionPine : IInteractiveSession
 
     private static PineValue EncodeValueForCompiler(PineValue pineValue)
     {
-        lock (encodeValueForCompilerLock)
+        lock (encodingCachesLock)
         {
             if (encodedForCompilerCache.TryGetValue(pineValue, out var encoded))
             {
@@ -98,7 +104,7 @@ public class InteractiveSessionPine : IInteractiveSession
 
     private static Result<string, ElmValue> PineValueDecodedAsElmValueCached(PineValue pineValue)
     {
-        lock (encodeValueForCompilerLock)
+        lock (encodingCachesLock)
         {
             if (pineValueDecodedAsElmValueCache.TryGetValue(pineValue, out var decoded))
             {
@@ -124,7 +130,7 @@ public class InteractiveSessionPine : IInteractiveSession
 
     private static Result<string, PineValue> DecodeElmValueFromCompilerCached(ElmValue elmValue)
     {
-        lock (encodeValueForCompilerLock)
+        lock (encodingCachesLock)
         {
             if (elmValueDecodedAsInElmCompilerCache.TryGetValue(elmValue, out var decoded))
             {
@@ -578,77 +584,76 @@ public class InteractiveSessionPine : IInteractiveSession
                                 return "Failed compile: " + compiledResultTag;
                             }
 
-                            logDuration("compile - decode expression");
+                            Result<string, Expression> decodeExpr()
+                            {
+                                lock (encodingCachesLock)
+                                {
+                                    return
+                                        ElmValueInterop.ElmValueFromCompilerDecodedAsExpression(
+                                            compiledResultTag.Arguments[0],
+                                            additionalReusableDecodings:
+                                            elmValueDecodedAsExpressionElmCompilerCache,
+                                            reportNewDecoding:
+                                            (elmValue, decoding) =>
+                                            elmValueDecodedAsExpressionElmCompilerCache.TryAdd(elmValue, decoding),
+                                            literalAdditionalReusableDecodings:
+                                            elmValueDecodedAsInElmCompilerCache,
+                                            literalReportNewDecoding:
+                                            (elmValue, decoding) =>
+                                            elmValueDecodedAsInElmCompilerCache.TryAdd(elmValue, decoding));
+                                }
+                            }
 
-                            clock.Restart();
+                            var decodeExpressionResult = decodeExpr();
 
                             return
-                                PineValueDecodedAsElmValueCached(compileParsedOk)
-                                .MapError(error => "Failed decoding parse result as Elm value: " + error)
-                                .AndThen(compileParsedOkAsElmValue =>
+                            decodeExpressionResult
+                            .MapError(error => "Failed decoding compiled expression: " + error)
+                            .AndThen(resultingExpr =>
+                            {
+                                logDuration("compile - decode expression");
+
+                                clock.Restart();
+
+                                var evalResult = pineVM.EvaluateExpression(resultingExpr, buildPineEvalContextOk);
+
+                                logDuration("eval");
+
+                                return
+                                evalResult
+                                .MapError(error => "Failed to evaluate expression in PineVM: " + error)
+                                .AndThen(evalOk =>
                                 {
-                                    if (compileParsedOkAsElmValue is not ElmValue.ElmTag compiledResultTag)
+                                    if (evalOk is not PineValue.ListValue evalResultListComponent)
                                     {
-                                        return "Unexpected return value: No tag: " + compileParsedOkAsElmValue;
+                                        return
+                                        "Type mismatch: Pine expression evaluated to a blob";
                                     }
 
-                                    if (compiledResultTag.TagName is not "Ok" || compiledResultTag.Arguments.Count is not 1)
+                                    if (evalResultListComponent.Elements.Count is not 2)
                                     {
-                                        return "Failed compile: " + compiledResultTag;
+                                        return
+                                        "Type mismatch: Pine expression evaluated to a list with unexpected number of elements: " +
+                                        evalResultListComponent.Elements.Count +
+                                        " instead of 2";
                                     }
+
+                                    buildPineEvalContextTask = System.Threading.Tasks.Task.FromResult(
+                                        Result<string, PineValue>.ok(evalResultListComponent.Elements[0]));
+
+                                    clock.Restart();
+
+                                    var parseSubmissionResponseResult =
+                                        ElmInteractive.SubmissionResponseFromResponsePineValue(
+                                            response: evalResultListComponent.Elements[1]);
+
+                                    logDuration("parse-result");
 
                                     return
-                                    ElmValueInterop.ElmValueFromCompilerDecodedAsExpression(
-                                        compiledResultTag.Arguments[0],
-                                        literalAdditionalReusableEncodings:
-                                        null,
-                                        literalReportNewEncoding:
-                                        null)
-                                    .MapError(error => "Failed decoding compiled expression: " + error)
-                                    .AndThen(resultingExpr =>
-                                    {
-                                        clock.Restart();
-
-                                        var evalResult = pineVM.EvaluateExpression(resultingExpr, buildPineEvalContextOk);
-
-                                        logDuration("eval");
-
-                                        return
-                                        evalResult
-                                        .MapError(error => "Failed to evaluate expression in PineVM: " + error)
-                                        .AndThen(evalOk =>
-                                        {
-                                            if (evalOk is not PineValue.ListValue evalResultListComponent)
-                                            {
-                                                return
-                                                "Type mismatch: Pine expression evaluated to a blob";
-                                            }
-
-                                            if (evalResultListComponent.Elements.Count is not 2)
-                                            {
-                                                return
-                                                "Type mismatch: Pine expression evaluated to a list with unexpected number of elements: " +
-                                                evalResultListComponent.Elements.Count +
-                                                " instead of 2";
-                                            }
-
-                                            buildPineEvalContextTask = System.Threading.Tasks.Task.FromResult(
-                                                Result<string, PineValue>.ok(evalResultListComponent.Elements[0]));
-
-                                            clock.Restart();
-
-                                            var parseSubmissionResponseResult =
-                                                ElmInteractive.SubmissionResponseFromResponsePineValue(
-                                                    response: evalResultListComponent.Elements[1]);
-
-                                            logDuration("parse-result");
-
-                                            return
-                                            parseSubmissionResponseResult
-                                            .MapError(error => "Failed to parse submission response: " + error);
-                                        });
-                                    });
+                                    parseSubmissionResponseResult
+                                    .MapError(error => "Failed to parse submission response: " + error);
                                 });
+                            });
                         });
                     });
                 }));
