@@ -1967,7 +1967,7 @@ isSubStringHelper smallChars bigChars offset row col =
             if Pine_kernel.equal [ sChar, bChar ] then
                 let
                     ( newRow, newCol ) =
-                        if Pine_kernel.equal [ sChar, 10 ] then
+                        if Pine_kernel.equal [ sChar, newlineChar ] then
                             -- ASCII code for '\\n'
                             ( Pine_kernel.int_add [ row, 1 ], 1 )
 
@@ -1993,7 +1993,7 @@ isSubChar predicate offset (String chars) =
 
     nextChar :: _ ->
       if predicate nextChar then
-        if Pine_kernel.equal [ nextChar, 10 ] then
+        if Pine_kernel.equal [ nextChar, newlineChar ] then
             -2 -- Special code for newline
         else
             Pine_kernel.int_add [ offset, 1 ]
@@ -2058,6 +2058,11 @@ updateRowColOverRange currentOffset targetOffset chars row col =
 
             Nothing ->
                 ( row, col )
+
+
+newlineChar : Char
+newlineChar =
+    Pine_kernel.skip [ 1, 10 ]
 
 
 isAsciiCode : Int -> Int -> String -> Bool

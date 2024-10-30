@@ -8,6 +8,7 @@ module Pine exposing
     , bigIntFromUnsignedBlobValue
     , bigIntFromValue
     , blobValueFromBigInt
+    , computeValueFromStringRecursive
     , countValueContent
     , displayStringFromPineError
     , emptyEvalEnvironment

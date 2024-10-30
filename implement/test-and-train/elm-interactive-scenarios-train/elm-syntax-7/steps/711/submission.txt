@@ -1,0 +1,1 @@
+Elm.Parser.parseToFile  "module Test exposing (..)\n\ndecl = 123"
