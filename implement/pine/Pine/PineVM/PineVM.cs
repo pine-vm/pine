@@ -1530,7 +1530,7 @@ public class PineVM : IPineVM
                         return
                             "Failed to parse expression from value: " + parseErr.Value +
                             " - expressionValue is " + DescribeValueForErrorMessage(expressionValue) +
-                            " - environmentValue is " + DescribeValueForErrorMessage(expressionValue);
+                            " - environmentValue is " + DescribeValueForErrorMessage(environmentValue);
                     }
 
                     if (parseResult is not Result<string, Expression>.Ok parseOk)
@@ -1571,7 +1571,7 @@ public class PineVM : IPineVM
                                         return
                                             "Failed to parse expression from value: " + contParseErr.Value +
                                             " - expressionValue is " + DescribeValueForErrorMessage(expressionValue) +
-                                            " - environmentValue is " + DescribeValueForErrorMessage(expressionValue);
+                                            " - environmentValue is " + DescribeValueForErrorMessage(environmentValue);
                                     }
 
                                     if (contParseResult is not Result<string, Expression>.Ok contParseOk)
@@ -1941,7 +1941,7 @@ public class PineVM : IPineVM
             var message =
                 "Failed to parse expression from value: " + parseErr.Value +
                 " - expressionValue is " + DescribeValueForErrorMessage(expressionValue) +
-                " - environmentValue is " + DescribeValueForErrorMessage(expressionValue);
+                " - environmentValue is " + DescribeValueForErrorMessage(environmentValue);
 
             throw new ParseExpressionException(message);
         }
