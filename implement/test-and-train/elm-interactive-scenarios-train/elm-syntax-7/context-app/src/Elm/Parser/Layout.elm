@@ -1,9 +1,9 @@
 module Elm.Parser.Layout exposing (LayoutStatus(..), layout, layoutStrict, maybeAroundBothSides, optimisticLayout, optimisticLayoutWith)
 
-import Combine exposing (Parser, fail, many, many1, maybe, oneOf, succeed, withLocation, withState)
+import Combine exposing (Parser)
 import Elm.Parser.Comments as Comments
 import Elm.Parser.State as State exposing (State)
-import Elm.Parser.Whitespace exposing (many1Spaces, realNewLine)
+import Elm.Parser.Whitespace
 
 
 anyComment : Combine.Parser State ()
@@ -16,17 +16,17 @@ anyComment =
 
 layout : Parser State ()
 layout =
-    many1
-        (oneOf
+    Combine.many1
+        (Combine.oneOf
             [ anyComment
-            , many1 realNewLine
+            , Combine.many1 Elm.Parser.Whitespace.realNewLine
                 |> Combine.continueWith
-                    (oneOf
-                        [ many1Spaces
+                    (Combine.oneOf
+                        [ Elm.Parser.Whitespace.many1Spaces
                         , anyComment
                         ]
                     )
-            , many1Spaces
+            , Elm.Parser.Whitespace.many1Spaces
             ]
         )
         |> Combine.continueWith (verifyIndent (\stateIndent current -> stateIndent < current))
@@ -53,18 +53,18 @@ optimisticLayoutWith onStrict onIndented =
 
 optimisticLayout : Parser State LayoutStatus
 optimisticLayout =
-    many
-        (oneOf
+    Combine.many
+        (Combine.oneOf
             [ anyComment
-            , many1 realNewLine
+            , Combine.many1 Elm.Parser.Whitespace.realNewLine
                 |> Combine.continueWith
-                    (oneOf
-                        [ many1Spaces
+                    (Combine.oneOf
+                        [ Elm.Parser.Whitespace.many1Spaces
                         , anyComment
-                        , succeed ()
+                        , Combine.succeed ()
                         ]
                     )
-            , many1Spaces
+            , Elm.Parser.Whitespace.many1Spaces
             ]
         )
         |> Combine.continueWith compute
@@ -72,26 +72,27 @@ optimisticLayout =
 
 compute : Parser State LayoutStatus
 compute =
-    withState
+    Combine.withState
         (\state ->
-            withLocation
+            Combine.withLocation
                 (\l ->
                     if l.column == 1 || List.member (l.column - 1) (State.storedColumns state) then
-                        succeed Strict
+                        Combine.succeed Strict
 
                     else
-                        succeed Indented
+                        Combine.succeed Indented
                 )
         )
 
 
 layoutStrict : Parser State ()
 layoutStrict =
-    many1
-        (oneOf
+    Combine.many1
+        (Combine.oneOf
             [ anyComment
-            , many1 realNewLine |> Combine.continueWith (succeed ())
-            , many1Spaces
+            , Combine.many1 Elm.Parser.Whitespace.realNewLine
+                |> Combine.continueWith (Combine.succeed ())
+            , Elm.Parser.Whitespace.many1Spaces
             ]
         )
         |> Combine.continueWith (verifyIndent (\stateIndent current -> stateIndent == current))
@@ -99,21 +100,21 @@ layoutStrict =
 
 verifyIndent : (Int -> Int -> Bool) -> Parser State ()
 verifyIndent f =
-    withState
+    Combine.withState
         (\s ->
-            withLocation
+            Combine.withLocation
                 (\l ->
                     if f (State.expectedColumn s) l.column then
-                        succeed ()
+                        Combine.succeed ()
 
                     else
-                        fail ("Expected higher indent than " ++ String.fromInt l.column)
+                        Combine.fail ("Expected higher indent than " ++ String.fromInt l.column)
                 )
         )
 
 
 maybeAroundBothSides : Parser State b -> Parser State b
 maybeAroundBothSides x =
-    maybe layout
+    Combine.maybe layout
         |> Combine.continueWith x
-        |> Combine.ignore (maybe layout)
+        |> Combine.ignore (Combine.maybe layout)

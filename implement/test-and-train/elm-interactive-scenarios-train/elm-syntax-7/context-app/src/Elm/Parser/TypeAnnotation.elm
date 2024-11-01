@@ -1,11 +1,11 @@
 module Elm.Parser.TypeAnnotation exposing (typeAnnotation, typeAnnotationNonGreedy)
 
 import Combine exposing (..)
-import Elm.Parser.Base exposing (typeIndicator)
+import Elm.Parser.Base
 import Elm.Parser.Layout as Layout
 import Elm.Parser.Node
 import Elm.Parser.State exposing (State)
-import Elm.Parser.Tokens exposing (functionName)
+import Elm.Parser.Tokens
 import Elm.Syntax.Node as Node exposing (Node(..))
 import Elm.Syntax.Range exposing (Range)
 import Elm.Syntax.TypeAnnotation as TypeAnnotation exposing (TypeAnnotation)
@@ -100,7 +100,7 @@ asTypeAnnotation ((Node _ value) as x) xs =
 
 genericTypeAnnotation : Parser State (Node TypeAnnotation)
 genericTypeAnnotation =
-    Elm.Parser.Node.parser (Combine.map TypeAnnotation.GenericType functionName)
+    Elm.Parser.Node.parser (Combine.map TypeAnnotation.GenericType Elm.Parser.Tokens.functionName)
 
 
 recordFieldsTypeAnnotation : Parser State TypeAnnotation.RecordDefinition
@@ -116,7 +116,7 @@ recordTypeAnnotation =
             (Combine.oneOf
                 [ Combine.succeed (TypeAnnotation.Record [])
                     |> Combine.ignore (Combine.string "}")
-                , Elm.Parser.Node.parser functionName
+                , Elm.Parser.Node.parser Elm.Parser.Tokens.functionName
                     |> Combine.ignore (maybe Layout.layout)
                     |> Combine.andThen
                         (\fname ->
@@ -151,7 +151,7 @@ recordFieldDefinition : Parser State TypeAnnotation.RecordField
 recordFieldDefinition =
     succeed Tuple.pair
         |> Combine.ignore (maybe Layout.layout)
-        |> Combine.keep (Elm.Parser.Node.parser functionName)
+        |> Combine.keep (Elm.Parser.Node.parser Elm.Parser.Tokens.functionName)
         |> Combine.ignore (maybe Layout.layout)
         |> Combine.ignore (string ":")
         |> Combine.ignore (maybe Layout.layout)
@@ -175,7 +175,7 @@ typedTypeAnnotation mode =
                 , Combine.succeed items
                 ]
     in
-    Elm.Parser.Node.parser typeIndicator
+    Elm.Parser.Node.parser Elm.Parser.Base.typeIndicator
         |> Combine.andThen
             (\((Node tir _) as original) ->
                 Layout.optimisticLayoutWith

@@ -1,13 +1,13 @@
 module Elm.Parser.CombineTestUtil exposing (parse, parseWithFailure, parseWithState)
 
 import Combine exposing (Parser)
-import Elm.Parser.State exposing (State, emptyState)
+import Elm.Parser.State exposing (State)
 import Parser exposing (DeadEnd)
 
 
 parseWithState : String -> Parser State a -> Maybe ( State, a )
 parseWithState s p =
-    Combine.runParser (p |> Combine.ignore Combine.end) emptyState s
+    Combine.runParser (p |> Combine.ignore Combine.end) Elm.Parser.State.emptyState s
         |> Result.toMaybe
 
 
@@ -19,5 +19,5 @@ parse s p =
 
 parseWithFailure : String -> Parser State a -> Result (List DeadEnd) a
 parseWithFailure s p =
-    Combine.runParser (p |> Combine.ignore Combine.end) emptyState s
+    Combine.runParser (p |> Combine.ignore Combine.end) Elm.Parser.State.emptyState s
         |> Result.map Tuple.second

@@ -1,13 +1,13 @@
 module Elm.Parser.Declarations exposing (declaration)
 
-import Combine exposing (Parser, maybe, oneOf, string, succeed)
-import Elm.Parser.Expression exposing (function)
+import Combine exposing (Parser)
+import Elm.Parser.Expression
 import Elm.Parser.Layout as Layout
 import Elm.Parser.Node
 import Elm.Parser.State exposing (State)
-import Elm.Parser.Tokens exposing (functionName, portToken, prefixOperatorToken)
-import Elm.Parser.TypeAnnotation exposing (typeAnnotation)
-import Elm.Parser.Typings exposing (typeDefinition)
+import Elm.Parser.Tokens
+import Elm.Parser.TypeAnnotation
+import Elm.Parser.Typings
 import Elm.Syntax.Declaration as Declaration exposing (Declaration)
 import Elm.Syntax.Infix as Infix exposing (Infix)
 import Elm.Syntax.Node as Node exposing (Node(..))
@@ -17,37 +17,37 @@ import Parser as Core
 
 declaration : Parser State (Node Declaration)
 declaration =
-    oneOf
+    Combine.oneOf
         [ infixDeclaration
-        , function
-        , typeDefinition
+        , Elm.Parser.Expression.function
+        , Elm.Parser.Typings.typeDefinition
         , portDeclaration
         ]
 
 
 signature : Parser State Signature
 signature =
-    succeed Signature
-        |> Combine.keep (Elm.Parser.Node.parser functionName)
-        |> Combine.ignore (Layout.maybeAroundBothSides (string ":"))
-        |> Combine.ignore (maybe Layout.layout)
-        |> Combine.keep typeAnnotation
+    Combine.succeed Signature
+        |> Combine.keep (Elm.Parser.Node.parser Elm.Parser.Tokens.functionName)
+        |> Combine.ignore (Layout.maybeAroundBothSides (Combine.string ":"))
+        |> Combine.ignore (Combine.maybe Layout.layout)
+        |> Combine.keep Elm.Parser.TypeAnnotation.typeAnnotation
 
 
 infixDeclaration : Parser State (Node Declaration)
 infixDeclaration =
-    succeed Infix
+    Combine.succeed Infix
         |> Combine.ignore (Combine.fromCore (Core.keyword "infix"))
         |> Combine.ignore Layout.layout
         |> Combine.keep (Elm.Parser.Node.parser infixDirection)
         |> Combine.ignore Layout.layout
         |> Combine.keep (Elm.Parser.Node.parser (Combine.fromCore Core.int))
         |> Combine.ignore Layout.layout
-        |> Combine.keep (Elm.Parser.Node.parser <| Combine.parens prefixOperatorToken)
+        |> Combine.keep (Elm.Parser.Node.parser <| Combine.parens Elm.Parser.Tokens.prefixOperatorToken)
         |> Combine.ignore Layout.layout
-        |> Combine.ignore (string "=")
+        |> Combine.ignore (Combine.string "=")
         |> Combine.ignore Layout.layout
-        |> Combine.keep (Elm.Parser.Node.parser functionName)
+        |> Combine.keep (Elm.Parser.Node.parser Elm.Parser.Tokens.functionName)
         |> Combine.map Declaration.InfixDeclaration
         |> Elm.Parser.Node.parser
 
@@ -73,6 +73,6 @@ portDeclaration =
                 { start = start, end = (Node.range sig.typeAnnotation).end }
                 (Declaration.PortDeclaration sig)
         )
-        |> Combine.keep (Elm.Parser.Node.parser portToken)
+        |> Combine.keep (Elm.Parser.Node.parser Elm.Parser.Tokens.portToken)
         |> Combine.ignore Layout.layout
         |> Combine.keep signature

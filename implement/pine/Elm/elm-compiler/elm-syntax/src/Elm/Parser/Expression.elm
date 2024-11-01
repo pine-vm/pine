@@ -1,16 +1,28 @@
 module Elm.Parser.Expression exposing (expression, function)
 
-import Combine exposing (Parser, lazy, many, maybe, modifyState, oneOf, sepBy1, string, succeed, withLocation)
+import Combine exposing (Parser)
 import Elm.Parser.Layout as Layout
 import Elm.Parser.Node
 import Elm.Parser.Numbers
-import Elm.Parser.Patterns exposing (pattern)
-import Elm.Parser.State as State exposing (State, popIndent, pushColumn)
-import Elm.Parser.Tokens as Tokens exposing (caseToken, characterLiteral, elseToken, functionName, ifToken, infixOperatorToken, multiLineStringLiteral, ofToken, prefixOperatorToken, stringLiteral, thenToken)
-import Elm.Parser.TypeAnnotation exposing (typeAnnotation)
-import Elm.Parser.Whitespace exposing (manySpaces)
+import Elm.Parser.Patterns
+import Elm.Parser.State as State exposing (State)
+import Elm.Parser.Tokens as Tokens
+import Elm.Parser.TypeAnnotation
+import Elm.Parser.Whitespace
 import Elm.Syntax.Declaration as Declaration exposing (Declaration)
-import Elm.Syntax.Expression as Expression exposing (Case, CaseBlock, Cases, Expression(..), Function, FunctionImplementation, Lambda, LetBlock, LetDeclaration(..), RecordSetter)
+import Elm.Syntax.Expression as Expression
+    exposing
+        ( Case
+        , CaseBlock
+        , Cases
+        , Expression(..)
+        , Function
+        , FunctionImplementation
+        , Lambda
+        , LetBlock
+        , LetDeclaration(..)
+        , RecordSetter
+        )
 import Elm.Syntax.ModuleName exposing (ModuleName)
 import Elm.Syntax.Node as Node exposing (Node(..))
 import Elm.Syntax.Pattern as Pattern exposing (Pattern)
@@ -21,9 +33,9 @@ import Parser as Core exposing (Nestable(..))
 
 expressionNotApplication : Parser State (Node Expression)
 expressionNotApplication =
-    lazy
+    Combine.lazy
         (\() ->
-            oneOf
+            Combine.oneOf
                 [ numberExpression
                 , referenceExpression
                 , ifBlockExpression
@@ -47,7 +59,7 @@ liftRecordAccess : Node Expression -> Parser State (Node Expression)
 liftRecordAccess e =
     Combine.oneOf
         [ Combine.string "."
-            |> Combine.continueWith (Elm.Parser.Node.parser functionName)
+            |> Combine.continueWith (Elm.Parser.Node.parser Tokens.functionName)
             |> Combine.andThen
                 (\f ->
                     liftRecordAccess
@@ -70,13 +82,13 @@ expression =
                     complete lastExpressionRange rest =
                         case rest of
                             [] ->
-                                succeed first
+                                Combine.succeed first
 
                             (Node _ (Operator _)) :: _ ->
                                 Combine.fail "Expression should not end with an operator"
 
                             _ ->
-                                succeed
+                                Combine.succeed
                                     (Node
                                         { start = (Node.range first).start, end = lastExpressionRange.end }
                                         (Application (first :: List.reverse rest))
@@ -125,15 +137,15 @@ glslExpression =
 listExpression : Parser State (Node Expression)
 listExpression =
     Combine.succeed ListExpr
-        |> Combine.ignore (string "[")
-        |> Combine.ignore (maybe Layout.layout)
+        |> Combine.ignore (Combine.string "[")
+        |> Combine.ignore (Combine.maybe Layout.layout)
         |> Combine.keep
             (Combine.sepBy
-                (string "," |> Combine.ignore (maybe Layout.layout))
+                (Combine.string "," |> Combine.ignore (Combine.maybe Layout.layout))
                 expression
             )
-        |> Combine.ignore (maybe Layout.layout)
-        |> Combine.ignore (string "]")
+        |> Combine.ignore (Combine.maybe Layout.layout)
+        |> Combine.ignore (Combine.string "]")
         |> Elm.Parser.Node.parser
 
 
@@ -143,11 +155,11 @@ listExpression =
 
 recordExpression : Parser State (Node Expression)
 recordExpression =
-    string "{"
-        |> Combine.ignore (maybe Layout.layout)
+    Combine.string "{"
+        |> Combine.ignore (Combine.maybe Layout.layout)
         |> Combine.continueWith
             (Combine.oneOf
-                [ string "}" |> Combine.map (always (RecordExpr []))
+                [ Combine.string "}" |> Combine.map (always (RecordExpr []))
                 , recordContents
                 ]
             )
@@ -156,16 +168,16 @@ recordExpression =
 
 recordContents : Parser State Expression
 recordContents =
-    Elm.Parser.Node.parser functionName
-        |> Combine.ignore (maybe Layout.layout)
+    Elm.Parser.Node.parser Tokens.functionName
+        |> Combine.ignore (Combine.maybe Layout.layout)
         |> Combine.andThen
             (\fname ->
                 Combine.oneOf
                     [ recordUpdateSyntaxParser fname
-                    , string "="
-                        |> Combine.ignore (maybe Layout.layout)
+                    , Combine.string "="
+                        |> Combine.ignore (Combine.maybe Layout.layout)
                         |> Combine.continueWith expression
-                        |> Combine.ignore (maybe Layout.layout)
+                        |> Combine.ignore (Combine.maybe Layout.layout)
                         |> Combine.andThen
                             (\e ->
                                 let
@@ -174,13 +186,13 @@ recordContents =
                                         Node.combine Tuple.pair fname e
                                 in
                                 Combine.oneOf
-                                    [ string "}"
+                                    [ Combine.string "}"
                                         |> Combine.map (always (RecordExpr [ fieldUpdate ]))
                                     , Combine.succeed (\fieldUpdates -> RecordExpr (fieldUpdate :: fieldUpdates))
-                                        |> Combine.ignore (string ",")
-                                        |> Combine.ignore (maybe Layout.layout)
+                                        |> Combine.ignore (Combine.string ",")
+                                        |> Combine.ignore (Combine.maybe Layout.layout)
                                         |> Combine.keep recordFields
-                                        |> Combine.ignore (string "}")
+                                        |> Combine.ignore (Combine.string "}")
                                     ]
                             )
                     ]
@@ -190,23 +202,23 @@ recordContents =
 recordUpdateSyntaxParser : Node String -> Parser State Expression
 recordUpdateSyntaxParser fname =
     Combine.succeed (\e -> RecordUpdateExpression fname e)
-        |> Combine.ignore (string "|")
-        |> Combine.ignore (maybe Layout.layout)
+        |> Combine.ignore (Combine.string "|")
+        |> Combine.ignore (Combine.maybe Layout.layout)
         |> Combine.keep recordFields
-        |> Combine.ignore (string "}")
+        |> Combine.ignore (Combine.string "}")
 
 
 recordFields : Parser State (List (Node RecordSetter))
 recordFields =
-    succeed (::)
+    Combine.succeed (::)
         |> Combine.keep recordField
-        |> Combine.ignore (maybe Layout.layout)
+        |> Combine.ignore (Combine.maybe Layout.layout)
         |> Combine.keep
-            (many
-                (string ","
-                    |> Combine.ignore (maybe Layout.layout)
+            (Combine.many
+                (Combine.string ","
+                    |> Combine.ignore (Combine.maybe Layout.layout)
                     |> Combine.continueWith recordField
-                    |> Combine.ignore (maybe Layout.layout)
+                    |> Combine.ignore (Combine.maybe Layout.layout)
                 )
             )
 
@@ -214,11 +226,11 @@ recordFields =
 recordField : Parser State (Node RecordSetter)
 recordField =
     Elm.Parser.Node.parser
-        (succeed Tuple.pair
-            |> Combine.keep (Elm.Parser.Node.parser functionName)
-            |> Combine.ignore (maybe Layout.layout)
-            |> Combine.ignore (string "=")
-            |> Combine.ignore (maybe Layout.layout)
+        (Combine.succeed Tuple.pair
+            |> Combine.keep (Elm.Parser.Node.parser Tokens.functionName)
+            |> Combine.ignore (Combine.maybe Layout.layout)
+            |> Combine.ignore (Combine.string "=")
+            |> Combine.ignore (Combine.maybe Layout.layout)
             |> Combine.keep expression
         )
 
@@ -226,8 +238,8 @@ recordField =
 literalExpression : Parser State (Node Expression)
 literalExpression =
     Combine.oneOf
-        [ multiLineStringLiteral
-        , stringLiteral
+        [ Tokens.multiLineStringLiteral
+        , Tokens.stringLiteral
         ]
         |> Combine.map Literal
         |> Elm.Parser.Node.parser
@@ -235,7 +247,7 @@ literalExpression =
 
 charLiteralExpression : Parser State (Node Expression)
 charLiteralExpression =
-    Elm.Parser.Node.parser (Combine.map CharLiteral characterLiteral)
+    Elm.Parser.Node.parser (Combine.map CharLiteral Tokens.characterLiteral)
 
 
 
@@ -244,16 +256,16 @@ charLiteralExpression =
 
 lambdaExpression : Parser State (Node Expression)
 lambdaExpression =
-    succeed
+    Combine.succeed
         (\(Node { start } _) args expr ->
             Lambda args expr
                 |> LambdaExpression
                 |> Node { start = start, end = (Node.range expr).end }
         )
-        |> Combine.keep (Elm.Parser.Node.parser (string "\\"))
-        |> Combine.ignore (maybe Layout.layout)
-        |> Combine.keep (sepBy1 (maybe Layout.layout) pattern)
-        |> Combine.ignore (Layout.maybeAroundBothSides (string "->"))
+        |> Combine.keep (Elm.Parser.Node.parser (Combine.string "\\"))
+        |> Combine.ignore (Combine.maybe Layout.layout)
+        |> Combine.keep (Combine.sepBy1 (Combine.maybe Layout.layout) Elm.Parser.Patterns.pattern)
+        |> Combine.ignore (Layout.maybeAroundBothSides (Combine.string "->"))
         |> Combine.keep expression
 
 
@@ -264,10 +276,10 @@ lambdaExpression =
 caseStatement : Parser State Case
 caseStatement =
     Combine.succeed Tuple.pair
-        |> Combine.keep pattern
-        |> Combine.ignore (maybe (Combine.oneOf [ Layout.layout, Layout.layoutStrict ]))
-        |> Combine.ignore (string "->")
-        |> Combine.ignore (maybe Layout.layout)
+        |> Combine.keep Elm.Parser.Patterns.pattern
+        |> Combine.ignore (Combine.maybe (Combine.oneOf [ Layout.layout, Layout.layoutStrict ]))
+        |> Combine.ignore (Combine.string "->")
+        |> Combine.ignore (Combine.maybe Layout.layout)
         |> Combine.keep expression
 
 
@@ -300,10 +312,10 @@ caseExpression =
             Node { start = (Node.range caseKeyword).start, end = end }
                 (CaseExpression (CaseBlock caseBlock_ cases))
         )
-        |> Combine.keep (Elm.Parser.Node.parser caseToken)
+        |> Combine.keep (Elm.Parser.Node.parser Tokens.caseToken)
         |> Combine.ignore Layout.layout
         |> Combine.keep expression
-        |> Combine.ignore ofToken
+        |> Combine.ignore Tokens.ofToken
         |> Combine.ignore Layout.layout
         |> Combine.keep (withIndentedState caseStatements)
 
@@ -316,12 +328,17 @@ letBody : Parser State (List (Node LetDeclaration))
 letBody =
     Combine.succeed (::)
         |> Combine.keep blockElement
-        |> Combine.keep (many (blockElement |> Combine.ignore (maybe Layout.layout)))
+        |> Combine.keep
+            (Combine.many
+                (blockElement
+                    |> Combine.ignore (Combine.maybe Layout.layout)
+                )
+            )
 
 
 blockElement : Parser State (Node LetDeclaration)
 blockElement =
-    pattern
+    Elm.Parser.Patterns.pattern
         |> Combine.andThen
             (\(Node r p) ->
                 case p of
@@ -336,24 +353,27 @@ blockElement =
 
 letDestructuringDeclarationWithPattern : Node Pattern -> Parser State (Node LetDeclaration)
 letDestructuringDeclarationWithPattern pattern =
-    succeed
+    Combine.succeed
         (\expr ->
             Node { start = (Node.range pattern).start, end = (Node.range expr).end } (LetDestructuring pattern expr)
         )
-        |> Combine.ignore (maybe Layout.layout)
-        |> Combine.ignore (string "=")
-        |> Combine.ignore (maybe Layout.layout)
+        |> Combine.ignore (Combine.maybe Layout.layout)
+        |> Combine.ignore (Combine.string "=")
+        |> Combine.ignore (Combine.maybe Layout.layout)
         |> Combine.keep expression
 
 
 letExpression : Parser State (Node Expression)
 letExpression =
-    succeed (\(Node { start } _) decls expr -> Node { start = start, end = (Node.range expr).end } (LetBlock decls expr |> LetExpression))
-        |> Combine.keep (Elm.Parser.Node.parser (string "let"))
+    Combine.succeed
+        (\(Node { start } _) decls expr ->
+            Node { start = start, end = (Node.range expr).end } (LetBlock decls expr |> LetExpression)
+        )
+        |> Combine.keep (Elm.Parser.Node.parser (Combine.string "let"))
         |> Combine.ignore Layout.layout
         |> Combine.keep (withIndentedState letBody)
-        |> Combine.ignore (oneOf [ Layout.layout, manySpaces ])
-        |> Combine.ignore (string "in")
+        |> Combine.ignore (Combine.oneOf [ Layout.layout, Elm.Parser.Whitespace.manySpaces ])
+        |> Combine.ignore (Combine.string "in")
         |> Combine.ignore Layout.layout
         |> Combine.keep expression
 
@@ -371,15 +391,15 @@ ifBlockExpression =
                 { start = start, end = (Node.range ifFalse).end }
                 (IfBlock condition ifTrue ifFalse)
         )
-        |> Combine.keep (Elm.Parser.Node.parser ifToken)
-        |> Combine.ignore (maybe Layout.layout)
+        |> Combine.keep (Elm.Parser.Node.parser Tokens.ifToken)
+        |> Combine.ignore (Combine.maybe Layout.layout)
         |> Combine.keep expression
-        |> Combine.ignore (maybe Layout.layout)
-        |> Combine.ignore thenToken
-        |> Combine.ignore (maybe Layout.layout)
+        |> Combine.ignore (Combine.maybe Layout.layout)
+        |> Combine.ignore Tokens.thenToken
+        |> Combine.ignore (Combine.maybe Layout.layout)
         |> Combine.keep expression
-        |> Combine.ignore (maybe Layout.layout)
-        |> Combine.ignore elseToken
+        |> Combine.ignore (Combine.maybe Layout.layout)
+        |> Combine.ignore Tokens.elseToken
         |> Combine.ignore Layout.layout
         |> Combine.keep expression
 
@@ -390,7 +410,7 @@ operatorExpression =
         negationExpression : Parser State Expression
         negationExpression =
             Combine.map Negation
-                (oneOf
+                (Combine.oneOf
                     [ referenceExpression
                     , numberExpression
                     , tupledExpression
@@ -399,15 +419,15 @@ operatorExpression =
                 )
     in
     Combine.oneOf
-        [ string "-"
+        [ Combine.string "-"
             |> Combine.continueWith
                 (Combine.oneOf
                     [ negationExpression
-                    , succeed (Operator "-") |> Combine.ignore Layout.layout
+                    , Combine.succeed (Operator "-") |> Combine.ignore Layout.layout
                     ]
                 )
             |> Elm.Parser.Node.parser
-        , Combine.map Operator infixOperatorToken
+        , Combine.map Operator Tokens.infixOperatorToken
             |> Elm.Parser.Node.parser
         ]
 
@@ -418,7 +438,7 @@ referenceExpression =
         helper : ModuleName -> String -> Parser s Expression
         helper moduleNameSoFar nameOrSegment =
             Combine.oneOf
-                [ string "."
+                [ Combine.string "."
                     |> Combine.continueWith
                         (Combine.oneOf
                             [ Tokens.typeName
@@ -448,8 +468,8 @@ referenceExpression =
 recordAccessFunctionExpression : Parser State (Node Expression)
 recordAccessFunctionExpression =
     Combine.succeed (\field -> RecordAccessFunction ("." ++ field))
-        |> Combine.ignore (string ".")
-        |> Combine.keep functionName
+        |> Combine.ignore (Combine.string ".")
+        |> Combine.keep Tokens.functionName
         |> Elm.Parser.Node.parser
 
 
@@ -467,19 +487,19 @@ tupledExpression =
 
         commaSep : Parser State (List (Node Expression))
         commaSep =
-            many
-                (string ","
-                    |> Combine.ignore (maybe Layout.layout)
+            Combine.many
+                (Combine.string ","
+                    |> Combine.ignore (Combine.maybe Layout.layout)
                     |> Combine.continueWith expression
-                    |> Combine.ignore (maybe Layout.layout)
+                    |> Combine.ignore (Combine.maybe Layout.layout)
                 )
 
         nested : Parser State Expression
         nested =
             Combine.succeed asExpression
-                |> Combine.ignore (maybe Layout.layout)
+                |> Combine.ignore (Combine.maybe Layout.layout)
                 |> Combine.keep expression
-                |> Combine.ignore (maybe Layout.layout)
+                |> Combine.ignore (Combine.maybe Layout.layout)
                 |> Combine.keep commaSep
 
         closingParen : Parser state ()
@@ -492,7 +512,7 @@ tupledExpression =
                 [ closingParen |> Combine.map (always UnitExpr)
                 , -- Backtracking needed for record access expression
                   Combine.backtrackable
-                    (prefixOperatorToken
+                    (Tokens.prefixOperatorToken
                         |> Combine.ignore closingParen
                         |> Combine.map PrefixOperator
                     )
@@ -504,11 +524,11 @@ tupledExpression =
 
 withIndentedState : Parser State a -> Parser State a
 withIndentedState p =
-    withLocation
+    Combine.withLocation
         (\location ->
-            modifyState (pushColumn location.column)
+            Combine.modifyState (State.pushColumn location.column)
                 |> Combine.continueWith p
-                |> Combine.ignore (modifyState popIndent)
+                |> Combine.ignore (Combine.modifyState State.popIndent)
         )
 
 
@@ -517,10 +537,17 @@ functionWithNameNode pointer =
     let
         functionImplementationFromVarPointer : Node String -> Parser State (Node FunctionImplementation)
         functionImplementationFromVarPointer varPointer =
-            succeed (\args expr -> Node { start = (Node.range varPointer).start, end = (Node.range expr).end } (FunctionImplementation varPointer args expr))
-                |> Combine.keep (many (pattern |> Combine.ignore (maybe Layout.layout)))
-                |> Combine.ignore (string "=")
-                |> Combine.ignore (maybe Layout.layout)
+            Combine.succeed
+                (\args expr ->
+                    Node
+                        { start = (Node.range varPointer).start
+                        , end = (Node.range expr).end
+                        }
+                        (FunctionImplementation varPointer args expr)
+                )
+                |> Combine.keep (Combine.many (Elm.Parser.Patterns.pattern |> Combine.ignore (Combine.maybe Layout.layout)))
+                |> Combine.ignore (Combine.string "=")
+                |> Combine.ignore (Combine.maybe Layout.layout)
                 |> Combine.keep expression
 
         fromParts : Node Signature -> Node FunctionImplementation -> Function
@@ -533,12 +560,12 @@ functionWithNameNode pointer =
         functionWithSignature : Node String -> Parser State Function
         functionWithSignature varPointer =
             functionSignatureFromVarPointer varPointer
-                |> Combine.ignore (maybe Layout.layoutStrict)
+                |> Combine.ignore (Combine.maybe Layout.layoutStrict)
                 |> Combine.andThen
                     (\sig ->
-                        Elm.Parser.Node.parser functionName
+                        Elm.Parser.Node.parser Tokens.functionName
                             |> Combine.andThen (failIfDifferentFrom varPointer)
-                            |> Combine.ignore (maybe Layout.layout)
+                            |> Combine.ignore (Combine.maybe Layout.layout)
                             |> Combine.andThen functionImplementationFromVarPointer
                             |> Combine.map (fromParts sig)
                     )
@@ -565,15 +592,15 @@ failIfDifferentFrom (Node _ expectedName) ((Node _ actualName) as actual) =
 
 function : Parser State (Node Declaration)
 function =
-    Elm.Parser.Node.parser functionName
-        |> Combine.ignore (maybe Layout.layout)
+    Elm.Parser.Node.parser Tokens.functionName
+        |> Combine.ignore (Combine.maybe Layout.layout)
         |> Combine.andThen functionWithNameNode
         |> Combine.map (\f -> Node (Expression.functionRange f) (Declaration.FunctionDeclaration f))
 
 
 functionSignatureFromVarPointer : Node String -> Parser State (Node Signature)
 functionSignatureFromVarPointer varPointer =
-    succeed (\ta -> Node.combine Signature varPointer ta)
-        |> Combine.ignore (string ":")
-        |> Combine.ignore (maybe Layout.layout)
-        |> Combine.keep typeAnnotation
+    Combine.succeed (\ta -> Node.combine Signature varPointer ta)
+        |> Combine.ignore (Combine.string ":")
+        |> Combine.ignore (Combine.maybe Layout.layout)
+        |> Combine.keep Elm.Parser.TypeAnnotation.typeAnnotation

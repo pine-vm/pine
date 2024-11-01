@@ -1,12 +1,12 @@
 module Elm.Parser.Patterns exposing (pattern)
 
-import Combine exposing (Parser, between, maybe, parens, sepBy, string)
+import Combine exposing (Parser)
 import Elm.Parser.Base as Base
 import Elm.Parser.Layout as Layout
 import Elm.Parser.Node
 import Elm.Parser.Numbers
 import Elm.Parser.State exposing (State)
-import Elm.Parser.Tokens exposing (characterLiteral, functionName, stringLiteral)
+import Elm.Parser.Tokens
 import Elm.Syntax.Node as Node exposing (Node(..))
 import Elm.Syntax.Pattern exposing (Pattern(..), QualifiedNameRef)
 import Parser as Core
@@ -14,16 +14,16 @@ import Parser as Core
 
 tryToCompose : Node Pattern -> Parser State (Node Pattern)
 tryToCompose x =
-    maybe Layout.layout
+    Combine.maybe Layout.layout
         |> Combine.continueWith
             (Combine.oneOf
                 [ Combine.succeed (\y -> Node.combine AsPattern x y)
                     |> Combine.ignore (Combine.fromCore (Core.keyword "as"))
                     |> Combine.ignore Layout.layout
-                    |> Combine.keep (Elm.Parser.Node.parser functionName)
+                    |> Combine.keep (Elm.Parser.Node.parser Elm.Parser.Tokens.functionName)
                 , Combine.succeed (\y -> Node.combine UnConsPattern x y)
                     |> Combine.ignore (Combine.fromCore (Core.symbol "::"))
-                    |> Combine.ignore (maybe Layout.layout)
+                    |> Combine.ignore (Combine.maybe Layout.layout)
                     |> Combine.keep pattern
                 , Combine.succeed x
                 ]
@@ -41,7 +41,7 @@ pattern =
 parensPattern : Parser State (Node Pattern)
 parensPattern =
     Elm.Parser.Node.parser
-        (parens (sepBy (string ",") (Layout.maybeAroundBothSides pattern))
+        (Combine.parens (Combine.sepBy (Combine.string ",") (Layout.maybeAroundBothSides pattern))
             |> Combine.map
                 (\c ->
                     case c of
@@ -56,7 +56,7 @@ parensPattern =
 
 variablePart : Parser State (Node Pattern)
 variablePart =
-    Elm.Parser.Node.parser (Combine.map VarPattern functionName)
+    Elm.Parser.Node.parser (Combine.map VarPattern Elm.Parser.Tokens.functionName)
 
 
 numberPart : Parser State Pattern
@@ -67,10 +67,10 @@ numberPart =
 listPattern : Parser State (Node Pattern)
 listPattern =
     Elm.Parser.Node.parser <|
-        between
-            (string "[" |> Combine.ignore (maybe Layout.layout))
-            (string "]")
-            (Combine.map ListPattern (sepBy (string ",") (Layout.maybeAroundBothSides pattern)))
+        Combine.between
+            (Combine.string "[" |> Combine.ignore (Combine.maybe Layout.layout))
+            (Combine.string "]")
+            (Combine.map ListPattern (Combine.sepBy (Combine.string ",") (Layout.maybeAroundBothSides pattern)))
 
 
 type alias ConsumeArgs =
@@ -82,8 +82,8 @@ composablePattern =
     Combine.oneOf
         [ variablePart
         , qualifiedPattern True
-        , Elm.Parser.Node.parser (stringLiteral |> Combine.map StringPattern)
-        , Elm.Parser.Node.parser (characterLiteral |> Combine.map CharPattern)
+        , Elm.Parser.Node.parser (Elm.Parser.Tokens.stringLiteral |> Combine.map StringPattern)
+        , Elm.Parser.Node.parser (Elm.Parser.Tokens.characterLiteral |> Combine.map CharPattern)
         , Elm.Parser.Node.parser numberPart
         , Elm.Parser.Node.parser (Core.symbol "()" |> Combine.fromCore |> Combine.map (always UnitPattern))
         , Elm.Parser.Node.parser (Core.symbol "_" |> Combine.fromCore |> Combine.map (always AllPattern))
@@ -98,8 +98,8 @@ qualifiedPatternArg =
     Combine.oneOf
         [ variablePart
         , qualifiedPattern False
-        , Elm.Parser.Node.parser (stringLiteral |> Combine.map StringPattern)
-        , Elm.Parser.Node.parser (characterLiteral |> Combine.map CharPattern)
+        , Elm.Parser.Node.parser (Elm.Parser.Tokens.stringLiteral |> Combine.map StringPattern)
+        , Elm.Parser.Node.parser (Elm.Parser.Tokens.characterLiteral |> Combine.map CharPattern)
         , Elm.Parser.Node.parser numberPart
         , Elm.Parser.Node.parser (Core.symbol "()" |> Combine.fromCore |> Combine.map (always UnitPattern))
         , Elm.Parser.Node.parser (Core.symbol "_" |> Combine.fromCore |> Combine.map (always AllPattern))
@@ -112,11 +112,15 @@ qualifiedPatternArg =
 qualifiedPattern : ConsumeArgs -> Parser State (Node Pattern)
 qualifiedPattern consumeArgs =
     Elm.Parser.Node.parser Base.typeIndicator
-        |> Combine.ignore (maybe Layout.layout)
+        |> Combine.ignore (Combine.maybe Layout.layout)
         |> Combine.andThen
             (\(Node range ( mod, name )) ->
                 (if consumeArgs then
-                    Combine.manyWithEndLocationForLastElement range Node.range (qualifiedPatternArg |> Combine.ignore (maybe Layout.layout))
+                    Combine.manyWithEndLocationForLastElement range
+                        Node.range
+                        (qualifiedPatternArg
+                            |> Combine.ignore (Combine.maybe Layout.layout)
+                        )
 
                  else
                     Combine.succeed ( range.end, [] )
@@ -134,8 +138,11 @@ recordPattern : Parser State (Node Pattern)
 recordPattern =
     Elm.Parser.Node.parser
         (Combine.map RecordPattern <|
-            between
-                (string "{" |> Combine.continueWith (maybe Layout.layout))
-                (string "}")
-                (sepBy (string ",") (Layout.maybeAroundBothSides (Elm.Parser.Node.parser functionName)))
+            Combine.between
+                (Combine.string "{" |> Combine.continueWith (Combine.maybe Layout.layout))
+                (Combine.string "}")
+                (Combine.sepBy
+                    (Combine.string ",")
+                    (Layout.maybeAroundBothSides (Elm.Parser.Node.parser Elm.Parser.Tokens.functionName))
+                )
         )

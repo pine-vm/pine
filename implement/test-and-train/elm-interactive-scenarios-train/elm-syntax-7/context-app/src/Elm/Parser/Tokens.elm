@@ -19,8 +19,8 @@ module Elm.Parser.Tokens exposing
     )
 
 import Char
-import Combine exposing (Parser, fail, many1, string, succeed)
-import Combine.Char exposing (anyChar, char, oneOf)
+import Combine exposing (Parser)
+import Combine.Char
 import Hex
 import Parser as Core exposing ((|.), (|=), Step(..))
 import Set
@@ -53,17 +53,17 @@ reservedList =
 
 portToken : Parser s String
 portToken =
-    string "port"
+    Combine.string "port"
 
 
 moduleToken : Parser s String
 moduleToken =
-    string "module"
+    Combine.string "module"
 
 
 exposingToken : Parser s String
 exposingToken =
-    string "exposing"
+    Combine.string "exposing"
 
 
 importToken : Parser s ()
@@ -78,27 +78,27 @@ asToken =
 
 ifToken : Parser s String
 ifToken =
-    string "if"
+    Combine.string "if"
 
 
 thenToken : Parser s String
 thenToken =
-    string "then"
+    Combine.string "then"
 
 
 elseToken : Parser s String
 elseToken =
-    string "else"
+    Combine.string "else"
 
 
 caseToken : Parser s String
 caseToken =
-    string "case"
+    Combine.string "case"
 
 
 ofToken : Parser s String
 ofToken =
-    string "of"
+    Combine.string "of"
 
 
 escapedCharValue : Core.Parser Char
@@ -137,9 +137,9 @@ characterLiteral : Parser s Char
 characterLiteral =
     Combine.oneOf
         [ quotedSingleQuote
-        , char '\''
-            |> Combine.continueWith anyChar
-            |> Combine.ignore (char '\'')
+        , Combine.Char.char '\''
+            |> Combine.continueWith Combine.Char.anyChar
+            |> Combine.ignore (Combine.Char.char '\'')
         ]
 
 
@@ -280,7 +280,7 @@ infixOperatorToken =
 
 operatorTokenFromList : List Char -> Parser s String
 operatorTokenFromList allowedChars =
-    many1 (oneOf allowedChars)
+    Combine.many1 (Combine.Char.oneOf allowedChars)
         |> Combine.andThen
             (\chars ->
                 let
@@ -289,8 +289,8 @@ operatorTokenFromList allowedChars =
                         String.fromList chars
                 in
                 if List.member charList excludedOperators then
-                    fail "operator is not allowed"
+                    Combine.fail "operator is not allowed"
 
                 else
-                    succeed charList
+                    Combine.succeed charList
             )

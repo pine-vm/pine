@@ -1,13 +1,13 @@
 module Elm.Parser.Base exposing (moduleName, typeIndicator)
 
-import Combine exposing (Parser, sepBy1, string)
+import Combine exposing (Parser)
 import Elm.Parser.Tokens as Tokens
 import Elm.Syntax.ModuleName exposing (ModuleName)
 
 
 moduleName : Parser s ModuleName
 moduleName =
-    sepBy1 (string ".") Tokens.typeName
+    Combine.sepBy1 (Combine.string ".") Tokens.typeName
 
 
 typeIndicator : Parser s ( ModuleName, String )
@@ -17,7 +17,7 @@ typeIndicator =
         helper moduleNameSoFar typeOrSegment =
             Combine.oneOf
                 [ Combine.succeed identity
-                    |> Combine.ignore (string ".")
+                    |> Combine.ignore (Combine.string ".")
                     |> Combine.keep Tokens.typeName
                     |> Combine.andThen (\t -> helper (typeOrSegment :: moduleNameSoFar) t)
                 , Combine.succeed ()

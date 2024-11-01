@@ -1,26 +1,26 @@
 module Elm.Parser.Expose exposing (exposeDefinition)
 
-import Combine exposing (Parser, maybe, oneOf, parens, sepBy1, string, succeed, while)
-import Combine.Char exposing (char)
+import Combine exposing (Parser)
+import Combine.Char
 import Elm.Parser.Layout as Layout
 import Elm.Parser.Node
 import Elm.Parser.Ranges as Ranges
 import Elm.Parser.State exposing (State)
-import Elm.Parser.Tokens exposing (exposingToken, functionName, typeName)
+import Elm.Parser.Tokens
 import Elm.Syntax.Exposing exposing (ExposedType, Exposing(..), TopLevelExpose(..))
 import Elm.Syntax.Node as Node exposing (Node(..))
 
 
 exposeDefinition : Parser State Exposing
 exposeDefinition =
-    exposingToken
-        |> Combine.continueWith (maybe Layout.layout)
+    Elm.Parser.Tokens.exposingToken
+        |> Combine.continueWith (Combine.maybe Layout.layout)
         |> Combine.continueWith exposeListWith
 
 
 exposeListWith : Parser State Exposing
 exposeListWith =
-    parens
+    Combine.parens
         (Layout.optimisticLayout
             |> Combine.continueWith exposingListInner
             |> Combine.ignore Layout.optimisticLayout
@@ -30,14 +30,14 @@ exposeListWith =
 exposingListInner : Parser State Exposing
 exposingListInner =
     Combine.oneOf
-        [ Ranges.withRange (succeed All |> Combine.ignore (Layout.maybeAroundBothSides (string "..")))
-        , Combine.map Explicit (sepBy1 (char ',') (Layout.maybeAroundBothSides exposable))
+        [ Ranges.withRange (Combine.succeed All |> Combine.ignore (Layout.maybeAroundBothSides (Combine.string "..")))
+        , Combine.map Explicit (Combine.sepBy1 (Combine.Char.char ',') (Layout.maybeAroundBothSides exposable))
         ]
 
 
 exposable : Parser State (Node TopLevelExpose)
 exposable =
-    oneOf
+    Combine.oneOf
         [ typeExpose
         , infixExpose
         , functionExpose
@@ -46,17 +46,17 @@ exposable =
 
 infixExpose : Parser State (Node TopLevelExpose)
 infixExpose =
-    Elm.Parser.Node.parser (Combine.map InfixExpose (parens (while ((/=) ')'))))
+    Elm.Parser.Node.parser (Combine.map InfixExpose (Combine.parens (Combine.while ((/=) ')'))))
 
 
 typeExpose : Parser State (Node TopLevelExpose)
 typeExpose =
-    Elm.Parser.Node.parser typeName
-        |> Combine.ignore (maybe Layout.layout)
+    Elm.Parser.Node.parser Elm.Parser.Tokens.typeName
+        |> Combine.ignore (Combine.maybe Layout.layout)
         |> Combine.andThen
             (\((Node typeRange typeValue) as tipe) ->
                 Combine.oneOf
-                    [ Elm.Parser.Node.parser (parens (Layout.maybeAroundBothSides (string "..")))
+                    [ Elm.Parser.Node.parser (Combine.parens (Layout.maybeAroundBothSides (Combine.string "..")))
                         |> Combine.map
                             (\(Node openRange _) ->
                                 Node
@@ -70,4 +70,4 @@ typeExpose =
 
 functionExpose : Parser State (Node TopLevelExpose)
 functionExpose =
-    Elm.Parser.Node.parser (Combine.map FunctionExpose functionName)
+    Elm.Parser.Node.parser (Combine.map FunctionExpose Elm.Parser.Tokens.functionName)

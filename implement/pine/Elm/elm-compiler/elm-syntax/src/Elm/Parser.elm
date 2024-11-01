@@ -10,10 +10,10 @@ module Elm.Parser exposing
 
 -}
 
-import Combine exposing (Parser, end)
+import Combine exposing (Parser)
 import Elm.Internal.RawFile as InternalRawFile
-import Elm.Parser.File exposing (file)
-import Elm.Parser.State exposing (State, emptyState)
+import Elm.Parser.File
+import Elm.Parser.State exposing (State)
 import Elm.Processing as Processing
 import Elm.RawFile exposing (RawFile)
 import Elm.Syntax.File exposing (File)
@@ -41,7 +41,7 @@ When parsing fails, the result will contain a list of errors indicating what wen
 parseToFile : String -> Result (List DeadEnd) File
 parseToFile input =
     -- A single line is added for unfinished ranges produced by `parser-combinators` on the last line.
-    case Combine.runParser (withEnd file) emptyState (input ++ "\n") of
+    case Combine.runParser (withEnd Elm.Parser.File.file) Elm.Parser.State.emptyState (input ++ "\n") of
         Ok ( _, r ) ->
             Ok (Processing.process Processing.init (InternalRawFile.fromFile r))
 
@@ -51,4 +51,4 @@ parseToFile input =
 
 withEnd : Parser State File -> Parser State File
 withEnd p =
-    p |> Combine.ignore end
+    p |> Combine.ignore Combine.end

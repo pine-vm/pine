@@ -1,12 +1,12 @@
 module Elm.Parser.Modules exposing (moduleDefinition)
 
-import Combine exposing (Parser, between, oneOf, sepBy1, string, succeed)
-import Elm.Parser.Base exposing (moduleName)
-import Elm.Parser.Expose exposing (exposeDefinition)
+import Combine exposing (Parser)
+import Elm.Parser.Base
+import Elm.Parser.Expose
 import Elm.Parser.Layout as Layout
 import Elm.Parser.Node
 import Elm.Parser.State exposing (State)
-import Elm.Parser.Tokens exposing (functionName, moduleToken, portToken, typeName)
+import Elm.Parser.Tokens
 import Elm.Syntax.Exposing exposing (Exposing)
 import Elm.Syntax.Module exposing (DefaultModuleData, Module(..))
 import Elm.Syntax.ModuleName exposing (ModuleName)
@@ -15,7 +15,7 @@ import Elm.Syntax.Node exposing (Node)
 
 moduleDefinition : Parser State Module
 moduleDefinition =
-    oneOf
+    Combine.oneOf
         [ normalModuleDefinition
         , portModuleDefinition
         , effectModuleDefinition
@@ -24,18 +24,18 @@ moduleDefinition =
 
 effectWhereClause : Parser State ( String, Node String )
 effectWhereClause =
-    succeed Tuple.pair
-        |> Combine.keep functionName
-        |> Combine.ignore (Layout.maybeAroundBothSides (string "="))
-        |> Combine.keep (Elm.Parser.Node.parser typeName)
+    Combine.succeed Tuple.pair
+        |> Combine.keep Elm.Parser.Tokens.functionName
+        |> Combine.ignore (Layout.maybeAroundBothSides (Combine.string "="))
+        |> Combine.keep (Elm.Parser.Node.parser Elm.Parser.Tokens.typeName)
 
 
 whereBlock : Parser State { command : Maybe (Node String), subscription : Maybe (Node String) }
 whereBlock =
-    between
-        (string "{")
-        (string "}")
-        (sepBy1 (string ",")
+    Combine.between
+        (Combine.string "{")
+        (Combine.string "}")
+        (Combine.sepBy1 (Combine.string ",")
             (Layout.maybeAroundBothSides effectWhereClause)
         )
         |> Combine.map
@@ -48,7 +48,7 @@ whereBlock =
 
 effectWhereClauses : Parser State { command : Maybe (Node String), subscription : Maybe (Node String) }
 effectWhereClauses =
-    string "where"
+    Combine.string "where"
         |> Combine.continueWith Layout.layout
         |> Combine.continueWith whereBlock
 
@@ -65,39 +65,39 @@ effectModuleDefinition =
                 , subscription = whereClauses.subscription
                 }
     in
-    succeed createEffectModule
-        |> Combine.ignore (string "effect")
+    Combine.succeed createEffectModule
+        |> Combine.ignore (Combine.string "effect")
         |> Combine.ignore Layout.layout
-        |> Combine.ignore moduleToken
+        |> Combine.ignore Elm.Parser.Tokens.moduleToken
         |> Combine.ignore Layout.layout
-        |> Combine.keep (Elm.Parser.Node.parser moduleName)
+        |> Combine.keep (Elm.Parser.Node.parser Elm.Parser.Base.moduleName)
         |> Combine.ignore Layout.layout
         |> Combine.keep effectWhereClauses
         |> Combine.ignore Layout.layout
-        |> Combine.keep (Elm.Parser.Node.parser exposeDefinition)
+        |> Combine.keep (Elm.Parser.Node.parser Elm.Parser.Expose.exposeDefinition)
 
 
 normalModuleDefinition : Parser State Module
 normalModuleDefinition =
     Combine.map NormalModule
-        (succeed DefaultModuleData
-            |> Combine.ignore moduleToken
+        (Combine.succeed DefaultModuleData
+            |> Combine.ignore Elm.Parser.Tokens.moduleToken
             |> Combine.ignore Layout.layout
-            |> Combine.keep (Elm.Parser.Node.parser moduleName)
+            |> Combine.keep (Elm.Parser.Node.parser Elm.Parser.Base.moduleName)
             |> Combine.ignore Layout.layout
-            |> Combine.keep (Elm.Parser.Node.parser exposeDefinition)
+            |> Combine.keep (Elm.Parser.Node.parser Elm.Parser.Expose.exposeDefinition)
         )
 
 
 portModuleDefinition : Parser State Module
 portModuleDefinition =
     Combine.map PortModule
-        (succeed DefaultModuleData
-            |> Combine.ignore portToken
+        (Combine.succeed DefaultModuleData
+            |> Combine.ignore Elm.Parser.Tokens.portToken
             |> Combine.ignore Layout.layout
-            |> Combine.ignore moduleToken
+            |> Combine.ignore Elm.Parser.Tokens.moduleToken
             |> Combine.ignore Layout.layout
-            |> Combine.keep (Elm.Parser.Node.parser moduleName)
+            |> Combine.keep (Elm.Parser.Node.parser Elm.Parser.Base.moduleName)
             |> Combine.ignore Layout.layout
-            |> Combine.keep (Elm.Parser.Node.parser exposeDefinition)
+            |> Combine.keep (Elm.Parser.Node.parser Elm.Parser.Expose.exposeDefinition)
         )

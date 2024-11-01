@@ -1,16 +1,16 @@
 module Elm.Parser.Comments exposing (multilineComment, singleLineComment)
 
-import Combine exposing (Parser, modifyState, string, succeed)
+import Combine exposing (Parser)
 import Elm.Parser.Node
-import Elm.Parser.State exposing (State, addComment)
-import Elm.Parser.Whitespace exposing (untilNewlineToken)
+import Elm.Parser.State exposing (State)
+import Elm.Parser.Whitespace
 import Elm.Syntax.Node exposing (Node)
 import Parser as Core exposing (Nestable(..))
 
 
 addCommentToState : Parser State (Node String) -> Parser State ()
 addCommentToState p =
-    p |> Combine.andThen (\pair -> modifyState (addComment pair))
+    p |> Combine.andThen (\pair -> Combine.modifyState (Elm.Parser.State.addComment pair))
 
 
 parseComment : Parser State String -> Parser State ()
@@ -21,9 +21,9 @@ parseComment commentParser =
 singleLineComment : Parser State ()
 singleLineComment =
     parseComment
-        (succeed (++)
-            |> Combine.keep (string "--")
-            |> Combine.keep untilNewlineToken
+        (Combine.succeed (++)
+            |> Combine.keep (Combine.string "--")
+            |> Combine.keep Elm.Parser.Whitespace.untilNewlineToken
         )
 
 

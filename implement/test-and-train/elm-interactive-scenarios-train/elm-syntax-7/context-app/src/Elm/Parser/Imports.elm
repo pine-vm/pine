@@ -1,12 +1,12 @@
 module Elm.Parser.Imports exposing (importDefinition)
 
 import Combine exposing (Parser)
-import Elm.Parser.Base exposing (moduleName)
-import Elm.Parser.Expose exposing (exposeDefinition)
+import Elm.Parser.Base
+import Elm.Parser.Expose
 import Elm.Parser.Layout as Layout
 import Elm.Parser.Node
 import Elm.Parser.State exposing (State)
-import Elm.Parser.Tokens exposing (asToken, importToken)
+import Elm.Parser.Tokens
 import Elm.Syntax.Import exposing (Import)
 import Elm.Syntax.ModuleName exposing (ModuleName)
 import Elm.Syntax.Node as Node exposing (Node(..))
@@ -18,14 +18,14 @@ importDefinition =
     let
         asDefinition : Parser State (Node ModuleName)
         asDefinition =
-            asToken
+            Elm.Parser.Tokens.asToken
                 |> Combine.continueWith Layout.layout
-                |> Combine.continueWith (Elm.Parser.Node.parser moduleName)
+                |> Combine.continueWith (Elm.Parser.Node.parser Elm.Parser.Base.moduleName)
 
         parseExposingDefinition : Node ModuleName -> Maybe (Node ModuleName) -> Parser State Import
         parseExposingDefinition mod asDef =
             Combine.oneOf
-                [ Elm.Parser.Node.parser exposeDefinition
+                [ Elm.Parser.Node.parser Elm.Parser.Expose.exposeDefinition
                     |> Combine.map Just
                 , Combine.succeed Nothing
                 ]
@@ -42,9 +42,9 @@ importDefinition =
                 |> Combine.map (setupNode importKeywordRange.start)
     in
     Combine.succeed parseAsDefinition
-        |> Combine.keep (Elm.Parser.Node.parser importToken)
+        |> Combine.keep (Elm.Parser.Node.parser Elm.Parser.Tokens.importToken)
         |> Combine.ignore Layout.layout
-        |> Combine.keep (Elm.Parser.Node.parser moduleName)
+        |> Combine.keep (Elm.Parser.Node.parser Elm.Parser.Base.moduleName)
         |> Combine.ignore Layout.optimisticLayout
         |> Combine.andThen identity
         |> Combine.ignore Layout.optimisticLayout

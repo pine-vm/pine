@@ -1,0 +1,1 @@
+Elm.Parser.CombineTestUtil.parseWithFailure  "type alias AliasInt = Int"  Elm.Parser.Typings.typeDefinition

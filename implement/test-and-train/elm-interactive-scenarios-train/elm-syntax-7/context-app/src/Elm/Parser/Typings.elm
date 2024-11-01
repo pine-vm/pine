@@ -1,11 +1,11 @@
 module Elm.Parser.Typings exposing (typeDefinition)
 
-import Combine exposing (Parser, many, maybe, string)
+import Combine exposing (Parser)
 import Elm.Parser.Layout as Layout
 import Elm.Parser.Node
 import Elm.Parser.State exposing (State)
-import Elm.Parser.Tokens exposing (functionName, typeName)
-import Elm.Parser.TypeAnnotation exposing (typeAnnotation, typeAnnotationNonGreedy)
+import Elm.Parser.Tokens
+import Elm.Parser.TypeAnnotation
 import Elm.Syntax.Declaration as Declaration
 import Elm.Syntax.Node as Node exposing (Node(..))
 import Elm.Syntax.Range exposing (Location, Range)
@@ -17,12 +17,16 @@ typeDefinition : Parser State (Node Declaration.Declaration)
 typeDefinition =
     typePrefix
         |> Combine.andThen
-            (\(Node { start } _) ->
+            (\(Node nodeRange _) ->
                 Combine.oneOf
                     [ Combine.succeed
                         (\name generics typeAnnotation ->
+                            let
+                                (Node.Node typeAnnotationRange _) =
+                                    typeAnnotation
+                            in
                             Node
-                                { start = start, end = (Node.range typeAnnotation).end }
+                                { start = nodeRange.start, end = typeAnnotationRange.end }
                                 (Declaration.AliasDeclaration
                                     { documentation = Nothing
                                     , name = name
@@ -31,15 +35,15 @@ typeDefinition =
                                     }
                                 )
                         )
-                        |> Combine.ignore (string "alias")
+                        |> Combine.ignore (Combine.string "alias")
                         |> Combine.ignore Layout.layout
-                        |> Combine.keep (Elm.Parser.Node.parser typeName)
-                        |> Combine.ignore (maybe Layout.layout)
-                        |> Combine.ignore (maybe Layout.layout)
+                        |> Combine.keep (Elm.Parser.Node.parser Elm.Parser.Tokens.typeName)
+                        |> Combine.ignore (Combine.maybe Layout.layout)
+                        |> Combine.ignore (Combine.maybe Layout.layout)
                         |> Combine.keep genericList
-                        |> Combine.ignore (string "=")
-                        |> Combine.ignore (maybe Layout.layout)
-                        |> Combine.keep typeAnnotation
+                        |> Combine.ignore (Combine.string "=")
+                        |> Combine.ignore (Combine.maybe Layout.layout)
+                        |> Combine.keep Elm.Parser.TypeAnnotation.typeAnnotation
                     , Combine.succeed
                         (\name generics constructors ->
                             let
@@ -50,10 +54,10 @@ typeDefinition =
                                             range.end
 
                                         Nothing ->
-                                            start
+                                            nodeRange.start
                             in
                             Node
-                                { start = start, end = end }
+                                { start = nodeRange.start, end = end }
                                 (Declaration.CustomTypeDeclaration
                                     { documentation = Nothing
                                     , name = name
@@ -62,12 +66,12 @@ typeDefinition =
                                     }
                                 )
                         )
-                        |> Combine.keep (Elm.Parser.Node.parser typeName)
-                        |> Combine.ignore (maybe Layout.layout)
+                        |> Combine.keep (Elm.Parser.Node.parser Elm.Parser.Tokens.typeName)
+                        |> Combine.ignore (Combine.maybe Layout.layout)
                         |> Combine.keep genericList
-                        |> Combine.ignore (maybe Layout.layout)
-                        |> Combine.ignore (string "=")
-                        |> Combine.ignore (maybe Layout.layout)
+                        |> Combine.ignore (Combine.maybe Layout.layout)
+                        |> Combine.ignore (Combine.string "=")
+                        |> Combine.ignore (Combine.maybe Layout.layout)
                         |> Combine.keep valueConstructors
                     ]
             )
@@ -76,13 +80,13 @@ typeDefinition =
 valueConstructors : Parser State (List (Node ValueConstructor))
 valueConstructors =
     Combine.sepBy1WithoutReverse
-        (Combine.ignore (maybe Layout.layout) (string "|"))
+        (Combine.ignore (Combine.maybe Layout.layout) (Combine.string "|"))
         valueConstructor
 
 
 valueConstructor : Parser State (Node ValueConstructor)
 valueConstructor =
-    Elm.Parser.Node.parser typeName
+    Elm.Parser.Node.parser Elm.Parser.Tokens.typeName
         |> Combine.andThen
             (\((Node range _) as tnn) ->
                 let
@@ -102,7 +106,7 @@ valueConstructor =
                     argHelper : List (Node TypeAnnotation) -> Parser State (Node ValueConstructor)
                     argHelper xs =
                         Combine.oneOf
-                            [ typeAnnotationNonGreedy
+                            [ Elm.Parser.TypeAnnotation.typeAnnotationNonGreedy
                                 |> Combine.andThen
                                     (\ta ->
                                         Layout.optimisticLayoutWith
@@ -121,7 +125,10 @@ valueConstructor =
 
 genericList : Parser State (List (Node String))
 genericList =
-    many (Elm.Parser.Node.parser functionName |> Combine.ignore (maybe Layout.layout))
+    Combine.many
+        (Elm.Parser.Node.parser Elm.Parser.Tokens.functionName
+            |> Combine.ignore (Combine.maybe Layout.layout)
+        )
 
 
 typePrefix : Parser State (Node String)

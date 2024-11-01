@@ -37,7 +37,6 @@ See also [Basics.compare](https://package.elm-lang.org/packages/elm/core/latest/
 -}
 
 
-
 {-| Source location
 -}
 type alias Location =
