@@ -4,8 +4,12 @@ WORKDIR /app
 
 # Copy everything and build
 COPY . ./
+
+# Build the files to bundle with the executable file
+RUN dotnet  run  --project  ./prebuild/prebuild.csproj
+
 WORKDIR /app/pine
-RUN dotnet publish -c Debug -o out
+RUN dotnet  publish  -o out
 
 # Build runtime image
 FROM mcr.microsoft.com/dotnet/aspnet:8.0.10 AS binaries
