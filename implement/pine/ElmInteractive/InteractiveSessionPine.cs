@@ -33,19 +33,7 @@ public class InteractiveSessionPine : IInteractiveSession
      * TODO: Move these caches to a dedicated scope to enable for better control over reuse/disposal.
      * */
 
-    private static readonly Dictionary<PineValue, PineValue> encodedForCompilerCache = [];
-
-    private static readonly Dictionary<ElmValue, PineValue> elmValueAsPineValueCache = [];
-
-    private static readonly Dictionary<PineValue, ElmValue> pineValueDecodedAsElmValueCache = [];
-
-    private static readonly Dictionary<PineValue, ElmValue> pineValueEncodedAsInElmCompilerCache = [];
-
-    private static readonly Dictionary<ElmValue, PineValue> elmValueDecodedAsInElmCompilerCache = [];
-
-    private readonly Dictionary<ElmValue, Expression> elmValueDecodedAsExpressionElmCompilerCache = [];
-
-    private static readonly object encodingCachesLock = new();
+    static readonly ElmCompilerCache elmCompilerCache = new();
 
     static readonly ConcurrentDictionary<string, Result<string, KeyValuePair<IReadOnlyList<string>, PineValue>>> TryParseModuleTextCache = new();
 
@@ -56,102 +44,6 @@ public class InteractiveSessionPine : IInteractiveSession
     {
         return ElmCompiler.JavaScriptEngineFromElmCompilerSourceFiles(
             ElmCompiler.CompilerSourceContainerFilesDefault.Value);
-    }
-
-    private static PineValue EncodeValueForCompiler(PineValue pineValue)
-    {
-        lock (encodingCachesLock)
-        {
-            if (encodedForCompilerCache.TryGetValue(pineValue, out var encoded))
-            {
-                return encoded;
-            }
-
-            encoded =
-                ElmValueAsPineValueCached(
-                    ElmValueInterop.PineValueEncodedAsInElmCompiler(
-                        pineValue,
-                        additionalReusableEncodings:
-                        pineValueEncodedAsInElmCompilerCache,
-                        reportNewEncoding:
-                        (pineValue, encoding) => pineValueEncodedAsInElmCompilerCache.TryAdd(pineValue, encoding)));
-
-            encodedForCompilerCache.TryAdd(pineValue, encoded);
-
-            return encoded;
-        }
-    }
-
-    private static PineValue ElmValueAsPineValueCached(ElmValue elmValue)
-    {
-        if (elmValueAsPineValueCache.TryGetValue(elmValue, out var encoded))
-        {
-            return encoded;
-        }
-
-        encoded =
-            ElmValueEncoding.ElmValueAsPineValue(
-                elmValue,
-                additionalReusableEncodings:
-                elmValueAsPineValueCache,
-                reportNewEncoding:
-                (elmValue, encoded) => elmValueAsPineValueCache.TryAdd(elmValue, encoded));
-
-        elmValueAsPineValueCache.TryAdd(elmValue, encoded);
-
-        return encoded;
-    }
-
-    private static Result<string, ElmValue> PineValueDecodedAsElmValueCached(PineValue pineValue)
-    {
-        lock (encodingCachesLock)
-        {
-            if (pineValueDecodedAsElmValueCache.TryGetValue(pineValue, out var decoded))
-            {
-                return decoded;
-            }
-
-            var decodeResult =
-                ElmValueEncoding.PineValueAsElmValue(
-                    pineValue,
-                    additionalReusableDecodings:
-                    pineValueDecodedAsElmValueCache,
-                    reportNewDecoding:
-                    (pineValue, decoding) => pineValueDecodedAsElmValueCache.TryAdd(pineValue, decoding));
-
-            if (decodeResult.IsOkOrNull() is { } decodedOk)
-            {
-                pineValueDecodedAsElmValueCache.TryAdd(pineValue, decodedOk);
-            }
-
-            return decodeResult;
-        }
-    }
-
-    private static Result<string, PineValue> DecodeElmValueFromCompilerCached(ElmValue elmValue)
-    {
-        lock (encodingCachesLock)
-        {
-            if (elmValueDecodedAsInElmCompilerCache.TryGetValue(elmValue, out var decoded))
-            {
-                return decoded;
-            }
-
-            var decodeResult =
-                ElmValueInterop.ElmValueDecodedAsInElmCompiler(
-                    elmValue,
-                    additionalReusableDecodings:
-                    elmValueDecodedAsInElmCompilerCache,
-                    reportNewDecoding:
-                    (elmValue, decoded) => elmValueDecodedAsInElmCompilerCache.TryAdd(elmValue, decoded));
-
-            if (decodeResult.IsOkOrNull() is { } decodedOk)
-            {
-                elmValueDecodedAsInElmCompilerCache.TryAdd(elmValue, decodedOk);
-            }
-
-            return decodeResult;
-        }
     }
 
     public InteractiveSessionPine(
@@ -329,7 +221,7 @@ public class InteractiveSessionPine : IInteractiveSession
         }
 
         var asElmValueResult =
-            PineValueDecodedAsElmValueCached(compiledNewEnvInCompiler);
+            elmCompilerCache.PineValueDecodedAsElmValue(compiledNewEnvInCompiler);
 
         if (asElmValueResult.IsErrOrNull() is { } asElmValueErr)
         {
@@ -343,7 +235,7 @@ public class InteractiveSessionPine : IInteractiveSession
         }
 
         var compiledNewEnvValueResult =
-            DecodeElmValueFromCompilerCached(compiledNewEnvInCompilerElm);
+            elmCompilerCache.DecodeElmValueFromCompiler(compiledNewEnvInCompilerElm);
 
         if (compiledNewEnvValueResult.IsErrOrNull() is { } compiledNewEnvValueErr)
         {
@@ -494,7 +386,7 @@ public class InteractiveSessionPine : IInteractiveSession
         {
             return
                 "Failed to extract environment: Tag not 'Ok': " +
-                PineValueDecodedAsElmValueCached(applyFunctionOk)
+                elmCompilerCache.PineValueDecodedAsElmValue(applyFunctionOk)
                 .Unpack(
                     fromErr: err => "Failed to parse as Elm value: " + err,
                     fromOk: elmValue => ElmValue.RenderAsElmExpression(elmValue).expressionString);
@@ -574,7 +466,7 @@ public class InteractiveSessionPine : IInteractiveSession
                     .AndThen(parsedSubmissionOk =>
                     {
                         return
-                        PineValueDecodedAsElmValueCached(parsedSubmissionOk)
+                        elmCompilerCache.PineValueDecodedAsElmValue(parsedSubmissionOk)
                         .MapError(error => "Failed parsing result as Elm value: " + error)
                         .AndThen(parsedSubmissionAsElmValue =>
                         {
@@ -583,7 +475,7 @@ public class InteractiveSessionPine : IInteractiveSession
                             clock.Restart();
 
                             var environmentEncodedForCompiler =
-                                EncodeValueForCompiler(buildPineEvalContextOk);
+                                elmCompilerCache.EncodeValueForCompiler(buildPineEvalContextOk);
 
                             logDuration("compile - encode environment");
 
@@ -612,7 +504,7 @@ public class InteractiveSessionPine : IInteractiveSession
                             clock.Restart();
 
                             var compileParsedOkAsElmValue =
-                            PineValueDecodedAsElmValueCached(compileParsedOk)
+                            elmCompilerCache.PineValueDecodedAsElmValue(compileParsedOk)
                             .Extract(err => throw new Exception("Failed decoding as Elm value: " + err));
 
                             logDuration("compile - decode result");
@@ -629,27 +521,8 @@ public class InteractiveSessionPine : IInteractiveSession
                                 return "Failed compile: " + compiledResultTag;
                             }
 
-                            Result<string, Expression> decodeExpr()
-                            {
-                                lock (encodingCachesLock)
-                                {
-                                    return
-                                        ElmValueInterop.ElmValueFromCompilerDecodedAsExpression(
-                                            compiledResultTag.Arguments[0],
-                                            additionalReusableDecodings:
-                                            elmValueDecodedAsExpressionElmCompilerCache,
-                                            reportNewDecoding:
-                                            (elmValue, decoding) =>
-                                            elmValueDecodedAsExpressionElmCompilerCache.TryAdd(elmValue, decoding),
-                                            literalAdditionalReusableDecodings:
-                                            elmValueDecodedAsInElmCompilerCache,
-                                            literalReportNewDecoding:
-                                            (elmValue, decoding) =>
-                                            elmValueDecodedAsInElmCompilerCache.TryAdd(elmValue, decoding));
-                                }
-                            }
-
-                            var decodeExpressionResult = decodeExpr();
+                            var decodeExpressionResult =
+                            elmCompilerCache.DecodeExpressionFromElmValue(compiledResultTag.Arguments[0]);
 
                             return
                             decodeExpressionResult
