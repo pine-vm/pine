@@ -346,7 +346,7 @@ public class InteractiveSessionPine : IInteractiveSession
             .MapError(err => "Failed parsing name for module " + moduleText.Split('\n', '\r').FirstOrDefault())
             .AndThen(moduleName =>
             ElmInteractive.ParseElmModuleTextToPineValue(moduleText, ParseSubmissionOrCompileDefaultJavaScriptEngine)
-            .MapError(err => "Failed parsing module " + moduleName + ": " + err)
+            .MapError(err => "Failed parsing module " + string.Join(".", moduleName) + ": " + err)
             .Map(parsedModule => new KeyValuePair<IReadOnlyList<string>, PineValue>(moduleName, parsedModule)));
     }
 
