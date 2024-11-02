@@ -11,13 +11,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        environment: [ubuntu-22.04, windows-2022, macos-12]
+        environment: [ubuntu-22.04, windows-2022, macos-13]
         include:
           - environment: ubuntu-22.04
             publish-runtime-id: linux-x64
           - environment: windows-2022
             publish-runtime-id: win-x64
-          - environment: macos-12
+          - environment: macos-13
             publish-runtime-id: osx-x64
 
     runs-on: ${{ matrix.environment }}
