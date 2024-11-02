@@ -174,7 +174,7 @@ public abstract record TreeNodeWithStringPath : IEquatable<TreeNodeWithStringPat
         return SortedTree(treeEntries);
     }
 
-    public static TreeNodeWithStringPath FilterNodes(
+    public static TreeNodeWithStringPath FilterNodesByPath(
         TreeNodeWithStringPath node,
         Func<IReadOnlyList<string>, bool> pathFilter,
         IReadOnlyList<string>? currentPrefix = null) =>
@@ -187,14 +187,39 @@ public abstract record TreeNodeWithStringPath : IEquatable<TreeNodeWithStringPat
                 tree.Elements
                 .Where(treeNode => pathFilter([.. (currentPrefix ?? []), treeNode.name]))
                 .Select(treeNode => (treeNode.name,
-                FilterNodes(
+                FilterNodesByPath(
                     treeNode.component,
                     pathFilter,
                     currentPrefix: [.. currentPrefix ?? [], treeNode.name])))
                 .ToImmutableList()),
 
-            _ => throw new NotImplementedException()
+            _ =>
+            throw new NotImplementedException(
+                "Unexpected node type: " + node.GetType())
         };
+
+    public static TreeNodeWithStringPath? RemoveEmptyNodes(TreeNodeWithStringPath node)
+    {
+        if (node is BlobNode)
+            return node;
+
+        if (node is TreeNode tree)
+        {
+            IReadOnlyList<(string name, TreeNodeWithStringPath component)> newElements =
+                [..tree.Elements
+                .Select(e => (e.name, component: RemoveEmptyNodes(e.component)))
+                .Where(e => e.component is not null)
+                ];
+
+            if (newElements.Count is 0)
+                return null;
+
+            return new TreeNode(newElements);
+        }
+
+        throw new NotImplementedException(
+            "Unexpected node type: " + node.GetType());
+    }
 
     public static TreeNodeWithStringPath Sort(TreeNodeWithStringPath node) =>
         node switch

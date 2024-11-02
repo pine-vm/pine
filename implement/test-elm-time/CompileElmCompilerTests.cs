@@ -360,7 +360,7 @@ public class CompileElmCompilerTests
         var elmModulesTexts = elmCoreLibraryModulesTexts;
 
         var compilerProgramOnlyElmJson =
-            TreeNodeWithStringPath.FilterNodes(
+            TreeNodeWithStringPath.FilterNodesByPath(
                 compilerProgram,
                 nodePath => nodePath.SequenceEqual(["elm.json"]));
 

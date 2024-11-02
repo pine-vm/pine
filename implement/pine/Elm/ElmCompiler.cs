@@ -163,7 +163,7 @@ public class ElmCompiler
             .ToImmutableArray();
 
         var compilerProgramOnlyElmJson =
-            TreeNodeWithStringPath.FilterNodes(
+            TreeNodeWithStringPath.FilterNodesByPath(
                 bundledFileTree,
                 nodePath => nodePath.SequenceEqual(["elm.json"]));
 
@@ -373,7 +373,7 @@ public class ElmCompiler
             .ToImmutableHashSet(EnumerableExtension.EqualityComparer<IReadOnlyList<string>>());
 
         return
-            TreeNodeWithStringPath.FilterNodes(
+            TreeNodeWithStringPath.FilterNodesByPath(
                 tree,
                 nodePath =>
                 !filePathsExcluded.Contains(nodePath));
