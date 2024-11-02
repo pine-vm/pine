@@ -63,10 +63,12 @@ public class ElmInteractiveTests
         var parsedScenarios =
             ElmTime.ElmInteractive.TestElmInteractive.ParseElmInteractiveScenarios(scenariosTree, console);
 
-        ElmTime.ElmInteractive.IInteractiveSession newInteractiveSessionFromAppCode(TreeNodeWithStringPath? appCodeTree) =>
+        static ElmTime.ElmInteractive.IInteractiveSession newInteractiveSessionFromAppCode(
+            TreeNodeWithStringPath? appCodeTree) =>
             new ElmTime.ElmInteractive.InteractiveSessionPine(
                 compilerSourceFiles: CompileElmProgramCodeFiles,
                 appCodeTree: appCodeTree,
+                overrideSkipLowering: null,
                 caching: true,
                 autoPGO: null);
 
@@ -151,6 +153,7 @@ public class ElmInteractiveTests
             new ElmTime.ElmInteractive.InteractiveSessionPine(
                 compilerSourceFiles: CompileElmProgramCodeFiles,
                 appCodeTree: appCodeTree,
+                overrideSkipLowering: true,
                 dynamicPGOShare.GetVMAutoUpdating());
 
         {

@@ -98,12 +98,8 @@ public class ElmInteractive
             .Concat(ModulesTextsFromAppCodeTree(appCodeTree) ?? [])
             .ToImmutableList();
             */
-            appCodeTree is null
-            ?
-            []
-            :
             ModulesTextsFromAppCodeTree(
-                appCodeTree,
+                appCodeTree ?? TreeNodeWithStringPath.EmptyTree,
                 skipLowering,
                 rootFilePaths: rootFilePaths);
 
@@ -166,12 +162,13 @@ public class ElmInteractive
         {
             if (closestBaseFromFile.HasValue)
             {
-                return (new CompileInteractiveEnvironmentResult(
-                    lastIncrementModulesTexts: closestBaseFromFile.Value.CompiledModules,
-                    environmentPineValueJson: closestBaseFromFile.Value.CompiledValueJson,
-                    environmentPineValue: closestBaseFromFile.Value.CompiledValue,
-                    environmentDictionary: ImmutableDictionary<string, PineValue>.Empty,
-                    parent: null),
+                return
+                    (new CompileInteractiveEnvironmentResult(
+                        lastIncrementModulesTexts: closestBaseFromFile.Value.CompiledModules,
+                        environmentPineValueJson: closestBaseFromFile.Value.CompiledValueJson,
+                        environmentPineValue: closestBaseFromFile.Value.CompiledValue,
+                        environmentDictionary: ImmutableDictionary<string, PineValue>.Empty,
+                        parent: null),
                     compilationCacheBefore);
             }
 
@@ -853,7 +850,7 @@ public class ElmInteractive
                 [.. allModules.Select(m => m.moduleText)]);
     }
 
-    static bool ShouldIgnoreSourceFile(IReadOnlyList<string> filePath, ReadOnlyMemory<byte> fileContent)
+    public static bool ShouldIgnoreSourceFile(IReadOnlyList<string> filePath, ReadOnlyMemory<byte> fileContent)
     {
         /*
          * Adapt to observation 2024-10-25:
@@ -881,8 +878,11 @@ public class ElmInteractive
             :
             CompileTree(appCodeTree);
 
+        var treeWithKernelModules =
+            InteractiveSessionPine.MergeDefaultElmCoreAndKernelModules(loweredTree);
+
         return
-            [.. TreeToFlatDictionaryWithPathComparer(loweredTree)
+            [.. TreeToFlatDictionaryWithPathComparer(treeWithKernelModules)
             .Where(sourceFile => sourceFile.Key.Last().EndsWith(".elm"))
             .Select(appCodeFile => (appCodeFile.Key, appCodeFile.Value, Encoding.UTF8.GetString(appCodeFile.Value.Span)))
             ];
@@ -890,15 +890,36 @@ public class ElmInteractive
 
     private static TreeNodeWithStringPath CompileTree(TreeNodeWithStringPath sourceTree)
     {
-        if (sourceTree.GetNodeAtPath(["elm.json"]) is null)
+        if (sourceTree.GetNodeAtPath(["elm.json"]) is not TreeNodeWithStringPath.BlobNode elmJsonFile)
             return sourceTree;
+
+        var elmJsonFileParsed =
+            System.Text.Json.JsonSerializer.Deserialize<ElmJsonStructure>(elmJsonFile.Bytes.Span);
+
+        IReadOnlyList<IReadOnlyList<string>> elmJsonSourceDirectories =
+            [..elmJsonFileParsed?.sourceDirectories
+            .Select(flat => flat.Split('/', '\\'))
+            ];
+
+        bool filePathIsUnderElmJsonSourceDirectories(IReadOnlyList<string> filePath)
+        {
+            return
+                elmJsonSourceDirectories
+                .Any(sourceDir => filePath.Take(sourceDir.Count).SequenceEqual(sourceDir));
+        }
 
         var sourceFiles = TreeToFlatDictionaryWithPathComparer(sourceTree);
 
         if (sourceFiles.Count is 0)
             return sourceTree;
 
-        var compilationRootFilePath = sourceFiles.FirstOrDefault(c => c.Key[c.Key.Count - 1].EndsWith(".elm")).Key;
+        var compilationRootFilePath =
+            sourceFiles
+            .Where(c => c.Key[c.Key.Count - 1].EndsWith(".elm", StringComparison.OrdinalIgnoreCase))
+            .OrderBy(c => c.Key.Count)
+            .OrderBy(c => filePathIsUnderElmJsonSourceDirectories(c.Key) ? 0 : 1)
+            .FirstOrDefault()
+            .Key;
 
         if (compilationRootFilePath.Count is 0)
             return sourceTree;

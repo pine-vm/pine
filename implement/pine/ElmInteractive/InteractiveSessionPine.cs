@@ -154,16 +154,17 @@ public class InteractiveSessionPine : IInteractiveSession
         }
     }
 
-
     public InteractiveSessionPine(
         TreeNodeWithStringPath compilerSourceFiles,
         TreeNodeWithStringPath? appCodeTree,
+        bool? overrideSkipLowering,
         bool caching,
         DynamicPGOShare? autoPGO)
         :
         this(
             compilerSourceFiles: compilerSourceFiles,
             appCodeTree: appCodeTree,
+            overrideSkipLowering: overrideSkipLowering,
             BuildPineVM(caching: caching, autoPGO: autoPGO))
     {
     }
@@ -171,11 +172,13 @@ public class InteractiveSessionPine : IInteractiveSession
     public InteractiveSessionPine(
         TreeNodeWithStringPath compilerSourceFiles,
         TreeNodeWithStringPath? appCodeTree,
+        bool? overrideSkipLowering,
         IPineVM pineVM)
         :
         this(
             compilerSourceFiles: compilerSourceFiles,
             appCodeTree: appCodeTree,
+            overrideSkipLowering: overrideSkipLowering,
             (pineVM, pineVMCache: null))
     {
     }
@@ -183,6 +186,7 @@ public class InteractiveSessionPine : IInteractiveSession
     private InteractiveSessionPine(
         TreeNodeWithStringPath compilerSourceFiles,
         TreeNodeWithStringPath? appCodeTree,
+        bool? overrideSkipLowering,
         (IPineVM pineVM, PineVMCache? pineVMCache) pineVMAndCache)
     {
         pineVM = pineVMAndCache.pineVM;
@@ -192,7 +196,9 @@ public class InteractiveSessionPine : IInteractiveSession
 
         buildPineEvalContextTask =
             System.Threading.Tasks.Task.Run(() =>
-            CompileInteractiveEnvironment(appCodeTree: appCodeTree));
+            CompileInteractiveEnvironment(
+                appCodeTree: appCodeTree,
+                overrideSkipLowering: overrideSkipLowering));
     }
 
     public static (IPineVM, PineVMCache?) BuildPineVM(
@@ -220,15 +226,9 @@ public class InteractiveSessionPine : IInteractiveSession
 
 
     private Result<string, PineValue> CompileInteractiveEnvironment(
-        TreeNodeWithStringPath? appCodeTree)
+        TreeNodeWithStringPath? appCodeTree,
+        bool? overrideSkipLowering)
     {
-        var appCodeTreeHash =
-            appCodeTree switch
-            {
-                null => "",
-                not null => CommonConversion.StringBase16(PineValueHashTree.ComputeHashNotSorted(appCodeTree))
-            };
-
         if (buildCompilerResult.IsOkOrNull() is not { } elmCompiler)
         {
             if (buildCompilerResult.IsErrOrNull() is { } err)
@@ -243,6 +243,7 @@ public class InteractiveSessionPine : IInteractiveSession
         return
             CompileInteractiveEnvironment(
                 appCodeTree,
+                overrideSkipLowering: overrideSkipLowering,
                 elmCompiler,
                 compileEnvPineVM);
     }
@@ -250,21 +251,35 @@ public class InteractiveSessionPine : IInteractiveSession
     public static Result<string, PineValue>
         CompileInteractiveEnvironment(
         TreeNodeWithStringPath? appCodeTree,
+        bool? overrideSkipLowering,
+        ElmCompiler elmCompiler) =>
+        CompileInteractiveEnvironment(
+            appCodeTree,
+            overrideSkipLowering: overrideSkipLowering,
+            elmCompiler,
+            compileEnvPineVM);
+
+    public static Result<string, PineValue>
+        CompileInteractiveEnvironment(
+        TreeNodeWithStringPath? appCodeTree,
+        bool? overrideSkipLowering,
         ElmCompiler elmCompiler,
         IPineVM pineVM)
     {
-        var appCodeTreeHash =
-            appCodeTree switch
-            {
-                null => "",
-                not null => CommonConversion.StringBase16(PineValueHashTree.ComputeHashNotSorted(appCodeTree))
-            };
+        var skipLowering =
+            overrideSkipLowering ??
+            !ElmCompiler.CheckIfAppUsesLowering(appCodeTree ?? TreeNodeWithStringPath.EmptyTree);
 
         var appCodeTreeWithCoreModules =
+            /*
             ElmCompiler.MergeElmCoreModules(appCodeTree ?? TreeNodeWithStringPath.EmptyTree);
+            */
+            appCodeTree ?? TreeNodeWithStringPath.EmptyTree;
 
         var orderedModules =
-            AppSourceFileTreesForIncrementalCompilation(appCodeTreeWithCoreModules)
+            AppSourceFileTreesForIncrementalCompilation(
+                appCodeTreeWithCoreModules,
+                skipLowering: skipLowering)
             .ToImmutableArray();
 
         var initialStateElmValue =
@@ -344,16 +359,45 @@ public class InteractiveSessionPine : IInteractiveSession
         return compiledNewEnvValue;
     }
 
+    public static TreeNodeWithStringPath MergeDefaultElmCoreAndKernelModules(
+        TreeNodeWithStringPath appCodeTree) =>
+        MergeDefaultElmCoreAndKernelModules(
+            appCodeTree,
+            ElmCompiler.ElmCoreAndKernelModuleFilesDefault.Value);
+
+    public static TreeNodeWithStringPath MergeDefaultElmCoreAndKernelModules(
+        TreeNodeWithStringPath appCodeTree,
+        TreeNodeWithStringPath elmCoreAndKernelModuleFilesDefault)
+    {
+        return
+            elmCoreAndKernelModuleFilesDefault
+            .EnumerateBlobsTransitive()
+            .Aggregate(
+                seed:
+                appCodeTree,
+
+                func:
+                (aggregate, nextBlob) =>
+                aggregate.GetNodeAtPath(nextBlob.path) is { } existingNode
+                ?
+                aggregate
+                :
+                aggregate.SetNodeAtPathSorted(nextBlob.path, TreeNodeWithStringPath.Blob(nextBlob.blobContent)));
+    }
+
     public record ParsedModule(
         IReadOnlyList<string> FilePath,
         IReadOnlyList<string> ModuleName,
         string ModuleText);
 
     public static IEnumerable<(TreeNodeWithStringPath tree, ParsedModule sourceModule)> AppSourceFileTreesForIncrementalCompilation(
-        TreeNodeWithStringPath appSourceFiles)
+        TreeNodeWithStringPath appSourceFiles,
+        bool skipLowering)
     {
         var compileableSourceModules =
-            ElmInteractive.ModulesFilePathsAndTextsFromAppCodeTree(appSourceFiles, skipLowering: false) ?? [];
+            ElmInteractive.ModulesFilePathsAndTextsFromAppCodeTree(
+                appSourceFiles,
+                skipLowering: skipLowering) ?? [];
 
         var baseTree =
             compileableSourceModules
@@ -363,6 +407,7 @@ public class InteractiveSessionPine : IInteractiveSession
 
         var compileableSourceModulesTexts =
             compileableSourceModules
+            .Where(sm => !ElmInteractive.ShouldIgnoreSourceFile(sm.filePath, sm.fileContent))
             .Select(sm => sm.moduleText)
             .ToImmutableArray();
 
@@ -718,6 +763,7 @@ public class InteractiveSessionPine : IInteractiveSession
         var profilingSession = new InteractiveSessionPine(
             compilerSourceFiles: compileElmProgramCodeFiles,
             appCodeTree: null,
+            overrideSkipLowering: false,
             profilingVM.PineVM);
 
         foreach (var step in scenario.Steps)

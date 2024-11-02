@@ -12,27 +12,28 @@ public interface IInteractiveSession : IDisposable
     static ElmEngineTypeCLI DefaultImplementation => ElmEngineTypeCLI.Pine;
 
     static IInteractiveSession Create(
-        TreeNodeWithStringPath compileElmProgramCodeFiles,
+        TreeNodeWithStringPath compilerSourceFiles,
         TreeNodeWithStringPath? appCodeTree,
         ElmEngineType engineType) =>
         engineType switch
         {
             ElmEngineType.JavaScript_Jint =>
             new InteractiveSessionJavaScript(
-                compileElmProgramCodeFiles: compileElmProgramCodeFiles,
+                compileElmProgramCodeFiles: compilerSourceFiles,
                 appCodeTree: appCodeTree,
                 InteractiveSessionJavaScript.JavaScriptEngineFlavor.Jint),
 
             ElmEngineType.JavaScript_V8 =>
             new InteractiveSessionJavaScript(
-                compileElmProgramCodeFiles: compileElmProgramCodeFiles,
+                compileElmProgramCodeFiles: compilerSourceFiles,
                 appCodeTree: appCodeTree,
                 InteractiveSessionJavaScript.JavaScriptEngineFlavor.V8),
 
             ElmEngineType.Pine pineConfig =>
             new InteractiveSessionPine(
-                compilerSourceFiles: compileElmProgramCodeFiles,
+                compilerSourceFiles: compilerSourceFiles,
                 appCodeTree: appCodeTree,
+                overrideSkipLowering: false,
                 caching: pineConfig.Caching,
                 autoPGO: pineConfig.DynamicPGOShare),
 

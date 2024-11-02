@@ -44,6 +44,7 @@ public class PGOTests
             new InteractiveSessionPine(
                 ElmCompiler.CompilerSourceFilesDefault.Value,
                 appCodeTree: appCodeTree,
+                overrideSkipLowering: true,
                 caching: true,
                 autoPGO: null);
 
@@ -429,6 +430,7 @@ public class PGOTests
             new InteractiveSessionPine(
                 ElmCompiler.CompilerSourceFilesDefault.Value,
                 appCodeTree: appCodeTree,
+                overrideSkipLowering: true,
                 caching: true,
                 autoPGO: null);
 
@@ -929,6 +931,7 @@ public class PGOTests
             new InteractiveSessionPine(
                 ElmCompiler.CompilerSourceFilesDefault.Value,
                 appCodeTree: appCodeTree,
+                overrideSkipLowering: true,
                 caching: true,
                 autoPGO: null);
 
@@ -1344,6 +1347,7 @@ public class PGOTests
             new InteractiveSessionPine(
                 ElmCompiler.CompilerSourceFilesDefault.Value,
                 appCodeTree: appCodeTree,
+                overrideSkipLowering: true,
                 caching: true,
                 autoPGO: null);
 

@@ -114,6 +114,8 @@ public record CommandLineAppConfig(
             new ElmTime.ElmInteractive.InteractiveSessionPine(
                 ElmCompiler.CompilerSourceContainerFilesDefault.Value,
                 appCodeTree: sourceFiles,
+                // TODO: Migrate lowering implementation for portability.
+                overrideSkipLowering: true,
                 caching: true,
                 autoPGO: null);
 

@@ -1,8 +1,8 @@
+using Pine.Core;
 using Pine.PineVM;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
-using Pine.Core;
 
 namespace ElmTime.ElmInteractive;
 
@@ -60,28 +60,42 @@ public static class ElmInteractiveEnvironment
         string declarationName,
         PineVMParseCache parseCache)
     {
+        var parseEnvResult =
+            ParseInteractiveEnvironment(interactiveEnvironment);
+
+        if (parseEnvResult.IsErrOrNull() is { } err)
+        {
+            return "Failed parsing environment: " + err;
+        }
+
+        if (parseEnvResult.IsOkOrNull() is not { } parsedEnv)
+        {
+            throw new System.NotImplementedException(
+                "Unexpected result type: " + parseEnvResult.GetType());
+        }
+
+        var selectedModule =
+            parsedEnv.Modules
+            .FirstOrDefault(moduleNameAndContent => moduleNameAndContent.moduleName == moduleName);
+
+        if (selectedModule.moduleContent is null)
+        {
+            return
+                "Did not find module '" + moduleName + "' (there are " +
+                parsedEnv.Modules.Count + " other modules: " +
+                string.Join(", ", parsedEnv.Modules.Select(m => m.moduleName));
+        }
+
+        var functionDeclaration =
+            selectedModule.moduleContent.FunctionDeclarations
+            .FirstOrDefault(fd => fd.Key == declarationName);
+
+        if (functionDeclaration.Value is null)
+            return "declaration " + declarationName + " not found";
+
         return
-            ParseInteractiveEnvironment(interactiveEnvironment)
-            .AndThen(parsedEnv =>
-            {
-                var selectedModule =
-                    parsedEnv.Modules
-                    .FirstOrDefault(moduleNameAndContent => moduleNameAndContent.moduleName == moduleName);
-
-                if (selectedModule.moduleContent is null)
-                    return "module not found";
-
-                var functionDeclaration =
-                    selectedModule.moduleContent.FunctionDeclarations
-                    .FirstOrDefault(fd => fd.Key == declarationName);
-
-                if (functionDeclaration.Value is null)
-                    return "declaration " + declarationName + " not found";
-
-                return
-                ParseFunctionRecordFromValueTagged(functionDeclaration.Value, parseCache)
-                .Map(parsedRecord => (functionDeclaration.Value, parsedRecord));
-            });
+        ParseFunctionRecordFromValueTagged(functionDeclaration.Value, parseCache)
+        .Map(parsedRecord => (functionDeclaration.Value, parsedRecord));
     }
 
     public static Result<string, PineValue> ApplyFunction(

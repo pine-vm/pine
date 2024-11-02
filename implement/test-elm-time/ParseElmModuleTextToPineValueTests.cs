@@ -1,5 +1,5 @@
-using ElmTime.ElmInteractive;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
+using Pine.Core;
 using Pine.Elm;
 using Pine.ElmInteractive;
 using System;
@@ -183,7 +183,7 @@ public class ParseElmModuleTextToPineValueTests
 
         IReadOnlyList<string> expectedExpressionStringChunks =
             [
-            "{ comments = []",
+            "{ comments = [Node { end = { column = 119, row = 29 }, start = { column = 7, row = 29 } } \"-- We need another tag to prevent the compiler from assuming that the condition for tag 'String' is always true.\"]",
             ", declarations = [",
             "Node { end = { column = 14, row = 10 }, start = { column = 1, row = 9 } } (AliasDeclaration { documentation = Nothing, generics = [], name = Node { end = { column = 20, row = 9 }, start = { column = 12, row = 9 } } \"MaybeInt\", typeAnnotation = Node { end = { column = 14, row = 10 }, start = { column = 5, row = 10 } } (Typed (Node { end = { column = 10, row = 10 }, start = { column = 5, row = 10 } } ([],\"Maybe\")) [Node { end = { column = 14, row = 10 }, start = { column = 11, row = 10 } } (Typed (Node { end = { column = 14, row = 10 }, start = { column = 11, row = 10 } } ([],\"Int\")) [])]) })",
             ",Node { end = { column = 19, row = 14 }, start = { column = 1, row = 13 } } (AliasDeclaration { documentation = Nothing, generics = [], name = Node { end = { column = 22, row = 13 }, start = { column = 12, row = 13 } } \"RecordType\", typeAnnotation = Node { end = { column = 19, row = 14 }, start = { column = 5, row = 14 } } (Record [Node { end = { column = 17, row = 14 }, start = { column = 7, row = 14 } } [Node { end = { column = 11, row = 14 }, start = { column = 7, row = 14 } } \"alfa\",Node { end = { column = 17, row = 14 }, start = { column = 14, row = 14 } } (Typed (Node { end = { column = 17, row = 14 }, start = { column = 14, row = 14 } } ([],\"Int\")) [])]]) })",
@@ -204,16 +204,8 @@ public class ParseElmModuleTextToPineValueTests
         var expectedExpressionString =
             string.Concat(expectedExpressionStringChunks);
 
-        var compilerProgram =
-            ElmCompiler.CompilerSourceContainerFilesDefault.Value;
-
-        using var compilerJavaScript =
-            ElmInteractive.PrepareJavaScriptEngineToEvaluateElm(
-                compilerProgram,
-                InteractiveSessionJavaScript.JavaScriptEngineFlavor.V8);
-
         var parsedModulePineValue =
-            ElmInteractive.ParseElmModuleTextToPineValue(elmModuleText, compilerJavaScript)
+            ParseElmModuleTextToPineValue(elmModuleText)
             .Extract(err => throw new Exception(err));
 
         var responseAsElmValue =
@@ -399,5 +391,26 @@ public class ParseElmModuleTextToPineValueTests
                 """Node { end = { column = 10, row = 124 }, start = { column = 1, row = 110 } } { arguments = [Node { end = { column = 10, row = 110 }, start = { column = 6, row = 110 } } (VarPattern "func"),Node { end = { column = 28, row = 110 }, start = { column = 11, row = 110 } } (ParenthesizedPattern (Node { end = { column = 27, row = 110 }, start = { column = 12, row = 110 } } (NamedPattern { moduleName = [], name = "Decoder" } [Node { end = { column = 27, row = 110 }, start = { column = 20, row = 110 } } (VarPattern "decodeA")]))),Node { end = { column = 46, row = 110 }, start = { column = 29, row = 110 } } (ParenthesizedPattern (Node { end = { column = 45, row = 110 }, start = { column = 30, row = 110 } } (NamedPattern { moduleName = [], name = "Decoder" } [Node { end = { column = 45, row = 110 }, start = { column = 38, row = 110 } } (VarPattern "decodeB")]))),Node { end = { column = 64, row = 110 }, start = { column = 47, row = 110 } } (ParenthesizedPattern (Node { end = { column = 63, row = 110 }, start = { column = 48, row = 110 } } (NamedPattern { moduleName = [], name = "Decoder" } [Node { end = { column = 63, row = 110 }, start = { column = 56, row = 110 } } (VarPattern "decodeC")])))], expression = Node { end = { column = 10, row = 124 }, start = { column = 5, row = 111 } } (Application [Node { end = { column = 12, row = 111 }, start = { column = 5, row = 111 } } (FunctionOrValue [] "Decoder"),Node { end = { column = 10, row = 124 }, start = { column = 9, row = 112 } } (ParenthesizedExpression (Node { end = { column = 36, row = 123 }, start = { column = 10, row = 112 } } (LambdaExpression { args = [Node { end = { column = 16, row = 112 }, start = { column = 11, row = 112 } } (VarPattern "bites"),Node { end = { column = 23, row = 112 }, start = { column = 17, row = 112 } } (VarPattern "offset")], expression = Node { end = { column = 36, row = 123 }, start = { column = 13, row = 113 } } (LetExpression { declarations = [Node { end = { column = 41, row = 115 }, start = { column = 17, row = 114 } } (LetDestructuring (Node { end = { column = 31, row = 114 }, start = { column = 17, row = 114 } } (TuplePattern [Node { end = { column = 26, row = 114 }, start = { column = 19, row = 114 } } (VarPattern "offsetA"),Node { end = { column = 29, row = 114 }, start = { column = 28, row = 114 } } (VarPattern "a")])) (Node { end = { column = 41, row = 115 }, start = { column = 21, row = 115 } } (Application [Node { end = { column = 28, row = 115 }, start = { column = 21, row = 115 } } (FunctionOrValue [] "decodeA"),Node { end = { column = 34, row = 115 }, start = { column = 29, row = 115 } } (FunctionOrValue [] "bites"),Node { end = { column = 41, row = 115 }, start = { column = 35, row = 115 } } (FunctionOrValue [] "offset")]))),Node { end = { column = 42, row = 118 }, start = { column = 17, row = 117 } } (LetDestructuring (Node { end = { column = 31, row = 117 }, start = { column = 17, row = 117 } } (TuplePattern [Node { end = { column = 26, row = 117 }, start = { column = 19, row = 117 } } (VarPattern "offsetB"),Node { end = { column = 29, row = 117 }, start = { column = 28, row = 117 } } (VarPattern "b")])) (Node { end = { column = 42, row = 118 }, start = { column = 21, row = 118 } } (Application [Node { end = { column = 28, row = 118 }, start = { column = 21, row = 118 } } (FunctionOrValue [] "decodeB"),Node { end = { column = 34, row = 118 }, start = { column = 29, row = 118 } } (FunctionOrValue [] "bites"),Node { end = { column = 42, row = 118 }, start = { column = 35, row = 118 } } (FunctionOrValue [] "offsetA")]))),Node { end = { column = 42, row = 121 }, start = { column = 17, row = 120 } } (LetDestructuring (Node { end = { column = 31, row = 120 }, start = { column = 17, row = 120 } } (TuplePattern [Node { end = { column = 26, row = 120 }, start = { column = 19, row = 120 } } (VarPattern "offsetC"),Node { end = { column = 29, row = 120 }, start = { column = 28, row = 120 } } (VarPattern "c")])) (Node { end = { column = 42, row = 121 }, start = { column = 21, row = 121 } } (Application [Node { end = { column = 28, row = 121 }, start = { column = 21, row = 121 } } (FunctionOrValue [] "decodeC"),Node { end = { column = 34, row = 121 }, start = { column = 29, row = 121 } } (FunctionOrValue [] "bites"),Node { end = { column = 42, row = 121 }, start = { column = 35, row = 121 } } (FunctionOrValue [] "offsetB")])))], expression = Node { end = { column = 36, row = 123 }, start = { column = 13, row = 123 } } (TupledExpression [Node { end = { column = 22, row = 123 }, start = { column = 15, row = 123 } } (FunctionOrValue [] "offsetC"),Node { end = { column = 34, row = 123 }, start = { column = 24, row = 123 } } (Application [Node { end = { column = 28, row = 123 }, start = { column = 24, row = 123 } } (FunctionOrValue [] "func"),Node { end = { column = 30, row = 123 }, start = { column = 29, row = 123 } } (FunctionOrValue [] "a"),Node { end = { column = 32, row = 123 }, start = { column = 31, row = 123 } } (FunctionOrValue [] "b"),Node { end = { column = 34, row = 123 }, start = { column = 33, row = 123 } } (FunctionOrValue [] "c")])]) }) })))]), name = Node { end = { column = 5, row = 110 }, start = { column = 1, row = 110 } } "map3" }""",
                 declarationDeclarationNodeAsExpression);
         }
+    }
+
+    public static Result<string, PineValue> ParseElmModuleTextToPineValue(string elmModuleText)
+    {
+        var elmCompilerFromBundle =
+            Pine.Core.Elm.BundledElmEnvironments.BundledElmCompilerCompiledEnvValue();
+
+        Assert.IsNotNull(
+            elmCompilerFromBundle,
+            message: "Elm compiler environment not found in bundled environments");
+
+        var elmCompiler =
+            ElmCompiler.ElmCompilerFromEnvValue(elmCompilerFromBundle)
+            .Extract(err => throw new Exception(err));
+
+        var pineVMCache = new Pine.PineVM.PineVMCache();
+
+        var pineVM =
+            new Pine.PineVM.PineVM(evalCache: pineVMCache.EvalCache);
+
+        return elmCompiler.ParseElmModuleText(elmModuleText, pineVM);
     }
 }

@@ -6,7 +6,6 @@ using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Collections.Immutable;
-using System.Diagnostics;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -21,6 +20,27 @@ public class ElmCompiler
         new(() => PineValueComposition.SortedTreeFromSetOfBlobsWithStringPath(
             LoadElmCompilerSourceCodeFiles()
             .Extract(error => throw new NotImplementedException(nameof(LoadElmCompilerSourceCodeFiles) + ": " + error))));
+
+    static public readonly Lazy<TreeNodeWithStringPath> ElmCoreAndKernelModuleFilesDefault =
+        new(() =>
+        CompilerSourceContainerFilesDefault.Value.GetNodeAtPath(["elm-kernel-modules"])
+        ?? throw new Exception("Did not find node elm-kernel-modules"));
+
+    static public readonly Lazy<IReadOnlyDictionary<IReadOnlyList<string>, string>> ElmCoreAndKernelModulesByName =
+        new(() =>
+        ElmCoreAndKernelModuleFilesDefault.Value
+        .EnumerateBlobsTransitive()
+        .Where(blob => blob.path.Last().EndsWith(".elm", StringComparison.OrdinalIgnoreCase))
+        .ToDictionary(
+            blobAtPath =>
+            ElmTime.ElmSyntax.ElmModule.ParseModuleName(Encoding.UTF8.GetString(blobAtPath.blobContent.Span))
+            .Extract(err => throw new Exception(err)),
+
+            blobAtPath =>
+            Encoding.UTF8.GetString(blobAtPath.blobContent.Span),
+
+            comparer:
+            EnumerableExtension.EqualityComparer<IReadOnlyList<string>>()));
 
     static public readonly Lazy<TreeNodeWithStringPath> CompilerSourceFilesDefault =
         new(() => ElmCompilerFileTreeFromBundledFileTree(CompilerSourceContainerFilesDefault.Value));
@@ -48,7 +68,10 @@ public class ElmCompiler
         "https://github.com/Viir/result-extra/tree/e3b2e4358ac701d66e75ccbfdc4256513dc70694",
         */
 
+        /*
+         * 2024-10-25: We are bundling these now so no need to load them from the internet.
         "https://github.com/Viir/elm-bigint/tree/d452b489c5795f8deed19658a7b8f7bf5ef1e9a4/",
+        */
 
         /*
         * Remove usages of Json.Decode and Json.Encode to speed up bootstrapping of the Elm compiler.
@@ -60,8 +83,6 @@ public class ElmCompiler
         */
     ];
 
-    public TreeNodeWithStringPath CompilerSourceFiles { get; }
-
     public PineValue CompilerEnvironment { get; }
 
     public ElmInteractiveEnvironment.FunctionRecord CompileParsedInteractiveSubmission { get; }
@@ -71,12 +92,10 @@ public class ElmCompiler
     private static readonly PineVM.PineVMParseCache parseCache = new();
 
     private ElmCompiler(
-        TreeNodeWithStringPath compilerSourceFiles,
         PineValue compilerEnvironment,
         ElmInteractiveEnvironment.FunctionRecord compileParsedInteractiveSubmission,
         ElmInteractiveEnvironment.FunctionRecord expandElmInteractiveEnvironmentWithModules)
     {
-        CompilerSourceFiles = compilerSourceFiles;
         CompilerEnvironment = compilerEnvironment;
         CompileParsedInteractiveSubmission = compileParsedInteractiveSubmission;
         ExpandElmInteractiveEnvironmentWithModules = expandElmInteractiveEnvironmentWithModules;
@@ -88,11 +107,12 @@ public class ElmCompiler
         return buildCompilerFromSource.GetOrAdd(
             compilerSourceFiles,
             valueFactory:
-            compilerSourceFiles => Task.Run(() => BuildElmCompiler(compilerSourceFiles)));
+            compilerSourceFiles => Task.Run(() => BuildCompilerFromSourceFiles(compilerSourceFiles)));
     }
 
-    public static Result<string, ElmCompiler> BuildElmCompiler(
-        TreeNodeWithStringPath compilerSourceFiles)
+    public static Result<string, ElmCompiler> BuildCompilerFromSourceFiles(
+        TreeNodeWithStringPath compilerSourceFiles,
+        ElmCompiler? overrideElmCompiler = null)
     {
         var compilerWithPackagesTree =
             ElmCompilerFileTreeFromBundledFileTree(compilerSourceFiles);
@@ -100,13 +120,12 @@ public class ElmCompiler
         return
             LoadOrCompileInteractiveEnvironment(
                 compilerWithPackagesTree,
-                rootFilePaths: [],
-                skipLowering: true)
+                rootFilePaths: DefaultCompilerTreeRootModuleFilePaths,
+                skipLowering: true,
+                overrideElmCompiler: overrideElmCompiler)
             .AndThen(compiledEnv =>
             {
-                return ElmCompilerFromEnvValue(
-                    compilerSourceFiles,
-                    compiledEnv);
+                return ElmCompilerFromEnvValue(compiledEnv);
             });
     }
 
@@ -114,7 +133,13 @@ public class ElmCompiler
         TreeNodeWithStringPath bundledFileTree) =>
         ElmCompilerFileTreeFromBundledFileTree(
             bundledFileTree,
-            rootModuleFileNames: [["src", "ElmCompiler.elm"]]);
+            rootModuleFileNames: DefaultCompilerTreeRootModuleFilePaths);
+
+    public static IReadOnlyList<IReadOnlyList<string>> DefaultCompilerTreeRootModuleFilePaths =>
+        [
+        ["src", "ElmCompiler.elm"],
+        ["elm-syntax", "src", "Elm", "Parser.elm"]
+        ];
 
     public static TreeNodeWithStringPath ElmCompilerFileTreeFromBundledFileTree(
         TreeNodeWithStringPath bundledFileTree,
@@ -170,10 +195,7 @@ public class ElmCompiler
                 func: (aggregate, elmModule) =>
                 aggregate.SetNodeAtPathSorted(elmModule.path, TreeNodeWithStringPath.Blob(elmModule.blobContent)));
 
-        var compilerWithCoreModules =
-            MergeElmCoreModules(compilerWithPackagesTree);
-
-        return compilerWithCoreModules;
+        return compilerWithPackagesTree;
     }
 
     public static TreeNodeWithStringPath MergeElmCoreModules(
@@ -213,14 +235,31 @@ public class ElmCompiler
     }
 
     public static Result<string, PineValue> LoadOrCompileInteractiveEnvironment(
-        TreeNodeWithStringPath compilerSourceFiles,
+        TreeNodeWithStringPath appCodeTree,
         IReadOnlyList<IReadOnlyList<string>> rootFilePaths,
-        bool skipLowering)
+        bool skipLowering,
+        ElmCompiler? overrideElmCompiler = null)
     {
         if (rootFilePaths.Count is 0 &&
-            BundledElmEnvironments.BundledElmEnvironmentFromFileTree(compilerSourceFiles) is { } fromBundle)
+            overrideElmCompiler is null &&
+            BundledElmEnvironments.BundledElmEnvironmentFromFileTree(appCodeTree) is { } fromBundle)
         {
             return Result<string, PineValue>.ok(fromBundle);
+        }
+
+        if (rootFilePaths.Count is not 0)
+        {
+            var appCodeFilteredForRoots =
+                FilterTreeForCompilationRoots(
+                    appCodeTree,
+                    rootFilePaths);
+
+            return
+                LoadOrCompileInteractiveEnvironment(
+                    appCodeFilteredForRoots,
+                    rootFilePaths: [],
+                    skipLowering: skipLowering,
+                    overrideElmCompiler);
         }
 
         /*
@@ -229,23 +268,115 @@ public class ElmCompiler
 
         return
             CompileInteractiveEnvironment(
-                compilerSourceFiles,
+                appCodeTree,
                 rootFilePaths: rootFilePaths,
-                skipLowering: skipLowering);
+                skipLowering: skipLowering,
+                overrideElmCompiler: overrideElmCompiler);
     }
 
     public static Result<string, PineValue> CompileInteractiveEnvironment(
-        TreeNodeWithStringPath compilerSourceFiles,
+        TreeNodeWithStringPath appCodeTree,
         IReadOnlyList<IReadOnlyList<string>> rootFilePaths,
-        bool skipLowering)
+        bool skipLowering,
+        ElmCompiler? overrideElmCompiler = null)
     {
+        /*
+         * 2024-10-27:
+         * Change to depend less often on JavaScript to build an environment.
+         * Instead of always going the JavaScript route, default to the new Pine-based route.
+         * */
+
+        Result<string, PineValue> continueOnJavaScript()
+        {
+            return
+                ElmTime.ElmInteractive.ElmInteractive.CompileInteractiveEnvironment(
+                    appCodeTree: appCodeTree,
+                    rootFilePaths: rootFilePaths,
+                    skipLowering: skipLowering,
+                    compilationCacheBefore: ElmTime.ElmInteractive.ElmInteractive.CompilationCache.Empty)
+                .Map(result => result.compileResult);
+        }
+
+        if (!skipLowering)
+        {
+            // We need to port some more dependencies before migrating lowering away from JavaScript.
+
+            return continueOnJavaScript();
+        }
+
+        var compilerSourceFilesDefault = CompilerSourceFilesDefault.Value;
+
+        if (overrideElmCompiler is null && appCodeTree.Equals(compilerSourceFilesDefault))
+        {
+            return continueOnJavaScript();
+        }
+
+        var defaultCompilerResult =
+            overrideElmCompiler is null
+            ?
+            GetElmCompilerAsync(compilerSourceFilesDefault).Result
+            :
+            overrideElmCompiler;
+
+        if (defaultCompilerResult.IsErrOrNull() is { } err)
+        {
+            return "Failed getting default compiler: " + err;
+        }
+
+        if (defaultCompilerResult.IsOkOrNull() is not { } defaultCompiler)
+        {
+            throw new NotImplementedException(
+                "Unexpected result type: " + defaultCompilerResult.GetType());
+        }
+
+        var appCodeFilteredForRoots =
+            rootFilePaths.Count is 0
+            ?
+            appCodeTree
+            :
+            FilterTreeForCompilationRoots(
+                appCodeTree,
+                rootFilePaths);
+
         return
-            ElmTime.ElmInteractive.ElmInteractive.CompileInteractiveEnvironment(
-                appCodeTree: compilerSourceFiles,
-                rootFilePaths: rootFilePaths,
-                skipLowering: skipLowering,
-                compilationCacheBefore: ElmTime.ElmInteractive.ElmInteractive.CompilationCache.Empty)
-            .Map(result => result.compileResult);
+            InteractiveSessionPine.CompileInteractiveEnvironment(
+                appCodeTree: appCodeFilteredForRoots,
+                overrideSkipLowering: true,
+                elmCompiler: defaultCompiler);
+    }
+
+    public static TreeNodeWithStringPath FilterTreeForCompilationRoots(
+        TreeNodeWithStringPath tree,
+        IReadOnlyList<IReadOnlyList<string>> rootFilePaths)
+    {
+        var allAvailableElmFiles =
+            tree
+            .EnumerateBlobsTransitive()
+            .Where(blobAtPath => blobAtPath.path.Last().EndsWith(".elm", StringComparison.OrdinalIgnoreCase))
+            .Select(blobAtPath => (blobAtPath, moduleText: Encoding.UTF8.GetString(blobAtPath.blobContent.Span)))
+            .ToImmutableArray();
+
+        var rootElmFiles =
+            allAvailableElmFiles
+            .Where(c => rootFilePaths.Any(root => c.blobAtPath.path.SequenceEqual(root)))
+            .ToImmutableArray();
+
+        var elmModulesIncluded =
+            ElmTime.ElmSyntax.ElmModule.ModulesTextOrderedForCompilationByDependencies(
+                rootModulesTexts: [.. rootElmFiles.Select(file => file.moduleText)],
+                availableModulesTexts: [.. allAvailableElmFiles.Select(file => file.moduleText)]);
+
+        var filePathsExcluded =
+            allAvailableElmFiles
+            .Where(elmFile => !elmModulesIncluded.Any(included => elmFile.moduleText == included))
+            .Select(elmFile => elmFile.blobAtPath.path)
+            .ToImmutableHashSet(EnumerableExtension.EqualityComparer<IReadOnlyList<string>>());
+
+        return
+            TreeNodeWithStringPath.FilterNodes(
+                tree,
+                nodePath =>
+                !filePathsExcluded.Contains(nodePath));
     }
 
     public static IJavaScriptEngine JavaScriptEngineFromElmCompilerSourceFiles(
@@ -261,9 +392,7 @@ public class ElmCompiler
         return javaScriptEngine;
     }
 
-    public static Result<string, ElmCompiler> ElmCompilerFromEnvValue(
-        TreeNodeWithStringPath compilerSourceFiles,
-        PineValue compiledEnv)
+    public static Result<string, ElmCompiler> ElmCompilerFromEnvValue(PineValue compiledEnv)
     {
         return
             ElmInteractiveEnvironment.ParseFunctionFromElmModule(
@@ -271,7 +400,7 @@ public class ElmCompiler
                 moduleName: "ElmCompiler",
                 declarationName: "compileParsedInteractiveSubmission",
                 parseCache)
-            .MapError(err => "Failed parsing function to compile interactive submission")
+            .MapError(err => "Failed parsing function to compile interactive submission: " + err)
             .AndThen(compileParsedInteractiveSubmission =>
             ElmInteractiveEnvironment.ParseFunctionFromElmModule(
                 interactiveEnvironment: compiledEnv,
@@ -280,11 +409,80 @@ public class ElmCompiler
                 parseCache)
             .Map(expandElmInteractiveEnvironmentWithModules =>
             new ElmCompiler(
-                compilerSourceFiles,
                 compiledEnv,
                 compileParsedInteractiveSubmission:
                 compileParsedInteractiveSubmission.functionRecord,
                 expandElmInteractiveEnvironmentWithModules:
                 expandElmInteractiveEnvironmentWithModules.functionRecord)));
+    }
+
+    public Result<string, PineValue> ParseElmModuleText(
+        string elmModuleText,
+        Core.PineVM.IPineVM pineVM)
+    {
+        var parsedFunctionRecord =
+            ElmInteractiveEnvironment.ParseFunctionFromElmModule(
+                interactiveEnvironment: CompilerEnvironment,
+                moduleName: "Elm.Parser",
+                declarationName: "parseToFile",
+                parseCache)
+            .Extract(err => throw new Exception(
+                "Failed parsing Elm.Parser.parseToFile from bundled env: " + err));
+
+        var elmModuleTextEncoded =
+            ElmInteractive.ElmValueEncoding.ElmValueAsPineValue(
+                ElmInteractive.ElmValue.StringInstance(elmModuleText));
+
+        var parseToFileResultValue =
+            ElmInteractiveEnvironment.ApplyFunction(
+                pineVM,
+                parsedFunctionRecord.functionRecord,
+                [elmModuleTextEncoded]);
+
+        if (parseToFileResultValue.IsErrOrNull() is { } err)
+            return "Failed to apply function: " + err;
+
+        if (parseToFileResultValue.IsOkOrNull() is not { } applyFunctionOk)
+            throw new Exception("Unexpected result type: " + parseToFileResultValue.GetType().FullName);
+
+        return
+            ElmInteractive.ElmValueInterop.ParseElmResultValue(
+                applyFunctionOk,
+                err:
+                errValue =>
+                Result<string, PineValue>.err(
+                    "Failed to parse Elm module text: 'Err': " +
+                        ElmInteractive.ElmValueEncoding.PineValueAsElmValue(errValue, null, null)
+                        .Unpack(
+                            fromErr: err => "Failed to parse as Elm value: " + err,
+                            fromOk: elmValue => ElmInteractive.ElmValue.RenderAsElmExpression(elmValue).expressionString)),
+                ok:
+                okValue => okValue,
+                invalid:
+                (err) => throw new Exception("Invalid Elm result value: " + err));
+    }
+
+    public static bool CheckIfAppUsesLowering(TreeNodeWithStringPath appCode)
+    {
+        var allAvailableElmFiles =
+            appCode
+            .EnumerateBlobsTransitive()
+            .Where(blobAtPath => blobAtPath.path.Last().EndsWith(".elm", StringComparison.OrdinalIgnoreCase))
+            .Select(blobAtPath => (blobAtPath, moduleText: Encoding.UTF8.GetString(blobAtPath.blobContent.Span)))
+            .ToImmutableArray();
+
+        foreach (var file in allAvailableElmFiles)
+        {
+            var elmModuleName =
+                ElmTime.ElmSyntax.ElmModule.ParseModuleName(file.moduleText)
+                .Extract(err => throw new Exception("Failed parsing module name: " + err));
+
+            if (elmModuleName.First() is "CompilationInterface")
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 }

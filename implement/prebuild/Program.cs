@@ -1,5 +1,6 @@
 using Pine.Core;
 using Pine.Core.Elm;
+using Pine.Elm;
 using System.Collections.Immutable;
 using System.Linq;
 
@@ -8,6 +9,9 @@ namespace prebuild;
 public class Program
 {
     public const string DestinationFilePath = "./Pine.Core/" + ReusedInstances.EmbeddedResourceFilePath;
+
+    public const string PreviousCompilerFilePath =
+        "./history/2024-11-01-compiler-bundle/elm-syntax-parser-and-compiler.json.gzip";
 
     public static void Main()
     {
@@ -41,15 +45,42 @@ public class Program
         BundleElmCompiler();
     }
 
+    public static ElmCompiler LoadPreviousCompiler()
+    {
+        using var sourceFile =
+            new System.IO.FileStream(
+                path: PreviousCompilerFilePath,
+                System.IO.FileMode.Open,
+                System.IO.FileAccess.Read);
+
+        var envDict =
+            BundledElmEnvironments.LoadBundledCompiledEnvironments(sourceFile, gzipDecompress: true)
+            .Extract(err => throw new System.Exception(err));
+
+        var compiledEnv =
+            envDict.Values
+            .OfType<PineValue.ListValue>()
+            .OrderByDescending(list => list.NodesCount)
+            .First();
+
+        return
+            ElmCompiler.ElmCompilerFromEnvValue(compiledEnv)
+            .Extract(err => throw new System.Exception(err));
+    }
+
     public static void BundleElmCompiler()
     {
+        var previousCompiler = LoadPreviousCompiler();
+
         var elmCompilerSource =
-            Pine.Elm.ElmCompiler.CompilerSourceFilesDefault.Value;
+            ElmCompiler.CompilerSourceFilesDefault.Value;
 
         if (true)
         {
             var elmCompiler =
-                Pine.Elm.ElmCompiler.BuildElmCompiler(elmCompilerSource)
+                ElmCompiler.BuildCompilerFromSourceFiles(
+                    elmCompilerSource,
+                    overrideElmCompiler: previousCompiler)
                 .Extract(err => throw new System.Exception(err));
 
             BundledElmEnvironments.CompressAndWriteBundleFile(

@@ -31,6 +31,7 @@ public class CompileElmCompilerTests
             new InteractiveSessionPine(
                 compilerProgram,
                 appCodeTree: null,
+                overrideSkipLowering: true,
                 caching: true,
                 autoPGO: pgoShare);
 
@@ -269,6 +270,7 @@ public class CompileElmCompilerTests
         using var interactiveSession =
             new InteractiveSessionPine(
                 compilerProgram,
+                overrideSkipLowering: true,
                 appCodeTree: null,
                 caching: true,
                 autoPGO: pgoShare);
@@ -389,11 +391,13 @@ public class CompileElmCompilerTests
                 func: (aggregate, elmModule) =>
                 aggregate.SetNodeAtPathSorted(elmModule.path, TreeNodeWithStringPath.Blob(elmModule.blobContent)));
 
-        using var compilerInteractiveSession = new InteractiveSessionPine(
-            compilerSourceFiles: compilerProgram,
-            appCodeTree: compilerWithPackagesTree,
-            caching: true,
-            autoPGO: null);
+        using var compilerInteractiveSession =
+            new InteractiveSessionPine(
+                compilerSourceFiles: compilerProgram,
+                appCodeTree: compilerWithPackagesTree,
+                overrideSkipLowering: true,
+                caching: true,
+                autoPGO: null);
 
         var interactiveInitialState = compilerInteractiveSession.CurrentEnvironmentValue();
 
@@ -671,6 +675,7 @@ public class CompileElmCompilerTests
 
             using var newCompilerInteractiveSession =
                 new InteractiveSessionPine(
+                    overrideSkipLowering: true,
                     compilerSourceFiles: compilerProgram,
                     appCodeTree: simpleElmModuleAppCodeTree,
                     caching: true,

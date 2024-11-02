@@ -1,4 +1,4 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.IO.Compression;
 using System.Linq;
@@ -12,6 +12,17 @@ public class BundledElmEnvironments
         CompiledEnvDict.TryGetValue(DictionaryKeyHashPartFromFileTree(fileTree), out var bundledEnv);
 
         return bundledEnv;
+    }
+
+    public static PineValue? BundledElmCompilerCompiledEnvValue()
+    {
+        var compiledEnvDict = CompiledEnvDict;
+
+        return
+            compiledEnvDict
+            .Select(kv => kv.Value)
+            .OrderByDescending(compiledEnv => compiledEnv is PineValue.ListValue listValue ? listValue.NodesCount : 0)
+            .FirstOrDefault();
     }
 
     public static string DictionaryKeyHashPartFromFileTree(TreeNodeWithStringPath fileTree)
@@ -70,10 +81,28 @@ public class BundledElmEnvironments
 
         using var readStream = embeddedFileInfo.CreateReadStream();
 
-        using var gzipStream = new GZipStream(readStream, CompressionMode.Decompress);
+        return LoadBundledCompiledEnvironments(readStream, gzipDecompress: true);
+    }
 
+    public static Result<string, IReadOnlyDictionary<string, PineValue>> LoadBundledCompiledEnvironments(
+        System.IO.Stream readStream,
+        bool gzipDecompress)
+    {
+        if (gzipDecompress)
+        {
+            using var gzipStream = new GZipStream(readStream, CompressionMode.Decompress);
+
+            return LoadBundledCompiledEnvironments(gzipStream);
+        }
+
+        return LoadBundledCompiledEnvironments(readStream);
+    }
+
+    private static Result<string, IReadOnlyDictionary<string, PineValue>> LoadBundledCompiledEnvironments(
+        System.IO.Stream readStream)
+    {
         var dictionaryEntries =
-            System.Text.Json.JsonSerializer.Deserialize<IReadOnlyList<PineValueCompactBuild.ListEntry>>(gzipStream);
+            System.Text.Json.JsonSerializer.Deserialize<IReadOnlyList<PineValueCompactBuild.ListEntry>>(readStream);
 
         var sharedDictionary = PineValueCompactBuild.BuildDictionaryFromEntries(dictionaryEntries);
 
@@ -93,7 +122,7 @@ public class BundledElmEnvironments
             mutatedDictionary[environmentId] = item.Value;
         }
 
-        return Result<string, IReadOnlyDictionary<string, PineValue>>.ok(mutatedDictionary);
+        return mutatedDictionary;
     }
 
     public const string ResourceFilePath = "./Pine.Core/" + EmbeddedResourceFilePath;

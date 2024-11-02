@@ -976,7 +976,7 @@ public class Program
 
                     var sourceTreeElmModules =
                     sourceTreeAllFiles
-                    .Where(f => f.path?.Last().EndsWith(".elm") ?? false)
+                    .Where(f => f.path?.Last().EndsWith(".elm", StringComparison.OrdinalIgnoreCase) ?? false)
                     .ToImmutableArray();
 
                     var environmentNodesCount =
@@ -1237,17 +1237,54 @@ public class Program
 
         var compilationStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
+        IReadOnlyList<IReadOnlyList<string>>? readElmJsonSourceDirectories()
+        {
+            if (loadCompositionResult.tree.GetNodeAtPath(["elm.json"]) is not
+                TreeNodeWithStringPath.BlobNode elmJsonFile)
+            {
+                return null;
+            }
+
+            var elmJsonFileParsed =
+                System.Text.Json.JsonSerializer.Deserialize<ElmJsonStructure>(elmJsonFile.Bytes.Span);
+
+            return
+                [..elmJsonFileParsed?.sourceDirectories
+                .Select(flat => flat.Split('/', '\\'))
+                ];
+        }
+
         try
         {
             var sourceFiles =
                 PineValueComposition.TreeToFlatDictionaryWithPathComparer(loadCompositionResult.tree);
 
+            var elmJsonSourceDirectories =
+                readElmJsonSourceDirectories() ?? [];
+
+            bool filePathIsUnderElmJsonSourceDirectories(IReadOnlyList<string> filePath)
+            {
+                return
+                    elmJsonSourceDirectories
+                    .Any(sourceDir => filePath.Take(sourceDir.Count).SequenceEqual(sourceDir));
+            }
+
+            var compilationRootFilePath =
+                sourceFiles.ContainsKey(ElmAppInterfaceConfig.Default.compilationRootFilePath)
+                ?
+                ElmAppInterfaceConfig.Default.compilationRootFilePath
+                :
+                sourceFiles
+                .Where(c => c.Key[c.Key.Count - 1].EndsWith(".elm", StringComparison.OrdinalIgnoreCase))
+                .OrderBy(c => c.Key.Count)
+                .OrderBy(c => filePathIsUnderElmJsonSourceDirectories(c.Key) ? 0 : 1)
+                .FirstOrDefault()
+                .Key;
+
             var interfaceConfig =
                 ElmAppInterfaceConfig.Default with
                 {
-                    compilationRootFilePath = sourceFiles.ContainsKey(ElmAppInterfaceConfig.Default.compilationRootFilePath) ?
-                    ElmAppInterfaceConfig.Default.compilationRootFilePath :
-                    sourceFiles.Keys.Where(name => name.Last().EndsWith(".elm")).First()
+                    compilationRootFilePath = compilationRootFilePath
                 };
 
             var compilationResult = ElmAppCompilation.AsCompletelyLoweredElmApp(
@@ -1594,12 +1631,13 @@ public class Program
                                     return new InteractiveSessionPine(
                                         compilerSourceFiles: compileElmProgramCodeFiles,
                                         appCodeTree: appCodeTree,
+                                        overrideSkipLowering: null,
                                         pineVMWithCompiledAssembly);
                                 }
                             }
 
                             return IInteractiveSession.Create(
-                                compileElmProgramCodeFiles: compileElmProgramCodeFiles,
+                                compilerSourceFiles: compileElmProgramCodeFiles,
                                 appCodeTree: appCodeTree,
                                 elmEngineType);
                         }
@@ -1729,7 +1767,7 @@ public class Program
                 };
 
                 using var interactiveSession = IInteractiveSession.Create(
-                    compileElmProgramCodeFiles: compileElmProgramCodeFiles,
+                    compilerSourceFiles: compileElmProgramCodeFiles,
                     appCodeTree: contextAppCodeTree,
                     engineType: elmEngineType);
 
