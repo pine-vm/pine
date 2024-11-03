@@ -43,6 +43,14 @@ public abstract record PineValue : IEquatable<PineValue>
         ?
         ReusedBlobTuple[bytes.Span[0] * 256 + bytes.Span[1]]
         :
+        bytes.Length is 3 && bytes.Span[0] is 2
+        ?
+        ReusedBlobInteger3ByteNegative[bytes.Span[1] * 256 + bytes.Span[2]]
+        :
+        bytes.Length is 3 && bytes.Span[0] is 4
+        ?
+        ReusedBlobInteger3BytePositive[bytes.Span[1] * 256 + bytes.Span[2]]
+        :
         new BlobValue(bytes);
 
     /// <summary>
@@ -84,8 +92,21 @@ public abstract record PineValue : IEquatable<PineValue>
         [..Enumerable.Range(0, 256)
         .SelectMany(i => Enumerable.Range(0, 256).Select(j => new BlobValue(new byte[] { (byte)i, (byte)j })))];
 
+    private static readonly BlobValue[] ReusedBlobInteger3ByteNegative =
+        [..Enumerable.Range(0, 0x1_00_00)
+        .Select(i => new BlobValue(new byte[] { 2, (byte)(i >> 8), (byte)(i & 0xff) }))];
+
+    private static readonly BlobValue[] ReusedBlobInteger3BytePositive =
+        [..Enumerable.Range(0, 0x1_00_00)
+        .Select(i => new BlobValue(new byte[] { 4, (byte)(i >> 8), (byte)(i & 0xff) }))];
+
     public static readonly FrozenSet<BlobValue> ReusedBlobs =
-        new HashSet<BlobValue>([EmptyBlob, .. ReusedBlobSingle, .. ReusedBlobTuple])
+        new HashSet<BlobValue>(
+            [EmptyBlob,
+            .. ReusedBlobSingle,
+            .. ReusedBlobTuple,
+            ..ReusedBlobInteger3ByteNegative,
+            ..ReusedBlobInteger3BytePositive])
         .ToFrozenSet();
 
     /// <summary>
