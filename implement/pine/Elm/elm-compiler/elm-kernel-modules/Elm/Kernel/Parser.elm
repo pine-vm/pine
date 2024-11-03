@@ -136,7 +136,6 @@ isSubStringHelper smallChars bigChars offset row col =
                 let
                     ( newRow, newCol ) =
                         if Pine_kernel.equal [ sChar, newlineChar ] then
-                            -- ASCII code for '\\n'
                             ( Pine_kernel.int_add [ row, 1 ], 1 )
 
                         else
@@ -155,21 +154,23 @@ isSubStringHelper smallChars bigChars offset row col =
 
 isSubChar : (Char -> Bool) -> Int -> String -> Int
 isSubChar predicate offset (String chars) =
-    case Pine_kernel.skip [ offset, chars ] of
-        [] ->
-            -1
+    let
+        nextChar =
+            Pine_kernel.head (Pine_kernel.skip [ offset, chars ])
+    in
+    if Pine_kernel.equal [ nextChar, [] ] then
+        -1
 
-        nextChar :: _ ->
-            if predicate nextChar then
-                if Pine_kernel.equal [ nextChar, newlineChar ] then
-                    -2
-                    -- Special code for newline
+    else if predicate nextChar then
+        if Pine_kernel.equal [ nextChar, newlineChar ] then
+            -- Special code for newline
+            -2
 
-                else
-                    Pine_kernel.int_add [ offset, 1 ]
+        else
+            Pine_kernel.int_add [ offset, 1 ]
 
-            else
-                -1
+    else
+        -1
 
 
 findSubString : String -> Int -> Int -> Int -> String -> ( Int, Int, Int )
@@ -219,8 +220,7 @@ updateRowColOverRange currentOffset targetOffset chars row col =
     else
         case List.head (List.drop currentOffset chars) of
             Just char ->
-                if char == 10 then
-                    -- ASCII code for '\\n'
+                if Pine_kernel.equal [ char, newlineChar ] then
                     updateRowColOverRange (currentOffset + 1) targetOffset chars (row + 1) 1
 
                 else
@@ -232,6 +232,7 @@ updateRowColOverRange currentOffset targetOffset chars row col =
 
 newlineChar : Char
 newlineChar =
+    -- ASCII code for '\\n'
     Pine_kernel.skip [ 1, 10 ]
 
 

@@ -265,9 +265,10 @@ bagToList bag list =
 -}
 succeed : a -> Parser c x a
 succeed a =
-    Parser <|
-        \s ->
+    Parser
+        (\s ->
             Good False a s
+        )
 
 
 {-| Just like [`Parser.problem`](Parser#problem) except you provide a custom
@@ -275,9 +276,10 @@ type for your problem.
 -}
 problem : x -> Parser c x a
 problem x =
-    Parser <|
-        \s ->
+    Parser
+        (\s ->
             Bad False (fromState s x)
+        )
 
 
 
@@ -288,20 +290,21 @@ problem x =
 -}
 map : (a -> b) -> Parser c x a -> Parser c x b
 map func (Parser parse) =
-    Parser <|
-        \s0 ->
+    Parser
+        (\s0 ->
             case parse s0 of
                 Good p a s1 ->
                     Good p (func a) s1
 
                 Bad p x ->
                     Bad p x
+        )
 
 
 map2 : (a -> b -> value) -> Parser c x a -> Parser c x b -> Parser c x value
 map2 func (Parser parseA) (Parser parseB) =
-    Parser <|
-        \s0 ->
+    Parser
+        (\s0 ->
             case parseA s0 of
                 Bad p x ->
                     Bad p x
@@ -313,6 +316,7 @@ map2 func (Parser parseA) (Parser parseB) =
 
                         Good p2 b s2 ->
                             Good (p1 || p2) (func a b) s2
+        )
 
 
 {-| Just like the [`(|=)`](Parser#|=) from the `Parser` module.
@@ -337,8 +341,8 @@ ignorer keepParser ignoreParser =
 -}
 andThen : (a -> Parser c x b) -> Parser c x a -> Parser c x b
 andThen callback (Parser parseA) =
-    Parser <|
-        \s0 ->
+    Parser
+        (\s0 ->
             case parseA s0 of
                 Bad p x ->
                     Bad p x
@@ -354,6 +358,7 @@ andThen callback (Parser parseA) =
 
                         Good p2 b s2 ->
                             Good (p1 || p2) b s2
+        )
 
 
 
@@ -364,13 +369,14 @@ andThen callback (Parser parseA) =
 -}
 lazy : (() -> Parser c x a) -> Parser c x a
 lazy thunk =
-    Parser <|
-        \s ->
+    Parser
+        (\s ->
             let
                 (Parser parse) =
                     thunk ()
             in
             parse s
+        )
 
 
 
@@ -381,7 +387,8 @@ lazy thunk =
 -}
 oneOf : List (Parser c x a) -> Parser c x a
 oneOf parsers =
-    Parser <| \s -> oneOfHelp s Empty parsers
+    Parser
+        (\s -> oneOfHelp s Empty parsers)
 
 
 oneOfHelp : State c -> Bag c x -> List (Parser c x a) -> PStep c x a
@@ -418,9 +425,10 @@ type Step state a
 -}
 loop : state -> (state -> Parser c x (Step state a)) -> Parser c x a
 loop state callback =
-    Parser <|
-        \s ->
+    Parser
+        (\s ->
             loopHelp False state callback s
+        )
 
 
 loopHelp : Bool -> state -> (state -> Parser c x (Step state a)) -> State c -> PStep c x a
@@ -450,21 +458,22 @@ loopHelp p state callback s0 =
 -}
 backtrackable : Parser c x a -> Parser c x a
 backtrackable (Parser parse) =
-    Parser <|
-        \s0 ->
+    Parser
+        (\s0 ->
             case parse s0 of
                 Bad _ x ->
                     Bad False x
 
                 Good _ a s1 ->
                     Good False a s1
+        )
 
 
 {-| Just like [`Parser.commit`](Parser#commit)
 -}
 commit : a -> Parser c x a
 commit a =
-    Parser <| \s -> Good True a s
+    Parser (\s -> Good True a s)
 
 
 
@@ -505,8 +514,8 @@ keyword (Token kwd expecting) =
         progress =
             not (String.isEmpty kwd)
     in
-    Parser <|
-        \s ->
+    Parser
+        (\s ->
             let
                 ( newOffset, newRow, newCol ) =
                     isSubString kwd s.offset s.row s.col s.src
@@ -524,6 +533,7 @@ keyword (Token kwd expecting) =
                     , row = newRow
                     , col = newCol
                     }
+        )
 
 
 
@@ -566,8 +576,8 @@ token (Token str expecting) =
         progress =
             not (String.isEmpty str)
     in
-    Parser <|
-        \s ->
+    Parser
+        (\s ->
             let
                 ( newOffset, newRow, newCol ) =
                     isSubString str s.offset s.row s.col s.src
@@ -585,6 +595,7 @@ token (Token str expecting) =
                     , row = newRow
                     , col = newCol
                     }
+        )
 
 
 
@@ -676,8 +687,8 @@ number :
     }
     -> Parser c x a
 number c =
-    Parser <|
-        \s ->
+    Parser
+        (\s ->
             if isAsciiCode 0x30 {- 0 -} s.offset s.src then
                 let
                     zeroOffset =
@@ -700,6 +711,7 @@ number c =
 
             else
                 finalizeFloat c.invalid c.expecting c.int c.float (consumeBase 10 s.offset s.src) s
+        )
 
 
 consumeBase : Int -> Int -> String -> ( Int, Int )
@@ -831,13 +843,14 @@ arises when the parser is not at the end of the input.
 -}
 end : x -> Parser c x ()
 end x =
-    Parser <|
-        \s ->
+    Parser
+        (\s ->
             if String.length s.src == s.offset then
                 Good False () s
 
             else
                 Bad False (fromState s x)
+        )
 
 
 
@@ -855,14 +868,15 @@ getChompedString parser =
 -}
 mapChompedString : (String -> a -> b) -> Parser c x a -> Parser c x b
 mapChompedString func (Parser parse) =
-    Parser <|
-        \s0 ->
+    Parser
+        (\s0 ->
             case parse s0 of
                 Bad p x ->
                     Bad p x
 
                 Good p a s1 ->
                     Good p (func (String.slice s0.offset s1.offset s0.src) a) s1
+        )
 
 
 
@@ -874,8 +888,8 @@ in case a character cannot be chomped.
 -}
 chompIf : (Char -> Bool) -> x -> Parser c x ()
 chompIf isGood expecting =
-    Parser <|
-        \s ->
+    Parser
+        (\s ->
             let
                 newOffset =
                     isSubChar isGood s.offset s.src
@@ -907,6 +921,7 @@ chompIf isGood expecting =
                     , row = s.row
                     , col = s.col + 1
                     }
+        )
 
 
 
@@ -917,9 +932,10 @@ chompIf isGood expecting =
 -}
 chompWhile : (Char -> Bool) -> Parser c x ()
 chompWhile isGood =
-    Parser <|
-        \s ->
+    Parser
+        (\s ->
             chompWhileHelp isGood s.offset s.row s.col s
+        )
 
 
 chompWhileHelp : (Char -> Bool) -> Int -> Int -> Int -> State c -> PStep c x ()
@@ -929,7 +945,7 @@ chompWhileHelp isGood offset row col s0 =
             isSubChar isGood offset s0.src
     in
     -- no match
-    if newOffset == -1 then
+    if Pine_kernel.equal [ newOffset, -1 ] then
         Good (s0.offset < offset)
             ()
             { src = s0.src
@@ -941,12 +957,22 @@ chompWhileHelp isGood offset row col s0 =
             }
         -- matched a newline
 
-    else if newOffset == -2 then
-        chompWhileHelp isGood (offset + 1) (row + 1) 1 s0
+    else if Pine_kernel.equal [ newOffset, -2 ] then
+        chompWhileHelp
+            isGood
+            (Pine_kernel.int_add [ offset, 1 ])
+            (Pine_kernel.int_add [ row, 1 ])
+            1
+            s0
         -- normal match
 
     else
-        chompWhileHelp isGood newOffset row (col + 1) s0
+        chompWhileHelp
+            isGood
+            newOffset
+            row
+            (Pine_kernel.int_add [ col, 1 ])
+            s0
 
 
 
@@ -959,8 +985,8 @@ what you need.
 -}
 chompUntil : Token x -> Parser c x ()
 chompUntil (Token str expecting) =
-    Parser <|
-        \s ->
+    Parser
+        (\s ->
             let
                 ( newOffset, newRow, newCol ) =
                     Elm.Kernel.Parser.findSubString str s.offset s.row s.col s.src
@@ -978,14 +1004,15 @@ chompUntil (Token str expecting) =
                     , row = newRow
                     , col = newCol
                     }
+        )
 
 
 {-| Just like [`Parser.chompUntilEndOr`](Parser#chompUntilEndOr)
 -}
 chompUntilEndOr : String -> Parser c x ()
 chompUntilEndOr str =
-    Parser <|
-        \s ->
+    Parser
+        (\s ->
             let
                 ( newOffset, newRow, newCol ) =
                     Elm.Kernel.Parser.findSubString str s.offset s.row s.col s.src
@@ -1006,6 +1033,7 @@ chompUntilEndOr str =
                 , row = newRow
                 , col = newCol
                 }
+        )
 
 
 
@@ -1054,14 +1082,15 @@ things like, “I was expecting an equals sign in the `view` definition.” Cont
 -}
 inContext : context -> Parser context x a -> Parser context x a
 inContext context (Parser parse) =
-    Parser <|
-        \s0 ->
+    Parser
+        (\s0 ->
             case parse (changeContext (Located s0.row s0.col context :: s0.context) s0) of
                 Good p a s1 ->
                     Good p a (changeContext s0.context s1)
 
                 (Bad _ _) as step ->
                     step
+        )
 
 
 changeContext : List (Located c) -> State c -> State c
@@ -1083,21 +1112,22 @@ changeContext newContext s =
 -}
 getIndent : Parser c x Int
 getIndent =
-    Parser <| \s -> Good False s.indent s
+    Parser (\s -> Good False s.indent s)
 
 
 {-| Just like [`Parser.withIndent`](Parser#withIndent)
 -}
 withIndent : Int -> Parser c x a -> Parser c x a
 withIndent newIndent (Parser parse) =
-    Parser <|
-        \s0 ->
+    Parser
+        (\s0 ->
             case parse (changeIndent newIndent s0) of
                 Good p a s1 ->
                     Good p a (changeIndent s0.indent s1)
 
                 Bad p x ->
                     Bad p x
+        )
 
 
 changeIndent : Int -> State c -> State c
@@ -1119,35 +1149,35 @@ changeIndent newIndent s =
 -}
 getPosition : Parser c x ( Int, Int )
 getPosition =
-    Parser <| \s -> Good False ( s.row, s.col ) s
+    Parser (\s -> Good False ( s.row, s.col ) s)
 
 
 {-| Just like [`Parser.getRow`](Parser#getRow)
 -}
 getRow : Parser c x Int
 getRow =
-    Parser <| \s -> Good False s.row s
+    Parser (\s -> Good False s.row s)
 
 
 {-| Just like [`Parser.getCol`](Parser#getCol)
 -}
 getCol : Parser c x Int
 getCol =
-    Parser <| \s -> Good False s.col s
+    Parser (\s -> Good False s.col s)
 
 
 {-| Just like [`Parser.getOffset`](Parser#getOffset)
 -}
 getOffset : Parser c x Int
 getOffset =
-    Parser <| \s -> Good False s.offset s
+    Parser (\s -> Good False s.offset s)
 
 
 {-| Just like [`Parser.getSource`](Parser#getSource)
 -}
 getSource : Parser c x String
 getSource =
-    Parser <| \s -> Good False s.src s
+    Parser (\s -> Good False s.src s)
 
 
 
@@ -1237,8 +1267,8 @@ variable :
     }
     -> Parser c x String
 variable i =
-    Parser <|
-        \s ->
+    Parser
+        (\s ->
             let
                 firstOffset =
                     isSubChar i.start s.offset s.src
@@ -1263,6 +1293,7 @@ variable i =
 
                 else
                     Good True name s1
+        )
 
 
 varHelp : (Char -> Bool) -> Int -> Int -> Int -> String -> Int -> List (Located c) -> State c
@@ -1305,9 +1336,10 @@ sequence :
     }
     -> Parser c x (List a)
 sequence i =
-    skip (token i.start) <|
-        skip i.spaces <|
-            sequenceEnd (token i.end) i.spaces i.item (token i.separator) i.trailing
+    skip (token i.start)
+        (skip i.spaces
+            (sequenceEnd (token i.end) i.spaces i.item (token i.separator) i.trailing)
+        )
 
 
 {-| What’s the deal with trailing commas? Are they `Forbidden`?
@@ -1343,10 +1375,12 @@ sequenceEnd ender ws parseItem sep trailing =
 
                 Mandatory ->
                     ignorer
-                        (skip ws <|
-                            skip sep <|
-                                skip ws <|
-                                    loop [ item ] (sequenceEndMandatory ws parseItem sep)
+                        (skip ws
+                            (skip sep
+                                (skip ws
+                                    (loop [ item ] (sequenceEndMandatory ws parseItem sep))
+                                )
+                            )
                         )
                         ender
     in
@@ -1404,7 +1438,20 @@ sequenceEndMandatory ws parseItem sep revItems =
 -}
 spaces : Parser c x ()
 spaces =
-    chompWhile (\c -> c == ' ' || c == '\n' || c == '\u{000D}')
+    chompWhile
+        (\c ->
+            if Pine_kernel.equal [ c, ' ' ] then
+                True
+
+            else if Pine_kernel.equal [ c, '\n' ] then
+                True
+
+            else if Pine_kernel.equal [ c, '\u{000D}' ] then
+                True
+
+            else
+                False
+        )
 
 
 {-| Just like [`Parser.lineComment`](Parser#lineComment) except you provide a
@@ -1450,8 +1497,16 @@ nestableComment ((Token oStr oX) as open) ((Token cStr cX) as close) =
 
                 Just ( closeChar, _ ) ->
                     let
+                        isNotRelevant : Char -> Bool
                         isNotRelevant char =
-                            char /= openChar && char /= closeChar
+                            if Pine_kernel.equal [ char, openChar ] then
+                                False
+
+                            else if Pine_kernel.equal [ char, closeChar ] then
+                                False
+
+                            else
+                                True
 
                         chompOpen =
                             token open
@@ -1461,19 +1516,45 @@ nestableComment ((Token oStr oX) as open) ((Token cStr cX) as close) =
 
 nestableHelp : (Char -> Bool) -> Parser c x () -> Parser c x () -> x -> Int -> Parser c x ()
 nestableHelp isNotRelevant open close expectingClose nestLevel =
-    skip (chompWhile isNotRelevant) <|
-        oneOf
-            [ if nestLevel == 1 then
+    skip
+        (chompWhile isNotRelevant)
+        (oneOf
+            [ if Pine_kernel.equal [ nestLevel, 1 ] then
                 close
 
               else
                 close
-                    |> andThen (\_ -> nestableHelp isNotRelevant open close expectingClose (nestLevel - 1))
+                    |> andThen
+                        (\_ ->
+                            nestableHelp
+                                isNotRelevant
+                                open
+                                close
+                                expectingClose
+                                (nestLevel - 1)
+                        )
             , open
-                |> andThen (\_ -> nestableHelp isNotRelevant open close expectingClose (nestLevel + 1))
+                |> andThen
+                    (\_ ->
+                        nestableHelp
+                            isNotRelevant
+                            open
+                            close
+                            expectingClose
+                            (nestLevel + 1)
+                    )
             , chompIf isChar expectingClose
-                |> andThen (\_ -> nestableHelp isNotRelevant open close expectingClose nestLevel)
+                |> andThen
+                    (\_ ->
+                        nestableHelp
+                            isNotRelevant
+                            open
+                            close
+                            expectingClose
+                            nestLevel
+                    )
             ]
+        )
 
 
 isChar : Char -> Bool

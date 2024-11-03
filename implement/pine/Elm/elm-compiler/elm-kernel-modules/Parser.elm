@@ -1282,11 +1282,7 @@ the necessary tweaks! Check out [`lineComment`](#lineComment) and
 -}
 spaces : Parser ()
 spaces =
-    {-
-       Since compiler currently fails to compile the original form, inline A.spaces here as a workaround.
-       A.spaces
-    -}
-    A.chompWhile (\c -> c == ' ' || c == '\n' || c == '\u{000D}')
+    A.spaces
 
 
 {-| Parse single-line comments:
