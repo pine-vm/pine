@@ -4,6 +4,7 @@ using System.Collections.Immutable;
 using System.Linq;
 using Pine.Core;
 using Pine.Core.PineVM;
+using Pine.Pine.PineVM;
 
 namespace Pine.PineVM;
 
@@ -38,7 +39,8 @@ public class PineVM : IPineVM
         PineValue Environment,
         long InstructionCount,
         long ParseAndEvalCount,
-        PineValue ReturnValue);
+        PineValue ReturnValue,
+        IReadOnlyList<Expression> StackTrace);
 
     public PineVM(
         IDictionary<EvalCacheEntryKey, PineValue>? evalCache = null,
@@ -70,7 +72,8 @@ public class PineVM : IPineVM
         .Map(report => report.ReturnValue);
 
     public record StackFrameInstructions(
-        IReadOnlyList<StackInstruction> Instructions)
+        IReadOnlyList<StackInstruction> Instructions,
+        EnvConstraintId? TrackEnvConstraint = null)
     {
         public virtual bool Equals(StackFrameInstructions? other)
         {
@@ -222,6 +225,8 @@ public class PineVM : IPineVM
 
     readonly Dictionary<Expression, ExpressionCompilation> expressionCompilationDict = [];
 
+    readonly static CompilePineToDotNet.CompilerMutableCache mutableCache = new();
+
     StackFrame StackFrameFromExpression(
         PineValue? expressionValue,
         Expression expression,
@@ -287,7 +292,8 @@ public class PineVM : IPineVM
                     rootExpression,
                     envConstraintId: null,
                     parseCache: parseCache,
-                    disableReduction: disableReduction));
+                    disableReduction: disableReduction),
+                TrackEnvConstraint: null);
 
         var specialized =
             specializations
@@ -303,7 +309,8 @@ public class PineVM : IPineVM
                         rootExpression,
                         envConstraintId: specialization,
                         parseCache: parseCache,
-                        disableReduction: disableReduction))))
+                        disableReduction: disableReduction),
+                    TrackEnvConstraint: specialization)))
             .ToImmutableArray();
 
         return new ExpressionCompilation(
@@ -1358,7 +1365,8 @@ public class PineVM : IPineVM
                         currentFrame.EnvironmentValue,
                         InstructionCount: frameInstructionCount,
                         ParseAndEvalCount: frameParseAndEvalCount,
-                        ReturnValue: frameReturnValue));
+                        ReturnValue: frameReturnValue,
+                        StackTrace: CompileStackTrace(10)));
             }
 
             stack.Pop();
@@ -1374,7 +1382,8 @@ public class PineVM : IPineVM
                     Environment: rootEnvironment,
                     InstructionCount: instructionCount,
                     ParseAndEvalCount: parseAndEvalCount,
-                    ReturnValue: frameReturnValue);
+                    ReturnValue: frameReturnValue,
+                    StackTrace: []);
             }
 
             var previousFrame = stack.Peek();
@@ -1383,6 +1392,9 @@ public class PineVM : IPineVM
 
             return null;
         }
+
+        IReadOnlyList<Expression> CompileStackTrace(int frameCountMax) =>
+            [.. stack.Skip(1).Take(frameCountMax).Select(f => f.Expression)];
 
         pushStackFrame(
             StackFrameFromExpression(
@@ -1393,20 +1405,87 @@ public class PineVM : IPineVM
                 beginParseAndEvalCount: parseAndEvalCount,
                 beginStackFrameCount: stackFrameCount));
 
+        static ExecutionErrorReport buildErrorReport(StackFrame stackFrame)
+        {
+            return
+                new(
+                    FrameExpression: stackFrame.Expression,
+                    EnvironmentValue: stackFrame.EnvironmentValue,
+                    Instructions: stackFrame.Instructions,
+                    FrameInstructionPointer: stackFrame.InstructionPointer);
+        }
+
         while (true)
         {
             var currentFrame = stack.Peek();
 
             ++instructionCount;
 
-            if (currentFrame.Specialization is { } specializedFrame)
+            try
             {
-                var stepResult = specializedFrame.CurrentStep;
-
-                if (stepResult is ApplyStepwise.StepResult.Complete complete)
+                if (currentFrame.Specialization is { } specializedFrame)
                 {
+                    var stepResult = specializedFrame.CurrentStep;
+
+                    if (stepResult is ApplyStepwise.StepResult.Complete complete)
+                    {
+                        var returnOverall =
+                            returnFromStackFrame(complete.PineValue);
+
+                        if (returnOverall is not null)
+                        {
+                            return returnOverall;
+                        }
+
+                        continue;
+                    }
+
+                    if (stepResult is ApplyStepwise.StepResult.Continue cont)
+                    {
+                        var newFrame =
+                            StackFrameFromExpression(
+                                expressionValue: null,
+                                expression: cont.Expression,
+                                environment: cont.EnvironmentValue,
+                                beginInstructionCount: instructionCount,
+                                beginParseAndEvalCount: parseAndEvalCount,
+                                beginStackFrameCount: stackFrameCount);
+
+                        pushStackFrame(newFrame);
+
+                        continue;
+                    }
+
+                    throw new NotImplementedException(
+                        "Unexpected step result type: " + stepResult.GetType().FullName);
+                }
+
+
+                if (currentFrame.Instructions.Instructions.Count <= currentFrame.InstructionPointer)
+                {
+                    return
+                        "Instruction pointer out of bounds. Missing explicit return instruction.";
+                }
+
+                ReadOnlyMemory<PineValue> stackPrevValues =
+                    currentFrame.InstructionsResultValues[..currentFrame.InstructionPointer];
+
+                var currentInstruction = currentFrame.Instructions.Instructions[currentFrame.InstructionPointer];
+
+                if (currentInstruction is StackInstruction.ReturnInstruction)
+                {
+                    var lastAssignedIndex = currentFrame.LastEvalResultIndex;
+
+                    if (lastAssignedIndex < 0)
+                    {
+                        return "Return instruction before assignment";
+                    }
+
+                    var frameReturnValue =
+                        currentFrame.InstructionsResultValues.Span[lastAssignedIndex];
+
                     var returnOverall =
-                        returnFromStackFrame(complete.PineValue);
+                        returnFromStackFrame(frameReturnValue);
 
                     if (returnOverall is not null)
                     {
@@ -1416,318 +1495,312 @@ public class PineVM : IPineVM
                     continue;
                 }
 
-                if (stepResult is ApplyStepwise.StepResult.Continue cont)
+                if (currentInstruction is StackInstruction.CopyLastAssignedInstruction)
                 {
-                    var newFrame =
-                        StackFrameFromExpression(
-                            expressionValue: null,
-                            expression: cont.Expression,
-                            environment: cont.EnvironmentValue,
-                            beginInstructionCount: instructionCount,
-                            beginParseAndEvalCount: parseAndEvalCount,
-                            beginStackFrameCount: stackFrameCount);
+                    var lastAssignedIndex = currentFrame.LastEvalResultIndex;
 
-                    pushStackFrame(newFrame);
+                    if (lastAssignedIndex < 0)
+                    {
+                        return "CopyLastAssignedInstruction before assignment";
+                    }
+
+                    var lastAssignedValue =
+                        currentFrame.InstructionsResultValues.Span[lastAssignedIndex];
+
+                    if (lastAssignedValue is null)
+                    {
+                        throw new InvalidIntermediateCodeException(
+                            "CopyLastAssignedInstruction referenced null",
+                            innerException: null,
+                            buildErrorReport(currentFrame));
+                    }
+
+                    currentFrame.PushInstructionResult(lastAssignedValue);
+
+                    continue;
+                }
+
+                if (currentInstruction is StackInstruction.EvalInstruction evalInstr)
+                {
+                    if (evalInstr.Expression is Expression.ParseAndEval parseAndEval)
+                    {
+                        {
+                            ++parseAndEvalCount;
+
+                            if (config.ParseAndEvalCountLimit is { } limit && parseAndEvalCount > limit)
+                            {
+                                return "Parse and eval count limit exceeded: " + limit;
+                            }
+                        }
+
+                        var expressionValue =
+                            EvaluateExpressionDefaultLessStack(
+                                parseAndEval.encoded,
+                                currentFrame.EnvironmentValue,
+                                stackPrevValues: stackPrevValues);
+
+                        var environmentValue =
+                            EvaluateExpressionDefaultLessStack(
+                                parseAndEval.environment,
+                                currentFrame.EnvironmentValue,
+                                stackPrevValues: stackPrevValues);
+
+                        {
+                            if (InvocationCachedResultOrOverride(
+                                expressionValue: expressionValue,
+                                environmentValue: environmentValue) is { } fromCacheOrDelegate)
+                            {
+                                currentFrame.PushInstructionResult(fromCacheOrDelegate);
+
+                                continue;
+                            }
+                        }
+
+                        var parseResult = parseCache.ParseExpression(expressionValue);
+
+                        if (parseResult is Result<string, Expression>.Err parseErr)
+                        {
+                            return
+                                "Failed to parse expression from value: " + parseErr.Value +
+                                " - expressionValue is " + DescribeValueForErrorMessage(expressionValue) +
+                                " - environmentValue is " + DescribeValueForErrorMessage(environmentValue);
+                        }
+
+                        if (parseResult is not Result<string, Expression>.Ok parseOk)
+                        {
+                            throw new NotImplementedException("Unexpected result type: " + parseResult.GetType().FullName);
+                        }
+
+                        if (!disablePrecompiled &&
+                            Precompiled.SelectPrecompiled(parseOk.Value, environmentValue, parseCache) is { } precompiledDelegate)
+                        {
+                            var precompiledResult = precompiledDelegate();
+
+                            switch (precompiledResult)
+                            {
+                                case Precompiled.PrecompiledResult.FinalValue finalValue:
+
+                                    stackFrameCount += finalValue.StackFrameCount;
+
+                                    currentFrame.PushInstructionResult(finalValue.Value);
+
+                                    continue;
+
+                                case Precompiled.PrecompiledResult.ContinueParseAndEval continueParseAndEval:
+                                    {
+                                        if (InvocationCachedResultOrOverride(
+                                            expressionValue: continueParseAndEval.ExpressionValue,
+                                            environmentValue: continueParseAndEval.EnvironmentValue) is { } fromCacheOrDelegate)
+                                        {
+                                            currentFrame.PushInstructionResult(fromCacheOrDelegate);
+
+                                            continue;
+                                        }
+
+                                        var contParseResult = parseCache.ParseExpression(continueParseAndEval.ExpressionValue);
+
+                                        if (contParseResult is Result<string, Expression>.Err contParseErr)
+                                        {
+                                            return
+                                                "Failed to parse expression from value: " + contParseErr.Value +
+                                                " - expressionValue is " + DescribeValueForErrorMessage(expressionValue) +
+                                                " - environmentValue is " + DescribeValueForErrorMessage(environmentValue);
+                                        }
+
+                                        if (contParseResult is not Result<string, Expression>.Ok contParseOk)
+                                        {
+                                            throw new NotImplementedException("Unexpected result type: " + parseResult.GetType().FullName);
+                                        }
+
+                                        var newFrame =
+                                            StackFrameFromExpression(
+                                                expressionValue: continueParseAndEval.ExpressionValue,
+                                                expression: contParseOk.Value,
+                                                environment: continueParseAndEval.EnvironmentValue,
+                                                beginInstructionCount: instructionCount,
+                                                beginParseAndEvalCount: parseAndEvalCount,
+                                                beginStackFrameCount: stackFrameCount);
+
+                                        pushStackFrame(newFrame);
+
+                                        continue;
+                                    }
+
+                                case Precompiled.PrecompiledResult.StepwiseSpecialization specialization:
+                                    {
+                                        var newFrame =
+                                            new StackFrame(
+                                                ExpressionValue: expressionValue,
+                                                Expression: parseOk.Value,
+                                                Instructions: null,
+                                                EnvironmentValue: environmentValue,
+                                                InstructionsResultValues: null,
+                                                BeginInstructionCount: instructionCount,
+                                                BeginParseAndEvalCount: parseAndEvalCount,
+                                                BeginStackFrameCount: stackFrameCount,
+                                                Specialization: specialization.Stepwise);
+
+                                        pushStackFrame(newFrame);
+
+                                        continue;
+                                    }
+
+                                default:
+                                    throw new Exception("Unexpected return type from precompiled: " + precompiledResult.GetType().FullName);
+                            }
+                        }
+
+                        {
+                            var newFrame =
+                                StackFrameFromExpression(
+                                    expressionValue: expressionValue,
+                                    parseOk.Value,
+                                    environmentValue,
+                                    beginInstructionCount: instructionCount,
+                                    beginParseAndEvalCount: parseAndEvalCount,
+                                    beginStackFrameCount: stackFrameCount);
+
+                            pushStackFrame(newFrame);
+
+                            continue;
+                        }
+                    }
+
+                    if (evalInstr.Expression is Expression.Conditional conditionalExpr)
+                    {
+                        var conditionValue =
+                            EvaluateExpressionDefaultLessStack(
+                                conditionalExpr.condition,
+                                currentFrame.EnvironmentValue,
+                                stackPrevValues: stackPrevValues);
+
+                        var expressionToContinueWith =
+                            conditionValue == PineVMValues.TrueValue
+                            ?
+                            conditionalExpr.trueBranch
+                            :
+                            conditionValue == PineVMValues.FalseValue
+                            ?
+                            conditionalExpr.falseBranch
+                            :
+                            null;
+
+                        if (expressionToContinueWith is not null)
+                        {
+                            if (ExpressionShouldGetNewStackFrame(expressionToContinueWith))
+                            {
+                                pushStackFrame(
+                                    StackFrameFromExpression(
+                                        expressionValue: null,
+                                        expressionToContinueWith,
+                                        currentFrame.EnvironmentValue,
+                                        beginInstructionCount: instructionCount,
+                                        beginParseAndEvalCount: parseAndEvalCount,
+                                        beginStackFrameCount: stackFrameCount));
+
+                                continue;
+                            }
+
+                            var evalBranchResult =
+                                EvaluateExpressionDefaultLessStack(
+                                    expressionToContinueWith,
+                                    currentFrame.EnvironmentValue,
+                                    stackPrevValues: stackPrevValues);
+
+                            currentFrame.PushInstructionResult(evalBranchResult); ;
+
+                            continue;
+                        }
+                        else
+                        {
+                            currentFrame.PushInstructionResult(PineValue.EmptyList);
+
+                            continue;
+                        }
+                    }
+
+                    var evalResult =
+                        EvaluateExpressionDefaultLessStack(
+                            evalInstr.Expression,
+                            currentFrame.EnvironmentValue,
+                            stackPrevValues: stackPrevValues);
+
+                    currentFrame.PushInstructionResult(evalResult);
+
+                    continue;
+                }
+
+                if (currentInstruction is StackInstruction.JumpInstruction jumpInstruction)
+                {
+                    currentFrame.InstructionPointer += jumpInstruction.Offset;
+                    continue;
+                }
+
+                if (currentInstruction is StackInstruction.ConditionalJumpInstruction conditionalStatement)
+                {
+                    var conditionValue = currentFrame.LastEvalResult();
+
+                    if (conditionValue == PineVMValues.FalseValue)
+                    {
+                        currentFrame.InstructionPointer++;
+                        continue;
+                    }
+
+                    if (conditionValue == PineVMValues.TrueValue)
+                    {
+                        currentFrame.InstructionPointer += 1 + conditionalStatement.TrueBranchOffset;
+                        continue;
+                    }
+
+                    currentFrame.PushInstructionResult(PineValue.EmptyList);
+                    currentFrame.InstructionPointer += conditionalStatement.InvalidBranchOffset;
 
                     continue;
                 }
 
                 throw new NotImplementedException(
-                    "Unexpected step result type: " + stepResult.GetType().FullName);
+                    "Unexpected instruction type: " + currentInstruction.GetType().FullName);
             }
-
-
-            if (currentFrame.Instructions.Instructions.Count <= currentFrame.InstructionPointer)
+            catch (Exception e)
             {
-                return
-                    "Instruction pointer out of bounds. Missing explicit return instruction.";
+                var errorReport = buildErrorReport(currentFrame);
+
+                throw new InvalidIntermediateCodeException(
+                    e.Message,
+                    innerException: e,
+                    errorReport);
             }
-
-            ReadOnlyMemory<PineValue> stackPrevValues =
-                currentFrame.InstructionsResultValues[..currentFrame.InstructionPointer];
-
-            var currentInstruction = currentFrame.Instructions.Instructions[currentFrame.InstructionPointer];
-
-            if (currentInstruction is StackInstruction.ReturnInstruction)
-            {
-                var lastAssignedIndex = currentFrame.LastEvalResultIndex;
-
-                if (lastAssignedIndex < 0)
-                {
-                    return "Return instruction before assignment";
-                }
-
-                var frameReturnValue =
-                    currentFrame.InstructionsResultValues.Span[lastAssignedIndex];
-
-                var returnOverall =
-                    returnFromStackFrame(frameReturnValue);
-
-                if (returnOverall is not null)
-                {
-                    return returnOverall;
-                }
-
-                continue;
-            }
-
-            if (currentInstruction is StackInstruction.CopyLastAssignedInstruction)
-            {
-                var lastAssignedIndex = currentFrame.LastEvalResultIndex;
-
-                if (lastAssignedIndex < 0)
-                {
-                    return "CopyLastAssignedInstruction before assignment";
-                }
-
-                var lastAssignedValue = currentFrame.InstructionsResultValues.Span[lastAssignedIndex];
-
-                currentFrame.PushInstructionResult(lastAssignedValue);
-
-                continue;
-            }
-
-            if (currentInstruction is StackInstruction.EvalInstruction evalInstr)
-            {
-                if (evalInstr.Expression is Expression.ParseAndEval parseAndEval)
-                {
-                    {
-                        ++parseAndEvalCount;
-
-                        if (config.ParseAndEvalCountLimit is { } limit && parseAndEvalCount > limit)
-                        {
-                            return "Parse and eval count limit exceeded: " + limit;
-                        }
-                    }
-
-                    var expressionValue =
-                        EvaluateExpressionDefaultLessStack(
-                            parseAndEval.encoded,
-                            currentFrame.EnvironmentValue,
-                            stackPrevValues: stackPrevValues);
-
-                    var environmentValue =
-                        EvaluateExpressionDefaultLessStack(
-                            parseAndEval.environment,
-                            currentFrame.EnvironmentValue,
-                            stackPrevValues: stackPrevValues);
-
-                    {
-                        if (InvocationCachedResultOrOverride(
-                            expressionValue: expressionValue,
-                            environmentValue: environmentValue) is { } fromCacheOrDelegate)
-                        {
-                            currentFrame.PushInstructionResult(fromCacheOrDelegate);
-
-                            continue;
-                        }
-                    }
-
-                    var parseResult = parseCache.ParseExpression(expressionValue);
-
-                    if (parseResult is Result<string, Expression>.Err parseErr)
-                    {
-                        return
-                            "Failed to parse expression from value: " + parseErr.Value +
-                            " - expressionValue is " + DescribeValueForErrorMessage(expressionValue) +
-                            " - environmentValue is " + DescribeValueForErrorMessage(environmentValue);
-                    }
-
-                    if (parseResult is not Result<string, Expression>.Ok parseOk)
-                    {
-                        throw new NotImplementedException("Unexpected result type: " + parseResult.GetType().FullName);
-                    }
-
-                    if (!disablePrecompiled &&
-                        Precompiled.SelectPrecompiled(parseOk.Value, environmentValue, parseCache) is { } precompiledDelegate)
-                    {
-                        var precompiledResult = precompiledDelegate();
-
-                        switch (precompiledResult)
-                        {
-                            case Precompiled.PrecompiledResult.FinalValue finalValue:
-
-                                stackFrameCount += finalValue.StackFrameCount;
-
-                                currentFrame.PushInstructionResult(finalValue.Value);
-
-                                continue;
-
-                            case Precompiled.PrecompiledResult.ContinueParseAndEval continueParseAndEval:
-                                {
-                                    if (InvocationCachedResultOrOverride(
-                                        expressionValue: continueParseAndEval.ExpressionValue,
-                                        environmentValue: continueParseAndEval.EnvironmentValue) is { } fromCacheOrDelegate)
-                                    {
-                                        currentFrame.PushInstructionResult(fromCacheOrDelegate);
-
-                                        continue;
-                                    }
-
-                                    var contParseResult = parseCache.ParseExpression(continueParseAndEval.ExpressionValue);
-
-                                    if (contParseResult is Result<string, Expression>.Err contParseErr)
-                                    {
-                                        return
-                                            "Failed to parse expression from value: " + contParseErr.Value +
-                                            " - expressionValue is " + DescribeValueForErrorMessage(expressionValue) +
-                                            " - environmentValue is " + DescribeValueForErrorMessage(environmentValue);
-                                    }
-
-                                    if (contParseResult is not Result<string, Expression>.Ok contParseOk)
-                                    {
-                                        throw new NotImplementedException("Unexpected result type: " + parseResult.GetType().FullName);
-                                    }
-
-                                    var newFrame =
-                                        StackFrameFromExpression(
-                                            expressionValue: continueParseAndEval.ExpressionValue,
-                                            expression: contParseOk.Value,
-                                            environment: continueParseAndEval.EnvironmentValue,
-                                            beginInstructionCount: instructionCount,
-                                            beginParseAndEvalCount: parseAndEvalCount,
-                                            beginStackFrameCount: stackFrameCount);
-
-                                    pushStackFrame(newFrame);
-
-                                    continue;
-                                }
-
-                            case Precompiled.PrecompiledResult.StepwiseSpecialization specialization:
-                                {
-                                    var newFrame =
-                                        new StackFrame(
-                                            ExpressionValue: expressionValue,
-                                            Expression: parseOk.Value,
-                                            Instructions: null,
-                                            EnvironmentValue: environmentValue,
-                                            InstructionsResultValues: null,
-                                            BeginInstructionCount: instructionCount,
-                                            BeginParseAndEvalCount: parseAndEvalCount,
-                                            BeginStackFrameCount: stackFrameCount,
-                                            Specialization: specialization.Stepwise);
-
-                                    pushStackFrame(newFrame);
-
-                                    continue;
-                                }
-
-                            default:
-                                throw new Exception("Unexpected return type from precompiled: " + precompiledResult.GetType().FullName);
-                        }
-                    }
-
-                    {
-                        var newFrame =
-                            StackFrameFromExpression(
-                                expressionValue: expressionValue,
-                                parseOk.Value,
-                                environmentValue,
-                                beginInstructionCount: instructionCount,
-                                beginParseAndEvalCount: parseAndEvalCount,
-                                beginStackFrameCount: stackFrameCount);
-
-                        pushStackFrame(newFrame);
-
-                        continue;
-                    }
-                }
-
-                if (evalInstr.Expression is Expression.Conditional conditionalExpr)
-                {
-                    var conditionValue =
-                        EvaluateExpressionDefaultLessStack(
-                            conditionalExpr.condition,
-                            currentFrame.EnvironmentValue,
-                            stackPrevValues: stackPrevValues);
-
-                    var expressionToContinueWith =
-                        conditionValue == PineVMValues.TrueValue
-                        ?
-                        conditionalExpr.trueBranch
-                        :
-                        conditionValue == PineVMValues.FalseValue
-                        ?
-                        conditionalExpr.falseBranch
-                        :
-                        null;
-
-                    if (expressionToContinueWith is not null)
-                    {
-                        if (ExpressionShouldGetNewStackFrame(expressionToContinueWith))
-                        {
-                            pushStackFrame(
-                                StackFrameFromExpression(
-                                    expressionValue: null,
-                                    expressionToContinueWith,
-                                    currentFrame.EnvironmentValue,
-                                    beginInstructionCount: instructionCount,
-                                    beginParseAndEvalCount: parseAndEvalCount,
-                                    beginStackFrameCount: stackFrameCount));
-
-                            continue;
-                        }
-
-                        var evalBranchResult =
-                            EvaluateExpressionDefaultLessStack(
-                                expressionToContinueWith,
-                                currentFrame.EnvironmentValue,
-                                stackPrevValues: stackPrevValues);
-
-                        currentFrame.PushInstructionResult(evalBranchResult); ;
-
-                        continue;
-                    }
-                    else
-                    {
-                        currentFrame.PushInstructionResult(PineValue.EmptyList);
-
-                        continue;
-                    }
-                }
-
-                var evalResult =
-                    EvaluateExpressionDefaultLessStack(
-                        evalInstr.Expression,
-                        currentFrame.EnvironmentValue,
-                        stackPrevValues: stackPrevValues);
-
-                currentFrame.PushInstructionResult(evalResult);
-
-                continue;
-            }
-
-            if (currentInstruction is StackInstruction.JumpInstruction jumpInstruction)
-            {
-                currentFrame.InstructionPointer += jumpInstruction.Offset;
-                continue;
-            }
-
-            if (currentInstruction is StackInstruction.ConditionalJumpInstruction conditionalStatement)
-            {
-                var conditionValue = currentFrame.LastEvalResult();
-
-                currentFrame.InstructionPointer++;
-
-                if (conditionValue == PineVMValues.FalseValue)
-                {
-                    continue;
-                }
-
-                if (conditionValue == PineVMValues.TrueValue)
-                {
-                    currentFrame.InstructionPointer += conditionalStatement.TrueBranchOffset;
-                    continue;
-                }
-
-                currentFrame.PushInstructionResult(PineValue.EmptyList);
-                currentFrame.InstructionPointer += conditionalStatement.InvalidBranchOffset;
-
-                continue;
-            }
-
-            return "Unexpected instruction type: " + currentInstruction.GetType().FullName;
         }
+    }
+
+    public static IEnumerable<string> DisplayText(ExecutionErrorReport errorReport)
+    {
+        var expressionValue =
+            ExpressionEncoding.EncodeExpressionAsValue(errorReport.FrameExpression);
+
+        var exprHash =
+            mutableCache.ComputeHash(expressionValue);
+
+        var exprHashBase16 = CommonConversion.StringBase16(exprHash);
+
+        var envHash =
+            mutableCache.ComputeHash(errorReport.EnvironmentValue);
+
+        var envHashBase16 = CommonConversion.StringBase16(envHash);
+
+        yield return
+            "Instruction " + errorReport.FrameInstructionPointer +
+            " in expression: " + exprHashBase16[..8] + " for environment " +
+            envHashBase16[..8];
+
+        var specializationText =
+            errorReport.Instructions.TrackEnvConstraint is { } trackEnvConstraint
+            ? "specialized with " + trackEnvConstraint.HashBase16[0..8]
+            : "not specialized";
+
+        yield return
+            specializationText + " has " +
+            errorReport.Instructions.Instructions.Count + " instructions";
     }
 
     private static bool ExpressionShouldGetNewStackFrame(Expression expression)
@@ -1841,20 +1914,24 @@ public class PineVM : IPineVM
 
             if (index < 0 || index >= stackPrevValues.Length)
             {
-                throw new InvalidExpressionException(
+                throw new InvalidIntermediateCodeException(
                     "Invalid stack reference: offset " + stackRef.offset +
                     " from " + stackPrevValues.Length +
-                    " results in index " + index);
+                    " results in index " + index,
+                    null,
+                    null);
             }
 
             var content = stackPrevValues.Span[index];
 
             if (content is null)
             {
-                throw new InvalidExpressionException(
+                throw new InvalidIntermediateCodeException(
                     "Null value in stack reference: offset " + stackRef.offset +
                     " from " + stackPrevValues.Length +
-                    " results in index " + index);
+                    " results in index " + index,
+                    null,
+                    null);
             }
 
             return content;
