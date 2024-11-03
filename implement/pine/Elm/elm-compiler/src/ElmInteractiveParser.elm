@@ -22,7 +22,6 @@ import ElmInteractive
 import ElmInteractiveCoreModules
 import ElmInteractiveKernelModules
 import EncodeElmSyntaxAsPineValue
-import Json.Encode
 import Parser
 import Pine
 import Result.Extra
@@ -36,7 +35,7 @@ compileEvalContextForElmInteractive context =
             case context of
                 DefaultContext ->
                     [ ElmInteractiveCoreModules.elmCoreModulesTexts
-                        ++ ElmInteractiveKernelModules.elmKernelModulesTexts
+                    , ElmInteractiveKernelModules.elmKernelModulesTexts
                     ]
 
                 CustomModulesContext { includeCoreModules, modulesTexts } ->
@@ -48,8 +47,10 @@ compileEvalContextForElmInteractive context =
                             ElmInteractiveCoreModules.elmCoreModulesTexts
 
                         Just CoreAndOtherKernelModules ->
-                            ElmInteractiveCoreModules.elmCoreModulesTexts
-                                ++ ElmInteractiveKernelModules.elmKernelModulesTexts
+                            List.concat
+                                [ ElmInteractiveCoreModules.elmCoreModulesTexts
+                                , ElmInteractiveKernelModules.elmKernelModulesTexts
+                                ]
                     , modulesTexts
                     ]
     in

@@ -260,7 +260,7 @@ emitExpressionInDeclarationBlock stackBefore blockDeclarations mainExpression =
                 (\( declName, declExpression ) ->
                     ( declName
                     , listUnboundReferencesInExpression declExpression []
-                )
+                    )
                 )
                 blockDeclarations
 
@@ -343,24 +343,24 @@ emitExpressionInDeclarationBlock stackBefore blockDeclarations mainExpression =
                 continueEmitBlock ()
 
             else
-                    let
-                        needsAdaptiveApplication =
-                            case stackBefore.environmentFunctions of
-                                [] ->
-                                    expressionNeedsAdaptiveApplication [] mainExprInnerExpr
+                let
+                    needsAdaptiveApplication =
+                        case stackBefore.environmentFunctions of
+                            [] ->
+                                expressionNeedsAdaptiveApplication [] mainExprInnerExpr
 
-                                _ ->
-                                    {-
-                                       If the stackBefore.environmentFunctions is not empty, assume we already added nessecary internals
-                                       in a parent scope.
-                                    -}
-                                    False
-                    in
+                            _ ->
+                                {-
+                                   If the stackBefore.environmentFunctions is not empty, assume we already added nessecary internals
+                                   in a parent scope.
+                                -}
+                                False
+                in
                 if needsAdaptiveApplication then
-                            continueEmitBlock ()
+                    continueEmitBlock ()
 
                 else
-                            emitExpression stackBefore mainExprInnerExpr
+                    emitExpression stackBefore mainExprInnerExpr
 
         _ ->
             continueEmitBlock ()
