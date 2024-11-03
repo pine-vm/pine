@@ -1,0 +1,1 @@
+Elm.Kernel.Parser.isSubChar  Char.isLower  0  "Test alfa"

@@ -1,0 +1,1 @@
+Elm.Kernel.Parser.isSubString "alfa" 0 0 0 "alf"

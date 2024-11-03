@@ -1,0 +1,1 @@
+Elm.Kernel.Parser.isSubString "||" 6 0 6 "(true || false)"
