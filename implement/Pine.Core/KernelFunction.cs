@@ -374,14 +374,20 @@ public static class KernelFunction
                 return ValueFromBool(true);
 
             if (SignedIntegerFromValueRelaxed(listValue.Elements[0]) is not { } firstInt)
+            {
                 return PineValue.EmptyList;
+            }
 
             var previous = firstInt;
 
-            foreach (var next in listValue.Elements)
+            for (var i = 1; i < listValue.Elements.Count; ++i)
             {
+                var next = listValue.Elements[i];
+
                 if (SignedIntegerFromValueRelaxed(next) is not { } nextInt)
+                {
                     return PineValue.EmptyList;
+                }
 
                 if (nextInt < previous)
                     return ValueFromBool(false);
