@@ -1,0 +1,1 @@
+Parser.run  (Parser.number  { binary = Nothing, float = Nothing, hex = Just identity, int = Just identity, octal = Nothing })  "0x007ED"
