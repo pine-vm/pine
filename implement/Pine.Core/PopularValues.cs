@@ -354,8 +354,14 @@ public static class PopularValues
 
         // From the Elm syntax library
         "Module",
+        "NormalModule",
+        "PortModule",
         "File",
         "Import",
+
+        "exposingList",
+        "moduleName",
+        "moduleAlias",
 
         "Declaration",
         "FunctionDeclaration",
@@ -441,6 +447,10 @@ public static class PopularValues
         "Left",
         "Right",
         "Non",
+
+        "documentation",
+        "signature",
+        "typeAnnotation",
 
         "(|=)",
         "(|.)",

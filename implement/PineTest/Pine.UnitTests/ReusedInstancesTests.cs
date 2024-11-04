@@ -20,6 +20,10 @@ public class ReusedInstancesTests
             ReusedInstances.BuildPineListValueReusedInstances(
                 ReusedInstances.ExpressionsSource());
 
+        var fromFreshBuildListValues =
+            ReusedInstances.BuildListValuesFromBundledListValues(
+                fromFreshBuild.PineValueLists);
+
         var file =
             ReusedInstances.BuildPrecompiledDictFile(fromFreshBuild);
 
@@ -32,7 +36,7 @@ public class ReusedInstancesTests
 
         AssertPineValueListDictsAreEquivalent(
             ReusedInstances.Instance.ListValues,
-            fromFreshBuild.PineValueLists);
+            fromFreshBuildListValues);
     }
 
     public static void AssertPineValueListDictsAreEquivalent(

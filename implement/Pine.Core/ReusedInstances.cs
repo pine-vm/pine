@@ -219,9 +219,33 @@ public record ReusedInstances(
     public static PineListValueReusedInstances BuildPineListValueReusedInstances(
         IEnumerable<Expression> expressionRootsSource)
     {
+        var rowStringValue =
+            PineValueAsString.ValueFromString("row");
+
+        var columnStringValue =
+            PineValueAsString.ValueFromString("column");
+
+        IReadOnlyList<PineValue.ListValue> listsFromElmSyntaxLocations =
+            [..Enumerable.Range(0, 1600)
+            .SelectMany(index =>
+            {
+                var intValue = PineValueAsInteger.ValueFromSignedInteger(index);
+
+                /*
+                 * These fields appear as parts of records returned from the Elm syntax parser.
+                 * */
+                return
+                (IReadOnlyList<PineValue.ListValue>)
+                [
+                    PineValue.List([rowStringValue, intValue]),
+                    PineValue.List([columnStringValue, intValue])
+                ];
+            })
+            ];
+
         var valueRootsFromProgramsSorted =
-            expressionRootsSource
-            .Select(ExpressionEncoding.EncodeExpressionAsValue)
+            listsFromElmSyntaxLocations
+            .Concat(expressionRootsSource.Select(ExpressionEncoding.EncodeExpressionAsValue))
             .Concat(PopularExpression.BuildPopularValueDictionary().Values)
             .OrderBy(pineValue => pineValue is PineValue.ListValue listValue ? listValue.NodesCount : 0)
             .ToList();
@@ -323,7 +347,8 @@ public record ReusedInstances(
                 typeof(ReusedInstances).Assembly,
                 ExpressionsSource);
 
-        ListValues = loadedPineListValues.PineValueLists.ToFrozenDictionary();
+        ListValues =
+            BuildListValuesFromBundledListValues(loadedPineListValues.PineValueLists);
 
         var valuesExpectedInCompilerSorted =
             PineValue.ReusedBlobs
@@ -567,6 +592,27 @@ public record ReusedInstances(
                     keySelector: kvp => kvp.Value,
                     elementSelector: kvp => kvp.Key);
         }
+    }
+
+    public static FrozenDictionary<PineValue.ListValue.ListValueStruct, PineValue.ListValue>
+        BuildListValuesFromBundledListValues(
+        IReadOnlyDictionary<PineValue.ListValue.ListValueStruct, PineValue.ListValue> bundledPineValueLists)
+    {
+        /*
+         * Instances based on strings are simple to merge separately:
+         * We don't need to store them in the compact build, because they never dependent on the other list instances.
+         * */
+        var pineListValuesFromStrings =
+            PopularValues.PopularStrings
+            .Select(PineValueAsString.ValueFromString)
+            .Cast<PineValue.ListValue>()
+            .ToFrozenDictionary(
+                keySelector: sv => new PineValue.ListValue.ListValueStruct(sv),
+                elementSelector: sv => sv);
+
+        return
+            pineListValuesFromStrings.Concat(bundledPineValueLists)
+            .ToFrozenDictionary();
     }
 
     public void AssertReferenceEquality()
