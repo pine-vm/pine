@@ -37,43 +37,42 @@ consumeBase16 offset (String chars) =
 
 consumeBase16Helper : Int -> List Char -> Int -> ( Int, Int )
 consumeBase16Helper offset chars total =
-    if offset >= List.length chars then
+    let
+        char =
+            Pine_kernel.head (Pine_kernel.skip [ offset, chars ])
+    in
+    if Pine_kernel.equal [ char, [] ] then
         ( offset, total )
 
     else
-        case Pine_kernel.skip [ offset, chars ] of
-            char :: _ ->
-                let
-                    code =
-                        Char.toCode char
+        let
+            code =
+                Char.toCode char
 
-                    digit =
-                        if Pine_kernel.int_is_sorted_asc [ 48, code, 57 ] then
-                            -- '0' to '9'
-                            Just (code - 48)
+            digit =
+                if Pine_kernel.int_is_sorted_asc [ 48, code, 57 ] then
+                    -- '0' to '9'
+                    Just (Pine_kernel.int_add [ code, -48 ])
 
-                        else if Pine_kernel.int_is_sorted_asc [ 65, code, 70 ] then
-                            -- 'A' to 'F'
-                            Just (code - 55)
+                else if Pine_kernel.int_is_sorted_asc [ 65, code, 70 ] then
+                    -- 'A' to 'F'
+                    Just (Pine_kernel.int_add [ code, -55 ])
 
-                        else if Pine_kernel.int_is_sorted_asc [ 97, code, 102 ] then
-                            -- 'a' to 'f'
-                            Just (code - 87)
+                else if Pine_kernel.int_is_sorted_asc [ 97, code, 102 ] then
+                    -- 'a' to 'f'
+                    Just (Pine_kernel.int_add [ code, -87 ])
 
-                        else
-                            Nothing
-                in
-                case digit of
-                    Just d ->
-                        consumeBase16Helper
-                            (offset + 1)
-                            chars
-                            (16 * total + d)
+                else
+                    Nothing
+        in
+        case digit of
+            Just d ->
+                consumeBase16Helper
+                    (Pine_kernel.int_add [ offset, 1 ])
+                    chars
+                    (Pine_kernel.int_add [ Pine_kernel.int_mul [ 16, total ], d ])
 
-                    Nothing ->
-                        ( offset, total )
-
-            [] ->
+            Nothing ->
                 ( offset, total )
 
 
@@ -84,72 +83,86 @@ chompBase10 offset (String chars) =
 
 chompBase10Helper : Int -> List Char -> Int
 chompBase10Helper offset chars =
-    if Pine_kernel.int_is_sorted_asc [ offset, Pine_kernel.length chars ] then
+    let
+        char =
+            Pine_kernel.head (Pine_kernel.skip [ offset, chars ])
+    in
+    if Pine_kernel.equal [ char, [] ] then
         offset
 
     else
-        case Pine_kernel.skip [ offset, chars ] of
-            [] ->
-                offset
+        let
+            code =
+                Char.toCode char
+        in
+        if Pine_kernel.int_is_sorted_asc [ 48, code, 57 ] then
+            chompBase10Helper
+                (Pine_kernel.int_add [ offset, 1 ])
+                chars
 
-            char :: _ ->
-                let
-                    code =
-                        Char.toCode char
-                in
-                if Pine_kernel.int_is_sorted_asc [ 48, code, 57 ] then
-                    chompBase10Helper
-                        (Pine_kernel.int_add [ offset, 1 ])
-                        chars
-
-                else
-                    offset
+        else
+            offset
 
 
 isSubString : String -> Int -> Int -> Int -> String -> ( Int, Int, Int )
 isSubString (String smallChars) offset row col (String bigChars) =
     let
-        bigCharsFromOffset =
-            List.drop offset bigChars
+        expectedLength : Int
+        expectedLength =
+            Pine_kernel.length smallChars
 
-        ( newOffset, newRow, newCol, matched ) =
-            isSubStringHelper smallChars bigCharsFromOffset offset row col
+        sliceFromSourceChars : List Char
+        sliceFromSourceChars =
+            Pine_kernel.take
+                [ expectedLength
+                , Pine_kernel.skip [ offset, bigChars ]
+                ]
     in
-    if matched then
+    if Pine_kernel.equal [ sliceFromSourceChars, smallChars ] then
+        let
+            ( newlineCount, colShift ) =
+                countOffsetsInString ( 0, 0 ) smallChars
+
+            newOffset : Int
+            newOffset =
+                Pine_kernel.int_add [ offset, expectedLength ]
+
+            newRow : Int
+            newRow =
+                Pine_kernel.int_add [ row, newlineCount ]
+
+            newCol : Int
+            newCol =
+                if Pine_kernel.equal [ newlineCount, 0 ] then
+                    Pine_kernel.int_add [ col, colShift ]
+
+                else
+                    Pine_kernel.int_add [ 1, colShift ]
+        in
         ( newOffset, newRow, newCol )
 
     else
         ( -1, row, col )
 
 
-isSubStringHelper : List Char -> List Char -> Int -> Int -> Int -> ( Int, Int, Int, Bool )
-isSubStringHelper smallChars bigChars offset row col =
-    case ( smallChars, bigChars ) of
-        ( [], _ ) ->
-            ( offset, row, col, True )
+countOffsetsInString : ( Int, Int ) -> List Char -> ( Int, Int )
+countOffsetsInString ( newlines, col ) chars =
+    let
+        nextChar =
+            Pine_kernel.head chars
+    in
+    if Pine_kernel.equal [ nextChar, [] ] then
+        ( newlines, col )
 
-        ( _, [] ) ->
-            ( offset, row, col, False )
+    else if Pine_kernel.equal [ nextChar, '\n' ] then
+        countOffsetsInString
+            ( Pine_kernel.int_add [ newlines, 1 ], 0 )
+            (Pine_kernel.skip [ 1, chars ])
 
-        ( sChar :: sRest, bChar :: bRest ) ->
-            if Pine_kernel.equal [ sChar, bChar ] then
-                let
-                    ( newRow, newCol ) =
-                        if Pine_kernel.equal [ sChar, newlineChar ] then
-                            ( Pine_kernel.int_add [ row, 1 ], 1 )
-
-                        else
-                            ( row, Pine_kernel.int_add [ col, 1 ] )
-                in
-                isSubStringHelper
-                    sRest
-                    bRest
-                    (Pine_kernel.int_add [ offset, 1 ])
-                    newRow
-                    newCol
-
-            else
-                ( offset, row, col, False )
+    else
+        countOffsetsInString
+            ( newlines, Pine_kernel.int_add [ col, 1 ] )
+            (Pine_kernel.skip [ 1, chars ])
 
 
 isSubChar : (Char -> Bool) -> Int -> String -> Int
@@ -238,9 +251,9 @@ newlineChar =
 
 isAsciiCode : Int -> Int -> String -> Bool
 isAsciiCode code offset (String chars) =
-    case Pine_kernel.skip [ offset, chars ] of
-        [] ->
-            False
-
-        nextChar :: _ ->
-            Pine_kernel.equal [ nextChar, Char.fromCode code ]
+    let
+        nextChar =
+            Pine_kernel.head
+                (Pine_kernel.skip [ offset, chars ])
+    in
+    Pine_kernel.equal [ nextChar, Char.fromCode code ]

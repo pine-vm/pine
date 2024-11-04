@@ -689,21 +689,31 @@ number :
 number c =
     Parser
         (\s ->
-            if isAsciiCode 0x30 {- 0 -} s.offset s.src then
+            let
+                (String sourceChars) =
+                    s.src
+
+                firstChar =
+                    Pine_kernel.head (Pine_kernel.skip [ s.offset, sourceChars ])
+            in
+            if Pine_kernel.equal [ firstChar, '0' ] then
                 let
                     zeroOffset =
-                        s.offset + 1
+                        Pine_kernel.int_add [ s.offset, 1 ]
+
+                    secondChar =
+                        Pine_kernel.head (Pine_kernel.skip [ zeroOffset, sourceChars ])
 
                     baseOffset =
-                        zeroOffset + 1
+                        Pine_kernel.int_add [ zeroOffset, 1 ]
                 in
-                if isAsciiCode 0x78 {- x -} zeroOffset s.src then
+                if Pine_kernel.equal [ secondChar, 'x' ] then
                     finalizeInt c.invalid c.hex baseOffset (consumeBase16 baseOffset s.src) s
 
-                else if isAsciiCode 0x6F {- o -} zeroOffset s.src then
+                else if Pine_kernel.equal [ secondChar, 'o' ] then
                     finalizeInt c.invalid c.octal baseOffset (consumeBase 8 baseOffset s.src) s
 
-                else if isAsciiCode 0x62 {- b -} zeroOffset s.src then
+                else if Pine_kernel.equal [ secondChar, 'b' ] then
                     finalizeInt c.invalid c.binary baseOffset (consumeBase 2 baseOffset s.src) s
 
                 else
@@ -752,8 +762,8 @@ bumpOffset newOffset s =
 finalizeFloat : x -> x -> Result x (Int -> a) -> Result x (Float -> a) -> ( Int, Int ) -> State c -> PStep c x a
 finalizeFloat invalid expecting intSettings floatSettings intPair s =
     let
-        intOffset =
-            Tuple.first intPair
+        ( intOffset, _ ) =
+            intPair
 
         floatOffset =
             consumeDotAndExp intOffset s.src
@@ -946,7 +956,10 @@ chompWhileHelp isGood offset row col s0 =
     in
     -- no match
     if Pine_kernel.equal [ newOffset, -1 ] then
-        Good (s0.offset < offset)
+        Good
+            (Pine_kernel.negate
+                (Pine_kernel.int_is_sorted_asc [ offset, s0.offset ])
+            )
             ()
             { src = s0.src
             , offset = offset

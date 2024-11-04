@@ -1871,43 +1871,42 @@ consumeBase16 offset (String chars) =
 
 consumeBase16Helper : Int -> List Char -> Int -> ( Int, Int )
 consumeBase16Helper offset chars total =
-    if offset >= List.length chars then
+    let
+        char =
+            Pine_kernel.head (Pine_kernel.skip [ offset, chars ])
+    in
+    if Pine_kernel.equal [ char, [] ] then
         ( offset, total )
 
     else
-        case Pine_kernel.skip [ offset, chars ] of
-            char :: _ ->
-                let
-                    code =
-                        Char.toCode char
+        let
+            code =
+                Char.toCode char
 
-                    digit =
-                        if Pine_kernel.int_is_sorted_asc [ 48, code, 57 ] then
-                            -- '0' to '9'
-                            Just (code - 48)
+            digit =
+                if Pine_kernel.int_is_sorted_asc [ 48, code, 57 ] then
+                    -- '0' to '9'
+                    Just (Pine_kernel.int_add [ code, -48 ])
 
-                        else if Pine_kernel.int_is_sorted_asc [ 65, code, 70 ] then
-                            -- 'A' to 'F'
-                            Just (code - 55)
+                else if Pine_kernel.int_is_sorted_asc [ 65, code, 70 ] then
+                    -- 'A' to 'F'
+                    Just (Pine_kernel.int_add [ code, -55 ])
 
-                        else if Pine_kernel.int_is_sorted_asc [ 97, code, 102 ] then
-                            -- 'a' to 'f'
-                            Just (code - 87)
+                else if Pine_kernel.int_is_sorted_asc [ 97, code, 102 ] then
+                    -- 'a' to 'f'
+                    Just (Pine_kernel.int_add [ code, -87 ])
 
-                        else
-                            Nothing
-                in
-                case digit of
-                    Just d ->
-                        consumeBase16Helper
-                            (offset + 1)
-                            chars
-                            (16 * total + d)
+                else
+                    Nothing
+        in
+        case digit of
+            Just d ->
+                consumeBase16Helper
+                    (Pine_kernel.int_add [ offset, 1 ])
+                    chars
+                    (Pine_kernel.int_add [ Pine_kernel.int_mul [ 16, total ], d ])
 
-                    Nothing ->
-                        ( offset, total )
-
-            [] ->
+            Nothing ->
                 ( offset, total )
 
 
@@ -1918,72 +1917,86 @@ chompBase10 offset (String chars) =
 
 chompBase10Helper : Int -> List Char -> Int
 chompBase10Helper offset chars =
-    if Pine_kernel.int_is_sorted_asc [ offset, Pine_kernel.length chars ] then
+    let
+        char =
+            Pine_kernel.head (Pine_kernel.skip [ offset, chars ])
+    in
+    if Pine_kernel.equal [ char, [] ] then
         offset
 
     else
-        case Pine_kernel.skip [ offset, chars ] of
-            [] ->
-                offset
+        let
+            code =
+                Char.toCode char
+        in
+        if Pine_kernel.int_is_sorted_asc [ 48, code, 57 ] then
+            chompBase10Helper
+                (Pine_kernel.int_add [ offset, 1 ])
+                chars
 
-            char :: _ ->
-                let
-                    code =
-                        Char.toCode char
-                in
-                if Pine_kernel.int_is_sorted_asc [ 48, code, 57 ] then
-                    chompBase10Helper
-                        (Pine_kernel.int_add [ offset, 1 ])
-                        chars
-
-                else
-                    offset
+        else
+            offset
 
 
 isSubString : String -> Int -> Int -> Int -> String -> ( Int, Int, Int )
 isSubString (String smallChars) offset row col (String bigChars) =
     let
-        bigCharsFromOffset =
-            List.drop offset bigChars
+        expectedLength : Int
+        expectedLength =
+            Pine_kernel.length smallChars
 
-        ( newOffset, newRow, newCol, matched ) =
-            isSubStringHelper smallChars bigCharsFromOffset offset row col
+        sliceFromSourceChars : List Char
+        sliceFromSourceChars =
+            Pine_kernel.take
+                [ expectedLength
+                , Pine_kernel.skip [ offset, bigChars ]
+                ]
     in
-    if matched then
+    if Pine_kernel.equal [ sliceFromSourceChars, smallChars ] then
+        let
+            ( newlineCount, colShift ) =
+                countOffsetsInString ( 0, 0 ) smallChars
+
+            newOffset : Int
+            newOffset =
+                Pine_kernel.int_add [ offset, expectedLength ]
+
+            newRow : Int
+            newRow =
+                Pine_kernel.int_add [ row, newlineCount ]
+
+            newCol : Int
+            newCol =
+                if Pine_kernel.equal [ newlineCount, 0 ] then
+                    Pine_kernel.int_add [ col, colShift ]
+
+                else
+                    Pine_kernel.int_add [ 1, colShift ]
+        in
         ( newOffset, newRow, newCol )
 
     else
         ( -1, row, col )
 
 
-isSubStringHelper : List Char -> List Char -> Int -> Int -> Int -> ( Int, Int, Int, Bool )
-isSubStringHelper smallChars bigChars offset row col =
-    case ( smallChars, bigChars ) of
-        ( [], _ ) ->
-            ( offset, row, col, True )
+countOffsetsInString : ( Int, Int ) -> List Char -> ( Int, Int )
+countOffsetsInString ( newlines, col ) chars =
+    let
+        nextChar =
+            Pine_kernel.head chars
+    in
+    if Pine_kernel.equal [ nextChar, [] ] then
+        ( newlines, col )
 
-        ( _, [] ) ->
-            ( offset, row, col, False )
+    else if Pine_kernel.equal [ nextChar, '\\n' ] then
+        countOffsetsInString
+            ( Pine_kernel.int_add [ newlines, 1 ], 0 )
+            (Pine_kernel.skip [ 1, chars ])
 
-        ( sChar :: sRest, bChar :: bRest ) ->
-            if Pine_kernel.equal [ sChar, bChar ] then
-                let
-                    ( newRow, newCol ) =
-                        if Pine_kernel.equal [ sChar, newlineChar ] then
-                            ( Pine_kernel.int_add [ row, 1 ], 1 )
-
-                        else
-                            ( row, Pine_kernel.int_add [ col, 1 ] )
-                in
-                isSubStringHelper
-                    sRest
-                    bRest
-                    (Pine_kernel.int_add [ offset, 1 ])
-                    newRow
-                    newCol
-
-            else
-                ( offset, row, col, False )
+    else
+        countOffsetsInString
+            ( newlines, Pine_kernel.int_add [ col, 1 ] )
+            (Pine_kernel.skip [ 1, chars ])
 
 
 isSubChar : (Char -> Bool) -> Int -> String -> Int
@@ -2072,12 +2085,12 @@ newlineChar =
 
 isAsciiCode : Int -> Int -> String -> Bool
 isAsciiCode code offset (String chars) =
-    case Pine_kernel.skip [ offset, chars ] of
-        [] ->
-            False
-
-        nextChar :: _ ->
-            Pine_kernel.equal [ nextChar, Char.fromCode code ]
+    let
+        nextChar =
+            Pine_kernel.head
+                (Pine_kernel.skip [ offset, chars ])
+    in
+    Pine_kernel.equal [ nextChar, Char.fromCode code ]
 
 """
     , """
@@ -2713,8 +2726,8 @@ float expecting invalid =
 negation yourself. The only difference is that you provide all the potential
 problems.
 -}
-number
-  : { int : Result x (Int -> a)
+number :
+    { int : Result x (Int -> a)
     , hex : Result x (Int -> a)
     , octal : Result x (Int -> a)
     , binary : Result x (Int -> a)
@@ -2722,84 +2735,110 @@ number
     , invalid : x
     , expecting : x
     }
-  -> Parser c x a
+    -> Parser c x a
 number c =
-  Parser <| \\s ->
-    if isAsciiCode 0x30 {- 0 -} s.offset s.src then
-      let
-        zeroOffset = s.offset + 1
-        baseOffset = zeroOffset + 1
-      in
-      if isAsciiCode 0x78 {- x -} zeroOffset s.src then
-        finalizeInt c.invalid c.hex baseOffset (consumeBase16 baseOffset s.src) s
-      else if isAsciiCode 0x6F {- o -} zeroOffset s.src then
-        finalizeInt c.invalid c.octal baseOffset (consumeBase 8 baseOffset s.src) s
-      else if isAsciiCode 0x62 {- b -} zeroOffset s.src then
-        finalizeInt c.invalid c.binary baseOffset (consumeBase 2 baseOffset s.src) s
-      else
-        finalizeFloat c.invalid c.expecting c.int c.float (zeroOffset, 0) s
+    Parser
+        (\\s ->
+            let
+                (String sourceChars) =
+                    s.src
 
-    else
-      finalizeFloat c.invalid c.expecting c.int c.float (consumeBase 10 s.offset s.src) s
+                firstChar =
+                    Pine_kernel.head (Pine_kernel.skip [ s.offset, sourceChars ])
+            in
+            if Pine_kernel.equal [ firstChar, '0' ] then
+                let
+                    zeroOffset =
+                        Pine_kernel.int_add [ s.offset, 1 ]
+
+                    secondChar =
+                        Pine_kernel.head (Pine_kernel.skip [ zeroOffset, sourceChars ])
+
+                    baseOffset =
+                        Pine_kernel.int_add [ zeroOffset, 1 ]
+                in
+                if Pine_kernel.equal [ secondChar, 'x' ] then
+                    finalizeInt c.invalid c.hex baseOffset (consumeBase16 baseOffset s.src) s
+
+                else if Pine_kernel.equal [ secondChar, 'o' ] then
+                    finalizeInt c.invalid c.octal baseOffset (consumeBase 8 baseOffset s.src) s
+
+                else if Pine_kernel.equal [ secondChar, 'b' ] then
+                    finalizeInt c.invalid c.binary baseOffset (consumeBase 2 baseOffset s.src) s
+
+                else
+                    finalizeFloat c.invalid c.expecting c.int c.float ( zeroOffset, 0 ) s
+
+            else
+                finalizeFloat c.invalid c.expecting c.int c.float (consumeBase 10 s.offset s.src) s
+        )
 
 
-consumeBase : Int -> Int -> String -> (Int, Int)
+consumeBase : Int -> Int -> String -> ( Int, Int )
 consumeBase base offset string =
-  Elm.Kernel.Parser.consumeBase base offset string
+    Elm.Kernel.Parser.consumeBase base offset string
 
 
-consumeBase16 : Int -> String -> (Int, Int)
+consumeBase16 : Int -> String -> ( Int, Int )
 consumeBase16 offset string =
-  Elm.Kernel.Parser.consumeBase16 offset string
+    Elm.Kernel.Parser.consumeBase16 offset string
 
 
-finalizeInt : x -> Result x (Int -> a) -> Int -> (Int, Int) -> State c -> PStep c x a
-finalizeInt invalid handler startOffset (endOffset, n) s =
-  case handler of
-    Err x ->
-      Bad True (fromState s x)
+finalizeInt : x -> Result x (Int -> a) -> Int -> ( Int, Int ) -> State c -> PStep c x a
+finalizeInt invalid handler startOffset ( endOffset, n ) s =
+    case handler of
+        Err x ->
+            Bad True (fromState s x)
 
-    Ok toValue ->
-      if startOffset == endOffset
-        then Bad (s.offset < startOffset) (fromState s invalid)
-        else Good True (toValue n) (bumpOffset endOffset s)
+        Ok toValue ->
+            if startOffset == endOffset then
+                Bad (s.offset < startOffset) (fromState s invalid)
+
+            else
+                Good True (toValue n) (bumpOffset endOffset s)
 
 
 bumpOffset : Int -> State c -> State c
 bumpOffset newOffset s =
-  { src = s.src
-  , offset = newOffset
-  , indent = s.indent
-  , context = s.context
-  , row = s.row
-  , col = s.col + (newOffset - s.offset)
-  }
+    { src = s.src
+    , offset = newOffset
+    , indent = s.indent
+    , context = s.context
+    , row = s.row
+    , col = s.col + (newOffset - s.offset)
+    }
 
 
-finalizeFloat : x -> x -> Result x (Int -> a) -> Result x (Float -> a) -> (Int, Int) -> State c -> PStep c x a
+finalizeFloat : x -> x -> Result x (Int -> a) -> Result x (Float -> a) -> ( Int, Int ) -> State c -> PStep c x a
 finalizeFloat invalid expecting intSettings floatSettings intPair s =
-  let
-    intOffset = Tuple.first intPair
-    floatOffset = consumeDotAndExp intOffset s.src
-  in
-  if floatOffset < 0 then
-    Bad True (fromInfo s.row (s.col - (floatOffset + s.offset)) invalid s.context)
+    let
+        ( intOffset, _ ) =
+            intPair
 
-  else if s.offset == floatOffset then
-    Bad False (fromState s expecting)
+        floatOffset =
+            consumeDotAndExp intOffset s.src
+    in
+    if floatOffset < 0 then
+        Bad True (fromInfo s.row (s.col - (floatOffset + s.offset)) invalid s.context)
 
-  else if intOffset == floatOffset then
-    finalizeInt invalid intSettings s.offset intPair s
+    else if s.offset == floatOffset then
+        Bad False (fromState s expecting)
 
-  else
-    case floatSettings of
-      Err x ->
-        Bad True (fromState s invalid)
+    else if intOffset == floatOffset then
+        finalizeInt invalid intSettings s.offset intPair s
 
-      Ok toValue ->
-        case String.toFloat (String.slice s.offset floatOffset s.src) of
-          Nothing -> Bad True (fromState s invalid)
-          Just n -> Good True (toValue n) (bumpOffset floatOffset s)
+    else
+        case floatSettings of
+            Err x ->
+                Bad True (fromState s invalid)
+
+            Ok toValue ->
+                case String.toFloat (String.slice s.offset floatOffset s.src) of
+                    Nothing ->
+                        Bad True (fromState s invalid)
+
+                    Just n ->
+                        Good True (toValue n) (bumpOffset floatOffset s)
 
 
 --
