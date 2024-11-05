@@ -741,8 +741,12 @@ finalizeInt invalid handler startOffset ( endOffset, n ) s =
             Bad True (fromState s x)
 
         Ok toValue ->
-            if startOffset == endOffset then
-                Bad (s.offset < startOffset) (fromState s invalid)
+            if Pine_kernel.equal [ startOffset, endOffset ] then
+                Bad
+                    (Pine_kernel.negate
+                        (Pine_kernel.int_is_sorted_asc [ startOffset, s.offset ])
+                    )
+                    (fromState s invalid)
 
             else
                 Good True (toValue n) (bumpOffset endOffset s)
@@ -1004,11 +1008,14 @@ chompUntil (Token str expecting) =
                 ( newOffset, newRow, newCol ) =
                     Elm.Kernel.Parser.findSubString str s.offset s.row s.col s.src
             in
-            if newOffset == -1 then
+            if Pine_kernel.equal [ newOffset, -1 ] then
                 Bad False (fromInfo newRow newCol expecting s.context)
 
             else
-                Good (s.offset < newOffset)
+                Good
+                    (Pine_kernel.negate
+                        (Pine_kernel.int_is_sorted_asc [ newOffset, s.offset ])
+                    )
                     ()
                     { src = s.src
                     , offset = newOffset

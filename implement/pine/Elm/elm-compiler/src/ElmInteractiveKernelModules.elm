@@ -1979,26 +1979,6 @@ isSubString (String smallChars) offset row col (String bigChars) =
         ( -1, row, col )
 
 
-countOffsetsInString : ( Int, Int ) -> List Char -> ( Int, Int )
-countOffsetsInString ( newlines, col ) chars =
-    let
-        nextChar =
-            Pine_kernel.head chars
-    in
-    if Pine_kernel.equal [ nextChar, [] ] then
-        ( newlines, col )
-
-    else if Pine_kernel.equal [ nextChar, '\\n' ] then
-        countOffsetsInString
-            ( Pine_kernel.int_add [ newlines, 1 ], 0 )
-            (Pine_kernel.skip [ 1, chars ])
-
-    else
-        countOffsetsInString
-            ( newlines, Pine_kernel.int_add [ col, 1 ] )
-            (Pine_kernel.skip [ 1, chars ])
-
-
 isSubChar : (Char -> Bool) -> Int -> String -> Int
 isSubChar predicate offset (String chars) =
     let
@@ -2023,32 +2003,73 @@ isSubChar predicate offset (String chars) =
 findSubString : String -> Int -> Int -> Int -> String -> ( Int, Int, Int )
 findSubString (String smallChars) offset row col (String bigChars) =
     let
+        newOffset : Int
         newOffset =
             indexOf smallChars bigChars offset
 
+        consumedLength : Int
+        consumedLength =
+            Pine_kernel.int_add
+                [ newOffset
+                , Pine_kernel.negate offset
+                ]
+
+        consumedChars : List Char
+        consumedChars =
+            Pine_kernel.take
+                [ consumedLength
+                , Pine_kernel.skip [ offset, bigChars ]
+                ]
+
+        targetOffset : Int
         targetOffset =
-            if newOffset == -1 then
+            if Pine_kernel.equal [ newOffset, -1 ] then
                 List.length bigChars
 
             else
-                newOffset + List.length smallChars
+                Pine_kernel.int_add [ newOffset, Pine_kernel.length smallChars ]
 
-        ( newRow, newCol ) =
-            updateRowColOverRange offset targetOffset bigChars row col
+        ( newlineCount, colShift ) =
+            countOffsetsInString ( 0, 0 ) consumedChars
+
+        newRow : Int
+        newRow =
+            Pine_kernel.int_add [ row, newlineCount ]
+
+        newCol : Int
+        newCol =
+            if Pine_kernel.equal [ newlineCount, 0 ] then
+                Pine_kernel.int_add [ col, colShift ]
+
+            else
+                Pine_kernel.int_add [ 1, colShift ]
     in
     ( newOffset, newRow, newCol )
 
 
 indexOf : List Char -> List Char -> Int -> Int
 indexOf smallChars bigChars offset =
-    if offset > List.length bigChars - List.length smallChars then
-        -1
+    let
+        expectedLength : Int
+        expectedLength =
+            Pine_kernel.length smallChars
 
-    else if startsWith smallChars (List.drop offset bigChars) then
-        offset
+        sliceFromSourceChars : List Char
+        sliceFromSourceChars =
+            Pine_kernel.take
+                [ expectedLength
+                , Pine_kernel.skip [ offset, bigChars ]
+                ]
+    in
+    if Pine_kernel.equal [ Pine_kernel.length sliceFromSourceChars, expectedLength ] then
+        if Pine_kernel.equal [ sliceFromSourceChars, smallChars ] then
+            offset
+
+        else
+            indexOf smallChars bigChars (Pine_kernel.int_add [ offset, 1 ])
 
     else
-        indexOf smallChars bigChars (offset + 1)
+        -1
 
 
 startsWith : List Char -> List Char -> Bool
@@ -2059,22 +2080,24 @@ startsWith patternList stringList =
         ]
 
 
-updateRowColOverRange : Int -> Int -> List Char -> Int -> Int -> ( Int, Int )
-updateRowColOverRange currentOffset targetOffset chars row col =
-    if currentOffset >= targetOffset then
-        ( row, col )
+countOffsetsInString : ( Int, Int ) -> List Char -> ( Int, Int )
+countOffsetsInString ( newlines, col ) chars =
+    let
+        nextChar =
+            Pine_kernel.head chars
+    in
+    if Pine_kernel.equal [ nextChar, [] ] then
+        ( newlines, col )
+
+    else if Pine_kernel.equal [ nextChar, '\\n' ] then
+        countOffsetsInString
+            ( Pine_kernel.int_add [ newlines, 1 ], 0 )
+            (Pine_kernel.skip [ 1, chars ])
 
     else
-        case List.head (List.drop currentOffset chars) of
-            Just char ->
-                if Pine_kernel.equal [ char, newlineChar ] then
-                    updateRowColOverRange (currentOffset + 1) targetOffset chars (row + 1) 1
-
-                else
-                    updateRowColOverRange (currentOffset + 1) targetOffset chars row (col + 1)
-
-            Nothing ->
-                ( row, col )
+        countOffsetsInString
+            ( newlines, Pine_kernel.int_add [ col, 1 ] )
+            (Pine_kernel.skip [ 1, chars ])
 
 
 newlineChar : Char
@@ -2791,8 +2814,12 @@ finalizeInt invalid handler startOffset ( endOffset, n ) s =
             Bad True (fromState s x)
 
         Ok toValue ->
-            if startOffset == endOffset then
-                Bad (s.offset < startOffset) (fromState s invalid)
+            if Pine_kernel.equal [ startOffset, endOffset ] then
+                Bad
+                    (Pine_kernel.negate
+                        (Pine_kernel.int_is_sorted_asc [ startOffset, s.offset ])
+                    )
+                    (fromState s invalid)
 
             else
                 Good True (toValue n) (bumpOffset endOffset s)
@@ -3010,23 +3037,29 @@ what you need.
 -}
 chompUntil : Token x -> Parser c x ()
 chompUntil (Token str expecting) =
-  Parser <| \\s ->
-    let
-      (newOffset, newRow, newCol) =
-        Elm.Kernel.Parser.findSubString str s.offset s.row s.col s.src
-    in
-    if newOffset == -1 then
-      Bad False (fromInfo newRow newCol expecting s.context)
+    Parser
+        (\\s ->
+            let
+                ( newOffset, newRow, newCol ) =
+                    Elm.Kernel.Parser.findSubString str s.offset s.row s.col s.src
+            in
+            if Pine_kernel.equal [ newOffset, -1 ] then
+                Bad False (fromInfo newRow newCol expecting s.context)
 
-    else
-      Good (s.offset < newOffset) ()
-        { src = s.src
-        , offset = newOffset
-        , indent = s.indent
-        , context = s.context
-        , row = newRow
-        , col = newCol
-        }
+            else
+                Good
+                    (Pine_kernel.negate
+                        (Pine_kernel.int_is_sorted_asc [ newOffset, s.offset ])
+                    )
+                    ()
+                    { src = s.src
+                    , offset = newOffset
+                    , indent = s.indent
+                    , context = s.context
+                    , row = newRow
+                    , col = newCol
+                    }
+        )
 
 
 {-| Just like [`Parser.chompUntilEndOr`](Parser#chompUntilEndOr)
