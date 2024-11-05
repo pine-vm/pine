@@ -164,13 +164,13 @@ public class JsonConverterForChoiceType : JsonConverterFactory
 
         foreach (var constructorResult in constructorsResults)
         {
-            if (constructorResult is Result<string, (ConstructorInfo, IReadOnlyList<ConstructorParameter>)>.Ok constructorMatch)
+            if (constructorResult.IsOkOrNullable() is { } constructorMatch)
             {
                 return new ParsedType.Variant(
                     variantType.Name,
                     variantType,
-                    constructorMatch.Value.Item1,
-                    constructorMatch.Value.Item2);
+                    constructorMatch.constructor,
+                    constructorMatch.arguments);
             }
         }
 

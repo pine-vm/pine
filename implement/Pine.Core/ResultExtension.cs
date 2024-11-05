@@ -21,8 +21,26 @@ public static class ResultExtension
         return null;
     }
 
+    public static ErrT? IsErrOrNullable<ErrT, OkT>(this Result<ErrT, OkT> result)
+        where ErrT : struct
+    {
+        if (result is Result<ErrT, OkT>.Err error)
+            return error.Value;
+
+        return null;
+    }
+
     public static OkT? IsOkOrNull<ErrT, OkT>(this Result<ErrT, OkT> result)
         where OkT : class
+    {
+        if (result is Result<ErrT, OkT>.Ok ok)
+            return ok.Value;
+
+        return null;
+    }
+
+    public static OkT? IsOkOrNullable<ErrT, OkT>(this Result<ErrT, OkT> result)
+        where OkT : struct
     {
         if (result is Result<ErrT, OkT>.Ok ok)
             return ok.Value;

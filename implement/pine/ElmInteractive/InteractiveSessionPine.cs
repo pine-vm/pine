@@ -379,10 +379,10 @@ public class InteractiveSessionPine : IInteractiveSession
         if (parseAsTagResult.IsErrOrNull() is { } parseAsTagErr)
             return "Failed to parse result as tag: " + parseAsTagErr;
 
-        if (parseAsTagResult is not Result<string, (string tagName, IReadOnlyList<PineValue> tagArgs)>.Ok parseAsTagOk)
+        if (parseAsTagResult.IsOkOrNullable() is not { } parseAsTagOk)
             throw new Exception("Unexpected result type: " + parseAsTagResult.GetType().FullName);
 
-        if (parseAsTagOk.Value.tagName is not "Ok")
+        if (parseAsTagOk.tagName is not "Ok")
         {
             return
                 "Failed to extract environment: Tag not 'Ok': " +
@@ -392,10 +392,10 @@ public class InteractiveSessionPine : IInteractiveSession
                     fromOk: elmValue => ElmValue.RenderAsElmExpression(elmValue).expressionString);
         }
 
-        if (parseAsTagOk.Value.tagArgs.Count is not 1)
-            return "Failed to extract environment: Expected one element in the list, got " + parseAsTagOk.Value.tagArgs.Count;
+        if (parseAsTagOk.tagArguments.Count is not 1)
+            return "Failed to extract environment: Expected one element in the list, got " + parseAsTagOk.tagArguments.Count;
 
-        var parseAsRecordResult = ElmValueEncoding.ParsePineValueAsRecordTagged(parseAsTagOk.Value.tagArgs[0]);
+        var parseAsRecordResult = ElmValueEncoding.ParsePineValueAsRecordTagged(parseAsTagOk.tagArguments[0]);
 
         if (parseAsRecordResult.IsErrOrNull() is { } parseAsRecordError)
             return "Failed to parse as record: " + parseAsRecordError;

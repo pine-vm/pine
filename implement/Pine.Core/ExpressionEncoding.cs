@@ -422,16 +422,16 @@ public static class ExpressionEncoding
 
         foreach (var listElement in listResult.Value)
         {
-            if (ParsePineListValue(listElement) is not Result<string, IReadOnlyList<PineValue>>.Ok listElementResult)
+            if (ParsePineListValue(listElement).IsOkOrNull() is not { } listElementResult)
                 return "Failed to parse list element as list";
 
-            if (ParseListWithExactlyTwoElements(listElementResult.Value) is not Result<string, (PineValue, PineValue)>.Ok fieldNameValueAndValue)
+            if (ParseListWithExactlyTwoElements(listElementResult).IsOkOrNullable() is not { } fieldNameValueAndValue)
                 return "Failed to parse list element as list with exactly two elements";
 
-            if (PineValueAsString.StringFromValue(fieldNameValueAndValue.Value.Item1) is not Result<string, string>.Ok fieldName)
+            if (PineValueAsString.StringFromValue(fieldNameValueAndValue.Item1).IsOkOrNull() is not { } fieldName)
                 return "Failed to parse field name as string";
 
-            recordFields[fieldName.Value] = fieldNameValueAndValue.Value.Item2;
+            recordFields[fieldName] = fieldNameValueAndValue.Item2;
         }
 
         return recordFields;
