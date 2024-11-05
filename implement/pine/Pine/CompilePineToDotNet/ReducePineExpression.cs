@@ -706,6 +706,37 @@ public class ReducePineExpression
                         argumentTransform.referencesOriginalEnv);
                 }
 
+            case Expression.KernelApplications_Skip_Take skipTake:
+                {
+                    var argumentTransform =
+                        TransformPineExpressionWithOptionalReplacement(
+                            findReplacement,
+                            skipTake.Argument);
+
+                    var skipCountTransform =
+                        TransformPineExpressionWithOptionalReplacement(
+                            findReplacement,
+                            skipTake.SkipCount);
+
+                    var takeCountTransform =
+                        TransformPineExpressionWithOptionalReplacement(
+                            findReplacement,
+                            skipTake.TakeCount);
+
+                    return
+                        (
+                        skipTake
+                        with
+                        {
+                            Argument = argumentTransform.expr,
+                            SkipCount = skipCountTransform.expr,
+                            TakeCount = takeCountTransform.expr
+                        },
+                        argumentTransform.referencesOriginalEnv ||
+                        skipCountTransform.referencesOriginalEnv ||
+                        takeCountTransform.referencesOriginalEnv);
+                }
+
             case Expression.KernelApplication_Equal_Two equalTwo:
                 {
                     var leftTransform =

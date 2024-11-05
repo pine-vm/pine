@@ -456,6 +456,43 @@ public abstract record Expression
     }
 
     /// <summary>
+    /// Fusion of the two applications of the kernel functions 'skip' and 'take',
+    /// as an implementation detail of the interpreter.
+    /// </summary>
+    public record KernelApplications_Skip_Take(
+        Expression SkipCount,
+        Expression TakeCount,
+        Expression Argument)
+    : Expression
+    {
+        public override int SubexpressionCount { get; } =
+            Argument.SubexpressionCount +
+            TakeCount.SubexpressionCount +
+            SkipCount.SubexpressionCount + 3;
+
+        public override bool ReferencesEnvironment { get; } =
+            Argument.ReferencesEnvironment ||
+            TakeCount.ReferencesEnvironment ||
+            SkipCount.ReferencesEnvironment;
+
+        public virtual bool Equals(KernelApplications_Skip_Take? other)
+        {
+            if (other is null)
+                return false;
+
+            return
+                other.SkipCount.Equals(SkipCount) &&
+                other.TakeCount.Equals(TakeCount) &&
+                other.Argument.Equals(Argument);
+        }
+
+        public override int GetHashCode()
+        {
+            return HashCode.Combine(SkipCount.GetHashCode(), TakeCount.GetHashCode(), Argument.GetHashCode());
+        }
+    }
+
+    /// <summary>
     /// Fusion of the special case of an application of the kernel function 'equal',
     /// with a list expression of length two as the argument.
     /// </summary>
@@ -600,6 +637,14 @@ public abstract record Expression
                 case KernelApplications_Skip_Head_Path skipHead:
 
                     stack.Push(skipHead.Argument);
+
+                    break;
+
+                case KernelApplications_Skip_Take skipTake:
+
+                    stack.Push(skipTake.Argument);
+                    stack.Push(skipTake.SkipCount);
+                    stack.Push(skipTake.TakeCount);
 
                     break;
 

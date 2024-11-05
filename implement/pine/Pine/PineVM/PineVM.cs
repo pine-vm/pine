@@ -1226,6 +1226,11 @@ public class PineVM : IPineVM
             return fusedEqualTwo;
         }
 
+        if (TryMapToKernelApplications_Skip_Take_Expression(expression) is { } fusedSkipTake)
+        {
+            return fusedSkipTake;
+        }
+
         return null;
     }
 
@@ -1299,6 +1304,61 @@ public class PineVM : IPineVM
                 SkipCounts: (int[])[skipCount],
                 Argument: currentArg);
         }
+    }
+
+
+    public static Expression.KernelApplications_Skip_Take?
+        TryMapToKernelApplications_Skip_Take_Expression(Expression expression)
+    {
+        if (expression is not Expression.KernelApplication kernelApp)
+            return null;
+
+        if (kernelApp.function is not nameof(KernelFunction.take))
+            return null;
+
+        if (kernelApp.input is not Expression.List takeArgListExpr)
+            return null;
+
+        if (takeArgListExpr.items.Count is not 2)
+            return null;
+
+        if (takeArgListExpr.items[1] is not Expression.KernelApplication innerKernelApp)
+            return null;
+
+        if (innerKernelApp.function is not nameof(KernelFunction.skip))
+            return null;
+
+        if (innerKernelApp.input is not Expression.List skipListExpr)
+            return null;
+
+        if (skipListExpr.items.Count is not 2)
+            return null;
+
+        var takeCountValueExpr = takeArgListExpr.items[0];
+
+        var skipCountValueExpr = skipListExpr.items[0];
+
+        if (Expression.EnumerateSelfAndDescendants(takeCountValueExpr)
+            .Any(desc =>
+            desc is Expression.ParseAndEval ||
+            desc is Expression.StackReferenceExpression))
+        {
+            return null;
+        }
+
+        if (Expression.EnumerateSelfAndDescendants(skipCountValueExpr)
+            .Any(desc =>
+            desc is Expression.ParseAndEval ||
+            desc is Expression.StackReferenceExpression))
+        {
+            return null;
+        }
+
+        return
+            new Expression.KernelApplications_Skip_Take(
+                SkipCount: skipListExpr.items[0],
+                TakeCount: takeArgListExpr.items[0],
+                Argument: skipListExpr.items[1]);
     }
 
     public static Expression.KernelApplication_Equal_Two? TryMapToKernelApplication_Equal_Two(Expression expression)
@@ -1849,6 +1909,9 @@ public class PineVM : IPineVM
         if (expression is Expression.KernelApplications_Skip_Head_Path)
             return false;
 
+        if (expression is Expression.KernelApplications_Skip_Take)
+            return false;
+
         if (expression is Expression.KernelApplication_Equal_Two)
             return false;
 
@@ -1943,6 +2006,15 @@ public class PineVM : IPineVM
                 EvaluateKernelApplications_Skip_ListHead_Expression(
                     environment: environment,
                     kernelApplicationsSkipListHead,
+                    stackPrevValues: stackPrevValues);
+        }
+
+        if (expression is Expression.KernelApplications_Skip_Take kernelAppSkipTake)
+        {
+            return
+                EvaluateKernelApplications_Skip_Take_Expression(
+                    environment: environment,
+                    application: kernelAppSkipTake,
                     stackPrevValues: stackPrevValues);
         }
 
@@ -2208,6 +2280,104 @@ public class PineVM : IPineVM
                 stackPrevValues: stackPrevValues);
 
         return ValueFromPathInValueOrEmptyList(argumentValue, application.SkipCounts.Span);
+    }
+
+
+    public PineValue EvaluateKernelApplications_Skip_Take_Expression(
+        PineValue environment,
+        Expression.KernelApplications_Skip_Take application,
+        ReadOnlyMemory<PineValue> stackPrevValues)
+    {
+        var argumentValue =
+            EvaluateExpressionDefaultLessStack(
+                application.Argument,
+                environment,
+                stackPrevValues: stackPrevValues);
+
+        var skipCountValue =
+            EvaluateExpressionDefaultLessStack(
+                application.SkipCount,
+                environment,
+                stackPrevValues: stackPrevValues);
+
+        var takeCountValue =
+            EvaluateExpressionDefaultLessStack(
+                application.TakeCount,
+                environment,
+                stackPrevValues: stackPrevValues);
+
+        if (PineValueAsInteger.SignedIntegerFromValueRelaxed(skipCountValue) is not Result<string, System.Numerics.BigInteger>.Ok skipCountOk)
+            return PineValue.EmptyList;
+
+        if (PineValueAsInteger.SignedIntegerFromValueRelaxed(takeCountValue) is not Result<string, System.Numerics.BigInteger>.Ok takeCountOk)
+            return PineValue.EmptyList;
+
+        return
+            FusedSkipAndTake(
+                argumentValue,
+                skipCount: (int)skipCountOk.Value,
+                takeCount: (int)takeCountOk.Value);
+    }
+
+    public static PineValue FusedSkipAndTake(PineValue argument, int skipCount, int takeCount)
+    {
+        skipCount =
+            skipCount < 0 ? 0 : skipCount;
+
+        if (argument is PineValue.ListValue argumentList)
+        {
+            var takeLimit =
+                argumentList.Elements.Count - skipCount;
+
+            takeCount =
+                takeLimit < takeCount
+                ?
+                takeLimit
+                :
+                takeCount;
+
+            if (takeCount < 1)
+                return PineValue.EmptyList;
+
+            if (skipCount is 0 && takeCount == argumentList.Elements.Count)
+                return argument;
+
+            var slicedItems = new PineValue[takeCount];
+
+            for (var i = 0; i < takeCount; ++i)
+            {
+                slicedItems[i] = argumentList.Elements[skipCount + i];
+            }
+
+            return PineValue.List(slicedItems);
+        }
+
+        if (argument is PineValue.BlobValue argumentBlob)
+        {
+            var takeLimit =
+                argumentBlob.Bytes.Length - skipCount;
+
+            takeCount =
+                takeLimit < takeCount
+                ?
+                takeLimit
+                :
+                takeCount;
+
+            if (takeCount < 1)
+                return PineValue.EmptyBlob;
+
+            if (skipCount is 0 && takeCount == argumentBlob.Bytes.Length)
+                return argument;
+
+            var slicedBytes =
+                argumentBlob.Bytes.Slice(start: skipCount, length: takeCount);
+
+            return PineValue.Blob(slicedBytes);
+        }
+
+        throw new NotImplementedException(
+            "Unexpected argument type: " + argument.GetType());
     }
 
     public static PineValue ValueFromPathInValueOrEmptyList(
