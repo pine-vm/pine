@@ -16,10 +16,15 @@ consumeBaseHelper base offset chars total =
 
         nextChar :: _ ->
             let
+                digit : Int
                 digit =
                     Pine_kernel.int_add [ Char.toCode nextChar, -48 ]
+
+                lastDigit : Int
+                lastDigit =
+                    Pine_kernel.int_add [ base, -1 ]
             in
-            if Pine_kernel.int_is_sorted_asc [ 0, digit, base ] then
+            if Pine_kernel.int_is_sorted_asc [ 0, digit, lastDigit ] then
                 consumeBaseHelper
                     base
                     (Pine_kernel.int_add [ offset, 1 ])
