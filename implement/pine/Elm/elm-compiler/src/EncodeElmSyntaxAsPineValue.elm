@@ -77,7 +77,10 @@ encodeElmSyntaxFileAsPineValue elmSyntaxFile =
                               , Pine.ListValue declarationsValues
                               )
                             , ( "comments"
-                              , Pine.ListValue []
+                              , Pine.ListValue
+                                    (List.map (encodeElmSyntaxNodeAsPineValue encodeElmStringAsPineValue)
+                                        elmSyntaxFile.comments
+                                    )
                               )
                             ]
                     )
