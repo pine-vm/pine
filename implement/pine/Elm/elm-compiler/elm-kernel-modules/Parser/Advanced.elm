@@ -772,27 +772,34 @@ finalizeFloat invalid expecting intSettings floatSettings intPair s =
         floatOffset =
             consumeDotAndExp intOffset s.src
     in
-    if floatOffset < 0 then
-        Bad True (fromInfo s.row (s.col - (floatOffset + s.offset)) invalid s.context)
+    if Pine_kernel.int_is_sorted_asc [ 0, floatOffset ] then
+        if Pine_kernel.equal [ s.offset, floatOffset ] then
+            Bad False (fromState s expecting)
 
-    else if s.offset == floatOffset then
-        Bad False (fromState s expecting)
+        else if Pine_kernel.equal [ intOffset, floatOffset ] then
+            finalizeInt invalid intSettings s.offset intPair s
 
-    else if intOffset == floatOffset then
-        finalizeInt invalid intSettings s.offset intPair s
+        else
+            case floatSettings of
+                Err x ->
+                    Bad True (fromState s invalid)
+
+                Ok toValue ->
+                    case String.toFloat (String.slice s.offset floatOffset s.src) of
+                        Nothing ->
+                            Bad True (fromState s invalid)
+
+                        Just n ->
+                            Good True (toValue n) (bumpOffset floatOffset s)
 
     else
-        case floatSettings of
-            Err x ->
-                Bad True (fromState s invalid)
-
-            Ok toValue ->
-                case String.toFloat (String.slice s.offset floatOffset s.src) of
-                    Nothing ->
-                        Bad True (fromState s invalid)
-
-                    Just n ->
-                        Good True (toValue n) (bumpOffset floatOffset s)
+        Bad True
+            (fromInfo
+                s.row
+                (Pine_kernel.int_add [ s.col, Pine_kernel.negate (Pine_kernel.int_add [ floatOffset, s.offset ]) ])
+                invalid
+                s.context
+            )
 
 
 
@@ -804,7 +811,7 @@ finalizeFloat invalid expecting intSettings floatSettings intPair s =
 consumeDotAndExp : Int -> String -> Int
 consumeDotAndExp offset src =
     if isAsciiCode 0x2E {- . -} offset src then
-        consumeExp (chompBase10 (offset + 1) src) src
+        consumeExp (chompBase10 (Pine_kernel.int_add [ offset, 1 ]) src) src
 
     else
         consumeExp offset src
@@ -818,23 +825,38 @@ consumeDotAndExp offset src =
 
 consumeExp : Int -> String -> Int
 consumeExp offset src =
-    if isAsciiCode 0x65 {- e -} offset src || isAsciiCode 0x45 {- E -} offset src then
-        let
-            eOffset =
-                offset + 1
+    let
+        (String chars) =
+            src
 
+        nextChar =
+            Pine_kernel.head
+                (Pine_kernel.skip [ offset, chars ])
+    in
+    if Pine_kernel.equal [ nextChar, 'e' ] || Pine_kernel.equal [ nextChar, 'E' ] then
+        let
+            eOffset : Int
+            eOffset =
+                Pine_kernel.int_add [ offset, 1 ]
+
+            charAfterE =
+                Pine_kernel.head
+                    (Pine_kernel.skip [ eOffset, chars ])
+
+            expOffset : Int
             expOffset =
-                if isAsciiCode 0x2B {- + -} eOffset src || isAsciiCode 0x2D {- - -} eOffset src then
-                    eOffset + 1
+                if Pine_kernel.equal [ charAfterE, '+' ] || Pine_kernel.equal [ charAfterE, '-' ] then
+                    Pine_kernel.int_add [ eOffset, 1 ]
 
                 else
                     eOffset
 
+            newOffset : Int
             newOffset =
                 chompBase10 expOffset src
         in
-        if expOffset == newOffset then
-            -newOffset
+        if Pine_kernel.equal [ expOffset, newOffset ] then
+            Pine_kernel.negate newOffset
 
         else
             newOffset

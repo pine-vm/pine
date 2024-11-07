@@ -126,7 +126,7 @@ isSubString (String smallChars) offset row col (String bigChars) =
     if Pine_kernel.equal [ sliceFromSourceChars, smallChars ] then
         let
             ( newlineCount, colShift ) =
-                countOffsetsInString ( 0, 0 ) smallChars
+                countOffsetsInString ( 0, 0, 0 ) ( smallChars, expectedLength )
 
             newOffset : Int
             newOffset =
@@ -185,13 +185,6 @@ findSubString (String smallChars) offset row col (String bigChars) =
                 , Pine_kernel.negate offset
                 ]
 
-        consumedChars : List Char
-        consumedChars =
-            Pine_kernel.take
-                [ consumedLength
-                , Pine_kernel.skip [ offset, bigChars ]
-                ]
-
         targetOffset : Int
         targetOffset =
             if Pine_kernel.equal [ newOffset, -1 ] then
@@ -201,7 +194,7 @@ findSubString (String smallChars) offset row col (String bigChars) =
                 Pine_kernel.int_add [ newOffset, Pine_kernel.length smallChars ]
 
         ( newlineCount, colShift ) =
-            countOffsetsInString ( 0, 0 ) consumedChars
+            countOffsetsInString ( offset, 0, 0 ) ( bigChars, newOffset )
 
         newRow : Int
         newRow =
@@ -243,32 +236,31 @@ indexOf smallChars bigChars offset =
         -1
 
 
-startsWith : List Char -> List Char -> Bool
-startsWith patternList stringList =
-    Pine_kernel.equal
-        [ Pine_kernel.take [ Pine_kernel.length patternList, stringList ]
-        , patternList
-        ]
-
-
-countOffsetsInString : ( Int, Int ) -> List Char -> ( Int, Int )
-countOffsetsInString ( newlines, col ) chars =
+countOffsetsInString : ( Int, Int, Int ) -> ( List Char, Int ) -> ( Int, Int )
+countOffsetsInString ( offset, newlines, col ) ( chars, end ) =
     let
-        nextChar =
-            Pine_kernel.head chars
+        currentChar =
+            Pine_kernel.head
+                (Pine_kernel.skip [ offset, chars ])
+
+        nextOffset =
+            Pine_kernel.int_add [ offset, 1 ]
     in
-    if Pine_kernel.equal [ nextChar, [] ] then
+    if Pine_kernel.equal [ currentChar, [] ] then
         ( newlines, col )
 
-    else if Pine_kernel.equal [ nextChar, '\n' ] then
+    else if Pine_kernel.int_is_sorted_asc [ end, offset ] then
+        ( newlines, col )
+
+    else if Pine_kernel.equal [ currentChar, '\n' ] then
         countOffsetsInString
-            ( Pine_kernel.int_add [ newlines, 1 ], 0 )
-            (Pine_kernel.skip [ 1, chars ])
+            ( nextOffset, Pine_kernel.int_add [ newlines, 1 ], 0 )
+            ( chars, end )
 
     else
         countOffsetsInString
-            ( newlines, Pine_kernel.int_add [ col, 1 ] )
-            (Pine_kernel.skip [ 1, chars ])
+            ( nextOffset, newlines, Pine_kernel.int_add [ col, 1 ] )
+            ( chars, end )
 
 
 newlineChar : Char

@@ -1357,19 +1357,52 @@ toLower char =
 """
     , """
 module String exposing
-  ( String
-  , isEmpty, length, reverse, repeat, replace
-  , append, concat, split, join, words, lines
-  , slice, left, right, dropLeft, dropRight
-  , contains, startsWith, endsWith, indexes, indices
-  , toInt, fromInt
-  , toFloat, fromFloat
-  , fromChar, cons, uncons
-  , toList, fromList
-  , toUpper, toLower, pad, padLeft, padRight, trim, trimLeft, trimRight
-  , map, filter, foldl, foldr, any, all
-  )
-
+    ( String
+    , all
+    , any
+    , append
+    , concat
+    , cons
+    , contains
+    , dropLeft
+    , dropRight
+    , endsWith
+    , filter
+    , foldl
+    , foldr
+    , fromChar
+    , fromFloat
+    , fromInt
+    , fromList
+    , indexes
+    , indices
+    , isEmpty
+    , join
+    , left
+    , length
+    , lines
+    , map
+    , pad
+    , padLeft
+    , padRight
+    , repeat
+    , replace
+    , reverse
+    , right
+    , slice
+    , split
+    , startsWith
+    , toFloat
+    , toInt
+    , toList
+    , toLower
+    , toUpper
+    , trim
+    , trimLeft
+    , trimRight
+    , uncons
+    , words
+    )
 
 import Basics
 import Char
@@ -1384,8 +1417,7 @@ type String
 
 type Elm_Float
     = Elm_Float Int Int
-
-    -- We need another tag to prevent the compiler from assuming that the condition for tag 'String' is always true.
+      -- We need another tag to prevent the compiler from assuming that the condition for tag 'String' is always true.
     | AnyOtherKind_Float
 
 
@@ -1468,7 +1500,7 @@ splitHelperOnList current sep string =
     if Pine_kernel.equal [ string, [] ] then
         [ fromList current ]
 
-    else if Pine_kernel.equal [ sep, (List.take (List.length sep) string) ] then
+    else if Pine_kernel.equal [ sep, List.take (List.length sep) string ] then
         [ fromList current ] ++ splitHelperOnList [] sep (List.drop (List.length sep) string)
 
     else
@@ -1487,9 +1519,9 @@ joinOnList sep chunks =
             []
 
         (String nextChunk) :: remaining ->
-            if remaining == []
-            then
+            if remaining == [] then
                 nextChunk
+
             else
                 Pine_kernel.concat [ nextChunk, sep, joinOnList sep remaining ]
 
@@ -1524,6 +1556,7 @@ right : Int -> String -> String
 right n string =
     if Pine_kernel.int_is_sorted_asc [ n, 0 ] then
         ""
+
     else
         slice -n (length string) string
 
@@ -1537,6 +1570,7 @@ dropRight : Int -> String -> String
 dropRight n string =
     if Pine_kernel.int_is_sorted_asc [ n, 0 ] then
         string
+
     else
         slice 0 -n string
 
@@ -1552,17 +1586,19 @@ contains (String patternList) (String stringList) =
 
 containsOnList : List Char -> List Char -> Bool
 containsOnList pattern string =
-    if Pine_kernel.equal
-        [ Pine_kernel.take [ Pine_kernel.length pattern, string ]
-        , pattern
-        ]
+    if
+        Pine_kernel.equal
+            [ Pine_kernel.take [ Pine_kernel.length pattern, string ]
+            , pattern
+            ]
     then
         True
+
+    else if Pine_kernel.int_is_sorted_asc [ Pine_kernel.length string, Pine_kernel.length pattern ] then
+        False
+
     else
-        if Pine_kernel.int_is_sorted_asc [ Pine_kernel.length string, Pine_kernel.length pattern ] then
-            False
-        else
-            containsOnList pattern (Pine_kernel.skip [ 1, string ])
+        containsOnList pattern (Pine_kernel.skip [ 1, string ])
 
 
 startsWith : String -> String -> Bool
@@ -1593,42 +1629,48 @@ fromInt int =
 
 toIntFromList : List Char -> Maybe Int
 toIntFromList stringAsList =
-    case stringAsList of
-        [] ->
+    let
+        firstChar =
+            Pine_kernel.head stringAsList
+    in
+    if Pine_kernel.equal [ firstChar, [] ] then
+        Nothing
+
+    else
+        let
+            ( valueString, signMultiplier ) =
+                case firstChar of
+                    '-' ->
+                        ( Pine_kernel.skip [ 1, stringAsList ], -1 )
+
+                    '+' ->
+                        ( Pine_kernel.skip [ 1, stringAsList ], 1 )
+
+                    _ ->
+                        ( stringAsList, 1 )
+        in
+        if Pine_kernel.equal [ valueString, [] ] then
             Nothing
 
-        firstChar :: lessFirstChar ->
-            let
-                ( valueString, signMultiplier ) =
-                    case firstChar of
-                        '-' ->
-                            ( lessFirstChar, -1 )
+        else
+            case toUnsignedIntFromList 0 valueString of
+                Just unsigned ->
+                    Just (Pine_kernel.int_mul [ signMultiplier, unsigned ])
 
-                        '+' ->
-                            ( lessFirstChar, 1 )
-
-                        _ ->
-                            ( stringAsList, 1 )
-            in
-            if valueString == []
-            then
-                Nothing
-            else
-                case toUnsignedIntFromList 0 valueString of
-                    Just unsigned ->
-                        Just (Pine_kernel.int_mul [ signMultiplier, unsigned ])
-
-                    Nothing ->
-                        Nothing
+                Nothing ->
+                    Nothing
 
 
 toUnsignedIntFromList : Int -> List Char -> Maybe Int
-toUnsignedIntFromList upper string =
-    case string of
-    [] ->
+toUnsignedIntFromList upper chars =
+    let
+        char =
+            Pine_kernel.head chars
+    in
+    if Pine_kernel.equal [ char, [] ] then
         Just upper
-    
-    char :: following ->
+
+    else
         case digitValueFromChar char of
             Nothing ->
                 Nothing
@@ -1636,7 +1678,7 @@ toUnsignedIntFromList upper string =
             Just digitValue ->
                 toUnsignedIntFromList
                     (Pine_kernel.int_add [ digitValue, Pine_kernel.int_mul [ upper, 10 ] ])
-                    following
+                    (Pine_kernel.skip [ 1, chars ])
 
 
 digitValueFromChar : Char -> Maybe Int
@@ -1647,13 +1689,13 @@ digitValueFromChar char =
 
         '1' ->
             Just 1
-        
+
         '2' ->
             Just 2
-        
+
         '3' ->
             Just 3
-        
+
         '4' ->
             Just 4
 
@@ -1757,7 +1799,8 @@ trim : String -> String
 trim (String chars) =
     String
         (dropWhileList isCharRemovedOnTrim
-            (List.reverse (dropWhileList isCharRemovedOnTrim (List.reverse chars))))
+            (List.reverse (dropWhileList isCharRemovedOnTrim (List.reverse chars)))
+        )
 
 
 trimLeft : String -> String
@@ -1784,6 +1827,7 @@ dropWhileList predicate stringList =
         char :: rest ->
             if predicate char then
                 dropWhileList predicate rest
+
             else
                 stringList
 
@@ -1808,50 +1852,63 @@ foldr func acc (String list) =
 
 
 toFloat : String -> Maybe Float
-toFloat string =
-    if startsWith "-" string
-    then
-        case toFloat (dropLeft 1 string) of
-        Nothing ->
+toFloat (String chars) =
+    let
+        firstChar =
+            Pine_kernel.head chars
+    in
+    if Pine_kernel.equal [ firstChar, [] ] then
+        Nothing
+
+    else if Pine_kernel.equal [ firstChar, '-' ] then
+        case toFloatIgnoringSign (Pine_kernel.skip [ 1, chars ]) of
+            Nothing ->
+                Nothing
+
+            Just (Elm_Float numAbs denom) ->
+                Just (Elm_Float -numAbs denom)
+
+    else
+        toFloatIgnoringSign chars
+
+
+toFloatIgnoringSign : List Char -> Maybe Float
+toFloatIgnoringSign chars =
+    case splitHelperOnList [] [ '.' ] chars of
+        [] ->
             Nothing
 
-        Just (Elm_Float numAbs denom) ->
-            Just (Elm_Float (-numAbs) denom)
-    else
-        case split "." string of
-            [] ->
-                Nothing
+        [ (String whole) ] ->
+            case toUnsignedIntFromList 0 whole of
+                Nothing ->
+                    Nothing
 
-            [ whole ] ->
-                case toInt whole of
-                    Nothing ->
-                        Nothing
+                Just numerator ->
+                    Just (Elm_Float numerator 1)
 
-                    Just numerator ->
-                        Just (Elm_Float numerator 1)
+        [ (String beforeSep), (String afterSep) ] ->
+            case toUnsignedIntFromList 0 beforeSep of
+                Nothing ->
+                    Nothing
 
-            [ beforeSep, afterSep ] ->
-                case toInt beforeSep of
-                    Nothing ->
-                        Nothing
+                Just beforeSepInt ->
+                    case toUnsignedIntFromList 0 afterSep of
+                        Nothing ->
+                            Nothing
 
-                    Just beforeSepInt ->
-                        case toInt afterSep of
-                            Nothing ->
-                                Nothing
+                        Just afterSepInt ->
+                            let
+                                denom =
+                                    Basics.pow 10 (Pine_kernel.length afterSep)
 
-                            Just afterSepInt ->
-                                let
-                                    denom =
-                                        Basics.pow 10 (length afterSep)
+                                numerator =
+                                    Pine_kernel.int_add
+                                        [ Pine_kernel.int_mul [ beforeSepInt, denom ], afterSepInt ]
+                            in
+                            Just (Elm_Float numerator denom)
 
-                                    numerator =
-                                        beforeSepInt * denom + afterSepInt
-                                in
-                                Just (Elm_Float numerator denom)
-
-            _ ->
-                Nothing
+        _ ->
+            Nothing
 
 
 any : (Char -> Bool) -> String -> Bool

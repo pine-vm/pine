@@ -271,50 +271,56 @@ fromInt int =
 
 toIntFromList : List Char -> Maybe Int
 toIntFromList stringAsList =
-    case stringAsList of
-        [] ->
+    let
+        firstChar =
+            Pine_kernel.head stringAsList
+    in
+    if Pine_kernel.equal [ firstChar, [] ] then
+        Nothing
+
+    else
+        let
+            ( valueString, signMultiplier ) =
+                case firstChar of
+                    '-' ->
+                        ( Pine_kernel.skip [ 1, stringAsList ], -1 )
+
+                    '+' ->
+                        ( Pine_kernel.skip [ 1, stringAsList ], 1 )
+
+                    _ ->
+                        ( stringAsList, 1 )
+        in
+        if Pine_kernel.equal [ valueString, [] ] then
             Nothing
 
-        firstChar :: lessFirstChar ->
-            let
-                ( valueString, signMultiplier ) =
-                    case firstChar of
-                        '-' ->
-                            ( lessFirstChar, -1 )
+        else
+            case toUnsignedIntFromList 0 valueString of
+                Just unsigned ->
+                    Just (Pine_kernel.int_mul [ signMultiplier, unsigned ])
 
-                        '+' ->
-                            ( lessFirstChar, 1 )
-
-                        _ ->
-                            ( stringAsList, 1 )
-            in
-            if valueString == [] then
-                Nothing
-
-            else
-                case toUnsignedIntFromList 0 valueString of
-                    Just unsigned ->
-                        Just (Pine_kernel.int_mul [ signMultiplier, unsigned ])
-
-                    Nothing ->
-                        Nothing
-
-
-toUnsignedIntFromList : Int -> List Char -> Maybe Int
-toUnsignedIntFromList upper string =
-    case string of
-        [] ->
-            Just upper
-
-        char :: following ->
-            case digitValueFromChar char of
                 Nothing ->
                     Nothing
 
-                Just digitValue ->
-                    toUnsignedIntFromList
-                        (Pine_kernel.int_add [ digitValue, Pine_kernel.int_mul [ upper, 10 ] ])
-                        following
+
+toUnsignedIntFromList : Int -> List Char -> Maybe Int
+toUnsignedIntFromList upper chars =
+    let
+        char =
+            Pine_kernel.head chars
+    in
+    if Pine_kernel.equal [ char, [] ] then
+        Just upper
+
+    else
+        case digitValueFromChar char of
+            Nothing ->
+                Nothing
+
+            Just digitValue ->
+                toUnsignedIntFromList
+                    (Pine_kernel.int_add [ digitValue, Pine_kernel.int_mul [ upper, 10 ] ])
+                    (Pine_kernel.skip [ 1, chars ])
 
 
 digitValueFromChar : Char -> Maybe Int
@@ -379,11 +385,17 @@ fromUnsignedIntAsListHelper int lowerDigits =
 
     else
         let
+            upperDigitsValue : Int
             upperDigitsValue =
                 int // 10
 
             digitChar =
-                unsafeDigitCharacterFromValue (int - (upperDigitsValue * 10))
+                unsafeDigitCharacterFromValue
+                    (Pine_kernel.int_add
+                        [ int
+                        , Pine_kernel.negate (Pine_kernel.int_mul [ upperDigitsValue, 10 ])
+                        ]
+                    )
         in
         fromUnsignedIntAsListHelper upperDigitsValue (digitChar :: lowerDigits)
 
@@ -482,9 +494,16 @@ foldr func acc (String list) =
 
 
 toFloat : String -> Maybe Float
-toFloat string =
-    if startsWith "-" string then
-        case toFloat (dropLeft 1 string) of
+toFloat (String chars) =
+    let
+        firstChar =
+            Pine_kernel.head chars
+    in
+    if Pine_kernel.equal [ firstChar, [] ] then
+        Nothing
+
+    else if Pine_kernel.equal [ firstChar, '-' ] then
+        case toFloatIgnoringSign (Pine_kernel.skip [ 1, chars ]) of
             Nothing ->
                 Nothing
 
@@ -492,40 +511,46 @@ toFloat string =
                 Just (Elm_Float -numAbs denom)
 
     else
-        case split "." string of
-            [] ->
-                Nothing
+        toFloatIgnoringSign chars
 
-            [ whole ] ->
-                case toInt whole of
-                    Nothing ->
-                        Nothing
 
-                    Just numerator ->
-                        Just (Elm_Float numerator 1)
+toFloatIgnoringSign : List Char -> Maybe Float
+toFloatIgnoringSign chars =
+    case splitHelperOnList [] [ '.' ] chars of
+        [] ->
+            Nothing
 
-            [ beforeSep, afterSep ] ->
-                case toInt beforeSep of
-                    Nothing ->
-                        Nothing
+        [ String whole ] ->
+            case toUnsignedIntFromList 0 whole of
+                Nothing ->
+                    Nothing
 
-                    Just beforeSepInt ->
-                        case toInt afterSep of
-                            Nothing ->
-                                Nothing
+                Just numerator ->
+                    Just (Elm_Float numerator 1)
 
-                            Just afterSepInt ->
-                                let
-                                    denom =
-                                        Basics.pow 10 (length afterSep)
+        [ String beforeSep, String afterSep ] ->
+            case toUnsignedIntFromList 0 beforeSep of
+                Nothing ->
+                    Nothing
 
-                                    numerator =
-                                        beforeSepInt * denom + afterSepInt
-                                in
-                                Just (Elm_Float numerator denom)
+                Just beforeSepInt ->
+                    case toUnsignedIntFromList 0 afterSep of
+                        Nothing ->
+                            Nothing
 
-            _ ->
-                Nothing
+                        Just afterSepInt ->
+                            let
+                                denom =
+                                    Basics.pow 10 (Pine_kernel.length afterSep)
+
+                                numerator =
+                                    Pine_kernel.int_add
+                                        [ Pine_kernel.int_mul [ beforeSepInt, denom ], afterSepInt ]
+                            in
+                            Just (Elm_Float numerator denom)
+
+        _ ->
+            Nothing
 
 
 any : (Char -> Bool) -> String -> Bool

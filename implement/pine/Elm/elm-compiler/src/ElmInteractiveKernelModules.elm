@@ -1960,7 +1960,7 @@ isSubString (String smallChars) offset row col (String bigChars) =
     if Pine_kernel.equal [ sliceFromSourceChars, smallChars ] then
         let
             ( newlineCount, colShift ) =
-                countOffsetsInString ( 0, 0 ) smallChars
+                countOffsetsInString ( 0, 0, 0 ) ( smallChars, expectedLength )
 
             newOffset : Int
             newOffset =
@@ -2019,13 +2019,6 @@ findSubString (String smallChars) offset row col (String bigChars) =
                 , Pine_kernel.negate offset
                 ]
 
-        consumedChars : List Char
-        consumedChars =
-            Pine_kernel.take
-                [ consumedLength
-                , Pine_kernel.skip [ offset, bigChars ]
-                ]
-
         targetOffset : Int
         targetOffset =
             if Pine_kernel.equal [ newOffset, -1 ] then
@@ -2035,7 +2028,7 @@ findSubString (String smallChars) offset row col (String bigChars) =
                 Pine_kernel.int_add [ newOffset, Pine_kernel.length smallChars ]
 
         ( newlineCount, colShift ) =
-            countOffsetsInString ( 0, 0 ) consumedChars
+            countOffsetsInString ( offset, 0, 0 ) ( bigChars, newOffset )
 
         newRow : Int
         newRow =
@@ -2077,32 +2070,31 @@ indexOf smallChars bigChars offset =
         -1
 
 
-startsWith : List Char -> List Char -> Bool
-startsWith patternList stringList =
-    Pine_kernel.equal
-        [ Pine_kernel.take [ Pine_kernel.length patternList, stringList ]
-        , patternList
-        ]
-
-
-countOffsetsInString : ( Int, Int ) -> List Char -> ( Int, Int )
-countOffsetsInString ( newlines, col ) chars =
+countOffsetsInString : ( Int, Int, Int ) -> ( List Char, Int ) -> ( Int, Int )
+countOffsetsInString ( offset, newlines, col ) ( chars, end ) =
     let
-        nextChar =
-            Pine_kernel.head chars
+        currentChar =
+            Pine_kernel.head
+                (Pine_kernel.skip [ offset, chars ])
+
+        nextOffset =
+            Pine_kernel.int_add [ offset, 1 ]
     in
-    if Pine_kernel.equal [ nextChar, [] ] then
+    if Pine_kernel.equal [ currentChar, [] ] then
         ( newlines, col )
 
-    else if Pine_kernel.equal [ nextChar, '\\n' ] then
+    else if Pine_kernel.int_is_sorted_asc [ end, offset ] then
+        ( newlines, col )
+
+    else if Pine_kernel.equal [ currentChar, '\\n' ] then
         countOffsetsInString
-            ( Pine_kernel.int_add [ newlines, 1 ], 0 )
-            (Pine_kernel.skip [ 1, chars ])
+            ( nextOffset, Pine_kernel.int_add [ newlines, 1 ], 0 )
+            ( chars, end )
 
     else
         countOffsetsInString
-            ( newlines, Pine_kernel.int_add [ col, 1 ] )
-            (Pine_kernel.skip [ 1, chars ])
+            ( nextOffset, newlines, Pine_kernel.int_add [ col, 1 ] )
+            ( chars, end )
 
 
 newlineChar : Char
@@ -2850,64 +2842,97 @@ finalizeFloat invalid expecting intSettings floatSettings intPair s =
         floatOffset =
             consumeDotAndExp intOffset s.src
     in
-    if floatOffset < 0 then
-        Bad True (fromInfo s.row (s.col - (floatOffset + s.offset)) invalid s.context)
+    if Pine_kernel.int_is_sorted_asc [ 0, floatOffset ] then
+        if Pine_kernel.equal [ s.offset, floatOffset ] then
+            Bad False (fromState s expecting)
 
-    else if s.offset == floatOffset then
-        Bad False (fromState s expecting)
+        else if Pine_kernel.equal [ intOffset, floatOffset ] then
+            finalizeInt invalid intSettings s.offset intPair s
 
-    else if intOffset == floatOffset then
-        finalizeInt invalid intSettings s.offset intPair s
+        else
+            case floatSettings of
+                Err x ->
+                    Bad True (fromState s invalid)
+
+                Ok toValue ->
+                    case String.toFloat (String.slice s.offset floatOffset s.src) of
+                        Nothing ->
+                            Bad True (fromState s invalid)
+
+                        Just n ->
+                            Good True (toValue n) (bumpOffset floatOffset s)
 
     else
-        case floatSettings of
-            Err x ->
-                Bad True (fromState s invalid)
+        Bad True
+            (fromInfo
+                s.row
+                (Pine_kernel.int_add [ s.col, Pine_kernel.negate (Pine_kernel.int_add [ floatOffset, s.offset ]) ])
+                invalid
+                s.context
+            )
 
-            Ok toValue ->
-                case String.toFloat (String.slice s.offset floatOffset s.src) of
-                    Nothing ->
-                        Bad True (fromState s invalid)
-
-                    Just n ->
-                        Good True (toValue n) (bumpOffset floatOffset s)
 
 
 --
 -- On a failure, returns negative index of problem.
 --
+
+
 consumeDotAndExp : Int -> String -> Int
 consumeDotAndExp offset src =
-  if isAsciiCode 0x2E {- . -} offset src then
-    consumeExp (chompBase10 (offset + 1) src) src
-  else
-    consumeExp offset src
+    if isAsciiCode 0x2E {- . -} offset src then
+        consumeExp (chompBase10 (Pine_kernel.int_add [ offset, 1 ]) src) src
+
+    else
+        consumeExp offset src
+
 
 
 --
 -- On a failure, returns negative index of problem.
 --
+
+
 consumeExp : Int -> String -> Int
 consumeExp offset src =
-  if isAsciiCode 0x65 {- e -} offset src || isAsciiCode 0x45 {- E -} offset src then
     let
-      eOffset = offset + 1
+        (String chars) =
+            src
 
-      expOffset =
-        if isAsciiCode 0x2B {- + -} eOffset src || isAsciiCode 0x2D {- - -} eOffset src then
-          eOffset + 1
-        else
-          eOffset
-
-      newOffset = chompBase10 expOffset src
+        nextChar =
+            Pine_kernel.head
+                (Pine_kernel.skip [ offset, chars ])
     in
-    if expOffset == newOffset then
-      -newOffset
-    else
-      newOffset
+    if Pine_kernel.equal [ nextChar, 'e' ] || Pine_kernel.equal [ nextChar, 'E' ] then
+        let
+            eOffset : Int
+            eOffset =
+                Pine_kernel.int_add [ offset, 1 ]
 
-  else
-    offset
+            charAfterE =
+                Pine_kernel.head
+                    (Pine_kernel.skip [ eOffset, chars ])
+
+            expOffset : Int
+            expOffset =
+                if Pine_kernel.equal [ charAfterE, '+' ] || Pine_kernel.equal [ charAfterE, '-' ] then
+                    Pine_kernel.int_add [ eOffset, 1 ]
+
+                else
+                    eOffset
+
+            newOffset : Int
+            newOffset =
+                chompBase10 expOffset src
+        in
+        if Pine_kernel.equal [ expOffset, newOffset ] then
+            Pine_kernel.negate newOffset
+
+        else
+            newOffset
+
+    else
+        offset
 
 
 chompBase10 : Int -> String -> Int
