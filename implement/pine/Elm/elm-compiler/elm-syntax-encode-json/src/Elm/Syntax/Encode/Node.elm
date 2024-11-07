@@ -23,8 +23,7 @@ element of the tree was found.
 -}
 
 import Elm.Syntax.Encode.Range as EncodeRange
-import Elm.Syntax.Node exposing (..)
-import Elm.Syntax.Range as Range exposing (Range)
+import Elm.Syntax.Node exposing (Node(..))
 import Json.Decode as JD exposing (Decoder)
 import Json.Encode as JE exposing (Value)
 

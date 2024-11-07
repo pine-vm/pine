@@ -1,6 +1,6 @@
 module Elm.Parser.TypeAnnotation exposing (typeAnnotation, typeAnnotationNonGreedy)
 
-import Combine exposing (..)
+import Combine
 import Elm.Parser.Base
 import Elm.Parser.Layout as Layout
 import Elm.Parser.Node
@@ -16,28 +16,28 @@ type Mode
     | Lazy
 
 
-typeAnnotation : Parser State (Node TypeAnnotation)
+typeAnnotation : Combine.Parser State (Node TypeAnnotation)
 typeAnnotation =
     typeAnnotationNoFn Eager
         |> Combine.andThen
             (\typeRef ->
                 Layout.optimisticLayoutWith
-                    (\() -> succeed typeRef)
+                    (\() -> Combine.succeed typeRef)
                     (\() ->
                         Combine.oneOf
-                            [ string "->"
-                                |> Combine.ignore (maybe Layout.layout)
+                            [ Combine.string "->"
+                                |> Combine.ignore (Combine.maybe Layout.layout)
                                 |> Combine.continueWith typeAnnotation
                                 |> Combine.map (\ta -> Node.combine TypeAnnotation.FunctionTypeAnnotation typeRef ta)
-                            , succeed typeRef
+                            , Combine.succeed typeRef
                             ]
                     )
             )
 
 
-typeAnnotationNonGreedy : Parser State (Node TypeAnnotation)
+typeAnnotationNonGreedy : Combine.Parser State (Node TypeAnnotation)
 typeAnnotationNonGreedy =
-    oneOf
+    Combine.oneOf
         [ parensTypeAnnotation
         , typedTypeAnnotation Lazy
         , genericTypeAnnotation
@@ -45,11 +45,11 @@ typeAnnotationNonGreedy =
         ]
 
 
-typeAnnotationNoFn : Mode -> Parser State (Node TypeAnnotation)
+typeAnnotationNoFn : Mode -> Combine.Parser State (Node TypeAnnotation)
 typeAnnotationNoFn mode =
-    lazy
+    Combine.lazy
         (\() ->
-            oneOf
+            Combine.oneOf
                 [ parensTypeAnnotation
                 , typedTypeAnnotation mode
                 , genericTypeAnnotation
@@ -58,24 +58,24 @@ typeAnnotationNoFn mode =
         )
 
 
-parensTypeAnnotation : Parser State (Node TypeAnnotation)
+parensTypeAnnotation : Combine.Parser State (Node TypeAnnotation)
 parensTypeAnnotation =
     let
-        commaSep : Parser State (List (Node TypeAnnotation))
+        commaSep : Combine.Parser State (List (Node TypeAnnotation))
         commaSep =
-            many
-                (string ","
-                    |> Combine.ignore (maybe Layout.layout)
+            Combine.many
+                (Combine.string ","
+                    |> Combine.ignore (Combine.maybe Layout.layout)
                     |> Combine.continueWith typeAnnotation
-                    |> Combine.ignore (maybe Layout.layout)
+                    |> Combine.ignore (Combine.maybe Layout.layout)
                 )
 
-        nested : Parser State TypeAnnotation
+        nested : Combine.Parser State TypeAnnotation
         nested =
             Combine.succeed asTypeAnnotation
-                |> Combine.ignore (maybe Layout.layout)
+                |> Combine.ignore (Combine.maybe Layout.layout)
                 |> Combine.keep typeAnnotation
-                |> Combine.ignore (maybe Layout.layout)
+                |> Combine.ignore (Combine.maybe Layout.layout)
                 |> Combine.keep commaSep
     in
     Combine.string "("
@@ -98,26 +98,26 @@ asTypeAnnotation ((Node _ value) as x) xs =
             TypeAnnotation.Tupled (x :: xs)
 
 
-genericTypeAnnotation : Parser State (Node TypeAnnotation)
+genericTypeAnnotation : Combine.Parser State (Node TypeAnnotation)
 genericTypeAnnotation =
     Elm.Parser.Node.parser (Combine.map TypeAnnotation.GenericType Elm.Parser.Tokens.functionName)
 
 
-recordFieldsTypeAnnotation : Parser State TypeAnnotation.RecordDefinition
+recordFieldsTypeAnnotation : Combine.Parser State TypeAnnotation.RecordDefinition
 recordFieldsTypeAnnotation =
-    sepBy1 (string ",") (Layout.maybeAroundBothSides <| Elm.Parser.Node.parser recordFieldDefinition)
+    Combine.sepBy1 (Combine.string ",") (Layout.maybeAroundBothSides <| Elm.Parser.Node.parser recordFieldDefinition)
 
 
-recordTypeAnnotation : Parser State (Node TypeAnnotation)
+recordTypeAnnotation : Combine.Parser State (Node TypeAnnotation)
 recordTypeAnnotation =
-    string "{"
-        |> Combine.ignore (maybe Layout.layout)
+    Combine.string "{"
+        |> Combine.ignore (Combine.maybe Layout.layout)
         |> Combine.continueWith
             (Combine.oneOf
                 [ Combine.succeed (TypeAnnotation.Record [])
                     |> Combine.ignore (Combine.string "}")
                 , Elm.Parser.Node.parser Elm.Parser.Tokens.functionName
-                    |> Combine.ignore (maybe Layout.layout)
+                    |> Combine.ignore (Combine.maybe Layout.layout)
                     |> Combine.andThen
                         (\fname ->
                             Combine.oneOf
@@ -127,13 +127,13 @@ recordTypeAnnotation =
                                     |> Combine.ignore (Combine.string "}")
                                 , Combine.succeed (\ta rest -> TypeAnnotation.Record <| Node.combine Tuple.pair fname ta :: rest)
                                     |> Combine.ignore (Combine.string ":")
-                                    |> Combine.ignore (maybe Layout.layout)
+                                    |> Combine.ignore (Combine.maybe Layout.layout)
                                     |> Combine.keep typeAnnotation
-                                    |> Combine.ignore (maybe Layout.layout)
+                                    |> Combine.ignore (Combine.maybe Layout.layout)
                                     |> Combine.keep
                                         (Combine.oneOf
                                             [ -- Skip a comma and then look for at least 1 more field
-                                              string ","
+                                              Combine.string ","
                                                 |> Combine.continueWith recordFieldsTypeAnnotation
                                             , -- Single field record, so just end with no additional fields
                                               Combine.succeed []
@@ -147,21 +147,21 @@ recordTypeAnnotation =
         |> Elm.Parser.Node.parser
 
 
-recordFieldDefinition : Parser State TypeAnnotation.RecordField
+recordFieldDefinition : Combine.Parser State TypeAnnotation.RecordField
 recordFieldDefinition =
-    succeed Tuple.pair
-        |> Combine.ignore (maybe Layout.layout)
+    Combine.succeed Tuple.pair
+        |> Combine.ignore (Combine.maybe Layout.layout)
         |> Combine.keep (Elm.Parser.Node.parser Elm.Parser.Tokens.functionName)
-        |> Combine.ignore (maybe Layout.layout)
-        |> Combine.ignore (string ":")
-        |> Combine.ignore (maybe Layout.layout)
+        |> Combine.ignore (Combine.maybe Layout.layout)
+        |> Combine.ignore (Combine.string ":")
+        |> Combine.ignore (Combine.maybe Layout.layout)
         |> Combine.keep typeAnnotation
 
 
-typedTypeAnnotation : Mode -> Parser State (Node TypeAnnotation)
+typedTypeAnnotation : Mode -> Combine.Parser State (Node TypeAnnotation)
 typedTypeAnnotation mode =
     let
-        genericHelper : List (Node TypeAnnotation) -> Parser State (List (Node TypeAnnotation))
+        genericHelper : List (Node TypeAnnotation) -> Combine.Parser State (List (Node TypeAnnotation))
         genericHelper items =
             Combine.oneOf
                 [ typeAnnotationNoFn Lazy
@@ -170,7 +170,7 @@ typedTypeAnnotation mode =
                             Layout.optimisticLayoutWith
                                 (\() -> Combine.succeed (next :: items))
                                 (\() -> genericHelper (next :: items))
-                                |> Combine.ignore (maybe Layout.layout)
+                                |> Combine.ignore (Combine.maybe Layout.layout)
                         )
                 , Combine.succeed items
                 ]

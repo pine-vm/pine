@@ -1,6 +1,6 @@
 module Elm.Syntax.Encode.Range exposing (..)
 
-import Elm.Syntax.Range exposing (..)
+import Elm.Syntax.Range exposing (Location, Range)
 import Json.Decode as JD exposing (Decoder)
 import Json.Encode as JE exposing (Value)
 

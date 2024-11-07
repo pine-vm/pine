@@ -25,7 +25,13 @@ import Elm.Operators exposing (SimpleInfix)
 import Elm.RawFile as RawFile
 import Elm.Syntax.Comments exposing (Comment)
 import Elm.Syntax.Declaration exposing (Declaration(..))
-import Elm.Syntax.Expression exposing (..)
+import Elm.Syntax.Expression
+    exposing
+        ( Expression(..)
+        , Function
+        , FunctionImplementation
+        , LetDeclaration(..)
+        )
 import Elm.Syntax.File exposing (File)
 import Elm.Syntax.Infix exposing (InfixDirection(..))
 import Elm.Syntax.ModuleName exposing (ModuleName)
@@ -105,7 +111,7 @@ attachDocumentationAndFixOperators declaration context =
     case Node.value declaration of
         FunctionDeclaration functionBeforeOperatorFix ->
             let
-                function : Function
+                function : Elm.Syntax.Expression.Function
                 function =
                     visitFunctionDecl functionBeforeOperatorFix
             in

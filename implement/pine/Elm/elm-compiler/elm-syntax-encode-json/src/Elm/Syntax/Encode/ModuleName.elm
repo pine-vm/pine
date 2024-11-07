@@ -1,6 +1,6 @@
 module Elm.Syntax.Encode.ModuleName exposing (..)
 
-import Elm.Syntax.ModuleName exposing (..)
+import Elm.Syntax.ModuleName exposing (ModuleName)
 import Json.Decode as JD exposing (Decoder)
 import Json.Encode as JE exposing (Value)
 
