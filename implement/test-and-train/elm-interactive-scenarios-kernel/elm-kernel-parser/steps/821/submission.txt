@@ -1,0 +1,1 @@
+Parser.run  Parser.float  "1.0"
