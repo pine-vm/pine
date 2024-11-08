@@ -145,14 +145,8 @@ type PStep context problem value
     | Bad Bool (Bag context problem)
 
 
-type alias State context =
-    { srcChars : List Char
-    , offset : Int
-    , indent : Int
-    , context : List (Located context)
-    , row : Int
-    , col : Int
-    }
+type State context
+    = PState (List Char) Int Int (List (Located context)) Int Int
 
 
 type alias Located context =
@@ -172,7 +166,17 @@ for each dead end.
 -}
 run : Parser c x a -> String -> Result (List (DeadEnd c x)) a
 run (Parser parse) (String srcChars) =
-    case parse { srcChars = srcChars, offset = 0, indent = 1, context = [], row = 1, col = 1 } of
+    case
+        parse
+            (PState
+                srcChars
+                0
+                1
+                []
+                1
+                1
+            )
+    of
         Good _ value _ ->
             Ok value
 
@@ -232,8 +236,8 @@ type Bag c x
 
 
 fromState : State c -> x -> Bag c x
-fromState s x =
-    AddRight Empty (DeadEnd s.row s.col x s.context)
+fromState (PState srcChars offset indent context row col) x =
+    AddRight Empty (DeadEnd row col x context)
 
 
 fromInfo : Int -> Int -> x -> List (Located c) -> Bag c x
@@ -514,8 +518,11 @@ keyword (Token kwd expecting) =
     Parser
         (\s ->
             let
+                (PState srcChars sOffset sIndent sContext sRow sCol) =
+                    s
+
                 ( newOffset, newRow, newCol ) =
-                    Elm.Kernel.Parser.isSubString kwd s.offset s.row s.col s.srcChars
+                    Elm.Kernel.Parser.isSubString kwd sOffset sRow sCol srcChars
             in
             if Pine_kernel.equal [ newOffset, -1 ] then
                 Bad False (fromState s expecting)
@@ -528,7 +535,7 @@ keyword (Token kwd expecting) =
                             Char.isAlphaNum c || Pine_kernel.equal [ c, '_' ]
                         )
                         newOffset
-                        s.srcChars
+                        srcChars
                     ]
             then
                 Bad False (fromState s expecting)
@@ -536,13 +543,14 @@ keyword (Token kwd expecting) =
             else
                 Good progress
                     ()
-                    { srcChars = s.srcChars
-                    , offset = newOffset
-                    , indent = s.indent
-                    , context = s.context
-                    , row = newRow
-                    , col = newCol
-                    }
+                    (PState
+                        srcChars
+                        newOffset
+                        sIndent
+                        sContext
+                        newRow
+                        newCol
+                    )
         )
 
 
@@ -589,8 +597,11 @@ token (Token str expecting) =
     Parser
         (\s ->
             let
+                (PState srcChars sOffset sIndent sContext sRow sCol) =
+                    s
+
                 ( newOffset, newRow, newCol ) =
-                    Elm.Kernel.Parser.isSubString str s.offset s.row s.col s.srcChars
+                    Elm.Kernel.Parser.isSubString str sOffset sRow sCol srcChars
             in
             if Pine_kernel.equal [ newOffset, -1 ] then
                 Bad False (fromState s expecting)
@@ -598,13 +609,14 @@ token (Token str expecting) =
             else
                 Good progress
                     ()
-                    { srcChars = s.srcChars
-                    , offset = newOffset
-                    , indent = s.indent
-                    , context = s.context
-                    , row = newRow
-                    , col = newCol
-                    }
+                    (PState
+                        srcChars
+                        newOffset
+                        sIndent
+                        sContext
+                        newRow
+                        newCol
+                    )
         )
 
 
@@ -700,37 +712,37 @@ number c =
     Parser
         (\s ->
             let
-                sourceChars =
-                    s.srcChars
+                (PState srcChars sOffset sIndent sContext sRow sCol) =
+                    s
 
                 firstChar =
-                    Pine_kernel.head (Pine_kernel.skip [ s.offset, sourceChars ])
+                    Pine_kernel.head (Pine_kernel.skip [ sOffset, srcChars ])
             in
             if Pine_kernel.equal [ firstChar, '0' ] then
                 let
                     zeroOffset =
-                        Pine_kernel.int_add [ s.offset, 1 ]
+                        Pine_kernel.int_add [ sOffset, 1 ]
 
                     secondChar =
-                        Pine_kernel.head (Pine_kernel.skip [ zeroOffset, sourceChars ])
+                        Pine_kernel.head (Pine_kernel.skip [ zeroOffset, srcChars ])
 
                     baseOffset =
                         Pine_kernel.int_add [ zeroOffset, 1 ]
                 in
                 if Pine_kernel.equal [ secondChar, 'x' ] then
-                    finalizeInt c.invalid c.hex baseOffset (consumeBase16 baseOffset s.srcChars) s
+                    finalizeInt c.invalid c.hex baseOffset (consumeBase16 baseOffset srcChars) s
 
                 else if Pine_kernel.equal [ secondChar, 'o' ] then
-                    finalizeInt c.invalid c.octal baseOffset (consumeBase 8 baseOffset s.srcChars) s
+                    finalizeInt c.invalid c.octal baseOffset (consumeBase 8 baseOffset srcChars) s
 
                 else if Pine_kernel.equal [ secondChar, 'b' ] then
-                    finalizeInt c.invalid c.binary baseOffset (consumeBase 2 baseOffset s.srcChars) s
+                    finalizeInt c.invalid c.binary baseOffset (consumeBase 2 baseOffset srcChars) s
 
                 else
                     finalizeFloat c.invalid c.expecting c.int c.float ( zeroOffset, 0 ) s
 
             else
-                finalizeFloat c.invalid c.expecting c.int c.float (consumeBase 10 s.offset s.srcChars) s
+                finalizeFloat c.invalid c.expecting c.int c.float (consumeBase 10 sOffset srcChars) s
         )
 
 
@@ -751,10 +763,14 @@ finalizeInt invalid handler startOffset ( endOffset, n ) s =
             Bad True (fromState s x)
 
         Ok toValue ->
+            let
+                (PState srcChars sOffset sIndent sContext sRow sCol) =
+                    s
+            in
             if Pine_kernel.equal [ startOffset, endOffset ] then
                 Bad
                     (Pine_kernel.negate
-                        (Pine_kernel.int_is_sorted_asc [ startOffset, s.offset ])
+                        (Pine_kernel.int_is_sorted_asc [ startOffset, sOffset ])
                     )
                     (fromState s invalid)
 
@@ -763,33 +779,34 @@ finalizeInt invalid handler startOffset ( endOffset, n ) s =
 
 
 bumpOffset : Int -> State c -> State c
-bumpOffset newOffset s =
-    { srcChars = s.srcChars
-    , offset = newOffset
-    , indent = s.indent
-    , context = s.context
-    , row = s.row
-    , col =
-        Pine_kernel.int_add
-            [ s.col, newOffset, Pine_kernel.negate s.offset ]
-    }
+bumpOffset newOffset (PState srcChars offset indent context row col) =
+    PState
+        srcChars
+        newOffset
+        indent
+        context
+        row
+        (Pine_kernel.int_add [ col, newOffset, Pine_kernel.negate offset ])
 
 
 finalizeFloat : x -> x -> Result x (Int -> a) -> Result x (Float -> a) -> ( Int, Int ) -> State c -> PStep c x a
 finalizeFloat invalid expecting intSettings floatSettings intPair s =
     let
+        (PState srcChars sOffset sIndent sContext sRow sCol) =
+            s
+
         ( intOffset, _ ) =
             intPair
 
         floatOffset =
-            consumeDotAndExp intOffset s.srcChars
+            consumeDotAndExp intOffset srcChars
     in
     if Pine_kernel.int_is_sorted_asc [ 0, floatOffset ] then
-        if Pine_kernel.equal [ s.offset, floatOffset ] then
+        if Pine_kernel.equal [ sOffset, floatOffset ] then
             Bad False (fromState s expecting)
 
         else if Pine_kernel.equal [ intOffset, floatOffset ] then
-            finalizeInt invalid intSettings s.offset intPair s
+            finalizeInt invalid intSettings sOffset intPair s
 
         else
             case floatSettings of
@@ -797,7 +814,7 @@ finalizeFloat invalid expecting intSettings floatSettings intPair s =
                     Bad True (fromState s invalid)
 
                 Ok toValue ->
-                    case String.toFloat (String.slice s.offset floatOffset (String s.srcChars)) of
+                    case String.toFloat (String.slice sOffset floatOffset (String srcChars)) of
                         Nothing ->
                             Bad True (fromState s invalid)
 
@@ -807,10 +824,10 @@ finalizeFloat invalid expecting intSettings floatSettings intPair s =
     else
         Bad True
             (fromInfo
-                s.row
-                (Pine_kernel.int_add [ s.col, Pine_kernel.negate (Pine_kernel.int_add [ floatOffset, s.offset ]) ])
+                sRow
+                (Pine_kernel.int_add [ sCol, Pine_kernel.negate (Pine_kernel.int_add [ floatOffset, sOffset ]) ])
                 invalid
-                s.context
+                sContext
             )
 
 
@@ -890,7 +907,11 @@ end : x -> Parser c x ()
 end x =
     Parser
         (\s ->
-            if Pine_kernel.equal [ Pine_kernel.length s.srcChars, s.offset ] then
+            let
+                (PState srcChars sOffset sIndent sContext sRow sCol) =
+                    s
+            in
+            if Pine_kernel.equal [ Pine_kernel.length srcChars, sOffset ] then
                 Good False () s
 
             else
@@ -920,7 +941,14 @@ mapChompedString func (Parser parse) =
                     Bad p x
 
                 Good p a s1 ->
-                    Good p (func (String.slice s0.offset s1.offset (String s0.srcChars)) a) s1
+                    let
+                        (PState srcChars sOffset sIndent sContext sRow sCol) =
+                            s0
+
+                        (PState _ s1Offset _ _ _ _) =
+                            s1
+                    in
+                    Good p (func (String.slice sOffset s1Offset (String srcChars)) a) s1
         )
 
 
@@ -936,8 +964,11 @@ chompIf isGood expecting =
     Parser
         (\s ->
             let
+                (PState srcChars sOffset sIndent sContext sRow sCol) =
+                    s
+
                 newOffset =
-                    isSubChar isGood s.offset s.srcChars
+                    isSubChar isGood sOffset srcChars
             in
             -- not found
             if Pine_kernel.equal [ newOffset, -1 ] then
@@ -947,25 +978,27 @@ chompIf isGood expecting =
             else if Pine_kernel.equal [ newOffset, -2 ] then
                 Good True
                     ()
-                    { srcChars = s.srcChars
-                    , offset = Pine_kernel.int_add [ s.offset, 1 ]
-                    , indent = s.indent
-                    , context = s.context
-                    , row = Pine_kernel.int_add [ s.row, 1 ]
-                    , col = 1
-                    }
+                    (PState
+                        srcChars
+                        (Pine_kernel.int_add [ sOffset, 1 ])
+                        sIndent
+                        sContext
+                        (Pine_kernel.int_add [ sRow, 1 ])
+                        1
+                    )
                 -- found
 
             else
                 Good True
                     ()
-                    { srcChars = s.srcChars
-                    , offset = newOffset
-                    , indent = s.indent
-                    , context = s.context
-                    , row = s.row
-                    , col = Pine_kernel.int_add [ s.col, 1 ]
-                    }
+                    (PState
+                        srcChars
+                        newOffset
+                        sIndent
+                        sContext
+                        sRow
+                        (Pine_kernel.int_add [ sCol, 1 ])
+                    )
         )
 
 
@@ -979,18 +1012,22 @@ chompWhile : (Char -> Bool) -> Parser c x ()
 chompWhile isGood =
     Parser
         (\s ->
-            chompWhileHelp isGood s.offset s.row s.col s
+            let
+                (PState srcChars sOffset sIndent sContext sRow sCol) =
+                    s
+            in
+            chompWhileHelp isGood sOffset sRow sCol s
         )
 
 
 chompWhileHelp : (Char -> Bool) -> Int -> Int -> Int -> State c -> PStep c x ()
 chompWhileHelp isGood offset row col s0 =
     let
-        chars =
-            s0.srcChars
+        (PState srcChars sOffset sIndent sContext sRow sCol) =
+            s0
 
         nextChar =
-            Pine_kernel.head (Pine_kernel.skip [ offset, chars ])
+            Pine_kernel.head (Pine_kernel.skip [ offset, srcChars ])
     in
     if isGood nextChar then
         if Pine_kernel.equal [ nextChar, '\n' ] then
@@ -1015,16 +1052,17 @@ chompWhileHelp isGood offset row col s0 =
         -- no match
         Good
             (Pine_kernel.negate
-                (Pine_kernel.int_is_sorted_asc [ offset, s0.offset ])
+                (Pine_kernel.int_is_sorted_asc [ offset, sOffset ])
             )
             ()
-            { srcChars = s0.srcChars
-            , offset = offset
-            , indent = s0.indent
-            , context = s0.context
-            , row = row
-            , col = col
-            }
+            (PState
+                srcChars
+                offset
+                sIndent
+                sContext
+                row
+                col
+            )
 
 
 
@@ -1040,25 +1078,29 @@ chompUntil (Token str expecting) =
     Parser
         (\s ->
             let
+                (PState srcChars sOffset sIndent sContext sRow sCol) =
+                    s
+
                 ( newOffset, newRow, newCol ) =
-                    Elm.Kernel.Parser.findSubString str s.offset s.row s.col s.srcChars
+                    Elm.Kernel.Parser.findSubString str sOffset sRow sCol srcChars
             in
             if Pine_kernel.equal [ newOffset, -1 ] then
-                Bad False (fromInfo newRow newCol expecting s.context)
+                Bad False (fromInfo newRow newCol expecting sContext)
 
             else
                 Good
                     (Pine_kernel.negate
-                        (Pine_kernel.int_is_sorted_asc [ newOffset, s.offset ])
+                        (Pine_kernel.int_is_sorted_asc [ newOffset, sOffset ])
                     )
                     ()
-                    { srcChars = s.srcChars
-                    , offset = newOffset
-                    , indent = s.indent
-                    , context = s.context
-                    , row = newRow
-                    , col = newCol
-                    }
+                    (PState
+                        srcChars
+                        newOffset
+                        sIndent
+                        sContext
+                        newRow
+                        newCol
+                    )
         )
 
 
@@ -1069,8 +1111,11 @@ chompUntilEndOr str =
     Parser
         (\s ->
             let
+                (PState srcChars sOffset sIndent sContext sRow sCol) =
+                    s
+
                 ( newOffset, newRow, newCol ) =
-                    Elm.Kernel.Parser.findSubString str s.offset s.row s.col s.srcChars
+                    Elm.Kernel.Parser.findSubString str sOffset sRow sCol srcChars
 
                 adjustedOffset : Int
                 adjustedOffset =
@@ -1078,17 +1123,18 @@ chompUntilEndOr str =
                         newOffset
 
                     else
-                        Pine_kernel.length s.srcChars
+                        Pine_kernel.length srcChars
             in
-            Good (Pine_kernel.negate (Pine_kernel.int_is_sorted_asc [ adjustedOffset, s.offset ]))
+            Good (Pine_kernel.negate (Pine_kernel.int_is_sorted_asc [ adjustedOffset, sOffset ]))
                 ()
-                { srcChars = s.srcChars
-                , offset = adjustedOffset
-                , indent = s.indent
-                , context = s.context
-                , row = newRow
-                , col = newCol
-                }
+                (PState
+                    srcChars
+                    adjustedOffset
+                    sIndent
+                    sContext
+                    newRow
+                    newCol
+                )
         )
 
 
@@ -1140,9 +1186,13 @@ inContext : context -> Parser context x a -> Parser context x a
 inContext context (Parser parse) =
     Parser
         (\s0 ->
-            case parse (changeContext (Located s0.row s0.col context :: s0.context) s0) of
+            let
+                (PState srcChars offset indent sContext row col) =
+                    s0
+            in
+            case parse (changeContext (Located row col context :: sContext) s0) of
                 Good p a s1 ->
-                    Good p a (changeContext s0.context s1)
+                    Good p a (changeContext sContext s1)
 
                 (Bad _ _) as step ->
                     step
@@ -1150,14 +1200,8 @@ inContext context (Parser parse) =
 
 
 changeContext : List (Located c) -> State c -> State c
-changeContext newContext s =
-    { srcChars = s.srcChars
-    , offset = s.offset
-    , indent = s.indent
-    , context = newContext
-    , row = s.row
-    , col = s.col
-    }
+changeContext newContext (PState srcChars offset indent context row col) =
+    PState srcChars offset indent newContext row col
 
 
 
@@ -1177,9 +1221,13 @@ withIndent : Int -> Parser c x a -> Parser c x a
 withIndent newIndent (Parser parse) =
     Parser
         (\s0 ->
+            let
+                (PState srcChars offset s0Indent context row col) =
+                    s0
+            in
             case parse (changeIndent newIndent s0) of
                 Good p a s1 ->
-                    Good p a (changeIndent s0.indent s1)
+                    Good p a (changeIndent s0Indent s1)
 
                 Bad p x ->
                     Bad p x
@@ -1187,14 +1235,8 @@ withIndent newIndent (Parser parse) =
 
 
 changeIndent : Int -> State c -> State c
-changeIndent newIndent s =
-    { srcChars = s.srcChars
-    , offset = s.offset
-    , indent = newIndent
-    , context = s.context
-    , row = s.row
-    , col = s.col
-    }
+changeIndent newIndent (PState srcChars offset indent context row col) =
+    PState srcChars offset newIndent context row col
 
 
 
@@ -1205,35 +1247,70 @@ changeIndent newIndent s =
 -}
 getPosition : Parser c x ( Int, Int )
 getPosition =
-    Parser (\s -> Good False ( s.row, s.col ) s)
+    Parser
+        (\s ->
+            let
+                (PState srcChars offset indent context row col) =
+                    s
+            in
+            Good False ( row, col ) s
+        )
 
 
 {-| Just like [`Parser.getRow`](Parser#getRow)
 -}
 getRow : Parser c x Int
 getRow =
-    Parser (\s -> Good False s.row s)
+    Parser
+        (\s ->
+            let
+                (PState srcChars offset indent context row col) =
+                    s
+            in
+            Good False row s
+        )
 
 
 {-| Just like [`Parser.getCol`](Parser#getCol)
 -}
 getCol : Parser c x Int
 getCol =
-    Parser (\s -> Good False s.col s)
+    Parser
+        (\s ->
+            let
+                (PState srcChars offset indent context row col) =
+                    s
+            in
+            Good False col s
+        )
 
 
 {-| Just like [`Parser.getOffset`](Parser#getOffset)
 -}
 getOffset : Parser c x Int
 getOffset =
-    Parser (\s -> Good False s.offset s)
+    Parser
+        (\s ->
+            let
+                (PState srcChars offset indent context row col) =
+                    s
+            in
+            Good False offset s
+        )
 
 
 {-| Just like [`Parser.getSource`](Parser#getSource)
 -}
 getSource : Parser c x String
 getSource =
-    Parser (\s -> Good False (String s.srcChars) s)
+    Parser
+        (\s ->
+            let
+                (PState srcChars offset indent context row col) =
+                    s
+            in
+            Good False (String srcChars) s
+        )
 
 
 {-| Again, when parsing, you want to allocate as little as possible.
@@ -1275,8 +1352,12 @@ variable i =
     Parser
         (\s ->
             let
+                (PState srcChars sOffset indent context row col) =
+                    s
+
+                firstOffset : Int
                 firstOffset =
-                    isSubChar i.start s.offset s.srcChars
+                    isSubChar i.start sOffset srcChars
             in
             if Pine_kernel.equal [ firstOffset, -1 ] then
                 Bad False (fromState s i.expecting)
@@ -1287,25 +1368,28 @@ variable i =
                         if Pine_kernel.equal [ firstOffset, -2 ] then
                             varHelp
                                 i.inner
-                                (Pine_kernel.int_add [ s.offset, 1 ])
-                                (Pine_kernel.int_add [ s.row, 1 ])
+                                (Pine_kernel.int_add [ sOffset, 1 ])
+                                (Pine_kernel.int_add [ row, 1 ])
                                 1
-                                s.srcChars
-                                s.indent
-                                s.context
+                                srcChars
+                                indent
+                                context
 
                         else
                             varHelp
                                 i.inner
                                 firstOffset
-                                s.row
-                                (Pine_kernel.int_add [ s.col, 1 ])
-                                s.srcChars
-                                s.indent
-                                s.context
+                                row
+                                (Pine_kernel.int_add [ col, 1 ])
+                                srcChars
+                                indent
+                                context
+
+                    (PState _ s1Offset _ _ _ _) =
+                        s1
 
                     name =
-                        String.slice s.offset s1.offset (String s.srcChars)
+                        String.slice sOffset s1Offset (String srcChars)
                 in
                 if Set.member name i.reserved then
                     Bad False (fromState s i.expecting)
@@ -1322,13 +1406,13 @@ varHelp isGood offset row col srcChars indent context =
             isSubChar isGood offset srcChars
     in
     if Pine_kernel.equal [ newOffset, -1 ] then
-        { srcChars = srcChars
-        , offset = offset
-        , indent = indent
-        , context = context
-        , row = row
-        , col = col
-        }
+        PState
+            srcChars
+            offset
+            indent
+            context
+            row
+            col
 
     else if Pine_kernel.equal [ newOffset, -2 ] then
         varHelp
