@@ -93,8 +93,10 @@ public class Precompiled
             }
             */
 
-            foreach (var envItem in envItems)
+            for (var i = 0; i < envItems.Count; ++i)
             {
+                var envItem = envItems[i];
+
                 if (envItem.EnvConstraint.SatisfiedByValue(environment))
                 {
                     return envItem.PrecompiledDelegate.Invoke(environment, parseCache);
@@ -233,6 +235,12 @@ public class Precompiled
 
         var pineComputeValueFromStringRecursiveBlobWrapperExpressionValue =
             ExpressionEncoding.EncodeExpressionAsValue(pineComputeValueFromStringRecursiveBlobWrapperExpression);
+
+        var elmKernelParser_countOffsetsInStringExpression =
+            popularExpressionDictionary["Elm.Kernel.Parser.countOffsetsInString"];
+
+        var elmKernelParser_countOffsetsInStringExpressionValue =
+            ExpressionEncoding.EncodeExpressionAsValue(elmKernelParser_countOffsetsInStringExpression);
 
 
         {
@@ -501,6 +509,24 @@ public class Precompiled
                     [new PrecompiledEntry(
                         computeValueFromStringRecursiveEnvClass,
                         PineComputeValueFromStringRecursive)]);
+        }
+
+
+        {
+            var countOffsetsInStringEnvClass =
+                EnvConstraintId.Create(
+                    [
+                    new KeyValuePair<IReadOnlyList<int>, PineValue>(
+                    [0, 0],
+                    elmKernelParser_countOffsetsInStringExpressionValue)
+                    ]);
+
+            yield return
+                new KeyValuePair<Expression, IReadOnlyList<PrecompiledEntry>>(
+                    elmKernelParser_countOffsetsInStringExpression,
+                    [new PrecompiledEntry(
+                        countOffsetsInStringEnvClass,
+                        ElmKernelParser_countOffsetsInString)]);
         }
     }
 
@@ -1262,6 +1288,70 @@ public class Precompiled
             new PrecompiledResult.FinalValue(
                 finalValue,
                 StackFrameCount: 3 + mappedValues.Length * 1);
+    }
+
+    static PrecompiledResult.FinalValue? ElmKernelParser_countOffsetsInString(
+        PineValue environment,
+        PineVMParseCache parseCache)
+    {
+        if (PineValueAsInteger.SignedIntegerFromValueRelaxed(
+            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 0, 0])).IsOkOrNullable() is not { } offset)
+        {
+            return null;
+        }
+
+        if (PineValueAsInteger.SignedIntegerFromValueRelaxed(
+            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 0, 1])).IsOkOrNullable() is not { } newlines)
+        {
+            return null;
+        }
+
+        if (PineValueAsInteger.SignedIntegerFromValueRelaxed(
+            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 0, 2])).IsOkOrNullable() is not { } col)
+        {
+            return null;
+        }
+
+        if (PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 1, 0]) is not PineValue.ListValue charsList)
+        {
+            return null;
+        }
+
+        if (PineValueAsInteger.SignedIntegerFromValueRelaxed(
+            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 1, 1])).IsOkOrNullable() is not { } end)
+        {
+            return null;
+        }
+
+        if (offset < 0 || offset >= charsList.Elements.Count || end > charsList.Elements.Count)
+        {
+            return null;
+        }
+
+        for (var i = (int)offset; i < end; ++i)
+        {
+            if (charsList.Elements[i] is PineValue.BlobValue charBlobValue &&
+                charBlobValue.Bytes.Length is 1 && charBlobValue.Bytes.Span[0] is 10)
+            {
+                ++newlines;
+                col = 0;
+                continue;
+            }
+
+            ++col;
+        }
+
+        var finalValue =
+            PineValue.List(
+                [
+                PineValueAsInteger.ValueFromSignedInteger(newlines),
+                PineValueAsInteger.ValueFromSignedInteger(col)
+                ]);
+
+        return
+            new PrecompiledResult.FinalValue(
+                finalValue,
+                StackFrameCount: 1 + charsList.Elements.Count);
     }
 
     static Func<PrecompiledResult>? ListMap(
