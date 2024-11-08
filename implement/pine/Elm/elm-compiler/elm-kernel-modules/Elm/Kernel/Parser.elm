@@ -81,8 +81,8 @@ consumeBase16Helper offset chars total =
                 ( offset, total )
 
 
-chompBase10 : Int -> String -> Int
-chompBase10 offset (String chars) =
+chompBase10 : Int -> List Char -> Int
+chompBase10 offset chars =
     chompBase10Helper offset chars
 
 

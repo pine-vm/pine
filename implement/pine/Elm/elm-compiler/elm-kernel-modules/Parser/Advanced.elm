@@ -18,13 +18,6 @@ module Parser.Advanced exposing
 
 @docs Parser, run, DeadEnd, inContext, Token
 
-  -   - \*
-        **Everything past here works just like in the
-        [`Parser`](/packages/elm/parser/latest/Parser) module, except that `String`
-        arguments become `Token` arguments, and you need to provide a `Problem` for
-        certain scenarios.**
-  -   - \*
-
 
 # Building Blocks
 
@@ -520,7 +513,20 @@ keyword (Token kwd expecting) =
                 ( newOffset, newRow, newCol ) =
                     isSubString kwd s.offset s.row s.col s.src
             in
-            if newOffset == -1 || 0 <= isSubChar (\c -> Char.isAlphaNum c || c == '_') newOffset s.src then
+            if Pine_kernel.equal [ newOffset, -1 ] then
+                Bad False (fromState s expecting)
+
+            else if
+                Pine_kernel.int_is_sorted_asc
+                    [ 0
+                    , isSubChar
+                        (\c ->
+                            Char.isAlphaNum c || Pine_kernel.equal [ c, '_' ]
+                        )
+                        newOffset
+                        s.src
+                    ]
+            then
                 Bad False (fromState s expecting)
 
             else
@@ -582,7 +588,7 @@ token (Token str expecting) =
                 ( newOffset, newRow, newCol ) =
                     isSubString str s.offset s.row s.col s.src
             in
-            if newOffset == -1 then
+            if Pine_kernel.equal [ newOffset, -1 ] then
                 Bad False (fromState s expecting)
 
             else
@@ -759,7 +765,9 @@ bumpOffset newOffset s =
     , indent = s.indent
     , context = s.context
     , row = s.row
-    , col = s.col + (newOffset - s.offset)
+    , col =
+        Pine_kernel.int_add
+            [ s.col, newOffset, Pine_kernel.negate s.offset ]
     }
 
 
@@ -809,12 +817,17 @@ finalizeFloat invalid expecting intSettings floatSettings intPair s =
 
 
 consumeDotAndExp : Int -> String -> Int
-consumeDotAndExp offset src =
-    if isAsciiCode 0x2E {- . -} offset src then
-        consumeExp (chompBase10 (Pine_kernel.int_add [ offset, 1 ]) src) src
+consumeDotAndExp offset (String chars) =
+    if Pine_kernel.equal [ Pine_kernel.head (Pine_kernel.skip [ offset, chars ]), '.' ] then
+        consumeExp
+            (Elm.Kernel.Parser.chompBase10
+                (Pine_kernel.int_add [ offset, 1 ])
+                chars
+            )
+            chars
 
     else
-        consumeExp offset src
+        consumeExp offset chars
 
 
 
@@ -823,12 +836,9 @@ consumeDotAndExp offset src =
 --
 
 
-consumeExp : Int -> String -> Int
-consumeExp offset src =
+consumeExp : Int -> List Char -> Int
+consumeExp offset chars =
     let
-        (String chars) =
-            src
-
         nextChar =
             Pine_kernel.head
                 (Pine_kernel.skip [ offset, chars ])
@@ -853,7 +863,7 @@ consumeExp offset src =
 
             newOffset : Int
             newOffset =
-                chompBase10 expOffset src
+                Elm.Kernel.Parser.chompBase10 expOffset chars
         in
         if Pine_kernel.equal [ expOffset, newOffset ] then
             Pine_kernel.negate newOffset
@@ -863,11 +873,6 @@ consumeExp offset src =
 
     else
         offset
-
-
-chompBase10 : Int -> String -> Int
-chompBase10 offset src =
-    Elm.Kernel.Parser.chompBase10 offset src
 
 
 
@@ -881,7 +886,7 @@ end : x -> Parser c x ()
 end x =
     Parser
         (\s ->
-            if String.length s.src == s.offset then
+            if Pine_kernel.equal [ String.length s.src, s.offset ] then
                 Good False () s
 
             else
@@ -931,18 +936,18 @@ chompIf isGood expecting =
                     isSubChar isGood s.offset s.src
             in
             -- not found
-            if newOffset == -1 then
+            if Pine_kernel.equal [ newOffset, -1 ] then
                 Bad False (fromState s expecting)
                 -- newline
 
-            else if newOffset == -2 then
+            else if Pine_kernel.equal [ newOffset, -2 ] then
                 Good True
                     ()
                     { src = s.src
-                    , offset = s.offset + 1
+                    , offset = Pine_kernel.int_add [ s.offset, 1 ]
                     , indent = s.indent
                     , context = s.context
-                    , row = s.row + 1
+                    , row = Pine_kernel.int_add [ s.row, 1 ]
                     , col = 1
                     }
                 -- found
@@ -955,7 +960,7 @@ chompIf isGood expecting =
                     , indent = s.indent
                     , context = s.context
                     , row = s.row
-                    , col = s.col + 1
+                    , col = Pine_kernel.int_add [ s.col, 1 ]
                     }
         )
 
@@ -977,11 +982,33 @@ chompWhile isGood =
 chompWhileHelp : (Char -> Bool) -> Int -> Int -> Int -> State c -> PStep c x ()
 chompWhileHelp isGood offset row col s0 =
     let
-        newOffset =
-            isSubChar isGood offset s0.src
+        (String chars) =
+            s0.src
+
+        nextChar =
+            Pine_kernel.head (Pine_kernel.skip [ offset, chars ])
     in
-    -- no match
-    if Pine_kernel.equal [ newOffset, -1 ] then
+    if isGood nextChar then
+        if Pine_kernel.equal [ nextChar, '\n' ] then
+            -- matched a newline
+            chompWhileHelp
+                isGood
+                (Pine_kernel.int_add [ offset, 1 ])
+                (Pine_kernel.int_add [ row, 1 ])
+                1
+                s0
+
+        else
+            -- normal match
+            chompWhileHelp
+                isGood
+                (Pine_kernel.int_add [ offset, 1 ])
+                row
+                (Pine_kernel.int_add [ col, 1 ])
+                s0
+
+    else
+        -- no match
         Good
             (Pine_kernel.negate
                 (Pine_kernel.int_is_sorted_asc [ offset, s0.offset ])
@@ -994,24 +1021,6 @@ chompWhileHelp isGood offset row col s0 =
             , row = row
             , col = col
             }
-        -- matched a newline
-
-    else if Pine_kernel.equal [ newOffset, -2 ] then
-        chompWhileHelp
-            isGood
-            (Pine_kernel.int_add [ offset, 1 ])
-            (Pine_kernel.int_add [ row, 1 ])
-            1
-            s0
-        -- normal match
-
-    else
-        chompWhileHelp
-            isGood
-            newOffset
-            row
-            (Pine_kernel.int_add [ col, 1 ])
-            s0
 
 
 
@@ -1059,14 +1068,15 @@ chompUntilEndOr str =
                 ( newOffset, newRow, newCol ) =
                     Elm.Kernel.Parser.findSubString str s.offset s.row s.col s.src
 
+                adjustedOffset : Int
                 adjustedOffset =
-                    if newOffset < 0 then
-                        String.length s.src
+                    if Pine_kernel.int_is_sorted_asc [ 0, newOffset ] then
+                        newOffset
 
                     else
-                        newOffset
+                        String.length s.src
             in
-            Good (s.offset < adjustedOffset)
+            Good (Pine_kernel.negate (Pine_kernel.int_is_sorted_asc [ adjustedOffset, s.offset ]))
                 ()
                 { src = s.src
                 , offset = adjustedOffset
@@ -1272,28 +1282,6 @@ isSubChar =
     Elm.Kernel.Parser.isSubChar
 
 
-{-| Check an offset in the string. Is it equal to the given Char? Are they
-both ASCII characters?
--}
-isAsciiCode : Int -> Int -> String -> Bool
-isAsciiCode =
-    Elm.Kernel.Parser.isAsciiCode
-
-
-{-| Find a substring after a given offset.
-
-    findSubString "42" offset row col "Is 42 the answer?"
-        --==> (newOffset, newRow, newCol)
-
-If `offset = 0` we would get `(3, 1, 4)`
-If `offset = 7` we would get `(-1, 1, 18)`
-
--}
-findSubString : String -> Int -> Int -> Int -> String -> ( Int, Int, Int )
-findSubString =
-    Elm.Kernel.Parser.findSubString
-
-
 
 -- VARIABLES
 
@@ -1315,17 +1303,31 @@ variable i =
                 firstOffset =
                     isSubChar i.start s.offset s.src
             in
-            if firstOffset == -1 then
+            if Pine_kernel.equal [ firstOffset, -1 ] then
                 Bad False (fromState s i.expecting)
 
             else
                 let
                     s1 =
-                        if firstOffset == -2 then
-                            varHelp i.inner (s.offset + 1) (s.row + 1) 1 s.src s.indent s.context
+                        if Pine_kernel.equal [ firstOffset, -2 ] then
+                            varHelp
+                                i.inner
+                                (Pine_kernel.int_add [ s.offset, 1 ])
+                                (Pine_kernel.int_add [ s.row, 1 ])
+                                1
+                                s.src
+                                s.indent
+                                s.context
 
                         else
-                            varHelp i.inner firstOffset s.row (s.col + 1) s.src s.indent s.context
+                            varHelp
+                                i.inner
+                                firstOffset
+                                s.row
+                                (Pine_kernel.int_add [ s.col, 1 ])
+                                s.src
+                                s.indent
+                                s.context
 
                     name =
                         String.slice s.offset s1.offset s.src
@@ -1344,7 +1346,7 @@ varHelp isGood offset row col src indent context =
         newOffset =
             isSubChar isGood offset src
     in
-    if newOffset == -1 then
+    if Pine_kernel.equal [ newOffset, -1 ] then
         { src = src
         , offset = offset
         , indent = indent
@@ -1353,11 +1355,25 @@ varHelp isGood offset row col src indent context =
         , col = col
         }
 
-    else if newOffset == -2 then
-        varHelp isGood (offset + 1) (row + 1) 1 src indent context
+    else if Pine_kernel.equal [ newOffset, -2 ] then
+        varHelp
+            isGood
+            (Pine_kernel.int_add [ offset, 1 ])
+            (Pine_kernel.int_add [ row, 1 ])
+            1
+            src
+            indent
+            context
 
     else
-        varHelp isGood newOffset row (col + 1) src indent context
+        varHelp
+            isGood
+            newOffset
+            row
+            (Pine_kernel.int_add [ col, 1 ])
+            src
+            indent
+            context
 
 
 
@@ -1404,7 +1420,13 @@ revAlways _ b =
     b
 
 
-sequenceEnd : Parser c x () -> Parser c x () -> Parser c x a -> Parser c x () -> Trailing -> Parser c x (List a)
+sequenceEnd :
+    Parser c x ()
+    -> Parser c x ()
+    -> Parser c x a
+    -> Parser c x ()
+    -> Trailing
+    -> Parser c x (List a)
 sequenceEnd ender ws parseItem sep trailing =
     let
         chompRest item =
@@ -1432,7 +1454,13 @@ sequenceEnd ender ws parseItem sep trailing =
         ]
 
 
-sequenceEndForbidden : Parser c x () -> Parser c x () -> Parser c x a -> Parser c x () -> List a -> Parser c x (Step (List a) (List a))
+sequenceEndForbidden :
+    Parser c x ()
+    -> Parser c x ()
+    -> Parser c x a
+    -> Parser c x ()
+    -> List a
+    -> Parser c x (Step (List a) (List a))
 sequenceEndForbidden ender ws parseItem sep revItems =
     let
         chompRest item =
@@ -1445,25 +1473,39 @@ sequenceEndForbidden ender ws parseItem sep revItems =
             ]
 
 
-sequenceEndOptional : Parser c x () -> Parser c x () -> Parser c x a -> Parser c x () -> List a -> Parser c x (Step (List a) (List a))
+sequenceEndOptional :
+    Parser c x ()
+    -> Parser c x ()
+    -> Parser c x a
+    -> Parser c x ()
+    -> List a
+    -> Parser c x (Step (List a) (List a))
 sequenceEndOptional ender ws parseItem sep revItems =
     let
         parseEnd =
             map (\_ -> Done (List.reverse revItems)) ender
     in
-    skip ws <|
-        oneOf
-            [ skip sep <|
-                skip ws <|
-                    oneOf
+    skip ws
+        (oneOf
+            [ skip sep
+                (skip ws
+                    (oneOf
                         [ parseItem |> map (\item -> Loop (item :: revItems))
                         , parseEnd
                         ]
+                    )
+                )
             , parseEnd
             ]
+        )
 
 
-sequenceEndMandatory : Parser c x () -> Parser c x a -> Parser c x () -> List a -> Parser c x (Step (List a) (List a))
+sequenceEndMandatory :
+    Parser c x ()
+    -> Parser c x a
+    -> Parser c x ()
+    -> List a
+    -> Parser c x (Step (List a) (List a))
 sequenceEndMandatory ws parseItem sep revItems =
     oneOf
         [ map (\item -> Loop (item :: revItems)) <|
@@ -1573,7 +1615,7 @@ nestableHelp isNotRelevant open close expectingClose nestLevel =
                                 open
                                 close
                                 expectingClose
-                                (nestLevel - 1)
+                                (Pine_kernel.int_add [ nestLevel, -1 ])
                         )
             , open
                 |> andThen
@@ -1583,7 +1625,7 @@ nestableHelp isNotRelevant open close expectingClose nestLevel =
                             open
                             close
                             expectingClose
-                            (nestLevel + 1)
+                            (Pine_kernel.int_add [ nestLevel, 1 ])
                     )
             , chompIf isChar expectingClose
                 |> andThen
