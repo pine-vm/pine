@@ -257,6 +257,7 @@ public static class PopularValues
 
         "State",
         "src",
+        "srcChars",
         "offset",
         "indent",
         "context",

@@ -3,8 +3,8 @@ module Elm.Kernel.Parser exposing (..)
 import Char
 
 
-consumeBase : Int -> Int -> String -> ( Int, Int )
-consumeBase base offset (String chars) =
+consumeBase : Int -> Int -> List Char -> ( Int, Int )
+consumeBase base offset chars =
     consumeBaseHelper base offset chars 0
 
 
@@ -35,8 +35,8 @@ consumeBaseHelper base offset chars total =
                 ( offset, total )
 
 
-consumeBase16 : Int -> String -> ( Int, Int )
-consumeBase16 offset (String chars) =
+consumeBase16 : Int -> List Char -> ( Int, Int )
+consumeBase16 offset chars =
     consumeBase16Helper offset chars 0
 
 
@@ -109,8 +109,8 @@ chompBase10Helper offset chars =
             offset
 
 
-isSubString : String -> Int -> Int -> Int -> String -> ( Int, Int, Int )
-isSubString (String smallChars) offset row col (String bigChars) =
+isSubString : String -> Int -> Int -> Int -> List Char -> ( Int, Int, Int )
+isSubString (String smallChars) offset row col bigChars =
     let
         expectedLength : Int
         expectedLength =
@@ -150,8 +150,8 @@ isSubString (String smallChars) offset row col (String bigChars) =
         ( -1, row, col )
 
 
-isSubChar : (Char -> Bool) -> Int -> String -> Int
-isSubChar predicate offset (String chars) =
+isSubChar : (Char -> Bool) -> Int -> List Char -> Int
+isSubChar predicate offset chars =
     let
         nextChar =
             Pine_kernel.head (Pine_kernel.skip [ offset, chars ])
@@ -171,8 +171,8 @@ isSubChar predicate offset (String chars) =
         -1
 
 
-findSubString : String -> Int -> Int -> Int -> String -> ( Int, Int, Int )
-findSubString (String smallChars) offset row col (String bigChars) =
+findSubString : String -> Int -> Int -> Int -> List Char -> ( Int, Int, Int )
+findSubString (String smallChars) offset row col bigChars =
     let
         newOffset : Int
         newOffset =
@@ -269,8 +269,8 @@ newlineChar =
     Pine_kernel.skip [ 1, 10 ]
 
 
-isAsciiCode : Int -> Int -> String -> Bool
-isAsciiCode code offset (String chars) =
+isAsciiCode : Int -> Int -> List Char -> Bool
+isAsciiCode code offset chars =
     let
         nextChar =
             Pine_kernel.head

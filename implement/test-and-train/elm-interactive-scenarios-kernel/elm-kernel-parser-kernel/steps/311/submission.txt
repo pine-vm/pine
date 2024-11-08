@@ -1,1 +1,1 @@
-Elm.Kernel.Parser.isSubString "test" 6 0 6 "other test"
+Elm.Kernel.Parser.isSubString  "test"  6  0  6  (String.toList "other test")

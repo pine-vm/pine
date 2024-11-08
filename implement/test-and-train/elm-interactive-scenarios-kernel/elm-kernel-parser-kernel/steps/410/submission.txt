@@ -1,1 +1,1 @@
-Elm.Kernel.Parser.isSubChar (\c -> False)  0  ""
+Elm.Kernel.Parser.isSubChar  (\c -> False)  0  (String.toList "")

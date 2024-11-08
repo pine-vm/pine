@@ -1,1 +1,1 @@
-Elm.Kernel.Parser.isSubChar  Char.isLower  9  "Test alfa"
+Elm.Kernel.Parser.isSubChar  Char.isLower  9  (String.toList "Test alfa")
