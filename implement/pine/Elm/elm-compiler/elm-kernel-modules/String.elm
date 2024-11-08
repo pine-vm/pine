@@ -503,19 +503,32 @@ toFloat (String chars) =
         Nothing
 
     else if Pine_kernel.equal [ firstChar, '-' ] then
-        case toFloatIgnoringSign (Pine_kernel.skip [ 1, chars ]) of
+        case toRationalComponentsLessSign (Pine_kernel.skip [ 1, chars ]) of
             Nothing ->
                 Nothing
 
             Just (Elm_Float numAbs denom) ->
-                Just (Elm_Float -numAbs denom)
+                let
+                    numSigned =
+                        if Pine_kernel.equal [ numAbs, 0 ] then
+                            0
+
+                        else
+                            Pine_kernel.int_mul [ -1, numAbs ]
+                in
+                Just (Elm_Float numSigned denom)
 
     else
-        toFloatIgnoringSign chars
+        case toRationalComponentsLessSign chars of
+            Nothing ->
+                Nothing
+
+            Just (Elm_Float numAbs denom) ->
+                Just (Elm_Float numAbs denom)
 
 
-toFloatIgnoringSign : List Char -> Maybe Float
-toFloatIgnoringSign chars =
+toRationalComponentsLessSign : List Char -> Maybe ( Int, Int )
+toRationalComponentsLessSign chars =
     case splitHelperOnList [] [ '.' ] chars of
         [] ->
             Nothing
@@ -529,25 +542,38 @@ toFloatIgnoringSign chars =
                     Just (Elm_Float numerator 1)
 
         [ String beforeSep, String afterSep ] ->
-            case toUnsignedIntFromList 0 beforeSep of
-                Nothing ->
+            if Pine_kernel.equal [ afterSep, [] ] then
+                if Pine_kernel.equal [ beforeSep, [] ] then
                     Nothing
 
-                Just beforeSepInt ->
-                    case toUnsignedIntFromList 0 afterSep of
+                else
+                    case toUnsignedIntFromList 0 beforeSep of
                         Nothing ->
                             Nothing
 
-                        Just afterSepInt ->
-                            let
-                                denom =
-                                    Basics.pow 10 (Pine_kernel.length afterSep)
+                        Just beforeSepInt ->
+                            Just (Elm_Float beforeSepInt 1)
 
-                                numerator =
-                                    Pine_kernel.int_add
-                                        [ Pine_kernel.int_mul [ beforeSepInt, denom ], afterSepInt ]
-                            in
-                            Just (Elm_Float numerator denom)
+            else
+                case toUnsignedIntFromList 0 beforeSep of
+                    Nothing ->
+                        Nothing
+
+                    Just beforeSepInt ->
+                        case toUnsignedIntFromList 0 afterSep of
+                            Nothing ->
+                                Nothing
+
+                            Just afterSepInt ->
+                                let
+                                    denom =
+                                        Basics.pow 10 (Pine_kernel.length afterSep)
+
+                                    numerator =
+                                        Pine_kernel.int_add
+                                            [ Pine_kernel.int_mul [ beforeSepInt, denom ], afterSepInt ]
+                                in
+                                Just (Elm_Float numerator denom)
 
         _ ->
             Nothing
