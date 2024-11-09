@@ -35,6 +35,15 @@ public class PineExecutableBundleTests
             Pine.Elm.ElmCompiler.BuildCompilerFromSourceFiles(compilerSourceFiles)
             .Extract(err => throw new System.Exception(err));
 
+        System.Console.WriteLine(
+            string.Join(
+                "\n",
+                [
+                    ..CompileElmCompilerTests.CompareCompiledEnvironmentsAndAssertEqual(
+                        expectedEnv: freshEnvironment,
+                        actualEnv: elmCompilerFromBundleValue)
+                ]));
+
         Assert.AreEqual(
             freshEnvironment,
             elmCompilerFromBundleValue);

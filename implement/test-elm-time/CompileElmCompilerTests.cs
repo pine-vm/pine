@@ -1235,10 +1235,10 @@ public class CompileElmCompilerTests
                 Console.WriteLine(
                     string.Join(
                         "\n",
-                        ["\nCompiled module " + parsedModuleNameFlat + " comparison:",
-                        ..ReportOnCompiledModule(
-                            javascriptCompiledModule.moduleContent,
-                            pineCompiledModule.moduleContent)]));
+                        [
+                            "Compiled module " + javascriptCompiledModule.moduleName + " comparison:\n",
+                            ..CompareCompiledModulesAndAssertEqual(javascriptCompiledModule, pineCompiledModule)
+                        ]));
 
                 Assert.AreEqual(
                     javascriptCompiledModule.moduleValue,
@@ -1326,6 +1326,106 @@ public class CompileElmCompilerTests
                 .Select(envItem =>
                 new Func<Result<string, (string moduleName, PineValue moduleValue, ElmInteractiveEnvironment.ElmModule moduleContent)>>(
                     () => ParseModuleEncodedInCompiler(envItem)))]);
+    }
+
+    public static IEnumerable<string> CompareCompiledEnvironmentsAndAssertEqual(
+        PineValue expectedEnv,
+        PineValue actualEnv)
+    {
+        var expectedEnvSize =
+            expectedEnv is PineValue.ListValue expectedList ? expectedList.NodesCount : 0;
+
+        var actualEnvSize =
+            actualEnv is PineValue.ListValue actualList ? actualList.NodesCount : 0;
+
+        yield return
+            "Comparing environments with sized " +
+            CommandLineInterface.FormatIntegerForDisplay(expectedEnvSize) +
+            " vs " +
+            CommandLineInterface.FormatIntegerForDisplay(actualEnvSize);
+
+        var expectedEnvParsed =
+            ElmInteractiveEnvironment.ParseInteractiveEnvironment(expectedEnv)
+            .Extract(err => throw new Exception("Failed parsing expected environment: " + err));
+
+        var actualEnvParsed =
+            ElmInteractiveEnvironment.ParseInteractiveEnvironment(actualEnv)
+            .Extract(err => throw new Exception("Failed parsing actual environment list: " + err));
+
+        var expectedModulesNames =
+            expectedEnvParsed.Modules
+            .Select(m => m.moduleName)
+            .ToImmutableHashSet();
+
+        var actualModulesNames =
+            actualEnvParsed.Modules
+            .Select(m => m.moduleName)
+            .ToImmutableHashSet();
+
+        var missingModulesNames =
+            expectedModulesNames
+            .Except(actualModulesNames);
+
+        var extraModulesNames =
+            actualModulesNames
+            .Except(expectedModulesNames);
+
+        if (missingModulesNames.Count > 0)
+        {
+            yield return "Missing modules: " + string.Join(", ", missingModulesNames);
+        }
+
+        if (extraModulesNames.Count > 0)
+        {
+            yield return "Extra modules: " + string.Join(", ", extraModulesNames);
+        }
+
+        foreach (var moduleName in expectedModulesNames.Intersect(actualModulesNames))
+        {
+            yield return "Compiled module " + moduleName + " comparison:";
+
+            var expectedModule =
+                expectedEnvParsed.Modules.Single(m => m.moduleName == moduleName);
+
+            var actualModule =
+                actualEnvParsed.Modules.Single(m => m.moduleName == moduleName);
+
+            foreach (var comparisonReport in CompareCompiledModules(expectedModule, actualModule))
+            {
+                yield return comparisonReport;
+            }
+        }
+
+        Assert.AreEqual(
+            expectedEnv,
+            actualEnv,
+            "Compiled environments value");
+    }
+
+
+    public static IEnumerable<string> CompareCompiledModulesAndAssertEqual(
+        (string moduleName, PineValue moduleValue, ElmInteractiveEnvironment.ElmModule moduleContent) expectedModule,
+        (string moduleName, PineValue moduleValue, ElmInteractiveEnvironment.ElmModule moduleContent) actualModule)
+    {
+        foreach (var comparisonReport in CompareCompiledModules(expectedModule, actualModule))
+        {
+            yield return comparisonReport;
+        }
+
+        Assert.AreEqual(
+            expectedModule.moduleValue,
+            actualModule.moduleValue,
+            "Compiled module " + expectedModule.moduleName + " value");
+    }
+
+    public static IEnumerable<string> CompareCompiledModules(
+        (string moduleName, PineValue moduleValue, ElmInteractiveEnvironment.ElmModule moduleContent) expectedModule,
+        (string moduleName, PineValue moduleValue, ElmInteractiveEnvironment.ElmModule moduleContent) actualModule)
+    {
+        foreach (var comparisonReport in ReportOnCompiledModule(expectedModule.moduleContent, actualModule.moduleContent))
+        {
+            yield return comparisonReport;
+        }
     }
 
     public static IEnumerable<string> ReportOnCompiledModule(
