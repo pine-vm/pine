@@ -2348,6 +2348,19 @@ searchCompileElmSyntaxOperatorOptimized :
     -> Maybe (Result String Expression)
 searchCompileElmSyntaxOperatorOptimized stack operator leftExpr rightExpr =
     let
+        functionGuaranteedToReturnInt : ( List String, String ) -> Bool
+        functionGuaranteedToReturnInt ( moduleName, localName ) =
+            case ( moduleName, localName ) of
+                ( [ "List" ], "length" ) ->
+                    True
+
+                ( [ "Pine_kernel" ], "length" ) ->
+                    -- Possibly another stage has already mapped from 'List.length' to 'Pine_kernel.length'.
+                    True
+
+                _ ->
+                    False
+
         exprGuaranteedToBeInt : Elm.Syntax.Expression.Expression -> Bool
         exprGuaranteedToBeInt expr =
             case expr of
@@ -2364,6 +2377,10 @@ searchCompileElmSyntaxOperatorOptimized stack operator leftExpr rightExpr =
 
                         _ ->
                             False
+
+                Elm.Syntax.Expression.Application ((Elm.Syntax.Node.Node _ (Elm.Syntax.Expression.FunctionOrValue moduleName localName)) :: _) ->
+                    functionGuaranteedToReturnInt
+                        ( moduleName, localName )
 
                 Elm.Syntax.Expression.OperatorApplication innerOp _ (Elm.Syntax.Node.Node _ innerLeft) (Elm.Syntax.Node.Node _ innerRight) ->
                     case innerOp of
@@ -2396,9 +2413,9 @@ searchCompileElmSyntaxOperatorOptimized stack operator leftExpr rightExpr =
 
                 _ ->
                     False
-    in
-    case operator of
-        "==" ->
+
+        continueForEquals : (Expression -> Expression) -> Maybe (Result String Expression)
+        continueForEquals mapAfterEquals =
             {-
                For the general case, '==' will be compiled to 'Basics.eq', which is polymorphic and has a more complex
                implementation to handle 'Set' and 'Dict' instances.
@@ -2406,6 +2423,19 @@ searchCompileElmSyntaxOperatorOptimized stack operator leftExpr rightExpr =
                we can emit a direct usage of the 'equal' kernel function.
             -}
             let
+                functionCannotReturnSetOrDict : ( List String, String ) -> Bool
+                functionCannotReturnSetOrDict ( moduleName, localName ) =
+                    if functionGuaranteedToReturnInt ( moduleName, localName ) then
+                        True
+
+                    else
+                        case ( moduleName, localName ) of
+                            ( [ "Basics" ], "compare" ) ->
+                                True
+
+                            _ ->
+                                False
+
                 exprCannotContainSetOrDict : Elm.Syntax.Expression.Expression -> Bool
                 exprCannotContainSetOrDict expr =
                     case expr of
@@ -2436,6 +2466,14 @@ searchCompileElmSyntaxOperatorOptimized stack operator leftExpr rightExpr =
                             -}
                             stringStartsWithUpper localName
 
+                        Elm.Syntax.Expression.Application ((Elm.Syntax.Node.Node _ functionExpr) :: _) ->
+                            case functionExpr of
+                                Elm.Syntax.Expression.FunctionOrValue moduleName localName ->
+                                    functionCannotReturnSetOrDict ( moduleName, localName )
+
+                                _ ->
+                                    False
+
                         Elm.Syntax.Expression.ParenthesizedExpression (Elm.Syntax.Node.Node _ parenthesized) ->
                             exprCannotContainSetOrDict parenthesized
 
@@ -2461,11 +2499,31 @@ searchCompileElmSyntaxOperatorOptimized stack operator leftExpr rightExpr =
                             Ok rightExprCompiled ->
                                 Just
                                     (Ok
-                                        (KernelApplicationExpression
-                                            "equal"
-                                            (ListExpression [ leftExprCompiled, rightExprCompiled ])
+                                        (mapAfterEquals
+                                            (KernelApplicationExpression
+                                                "equal"
+                                                (ListExpression [ leftExprCompiled, rightExprCompiled ])
+                                            )
                                         )
                                     )
+    in
+    case operator of
+        "==" ->
+            {-
+               For the general case, '==' will be compiled to 'Basics.eq', which is polymorphic and has a more complex
+               implementation to handle 'Set' and 'Dict' instances.
+               If we can prove at compile time that the operand type cannot contain any 'Set' or 'Dict',
+               we can emit a direct usage of the 'equal' kernel function.
+            -}
+            continueForEquals identity
+
+        "/=" ->
+            continueForEquals
+                (\equalExpr ->
+                    KernelApplicationExpression
+                        "negate"
+                        equalExpr
+                )
 
         "//" ->
             -- Operator (//) implies both operands are integers.
