@@ -236,6 +236,41 @@ indexOf smallChars bigChars offset =
         -1
 
 
+chompWhileHelp : (Char -> Bool) -> ( Int, Int, Int ) -> List Char -> ( Int, Int, Int )
+chompWhileHelp isGood ( offset, row, col ) srcChars =
+    let
+        nextChar =
+            Pine_kernel.head (Pine_kernel.skip [ offset, srcChars ])
+    in
+    if isGood nextChar then
+        if Pine_kernel.equal [ nextChar, '\n' ] then
+            -- matched a newline
+            chompWhileHelp
+                isGood
+                ( Pine_kernel.int_add [ offset, 1 ]
+                , Pine_kernel.int_add [ row, 1 ]
+                , 1
+                )
+                srcChars
+
+        else
+            -- normal match
+            chompWhileHelp
+                isGood
+                ( Pine_kernel.int_add [ offset, 1 ]
+                , row
+                , Pine_kernel.int_add [ col, 1 ]
+                )
+                srcChars
+
+    else
+        -- no match
+        ( offset
+        , row
+        , col
+        )
+
+
 countOffsetsInString : ( Int, Int, Int ) -> ( List Char, Int ) -> ( Int, Int )
 countOffsetsInString ( offset, newlines, col ) ( chars, end ) =
     let

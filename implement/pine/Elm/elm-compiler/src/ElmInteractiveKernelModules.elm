@@ -2070,6 +2070,41 @@ indexOf smallChars bigChars offset =
         -1
 
 
+chompWhileHelp : (Char -> Bool) -> ( Int, Int, Int ) -> List Char -> ( Int, Int, Int )
+chompWhileHelp isGood ( offset, row, col ) srcChars =
+    let
+        nextChar =
+            Pine_kernel.head (Pine_kernel.skip [ offset, srcChars ])
+    in
+    if isGood nextChar then
+        if Pine_kernel.equal [ nextChar, '\\n' ] then
+            -- matched a newline
+            chompWhileHelp
+                isGood
+                ( Pine_kernel.int_add [ offset, 1 ]
+                , Pine_kernel.int_add [ row, 1 ]
+                , 1
+                )
+                srcChars
+
+        else
+            -- normal match
+            chompWhileHelp
+                isGood
+                ( Pine_kernel.int_add [ offset, 1 ]
+                , row
+                , Pine_kernel.int_add [ col, 1 ]
+                )
+                srcChars
+
+    else
+        -- no match
+        ( offset
+        , row
+        , col
+        )
+
+
 countOffsetsInString : ( Int, Int, Int ) -> ( List Char, Int ) -> ( Int, Int )
 countOffsetsInString ( offset, newlines, col ) ( chars, end ) =
     let
@@ -3131,55 +3166,27 @@ chompWhile isGood =
             let
                 (PState srcChars sOffset sIndent sContext sRow sCol) =
                     s
+
+                ( newOffset, newRow, newCol ) =
+                    Elm.Kernel.Parser.chompWhileHelp
+                        isGood
+                        ( sOffset, sRow, sCol )
+                        srcChars
             in
-            chompWhileHelp isGood sOffset sRow sCol s
+            Good
+                (Pine_kernel.negate
+                    (Pine_kernel.int_is_sorted_asc [ newOffset, sOffset ])
+                )
+                ()
+                (PState
+                    srcChars
+                    newOffset
+                    sIndent
+                    sContext
+                    newRow
+                    newCol
+                )
         )
-
-
-chompWhileHelp : (Char -> Bool) -> Int -> Int -> Int -> State c -> PStep c x ()
-chompWhileHelp isGood offset row col s0 =
-    let
-        (PState srcChars sOffset sIndent sContext sRow sCol) =
-            s0
-
-        nextChar =
-            Pine_kernel.head (Pine_kernel.skip [ offset, srcChars ])
-    in
-    if isGood nextChar then
-        if Pine_kernel.equal [ nextChar, '\\n' ] then
-            -- matched a newline
-            chompWhileHelp
-                isGood
-                (Pine_kernel.int_add [ offset, 1 ])
-                (Pine_kernel.int_add [ row, 1 ])
-                1
-                s0
-
-        else
-            -- normal match
-            chompWhileHelp
-                isGood
-                (Pine_kernel.int_add [ offset, 1 ])
-                row
-                (Pine_kernel.int_add [ col, 1 ])
-                s0
-
-    else
-        -- no match
-        Good
-            (Pine_kernel.negate
-                (Pine_kernel.int_is_sorted_asc [ offset, sOffset ])
-            )
-            ()
-            (PState
-                srcChars
-                offset
-                sIndent
-                sContext
-                row
-                col
-            )
-
 
 
 -- CHOMP UNTIL
