@@ -77,15 +77,49 @@ public class Program
 
         if (true)
         {
-            var elmCompiler =
+            var clock = System.Diagnostics.Stopwatch.StartNew();
+
+            var elmCompilerFirst =
                 ElmCompiler.BuildCompilerFromSourceFiles(
                     elmCompilerSource,
                     overrideElmCompiler: previousCompiler)
                 .Extract(err => throw new System.Exception(err));
 
+            clock.Stop();
+
+            System.Console.WriteLine(
+                "Built the first iteration in " +
+                clock.Elapsed.TotalSeconds.ToString("0.00") + " seconds");
+
+            System.Console.WriteLine(
+                "Env compiled in first iteration is " + elmCompilerFirst.CompilerEnvironment);
+
+            /*
+             * The first iteration can differ from the second iteration when the previous compiler
+             * does not implement the same optimizations and transformations as the current compiler.
+             * Therefore, the second iteration is necessary to ensure that the compiler is fully optimized.
+             * */
+
+            clock.Restart();
+
+            var elmCompilerSecond =
+                ElmCompiler.BuildCompilerFromSourceFiles(
+                    elmCompilerSource,
+                    overrideElmCompiler: elmCompilerFirst)
+                .Extract(err => throw new System.Exception(err));
+
+            clock.Stop();
+
+            System.Console.WriteLine(
+                "Built the second iteration in " +
+                clock.Elapsed.TotalSeconds.ToString("0.00") + " seconds");
+
+            System.Console.WriteLine(
+                "Env compiled in second iteration is " + elmCompilerSecond.CompilerEnvironment);
+
             BundledElmEnvironments.CompressAndWriteBundleFile(
                 ImmutableDictionary<TreeNodeWithStringPath, PineValue>.Empty
-                .SetItem(elmCompilerSource, elmCompiler.CompilerEnvironment));
+                .SetItem(elmCompilerSource, elmCompilerSecond.CompilerEnvironment));
         }
         else
         {
