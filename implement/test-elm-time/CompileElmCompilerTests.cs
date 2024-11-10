@@ -20,6 +20,9 @@ public class CompileElmCompilerTests
     static IReadOnlyList<string> CompilerPackageSources =>
         ElmCompiler.CompilerPackageSources;
 
+    private static readonly ElmCompilerCache elmCompilerCache = new();
+
+
     [TestMethod]
     public void Test_call_Basics_modBy()
     {
@@ -1173,7 +1176,9 @@ public class CompileElmCompilerTests
                  */
 
                 var environmentList =
-                    ShallowParseEnvironmentListEncodedInCompiler(compiledNewEnvInCompiler)
+                    ShallowParseEnvironmentListEncodedInCompiler(
+                        compiledNewEnvInCompiler,
+                        elmCompilerCache)
                     .Extract(err => throw new Exception("Failed parsing environment list: " + err));
 
                 /*
@@ -1284,7 +1289,9 @@ public class CompileElmCompilerTests
     /// Shallow counterpart to <see cref="ElmInteractiveEnvironment.ParseInteractiveEnvironment(PineValue)"/>
     /// </summary>
     public static Result<string, IReadOnlyList<Func<Result<string, (string moduleName, PineValue moduleValue, ElmInteractiveEnvironment.ElmModule moduleContent)>>>>
-        ShallowParseEnvironmentListEncodedInCompiler(PineValue interactiveEnvironment)
+        ShallowParseEnvironmentListEncodedInCompiler(
+        PineValue interactiveEnvironment,
+        ElmCompilerCache elmCompilerCache)
     {
         /*
          * Since the return value from the compiler is of type 'PineValue', the outermost list also contains the tag 'ListValue'.
@@ -1294,28 +1301,28 @@ public class CompileElmCompilerTests
         var parseAsTagResult =
             ElmValueEncoding.ParseAsTag(interactiveEnvironment);
 
-        if (parseAsTagResult is Result<string, (string, IReadOnlyList<PineValue>)>.Err parseAsTagErr)
-            return "Failed parsing outermost as tag: " + parseAsTagErr.Value;
+        if (parseAsTagResult.IsErrOrNull() is { } parseAsTagErr)
+            return "Failed parsing outermost as tag: " + parseAsTagErr;
 
-        if (parseAsTagResult is not Result<string, (string, IReadOnlyList<PineValue>)>.Ok parseAsTagOk)
+        if (parseAsTagResult.IsOkOrNullable() is not { } parseAsTagOk)
             throw new NotImplementedException("Unexpected result type: " + parseAsTagResult.GetType().FullName);
 
-        if (parseAsTagOk.Value.Item1 is not "ListValue")
-            return "Unexpected tag name: " + parseAsTagOk.Value.Item1;
+        if (parseAsTagOk.tagName is not "ListValue")
+            return "Unexpected tag name: " + parseAsTagOk.tagName;
 
-        if (parseAsTagOk.Value.Item2.Count is not 1)
-            return "Unexpected number of tag arguments: " + parseAsTagOk.Value.Item2.Count;
+        if (parseAsTagOk.tagArguments.Count is not 1)
+            return "Unexpected number of tag arguments: " + parseAsTagOk.tagArguments.Count;
 
-        if (parseAsTagOk.Value.Item2[0] is not PineValue.ListValue environmentList)
+        if (parseAsTagOk.tagArguments[0] is not PineValue.ListValue environmentList)
             return "interactive environment not a list";
 
-        static Result<string, (string moduleName, PineValue moduleValue, ElmInteractiveEnvironment.ElmModule moduleContent)> ParseModuleEncodedInCompiler(
+        Result<string, (string moduleName, PineValue moduleValue, ElmInteractiveEnvironment.ElmModule moduleContent)> ParseModuleEncodedInCompiler(
             PineValue moduleEncodedInCompiler)
         {
             return
-                ElmValueEncoding.PineValueAsElmValue(moduleEncodedInCompiler, null, null)
+                elmCompilerCache.PineValueDecodedAsElmValue(moduleEncodedInCompiler)
                 .AndThen(moduleAsElmValueEncodedInCompiler =>
-                ElmValueInterop.ElmValueDecodedAsInElmCompiler(moduleAsElmValueEncodedInCompiler, null, null)
+                elmCompilerCache.DecodeElmValueFromCompiler(moduleAsElmValueEncodedInCompiler)
                 .AndThen(modulePineValue =>
                 ElmInteractiveEnvironment.ParseNamedElmModule(modulePineValue)));
         }
