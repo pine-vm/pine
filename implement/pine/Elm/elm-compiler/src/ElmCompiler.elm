@@ -2778,6 +2778,36 @@ searchCompileElmSyntaxOperatorOptimized stack operator leftExpr rightExpr =
                                     )
                                 )
 
+        "|>" ->
+            case compileElmSyntaxExpression stack leftExpr of
+                Err err ->
+                    Just (Err err)
+
+                Ok leftExprCompiled ->
+                    case compileElmSyntaxExpression stack rightExpr of
+                        Err err ->
+                            Just (Err err)
+
+                        Ok rightExprCompiled ->
+                            let
+                                ( funcExpr, aggregateArguments ) =
+                                    case rightExprCompiled of
+                                        FunctionApplicationExpression innerFunction arguments ->
+                                            ( innerFunction
+                                            , List.concat [ arguments, [ leftExprCompiled ] ]
+                                            )
+
+                                        _ ->
+                                            ( rightExprCompiled, [ leftExprCompiled ] )
+                            in
+                            Just
+                                (Ok
+                                    (FunctionApplicationExpression
+                                        funcExpr
+                                        aggregateArguments
+                                    )
+                                )
+
         _ ->
             Nothing
 

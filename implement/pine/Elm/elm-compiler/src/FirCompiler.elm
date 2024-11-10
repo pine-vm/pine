@@ -207,7 +207,11 @@ emitExpression stack expression =
             emitFunctionExpression stack functionParams functionBody
 
         FunctionApplicationExpression functionExpression arguments ->
-            emitFunctionApplication functionExpression arguments stack
+            let
+                ( consFunction, consArgs ) =
+                    consolidateNestedFunctionApplications functionExpression arguments
+            in
+            emitFunctionApplication consFunction consArgs stack
 
         DeclarationBlockExpression declarations innerExpression ->
             emitExpressionInDeclarationBlock
@@ -1367,6 +1371,18 @@ closureParameterFromParameters offset parameters =
             )
             parameters
         )
+
+
+consolidateNestedFunctionApplications : Expression -> List Expression -> ( Expression, List Expression )
+consolidateNestedFunctionApplications functionExpression arguments =
+    case functionExpression of
+        FunctionApplicationExpression innerFunction innerArguments ->
+            consolidateNestedFunctionApplications
+                innerFunction
+                (List.concat [ innerArguments, arguments ])
+
+        _ ->
+            ( functionExpression, arguments )
 
 
 emitFunctionApplication : Expression -> List Expression -> EmitStack -> Result String Pine.Expression
