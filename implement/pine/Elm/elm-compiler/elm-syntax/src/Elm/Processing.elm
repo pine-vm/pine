@@ -216,8 +216,14 @@ divideAndConquer ops exps =
                     OperatorApplication
                         infix_.operator
                         infix_.direction
-                        (Node (Range.combine <| List.map Node.range p) (divideAndConquer ops p))
-                        (Node (Range.combine <| List.map Node.range s) (divideAndConquer ops s))
+                        (Node
+                            (Range.combine (List.map Node.range p))
+                            (divideAndConquer ops p)
+                        )
+                        (Node
+                            (Range.combine (List.map Node.range s))
+                            (divideAndConquer ops s)
+                        )
 
                 Nothing ->
                     fixExprs exps
@@ -385,13 +391,14 @@ visitLetDeclarations declarations =
 
 visitLetDeclaration : Node LetDeclaration -> Node LetDeclaration
 visitLetDeclaration (Node range declaration) =
-    Node range <|
-        case declaration of
+    Node range
+        (case declaration of
             LetFunction function ->
                 LetFunction (visitFunctionDecl function)
 
             LetDestructuring pattern expression ->
                 LetDestructuring pattern (visitExpression expression)
+        )
 
 
 visitFunctionDecl : Function -> Function
@@ -416,23 +423,23 @@ visitFunctionDeclaration functionDeclaration =
 
 visitExpression : Node Expression -> Node Expression
 visitExpression expression =
-    visitExpressionInner <|
-        case expression of
+    visitExpressionInner
+        (case expression of
             Node r (Application args) ->
                 Node r (fixApplication args)
 
             _ ->
                 expression
+        )
 
 
 visitExpressionInner : Node Expression -> Node Expression
 visitExpressionInner (Node range expression) =
-    Node range <|
-        case expression of
+    Node range
+        (case expression of
             Application args ->
-                args
-                    |> List.map visitExpression
-                    |> Application
+                Application
+                    (args |> List.map visitExpression)
 
             OperatorApplication op dir left right ->
                 OperatorApplication op
@@ -441,12 +448,16 @@ visitExpressionInner (Node range expression) =
                     (visitExpression right)
 
             IfBlock e1 e2 e3 ->
-                IfBlock (visitExpression e1) (visitExpression e2) (visitExpression e3)
+                IfBlock
+                    (visitExpression e1)
+                    (visitExpression e2)
+                    (visitExpression e3)
 
             TupledExpression expressionList ->
-                expressionList
-                    |> List.map visitExpression
-                    |> TupledExpression
+                TupledExpression
+                    (expressionList
+                        |> List.map visitExpression
+                    )
 
             ParenthesizedExpression expr1 ->
                 ParenthesizedExpression (visitExpression expr1)
@@ -464,7 +475,8 @@ visitExpressionInner (Node range expression) =
                     }
 
             LambdaExpression lambda ->
-                LambdaExpression <| { lambda | expression = visitExpression lambda.expression }
+                LambdaExpression
+                    { lambda | expression = visitExpression lambda.expression }
 
             RecordExpr expressionStringList ->
                 expressionStringList
@@ -472,12 +484,15 @@ visitExpressionInner (Node range expression) =
                     |> RecordExpr
 
             ListExpr expressionList ->
-                ListExpr (List.map visitExpression expressionList)
+                ListExpr
+                    (List.map visitExpression expressionList)
 
             RecordUpdateExpression name updates ->
-                updates
-                    |> List.map (Node.map (Tuple.mapSecond visitExpression))
-                    |> RecordUpdateExpression name
+                RecordUpdateExpression
+                    name
+                    (updates
+                        |> List.map (Node.map (Tuple.mapSecond visitExpression))
+                    )
 
             Negation expr ->
                 Negation (visitExpression expr)
@@ -487,3 +502,4 @@ visitExpressionInner (Node range expression) =
 
             _ ->
                 expression
+        )

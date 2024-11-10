@@ -185,14 +185,6 @@ findSubString (String smallChars) offset row col bigChars =
                 , Pine_kernel.negate offset
                 ]
 
-        targetOffset : Int
-        targetOffset =
-            if Pine_kernel.equal [ newOffset, -1 ] then
-                List.length bigChars
-
-            else
-                Pine_kernel.int_add [ newOffset, Pine_kernel.length smallChars ]
-
         ( newlineCount, colShift ) =
             countOffsetsInString ( offset, 0, 0 ) ( bigChars, newOffset )
 

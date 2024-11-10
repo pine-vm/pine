@@ -13,7 +13,7 @@ withRange p =
                 |> Combine.keep
                     (Combine.withLocation
                         (\end ->
-                            Combine.succeed <|
+                            Combine.succeed
                                 { start = start
                                 , end = end
                                 }

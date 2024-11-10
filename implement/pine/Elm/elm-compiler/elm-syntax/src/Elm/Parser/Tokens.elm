@@ -164,7 +164,7 @@ stringLiteral =
             else
                 Core.oneOf
                     [ Core.symbol "\""
-                        |> Core.map (\_ -> Done (String.concat <| List.reverse s.parts))
+                        |> Core.map (\_ -> Done (String.concat (List.reverse s.parts)))
                     , Core.getChompedString (Core.symbol "\\")
                         |> Core.map (\_ -> Loop { escaped = True, parts = s.parts })
                     , Core.succeed (\start value end -> ( start, value, end ))
