@@ -1,0 +1,58 @@
+[
+  { "ListAsString": "Function" },
+  [
+    [
+      { "ListAsString": "KernelApplication" },
+      [
+        { "ListAsString": "equal" },
+        [
+          { "ListAsString": "List" },
+          [
+            [
+              [
+                { "ListAsString": "KernelApplication" },
+                [
+                  { "ListAsString": "head" },
+                  [
+                    { "ListAsString": "KernelApplication" },
+                    [
+                      { "ListAsString": "head" },
+                      [
+                        { "ListAsString": "KernelApplication" },
+                        [
+                          { "ListAsString": "skip" },
+                          [
+                            { "ListAsString": "List" },
+                            [
+                              [
+                                [
+                                  { "ListAsString": "Literal" },
+                                  [ 1 ]
+                                ],
+                                [
+                                  { "ListAsString": "Environment" },
+                                  []
+                                ]
+                              ]
+                            ]
+                          ]
+                        ]
+                      ]
+                    ]
+                  ]
+                ]
+              ],
+              [
+                { "ListAsString": "Literal" },
+                { "ListAsString": "-" }
+              ]
+            ]
+          ]
+        ]
+      ]
+    ],
+    1,
+    [],
+    []
+  ]
+]

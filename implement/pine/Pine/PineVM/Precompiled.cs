@@ -242,6 +242,24 @@ public class Precompiled
         var elmKernelParser_countOffsetsInStringExpressionValue =
             ExpressionEncoding.EncodeExpressionAsValue(elmKernelParser_countOffsetsInStringExpression);
 
+        var elmKernelParser_chompWhileHelpExpression =
+            popularExpressionDictionary["Elm.Kernel.Parser.chompWhileHelp"];
+
+        var elmKernelParser_chompWhileHelpExpressionValue =
+            ExpressionEncoding.EncodeExpressionAsValue(elmKernelParser_chompWhileHelpExpression);
+
+        var elmKernelParserFindSubStringExpression =
+            popularExpressionDictionary["Elm.Kernel.Parser.findSubString"];
+
+        var elmKernelParserFindSubStringExpressionValue =
+            ExpressionEncoding.EncodeExpressionAsValue(elmKernelParserFindSubStringExpression);
+
+        var elmKernelParserIndexOfExpression =
+            popularExpressionDictionary["Elm.Kernel.Parser.indexOf"];
+
+        var elmKernelParserIndexOfExpressionValue =
+            ExpressionEncoding.EncodeExpressionAsValue(elmKernelParserIndexOfExpression);
+
 
         {
             var compareExpressionEnvClass =
@@ -527,6 +545,79 @@ public class Precompiled
                     [new PrecompiledEntry(
                         countOffsetsInStringEnvClass,
                         ElmKernelParser_countOffsetsInString)]);
+        }
+
+        {
+            var findSubStringEnvClass =
+                EnvConstraintId.Create(
+                    [
+                    new KeyValuePair<IReadOnlyList<int>, PineValue>(
+                    [0, 0],
+                    elmKernelParser_countOffsetsInStringExpressionValue),
+                    new KeyValuePair<IReadOnlyList<int>, PineValue>(
+                    [0, 1],
+                    elmKernelParserIndexOfExpressionValue),
+                    ]);
+
+            yield return
+                new KeyValuePair<Expression, IReadOnlyList<PrecompiledEntry>>(
+                    elmKernelParserFindSubStringExpression,
+                    [new PrecompiledEntry(
+                        findSubStringEnvClass,
+                        ElmKernelParser_findSubstring)]);
+        }
+
+        {
+            /*
+             * chompWhileHelp : (Char -> Bool) -> ( Int, Int, Int ) -> List Char -> ( Int, Int, Int )
+             * chompWhileHelp isGood ( offset, row, col ) srcChars =
+             * */
+
+            var chompWhileHelpEnvClass =
+                EnvConstraintId.Create(
+                    [
+                    new KeyValuePair<IReadOnlyList<int>, PineValue>(
+                    [0, 0],
+                    adaptivePartialApplicationExpressionValue),
+                    new KeyValuePair<IReadOnlyList<int>, PineValue>(
+                    [0, 1],
+                    elmKernelParser_chompWhileHelpExpressionValue),
+                    ]);
+
+            EnvConstraintId chompWhileHelpEnvClassFromPredicate(PineValue predicateValue)
+            {
+                return
+                    EnvConstraintId.Create(
+                        [..chompWhileHelpEnvClass.ParsedEnvItems
+                        ,new KeyValuePair<IReadOnlyList<int>, PineValue>(
+                            [1, 0],
+                            predicateValue)]);
+            }
+
+            yield return
+                new KeyValuePair<Expression, IReadOnlyList<PrecompiledEntry>>(
+                    elmKernelParser_chompWhileHelpExpression,
+                    [new PrecompiledEntry(
+                        chompWhileHelpEnvClassFromPredicate(
+                            popularValueDictionary["predicate_first_arg_equals_ASCII_char_space_32"]),
+                        ElmKernelParser_chompWhileHelp_single_char_space_32)]);
+
+            yield return
+                new KeyValuePair<Expression, IReadOnlyList<PrecompiledEntry>>(
+                    elmKernelParser_chompWhileHelpExpression,
+                    [new PrecompiledEntry(
+                        chompWhileHelpEnvClassFromPredicate(
+                            popularValueDictionary["predicate_first_arg_equals_ASCII_char_minus_45"]),
+                        ElmKernelParser_chompWhileHelp_single_char_minus_45)]);
+
+            /*
+            yield return
+                new KeyValuePair<Expression, IReadOnlyList<PrecompiledEntry>>(
+                    elmKernelParser_chompWhileHelpExpression,
+                    [new PrecompiledEntry(
+                        chompWhileHelpEnvClass,
+                        ElmKernelParser_chompWhileHelp)]);
+            */
         }
     }
 
@@ -1330,8 +1421,7 @@ public class Precompiled
 
         for (var i = (int)offset; i < end; ++i)
         {
-            if (charsList.Elements[i] is PineValue.BlobValue charBlobValue &&
-                charBlobValue.Bytes.Length is 1 && charBlobValue.Bytes.Span[0] is 10)
+            if (charsList.Elements[i] == Character_ASCII_Newline_Value)
             {
                 ++newlines;
                 col = 0;
@@ -1352,6 +1442,294 @@ public class Precompiled
             new PrecompiledResult.FinalValue(
                 finalValue,
                 StackFrameCount: 1 + charsList.Elements.Count);
+    }
+
+    /*
+
+        findSubString : String -> Int -> Int -> Int -> List Char -> ( Int, Int, Int )
+        findSubString (String smallChars) offset row col bigChars =
+            let
+                newOffset : Int
+                newOffset =
+                    indexOf smallChars bigChars offset
+
+                consumedLength : Int
+                consumedLength =
+                    Pine_kernel.int_add
+                        [ newOffset
+                        , Pine_kernel.negate offset
+                        ]
+
+                ( newlineCount, colShift ) =
+                    countOffsetsInString ( offset, 0, 0 ) ( bigChars, newOffset )
+
+                newRow : Int
+                newRow =
+                    Pine_kernel.int_add [ row, newlineCount ]
+
+                newCol : Int
+                newCol =
+                    if Pine_kernel.equal [ newlineCount, 0 ] then
+                        Pine_kernel.int_add [ col, colShift ]
+
+                    else
+                        Pine_kernel.int_add [ 1, colShift ]
+            in
+            ( newOffset, newRow, newCol )
+
+
+        indexOf : List Char -> List Char -> Int -> Int
+        indexOf smallChars bigChars offset =
+            let
+                expectedLength : Int
+                expectedLength =
+                    Pine_kernel.length smallChars
+
+                sliceFromSourceChars : List Char
+                sliceFromSourceChars =
+                    Pine_kernel.take
+                        [ expectedLength
+                        , Pine_kernel.skip [ offset, bigChars ]
+                        ]
+            in
+            if Pine_kernel.equal [ Pine_kernel.length sliceFromSourceChars, expectedLength ] then
+                if Pine_kernel.equal [ sliceFromSourceChars, smallChars ] then
+                    offset
+
+                else
+                    indexOf smallChars bigChars (Pine_kernel.int_add [ offset, 1 ])
+
+            else
+                -1
+
+     * */
+
+    static PrecompiledResult.FinalValue? ElmKernelParser_findSubstring(
+        PineValue environment,
+        PineVMParseCache parseCache)
+    {
+        if (PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 0, 1, 0]) is not PineValue.ListValue patternList)
+        {
+            return null;
+        }
+
+        if (PineValueAsInteger.SignedIntegerFromValueRelaxed(
+            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 1])).IsOkOrNullable() is not { } offset)
+        {
+            return null;
+        }
+
+        if (PineValueAsInteger.SignedIntegerFromValueRelaxed(
+            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 2])).IsOkOrNullable() is not { } row)
+        {
+            return null;
+        }
+
+        if (PineValueAsInteger.SignedIntegerFromValueRelaxed(
+            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 3])).IsOkOrNullable() is not { } col)
+        {
+            return null;
+        }
+
+        if (PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 4]) is not PineValue.ListValue bigCharsList)
+        {
+            return null;
+        }
+
+        int newOffset = (int)offset;
+
+        for (; newOffset < bigCharsList.Elements.Count; ++newOffset)
+        {
+            if (bigCharsList.Elements.Count <= newOffset + patternList.Elements.Count)
+            {
+                newOffset = -1;
+                break;
+            }
+
+            bool found = true;
+
+            for (var j = 0; j < patternList.Elements.Count; ++j)
+            {
+                if (patternList.Elements[j] != bigCharsList.Elements[newOffset + j])
+                {
+                    found = false;
+                    break;
+                }
+            }
+
+            if (found)
+            {
+                break;
+            }
+        }
+
+        var consumedLength = newOffset - (int)offset;
+
+        int newRow = (int)row;
+        int newCol = (int)col;
+
+        for (var i = (int)offset; i < offset + consumedLength; ++i)
+        {
+            if (bigCharsList.Elements[i] == Character_ASCII_Newline_Value)
+            {
+                ++newRow;
+                newCol = 1;
+                continue;
+            }
+
+            ++newCol;
+        }
+
+        var finalValue =
+            PineValue.List(
+                [
+                PineValueAsInteger.ValueFromSignedInteger(newOffset),
+                PineValueAsInteger.ValueFromSignedInteger(newRow),
+                PineValueAsInteger.ValueFromSignedInteger(newCol)
+                ]);
+
+        return
+            new PrecompiledResult.FinalValue(
+                finalValue,
+                StackFrameCount: 0);
+    }
+
+    static PrecompiledResult.FinalValue? ElmKernelParser_chompWhileHelp(
+        PineValue environment,
+        PineVMParseCache parseCache)
+    {
+        /*
+         * chompWhileHelp : (Char -> Bool) -> ( Int, Int, Int ) -> List Char -> ( Int, Int, Int )
+         * chompWhileHelp isGood ( offset, row, col ) srcChars =
+         * 
+         * */
+
+        var isGoodFunctionValue =
+            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 0]);
+
+        var isMatchFunctionValueJson =
+            System.Text.Json.JsonSerializer.Serialize(
+                isGoodFunctionValue,
+                EncodePineExpressionAsJson.BuildJsonSerializerOptions());
+
+        if (ElmInteractiveEnvironment.ParseFunctionRecordFromValueTagged(isGoodFunctionValue, parseCache).IsOkOrNull()
+            is not { } isMatchFunctionRecord)
+        {
+            return null;
+        }
+
+        return null;
+    }
+
+    static PrecompiledResult.FinalValue? ElmKernelParser_chompWhileHelp_single_char_space_32(
+        PineValue environment,
+        PineVMParseCache parseCache) =>
+        ElmKernelParser_chompWhileHelp_single_char(
+            environment,
+            PineValue.Blob([32]));
+
+    static PrecompiledResult.FinalValue? ElmKernelParser_chompWhileHelp_single_char_minus_45(
+        PineValue environment,
+        PineVMParseCache parseCache) =>
+        ElmKernelParser_chompWhileHelp_single_char(
+            environment,
+            PineValue.Blob([45]));
+
+
+    static PrecompiledResult.FinalValue? ElmKernelParser_chompWhileHelp_single_char(
+        PineValue environment,
+        PineValue charValue)
+    {
+        /*
+         * chompWhileHelp : (Char -> Bool) -> ( Int, Int, Int ) -> List Char -> ( Int, Int, Int )
+         * chompWhileHelp isGood ( offset, row, col ) srcChars =
+         * 
+         * */
+
+        var offsetValue =
+            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 1, 0]);
+
+        var rowValue =
+            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 1, 1]);
+
+        var colValue =
+            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 1, 2]);
+
+        var srcCharsValue =
+            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 2]);
+
+        if (PineValueAsInteger.SignedIntegerFromValueRelaxed(offsetValue).IsOkOrNullable() is not { } startOffset)
+        {
+            return null;
+        }
+
+        if (PineValueAsInteger.SignedIntegerFromValueRelaxed(rowValue).IsOkOrNullable() is not { } row)
+        {
+            return null;
+        }
+
+        if (PineValueAsInteger.SignedIntegerFromValueRelaxed(colValue).IsOkOrNullable() is not { } col)
+        {
+            return null;
+        }
+
+        if (srcCharsValue is not PineValue.ListValue srcCharsList)
+        {
+            return null;
+        }
+
+        if (startOffset < 0)
+        {
+            return null;
+        }
+
+        /*
+         * In contrast to countOffsetsInString, chompWhileHelp uses 1-based indexing for row and col.
+         * */
+
+        int offset = (int)startOffset;
+
+        while (true)
+        {
+            if (srcCharsList.Elements.Count <= offset)
+            {
+                break;
+            }
+
+            var currentChar = srcCharsList.Elements[offset];
+
+            if (currentChar != charValue)
+            {
+                break;
+            }
+
+            ++offset;
+        }
+
+        var dist = offset - startOffset;
+
+        if (charValue == Character_ASCII_Newline_Value)
+        {
+            row += dist;
+            col = 1;
+        }
+        else
+        {
+            col += dist;
+        }
+
+        var finalValue =
+            PineValue.List(
+                [
+                PineValueAsInteger.ValueFromSignedInteger(offset),
+                PineValueAsInteger.ValueFromSignedInteger(row),
+                PineValueAsInteger.ValueFromSignedInteger(col)
+                ]);
+
+        return
+            new PrecompiledResult.FinalValue(
+                finalValue,
+                StackFrameCount: 0);
     }
 
     static Func<PrecompiledResult>? ListMap(
@@ -1744,6 +2122,9 @@ public class Precompiled
 
     private static readonly PineValue Tag_Nothing_Value =
         ElmValueEncoding.ElmValueAsPineValue(ElmValue.TagInstance("Nothing", []));
+
+    private static readonly PineValue Character_ASCII_Newline_Value =
+        PineValue.Blob([10]);
 
     private static PineValue.ListValue Tag_Just_Value(PineValue justValue) =>
         PineValue.List(
