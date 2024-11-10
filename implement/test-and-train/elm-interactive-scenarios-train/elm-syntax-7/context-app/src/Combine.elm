@@ -58,21 +58,22 @@ lazy t =
 
 withState : (s -> Parser s a) -> Parser s a
 withState f =
-    Parser <|
-        \state ->
+    Parser
+        (\state ->
             (\(Parser p) -> p state) (f state)
+        )
 
 
 modifyState : (s -> s) -> Parser s ()
 modifyState f =
-    Parser <|
-        \state -> Core.succeed ( f state, () )
+    Parser
+        (\state -> Core.succeed ( f state, () ))
 
 
 withLocation : (Location -> Parser s a) -> Parser s a
 withLocation f =
-    Parser <|
-        \state ->
+    Parser
+        (\state ->
             Core.getPosition
                 |> Core.andThen
                     (\( row, col ) ->
@@ -82,85 +83,97 @@ withLocation f =
                         in
                         p state
                     )
+        )
 
 
 map : (a -> b) -> Parser s a -> Parser s b
 map f (Parser p) =
-    Parser <|
-        \state ->
+    Parser
+        (\state ->
             p state
                 |> Core.map (\( s, a ) -> ( s, f a ))
+        )
 
 
 andThen : (a -> Parser s b) -> Parser s a -> Parser s b
 andThen f (Parser p) =
-    Parser <|
-        \state ->
+    Parser
+        (\state ->
             p state
                 |> Core.andThen (\( s, a ) -> (\(Parser x) -> x s) (f a))
+        )
 
 
 keep : Parser s a -> Parser s (a -> b) -> Parser s b
 keep (Parser rp) (Parser lp) =
-    Parser <|
-        \state ->
+    Parser
+        (\state ->
             lp state
                 |> Core.andThen (\( newState, a ) -> Core.map (Tuple.mapSecond a) (rp newState))
+        )
 
 
 fail : String -> Parser s a
 fail m =
-    Parser <|
-        \state ->
+    Parser
+        (\state ->
             Core.problem m |> Core.map (\x -> ( state, x ))
+        )
 
 
 succeed : a -> Parser s a
 succeed res =
-    Parser <| \state -> Core.succeed ( state, res )
+    Parser
+        (\state -> Core.succeed ( state, res ))
 
 
 string : String -> Parser s String
 string s =
-    Parser <|
-        \state ->
+    Parser
+        (\state ->
             Core.getChompedString (Core.token s)
                 |> Core.map (\x -> ( state, x ))
+        )
 
 
 while : (Char -> Bool) -> Parser s String
 while pred =
-    Parser <|
-        \state ->
+    Parser
+        (\state ->
             Core.getChompedString (Core.chompWhile pred)
                 |> Core.map (\x -> ( state, x ))
+        )
 
 
 end : Parser s ()
 end =
-    Parser <|
-        \state ->
+    Parser
+        (\state ->
             Core.end |> Core.map (\x -> ( state, x ))
+        )
 
 
 backtrackable : Parser s a -> Parser s a
 backtrackable (Parser p) =
-    Parser <| \state -> Core.backtrackable (p state)
+    Parser
+        (\state -> Core.backtrackable (p state))
 
 
 oneOf : List (Parser s a) -> Parser s a
 oneOf xs =
-    Parser <| \state -> Core.oneOf (List.map (\(Parser x) -> x state) xs)
+    Parser
+        (\state -> Core.oneOf (List.map (\(Parser x) -> x state) xs))
 
 
 maybe : Parser s a -> Parser s (Maybe a)
 maybe (Parser p) =
-    Parser <|
-        \state ->
+    Parser
+        (\state ->
             Core.oneOf
                 [ p state |> Core.map (\( c, v ) -> ( c, Just v ))
                 , Core.succeed ( state, Nothing )
                 ]
+        )
 
 
 many : Parser s a -> Parser s (List a)
@@ -183,9 +196,10 @@ manyWithoutReverse initList (Parser p) =
                 , Core.succeed (Core.Done acc)
                 ]
     in
-    Parser <|
-        \state ->
+    Parser
+        (\state ->
             Core.loop ( state, initList ) helper
+        )
 
 
 manyWithEndLocationForLastElement : Range -> (a -> Range) -> Parser s a -> Parser s ( Location, List a )
@@ -203,9 +217,10 @@ manyWithEndLocationForLastElement defaultRange getRange (Parser p) =
                         )
                 ]
     in
-    Parser <|
-        \state ->
+    Parser
+        (\state ->
             Core.loop ( state, [] ) helper
+        )
 
 
 many1WithEndLocationForLastElement : (a -> Range) -> Parser s a -> Parser s ( Location, List a )

@@ -21,7 +21,7 @@ parseComment commentParser =
 singleLineComment : Parser State ()
 singleLineComment =
     parseComment
-        (Combine.succeed (++)
+        (Combine.succeed (\a b -> String.concat [ a, b ])
             |> Combine.keep (Combine.string "--")
             |> Combine.keep Elm.Parser.Whitespace.untilNewlineToken
         )

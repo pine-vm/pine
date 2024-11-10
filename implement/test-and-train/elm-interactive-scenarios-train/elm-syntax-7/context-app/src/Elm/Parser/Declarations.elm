@@ -43,7 +43,7 @@ infixDeclaration =
         |> Combine.ignore Layout.layout
         |> Combine.keep (Elm.Parser.Node.parser (Combine.fromCore Core.int))
         |> Combine.ignore Layout.layout
-        |> Combine.keep (Elm.Parser.Node.parser <| Combine.parens Elm.Parser.Tokens.prefixOperatorToken)
+        |> Combine.keep (Elm.Parser.Node.parser (Combine.parens Elm.Parser.Tokens.prefixOperatorToken))
         |> Combine.ignore Layout.layout
         |> Combine.ignore (Combine.string "=")
         |> Combine.ignore Layout.layout

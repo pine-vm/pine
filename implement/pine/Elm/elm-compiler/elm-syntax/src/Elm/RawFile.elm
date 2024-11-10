@@ -33,7 +33,7 @@ type alias RawFile =
 -}
 moduleName : RawFile -> ModuleName
 moduleName (InternalRawFile.Raw file) =
-    Module.moduleName <| Node.value file.moduleDefinition
+    Module.moduleName (Node.value file.moduleDefinition)
 
 
 {-| Encode a `RawFile` syntax element to JSON.

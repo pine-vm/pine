@@ -19,7 +19,7 @@ many1Spaces =
 realNewLine : Parser s String
 realNewLine =
     Core.oneOf
-        [ Core.chompIf ((==) '\u{000D}')
+        [ Core.chompIf (\c -> c == '\u{000D}')
         , Core.succeed ()
         ]
         |. Core.symbol "\n"

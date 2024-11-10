@@ -66,11 +66,12 @@ numberPart =
 
 listPattern : Parser State (Node Pattern)
 listPattern =
-    Elm.Parser.Node.parser <|
-        Combine.between
+    Elm.Parser.Node.parser
+        (Combine.between
             (Combine.string "[" |> Combine.ignore (Combine.maybe Layout.layout))
             (Combine.string "]")
             (Combine.map ListPattern (Combine.sepBy (Combine.string ",") (Layout.maybeAroundBothSides pattern)))
+        )
 
 
 type alias ConsumeArgs =
@@ -137,12 +138,13 @@ qualifiedPattern consumeArgs =
 recordPattern : Parser State (Node Pattern)
 recordPattern =
     Elm.Parser.Node.parser
-        (Combine.map RecordPattern <|
-            Combine.between
+        (Combine.map RecordPattern
+            (Combine.between
                 (Combine.string "{" |> Combine.continueWith (Combine.maybe Layout.layout))
                 (Combine.string "}")
                 (Combine.sepBy
                     (Combine.string ",")
                     (Layout.maybeAroundBothSides (Elm.Parser.Node.parser Elm.Parser.Tokens.functionName))
                 )
+            )
         )

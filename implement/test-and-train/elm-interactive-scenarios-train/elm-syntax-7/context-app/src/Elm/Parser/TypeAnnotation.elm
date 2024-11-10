@@ -105,7 +105,9 @@ genericTypeAnnotation =
 
 recordFieldsTypeAnnotation : Combine.Parser State TypeAnnotation.RecordDefinition
 recordFieldsTypeAnnotation =
-    Combine.sepBy1 (Combine.string ",") (Layout.maybeAroundBothSides <| Elm.Parser.Node.parser recordFieldDefinition)
+    Combine.sepBy1
+        (Combine.string ",")
+        (Layout.maybeAroundBothSides (Elm.Parser.Node.parser recordFieldDefinition))
 
 
 recordTypeAnnotation : Combine.Parser State (Node TypeAnnotation)
@@ -125,7 +127,10 @@ recordTypeAnnotation =
                                     |> Combine.ignore (Combine.string "|")
                                     |> Combine.keep (Elm.Parser.Node.parser recordFieldsTypeAnnotation)
                                     |> Combine.ignore (Combine.string "}")
-                                , Combine.succeed (\ta rest -> TypeAnnotation.Record <| Node.combine Tuple.pair fname ta :: rest)
+                                , Combine.succeed
+                                    (\ta rest ->
+                                        TypeAnnotation.Record (Node.combine Tuple.pair fname ta :: rest)
+                                    )
                                     |> Combine.ignore (Combine.string ":")
                                     |> Combine.ignore (Combine.maybe Layout.layout)
                                     |> Combine.keep typeAnnotation
