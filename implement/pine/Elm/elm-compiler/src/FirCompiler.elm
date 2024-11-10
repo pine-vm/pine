@@ -1808,6 +1808,13 @@ partialApplicationExpressionFromListOfArguments arguments emitStack function =
 
 emitWrapperForPartialApplication : Pine.Expression -> Int -> Pine.Expression -> Pine.Expression
 emitWrapperForPartialApplication envFunctionsExpression parameterCount innerExpression =
+    let
+        envFunctionsExpressionFiltered : Pine.Expression
+        envFunctionsExpressionFiltered =
+            filterEnvFuncExprForPartialApplication
+                innerExpression
+                envFunctionsExpression
+    in
     case parameterCount of
         0 ->
             emitWrapperForPartialApplicationZero
@@ -1815,7 +1822,7 @@ emitWrapperForPartialApplication envFunctionsExpression parameterCount innerExpr
                     innerExpression
                         |> Pine.encodeExpressionAsValue
                         |> Pine.LiteralExpression
-                , getEnvFunctionsExpression = envFunctionsExpression
+                , getEnvFunctionsExpression = envFunctionsExpressionFiltered
                 }
 
         _ ->
@@ -1825,9 +1832,139 @@ emitWrapperForPartialApplication envFunctionsExpression parameterCount innerExpr
                         |> Pine.encodeExpressionAsValue
                         |> Pine.LiteralExpression
                 , parameterCount = parameterCount
-                , getEnvFunctionsExpression = envFunctionsExpression
+                , getEnvFunctionsExpression = envFunctionsExpressionFiltered
                 , argumentsAlreadyCollected = []
                 }
+
+
+filterEnvFuncExprForPartialApplication : Pine.Expression -> Pine.Expression -> Pine.Expression
+filterEnvFuncExprForPartialApplication funcExpr envFunctionsExpr =
+    {-
+       TODO: Consider moving (and expanding?) the implementation to reduce the environment functions list.
+       The late cleanup here worked as a PoC, but it seems better to filter these items in an earlier stage,
+       maybe in `emitDeclarationBlock`
+       Also, for the specific case of local functions not capturing any of the closure,
+       we could use an alternative approach to lift them out of the local scope.
+       Or maybe revisit lambda lifting all local functions in general?
+    -}
+    case envFunctionsExpr of
+        -- Some cheaper early exits for trivial cases.
+        Pine.ListExpression [] ->
+            envFunctionsExpr
+
+        Pine.LiteralExpression (Pine.ListValue []) ->
+            envFunctionsExpr
+
+        _ ->
+            let
+                envAccessPaths : List (List Int)
+                envAccessPaths =
+                    Common.listUnique
+                        (listPineExprEnvUsagesPaths funcExpr)
+
+                containsAnyRefToEnvFunctionsList =
+                    List.any
+                        (\path ->
+                            case path of
+                                0 :: _ ->
+                                    True
+
+                                _ ->
+                                    False
+                        )
+                        envAccessPaths
+            in
+            if List.member [] envAccessPaths then
+                envFunctionsExpr
+
+            else if List.member [ 0 ] envAccessPaths then
+                -- Is access to the whole functions list.
+                envFunctionsExpr
+
+            else if not containsAnyRefToEnvFunctionsList then
+                {-
+                   Optimize for the special case of a function without outer
+                   dependencies such as closure captures.
+                   This occurs in some simple predicates found in parser code.
+                   Perhaps we can optimize more cases by moving a reduction of the new env functions
+                   list into the emitDeclarationBlock function.
+                   Also, moving this into emitDeclarationBlock would improve internal consistency
+                   by building a matching environment model for the emission of the subexpressions.
+                -}
+                Pine.ListExpression []
+
+            else
+                envFunctionsExpr
+
+
+listPineExprEnvUsagesPaths : Pine.Expression -> List (List Int)
+listPineExprEnvUsagesPaths expr =
+    case parsePineExprAsEnvPath expr of
+        Just path ->
+            [ path ]
+
+        Nothing ->
+            case expr of
+                Pine.EnvironmentExpression ->
+                    [ [] ]
+
+                Pine.LiteralExpression _ ->
+                    []
+
+                Pine.ListExpression list ->
+                    List.concatMap listPineExprEnvUsagesPaths list
+
+                Pine.KernelApplicationExpression _ input ->
+                    listPineExprEnvUsagesPaths input
+
+                Pine.ConditionalExpression condition trueBranch falseBranch ->
+                    List.concat
+                        [ listPineExprEnvUsagesPaths condition
+                        , listPineExprEnvUsagesPaths trueBranch
+                        , listPineExprEnvUsagesPaths falseBranch
+                        ]
+
+                Pine.StringTagExpression _ tagged ->
+                    listPineExprEnvUsagesPaths tagged
+
+                Pine.ParseAndEvalExpression encodedExpr envExpr ->
+                    List.concat
+                        [ listPineExprEnvUsagesPaths encodedExpr
+                        , listPineExprEnvUsagesPaths envExpr
+                        ]
+
+
+parsePineExprAsEnvPath : Pine.Expression -> Maybe (List Int)
+parsePineExprAsEnvPath expr =
+    case expr of
+        Pine.EnvironmentExpression ->
+            Just []
+
+        Pine.KernelApplicationExpression "head" input ->
+            case input of
+                Pine.KernelApplicationExpression "skip" (Pine.ListExpression [ Pine.LiteralExpression skipCountValue, skipInput ]) ->
+                    case Pine.intFromValue skipCountValue of
+                        Ok skipCount ->
+                            case parsePineExprAsEnvPath skipInput of
+                                Just path ->
+                                    Just (List.concat [ path, [ skipCount ] ])
+
+                                Nothing ->
+                                    Nothing
+
+                        _ ->
+                            Nothing
+
+                _ ->
+                    case parsePineExprAsEnvPath input of
+                        Just path ->
+                            Just (List.concat [ path, [ 0 ] ])
+
+                        Nothing ->
+                            Nothing
+
+        _ ->
+            Nothing
 
 
 emitWrapperForPartialApplicationZero :
