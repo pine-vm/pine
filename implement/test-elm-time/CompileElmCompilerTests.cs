@@ -1242,7 +1242,7 @@ public class CompileElmCompilerTests
                         "\n",
                         [
                             "Compiled module " + javascriptCompiledModule.moduleName + " comparison:\n",
-                            ..CompareCompiledModulesAndAssertEqual(javascriptCompiledModule, pineCompiledModule)
+                            ..CompareCompiledModules(javascriptCompiledModule, pineCompiledModule)
                         ]));
 
                 Assert.AreEqual(
@@ -1409,21 +1409,6 @@ public class CompileElmCompilerTests
             "Compiled environments value");
     }
 
-
-    public static IEnumerable<string> CompareCompiledModulesAndAssertEqual(
-        (string moduleName, PineValue moduleValue, ElmInteractiveEnvironment.ElmModule moduleContent) expectedModule,
-        (string moduleName, PineValue moduleValue, ElmInteractiveEnvironment.ElmModule moduleContent) actualModule)
-    {
-        foreach (var comparisonReport in CompareCompiledModules(expectedModule, actualModule))
-        {
-            yield return comparisonReport;
-        }
-
-        Assert.AreEqual(
-            expectedModule.moduleValue,
-            actualModule.moduleValue,
-            "Compiled module " + expectedModule.moduleName + " value");
-    }
 
     public static IEnumerable<string> CompareCompiledModules(
         (string moduleName, PineValue moduleValue, ElmInteractiveEnvironment.ElmModule moduleContent) expectedModule,
