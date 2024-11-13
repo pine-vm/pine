@@ -156,6 +156,7 @@ public class Precompiled
 
         var basicsEqExposedValue = popularValueDictionary["Basics.eq.exposed"];
 
+        var listMemberExposedValue = popularValueDictionary["List.member.exposed"];
 
         var dictGetExpression = popularExpressionDictionary["dictGet"];
 
@@ -175,6 +176,12 @@ public class Precompiled
 
         var assocListGetExpressionValue =
             ExpressionEncoding.EncodeExpressionAsValue(assocListGetExpression);
+
+        var commonListUniqueHelpExpression =
+            popularExpressionDictionary["Common.listUniqueHelp"];
+
+        var commonListUniqueHelpExpressionValue =
+            ExpressionEncoding.EncodeExpressionAsValue(commonListUniqueHelpExpression);
 
         var dictSizeHelpExpression = popularExpressionDictionary["dictSizeHelp"];
 
@@ -269,8 +276,8 @@ public class Precompiled
                     [0],
                     PineValue.List(
                         [
-                        compareStringsExpressionValue,
                         isPineListExpressionValue,
+                        compareStringsExpressionValue,
                         compareExpressionValue,
                         compareListsExpressionValue
                         ]))
@@ -290,9 +297,9 @@ public class Precompiled
                     [0],
                     PineValue.List(
                         [
-                        dictToListExpressionValue,
-                        dictKeysExpressionValue,
                         isPineBlobExpressionValue,
+                        dictKeysExpressionValue,
+                        dictToListExpressionValue,
                         eqExpressionValue,
                         listsEqualRecursiveExpressionValue,
                         ]))
@@ -408,6 +415,25 @@ public class Precompiled
                 new KeyValuePair<Expression, IReadOnlyList<PrecompiledEntry>>(
                     assocListGetExpression,
                     [new PrecompiledEntry(assocListGetExpressionEnvClass, CommonAssocListGet)]);
+        }
+
+        {
+            var listUniqueHelpExpressionEnvClass =
+                EnvConstraintId.Create(
+                    [
+                    new KeyValuePair<IReadOnlyList<int>, PineValue>(
+                    [0],
+                    PineValue.List(
+                        [
+                        listMemberExposedValue,
+                        commonListUniqueHelpExpressionValue
+                        ])),
+                    ]);
+
+            yield return
+                new KeyValuePair<Expression, IReadOnlyList<PrecompiledEntry>>(
+                    commonListUniqueHelpExpression,
+                    [new PrecompiledEntry(listUniqueHelpExpressionEnvClass, CommonListUniqueHelp)]);
         }
 
 
@@ -1047,30 +1073,35 @@ public class Precompiled
     {
         if (list is PineValue.ListValue listValue)
         {
-            int totalCount = 0;
-
-            for (var i = 0; i < listValue.Elements.Count; ++i)
-            {
-                var (itemEq, itemEqStackFrameCount) = BasicsEqRecursive(item, listValue.Elements[i]);
-
-                totalCount += itemEqStackFrameCount;
-
-                if (itemEq)
-                {
-                    return new PrecompiledResult.FinalValue(
-                        PineVMValues.TrueValue,
-                        StackFrameCount: totalCount);
-                }
-            }
-
-            return new PrecompiledResult.FinalValue(
-                PineVMValues.FalseValue,
-                StackFrameCount: totalCount);
+            return ListMember(item, listValue.Elements);
         }
 
         return new PrecompiledResult.FinalValue(
             PineVMValues.FalseValue,
             StackFrameCount: 0);
+    }
+
+    static PrecompiledResult.FinalValue ListMember(PineValue item, IReadOnlyList<PineValue> list)
+    {
+        int totalCount = 0;
+
+        for (var i = 0; i < list.Count; ++i)
+        {
+            var (itemEq, itemEqStackFrameCount) = BasicsEqRecursive(item, list[i]);
+
+            totalCount += itemEqStackFrameCount;
+
+            if (itemEq)
+            {
+                return new PrecompiledResult.FinalValue(
+                    PineVMValues.TrueValue,
+                    StackFrameCount: totalCount);
+            }
+        }
+
+        return new PrecompiledResult.FinalValue(
+            PineVMValues.FalseValue,
+            StackFrameCount: totalCount);
     }
 
     static PrecompiledResult.FinalValue CommonAssocListGet(
@@ -1111,6 +1142,50 @@ public class Precompiled
 
         return new PrecompiledResult.FinalValue(
             Tag_Nothing_Value,
+            StackFrameCount: 0);
+    }
+
+    static PrecompiledResult.FinalValue CommonListUniqueHelp(
+        PineValue environment,
+        PineVMParseCache parseCache)
+    {
+        var remaining =
+            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 0]);
+
+        var accumulator =
+            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 1]);
+
+        if (remaining is not PineValue.ListValue remainingList)
+        {
+            return new PrecompiledResult.FinalValue(
+                accumulator,
+                StackFrameCount: 0);
+
+        }
+
+        if (accumulator is not PineValue.ListValue accumulatorList)
+        {
+            return new PrecompiledResult.FinalValue(
+                accumulator,
+                StackFrameCount: 0);
+        }
+
+        var newUnique = new List<PineValue>(accumulatorList.Elements);
+
+        for (var i = 0; i < remainingList.Elements.Count; ++i)
+        {
+            var item = remainingList.Elements[i];
+
+            var (isMember, _) = ListMember(item, newUnique);
+
+            if (isMember == PineVMValues.FalseValue)
+            {
+                newUnique.Add(item);
+            }
+        }
+
+        return new PrecompiledResult.FinalValue(
+            PineValue.List([.. accumulatorList.Elements, .. newUnique]),
             StackFrameCount: 0);
     }
 
@@ -1635,10 +1710,19 @@ public class Precompiled
             environment,
             PineValue.Blob([45]));
 
-
     static PrecompiledResult.FinalValue? ElmKernelParser_chompWhileHelp_single_char(
         PineValue environment,
         PineValue charValue)
+    {
+        return
+            ElmKernelParser_chompWhileHelp(
+                environment,
+                charValuePredicate: c => c == charValue);
+    }
+
+    static PrecompiledResult.FinalValue? ElmKernelParser_chompWhileHelp(
+        PineValue environment,
+        Func<PineValue, bool> charValuePredicate)
     {
         /*
          * chompWhileHelp : (Char -> Bool) -> ( Int, Int, Int ) -> List Char -> ( Int, Int, Int )
@@ -1698,24 +1782,22 @@ public class Precompiled
 
             var currentChar = srcCharsList.Elements[offset];
 
-            if (currentChar != charValue)
+            if (!charValuePredicate(currentChar))
             {
                 break;
             }
 
             ++offset;
-        }
 
-        var dist = offset - startOffset;
-
-        if (charValue == Character_ASCII_Newline_Value)
-        {
-            row += dist;
-            col = 1;
-        }
-        else
-        {
-            col += dist;
+            if (currentChar == Character_ASCII_Newline_Value)
+            {
+                ++row;
+                col = 1;
+            }
+            else
+            {
+                ++col;
+            }
         }
 
         var finalValue =
