@@ -947,8 +947,25 @@ mapChompedString func (Parser parse) =
 
                         (PState _ s1Offset _ _ _ _) =
                             s1
+
+                        sliceLength : Int
+                        sliceLength =
+                            Pine_kernel.int_add
+                                [ s1Offset
+                                , Pine_kernel.negate sOffset
+                                ]
+
+                        sliceChars : List Char
+                        sliceChars =
+                            Pine_kernel.take
+                                [ sliceLength
+                                , Pine_kernel.skip
+                                    [ sOffset
+                                    , srcChars
+                                    ]
+                                ]
                     in
-                    Good p (func (String.slice sOffset s1Offset (String srcChars)) a) s1
+                    Good p (func (String sliceChars) a) s1
         )
 
 
@@ -1361,8 +1378,23 @@ variable i =
                     (PState _ s1Offset _ _ _ _) =
                         s1
 
+                    sliceLength : Int
+                    sliceLength =
+                        Pine_kernel.int_add
+                            [ s1Offset
+                            , Pine_kernel.negate sOffset
+                            ]
+
+                    nameChars : List Char
+                    nameChars =
+                        Pine_kernel.take
+                            [ sliceLength
+                            , Pine_kernel.skip [ sOffset, srcChars ]
+                            ]
+
+                    name : String
                     name =
-                        String.slice sOffset s1Offset (String srcChars)
+                        String nameChars
                 in
                 if Set.member name i.reserved then
                     Bad False (fromState s i.expecting)
@@ -1375,37 +1407,16 @@ variable i =
 varHelp : (Char -> Bool) -> Int -> Int -> Int -> List Char -> Int -> List (Located c) -> State c
 varHelp isGood offset row col srcChars indent context =
     let
-        newOffset =
-            isSubChar isGood offset srcChars
+        ( newOffset, newRow, newCol ) =
+            Elm.Kernel.Parser.chompWhileHelp isGood ( offset, row, col ) srcChars
     in
-    if Pine_kernel.equal [ newOffset, -1 ] then
-        PState
-            srcChars
-            offset
-            indent
-            context
-            row
-            col
-
-    else if Pine_kernel.equal [ newOffset, -2 ] then
-        varHelp
-            isGood
-            (Pine_kernel.int_add [ offset, 1 ])
-            (Pine_kernel.int_add [ row, 1 ])
-            1
-            srcChars
-            indent
-            context
-
-    else
-        varHelp
-            isGood
-            newOffset
-            row
-            (Pine_kernel.int_add [ col, 1 ])
-            srcChars
-            indent
-            context
+    PState
+        srcChars
+        newOffset
+        indent
+        context
+        newRow
+        newCol
 
 
 
@@ -1601,33 +1612,46 @@ type Nestable
 
 
 nestableComment : Token x -> Token x -> Parser c x ()
-nestableComment ((Token oStr oX) as open) ((Token cStr cX) as close) =
-    case String.uncons oStr of
-        Nothing ->
-            problem oX
+nestableComment ((Token (String openChars) oX) as open) ((Token (String closeChars) cX) as close) =
+    let
+        openChar =
+            Pine_kernel.head openChars
 
-        Just ( openChar, _ ) ->
-            case String.uncons cStr of
-                Nothing ->
-                    problem cX
+        closeChar =
+            Pine_kernel.head closeChars
+    in
+    if Pine_kernel.equal [ openChar, [] ] then
+        problem oX
 
-                Just ( closeChar, _ ) ->
-                    let
-                        isNotRelevant : Char -> Bool
-                        isNotRelevant char =
-                            if Pine_kernel.equal [ char, openChar ] then
-                                False
+    else if Pine_kernel.equal [ closeChar, [] ] then
+        problem cX
 
-                            else if Pine_kernel.equal [ char, closeChar ] then
-                                False
+    else
+        let
+            chompOpen =
+                token open
+        in
+        ignorer
+            chompOpen
+            (nestableHelp
+                (nestableCommentPredicateNotRelevant openChar closeChar)
+                chompOpen
+                (token close)
+                cX
+                1
+            )
 
-                            else
-                                True
 
-                        chompOpen =
-                            token open
-                    in
-                    ignorer chompOpen (nestableHelp isNotRelevant chompOpen (token close) cX 1)
+nestableCommentPredicateNotRelevant : Char -> Char -> Char -> Bool
+nestableCommentPredicateNotRelevant openChar closeChar char =
+    if Pine_kernel.equal [ char, openChar ] then
+        False
+
+    else if Pine_kernel.equal [ char, closeChar ] then
+        False
+
+    else
+        True
 
 
 nestableHelp : (Char -> Bool) -> Parser c x () -> Parser c x () -> x -> Int -> Parser c x ()
