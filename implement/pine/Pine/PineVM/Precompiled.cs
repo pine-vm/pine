@@ -604,12 +604,12 @@ public class Precompiled
                 EnvConstraintId.Create(
                     [
                     new KeyValuePair<IReadOnlyList<int>, PineValue>(
-                    [0, 0],
-                    adaptivePartialApplicationExpressionValue),
+                        [0, 0],
+                        adaptivePartialApplicationExpressionValue),
                     new KeyValuePair<IReadOnlyList<int>, PineValue>(
-                    [0, 1],
-                    elmKernelParser_chompWhileHelpExpressionValue),
-                    ]);
+                        [0, 1],
+                        elmKernelParser_chompWhileHelpExpressionValue),
+                ]);
 
             EnvConstraintId chompWhileHelpEnvClassFromPredicate(PineValue predicateValue)
             {
@@ -636,6 +636,30 @@ public class Precompiled
                         chompWhileHelpEnvClassFromPredicate(
                             popularValueDictionary["predicate_first_arg_equals_ASCII_char_minus_45"]),
                         ElmKernelParser_chompWhileHelp_single_char_minus_45)]);
+
+            yield return
+                new KeyValuePair<Expression, IReadOnlyList<PrecompiledEntry>>(
+                    elmKernelParser_chompWhileHelpExpression,
+                    [new PrecompiledEntry(
+                        chompWhileHelpEnvClassFromPredicate(
+                            popularValueDictionary["predicate_first_arg_is_not_ASCII_carriage_return_or_newline"]),
+                        ElmKernelParser_chompWhileHelp_not_carriage_return_or_newline)]);
+
+            yield return
+                new KeyValuePair<Expression, IReadOnlyList<PrecompiledEntry>>(
+                    elmKernelParser_chompWhileHelpExpression,
+                    [new PrecompiledEntry(
+                        chompWhileHelpEnvClassFromPredicate(
+                            popularValueDictionary["predicate_nestableComment_char_is_not_elm_multiline_comment_open_or_close"]),
+                        ElmKernelParser_chompWhileHelp_not_elm_multiline_comment_open_or_close)]);
+
+            yield return
+                new KeyValuePair<Expression, IReadOnlyList<PrecompiledEntry>>(
+                    elmKernelParser_chompWhileHelpExpression,
+                    [new PrecompiledEntry(
+                        chompWhileHelpEnvClassFromPredicate(
+                            popularValueDictionary["predicate_parser_char_is_alpha_num_or_underscore"]),
+                        ElmKernelParser_chompWhileHelp_is_alpha_num_or_underscore)]);
 
             /*
             yield return
@@ -1710,6 +1734,72 @@ public class Precompiled
         ElmKernelParser_chompWhileHelp_single_char(
             environment,
             PineValue.Blob([45]));
+
+    static PrecompiledResult.FinalValue? ElmKernelParser_chompWhileHelp_not_carriage_return_or_newline(
+        PineValue environment,
+        PineVMParseCache parseCache)
+    {
+        var carriageReturnChar =
+            PineValue.Blob([13]);
+
+        var newlineChar =
+            PineValue.Blob([10]);
+
+        return
+            ElmKernelParser_chompWhileHelp(
+                environment,
+                charValuePredicate:
+                c => !(c == carriageReturnChar || c == newlineChar));
+    }
+
+    static PrecompiledResult.FinalValue? ElmKernelParser_chompWhileHelp_not_elm_multiline_comment_open_or_close(
+        PineValue environment,
+        PineVMParseCache parseCache)
+    {
+        var openChar =
+            PineValue.Blob([(byte)'{']);
+
+        var closeChar =
+            PineValue.Blob([(byte)'-']);
+
+        return
+            ElmKernelParser_chompWhileHelp(
+                environment,
+                charValuePredicate:
+                c => !(c == openChar || c == closeChar));
+    }
+
+    static PrecompiledResult.FinalValue? ElmKernelParser_chompWhileHelp_is_alpha_num_or_underscore(
+        PineValue environment,
+        PineVMParseCache parseCache)
+    {
+        static bool charValuePredicate(PineValue charValue)
+        {
+            if (charValue is not PineValue.BlobValue blobValue)
+            {
+                return false;
+            }
+
+            if (blobValue.Bytes.Length is not 1)
+            {
+                return false;
+            }
+
+            var byteValue = blobValue.Bytes.Span[0];
+
+            return
+                (byteValue >= 48 && byteValue <= 57) ||
+                (byteValue >= 65 && byteValue <= 90) ||
+                (byteValue >= 97 && byteValue <= 122) ||
+                byteValue == '_';
+        }
+
+        return
+            ElmKernelParser_chompWhileHelp(
+                environment,
+                charValuePredicate:
+                charValuePredicate);
+    }
 
     static PrecompiledResult.FinalValue? ElmKernelParser_chompWhileHelp_single_char(
         PineValue environment,

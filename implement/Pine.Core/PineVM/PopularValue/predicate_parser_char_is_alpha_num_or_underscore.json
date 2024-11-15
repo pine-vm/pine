@@ -1,0 +1,675 @@
+[
+  { "ListAsString": "Function" },
+  [
+    [
+      { "ListAsString": "Conditional" },
+      [
+        [
+          { "ListAsString": "Conditional" },
+          [
+            [
+              { "ListAsString": "ParseAndEval" },
+              [
+                [
+                  { "ListAsString": "Literal" },
+                  [
+                    [
+                      { "ListAsString": "ParseAndEval" },
+                      [
+                        [
+                          { "ListAsString": "Literal" },
+                          [
+                            [
+                              { "ListAsString": "Conditional" },
+                              [
+                                [
+                                  { "ListAsString": "KernelApplication" },
+                                  [
+                                    { "ListAsString": "int_is_sorted_asc" },
+                                    [
+                                      { "ListAsString": "List" },
+                                      [
+                                        [
+                                          [
+                                            { "ListAsString": "Literal" },
+                                            [ 65 ]
+                                          ],
+                                          [
+                                            { "ListAsString": "KernelApplication" },
+                                            [
+                                              { "ListAsString": "head" },
+                                              [
+                                                { "ListAsString": "KernelApplication" },
+                                                [
+                                                  { "ListAsString": "skip" },
+                                                  [
+                                                    { "ListAsString": "List" },
+                                                    [
+                                                      [
+                                                        [
+                                                          { "ListAsString": "Literal" },
+                                                          [ 2 ]
+                                                        ],
+                                                        [
+                                                          { "ListAsString": "KernelApplication" },
+                                                          [
+                                                            { "ListAsString": "head" },
+                                                            [
+                                                              { "ListAsString": "Environment" },
+                                                              []
+                                                            ]
+                                                          ]
+                                                        ]
+                                                      ]
+                                                    ]
+                                                  ]
+                                                ]
+                                              ]
+                                            ]
+                                          ],
+                                          [
+                                            { "ListAsString": "Literal" },
+                                            [ 90 ]
+                                          ]
+                                        ]
+                                      ]
+                                    ]
+                                  ]
+                                ],
+                                [
+                                  { "ListAsString": "KernelApplication" },
+                                  [
+                                    { "ListAsString": "int_is_sorted_asc" },
+                                    [
+                                      { "ListAsString": "List" },
+                                      [
+                                        [
+                                          [
+                                            { "ListAsString": "Literal" },
+                                            [ 97 ]
+                                          ],
+                                          [
+                                            { "ListAsString": "KernelApplication" },
+                                            [
+                                              { "ListAsString": "head" },
+                                              [
+                                                { "ListAsString": "KernelApplication" },
+                                                [
+                                                  { "ListAsString": "skip" },
+                                                  [
+                                                    { "ListAsString": "List" },
+                                                    [
+                                                      [
+                                                        [
+                                                          { "ListAsString": "Literal" },
+                                                          [ 2 ]
+                                                        ],
+                                                        [
+                                                          { "ListAsString": "KernelApplication" },
+                                                          [
+                                                            { "ListAsString": "head" },
+                                                            [
+                                                              { "ListAsString": "Environment" },
+                                                              []
+                                                            ]
+                                                          ]
+                                                        ]
+                                                      ]
+                                                    ]
+                                                  ]
+                                                ]
+                                              ]
+                                            ]
+                                          ],
+                                          [
+                                            { "ListAsString": "Literal" },
+                                            [ 122 ]
+                                          ]
+                                        ]
+                                      ]
+                                    ]
+                                  ]
+                                ],
+                                [
+                                  { "ListAsString": "Literal" },
+                                  { "ListAsString": "\u0004" }
+                                ]
+                              ]
+                            ]
+                          ]
+                        ],
+                        [
+                          { "ListAsString": "List" },
+                          [
+                            [
+                              [
+                                { "ListAsString": "List" },
+                                [
+                                  [
+                                    [
+                                      { "ListAsString": "KernelApplication" },
+                                      [
+                                        { "ListAsString": "head" },
+                                        [
+                                          { "ListAsString": "KernelApplication" },
+                                          [
+                                            { "ListAsString": "head" },
+                                            [
+                                              { "ListAsString": "Environment" },
+                                              []
+                                            ]
+                                          ]
+                                        ]
+                                      ]
+                                    ],
+                                    [
+                                      { "ListAsString": "KernelApplication" },
+                                      [
+                                        { "ListAsString": "head" },
+                                        [
+                                          { "ListAsString": "KernelApplication" },
+                                          [
+                                            { "ListAsString": "head" },
+                                            [
+                                              { "ListAsString": "KernelApplication" },
+                                              [
+                                                { "ListAsString": "skip" },
+                                                [
+                                                  { "ListAsString": "List" },
+                                                  [
+                                                    [
+                                                      [
+                                                        { "ListAsString": "Literal" },
+                                                        [ 1 ]
+                                                      ],
+                                                      [
+                                                        { "ListAsString": "Environment" },
+                                                        []
+                                                      ]
+                                                    ]
+                                                  ]
+                                                ]
+                                              ]
+                                            ]
+                                          ]
+                                        ]
+                                      ]
+                                    ],
+                                    [
+                                      { "ListAsString": "ParseAndEval" },
+                                      [
+                                        [
+                                          { "ListAsString": "KernelApplication" },
+                                          [
+                                            { "ListAsString": "head" },
+                                            [
+                                              { "ListAsString": "KernelApplication" },
+                                              [
+                                                { "ListAsString": "head" },
+                                                [
+                                                  { "ListAsString": "Environment" },
+                                                  []
+                                                ]
+                                              ]
+                                            ]
+                                          ]
+                                        ],
+                                        [
+                                          { "ListAsString": "List" },
+                                          [
+                                            [
+                                              [
+                                                { "ListAsString": "List" },
+                                                [ [] ]
+                                              ],
+                                              [
+                                                { "ListAsString": "List" },
+                                                [
+                                                  [
+                                                    [
+                                                      { "ListAsString": "KernelApplication" },
+                                                      [
+                                                        { "ListAsString": "head" },
+                                                        [
+                                                          { "ListAsString": "KernelApplication" },
+                                                          [
+                                                            { "ListAsString": "head" },
+                                                            [
+                                                              { "ListAsString": "KernelApplication" },
+                                                              [
+                                                                { "ListAsString": "skip" },
+                                                                [
+                                                                  { "ListAsString": "List" },
+                                                                  [
+                                                                    [
+                                                                      [
+                                                                        { "ListAsString": "Literal" },
+                                                                        [ 1 ]
+                                                                      ],
+                                                                      [
+                                                                        { "ListAsString": "Environment" },
+                                                                        []
+                                                                      ]
+                                                                    ]
+                                                                  ]
+                                                                ]
+                                                              ]
+                                                            ]
+                                                          ]
+                                                        ]
+                                                      ]
+                                                    ]
+                                                  ]
+                                                ]
+                                              ]
+                                            ]
+                                          ]
+                                        ]
+                                      ]
+                                    ]
+                                  ]
+                                ]
+                              ],
+                              [
+                                { "ListAsString": "List" },
+                                [ [] ]
+                              ]
+                            ]
+                          ]
+                        ]
+                      ]
+                    ]
+                  ]
+                ],
+                [
+                  { "ListAsString": "List" },
+                  [
+                    [
+                      [
+                        { "ListAsString": "Literal" },
+                        [
+                          [
+                            [
+                              { "ListAsString": "KernelApplication" },
+                              [
+                                { "ListAsString": "concat" },
+                                [
+                                  { "ListAsString": "List" },
+                                  [
+                                    [
+                                      [
+                                        { "ListAsString": "KernelApplication" },
+                                        [
+                                          { "ListAsString": "take" },
+                                          [
+                                            { "ListAsString": "Literal" },
+                                            [ [ 1, 0 ] ]
+                                          ]
+                                        ]
+                                      ],
+                                      [
+                                        { "ListAsString": "KernelApplication" },
+                                        [
+                                          { "ListAsString": "head" },
+                                          [
+                                            { "ListAsString": "KernelApplication" },
+                                            [
+                                              { "ListAsString": "head" },
+                                              [
+                                                { "ListAsString": "KernelApplication" },
+                                                [
+                                                  { "ListAsString": "skip" },
+                                                  [
+                                                    { "ListAsString": "List" },
+                                                    [
+                                                      [
+                                                        [
+                                                          { "ListAsString": "Literal" },
+                                                          [ 1 ]
+                                                        ],
+                                                        [
+                                                          { "ListAsString": "Environment" },
+                                                          []
+                                                        ]
+                                                      ]
+                                                    ]
+                                                  ]
+                                                ]
+                                              ]
+                                            ]
+                                          ]
+                                        ]
+                                      ]
+                                    ]
+                                  ]
+                                ]
+                              ]
+                            ]
+                          ]
+                        ]
+                      ],
+                      [
+                        { "ListAsString": "List" },
+                        [
+                          [
+                            [
+                              { "ListAsString": "KernelApplication" },
+                              [
+                                { "ListAsString": "head" },
+                                [
+                                  { "ListAsString": "KernelApplication" },
+                                  [
+                                    { "ListAsString": "head" },
+                                    [
+                                      { "ListAsString": "KernelApplication" },
+                                      [
+                                        { "ListAsString": "skip" },
+                                        [
+                                          { "ListAsString": "List" },
+                                          [
+                                            [
+                                              [
+                                                { "ListAsString": "Literal" },
+                                                [ 1 ]
+                                              ],
+                                              [
+                                                { "ListAsString": "Environment" },
+                                                []
+                                              ]
+                                            ]
+                                          ]
+                                        ]
+                                      ]
+                                    ]
+                                  ]
+                                ]
+                              ]
+                            ]
+                          ]
+                        ]
+                      ]
+                    ]
+                  ]
+                ]
+              ]
+            ],
+            [
+              { "ListAsString": "ParseAndEval" },
+              [
+                [
+                  { "ListAsString": "Literal" },
+                  [
+                    [
+                      { "ListAsString": "KernelApplication" },
+                      [
+                        { "ListAsString": "int_is_sorted_asc" },
+                        [
+                          { "ListAsString": "List" },
+                          [
+                            [
+                              [
+                                { "ListAsString": "Literal" },
+                                [ 48 ]
+                              ],
+                              [
+                                { "ListAsString": "ParseAndEval" },
+                                [
+                                  [
+                                    { "ListAsString": "KernelApplication" },
+                                    [
+                                      { "ListAsString": "head" },
+                                      [
+                                        { "ListAsString": "KernelApplication" },
+                                        [
+                                          { "ListAsString": "head" },
+                                          [
+                                            { "ListAsString": "Environment" },
+                                            []
+                                          ]
+                                        ]
+                                      ]
+                                    ]
+                                  ],
+                                  [
+                                    { "ListAsString": "List" },
+                                    [
+                                      [
+                                        [
+                                          { "ListAsString": "List" },
+                                          [ [] ]
+                                        ],
+                                        [
+                                          { "ListAsString": "List" },
+                                          [
+                                            [
+                                              [
+                                                { "ListAsString": "KernelApplication" },
+                                                [
+                                                  { "ListAsString": "head" },
+                                                  [
+                                                    { "ListAsString": "KernelApplication" },
+                                                    [
+                                                      { "ListAsString": "head" },
+                                                      [
+                                                        { "ListAsString": "KernelApplication" },
+                                                        [
+                                                          { "ListAsString": "skip" },
+                                                          [
+                                                            { "ListAsString": "List" },
+                                                            [
+                                                              [
+                                                                [
+                                                                  { "ListAsString": "Literal" },
+                                                                  [ 1 ]
+                                                                ],
+                                                                [
+                                                                  { "ListAsString": "Environment" },
+                                                                  []
+                                                                ]
+                                                              ]
+                                                            ]
+                                                          ]
+                                                        ]
+                                                      ]
+                                                    ]
+                                                  ]
+                                                ]
+                                              ]
+                                            ]
+                                          ]
+                                        ]
+                                      ]
+                                    ]
+                                  ]
+                                ]
+                              ],
+                              [
+                                { "ListAsString": "Literal" },
+                                [ 57 ]
+                              ]
+                            ]
+                          ]
+                        ]
+                      ]
+                    ]
+                  ]
+                ],
+                [
+                  { "ListAsString": "List" },
+                  [
+                    [
+                      [
+                        { "ListAsString": "Literal" },
+                        [
+                          [
+                            [
+                              { "ListAsString": "KernelApplication" },
+                              [
+                                { "ListAsString": "concat" },
+                                [
+                                  { "ListAsString": "List" },
+                                  [
+                                    [
+                                      [
+                                        { "ListAsString": "KernelApplication" },
+                                        [
+                                          { "ListAsString": "take" },
+                                          [
+                                            { "ListAsString": "Literal" },
+                                            [ [ 1, 0 ] ]
+                                          ]
+                                        ]
+                                      ],
+                                      [
+                                        { "ListAsString": "KernelApplication" },
+                                        [
+                                          { "ListAsString": "head" },
+                                          [
+                                            { "ListAsString": "KernelApplication" },
+                                            [
+                                              { "ListAsString": "head" },
+                                              [
+                                                { "ListAsString": "KernelApplication" },
+                                                [
+                                                  { "ListAsString": "skip" },
+                                                  [
+                                                    { "ListAsString": "List" },
+                                                    [
+                                                      [
+                                                        [
+                                                          { "ListAsString": "Literal" },
+                                                          [ 1 ]
+                                                        ],
+                                                        [
+                                                          { "ListAsString": "Environment" },
+                                                          []
+                                                        ]
+                                                      ]
+                                                    ]
+                                                  ]
+                                                ]
+                                              ]
+                                            ]
+                                          ]
+                                        ]
+                                      ]
+                                    ]
+                                  ]
+                                ]
+                              ]
+                            ]
+                          ]
+                        ]
+                      ],
+                      [
+                        { "ListAsString": "List" },
+                        [
+                          [
+                            [
+                              { "ListAsString": "KernelApplication" },
+                              [
+                                { "ListAsString": "head" },
+                                [
+                                  { "ListAsString": "KernelApplication" },
+                                  [
+                                    { "ListAsString": "head" },
+                                    [
+                                      { "ListAsString": "KernelApplication" },
+                                      [
+                                        { "ListAsString": "skip" },
+                                        [
+                                          { "ListAsString": "List" },
+                                          [
+                                            [
+                                              [
+                                                { "ListAsString": "Literal" },
+                                                [ 1 ]
+                                              ],
+                                              [
+                                                { "ListAsString": "Environment" },
+                                                []
+                                              ]
+                                            ]
+                                          ]
+                                        ]
+                                      ]
+                                    ]
+                                  ]
+                                ]
+                              ]
+                            ]
+                          ]
+                        ]
+                      ]
+                    ]
+                  ]
+                ]
+              ]
+            ],
+            [
+              { "ListAsString": "Literal" },
+              { "ListAsString": "\u0004" }
+            ]
+          ]
+        ],
+        [
+          { "ListAsString": "KernelApplication" },
+          [
+            { "ListAsString": "equal" },
+            [
+              { "ListAsString": "List" },
+              [
+                [
+                  [
+                    { "ListAsString": "KernelApplication" },
+                    [
+                      { "ListAsString": "head" },
+                      [
+                        { "ListAsString": "KernelApplication" },
+                        [
+                          { "ListAsString": "head" },
+                          [
+                            { "ListAsString": "KernelApplication" },
+                            [
+                              { "ListAsString": "skip" },
+                              [
+                                { "ListAsString": "List" },
+                                [
+                                  [
+                                    [
+                                      { "ListAsString": "Literal" },
+                                      [ 1 ]
+                                    ],
+                                    [
+                                      { "ListAsString": "Environment" },
+                                      []
+                                    ]
+                                  ]
+                                ]
+                              ]
+                            ]
+                          ]
+                        ]
+                      ]
+                    ]
+                  ],
+                  [
+                    { "ListAsString": "Literal" },
+                    { "ListAsString": "_" }
+                  ]
+                ]
+              ]
+            ]
+          ]
+        ],
+        [
+          { "ListAsString": "Literal" },
+          { "ListAsString": "\u0004" }
+        ]
+      ]
+    ],
+    1,
+    [],
+    []
+  ]
+]
