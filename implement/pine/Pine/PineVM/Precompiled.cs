@@ -6,6 +6,7 @@ using System.Collections.Concurrent;
 using System.Collections.Frozen;
 using System.Collections.Generic;
 using System.Collections.Immutable;
+using System.Linq;
 
 namespace Pine.PineVM;
 
@@ -2224,6 +2225,15 @@ public class Precompiled
 
     private static readonly FrozenDictionary<Expression, IReadOnlyList<PrecompiledEntry>> PrecompiledDict =
         BuildPrecompiled()
-        .ToFrozenDictionary();
+        .GroupBy(kv => kv.Key)
+        .ToFrozenDictionary(
+            keySelector:
+            group => group.Key,
+            elementSelector:
+            group =>
+            (IReadOnlyList<PrecompiledEntry>)
+            [..group
+            .SelectMany(kv => kv.Value)
+            .OrderByDescending(entry => entry.EnvConstraint.ParsedEnvItems.Count)]);
 
 }
