@@ -245,7 +245,8 @@ endLocationForList defaultRange getRange list =
 
 many1 : Parser s a -> Parser s (List a)
 many1 p =
-    succeed (::)
+    succeed
+        (\first rest -> first :: rest)
         |> keep p
         |> keep (many p)
 
@@ -260,7 +261,8 @@ sepBy sep p =
 
 sepBy1 : Parser s x -> Parser s a -> Parser s (List a)
 sepBy1 sep p =
-    succeed (::)
+    succeed
+        (\first rest -> first :: rest)
         |> keep p
         |> keep (many (sep |> continueWith p))
 

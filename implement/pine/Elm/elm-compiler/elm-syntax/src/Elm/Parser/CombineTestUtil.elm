@@ -7,14 +7,22 @@ import Parser exposing (DeadEnd)
 
 parseWithState : String -> Parser State a -> Maybe ( State, a )
 parseWithState s p =
-    Combine.runParser (p |> Combine.ignore Combine.end) Elm.Parser.State.emptyState s
-        |> Result.toMaybe
+    case Combine.runParser (p |> Combine.ignore Combine.end) Elm.Parser.State.emptyState s of
+        Ok ok ->
+            Just ok
+
+        Err _ ->
+            Nothing
 
 
 parse : String -> Parser State a -> Maybe a
 parse s p =
-    parseWithState s p
-        |> Maybe.map Tuple.second
+    case parseWithState s p of
+        Nothing ->
+            Nothing
+
+        Just ( _, r ) ->
+            Just r
 
 
 parseWithFailure : String -> Parser State a -> Result (List DeadEnd) a

@@ -95,7 +95,12 @@ valueConstructor =
                         let
                             endRange : Range
                             endRange =
-                                List.head args |> Maybe.map Node.range |> Maybe.withDefault range
+                                case args of
+                                    (Node argRange _) :: _ ->
+                                        argRange
+
+                                    [] ->
+                                        range
                         in
                         Combine.succeed
                             (Node

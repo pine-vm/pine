@@ -2656,7 +2656,7 @@ keyword : Token x -> Parser c x ()
 keyword (Token kwd expecting) =
     let
         progress =
-            not (String.isEmpty kwd)
+            kwd /= ""
     in
     Parser
         (\\s ->
@@ -2735,7 +2735,7 @@ token : Token x -> Parser c x ()
 token (Token str expecting) =
     let
         progress =
-            not (String.isEmpty str)
+            str /= ""
     in
     Parser
         (\\s ->
@@ -2957,7 +2957,22 @@ finalizeFloat invalid expecting intSettings floatSettings intPair s =
                     Bad True (fromState s invalid)
 
                 Ok toValue ->
-                    case String.toFloat (String.slice sOffset floatOffset (String srcChars)) of
+                    let
+                        sliceLength : Int
+                        sliceLength =
+                            Pine_kernel.int_add [ floatOffset, Pine_kernel.negate sOffset ]
+
+                        sliceChars : List Char
+                        sliceChars =
+                            Pine_kernel.take
+                                [ sliceLength
+                                , Pine_kernel.skip
+                                    [ sOffset
+                                    , srcChars
+                                    ]
+                                ]
+                    in
+                    case String.toFloat (String sliceChars) of
                         Nothing ->
                             Bad True (fromState s invalid)
 
@@ -3196,7 +3211,6 @@ chompWhile isGood =
                     newCol
                 )
         )
-
 
 
 -- CHOMP UNTIL
@@ -3488,17 +3502,21 @@ variable i =
                 (PState srcChars sOffset indent context row col) =
                     s
 
-                firstOffset : Int
-                firstOffset =
-                    isSubChar i.start sOffset srcChars
+                firstChar =
+                    Pine_kernel.head
+                        (Pine_kernel.skip [ sOffset, srcChars ])
             in
-            if Pine_kernel.equal [ firstOffset, -1 ] then
+            {-
+               First check if we have reached the end of the source string, to account for the possibility of
+               a predicate for i.start crashing when given an empty list.
+            -}
+            if Pine_kernel.equal [ firstChar, [] ] then
                 Bad False (fromState s i.expecting)
 
-            else
+            else if i.start firstChar then
                 let
                     s1 =
-                        if Pine_kernel.equal [ firstOffset, -2 ] then
+                        if Pine_kernel.equal [ firstChar, '\\n' ] then
                             varHelp
                                 i.inner
                                 (Pine_kernel.int_add [ sOffset, 1 ])
@@ -3511,7 +3529,7 @@ variable i =
                         else
                             varHelp
                                 i.inner
-                                firstOffset
+                                (Pine_kernel.int_add [ sOffset, 1 ])
                                 row
                                 (Pine_kernel.int_add [ col, 1 ])
                                 srcChars
@@ -3544,22 +3562,46 @@ variable i =
 
                 else
                     Good True name s1
+
+            else
+                Bad False (fromState s i.expecting)
         )
 
 
 varHelp : (Char -> Bool) -> Int -> Int -> Int -> List Char -> Int -> List (Located c) -> State c
 varHelp isGood offset row col srcChars indent context =
     let
-        ( newOffset, newRow, newCol ) =
-            Elm.Kernel.Parser.chompWhileHelp isGood ( offset, row, col ) srcChars
+        newOffset =
+            isSubChar isGood offset srcChars
     in
-    PState
-        srcChars
-        newOffset
-        indent
-        context
-        newRow
-        newCol
+    if Pine_kernel.equal [ newOffset, -1 ] then
+        PState
+            srcChars
+            offset
+            indent
+            context
+            row
+            col
+
+    else if Pine_kernel.equal [ newOffset, -2 ] then
+        varHelp
+            isGood
+            (Pine_kernel.int_add [ offset, 1 ])
+            (Pine_kernel.int_add [ row, 1 ])
+            1
+            srcChars
+            indent
+            context
+
+    else
+        varHelp
+            isGood
+            newOffset
+            row
+            (Pine_kernel.int_add [ col, 1 ])
+            srcChars
+            indent
+            context
 
 
 

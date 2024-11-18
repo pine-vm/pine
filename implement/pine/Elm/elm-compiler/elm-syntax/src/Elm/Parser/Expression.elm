@@ -62,9 +62,16 @@ liftRecordAccess e =
             |> Combine.continueWith (Elm.Parser.Node.parser Tokens.functionName)
             |> Combine.andThen
                 (\f ->
+                    let
+                        (Node eRange _) =
+                            e
+
+                        (Node fRange _) =
+                            f
+                    in
                     liftRecordAccess
                         (Node
-                            { start = (Node.range e).start, end = (Node.range f).end }
+                            { start = eRange.start, end = fRange.end }
                             (RecordAccess e f)
                         )
                 )
@@ -78,42 +85,51 @@ expression =
         |> Combine.andThen
             (\first ->
                 let
-                    complete : Range -> List (Node Expression) -> Parser s (Node Expression)
-                    complete lastExpressionRange rest =
-                        case rest of
-                            [] ->
-                                Combine.succeed first
-
-                            (Node _ (Operator _)) :: _ ->
-                                Combine.fail "Expression should not end with an operator"
-
-                            _ ->
-                                Combine.succeed
-                                    (Node
-                                        { start = (Node.range first).start, end = lastExpressionRange.end }
-                                        (Application (first :: List.reverse rest))
-                                    )
-
-                    promoter : Range -> List (Node Expression) -> Parser State (Node Expression)
-                    promoter lastExpressionRange rest =
-                        Layout.optimisticLayoutWith
-                            (\() -> complete lastExpressionRange rest)
-                            (\() ->
-                                Combine.oneOf
-                                    [ expressionNotApplication
-                                        |> Combine.andThen (\next -> promoter (Node.range next) (next :: rest))
-                                    , Combine.succeed ()
-                                        |> Combine.andThen (\() -> complete lastExpressionRange rest)
-                                    ]
-                            )
+                    (Node firstRange _) =
+                        first
                 in
                 case first of
                     Node _ (Operator _) ->
                         Combine.fail "Expression should not start with an operator"
 
                     _ ->
-                        promoter (Node.range first) []
+                        expressionPromoter first firstRange []
             )
+
+
+expressionPromoter : Node Expression -> Range -> List (Node Expression) -> Parser State (Node Expression)
+expressionPromoter first lastExpressionRange rest =
+    Layout.optimisticLayoutWith
+        (\() -> expressionComplete first lastExpressionRange rest)
+        (\() ->
+            Combine.oneOf
+                [ expressionNotApplication
+                    |> Combine.andThen (\next -> expressionPromoter first (Node.range next) (next :: rest))
+                , Combine.succeed ()
+                    |> Combine.andThen (\() -> expressionComplete first lastExpressionRange rest)
+                ]
+        )
+
+
+expressionComplete : Node Expression -> Range -> List (Node Expression) -> Parser s (Node Expression)
+expressionComplete first lastExpressionRange rest =
+    let
+        (Node firstRange _) =
+            first
+    in
+    case rest of
+        [] ->
+            Combine.succeed first
+
+        (Node _ (Operator _)) :: _ ->
+            Combine.fail "Expression should not end with an operator"
+
+        _ ->
+            Combine.succeed
+                (Node
+                    { start = firstRange.start, end = lastExpressionRange.end }
+                    (Application (first :: List.reverse rest))
+                )
 
 
 glslExpression : Parser State (Node Expression)
@@ -258,9 +274,13 @@ lambdaExpression : Parser State (Node Expression)
 lambdaExpression =
     Combine.succeed
         (\(Node { start } _) args expr ->
+            let
+                (Node exprRange _) =
+                    expr
+            in
             Lambda args expr
                 |> LambdaExpression
-                |> Node { start = start, end = (Node.range expr).end }
+                |> Node { start = start, end = exprRange.end }
         )
         |> Combine.keep (Elm.Parser.Node.parser (Combine.string "\\"))
         |> Combine.ignore (Combine.maybe Layout.layout)
@@ -286,7 +306,7 @@ caseStatement =
 caseStatements : Parser State ( Location, Cases )
 caseStatements =
     Combine.many1WithEndLocationForLastElement
-        (\( _, case_ ) -> Node.range case_)
+        (\( _, Node caseRange _ ) -> caseRange)
         caseStatementWithCorrectIndentation
 
 
@@ -308,8 +328,8 @@ caseStatementWithCorrectIndentation =
 caseExpression : Parser State (Node Expression)
 caseExpression =
     Combine.succeed
-        (\caseKeyword caseBlock_ ( end, cases ) ->
-            Node { start = (Node.range caseKeyword).start, end = end }
+        (\(Node caseKeywordRange _) caseBlock_ ( end, cases ) ->
+            Node { start = caseKeywordRange.start, end = end }
                 (CaseExpression (CaseBlock caseBlock_ cases))
         )
         |> Combine.keep (Elm.Parser.Node.parser Tokens.caseToken)
@@ -355,7 +375,14 @@ letDestructuringDeclarationWithPattern : Node Pattern -> Parser State (Node LetD
 letDestructuringDeclarationWithPattern pattern =
     Combine.succeed
         (\expr ->
-            Node { start = (Node.range pattern).start, end = (Node.range expr).end } (LetDestructuring pattern expr)
+            let
+                (Node exprRange _) =
+                    expr
+
+                (Node patternRange _) =
+                    pattern
+            in
+            Node { start = patternRange.start, end = exprRange.end } (LetDestructuring pattern expr)
         )
         |> Combine.ignore (Combine.maybe Layout.layout)
         |> Combine.ignore (Combine.string "=")
@@ -367,7 +394,13 @@ letExpression : Parser State (Node Expression)
 letExpression =
     Combine.succeed
         (\(Node { start } _) decls expr ->
-            Node { start = start, end = (Node.range expr).end } (LetBlock decls expr |> LetExpression)
+            let
+                (Node { end } _) =
+                    expr
+            in
+            Node
+                { start = start, end = end }
+                (LetExpression (LetBlock decls expr))
         )
         |> Combine.keep (Elm.Parser.Node.parser (Combine.string "let"))
         |> Combine.ignore Layout.layout
@@ -387,8 +420,12 @@ ifBlockExpression : Parser State (Node Expression)
 ifBlockExpression =
     Combine.succeed
         (\(Node { start } _) condition ifTrue ifFalse ->
+            let
+                (Node { end } _) =
+                    ifFalse
+            in
             Node
-                { start = start, end = (Node.range ifFalse).end }
+                { start = start, end = end }
                 (IfBlock condition ifTrue ifFalse)
         )
         |> Combine.keep (Elm.Parser.Node.parser Tokens.ifToken)
@@ -539,9 +576,16 @@ functionWithNameNode pointer =
         functionImplementationFromVarPointer varPointer =
             Combine.succeed
                 (\args expr ->
+                    let
+                        (Node { start } _) =
+                            varPointer
+
+                        (Node { end } _) =
+                            expr
+                    in
                     Node
-                        { start = (Node.range varPointer).start
-                        , end = (Node.range expr).end
+                        { start = start
+                        , end = end
                         }
                         (FunctionImplementation varPointer args expr)
                 )

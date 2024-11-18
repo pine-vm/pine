@@ -95,7 +95,12 @@ process _ (InternalRawFile.Raw file) =
     { moduleDefinition = file.moduleDefinition
     , imports = file.imports
     , declarations = List.reverse changes.declarations
-    , comments = List.sortWith (\(Node a _) (Node b _) -> Range.compare a b) (changes.remainingComments ++ changes.previousComments)
+    , comments =
+        List.sortWith
+            (\(Node a _) (Node b _) ->
+                Range.compare a b
+            )
+            (List.concat [ changes.remainingComments, changes.previousComments ])
     }
 
 
@@ -108,7 +113,11 @@ type alias DeclarationsAndComments =
 
 attachDocumentationAndFixOperators : Node Declaration -> DeclarationsAndComments -> DeclarationsAndComments
 attachDocumentationAndFixOperators declaration context =
-    case Node.value declaration of
+    let
+        (Node declarationRange declarationValue) =
+            declaration
+    in
+    case declarationValue of
         FunctionDeclaration functionBeforeOperatorFix ->
             let
                 function : Elm.Syntax.Expression.Function
@@ -117,7 +126,7 @@ attachDocumentationAndFixOperators declaration context =
             in
             addDocumentation
                 (\doc -> FunctionDeclaration { function | documentation = Just doc })
-                (Node (Node.range declaration) (FunctionDeclaration function))
+                (Node declarationRange (FunctionDeclaration function))
                 context
 
         AliasDeclaration typeAlias ->
@@ -155,18 +164,29 @@ attachDocumentationAndFixOperators declaration context =
 addDocumentation : (Node Comment -> Declaration) -> Node Declaration -> DeclarationsAndComments -> DeclarationsAndComments
 addDocumentation howToUpdate declaration file =
     let
+        (Node declarationRange _) =
+            declaration
+
         ( previous, maybeDoc, remaining ) =
-            findDocumentationForRange (Node.range declaration) file.remainingComments []
+            findDocumentationForRange declarationRange file.remainingComments []
     in
     case maybeDoc of
         Just doc ->
-            { previousComments = previous ++ file.previousComments
+            let
+                (Node docRange _) =
+                    doc
+            in
+            { previousComments = List.concat [ previous, file.previousComments ]
             , remainingComments = remaining
-            , declarations = Node { start = (Node.range doc).start, end = (Node.range declaration).end } (howToUpdate doc) :: file.declarations
+            , declarations =
+                Node
+                    { start = docRange.start, end = declarationRange.end }
+                    (howToUpdate doc)
+                    :: file.declarations
             }
 
         Nothing ->
-            { previousComments = previous ++ file.previousComments
+            { previousComments = List.concat [ previous, file.previousComments ]
             , remainingComments = remaining
             , declarations = declaration :: file.declarations
             }
@@ -239,7 +259,11 @@ fixExprs exps =
             Application exps
 
 
-findNextSplit : ( String, SimpleInfix ) -> List ( String, SimpleInfix ) -> List (Node Expression) -> Maybe ( List (Node Expression), SimpleInfix, List (Node Expression) )
+findNextSplit :
+    ( String, SimpleInfix )
+    -> List ( String, SimpleInfix )
+    -> List (Node Expression)
+    -> Maybe ( List (Node Expression), SimpleInfix, List (Node Expression) )
 findNextSplit op restOfOperators exps =
     let
         assocDirection : InfixDirection
@@ -260,9 +284,17 @@ findNextSplit op restOfOperators exps =
                         |> List.reverse
                         |> List.Extra.dropWhile
                             (\x ->
-                                expressionOperators x
-                                    |> Maybe.andThen (\key -> findInfix key operators)
-                                    |> (==) Nothing
+                                case expressionOperators x of
+                                    Nothing ->
+                                        True
+
+                                    Just key ->
+                                        case findInfix key operators of
+                                            Nothing ->
+                                                True
+
+                                            Just _ ->
+                                                False
                             )
                         |> List.drop 1
                         |> List.reverse
@@ -271,32 +303,44 @@ findNextSplit op restOfOperators exps =
                     exps
                         |> List.Extra.takeWhile
                             (\x ->
-                                expressionOperators x
-                                    |> Maybe.andThen (\key -> findInfix key operators)
-                                    |> (==) Nothing
+                                case expressionOperators x of
+                                    Nothing ->
+                                        True
+
+                                    Just key ->
+                                        case findInfix key operators of
+                                            Nothing ->
+                                                True
+
+                                            Just _ ->
+                                                False
                             )
 
         prefixLength : Int
         prefixLength =
             List.length prefix
     in
-    case
-        exps
-            |> List.drop prefixLength
-            |> List.head
-            |> Maybe.andThen expressionOperators
-            |> Maybe.andThen (\x -> findInfix x operators)
-    of
-        Just x ->
-            let
-                suffix : List (Node Expression)
-                suffix =
-                    List.drop (prefixLength + 1) exps
-            in
-            Just ( prefix, x, suffix )
-
-        Nothing ->
+    case List.drop prefixLength exps of
+        [] ->
             Nothing
+
+        head :: _ ->
+            case expressionOperators head of
+                Nothing ->
+                    Nothing
+
+                Just operator ->
+                    case findInfix operator operators of
+                        Just x ->
+                            let
+                                suffix : List (Node Expression)
+                                suffix =
+                                    List.drop (prefixLength + 1) exps
+                            in
+                            Just ( prefix, x, suffix )
+
+                        Nothing ->
+                            Nothing
 
 
 findInfix : String -> List ( String, SimpleInfix ) -> Maybe SimpleInfix

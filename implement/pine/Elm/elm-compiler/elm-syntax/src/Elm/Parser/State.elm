@@ -20,7 +20,12 @@ emptyState =
 
 currentIndent : State -> Int
 currentIndent (State { indents }) =
-    List.head indents |> Maybe.withDefault 0
+    case indents of
+        [] ->
+            0
+
+        current :: _ ->
+            current
 
 
 storedColumns : State -> List Int
@@ -35,12 +40,18 @@ expectedColumn state =
 
 popIndent : State -> State
 popIndent (State s) =
-    State { s | indents = List.drop 1 s.indents }
+    State
+        { indents = List.drop 1 s.indents
+        , comments = s.comments
+        }
 
 
 pushIndent : Int -> State -> State
 pushIndent x (State s) =
-    State { s | indents = x :: s.indents }
+    State
+        { indents = x :: s.indents
+        , comments = s.comments
+        }
 
 
 pushColumn : Int -> State -> State
@@ -50,7 +61,10 @@ pushColumn col state =
 
 addComment : Node String -> State -> State
 addComment pair (State s) =
-    State { s | comments = pair :: s.comments }
+    State
+        { indents = s.indents
+        , comments = pair :: s.comments
+        }
 
 
 getComments : State -> List (Node String)

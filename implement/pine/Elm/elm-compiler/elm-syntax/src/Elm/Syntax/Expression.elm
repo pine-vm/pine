@@ -23,13 +23,13 @@ Although it is a easy and simple language, you can express a lot! See the `Expre
 
 -}
 
-import Elm.Syntax.Documentation as Documentation exposing (Documentation)
-import Elm.Syntax.Infix as Infix exposing (InfixDirection)
-import Elm.Syntax.ModuleName as ModuleName exposing (ModuleName)
-import Elm.Syntax.Node as Node exposing (Node(..))
-import Elm.Syntax.Pattern as Pattern exposing (Pattern)
+import Elm.Syntax.Documentation exposing (Documentation)
+import Elm.Syntax.Infix exposing (InfixDirection)
+import Elm.Syntax.ModuleName exposing (ModuleName)
+import Elm.Syntax.Node exposing (Node(..))
+import Elm.Syntax.Pattern exposing (Pattern)
 import Elm.Syntax.Range exposing (Range)
-import Elm.Syntax.Signature as Signature exposing (Signature)
+import Elm.Syntax.Signature exposing (Signature)
 
 
 {-| Type alias for a full function
@@ -46,25 +46,39 @@ type alias Function =
 functionRange : Function -> Range
 functionRange function =
     let
+        (Node _ declarationValue) =
+            function.declaration
+
         { name, expression } =
-            Node.value function.declaration
+            declarationValue
+
+        (Node { end } _) =
+            expression
 
         startRange : Range
         startRange =
             case function.documentation of
-                Just documentation ->
-                    Node.range documentation
+                Just (Node documentationRange _) ->
+                    documentationRange
 
                 Nothing ->
                     case function.signature of
-                        Just (Node _ value) ->
-                            Node.range value.name
+                        Just (Node _ signatureValue) ->
+                            let
+                                (Node signatureNameRange _) =
+                                    signatureValue.name
+                            in
+                            signatureNameRange
 
                         Nothing ->
-                            Node.range name
+                            let
+                                (Node nameRange _) =
+                                    name
+                            in
+                            nameRange
     in
     { start = startRange.start
-    , end = (Node.range expression).end
+    , end = end
     }
 
 
