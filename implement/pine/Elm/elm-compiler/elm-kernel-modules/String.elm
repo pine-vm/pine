@@ -134,19 +134,57 @@ split (String sep) (String string) =
         List.map fromChar string
 
     else
-        splitHelperOnList [] sep string
+        splitHelperOnList 0 [] 0 sep string
 
 
-splitHelperOnList : List Char -> List Char -> List Char -> List String
-splitHelperOnList current sep string =
-    if Pine_kernel.equal [ string, [] ] then
-        [ fromList current ]
+splitHelperOnList : Int -> List String -> Int -> List Char -> List Char -> List String
+splitHelperOnList offset collected lastStart sep string =
+    let
+        slice : List Char
+        slice =
+            Pine_kernel.take
+                [ Pine_kernel.length sep
+                , Pine_kernel.skip [ offset, string ]
+                ]
+    in
+    if Pine_kernel.equal [ slice, sep ] then
+        let
+            separatedSliceLength : Int
+            separatedSliceLength =
+                Pine_kernel.int_add
+                    [ offset
+                    , Pine_kernel.int_mul [ -1, lastStart ]
+                    ]
 
-    else if Pine_kernel.equal [ sep, List.take (List.length sep) string ] then
-        [ fromList current ] ++ splitHelperOnList [] sep (List.drop (List.length sep) string)
+            separatedSlice : List Char
+            separatedSlice =
+                Pine_kernel.take
+                    [ separatedSliceLength
+                    , Pine_kernel.skip [ lastStart, string ]
+                    ]
+        in
+        splitHelperOnList
+            (Pine_kernel.int_add [ offset, Pine_kernel.length sep ])
+            (Pine_kernel.concat [ collected, [ String separatedSlice ] ])
+            (Pine_kernel.int_add [ offset, Pine_kernel.length sep ])
+            sep
+            string
+
+    else if Pine_kernel.equal [ slice, [] ] then
+        let
+            separatedSlice : List Char
+            separatedSlice =
+                Pine_kernel.skip [ lastStart, string ]
+        in
+        Pine_kernel.concat [ collected, [ String separatedSlice ] ]
 
     else
-        splitHelperOnList (current ++ List.take 1 string) sep (List.drop 1 string)
+        splitHelperOnList
+            (Pine_kernel.int_add [ offset, 1 ])
+            collected
+            lastStart
+            sep
+            string
 
 
 join : String -> List String -> String
@@ -653,7 +691,7 @@ toFloat (String chars) =
 
 toRationalComponentsLessSign : List Char -> Maybe ( Int, Int )
 toRationalComponentsLessSign chars =
-    case splitHelperOnList [] [ '.' ] chars of
+    case splitHelperOnList 0 [] 0 [ '.' ] chars of
         [] ->
             Nothing
 
