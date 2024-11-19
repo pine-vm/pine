@@ -1536,12 +1536,20 @@ slice start end (String chars) =
             else
                 Pine_kernel.int_add [ relativeIndex, Pine_kernel.length chars ]
 
+        absoluteStart : Int
         absoluteStart =
             absoluteIndex start
+
+        sliceLength : Int
+        sliceLength =
+            Pine_kernel.int_add
+                [ absoluteIndex end
+                , Pine_kernel.int_mul [ -1, absoluteStart ]
+                ]
     in
     String
         (Pine_kernel.take
-            [ absoluteIndex end - absoluteStart
+            [ sliceLength
             , Pine_kernel.skip [ absoluteStart, chars ]
             ]
         )
@@ -1751,7 +1759,7 @@ fromUnsignedIntAsListHelper int lowerDigits =
                 unsafeDigitCharacterFromValue
                     (Pine_kernel.int_add
                         [ int
-                        , Pine_kernel.negate (Pine_kernel.int_mul [ upperDigitsValue, 10 ])
+                        , Pine_kernel.int_mul [ upperDigitsValue, -10 ]
                         ]
                     )
         in
@@ -1815,7 +1823,20 @@ trimRight (String chars) =
 
 isCharRemovedOnTrim : Char -> Bool
 isCharRemovedOnTrim char =
-    Pine_kernel.int_is_sorted_asc [ Char.toCode char, 32 ]
+    if Pine_kernel.equal [ char, ' ' ] then
+        True
+
+    else if Pine_kernel.equal [ char, '\\t' ] then
+        True
+
+    else if Pine_kernel.equal [ char, '\\n' ] then
+        True
+
+    else if Pine_kernel.equal [ char, '\u{000D}' ] then
+        True
+
+    else
+        False
 
 
 dropWhileList : (Char -> Bool) -> List Char -> List Char
@@ -1839,11 +1860,114 @@ padLeft n char (String list) =
 
 
 lines : String -> List String
-lines string =
-    string
-        |> replace "\\r\\n" "\\n"
-        |> replace "\\r" "\\n"
-        |> split "\\n"
+lines (String chars) =
+    linesHelper 0 [] 0 chars
+
+
+linesHelper : Int -> List String -> Int -> List Char -> List String
+linesHelper currentLineStart currentLines offset chars =
+    let
+        nextChar =
+            Pine_kernel.head (Pine_kernel.skip [ offset, chars ])
+
+        nextTwoChars =
+            Pine_kernel.take [ 2, Pine_kernel.skip [ offset, chars ] ]
+    in
+    if Pine_kernel.equal [ nextChar, [] ] then
+        let
+            currentLineLength =
+                Pine_kernel.int_add [ offset, -currentLineStart ]
+
+            currentLineChars : List Char
+            currentLineChars =
+                Pine_kernel.take
+                    [ currentLineLength
+                    , Pine_kernel.skip [ currentLineStart, chars ]
+                    ]
+        in
+        Pine_kernel.concat
+            [ currentLines
+            , [ String (Pine_kernel.skip [ currentLineStart, chars ]) ]
+            ]
+
+    else if Pine_kernel.equal [ nextTwoChars, [ '\\u{000D}', '\\n' ] ] then
+        let
+            currentLineLength =
+                Pine_kernel.int_add [ offset, -currentLineStart ]
+
+            currentLineChars : List Char
+            currentLineChars =
+                Pine_kernel.take
+                    [ currentLineLength
+                    , Pine_kernel.skip [ currentLineStart, chars ]
+                    ]
+        in
+        linesHelper
+            (Pine_kernel.int_add [ offset, 2 ])
+            (Pine_kernel.concat [ currentLines, [ String currentLineChars ] ])
+            (Pine_kernel.int_add [ offset, 2 ])
+            chars
+
+    else if Pine_kernel.equal [ nextTwoChars, [ '\\n', '\\u{000D}' ] ] then
+        let
+            currentLineLength =
+                Pine_kernel.int_add [ offset, -currentLineStart ]
+
+            currentLineChars : List Char
+            currentLineChars =
+                Pine_kernel.take
+                    [ currentLineLength
+                    , Pine_kernel.skip [ currentLineStart, chars ]
+                    ]
+        in
+        linesHelper
+            (Pine_kernel.int_add [ offset, 2 ])
+            (Pine_kernel.concat [ currentLines, [ String currentLineChars ] ])
+            (Pine_kernel.int_add [ offset, 2 ])
+            chars
+
+    else if Pine_kernel.equal [ nextChar, '\\n' ] then
+        let
+            currentLineLength =
+                Pine_kernel.int_add [ offset, -currentLineStart ]
+
+            currentLineChars : List Char
+            currentLineChars =
+                Pine_kernel.take
+                    [ currentLineLength
+                    , Pine_kernel.skip [ currentLineStart, chars ]
+                    ]
+        in
+        linesHelper
+            (Pine_kernel.int_add [ offset, 1 ])
+            (Pine_kernel.concat [ currentLines, [ String currentLineChars ] ])
+            (Pine_kernel.int_add [ offset, 1 ])
+            chars
+
+    else if Pine_kernel.equal [ nextChar, '\\u{000D}' ] then
+        let
+            currentLineLength =
+                Pine_kernel.int_add [ offset, -currentLineStart ]
+
+            currentLineChars : List Char
+            currentLineChars =
+                Pine_kernel.take
+                    [ currentLineLength
+                    , Pine_kernel.skip [ currentLineStart, chars ]
+                    ]
+        in
+        linesHelper
+            (Pine_kernel.int_add [ offset, 1 ])
+            (Pine_kernel.concat [ currentLines, [ String currentLineChars ] ])
+            (Pine_kernel.int_add [ offset, 1 ])
+            chars
+
+    else
+        linesHelper
+            currentLineStart
+            currentLines
+            (Pine_kernel.int_add [ offset, 1 ])
+            chars
 
 
 foldr : (Char -> b -> b) -> b -> String -> b
