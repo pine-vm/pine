@@ -2360,72 +2360,6 @@ searchCompileElmSyntaxOperatorOptimized :
     -> Maybe (Result String Expression)
 searchCompileElmSyntaxOperatorOptimized stack operator leftExpr rightExpr =
     let
-        functionGuaranteedToReturnInt : ( List String, String ) -> Bool
-        functionGuaranteedToReturnInt ( moduleName, localName ) =
-            case ( moduleName, localName ) of
-                ( [ "List" ], "length" ) ->
-                    True
-
-                ( [ "Pine_kernel" ], "length" ) ->
-                    -- Possibly another stage has already mapped from 'List.length' to 'Pine_kernel.length'.
-                    True
-
-                _ ->
-                    False
-
-        exprGuaranteedToBeInt : Elm.Syntax.Expression.Expression -> Bool
-        exprGuaranteedToBeInt expr =
-            case expr of
-                Elm.Syntax.Expression.Integer _ ->
-                    True
-
-                Elm.Syntax.Expression.Hex _ ->
-                    True
-
-                Elm.Syntax.Expression.FunctionOrValue [] localName ->
-                    case Common.assocListGet localName stack.knownTypes of
-                        Just (Elm.Syntax.TypeAnnotation.Typed (Elm.Syntax.Node.Node _ ( [], "Int" )) []) ->
-                            True
-
-                        _ ->
-                            False
-
-                Elm.Syntax.Expression.Application ((Elm.Syntax.Node.Node _ (Elm.Syntax.Expression.FunctionOrValue moduleName localName)) :: _) ->
-                    functionGuaranteedToReturnInt
-                        ( moduleName, localName )
-
-                Elm.Syntax.Expression.OperatorApplication innerOp _ (Elm.Syntax.Node.Node _ innerLeft) (Elm.Syntax.Node.Node _ innerRight) ->
-                    case innerOp of
-                        "+" ->
-                            if exprGuaranteedToBeInt innerLeft then
-                                exprGuaranteedToBeInt innerRight
-
-                            else
-                                False
-
-                        "-" ->
-                            if exprGuaranteedToBeInt innerLeft then
-                                exprGuaranteedToBeInt innerRight
-
-                            else
-                                False
-
-                        "*" ->
-                            if exprGuaranteedToBeInt innerLeft then
-                                exprGuaranteedToBeInt innerRight
-
-                            else
-                                False
-
-                        "//" ->
-                            True
-
-                        _ ->
-                            False
-
-                _ ->
-                    False
-
         continueForEquals : (Expression -> Expression) -> Maybe (Result String Expression)
         continueForEquals mapAfterEquals =
             {-
@@ -2435,65 +2369,12 @@ searchCompileElmSyntaxOperatorOptimized stack operator leftExpr rightExpr =
                we can emit a direct usage of the 'equal' kernel function.
             -}
             let
-                functionCannotReturnSetOrDict : ( List String, String ) -> Bool
-                functionCannotReturnSetOrDict ( moduleName, localName ) =
-                    if functionGuaranteedToReturnInt ( moduleName, localName ) then
+                operandCannotContainSetOrDict =
+                    if exprCannotContainSetOrDict stack.knownTypes leftExpr then
                         True
 
                     else
-                        case ( moduleName, localName ) of
-                            ( [ "Basics" ], "compare" ) ->
-                                True
-
-                            _ ->
-                                False
-
-                exprCannotContainSetOrDict : Elm.Syntax.Expression.Expression -> Bool
-                exprCannotContainSetOrDict expr =
-                    case expr of
-                        Elm.Syntax.Expression.Literal _ ->
-                            True
-
-                        Elm.Syntax.Expression.CharLiteral _ ->
-                            True
-
-                        Elm.Syntax.Expression.Integer _ ->
-                            True
-
-                        Elm.Syntax.Expression.Hex _ ->
-                            True
-
-                        Elm.Syntax.Expression.Floatable _ ->
-                            True
-
-                        Elm.Syntax.Expression.ListExpr listExpr ->
-                            List.all (\(Elm.Syntax.Node.Node _ listItem) -> exprCannotContainSetOrDict listItem) listExpr
-
-                        Elm.Syntax.Expression.TupledExpression tupleExpr ->
-                            List.all (\(Elm.Syntax.Node.Node _ listItem) -> exprCannotContainSetOrDict listItem) tupleExpr
-
-                        Elm.Syntax.Expression.FunctionOrValue _ localName ->
-                            {-
-                               Cover choice type tags without arguments, like 'Nothing' or 'LT'.
-                            -}
-                            stringStartsWithUpper localName
-
-                        Elm.Syntax.Expression.Application ((Elm.Syntax.Node.Node _ functionExpr) :: _) ->
-                            case functionExpr of
-                                Elm.Syntax.Expression.FunctionOrValue moduleName localName ->
-                                    functionCannotReturnSetOrDict ( moduleName, localName )
-
-                                _ ->
-                                    False
-
-                        Elm.Syntax.Expression.ParenthesizedExpression (Elm.Syntax.Node.Node _ parenthesized) ->
-                            exprCannotContainSetOrDict parenthesized
-
-                        _ ->
-                            False
-
-                operandCannotContainSetOrDict =
-                    exprCannotContainSetOrDict leftExpr || exprCannotContainSetOrDict rightExpr
+                        exprCannotContainSetOrDict stack.knownTypes rightExpr
             in
             if not operandCannotContainSetOrDict then
                 Nothing
@@ -2610,8 +2491,8 @@ searchCompileElmSyntaxOperatorOptimized stack operator leftExpr rightExpr =
                     Nothing
 
         "+" ->
-            if exprGuaranteedToBeInt leftExpr then
-                if exprGuaranteedToBeInt rightExpr then
+            if exprProvenToBeInt stack.knownTypes leftExpr then
+                if exprProvenToBeInt stack.knownTypes rightExpr then
                     case compileElmSyntaxExpression stack leftExpr of
                         Err err ->
                             Just (Err err)
@@ -2641,8 +2522,8 @@ searchCompileElmSyntaxOperatorOptimized stack operator leftExpr rightExpr =
                 Nothing
 
         "*" ->
-            if exprGuaranteedToBeInt leftExpr then
-                if exprGuaranteedToBeInt rightExpr then
+            if exprProvenToBeInt stack.knownTypes leftExpr then
+                if exprProvenToBeInt stack.knownTypes rightExpr then
                     case compileElmSyntaxExpression stack leftExpr of
                         Err err ->
                             Just (Err err)
@@ -2672,8 +2553,8 @@ searchCompileElmSyntaxOperatorOptimized stack operator leftExpr rightExpr =
                 Nothing
 
         "-" ->
-            if exprGuaranteedToBeInt leftExpr then
-                if exprGuaranteedToBeInt rightExpr then
+            if exprProvenToBeInt stack.knownTypes leftExpr then
+                if exprProvenToBeInt stack.knownTypes rightExpr then
                     case compileElmSyntaxExpression stack leftExpr of
                         Err err ->
                             Just (Err err)
@@ -2704,22 +2585,17 @@ searchCompileElmSyntaxOperatorOptimized stack operator leftExpr rightExpr =
 
         "++" ->
             let
+                items : List Elm.Syntax.Expression.Expression
                 items =
                     List.concat
                         [ flattenOperatorAppSequencePlusPlus leftExpr
                         , flattenOperatorAppSequencePlusPlus rightExpr
                         ]
 
+                anyItemIsString : Bool
                 anyItemIsString =
                     List.any
-                        (\item ->
-                            case item of
-                                Elm.Syntax.Expression.Literal _ ->
-                                    True
-
-                                _ ->
-                                    False
-                        )
+                        (\item -> exprProvenToBeString stack.knownTypes item)
                         items
             in
             if not anyItemIsString then
@@ -2736,16 +2612,25 @@ searchCompileElmSyntaxOperatorOptimized stack operator leftExpr rightExpr =
                                to retrieve the lists of characters before concatenation and
                                compose the resulting 'String' after concatenation.
                             -}
+                            stringsExpressions : List Expression
                             stringsExpressions =
-                                List.map
+                                List.concatMap
                                     (\stringExpr ->
                                         case stringExpr of
-                                            LiteralExpression (Pine.ListValue ({- 'String' tag -} _ :: (Pine.ListValue [ literalChars ]) :: _)) ->
-                                                LiteralExpression literalChars
+                                            LiteralExpression (Pine.ListValue ({- 'String' tag -} _ :: (Pine.ListValue [ Pine.ListValue literalChars ]) :: _)) ->
+                                                --  Some code uses syntax like ` var ++ "" ` to simplify (local) type inference.
+                                                if literalChars == [] then
+                                                    []
+
+                                                else
+                                                    [ LiteralExpression
+                                                        (Pine.ListValue literalChars)
+                                                    ]
 
                                             _ ->
-                                                FirCompiler.listItemFromIndexExpression 0
+                                                [ FirCompiler.listItemFromIndexExpression 0
                                                     (FirCompiler.listItemFromIndexExpression 1 stringExpr)
+                                                ]
                                     )
                                     expressions
 
@@ -2822,6 +2707,232 @@ searchCompileElmSyntaxOperatorOptimized stack operator leftExpr rightExpr =
 
         _ ->
             Nothing
+
+
+exprCannotContainSetOrDict :
+    List ( String, Elm.Syntax.TypeAnnotation.TypeAnnotation )
+    -> Elm.Syntax.Expression.Expression
+    -> Bool
+exprCannotContainSetOrDict knownTypes expr =
+    case expr of
+        Elm.Syntax.Expression.Literal _ ->
+            True
+
+        Elm.Syntax.Expression.CharLiteral _ ->
+            True
+
+        Elm.Syntax.Expression.Integer _ ->
+            True
+
+        Elm.Syntax.Expression.Hex _ ->
+            True
+
+        Elm.Syntax.Expression.Floatable _ ->
+            True
+
+        Elm.Syntax.Expression.ListExpr listExpr ->
+            List.all
+                (\(Elm.Syntax.Node.Node _ listItem) ->
+                    exprCannotContainSetOrDict knownTypes listItem
+                )
+                listExpr
+
+        Elm.Syntax.Expression.TupledExpression tupleExpr ->
+            List.all
+                (\(Elm.Syntax.Node.Node _ listItem) ->
+                    exprCannotContainSetOrDict knownTypes listItem
+                )
+                tupleExpr
+
+        Elm.Syntax.Expression.FunctionOrValue _ localName ->
+            -- Choice type tags without arguments, like 'Nothing' or 'LT'.
+            stringStartsWithUpper localName
+
+        Elm.Syntax.Expression.Application ((Elm.Syntax.Node.Node _ functionExpr) :: argumentsNodes) ->
+            case functionExpr of
+                Elm.Syntax.Expression.FunctionOrValue moduleName localName ->
+                    if stringStartsWithUpper localName then
+                        -- Choice type tags without arguments, like 'Just' or 'Err'.
+                        List.all
+                            (\(Elm.Syntax.Node.Node _ arg) ->
+                                exprCannotContainSetOrDict knownTypes arg
+                            )
+                            argumentsNodes
+
+                    else
+                        functionCannotReturnSetOrDict ( moduleName, localName )
+
+                _ ->
+                    False
+
+        Elm.Syntax.Expression.ParenthesizedExpression (Elm.Syntax.Node.Node _ parenthesized) ->
+            exprCannotContainSetOrDict knownTypes parenthesized
+
+        _ ->
+            if exprProvenToBeInt knownTypes expr then
+                True
+
+            else
+                exprProvenToBeString knownTypes expr
+
+
+functionCannotReturnSetOrDict : ( List String, String ) -> Bool
+functionCannotReturnSetOrDict ( moduleName, localName ) =
+    if functionProvenToReturnInt ( moduleName, localName ) then
+        True
+
+    else
+        case ( moduleName, localName ) of
+            ( [ "Basics" ], "compare" ) ->
+                True
+
+            _ ->
+                False
+
+
+exprProvenToBeInt :
+    List ( String, Elm.Syntax.TypeAnnotation.TypeAnnotation )
+    -> Elm.Syntax.Expression.Expression
+    -> Bool
+exprProvenToBeInt knownTypes expr =
+    case expr of
+        Elm.Syntax.Expression.Integer _ ->
+            True
+
+        Elm.Syntax.Expression.Hex _ ->
+            True
+
+        Elm.Syntax.Expression.FunctionOrValue [] localName ->
+            case Common.assocListGet localName knownTypes of
+                Just (Elm.Syntax.TypeAnnotation.Typed (Elm.Syntax.Node.Node _ ( [], "Int" )) []) ->
+                    True
+
+                _ ->
+                    False
+
+        Elm.Syntax.Expression.Application ((Elm.Syntax.Node.Node _ (Elm.Syntax.Expression.FunctionOrValue moduleName localName)) :: _) ->
+            functionProvenToReturnInt
+                ( moduleName, localName )
+
+        Elm.Syntax.Expression.OperatorApplication innerOp _ (Elm.Syntax.Node.Node _ innerLeft) (Elm.Syntax.Node.Node _ innerRight) ->
+            case innerOp of
+                "+" ->
+                    if exprProvenToBeInt knownTypes innerLeft then
+                        exprProvenToBeInt knownTypes innerRight
+
+                    else
+                        False
+
+                "-" ->
+                    if exprProvenToBeInt knownTypes innerLeft then
+                        exprProvenToBeInt knownTypes innerRight
+
+                    else
+                        False
+
+                "*" ->
+                    if exprProvenToBeInt knownTypes innerLeft then
+                        exprProvenToBeInt knownTypes innerRight
+
+                    else
+                        False
+
+                "//" ->
+                    True
+
+                _ ->
+                    False
+
+        _ ->
+            False
+
+
+exprProvenToBeString :
+    List ( String, Elm.Syntax.TypeAnnotation.TypeAnnotation )
+    -> Elm.Syntax.Expression.Expression
+    -> Bool
+exprProvenToBeString knownTypes expr =
+    case expr of
+        Elm.Syntax.Expression.Literal _ ->
+            True
+
+        Elm.Syntax.Expression.FunctionOrValue [] localName ->
+            case Common.assocListGet localName knownTypes of
+                Just (Elm.Syntax.TypeAnnotation.Typed (Elm.Syntax.Node.Node _ ( [], "String" )) []) ->
+                    True
+
+                _ ->
+                    False
+
+        Elm.Syntax.Expression.OperatorApplication innerOp _ (Elm.Syntax.Node.Node _ innerLeft) (Elm.Syntax.Node.Node _ innerRight) ->
+            case innerOp of
+                "++" ->
+                    if exprProvenToBeString knownTypes innerLeft then
+                        True
+
+                    else
+                        exprProvenToBeString knownTypes innerRight
+
+                _ ->
+                    False
+
+        Elm.Syntax.Expression.Application ((Elm.Syntax.Node.Node _ (Elm.Syntax.Expression.FunctionOrValue moduleName localName)) :: argumentsNodes) ->
+            funcAppProvenToReturnString
+                ( ( moduleName, localName ), List.length argumentsNodes )
+
+        Elm.Syntax.Expression.ParenthesizedExpression (Elm.Syntax.Node.Node _ parenthesized) ->
+            exprProvenToBeString knownTypes parenthesized
+
+        _ ->
+            False
+
+
+functionProvenToReturnInt : ( List String, String ) -> Bool
+functionProvenToReturnInt ( moduleName, localName ) =
+    case ( moduleName, localName ) of
+        ( [ "List" ], "length" ) ->
+            True
+
+        ( [ "String" ], "length" ) ->
+            True
+
+        ( [ "Pine_kernel" ], "length" ) ->
+            -- Possibly another stage has already mapped from 'List.length' to 'Pine_kernel.length'.
+            True
+
+        _ ->
+            False
+
+
+funcAppProvenToReturnString : ( ( List String, String ), Int ) -> Bool
+funcAppProvenToReturnString application =
+    case application of
+        ( ( [ "String" ], "fromList" ), 1 ) ->
+            True
+
+        ( ( [ "String" ], "slice" ), 3 ) ->
+            True
+
+        ( ( [ "String" ], "cons" ), 2 ) ->
+            True
+
+        ( ( [ "String" ], "fromInt" ), 1 ) ->
+            True
+
+        ( ( [ "String" ], "fromFloat" ), 1 ) ->
+            True
+
+        ( ( [ "String" ], "fromChar" ), 1 ) ->
+            True
+
+        ( ( [ "String" ], "toLower" ), 1 ) ->
+            True
+
+        ( ( [ "String" ], "toUpper" ), 1 ) ->
+            True
+
+        _ ->
+            False
 
 
 flattenOperatorAppSequencePlusPlus :
