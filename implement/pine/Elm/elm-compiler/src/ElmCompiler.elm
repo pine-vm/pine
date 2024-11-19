@@ -1866,12 +1866,24 @@ compileCaseBlockInline stack caseBlockExpr caseBlockCases =
         Ok cases ->
             let
                 conditionalFromCase deconstructedCase nextBlockExpression =
-                    List.foldl
-                        (\conditionExpression nextConditionExpression ->
-                            ConditionalExpression conditionExpression nextBlockExpression nextConditionExpression
-                        )
-                        deconstructedCase.thenExpression
-                        deconstructedCase.conditionExpressions
+                    case deconstructedCase.conditionExpressions of
+                        [] ->
+                            deconstructedCase.thenExpression
+
+                        firstCondition :: otherConditions ->
+                            ConditionalExpression
+                                (List.foldl
+                                    (\conditionExpression nextConditionExpression ->
+                                        ConditionalExpression
+                                            conditionExpression
+                                            (LiteralExpression Pine.falseValue)
+                                            nextConditionExpression
+                                    )
+                                    firstCondition
+                                    otherConditions
+                                )
+                                nextBlockExpression
+                                deconstructedCase.thenExpression
             in
             Ok
                 (List.foldr
