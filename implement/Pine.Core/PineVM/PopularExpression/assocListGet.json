@@ -50,109 +50,17 @@
     {
       "Conditional": [
         {
-          "Conditional": [
+          "KernelApplication": [
+            "negate",
             {
               "KernelApplication": [
                 "equal",
                 {
                   "List": [
                     [
-                      { "Literal": [ 2 ] },
                       {
                         "KernelApplication": [
-                          "length",
-                          {
-                            "KernelApplication": [
-                              "head",
-                              {
-                                "KernelApplication": [
-                                  "head",
-                                  {
-                                    "KernelApplication": [
-                                      "skip",
-                                      {
-                                        "List": [
-                                          [
-                                            { "Literal": [ 1 ] },
-                                            {
-                                              "KernelApplication": [
-                                                "head",
-                                                {
-                                                  "KernelApplication": [
-                                                    "skip",
-                                                    {
-                                                      "List": [
-                                                        [
-                                                          { "Literal": [ 1 ] },
-                                                          { "Environment": [] }
-                                                        ]
-                                                      ]
-                                                    }
-                                                  ]
-                                                }
-                                              ]
-                                            }
-                                          ]
-                                        ]
-                                      }
-                                    ]
-                                  }
-                                ]
-                              }
-                            ]
-                          }
-                        ]
-                      }
-                    ]
-                  ]
-                }
-              ]
-            },
-            { "Literal": [ { "AsBase64": "Ag==" } ] },
-            {
-              "KernelApplication": [
-                "negate",
-                {
-                  "KernelApplication": [
-                    "equal",
-                    {
-                      "List": [
-                        [
-                          {
-                            "KernelApplication": [
-                              "head",
-                              {
-                                "KernelApplication": [
-                                  "skip",
-                                  {
-                                    "List": [
-                                      [
-                                        { "Literal": [ 1 ] },
-                                        {
-                                          "KernelApplication": [
-                                            "head",
-                                            {
-                                              "KernelApplication": [
-                                                "skip",
-                                                {
-                                                  "List": [
-                                                    [
-                                                      { "Literal": [ 1 ] },
-                                                      { "Environment": [] }
-                                                    ]
-                                                  ]
-                                                }
-                                              ]
-                                            }
-                                          ]
-                                        }
-                                      ]
-                                    ]
-                                  }
-                                ]
-                              }
-                            ]
-                          },
+                          "head",
                           {
                             "KernelApplication": [
                               "skip",
@@ -170,24 +78,7 @@
                                               "List": [
                                                 [
                                                   { "Literal": [ 1 ] },
-                                                  {
-                                                    "KernelApplication": [
-                                                      "head",
-                                                      {
-                                                        "KernelApplication": [
-                                                          "skip",
-                                                          {
-                                                            "List": [
-                                                              [
-                                                                { "Literal": [ 1 ] },
-                                                                { "Environment": [] }
-                                                              ]
-                                                            ]
-                                                          }
-                                                        ]
-                                                      }
-                                                    ]
-                                                  }
+                                                  { "Environment": [] }
                                                 ]
                                               ]
                                             }
@@ -201,8 +92,55 @@
                             ]
                           }
                         ]
-                      ]
-                    }
+                      },
+                      {
+                        "KernelApplication": [
+                          "skip",
+                          {
+                            "List": [
+                              [
+                                { "Literal": [ 1 ] },
+                                {
+                                  "KernelApplication": [
+                                    "head",
+                                    {
+                                      "KernelApplication": [
+                                        "skip",
+                                        {
+                                          "List": [
+                                            [
+                                              { "Literal": [ 1 ] },
+                                              {
+                                                "KernelApplication": [
+                                                  "head",
+                                                  {
+                                                    "KernelApplication": [
+                                                      "skip",
+                                                      {
+                                                        "List": [
+                                                          [
+                                                            { "Literal": [ 1 ] },
+                                                            { "Environment": [] }
+                                                          ]
+                                                        ]
+                                                      }
+                                                    ]
+                                                  }
+                                                ]
+                                              }
+                                            ]
+                                          ]
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            ]
+                          }
+                        ]
+                      }
+                    ]
                   ]
                 }
               ]

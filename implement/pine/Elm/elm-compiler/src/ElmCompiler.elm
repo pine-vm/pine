@@ -2021,8 +2021,9 @@ compileElmSyntaxPattern compilation elmPattern =
 
         continueWithListOrTupleItems :
             List (Elm.Syntax.Node.Node Elm.Syntax.Pattern.Pattern)
+            -> Bool
             -> Result String { conditionExpressions : Expression -> List Expression, declarations : List ( String, List Deconstruction ) }
-        continueWithListOrTupleItems listItems =
+        continueWithListOrTupleItems listItems addLengthCondition =
             case listItems of
                 [] ->
                     continueWithOnlyEqualsCondition (ListExpression [])
@@ -2044,41 +2045,48 @@ compileElmSyntaxPattern compilation elmPattern =
 
                         Ok itemsResults ->
                             let
-                                expectedLength =
-                                    List.length listItems
-
-                                matchesLengthCondition : Expression -> Expression
-                                matchesLengthCondition =
-                                    \deconstructedExpression ->
-                                        let
-                                            genericLengthCheckExpr () =
-                                                equalCondition
-                                                    [ LiteralExpression (Pine.valueFromInt expectedLength)
-                                                    , countListElementsExpression deconstructedExpression
-                                                    ]
-                                        in
-                                        case deconstructedExpression of
-                                            ListExpression deconstructedList ->
-                                                LiteralExpression
-                                                    (if List.length deconstructedList == expectedLength then
-                                                        Pine.trueValue
-
-                                                     else
-                                                        Pine.falseValue
-                                                    )
-
-                                            _ ->
-                                                genericLengthCheckExpr ()
-
                                 conditionExpressions : Expression -> List Expression
                                 conditionExpressions =
                                     \deconstructedExpression ->
-                                        matchesLengthCondition deconstructedExpression
-                                            :: List.concatMap
+                                        let
+                                            matchesLengthConditions =
+                                                if addLengthCondition then
+                                                    {-
+                                                       In contrast to a tuple pattern, we also need to check the length of the list matches the pattern.
+                                                       (For tuples, the length is always fixed.)
+                                                    -}
+                                                    let
+                                                        expectedLength =
+                                                            List.length listItems
+                                                    in
+                                                    [ case deconstructedExpression of
+                                                        ListExpression deconstructedList ->
+                                                            LiteralExpression
+                                                                (if List.length deconstructedList == expectedLength then
+                                                                    Pine.trueValue
+
+                                                                 else
+                                                                    Pine.falseValue
+                                                                )
+
+                                                        _ ->
+                                                            equalCondition
+                                                                [ LiteralExpression (Pine.valueFromInt expectedLength)
+                                                                , countListElementsExpression deconstructedExpression
+                                                                ]
+                                                    ]
+
+                                                else
+                                                    []
+                                        in
+                                        List.concat
+                                            [ matchesLengthConditions
+                                            , List.concatMap
                                                 (\{ conditions } ->
                                                     conditions deconstructedExpression
                                                 )
                                                 itemsResults
+                                            ]
                             in
                             Ok
                                 { conditionExpressions = conditionExpressions
@@ -2093,10 +2101,10 @@ compileElmSyntaxPattern compilation elmPattern =
                 }
 
         Elm.Syntax.Pattern.ListPattern listElements ->
-            continueWithListOrTupleItems listElements
+            continueWithListOrTupleItems listElements True
 
         Elm.Syntax.Pattern.TuplePattern tupleElements ->
-            continueWithListOrTupleItems tupleElements
+            continueWithListOrTupleItems tupleElements False
 
         Elm.Syntax.Pattern.UnConsPattern (Elm.Syntax.Node.Node _ unconsLeft) (Elm.Syntax.Node.Node _ unconsRight) ->
             case compileElmSyntaxPattern compilation unconsLeft of
