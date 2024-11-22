@@ -1568,11 +1568,20 @@ slice : Int -> Int -> String -> String
 slice start end (String chars) =
     let
         absoluteIndex relativeIndex =
-            if Pine_kernel.int_is_sorted_asc [ 0, relativeIndex ] then
-                relativeIndex
+            {-
+               Instead of using integer comparison together with the literal 0,
+               check the first byte if the sign is negative.
+            -}
+            if
+                Pine_kernel.equal
+                    [ Pine_kernel.take [ 1, relativeIndex ]
+                    , Pine_kernel.take [ 1, -1 ]
+                    ]
+            then
+                Pine_kernel.int_add [ relativeIndex, Pine_kernel.length chars ]
 
             else
-                Pine_kernel.int_add [ relativeIndex, Pine_kernel.length chars ]
+                relativeIndex
 
         absoluteStart : Int
         absoluteStart =
