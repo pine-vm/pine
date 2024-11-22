@@ -429,20 +429,14 @@ public class PineVM : IPineVM
             return expressionReduced;
         }
 
-        var subexprCount = 0;
 
-        foreach (var subexpr in Expression.EnumerateSelfAndDescendants(expressionReduced))
+        /*
+         * Install a limit after observing cases with more than a hundred million subexpressions.
+         * */
+
+        if (maxSubexpressionCount < expressionReduced.SubexpressionCount)
         {
-            ++subexprCount;
-
-            /*
-             * Install a limit after observing cases with more than a hundred million subexpressions.
-             * */
-
-            if (maxSubexpressionCount < subexprCount)
-            {
-                return expressionReduced;
-            }
+            return expressionReduced;
         }
 
         Expression? TryInlineParseAndEval(
@@ -506,19 +500,16 @@ public class PineVM : IPineVM
                         envConstraintId: envConstraintId);
 
                 {
+                    if (300 < inlinedExprReduced.SubexpressionCount)
+                    {
+                        return null;
+                    }
+
                     var conditionsCount = 0;
                     var invocationsCount = 0;
-                    var inlinedSubExprCount = 0;
 
                     foreach (var subexpr in Expression.EnumerateSelfAndDescendants(inlinedExprReduced))
                     {
-                        ++inlinedSubExprCount;
-
-                        if (300 < inlinedSubExprCount)
-                        {
-                            return null;
-                        }
-
                         if (subexpr is Expression.Conditional)
                         {
                             ++conditionsCount;
@@ -558,19 +549,16 @@ public class PineVM : IPineVM
                         disableRecurseAfterInline: disableRecurseAfterInline);
 
                 {
+                    if (300 < inlinedFinal.SubexpressionCount)
+                    {
+                        return null;
+                    }
+
                     var conditionsCount = 0;
                     var invocationsCount = 0;
-                    var inlinedSubExprCount = 0;
 
                     foreach (var subexpr in Expression.EnumerateSelfAndDescendants(inlinedFinal))
                     {
-                        ++inlinedSubExprCount;
-
-                        if (300 < inlinedSubExprCount)
-                        {
-                            return null;
-                        }
-
                         if (subexpr is Expression.Conditional)
                         {
                             ++conditionsCount;
@@ -2157,7 +2145,7 @@ public class PineVM : IPineVM
         if (application.function is nameof(KernelFunction.head) &&
             application.input is Expression.KernelApplication innerKernelApplication)
         {
-            if (innerKernelApplication.function == nameof(KernelFunction.skip) &&
+            if (innerKernelApplication.function is nameof(KernelFunction.skip) &&
                 innerKernelApplication.input is Expression.List skipListExpr &&
                 skipListExpr.items.Count is 2)
             {
