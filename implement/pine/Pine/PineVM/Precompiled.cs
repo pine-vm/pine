@@ -458,7 +458,7 @@ public class Precompiled
                         listAllEnvClass,
                         ListAll)]);
         }
-        
+
         {
             var listAnyEnvClass =
                 EnvConstraintId.Create(
@@ -1352,7 +1352,7 @@ public class Precompiled
 
             var (isMember, _) = ListMember(item, newUnique);
 
-            if (isMember == PineVMValues.FalseValue)
+            if (isMember != PineVMValues.TrueValue)
             {
                 newUnique.Add(item);
             }
@@ -1971,7 +1971,7 @@ public class Precompiled
          * */
 
         var offsetValue =
-            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 1, 0]);
+        PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 1, 0]);
 
         var rowValue =
             PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 1, 1]);
@@ -2388,13 +2388,6 @@ public class Precompiled
                 includedItems[includedItemCount] = itemsList.Elements[itemIndex];
 
                 ++includedItemCount;
-            }
-            else
-            {
-                if (itemResultValue != PineVMValues.FalseValue)
-                {
-                    return new PineVM.ApplyStepwise.StepResult.Complete(PineValue.EmptyList);
-                }
             }
 
             ++itemIndex;

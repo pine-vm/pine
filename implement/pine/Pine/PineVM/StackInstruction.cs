@@ -26,7 +26,6 @@ public abstract record StackInstruction
         : StackInstruction;
 
     public record ConditionalJumpInstruction(
-        int InvalidBranchOffset,
         int TrueBranchOffset)
         : StackInstruction;
 

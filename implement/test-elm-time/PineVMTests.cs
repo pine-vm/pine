@@ -519,7 +519,6 @@ public class PineVMTests
                             new Expression.Literal(PineValueAsInteger.ValueFromSignedInteger(11))),
 
                         new StackInstruction.ConditionalJumpInstruction(
-                            InvalidBranchOffset: 3,
                             TrueBranchOffset: 2),
 
                         StackInstruction.Eval(
@@ -565,7 +564,6 @@ public class PineVMTests
                         StackInstruction.Eval(new Expression.Literal(PineValueAsInteger.ValueFromSignedInteger(11))),
 
                         new StackInstruction.ConditionalJumpInstruction(
-                            InvalidBranchOffset: 3,
                             TrueBranchOffset:2),
 
                         StackInstruction.Eval(
@@ -627,7 +625,6 @@ public class PineVMTests
                         StackInstruction.Eval(new Expression.Literal(PineValueAsInteger.ValueFromSignedInteger(11))),
 
                         new StackInstruction.ConditionalJumpInstruction(
-                            InvalidBranchOffset: 3,
                             TrueBranchOffset: 2),
 
                         StackInstruction.Eval(
@@ -684,14 +681,12 @@ public class PineVMTests
                         StackInstruction.Eval(new Expression.Literal(PineValueAsInteger.ValueFromSignedInteger(11))),
 
                         new StackInstruction.ConditionalJumpInstruction(
-                            InvalidBranchOffset: 9,
                             TrueBranchOffset: 8),
 
                         // Outer if-false:
                         StackInstruction.Eval(new Expression.Literal(PineValueAsInteger.ValueFromSignedInteger(13))),
 
                         new StackInstruction.ConditionalJumpInstruction(
-                            InvalidBranchOffset: 3,
                             TrueBranchOffset: 2),
 
                         // Inner if-false:
@@ -762,7 +757,6 @@ public class PineVMTests
                         StackInstruction.Eval(new Expression.Literal(PineValueAsInteger.ValueFromSignedInteger(11))),
 
                         new StackInstruction.ConditionalJumpInstruction(
-                            InvalidBranchOffset: 3,
                             TrueBranchOffset: 2),
 
                         StackInstruction.Eval(
@@ -780,7 +774,6 @@ public class PineVMTests
                         StackInstruction.Eval(new Expression.Literal(PineValueAsInteger.ValueFromSignedInteger(13))),
 
                         new StackInstruction.ConditionalJumpInstruction(
-                            InvalidBranchOffset: 3,
                             TrueBranchOffset: 2),
 
                         StackInstruction.Eval(
@@ -830,14 +823,12 @@ public class PineVMTests
                             new Expression.Literal(PineValueAsInteger.ValueFromSignedInteger(11))),
 
                         new StackInstruction.ConditionalJumpInstruction(
-                            InvalidBranchOffset: 9,
                             TrueBranchOffset: 8),
 
                         StackInstruction.Eval(
                             new Expression.Literal(PineValueAsInteger.ValueFromSignedInteger(21))),
 
                         new StackInstruction.ConditionalJumpInstruction(
-                            InvalidBranchOffset: 3,
                             TrueBranchOffset: 2),
 
                         StackInstruction.Eval(
@@ -1029,14 +1020,12 @@ public class PineVMTests
                                 ])),
 
                         new StackInstruction.ConditionalJumpInstruction(
-                            InvalidBranchOffset: 9,
                             TrueBranchOffset: 8),
 
                         StackInstruction.Eval(
                             new Expression.StackReferenceExpression(offset: -3)),
 
                         new StackInstruction.ConditionalJumpInstruction(
-                            InvalidBranchOffset: 3,
                             TrueBranchOffset: 2),
 
                         StackInstruction.Eval(

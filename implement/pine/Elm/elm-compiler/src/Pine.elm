@@ -142,14 +142,11 @@ evaluateExpression context expression =
 
                 Ok conditionValue ->
                     case conditionValue of
-                        BlobValue [ 2 ] ->
-                            evaluateExpression context falseBranch
-
                         BlobValue [ 4 ] ->
                             evaluateExpression context trueBranch
 
                         _ ->
-                            Ok listValue_Empty
+                            evaluateExpression context falseBranch
 
         EnvironmentExpression ->
             let

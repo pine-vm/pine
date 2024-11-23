@@ -936,7 +936,6 @@ public class PineVM : IPineVM
 
             var branchInstruction =
                 new StackInstruction.ConditionalJumpInstruction(
-                    InvalidBranchOffset: falseBranchInstructionsAndJump.Count + trueBranchInstructions.Count,
                     TrueBranchOffset: falseBranchInstructionsAndJump.Count);
 
             IReadOnlyList<StackInstruction> instructionsBeforeContinuation =
@@ -1727,44 +1726,31 @@ public class PineVM : IPineVM
                             ?
                             conditionalExpr.trueBranch
                             :
-                            conditionValue == PineVMValues.FalseValue
-                            ?
-                            conditionalExpr.falseBranch
-                            :
-                            null;
+                            conditionalExpr.falseBranch;
 
-                        if (expressionToContinueWith is not null)
+                        if (ExpressionShouldGetNewStackFrame(expressionToContinueWith))
                         {
-                            if (ExpressionShouldGetNewStackFrame(expressionToContinueWith))
-                            {
-                                pushStackFrame(
-                                    StackFrameFromExpression(
-                                        expressionValue: null,
-                                        expressionToContinueWith,
-                                        currentFrame.EnvironmentValue,
-                                        beginInstructionCount: instructionCount,
-                                        beginParseAndEvalCount: parseAndEvalCount,
-                                        beginStackFrameCount: stackFrameCount));
-
-                                continue;
-                            }
-
-                            var evalBranchResult =
-                                EvaluateExpressionDefaultLessStack(
+                            pushStackFrame(
+                                StackFrameFromExpression(
+                                    expressionValue: null,
                                     expressionToContinueWith,
                                     currentFrame.EnvironmentValue,
-                                    stackPrevValues: stackPrevValues);
-
-                            currentFrame.PushInstructionResult(evalBranchResult); ;
-
-                            continue;
-                        }
-                        else
-                        {
-                            currentFrame.PushInstructionResult(PineValue.EmptyList);
+                                    beginInstructionCount: instructionCount,
+                                    beginParseAndEvalCount: parseAndEvalCount,
+                                    beginStackFrameCount: stackFrameCount));
 
                             continue;
                         }
+
+                        var evalBranchResult =
+                            EvaluateExpressionDefaultLessStack(
+                                expressionToContinueWith,
+                                currentFrame.EnvironmentValue,
+                                stackPrevValues: stackPrevValues);
+
+                        currentFrame.PushInstructionResult(evalBranchResult); ;
+
+                        continue;
                     }
 
                     var evalResult =
@@ -1788,21 +1774,13 @@ public class PineVM : IPineVM
                 {
                     var conditionValue = currentFrame.LastEvalResult();
 
-                    if (conditionValue == PineVMValues.FalseValue)
-                    {
-                        currentFrame.InstructionPointer++;
-                        continue;
-                    }
-
                     if (conditionValue == PineVMValues.TrueValue)
                     {
                         currentFrame.InstructionPointer += 1 + conditionalStatement.TrueBranchOffset;
                         continue;
                     }
 
-                    currentFrame.PushInstructionResult(PineValue.EmptyList);
-                    currentFrame.InstructionPointer += conditionalStatement.InvalidBranchOffset;
-
+                    currentFrame.InstructionPointer++;
                     continue;
                 }
 
