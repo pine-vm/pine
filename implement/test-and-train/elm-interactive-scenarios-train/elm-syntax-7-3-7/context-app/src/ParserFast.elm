@@ -161,13 +161,8 @@ type PStep value
     | Bad Bool Problem
 
 
-type alias State =
-    { src : String
-    , offset : Int
-    , indent : Int
-    , row : Int
-    , col : Int
-    }
+type State
+    = PState String Int Int Int Int
 
 
 {-| Try a parser. Here are some examples using the [`keyword`](#keyword)
@@ -191,13 +186,13 @@ to avoid breaking changes
 -}
 run : Parser a -> String -> Result (List Parser.DeadEnd) a
 run (Parser parse) src =
-    case parse { src = src, offset = 0, indent = 1, row = 1, col = 1 } of
-        Good value finalState ->
-            if finalState.offset - String.length finalState.src == 0 then
+    case parse (PState src 0 1 1 1) of
+        Good value (PState finalSrc finalOffset _ finalRow finalCol) ->
+            if finalOffset - String.length finalSrc == 0 then
                 Ok value
 
             else
-                Err [ { row = finalState.row, col = finalState.col, problem = Parser.ExpectingEnd } ]
+                Err [ { row = finalRow, col = finalCol, problem = Parser.ExpectingEnd } ]
 
         Bad _ deadEnds ->
             Err (ropeFilledToList deadEnds [])
@@ -301,12 +296,12 @@ validate isOkay problemOnNotOkay (Parser parseA) =
                 Bad committed x ->
                     Bad committed x
 
-                (Good a s1) as good ->
+                (Good a (PState _ _ _ s1Row s1Col)) as good ->
                     if isOkay a then
                         good
 
                     else
-                        Bad True (ExpectingCustom s1.row s1.col problemOnNotOkay)
+                        Bad True (ExpectingCustom s1Row s1Col problemOnNotOkay)
         )
 
 
@@ -315,8 +310,11 @@ columnAndThen callback =
     Parser
         (\s ->
             let
+                (PState _ _ _ _ col) =
+                    s
+
                 (Parser parse) =
-                    callback s.col
+                    callback col
             in
             parse s
         )
@@ -338,8 +336,11 @@ columnIndentAndThen callback =
     Parser
         (\s ->
             let
+                (PState _ _ indent _ col) =
+                    s
+
                 (Parser parse) =
-                    callback s.col s.indent
+                    callback col indent
             in
             parse s
         )
@@ -351,11 +352,15 @@ validateEndColumnIndentation isOkay problemOnIsNotOkay (Parser parse) =
         (\s0 ->
             case parse s0 of
                 (Good _ s1) as good ->
-                    if isOkay s1.col s1.indent then
+                    let
+                        (PState _ _ indent row col) =
+                            s1
+                    in
+                    if isOkay col indent then
                         good
 
                     else
-                        Bad True (ExpectingCustom s1.row s1.col problemOnIsNotOkay)
+                        Bad True (ExpectingCustom row col problemOnIsNotOkay)
 
                 bad ->
                     bad
@@ -377,8 +382,11 @@ offsetSourceAndThen callback =
     Parser
         (\s ->
             let
+                (PState src offset _ _ _) =
+                    s
+
                 (Parser parse) =
-                    callback s.offset s.src
+                    callback offset src
             in
             parse s
         )
@@ -388,7 +396,11 @@ offsetSourceAndThenOrSucceed : (Int -> String -> Maybe (Parser a)) -> a -> Parse
 offsetSourceAndThenOrSucceed callback fallback =
     Parser
         (\s ->
-            case callback s.offset s.src of
+            let
+                (PState src offset _ _ _) =
+                    s
+            in
+            case callback offset src of
                 Nothing ->
                     Good fallback s
 
@@ -421,6 +433,10 @@ map2WithStartLocation : (Location -> a -> b -> value) -> Parser a -> Parser b ->
 map2WithStartLocation func (Parser parseA) (Parser parseB) =
     Parser
         (\s0 ->
+            let
+                (PState _ _ _ s0Row s0Col) =
+                    s0
+            in
             case parseA s0 of
                 Bad committed x ->
                     Bad committed x
@@ -431,7 +447,7 @@ map2WithStartLocation func (Parser parseA) (Parser parseB) =
                             Bad True x
 
                         Good b s2 ->
-                            Good (func { row = s0.row, column = s0.col } a b) s2
+                            Good (func { row = s0Row, column = s0Col } a b) s2
         )
 
 
@@ -449,7 +465,22 @@ map2WithRange func (Parser parseA) (Parser parseB) =
                             Bad True x
 
                         Good b s2 ->
-                            Good (func { start = { row = s0.row, column = s0.col }, end = { row = s2.row, column = s2.col } } a b) s2
+                            let
+                                (PState _ _ _ s2Row s2Col) =
+                                    s2
+
+                                (PState _ _ _ s0Row s0Col) =
+                                    s0
+                            in
+                            Good
+                                (func
+                                    { start = { row = s0Row, column = s0Col }
+                                    , end = { row = s2Row, column = s2Col }
+                                    }
+                                    a
+                                    b
+                                )
+                                s2
         )
 
 
@@ -495,7 +526,23 @@ map3WithRange func (Parser parseA) (Parser parseB) (Parser parseC) =
                                     Bad True x
 
                                 Good c s3 ->
-                                    Good (func { start = { row = s0.row, column = s0.col }, end = { row = s3.row, column = s3.col } } a b c) s3
+                                    let
+                                        (PState _ _ _ s3Row s3Col) =
+                                            s3
+
+                                        (PState _ _ _ s0Row s0Col) =
+                                            s0
+                                    in
+                                    Good
+                                        (func
+                                            { start = { row = s0Row, column = s0Col }
+                                            , end = { row = s3Row, column = s3Col }
+                                            }
+                                            a
+                                            b
+                                            c
+                                        )
+                                        s3
         )
 
 
@@ -551,7 +598,24 @@ map4WithRange func (Parser parseA) (Parser parseB) (Parser parseC) (Parser parse
                                             Bad True x
 
                                         Good d s4 ->
-                                            Good (func { start = { row = s0.row, column = s0.col }, end = { row = s4.row, column = s4.col } } a b c d) s4
+                                            let
+                                                (PState _ _ _ s4Row s4Col) =
+                                                    s4
+
+                                                (PState _ _ _ s0Row s0Col) =
+                                                    s0
+                                            in
+                                            Good
+                                                (func
+                                                    { start = { row = s0Row, column = s0Col }
+                                                    , end = { row = s4Row, column = s4Col }
+                                                    }
+                                                    a
+                                                    b
+                                                    c
+                                                    d
+                                                )
+                                                s4
         )
 
 
@@ -574,7 +638,11 @@ map3WithStartLocation func (Parser parseA) (Parser parseB) (Parser parseC) =
                                     Bad True x
 
                                 Good c s3 ->
-                                    Good (func { row = s0.row, column = s0.col } a b c) s3
+                                    let
+                                        (PState _ _ _ s0Row s0Col) =
+                                            s0
+                                    in
+                                    Good (func { row = s0Row, column = s0Col } a b c) s3
         )
 
 
@@ -640,7 +708,11 @@ map5WithStartLocation func (Parser parseA) (Parser parseB) (Parser parseC) (Pars
                                                     Bad True x
 
                                                 Good e s5 ->
-                                                    Good (func { row = s0.row, column = s0.col } a b c d e) s5
+                                                    let
+                                                        (PState _ _ _ s0Row s0Col) =
+                                                            s0
+                                                    in
+                                                    Good (func { row = s0Row, column = s0Col } a b c d e) s5
         )
 
 
@@ -673,7 +745,25 @@ map5WithRange func (Parser parseA) (Parser parseB) (Parser parseC) (Parser parse
                                                     Bad True x
 
                                                 Good e s5 ->
-                                                    Good (func { start = { row = s0.row, column = s0.col }, end = { row = s5.row, column = s5.col } } a b c d e) s5
+                                                    let
+                                                        (PState _ _ _ s5Row s5Col) =
+                                                            s5
+
+                                                        (PState _ _ _ s0Row s0Col) =
+                                                            s0
+                                                    in
+                                                    Good
+                                                        (func
+                                                            { start = { row = s0Row, column = s0Col }
+                                                            , end = { row = s5Row, column = s5Col }
+                                                            }
+                                                            a
+                                                            b
+                                                            c
+                                                            d
+                                                            e
+                                                        )
+                                                        s5
         )
 
 
@@ -749,7 +839,11 @@ map6WithStartLocation func (Parser parseA) (Parser parseB) (Parser parseC) (Pars
                                                             Bad True x
 
                                                         Good f s6 ->
-                                                            Good (func { row = s0.row, column = s0.col } a b c d e f) s6
+                                                            let
+                                                                (PState _ _ _ s0Row s0Col) =
+                                                                    s0
+                                                            in
+                                                            Good (func { row = s0Row, column = s0Col } a b c d e f) s6
         )
 
 
@@ -787,7 +881,26 @@ map6WithRange func (Parser parseA) (Parser parseB) (Parser parseC) (Parser parse
                                                             Bad True x
 
                                                         Good f s6 ->
-                                                            Good (func { start = { row = s0.row, column = s0.col }, end = { row = s6.row, column = s6.col } } a b c d e f) s6
+                                                            let
+                                                                (PState _ _ _ s6Row s6Col) =
+                                                                    s6
+
+                                                                (PState _ _ _ s0Row s0Col) =
+                                                                    s0
+                                                            in
+                                                            Good
+                                                                (func
+                                                                    { start = { row = s0Row, column = s0Col }
+                                                                    , end = { row = s6Row, column = s6Col }
+                                                                    }
+                                                                    a
+                                                                    b
+                                                                    c
+                                                                    d
+                                                                    e
+                                                                    f
+                                                                )
+                                                                s6
         )
 
 
@@ -830,7 +943,27 @@ map7WithRange func (Parser parseA) (Parser parseB) (Parser parseC) (Parser parse
                                                                     Bad True x
 
                                                                 Good g s7 ->
-                                                                    Good (func { start = { row = s0.row, column = s0.col }, end = { row = s7.row, column = s7.col } } a b c d e f g) s7
+                                                                    let
+                                                                        (PState _ _ _ s7Row s7Col) =
+                                                                            s7
+
+                                                                        (PState _ _ _ s0Row s0Col) =
+                                                                            s0
+                                                                    in
+                                                                    Good
+                                                                        (func
+                                                                            { start = { row = s0Row, column = s0Col }
+                                                                            , end = { row = s7Row, column = s7Col }
+                                                                            }
+                                                                            a
+                                                                            b
+                                                                            c
+                                                                            d
+                                                                            e
+                                                                            f
+                                                                            g
+                                                                        )
+                                                                        s7
         )
 
 
@@ -878,7 +1011,11 @@ map8WithStartLocation func (Parser parseA) (Parser parseB) (Parser parseC) (Pars
                                                                             Bad True x
 
                                                                         Good h s8 ->
-                                                                            Good (func { row = s0.row, column = s0.col } a b c d e f g h) s8
+                                                                            let
+                                                                                (PState _ _ _ s0Row s0Col) =
+                                                                                    s0
+                                                                            in
+                                                                            Good (func { row = s0Row, column = s0Col } a b c d e f g h) s8
         )
 
 
@@ -931,7 +1068,29 @@ map9WithRange func (Parser parseA) (Parser parseB) (Parser parseC) (Parser parse
                                                                                     Bad True x
 
                                                                                 Good i s9 ->
-                                                                                    Good (func { start = { row = s0.row, column = s0.col }, end = { row = s9.row, column = s9.col } } a b c d e f g h i) s9
+                                                                                    let
+                                                                                        (PState _ _ _ s9Row s9Col) =
+                                                                                            s9
+
+                                                                                        (PState _ _ _ s0Row s0Col) =
+                                                                                            s0
+                                                                                    in
+                                                                                    Good
+                                                                                        (func
+                                                                                            { start = { row = s0Row, column = s0Col }
+                                                                                            , end = { row = s9Row, column = s9Col }
+                                                                                            }
+                                                                                            a
+                                                                                            b
+                                                                                            c
+                                                                                            d
+                                                                                            e
+                                                                                            f
+                                                                                            g
+                                                                                            h
+                                                                                            i
+                                                                                        )
+                                                                                        s9
         )
 
 
@@ -940,7 +1099,10 @@ until I ran into this problem." Check out the -AndThen helpers for where to use 
 -}
 problem : String -> Parser a
 problem msg =
-    Parser (\s -> Bad False (ExpectingCustom s.row s.col msg))
+    Parser
+        (\(PState _ _ _ row col) ->
+            Bad False (ExpectingCustom row col msg)
+        )
 
 
 orSucceed : Parser a -> a -> Parser a
@@ -1000,7 +1162,22 @@ map2WithRangeOrSucceed func (Parser parseA) (Parser parseB) fallback =
                             Bad True x
 
                         Good b s2 ->
-                            Good (func { start = { row = s0.row, column = s0.col }, end = { row = s2.row, column = s2.col } } a b) s2
+                            let
+                                (PState _ _ _ s2Row s2Col) =
+                                    s2
+
+                                (PState _ _ _ s0Row s0Col) =
+                                    s0
+                            in
+                            Good
+                                (func
+                                    { start = { row = s0Row, column = s0Col }
+                                    , end = { row = s2Row, column = s2Col }
+                                    }
+                                    a
+                                    b
+                                )
+                                s2
         )
 
 
@@ -1103,10 +1280,18 @@ oneOf2MapWithStartRowColumnAndEndRowColumn :
 oneOf2MapWithStartRowColumnAndEndRowColumn firstToChoice (Parser attemptFirst) secondToChoice (Parser attemptSecond) =
     Parser
         (\s ->
+            let
+                (PState _ _ _ sRow sCol) =
+                    s
+            in
             case attemptFirst s of
                 Good first s1 ->
+                    let
+                        (PState _ _ _ s1Row s1Col) =
+                            s1
+                    in
                     Good
-                        (firstToChoice s.row s.col first s1.row s1.col)
+                        (firstToChoice sRow sCol first s1Row s1Col)
                         s1
 
                 Bad firstCommitted firstX ->
@@ -1116,8 +1301,12 @@ oneOf2MapWithStartRowColumnAndEndRowColumn firstToChoice (Parser attemptFirst) s
                     else
                         case attemptSecond s of
                             Good second s1 ->
+                                let
+                                    (PState _ _ _ s1Row s1Col) =
+                                        s1
+                                in
                                 Good
-                                    (secondToChoice s.row s.col second s1.row s1.col)
+                                    (secondToChoice sRow sCol second s1Row s1Col)
                                     s1
 
                             Bad secondCommitted secondX ->
@@ -1601,32 +1790,36 @@ integerDecimalMapWithRange rangeAndIntToRes =
     Parser
         (\s0 ->
             let
+                (PState s0Src s0Offset s0Indent s0Row s0Col) =
+                    s0
+
                 s1 : { int : Int, offset : Int }
                 s1 =
-                    convertIntegerDecimal s0.offset s0.src
+                    convertIntegerDecimal s0Offset s0Src
             in
             if s1.offset == -1 then
-                Bad False (ExpectingNumber s0.row s0.col)
+                Bad False (ExpectingNumber s0Row s0Col)
 
             else
                 let
                     newColumn : Int
                     newColumn =
-                        s0.col + (s1.offset - s0.offset)
+                        s0Col + (s1.offset - s0Offset)
                 in
                 Good
                     (rangeAndIntToRes
-                        { start = { row = s0.row, column = s0.col }
-                        , end = { row = s0.row, column = newColumn }
+                        { start = { row = s0Row, column = s0Col }
+                        , end = { row = s0Row, column = newColumn }
                         }
                         s1.int
                     )
-                    { src = s0.src
-                    , offset = s1.offset
-                    , indent = s0.indent
-                    , row = s0.row
-                    , col = newColumn
-                    }
+                    (PState
+                        s0Src
+                        s1.offset
+                        s0Indent
+                        s0Row
+                        newColumn
+                    )
         )
 
 
@@ -1654,23 +1847,26 @@ integerDecimalOrHexadecimalMapWithRange rangeAndIntDecimalToRes rangeAndIntHexad
     Parser
         (\s0 ->
             let
+                (PState s0Src s0Offset s0Indent s0Row s0Col) =
+                    s0
+
                 s1 : { base : Base, offsetAndInt : { int : Int, offset : Int } }
                 s1 =
-                    convertIntegerDecimalOrHexadecimal s0.offset s0.src
+                    convertIntegerDecimalOrHexadecimal s0Offset s0Src
             in
             if s1.offsetAndInt.offset == -1 then
-                Bad False (ExpectingNumber s0.row s0.col)
+                Bad False (ExpectingNumber s0Row s0Col)
 
             else
                 let
                     newColumn : Int
                     newColumn =
-                        s0.col + (s1.offsetAndInt.offset - s0.offset)
+                        s0Col + (s1.offsetAndInt.offset - s0Offset)
 
                     range : Range
                     range =
-                        { start = { row = s0.row, column = s0.col }
-                        , end = { row = s0.row, column = newColumn }
+                        { start = { row = s0Row, column = s0Col }
+                        , end = { row = s0Row, column = newColumn }
                         }
                 in
                 Good
@@ -1681,12 +1877,13 @@ integerDecimalOrHexadecimalMapWithRange rangeAndIntDecimalToRes rangeAndIntHexad
                         Hexadecimal ->
                             rangeAndIntHexadecimalToRes range s1.offsetAndInt.int
                     )
-                    { src = s0.src
-                    , offset = s1.offsetAndInt.offset
-                    , indent = s0.indent
-                    , row = s0.row
-                    , col = newColumn
-                    }
+                    (PState
+                        s0Src
+                        s1.offsetAndInt.offset
+                        s0Indent
+                        s0Row
+                        newColumn
+                    )
         )
 
 
@@ -1714,33 +1911,32 @@ floatOrIntegerDecimalOrHexadecimalMapWithRange rangeAndFloatToRes rangeAndIntDec
     Parser
         (\s0 ->
             let
-                s0Offset : Int
-                s0Offset =
-                    s0.offset
+                (PState s0Src s0Offset s0Indent s0Row s0Col) =
+                    s0
 
                 s1 : { base : Base, offsetAndInt : { int : Int, offset : Int } }
                 s1 =
-                    convertIntegerDecimalOrHexadecimal s0Offset s0.src
+                    convertIntegerDecimalOrHexadecimal s0Offset s0Src
             in
             if s1.offsetAndInt.offset == -1 then
-                Bad False (ExpectingNumber s0.row s0.col)
+                Bad False (ExpectingNumber s0Row s0Col)
 
             else
                 let
                     offsetAfterFloat : Int
                     offsetAfterFloat =
-                        skipFloatAfterIntegerDecimal s1.offsetAndInt.offset s0.src
+                        skipFloatAfterIntegerDecimal s1.offsetAndInt.offset s0Src
                 in
                 if offsetAfterFloat == -1 then
                     let
                         newColumn : Int
                         newColumn =
-                            s0.col + (s1.offsetAndInt.offset - s0Offset)
+                            s0Col + (s1.offsetAndInt.offset - s0Offset)
 
                         range : Range
                         range =
-                            { start = { row = s0.row, column = s0.col }
-                            , end = { row = s0.row, column = newColumn }
+                            { start = { row = s0Row, column = s0Col }
+                            , end = { row = s0Row, column = newColumn }
                             }
                     in
                     Good
@@ -1751,37 +1947,39 @@ floatOrIntegerDecimalOrHexadecimalMapWithRange rangeAndFloatToRes rangeAndIntDec
                             Hexadecimal ->
                                 rangeAndIntHexadecimalToRes range s1.offsetAndInt.int
                         )
-                        { src = s0.src
-                        , offset = s1.offsetAndInt.offset
-                        , indent = s0.indent
-                        , row = s0.row
-                        , col = newColumn
-                        }
+                        (PState
+                            s0Src
+                            s1.offsetAndInt.offset
+                            s0Indent
+                            s0Row
+                            newColumn
+                        )
 
                 else
-                    case String.toFloat (String.slice s0Offset offsetAfterFloat s0.src) of
+                    case String.toFloat (String.slice s0Offset offsetAfterFloat s0Src) of
                         Just float ->
                             let
                                 newColumn : Int
                                 newColumn =
-                                    s0.col + (offsetAfterFloat - s0Offset)
+                                    s0Col + (offsetAfterFloat - s0Offset)
                             in
                             Good
                                 (rangeAndFloatToRes
-                                    { start = { row = s0.row, column = s0.col }
-                                    , end = { row = s0.row, column = newColumn }
+                                    { start = { row = s0Row, column = s0Col }
+                                    , end = { row = s0Row, column = newColumn }
                                     }
                                     float
                                 )
-                                { src = s0.src
-                                , offset = offsetAfterFloat
-                                , indent = s0.indent
-                                , row = s0.row
-                                , col = newColumn
-                                }
+                                (PState
+                                    s0Src
+                                    offsetAfterFloat
+                                    s0Indent
+                                    s0Row
+                                    newColumn
+                                )
 
                         Nothing ->
-                            Bad False (ExpectingNumber s0.row s0.col)
+                            Bad False (ExpectingNumber s0Row s0Col)
         )
 
 
@@ -2210,21 +2408,24 @@ symbol str res =
     Parser
         (\s ->
             let
+                (PState sSrc sOffset sIndent sRow sCol) =
+                    s
+
                 newOffset : Int
                 newOffset =
-                    s.offset + strLength
+                    sOffset + strLength
             in
-            if String.slice s.offset newOffset s.src == str ++ "" then
+            if String.slice sOffset newOffset sSrc == str ++ "" then
                 Good res
-                    { src = s.src
-                    , offset = newOffset
-                    , indent = s.indent
-                    , row = s.row
-                    , col = s.col + strLength
-                    }
+                    (PState sSrc
+                        newOffset
+                        sIndent
+                        sRow
+                        (sCol + strLength)
+                    )
 
             else
-                Bad False (ExpectingSymbol s.row s.col str)
+                Bad False (ExpectingSymbol sRow sCol str)
         )
 
 
@@ -2240,21 +2441,25 @@ followedBySymbol str (Parser parsePrevious) =
             case parsePrevious s0 of
                 Good res s1 ->
                     let
+                        (PState s1Src s1Offset s1Indent s1Row s1Col) =
+                            s1
+
                         newOffset : Int
                         newOffset =
-                            s1.offset + strLength
+                            s1Offset + strLength
                     in
-                    if String.slice s1.offset newOffset s1.src == str ++ "" then
+                    if String.slice s1Offset newOffset s1Src == str ++ "" then
                         Good res
-                            { src = s1.src
-                            , offset = newOffset
-                            , indent = s1.indent
-                            , row = s1.row
-                            , col = s1.col + strLength
-                            }
+                            (PState
+                                s1Src
+                                newOffset
+                                s1Indent
+                                s1Row
+                                (s1Col + strLength)
+                            )
 
                     else
-                        Bad True (ExpectingSymbol s1.row s1.col str)
+                        Bad True (ExpectingSymbol s1Row s1Col str)
 
                 bad ->
                     bad
@@ -2271,27 +2476,30 @@ symbolWithEndLocation str endLocationToRes =
     Parser
         (\s ->
             let
+                (PState sSrc sOffset sIndent sRow sCol) =
+                    s
+
                 newOffset : Int
                 newOffset =
-                    s.offset + strLength
+                    sOffset + strLength
             in
-            if String.slice s.offset newOffset s.src == str ++ "" then
+            if String.slice sOffset newOffset sSrc == str ++ "" then
                 let
                     newCol : Int
                     newCol =
-                        s.col + strLength
+                        sCol + strLength
                 in
                 Good
-                    (endLocationToRes { row = s.row, column = newCol })
-                    { src = s.src
-                    , offset = newOffset
-                    , indent = s.indent
-                    , row = s.row
-                    , col = newCol
-                    }
+                    (endLocationToRes { row = sRow, column = newCol })
+                    (PState sSrc
+                        newOffset
+                        sIndent
+                        sRow
+                        newCol
+                    )
 
             else
-                Bad False (ExpectingSymbol s.row s.col str)
+                Bad False (ExpectingSymbol sRow sCol str)
         )
 
 
@@ -2305,27 +2513,32 @@ symbolWithRange str startAndEndLocationToRes =
     Parser
         (\s ->
             let
+                (PState sSrc sOffset sIndent sRow sCol) =
+                    s
+
                 newOffset : Int
                 newOffset =
-                    s.offset + strLength
+                    sOffset + strLength
             in
-            if String.slice s.offset newOffset s.src == str ++ "" then
+            if String.slice sOffset newOffset sSrc == str ++ "" then
                 let
                     newCol : Int
                     newCol =
-                        s.col + strLength
+                        sCol + strLength
                 in
                 Good
-                    (startAndEndLocationToRes { start = { row = s.row, column = s.col }, end = { row = s.row, column = newCol } })
-                    { src = s.src
-                    , offset = newOffset
-                    , indent = s.indent
-                    , row = s.row
-                    , col = newCol
-                    }
+                    (startAndEndLocationToRes
+                        { start = { row = sRow, column = sCol }, end = { row = sRow, column = newCol } }
+                    )
+                    (PState sSrc
+                        newOffset
+                        sIndent
+                        sRow
+                        newCol
+                    )
 
             else
-                Bad False (ExpectingSymbol s.row s.col str)
+                Bad False (ExpectingSymbol sRow sCol str)
         )
 
 
@@ -2342,22 +2555,25 @@ symbolFollowedBy str (Parser parseNext) =
     Parser
         (\s ->
             let
+                (PState sSrc sOffset sIndent sRow sCol) =
+                    s
+
                 newOffset : Int
                 newOffset =
-                    s.offset + strLength
+                    sOffset + strLength
             in
-            if String.slice s.offset newOffset s.src == str ++ "" then
+            if String.slice sOffset newOffset sSrc == str ++ "" then
                 parseNext
-                    { src = s.src
-                    , offset = newOffset
-                    , indent = s.indent
-                    , row = s.row
-                    , col = s.col + strLength
-                    }
+                    (PState sSrc
+                        newOffset
+                        sIndent
+                        sRow
+                        (sCol + strLength)
+                    )
                     |> pStepCommit
 
             else
-                Bad False (ExpectingSymbol s.row s.col str)
+                Bad False (ExpectingSymbol sRow sCol str)
         )
 
 
@@ -2374,21 +2590,24 @@ symbolBacktrackableFollowedBy str (Parser parseNext) =
     Parser
         (\s ->
             let
+                (PState sSrc sOffset sIndent sRow sCol) =
+                    s
+
                 newOffset : Int
                 newOffset =
-                    s.offset + strLength
+                    sOffset + strLength
             in
-            if String.slice s.offset newOffset s.src == str ++ "" then
+            if String.slice sOffset newOffset sSrc == str ++ "" then
                 parseNext
-                    { src = s.src
-                    , offset = newOffset
-                    , indent = s.indent
-                    , row = s.row
-                    , col = s.col + strLength
-                    }
+                    (PState sSrc
+                        newOffset
+                        sIndent
+                        sRow
+                        (sCol + strLength)
+                    )
 
             else
-                Bad False (ExpectingSymbol s.row s.col str)
+                Bad False (ExpectingSymbol sRow sCol str)
         )
 
 
@@ -2426,24 +2645,27 @@ keyword kwd res =
     Parser
         (\s ->
             let
+                (PState sSrc sOffset sIndent sRow sCol) =
+                    s
+
                 newOffset : Int
                 newOffset =
-                    s.offset + kwdLength
+                    sOffset + kwdLength
             in
             if
-                (String.slice s.offset newOffset s.src == kwd ++ "")
-                    && not (isSubCharAlphaNumOrUnderscore newOffset s.src)
+                (String.slice sOffset newOffset sSrc == kwd ++ "")
+                    && not (isSubCharAlphaNumOrUnderscore newOffset sSrc)
             then
                 Good res
-                    { src = s.src
-                    , offset = newOffset
-                    , indent = s.indent
-                    , row = s.row
-                    , col = s.col + kwdLength
-                    }
+                    (PState sSrc
+                        newOffset
+                        sIndent
+                        sRow
+                        (sCol + kwdLength)
+                    )
 
             else
-                Bad False (ExpectingKeyword s.row s.col kwd)
+                Bad False (ExpectingKeyword sRow sCol kwd)
         )
 
 
@@ -2467,25 +2689,28 @@ keywordFollowedBy kwd (Parser parseNext) =
     Parser
         (\s ->
             let
+                (PState sSrc sOffset sIndent sRow sCol) =
+                    s
+
                 newOffset : Int
                 newOffset =
-                    s.offset + kwdLength
+                    sOffset + kwdLength
             in
             if
-                (String.slice s.offset newOffset s.src == kwd ++ "")
-                    && not (isSubCharAlphaNumOrUnderscore newOffset s.src)
+                (String.slice sOffset newOffset sSrc == kwd ++ "")
+                    && not (isSubCharAlphaNumOrUnderscore newOffset sSrc)
             then
                 parseNext
-                    { src = s.src
-                    , offset = newOffset
-                    , indent = s.indent
-                    , row = s.row
-                    , col = s.col + kwdLength
-                    }
+                    (PState sSrc
+                        newOffset
+                        sIndent
+                        sRow
+                        (sCol + kwdLength)
+                    )
                     |> pStepCommit
 
             else
-                Bad False (ExpectingKeyword s.row s.col kwd)
+                Bad False (ExpectingKeyword sRow sCol kwd)
         )
 
 
@@ -2494,38 +2719,42 @@ anyChar =
     Parser
         (\s ->
             let
+                (PState sSrc sOffset sIndent sRow sCol) =
+                    s
+
                 newOffset : Int
                 newOffset =
-                    charOrEnd s.offset s.src
+                    charOrEnd sOffset sSrc
             in
             if newOffset == -1 then
                 -- end of source
-                Bad False (ExpectingAnyChar s.row s.col)
+                Bad False (ExpectingAnyChar sRow sCol)
 
             else if newOffset == -2 then
                 -- newline
                 Good '\n'
-                    { src = s.src
-                    , offset = s.offset + 1
-                    , indent = s.indent
-                    , row = s.row + 1
-                    , col = 1
-                    }
+                    (PState
+                        sSrc
+                        (sOffset + 1)
+                        sIndent
+                        (sRow + 1)
+                        1
+                    )
 
             else
                 -- found
-                case String.toList (String.slice s.offset newOffset s.src) of
+                case String.toList (String.slice sOffset newOffset sSrc) of
                     [] ->
-                        Bad False (ExpectingAnyChar s.row s.col)
+                        Bad False (ExpectingAnyChar sRow sCol)
 
                     c :: _ ->
                         Good c
-                            { src = s.src
-                            , offset = newOffset
-                            , indent = s.indent
-                            , row = s.row
-                            , col = s.col + 1
-                            }
+                            (PState sSrc
+                                newOffset
+                                sIndent
+                                sRow
+                                (sCol + 1)
+                            )
         )
 
 
@@ -2552,16 +2781,22 @@ whileMapWithRange isGood rangeAndConsumedStringToRes =
     Parser
         (\s0 ->
             let
+                (PState s0Src s0Offset s0Indent s0Row s0Col) =
+                    s0
+
                 s1 : State
                 s1 =
-                    skipWhileHelp isGood s0.offset s0.row s0.col s0.src s0.indent
+                    skipWhileHelp isGood s0Offset s0Row s0Col s0Src s0Indent
+
+                (PState s1Src s1Offset s1Indent s1Row s1Col) =
+                    s1
             in
             Good
                 (rangeAndConsumedStringToRes
-                    { start = { row = s0.row, column = s0.col }
-                    , end = { row = s1.row, column = s1.col }
+                    { start = { row = s0Row, column = s0Col }
+                    , end = { row = s1Row, column = s1Col }
                     }
-                    (String.slice s0.offset s1.offset s0.src)
+                    (String.slice s0Offset s1Offset s0Src)
                 )
                 s1
         )
@@ -2584,12 +2819,7 @@ skipWhileHelp isGood offset row col src indent =
 
     else
         -- no match
-        { src = src
-        , offset = offset
-        , indent = indent
-        , row = row
-        , col = col
-        }
+        PState src offset indent row col
 
 
 skipWhileWithoutLinebreakHelp : (Char -> Bool) -> Int -> Int -> Int -> String -> Int -> State
@@ -2604,12 +2834,7 @@ skipWhileWithoutLinebreakHelp isGood offset row col src indent =
 
     else
         -- no match
-        { src = src
-        , offset = offset
-        , indent = indent
-        , row = row
-        , col = col
-        }
+        PState src offset indent row col
 
 
 skipWhileWithoutLinebreakAnd2PartUtf16Help : (Char -> Bool) -> Int -> String -> Int
@@ -2628,9 +2853,12 @@ followedBySkipWhileWhitespace (Parser parseBefore) =
             case parseBefore s0 of
                 Good res s1 ->
                     let
+                        (PState s1Src s1Offset s1Indent s1Row s1Col) =
+                            s1
+
                         s2 : State
                         s2 =
-                            skipWhileWhitespaceHelp s1.offset s1.row s1.col s1.src s1.indent
+                            skipWhileWhitespaceHelp s1Offset s1Row s1Col s1Src s1Indent
                     in
                     Good res s2
 
@@ -2646,9 +2874,12 @@ skipWhileWhitespaceFollowedBy (Parser parseNext) =
     Parser
         (\s0 ->
             let
+                (PState s0Src s0Offset s0Indent s0Row s0Col) =
+                    s0
+
                 s1 : State
                 s1 =
-                    skipWhileWhitespaceHelp s0.offset s0.row s0.col s0.src s0.indent
+                    skipWhileWhitespaceHelp s0Offset s0Row s0Col s0Src s0Indent
             in
             parseNext s1 |> pStepCommit
         )
@@ -2668,17 +2899,12 @@ skipWhileWhitespaceHelp offset row col src indent =
 
         -- empty or non-whitespace
         _ ->
-            { src = src, offset = offset, indent = indent, row = row, col = col }
+            PState src offset indent row col
 
 
 changeIndent : Int -> State -> State
-changeIndent newIndent s =
-    { src = s.src
-    , offset = s.offset
-    , indent = newIndent
-    , row = s.row
-    , col = s.col
-    }
+changeIndent newIndent (PState src offset _ row col) =
+    PState src offset newIndent row col
 
 
 {-| For a given parser, take the current start column as indentation for the whole block
@@ -2688,9 +2914,13 @@ withIndentSetToColumn : Parser a -> Parser a
 withIndentSetToColumn (Parser parse) =
     Parser
         (\s0 ->
-            case parse (changeIndent s0.col s0) of
+            let
+                (PState s0Src s0Offset s0Indent s0Row s0Col) =
+                    s0
+            in
+            case parse (changeIndent s0Col s0) of
                 Good a s1 ->
-                    Good a (changeIndent s0.indent s1)
+                    Good a (changeIndent s0Indent s1)
 
                 bad ->
                     bad
@@ -2701,9 +2931,13 @@ withIndentSetToColumnMinus : Int -> Parser a -> Parser a
 withIndentSetToColumnMinus columnToMoveIndentationBaseBackBy (Parser parse) =
     Parser
         (\s0 ->
-            case parse (changeIndent (s0.col - columnToMoveIndentationBaseBackBy) s0) of
+            let
+                (PState s0Src s0Offset s0Indent s0Row s0Col) =
+                    s0
+            in
+            case parse (changeIndent (s0Col - columnToMoveIndentationBaseBackBy) s0) of
                 Good a s1 ->
-                    Good a (changeIndent s0.indent s1)
+                    Good a (changeIndent s0Indent s1)
 
                 bad ->
                     bad
@@ -2719,7 +2953,21 @@ mapWithRange combineStartAndResult (Parser parse) =
         (\s0 ->
             case parse s0 of
                 Good a s1 ->
-                    Good (combineStartAndResult { start = { row = s0.row, column = s0.col }, end = { row = s1.row, column = s1.col } } a) s1
+                    let
+                        (PState s0Src s0Offset s0Indent s0Row s0Col) =
+                            s0
+
+                        (PState s1Src s1Offset s1Indent s1Row s1Col) =
+                            s1
+                    in
+                    Good
+                        (combineStartAndResult
+                            { start = { row = s0Row, column = s0Col }
+                            , end = { row = s1Row, column = s1Col }
+                            }
+                            a
+                        )
+                        s1
 
                 Bad committed x ->
                     Bad committed x
@@ -2755,28 +3003,34 @@ ifFollowedByWhileValidateWithoutLinebreak firstIsOkay afterFirstIsOkay resultIsO
     Parser
         (\s ->
             let
+                (PState sSrc sOffset sIndent sRow sCol) =
+                    s
+
                 firstOffset : Int
                 firstOffset =
-                    isSubCharWithoutLinebreak firstIsOkay s.offset s.src
+                    isSubCharWithoutLinebreak firstIsOkay sOffset sSrc
             in
             if firstOffset == -1 then
-                Bad False (ExpectingCharSatisfyingPredicate s.row s.col)
+                Bad False (ExpectingCharSatisfyingPredicate sRow sCol)
 
             else
                 let
                     s1 : State
                     s1 =
-                        skipWhileWithoutLinebreakHelp afterFirstIsOkay firstOffset s.row (s.col + 1) s.src s.indent
+                        skipWhileWithoutLinebreakHelp afterFirstIsOkay firstOffset sRow (sCol + 1) sSrc sIndent
+
+                    (PState s1Src s1Offset _ _ _) =
+                        s1
 
                     name : String
                     name =
-                        String.slice s.offset s1.offset s.src
+                        String.slice sOffset s1Offset sSrc
                 in
                 if resultIsOkay name then
                     Good name s1
 
                 else
-                    Bad False (ExpectingStringSatisfyingPredicate s.row (s.col + 1))
+                    Bad False (ExpectingStringSatisfyingPredicate sRow (sCol + 1))
         )
 
 
@@ -2785,37 +3039,40 @@ whileWithoutLinebreakAnd2PartUtf16ToResultAndThen whileCharIsOkay consumedString
     Parser
         (\s0 ->
             let
+                (PState s0Src s0Offset s0Indent s0Row s0Col) =
+                    s0
+
                 s1Offset : Int
                 s1Offset =
                     skipWhileWithoutLinebreakAnd2PartUtf16Help
                         whileCharIsOkay
-                        s0.offset
-                        s0.src
+                        s0Offset
+                        s0Src
 
                 whileContent : String
                 whileContent =
-                    String.slice s0.offset s1Offset s0.src
+                    String.slice s0Offset s1Offset s0Src
             in
             case consumedStringToIntermediateOrErr whileContent of
                 Err problemMessage ->
-                    Bad False (ExpectingCustom s0.row s0.col problemMessage)
+                    Bad False (ExpectingCustom s0Row s0Col problemMessage)
 
                 Ok intermediate ->
                     let
                         s1Column : Int
                         s1Column =
-                            s0.col + (s1Offset - s0.offset)
+                            s0Col + (s1Offset - s0Offset)
 
                         (Parser parseFollowup) =
                             intermediateToFollowupParser intermediate
                     in
                     parseFollowup
-                        { src = s0.src
-                        , offset = s1Offset
-                        , indent = s0.indent
-                        , row = s0.row
-                        , col = s1Column
-                        }
+                        (PState s0Src
+                            s1Offset
+                            s0Indent
+                            s0Row
+                            s1Column
+                        )
                         |> pStepCommit
         )
 
@@ -2830,19 +3087,22 @@ whileWithoutLinebreakAnd2PartUtf16ValidateMapWithRangeBacktrackableFollowedBySym
     Parser
         (\s0 ->
             let
+                (PState s0Src s0Offset s0Indent s0Row s0Col) =
+                    s0
+
                 s1Offset : Int
                 s1Offset =
                     skipWhileWithoutLinebreakAnd2PartUtf16Help
                         whileCharIsOkay
-                        s0.offset
-                        s0.src
+                        s0Offset
+                        s0Src
 
                 whileContent : String
                 whileContent =
-                    String.slice s0.offset s1Offset s0.src
+                    String.slice s0Offset s1Offset s0Src
             in
             if
-                (String.slice s1Offset (s1Offset + mandatoryFinalSymbolLength) s0.src
+                (String.slice s1Offset (s1Offset + mandatoryFinalSymbolLength) s0Src
                     == (mandatoryFinalSymbol ++ "")
                 )
                     && whileResultIsOkay whileContent
@@ -2850,24 +3110,24 @@ whileWithoutLinebreakAnd2PartUtf16ValidateMapWithRangeBacktrackableFollowedBySym
                 let
                     s1Column : Int
                     s1Column =
-                        s0.col + (s1Offset - s0.offset)
+                        s0Col + (s1Offset - s0Offset)
                 in
                 Good
                     (whileRangeAndContentToRes
-                        { start = { row = s0.row, column = s0.col }
-                        , end = { row = s0.row, column = s1Column }
+                        { start = { row = s0Row, column = s0Col }
+                        , end = { row = s0Row, column = s1Column }
                         }
                         whileContent
                     )
-                    { src = s0.src
-                    , offset = s1Offset + mandatoryFinalSymbolLength
-                    , indent = s0.indent
-                    , row = s0.row
-                    , col = s1Column + mandatoryFinalSymbolLength
-                    }
+                    (PState s0Src
+                        (s1Offset + mandatoryFinalSymbolLength)
+                        s0Indent
+                        s0Row
+                        (s1Column + mandatoryFinalSymbolLength)
+                    )
 
             else
-                Bad False (ExpectingStringSatisfyingPredicate s0.row (s0.col + 1))
+                Bad False (ExpectingStringSatisfyingPredicate s0Row (s0Col + 1))
         )
 
 
@@ -2881,28 +3141,41 @@ ifFollowedByWhileValidateMapWithRangeWithoutLinebreak toResult firstIsOkay after
     Parser
         (\s0 ->
             let
+                (PState s0Src s0Offset s0Indent s0Row s0Col) =
+                    s0
+
                 firstOffset : Int
                 firstOffset =
-                    isSubCharWithoutLinebreak firstIsOkay s0.offset s0.src
+                    isSubCharWithoutLinebreak firstIsOkay s0Offset s0Src
             in
             if firstOffset == -1 then
-                Bad False (ExpectingCharSatisfyingPredicate s0.row s0.col)
+                Bad False (ExpectingCharSatisfyingPredicate s0Row s0Col)
 
             else
                 let
                     s1 : State
                     s1 =
-                        skipWhileWithoutLinebreakHelp afterFirstIsOkay firstOffset s0.row (s0.col + 1) s0.src s0.indent
+                        skipWhileWithoutLinebreakHelp afterFirstIsOkay firstOffset s0Row (s0Col + 1) s0Src s0Indent
+
+                    (PState s1Src s1Offset _ s1Row s1Col) =
+                        s1
 
                     name : String
                     name =
-                        String.slice s0.offset s1.offset s0.src
+                        String.slice s0Offset s1Offset s0Src
                 in
                 if resultIsOkay name then
-                    Good (toResult { start = { row = s0.row, column = s0.col }, end = { row = s1.row, column = s1.col } } name) s1
+                    Good
+                        (toResult
+                            { start = { row = s0Row, column = s0Col }
+                            , end = { row = s1Row, column = s1Col }
+                            }
+                            name
+                        )
+                        s1
 
                 else
-                    Bad False (ExpectingStringSatisfyingPredicate s0.row (s0.col + 1))
+                    Bad False (ExpectingStringSatisfyingPredicate s0Row (s0Col + 1))
         )
 
 
@@ -2914,20 +3187,26 @@ ifFollowedByWhileWithoutLinebreak firstIsOkay afterFirstIsOkay =
     Parser
         (\s ->
             let
+                (PState sSrc sOffset sIndent sRow sCol) =
+                    s
+
                 firstOffset : Int
                 firstOffset =
-                    isSubCharWithoutLinebreak firstIsOkay s.offset s.src
+                    isSubCharWithoutLinebreak firstIsOkay sOffset sSrc
             in
             if firstOffset == -1 then
-                Bad False (ExpectingCharSatisfyingPredicate s.row s.col)
+                Bad False (ExpectingCharSatisfyingPredicate sRow sCol)
 
             else
                 let
                     s1 : State
                     s1 =
-                        skipWhileWithoutLinebreakHelp afterFirstIsOkay firstOffset s.row (s.col + 1) s.src s.indent
+                        skipWhileWithoutLinebreakHelp afterFirstIsOkay firstOffset sRow (sCol + 1) sSrc sIndent
+
+                    (PState s1Src s1Offset _ _ _) =
+                        s1
                 in
-                Good (String.slice s.offset s1.offset s.src) s1
+                Good (String.slice sOffset s1Offset sSrc) s1
         )
 
 
@@ -2940,25 +3219,31 @@ ifFollowedByWhileMapWithRangeWithoutLinebreak rangeAndConsumedStringToRes firstI
     Parser
         (\s0 ->
             let
+                (PState s0Src s0Offset s0Indent s0Row s0Col) =
+                    s0
+
                 firstOffset : Int
                 firstOffset =
-                    isSubCharWithoutLinebreak firstIsOkay s0.offset s0.src
+                    isSubCharWithoutLinebreak firstIsOkay s0Offset s0Src
             in
             if firstOffset == -1 then
-                Bad False (ExpectingCharSatisfyingPredicate s0.row s0.col)
+                Bad False (ExpectingCharSatisfyingPredicate s0Row s0Col)
 
             else
                 let
                     s1 : State
                     s1 =
-                        skipWhileWithoutLinebreakHelp afterFirstIsOkay firstOffset s0.row (s0.col + 1) s0.src s0.indent
+                        skipWhileWithoutLinebreakHelp afterFirstIsOkay firstOffset s0Row (s0Col + 1) s0Src s0Indent
+
+                    (PState s1Src s1Offset _ s1Row s1Col) =
+                        s1
                 in
                 Good
                     (rangeAndConsumedStringToRes
-                        { start = { row = s0.row, column = s0.col }
-                        , end = { row = s1.row, column = s1.col }
+                        { start = { row = s0Row, column = s0Col }
+                        , end = { row = s1Row, column = s1Col }
                         }
-                        (String.slice s0.offset s1.offset s0.src)
+                        (String.slice s0Offset s1Offset s0Src)
                     )
                     s1
         )
@@ -2973,21 +3258,27 @@ ifFollowedByWhileMapWithoutLinebreak consumedStringToRes firstIsOkay afterFirstI
     Parser
         (\s0 ->
             let
+                (PState s0Src s0Offset s0Indent s0Row s0Col) =
+                    s0
+
                 firstOffset : Int
                 firstOffset =
-                    isSubCharWithoutLinebreak firstIsOkay s0.offset s0.src
+                    isSubCharWithoutLinebreak firstIsOkay s0Offset s0Src
             in
             if firstOffset == -1 then
-                Bad False (ExpectingCharSatisfyingPredicate s0.row s0.col)
+                Bad False (ExpectingCharSatisfyingPredicate s0Row s0Col)
 
             else
                 let
                     s1 : State
                     s1 =
-                        skipWhileWithoutLinebreakHelp afterFirstIsOkay firstOffset s0.row (s0.col + 1) s0.src s0.indent
+                        skipWhileWithoutLinebreakHelp afterFirstIsOkay firstOffset s0Row (s0Col + 1) s0Src s0Indent
+
+                    (PState s1Src s1Offset _ _ _) =
+                        s1
                 in
                 Good
-                    (consumedStringToRes (String.slice s0.offset s1.offset s0.src))
+                    (consumedStringToRes (String.slice s0Offset s1Offset s0Src))
                     s1
         )
 
@@ -3050,12 +3341,18 @@ while isGood =
     Parser
         (\s0 ->
             let
+                (PState s0Src s0Offset s0Indent s0Row s0Col) =
+                    s0
+
                 s1 : State
                 s1 =
-                    skipWhileHelp isGood s0.offset s0.row s0.col s0.src s0.indent
+                    skipWhileHelp isGood s0Offset s0Row s0Col s0Src s0Indent
+
+                (PState s1Src s1Offset _ _ _) =
+                    s1
             in
             Good
-                (String.slice s0.offset s1.offset s0.src)
+                (String.slice s0Offset s1Offset s0Src)
                 s1
         )
 
@@ -3065,12 +3362,18 @@ whileWithoutLinebreak isGood =
     Parser
         (\s0 ->
             let
+                (PState s0Src s0Offset s0Indent s0Row s0Col) =
+                    s0
+
                 s1 : State
                 s1 =
-                    skipWhileWithoutLinebreakHelp isGood s0.offset s0.row s0.col s0.src s0.indent
+                    skipWhileWithoutLinebreakHelp isGood s0Offset s0Row s0Col s0Src s0Indent
+
+                (PState s1Src s1Offset _ _ _) =
+                    s1
             in
             Good
-                (String.slice s0.offset s1.offset s0.src)
+                (String.slice s0Offset s1Offset s0Src)
                 s1
         )
 
@@ -3083,25 +3386,31 @@ anyCharFollowedByWhileMap consumedStringToRes afterFirstIsOkay =
     Parser
         (\s ->
             let
+                (PState sSrc sOffset sIndent sRow sCol) =
+                    s
+
                 firstOffset : Int
                 firstOffset =
-                    charOrEnd s.offset s.src
+                    charOrEnd sOffset sSrc
             in
             if firstOffset == -1 then
                 -- end of source
-                Bad False (ExpectingAnyChar s.row s.col)
+                Bad False (ExpectingAnyChar sRow sCol)
 
             else
                 let
                     s1 : State
                     s1 =
                         if firstOffset == -2 then
-                            skipWhileHelp afterFirstIsOkay (s.offset + 1) (s.row + 1) 1 s.src s.indent
+                            skipWhileHelp afterFirstIsOkay (sOffset + 1) (sRow + 1) 1 sSrc sIndent
 
                         else
-                            skipWhileHelp afterFirstIsOkay firstOffset s.row (s.col + 1) s.src s.indent
+                            skipWhileHelp afterFirstIsOkay firstOffset sRow (sCol + 1) sSrc sIndent
+
+                    (PState s1Src s1Offset _ _ _) =
+                        s1
                 in
-                Good (consumedStringToRes (String.slice s.offset s1.offset s.src)) s1
+                Good (consumedStringToRes (String.slice sOffset s1Offset sSrc)) s1
         )
 
 
