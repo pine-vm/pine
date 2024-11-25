@@ -4259,14 +4259,31 @@ shouldInlineDeclaration name expression =
         {-
            let
                log =
-                   Debug.log "shouldInlineDeclaration (estimatePineValueSize)"
+                   Debug.log "shouldInlineDeclaration"
                        { name = name
+                       , estimatedSize =
+                           case expression of
+                               LiteralExpression value ->
+                                   String.fromInt (estimatePineValueSize value)
+
+                               _ ->
+                                   "not a literal"
                        }
            in
         -}
         case expression of
             LiteralExpression value ->
+                {-
                 estimatePineValueSize value < 50 * 1000
+                -}
+                {-
+                   TODO: Instead of going just by the size here, more appropriate would be to
+                   check the impact of inlining. For example, we discovered that `Rope.prependTo`
+                   (<https://github.com/stil4m/elm-syntax/blob/fcac5e99c1fab7cffea48e728d7034bad526c1e1/src/Rope.elm#L46-L47>)
+                   was inlined with an estimated size of 22279, and that inlining led to an exponential growth in
+                   expression sizes, because the left size argument was multiplied each time.
+                -}
+                estimatePineValueSize value < 15 * 1000
 
             _ ->
                 False
