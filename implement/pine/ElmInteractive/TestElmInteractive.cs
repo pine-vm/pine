@@ -291,16 +291,28 @@ public class TestElmInteractive
                             {
                                 if (sessionStep.step.ExpectedResponse is { } expectedResponse)
                                 {
-                                    if (expectedResponse != submissionResultOk.InteractiveResponse?.DisplayText)
+                                    if (submissionResultOk.InteractiveResponse?.DisplayText is not { } responseDisplayText)
+                                    {
+                                        return continueWithErrorMessage(
+                                            "Expected response but got null as display text");
+                                    }
+
+                                    if (Testing.CompareStringsChunkwiseAndReportFirstDifference(
+                                        [expectedResponse], responseDisplayText) is { } firstDifference)
                                     {
                                         var errorText =
-                                        "Response from interactive does not match expected value. Expected:\n" +
-                                        expectedResponse +
-                                        "\nBut got this response:\n" +
-                                        submissionResultOk.InteractiveResponse?.DisplayText;
+                                        string.Join(
+                                            "\n",
+                                            [
+                                                "Response from interactive does not match expected value:",
+                                                firstDifference,
+                                                "The complete response is " +
+                                                CommandLineInterface.FormatIntegerForDisplay(responseDisplayText.Length) +
+                                                " characters in length as follows:",
+                                                responseDisplayText
+                                            ]);
 
                                         return
-                                        (Result<InteractiveScenarioTestStepFailure, InteractiveScenarioTestStepSuccess>)
                                         new InteractiveScenarioTestStepFailure(
                                             submission: sessionStep.step.Submission,
                                             errorAsText: errorText);
@@ -314,7 +326,6 @@ public class TestElmInteractive
                                     "', but submission succeeded";
 
                                     return
-                                    (Result<InteractiveScenarioTestStepFailure, InteractiveScenarioTestStepSuccess>)
                                     new InteractiveScenarioTestStepFailure(
                                         submission: sessionStep.step.Submission,
                                         errorAsText: errorText);

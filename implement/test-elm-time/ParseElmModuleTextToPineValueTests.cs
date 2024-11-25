@@ -427,84 +427,13 @@ public class ParseElmModuleTextToPineValueTests
              * Compare chunkwise to make it easier to maintain and adapt tests.
              * */
 
-            int previousChunkEnd = 0;
-
-            for (var chunkIndex = 0; chunkIndex < expectedExpressionStringChunks.Count; chunkIndex++)
+            if (Testing.CompareStringsChunkwiseAndReportFirstDifference(
+                expectedExpressionStringChunks,
+                responseAsExpression) is { } firstDifference)
             {
-                try
-                {
-                    var expectedChunk = expectedExpressionStringChunks[chunkIndex];
+                Console.WriteLine(firstDifference);
 
-                    var responseChunk =
-                        responseAsExpression.Substring(previousChunkEnd, expectedChunk.Length);
-
-                    int? firstDifferentCharIndex = null;
-
-                    for (var i = 0; i < expectedChunk.Length; i++)
-                    {
-                        if (responseChunk.Length <= i)
-                        {
-                            firstDifferentCharIndex ??= i;
-                            break;
-                        }
-
-                        var expectedChar = expectedChunk[i];
-                        var responseChar = responseChunk[i];
-
-                        if (responseChar != expectedChar)
-                        {
-                            firstDifferentCharIndex ??= i;
-                            break;
-                        }
-                    }
-
-                    if (firstDifferentCharIndex.HasValue)
-                    {
-                        var sliceLengthMax = 80;
-
-                        var sliceStartIndex =
-                            Math.Max(0, firstDifferentCharIndex.Value - sliceLengthMax / 2);
-
-                        var sliceEndIndex =
-                            Math.Min(expectedChunk.Length, firstDifferentCharIndex.Value + sliceLengthMax / 2);
-
-                        var sliceLength = sliceEndIndex - sliceStartIndex;
-
-                        var expectedSlice =
-                            expectedChunk
-                            .Substring(startIndex: sliceStartIndex, length: sliceLength);
-
-                        var responseSlice =
-                            responseChunk
-                            .PadRight(totalWidth: expectedChunk.Length, ' ')
-                            .Substring(startIndex: sliceStartIndex, length: sliceLength);
-
-                        Console.WriteLine(
-                            string.Join(
-                                "\n",
-                                [
-                                    "Chunks differ at char index " + firstDifferentCharIndex + ":",
-                                    expectedSlice,
-                                    "<vs>",
-                                    responseSlice,
-                                ]
-                                ));
-                    }
-
-                    Assert.AreEqual(expectedChunk, responseChunk);
-
-                    previousChunkEnd += expectedChunk.Length;
-                }
-                catch (Exception e)
-                {
-                    var remainingText =
-                        responseAsExpression[previousChunkEnd..];
-
-                    throw new Exception(
-                        "Failed in chunk " + chunkIndex + " of " + expectedExpressionStringChunks.Count +
-                        "\nText following previous checked chunk is:\n" + remainingText,
-                        e);
-                }
+                Assert.Fail(firstDifference);
             }
         }
 
