@@ -1,0 +1,1 @@
+ParserFast.run  Elm.Parser.Declarations.declaration  "map func set = fromList (foldl (\\x xs -> func x :: xs) [] set)"

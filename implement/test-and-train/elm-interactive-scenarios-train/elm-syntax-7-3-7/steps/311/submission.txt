@@ -1,0 +1,1 @@
+ParserFast.run  Elm.Parser.Declarations.declaration  "simple_decl =\n    43  "

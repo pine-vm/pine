@@ -1,0 +1,1 @@
+Ok (WithComments Nothing (Node { end = { column = 14, row = 1 }, start = { column = 1, row = 1 } } (Application [Node { end = { column = 10, row = 1 }, start = { column = 1, row = 1 } } (FunctionOrValue [] "func_name"),Node { end = { column = 14, row = 1 }, start = { column = 12, row = 1 } } (Integer 71)])))

@@ -1,0 +1,1 @@
+ParserFast.run  Elm.Parser.Declarations.declaration  "type alias AliasInt = Int"

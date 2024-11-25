@@ -1,0 +1,9 @@
+moduleText =
+    String.trimLeft """
+module Namespace.Beta exposing (..)
+
+
+type alias MaybeInt =
+    Maybe Int
+
+"""

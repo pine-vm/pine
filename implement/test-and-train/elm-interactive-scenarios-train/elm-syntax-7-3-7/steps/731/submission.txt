@@ -1,0 +1,14 @@
+Elm.Parser.parseToFile
+    (String.join
+        "\n"
+        [ "module Namespace.Beta exposing (..)"
+        , ""
+        , "import Delta exposing (..)"
+        , "import Dict"
+        , ""
+        , ""
+        , "type alias MaybeInt ="
+        , "    Maybe Int"
+        , ""
+        ]
+    )
