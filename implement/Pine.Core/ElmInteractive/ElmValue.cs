@@ -518,7 +518,7 @@ public abstract record ElmValue
                 (integer.Value.ToString(), needsParens: false),
 
                 ElmChar charValue =>
-                ("'" + char.ConvertFromUtf32(charValue.Value) + "'", needsParens: false),
+                ("'" + RenderCharAsElmExpression(charValue.Value) + "'", needsParens: false),
 
                 ElmList list =>
                 ElmListItemsLookLikeTupleItems(list.Elements).WithDefault(false)
@@ -560,6 +560,20 @@ public abstract record ElmValue
                 throw new NotImplementedException(
                     "Not implemented for value type: " + elmValue.GetType().FullName)
             };
+    }
+
+    public static string RenderCharAsElmExpression(int charValue)
+    {
+        if (charValue is 10)
+            return "\\n";
+
+        if (charValue is 13)
+            return "\\r";
+
+        if (charValue is 9)
+            return "\\t";
+
+        return char.ConvertFromUtf32(charValue);
     }
 
     public static (string expressionString, bool needsParens) ElmTagAsExpression(
