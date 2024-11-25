@@ -7,7 +7,7 @@ import Elm.Syntax.Node as Node exposing (Node(..))
 import Elm.Syntax.Range exposing (Range)
 import Elm.Syntax.TypeAnnotation as TypeAnnotation exposing (RecordDefinition, RecordField, TypeAnnotation)
 import ParserFast exposing (Parser)
-import ParserWithComments exposing (WithComments)
+import ParserWithComments exposing (WithComments(..))
 import Rope
 
 
@@ -15,28 +15,39 @@ typeAnnotation : Parser (WithComments (Node TypeAnnotation))
 typeAnnotation =
     ParserFast.map3
         (\inType commentsAfterIn maybeOut ->
-            { comments =
-                inType.comments
+            let
+                (WithComments inTypeComments inTypeSyntax) =
+                    inType
+
+                (WithComments maybeOutComments maybeOutSyntax) =
+                    maybeOut
+            in
+            WithComments
+                (inTypeComments
                     |> Rope.prependTo commentsAfterIn
-                    |> Rope.prependTo maybeOut.comments
-            , syntax =
-                case maybeOut.syntax of
+                    |> Rope.prependTo maybeOutComments
+                )
+                (case maybeOutSyntax of
                     Nothing ->
-                        inType.syntax
+                        inTypeSyntax
 
                     Just out ->
-                        Node.combine TypeAnnotation.FunctionTypeAnnotation inType.syntax out
-            }
+                        Node.combine TypeAnnotation.FunctionTypeAnnotation inTypeSyntax out
+                )
         )
         (ParserFast.lazy (\() -> typeAnnotationNoFnIncludingTypedWithArguments))
         Layout.optimisticLayout
         (ParserFast.map2OrSucceed
             (\commentsAfterArrow typeAnnotationResult ->
-                { comments =
-                    commentsAfterArrow
-                        |> Rope.prependTo typeAnnotationResult.comments
-                , syntax = Just typeAnnotationResult.syntax
-                }
+                let
+                    (WithComments typeAnnotationComments typeAnnotationSyntax) =
+                        typeAnnotationResult
+                in
+                WithComments
+                    (commentsAfterArrow
+                        |> Rope.prependTo typeAnnotationComments
+                    )
+                    (Just typeAnnotationSyntax)
             )
             (ParserFast.symbolFollowedBy "->"
                 (Layout.positivelyIndentedPlusFollowedBy 2
@@ -44,7 +55,7 @@ typeAnnotation =
                 )
             )
             (ParserFast.lazy (\() -> typeAnnotation))
-            { comments = Rope.empty, syntax = Nothing }
+            (WithComments Rope.empty Nothing)
         )
 
 
@@ -72,29 +83,36 @@ parensTypeAnnotation =
         (ParserFast.oneOf2
             (ParserFast.symbolWithEndLocation ")"
                 (\end ->
-                    { comments = Rope.empty
-                    , syntax =
-                        Node
+                    WithComments
+                        Rope.empty
+                        (Node
                             { start = { row = end.row, column = end.column - 2 }
                             , end = end
                             }
                             TypeAnnotation.Unit
-                    }
+                        )
                 )
             )
             (ParserFast.map4WithRange
                 (\rangeAfterOpeningParens commentsBeforeFirstPart firstPart commentsAfterFirstPart lastToSecondPart ->
-                    { comments =
-                        commentsBeforeFirstPart
-                            |> Rope.prependTo firstPart.comments
+                    let
+                        (WithComments firstPartComments firstPartSyntax) =
+                            firstPart
+
+                        (WithComments lastToSecondPartComments lastToSecondPartSyntax) =
+                            lastToSecondPart
+                    in
+                    WithComments
+                        (commentsBeforeFirstPart
+                            |> Rope.prependTo firstPartComments
                             |> Rope.prependTo commentsAfterFirstPart
-                            |> Rope.prependTo lastToSecondPart.comments
-                    , syntax =
-                        Node
+                            |> Rope.prependTo lastToSecondPartComments
+                        )
+                        (Node
                             { start = { row = rangeAfterOpeningParens.start.row, column = rangeAfterOpeningParens.start.column - 1 }
                             , end = rangeAfterOpeningParens.end
                             }
-                            (case lastToSecondPart.syntax of
+                            (case lastToSecondPartSyntax of
                                 Nothing ->
                                     -- parenthesized types are not a `Tupled [ firstPart.syntax ]`
                                     -- but their Range still extends to both parens.
@@ -102,53 +120,64 @@ parensTypeAnnotation =
                                     -- This will likely change in v8 after discussion in issues like https://github.com/stil4m/elm-syntax/issues/204
                                     let
                                         (Node _ firstPartType) =
-                                            firstPart.syntax
+                                            firstPartSyntax
                                     in
                                     firstPartType
 
                                 Just firstAndMaybeThirdPart ->
                                     case firstAndMaybeThirdPart.maybeThirdPart of
                                         Nothing ->
-                                            TypeAnnotation.Tupled [ firstPart.syntax, firstAndMaybeThirdPart.secondPart ]
+                                            TypeAnnotation.Tupled [ firstPartSyntax, firstAndMaybeThirdPart.secondPart ]
 
                                         Just thirdPart ->
-                                            TypeAnnotation.Tupled [ firstPart.syntax, firstAndMaybeThirdPart.secondPart, thirdPart ]
+                                            TypeAnnotation.Tupled [ firstPartSyntax, firstAndMaybeThirdPart.secondPart, thirdPart ]
                             )
-                    }
+                        )
                 )
                 Layout.maybeLayout
                 typeAnnotation
                 Layout.maybeLayout
                 (ParserFast.oneOf2
                     (ParserFast.symbol ")"
-                        { comments = Rope.empty, syntax = Nothing }
+                        (WithComments Rope.empty Nothing)
                     )
                     (ParserFast.symbolFollowedBy ","
                         (ParserFast.map4
                             (\commentsBefore secondPartResult commentsAfter maybeThirdPartResult ->
-                                { comments =
-                                    commentsBefore
-                                        |> Rope.prependTo secondPartResult.comments
+                                let
+                                    (WithComments secondPartComments secondPartSyntax) =
+                                        secondPartResult
+
+                                    (WithComments maybeThirdPartComments maybeThirdPartSyntax) =
+                                        maybeThirdPartResult
+                                in
+                                WithComments
+                                    (commentsBefore
+                                        |> Rope.prependTo secondPartComments
                                         |> Rope.prependTo commentsAfter
-                                , syntax = Just { maybeThirdPart = maybeThirdPartResult.syntax, secondPart = secondPartResult.syntax }
-                                }
+                                    )
+                                    (Just { maybeThirdPart = maybeThirdPartSyntax, secondPart = secondPartSyntax })
                             )
                             Layout.maybeLayout
                             typeAnnotation
                             Layout.maybeLayout
                             (ParserFast.oneOf2
                                 (ParserFast.symbol ")"
-                                    { comments = Rope.empty, syntax = Nothing }
+                                    (WithComments Rope.empty Nothing)
                                 )
                                 (ParserFast.symbolFollowedBy ","
                                     (ParserFast.map3
                                         (\commentsBefore thirdPartResult commentsAfter ->
-                                            { comments =
-                                                commentsBefore
-                                                    |> Rope.prependTo thirdPartResult.comments
+                                            let
+                                                (WithComments thirdPartComments thirdPartSyntax) =
+                                                    thirdPartResult
+                                            in
+                                            WithComments
+                                                (commentsBefore
+                                                    |> Rope.prependTo thirdPartComments
                                                     |> Rope.prependTo commentsAfter
-                                            , syntax = Just thirdPartResult.syntax
-                                            }
+                                                )
+                                                (Just thirdPartSyntax)
                                         )
                                         Layout.maybeLayout
                                         typeAnnotation
@@ -168,10 +197,9 @@ genericTypeAnnotation : Parser (WithComments (Node TypeAnnotation))
 genericTypeAnnotation =
     Tokens.functionNameMapWithRange
         (\range var ->
-            { comments = Rope.empty
-            , syntax =
-                Node range (TypeAnnotation.GenericType var)
-            }
+            WithComments
+                Rope.empty
+                (Node range (TypeAnnotation.GenericType var))
         )
 
 
@@ -179,35 +207,43 @@ recordTypeAnnotation : Parser (WithComments (Node TypeAnnotation))
 recordTypeAnnotation =
     ParserFast.map2WithRange
         (\range commentsBefore afterCurly ->
-            { comments =
-                commentsBefore
-                    |> Rope.prependTo afterCurly.comments
-            , syntax =
-                case afterCurly.syntax of
+            let
+                (WithComments afterCurlyComments afterCurlySyntax) =
+                    afterCurly
+            in
+            WithComments
+                (commentsBefore
+                    |> Rope.prependTo afterCurlyComments
+                )
+                (case afterCurlySyntax of
                     Nothing ->
                         Node range typeAnnotationRecordEmpty
 
                     Just afterCurlyResult ->
                         Node range afterCurlyResult
-            }
+                )
         )
         (ParserFast.symbolFollowedBy "{" Layout.maybeLayout)
         (ParserFast.oneOf2
             (ParserFast.map3
                 (\firstNameNode commentsAfterFirstName afterFirstName ->
-                    { comments =
-                        commentsAfterFirstName
-                            |> Rope.prependTo afterFirstName.comments
-                    , syntax =
-                        Just
-                            (case afterFirstName.syntax of
+                    let
+                        (WithComments afterFirstNameComments afterFirstNameSyntax) =
+                            afterFirstName
+                    in
+                    WithComments
+                        (commentsAfterFirstName
+                            |> Rope.prependTo afterFirstNameComments
+                        )
+                        (Just
+                            (case afterFirstNameSyntax of
                                 RecordExtensionExpressionAfterName fields ->
                                     TypeAnnotation.GenericRecord firstNameNode fields
 
                                 FieldsAfterName fieldsAfterName ->
                                     TypeAnnotation.Record (Node.combine Tuple.pair firstNameNode fieldsAfterName.firstFieldValue :: fieldsAfterName.tailFields)
                             )
-                    }
+                        )
                 )
                 Tokens.functionNameNode
                 Layout.maybeLayout
@@ -215,14 +251,21 @@ recordTypeAnnotation =
                     (ParserFast.symbolFollowedBy "|"
                         (ParserFast.map3WithRange
                             (\range commentsBefore head tail ->
-                                { comments =
-                                    commentsBefore
-                                        |> Rope.prependTo head.comments
-                                        |> Rope.prependTo tail.comments
-                                , syntax =
-                                    RecordExtensionExpressionAfterName
-                                        (Node range (head.syntax :: tail.syntax))
-                                }
+                                let
+                                    (WithComments headComments headSyntax) =
+                                        head
+
+                                    (WithComments tailComments tailSyntax) =
+                                        tail
+                                in
+                                WithComments
+                                    (commentsBefore
+                                        |> Rope.prependTo headComments
+                                        |> Rope.prependTo tailComments
+                                    )
+                                    (RecordExtensionExpressionAfterName
+                                        (Node range (headSyntax :: tailSyntax))
+                                    )
                             )
                             Layout.maybeLayout
                             recordFieldDefinition
@@ -230,9 +273,13 @@ recordTypeAnnotation =
                                 (ParserFast.symbolFollowedBy ","
                                     (ParserFast.map2
                                         (\commentsBefore field ->
-                                            { comments = commentsBefore |> Rope.prependTo field.comments
-                                            , syntax = field.syntax
-                                            }
+                                            let
+                                                (WithComments fieldComments fieldSyntax) =
+                                                    field
+                                            in
+                                            WithComments
+                                                (commentsBefore |> Rope.prependTo fieldComments)
+                                                fieldSyntax
                                         )
                                         Layout.maybeLayout
                                         recordFieldDefinition
@@ -244,31 +291,40 @@ recordTypeAnnotation =
                     (ParserFast.symbolFollowedBy ":"
                         (ParserFast.map4
                             (\commentsBeforeFirstFieldValue firstFieldValue commentsAfterFirstFieldValue tailFields ->
-                                { comments =
-                                    commentsBeforeFirstFieldValue
-                                        |> Rope.prependTo firstFieldValue.comments
+                                let
+                                    (WithComments firstFieldValueComments firstFieldValueSyntax) =
+                                        firstFieldValue
+
+                                    (WithComments tailFieldsComments tailFieldsSyntax) =
+                                        tailFields
+                                in
+                                WithComments
+                                    (commentsBeforeFirstFieldValue
+                                        |> Rope.prependTo firstFieldValueComments
                                         |> Rope.prependTo commentsAfterFirstFieldValue
-                                        |> Rope.prependTo tailFields.comments
-                                , syntax =
-                                    FieldsAfterName
-                                        { firstFieldValue = firstFieldValue.syntax
-                                        , tailFields = tailFields.syntax
+                                        |> Rope.prependTo tailFieldsComments
+                                    )
+                                    (FieldsAfterName
+                                        { firstFieldValue = firstFieldValueSyntax
+                                        , tailFields = tailFieldsSyntax
                                         }
-                                }
+                                    )
                             )
                             Layout.maybeLayout
                             typeAnnotation
                             Layout.maybeLayout
                             (ParserFast.orSucceed
                                 (ParserFast.symbolFollowedBy "," recordFieldsTypeAnnotation)
-                                { comments = Rope.empty, syntax = [] }
+                                (WithComments Rope.empty [])
                             )
                         )
                     )
                 )
                 |> ParserFast.followedBySymbol "}"
             )
-            (ParserFast.symbol "}" { comments = Rope.empty, syntax = Nothing })
+            (ParserFast.symbol "}"
+                (WithComments Rope.empty Nothing)
+            )
         )
 
 
@@ -286,12 +342,19 @@ recordFieldsTypeAnnotation : Parser (WithComments TypeAnnotation.RecordDefinitio
 recordFieldsTypeAnnotation =
     ParserFast.map3
         (\commentsBefore head tail ->
-            { comments =
-                commentsBefore
-                    |> Rope.prependTo head.comments
-                    |> Rope.prependTo tail.comments
-            , syntax = head.syntax :: tail.syntax
-            }
+            let
+                (WithComments headComments headSyntax) =
+                    head
+
+                (WithComments tailComments tailSyntax) =
+                    tail
+            in
+            WithComments
+                (commentsBefore
+                    |> Rope.prependTo headComments
+                    |> Rope.prependTo tailComments
+                )
+                (headSyntax :: tailSyntax)
         )
         Layout.maybeLayout
         recordFieldDefinition
@@ -299,9 +362,13 @@ recordFieldsTypeAnnotation =
             (ParserFast.symbolFollowedBy ","
                 (ParserFast.map2
                     (\commentsBefore field ->
-                        { comments = commentsBefore |> Rope.prependTo field.comments
-                        , syntax = field.syntax
-                        }
+                        let
+                            (WithComments fieldComments fieldSyntax) =
+                                field
+                        in
+                        WithComments
+                            (commentsBefore |> Rope.prependTo fieldComments)
+                            fieldSyntax
                     )
                     Layout.maybeLayout
                     recordFieldDefinition
@@ -314,14 +381,18 @@ recordFieldDefinition : Parser (WithComments (Node TypeAnnotation.RecordField))
 recordFieldDefinition =
     ParserFast.map6WithRange
         (\range commentsBeforeFunctionName name commentsAfterFunctionName commentsAfterColon value commentsAfterValue ->
-            { comments =
-                commentsBeforeFunctionName
+            let
+                (WithComments valueComments valueSyntax) =
+                    value
+            in
+            WithComments
+                (commentsBeforeFunctionName
                     |> Rope.prependTo commentsAfterFunctionName
                     |> Rope.prependTo commentsAfterColon
-                    |> Rope.prependTo value.comments
+                    |> Rope.prependTo valueComments
                     |> Rope.prependTo commentsAfterValue
-            , syntax = Node range ( name, value.syntax )
-            }
+                )
+                (Node range ( name, valueSyntax ))
         )
         Layout.maybeLayout
         Tokens.functionNameNode
@@ -347,11 +418,11 @@ typedTypeAnnotationWithoutArguments =
                         Just ( qualificationAfterStartName, unqualified ) ->
                             ( startName :: qualificationAfterStartName, unqualified )
             in
-            { comments = Rope.empty
-            , syntax =
-                Node range
+            WithComments
+                Rope.empty
+                (Node range
                     (TypeAnnotation.Typed (Node range name) [])
-            }
+                )
         )
         Tokens.typeName
         maybeDotTypeNamesTuple
@@ -378,21 +449,23 @@ typedTypeAnnotationWithArgumentsOptimisticLayout =
     ParserFast.map3
         (\((Node nameRange _) as nameNode) commentsAfterName argsReverse ->
             let
+                (WithComments argsReverseComments argsReverseSyntax) =
+                    argsReverse
+
                 range : Range
                 range =
-                    case argsReverse.syntax of
+                    case argsReverseSyntax of
                         [] ->
                             nameRange
 
                         (Node lastArgRange _) :: _ ->
                             { start = nameRange.start, end = lastArgRange.end }
             in
-            { comments =
-                commentsAfterName
-                    |> Rope.prependTo argsReverse.comments
-            , syntax =
-                Node range (TypeAnnotation.Typed nameNode (List.reverse argsReverse.syntax))
-            }
+            WithComments
+                (commentsAfterName
+                    |> Rope.prependTo argsReverseComments
+                )
+                (Node range (TypeAnnotation.Typed nameNode (List.reverse argsReverseSyntax)))
         )
         (ParserFast.map2WithRange
             (\range startName afterStartName ->
@@ -416,11 +489,15 @@ typedTypeAnnotationWithArgumentsOptimisticLayout =
             (Layout.positivelyIndentedFollowedBy
                 (ParserFast.map2
                     (\typeAnnotationResult commentsAfter ->
-                        { comments =
-                            typeAnnotationResult.comments
+                        let
+                            (WithComments typeAnnotationResultComments typeAnnotationResultSyntax) =
+                                typeAnnotationResult
+                        in
+                        WithComments
+                            (typeAnnotationResultComments
                                 |> Rope.prependTo commentsAfter
-                        , syntax = typeAnnotationResult.syntax
-                        }
+                            )
+                            typeAnnotationResultSyntax
                     )
                     typeAnnotationNoFnExcludingTypedWithArguments
                     Layout.optimisticLayout

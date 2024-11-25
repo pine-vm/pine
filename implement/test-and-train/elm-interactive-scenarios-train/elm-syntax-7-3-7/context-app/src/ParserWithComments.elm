@@ -1,6 +1,6 @@
 module ParserWithComments exposing
     ( Comments
-    , WithComments
+    , WithComments(..)
     , many
     , manyWithoutReverse
     , until
@@ -11,8 +11,8 @@ import ParserFast exposing (Parser)
 import Rope exposing (Rope)
 
 
-type alias WithComments res =
-    { comments : Comments, syntax : res }
+type WithComments res
+    = WithComments Comments res
 
 
 type alias Comments =
@@ -25,15 +25,15 @@ until end element =
         end
         element
         ( Rope.empty, [] )
-        (\pResult ( commentsSoFar, itemsSoFar ) ->
-            ( commentsSoFar |> Rope.prependTo pResult.comments
-            , pResult.syntax :: itemsSoFar
+        (\(WithComments comments syntax) ( commentsSoFar, itemsSoFar ) ->
+            ( commentsSoFar |> Rope.prependTo comments
+            , syntax :: itemsSoFar
             )
         )
         (\( commentsSoFar, itemsSoFar ) ->
-            { comments = commentsSoFar
-            , syntax = List.reverse itemsSoFar
-            }
+            WithComments
+                commentsSoFar
+                (List.reverse itemsSoFar)
         )
 
 
@@ -41,15 +41,15 @@ many : Parser (WithComments a) -> Parser (WithComments (List a))
 many p =
     ParserFast.loopWhileSucceeds p
         ( Rope.empty, [] )
-        (\pResult ( commentsSoFar, itemsSoFar ) ->
-            ( commentsSoFar |> Rope.prependTo pResult.comments
-            , pResult.syntax :: itemsSoFar
+        (\(WithComments comments syntax) ( commentsSoFar, itemsSoFar ) ->
+            ( commentsSoFar |> Rope.prependTo comments
+            , syntax :: itemsSoFar
             )
         )
         (\( commentsSoFar, itemsSoFar ) ->
-            { comments = commentsSoFar
-            , syntax = List.reverse itemsSoFar
-            }
+            WithComments
+                commentsSoFar
+                (List.reverse itemsSoFar)
         )
 
 
@@ -63,13 +63,13 @@ manyWithoutReverse : Parser (WithComments a) -> Parser (WithComments (List a))
 manyWithoutReverse p =
     ParserFast.loopWhileSucceeds p
         ( Rope.empty, [] )
-        (\pResult ( commentsSoFar, itemsSoFar ) ->
-            ( commentsSoFar |> Rope.prependTo pResult.comments
-            , pResult.syntax :: itemsSoFar
+        (\(WithComments comments syntax) ( commentsSoFar, itemsSoFar ) ->
+            ( commentsSoFar |> Rope.prependTo comments
+            , syntax :: itemsSoFar
             )
         )
         (\( commentsSoFar, itemsSoFar ) ->
-            { comments = commentsSoFar
-            , syntax = itemsSoFar
-            }
+            WithComments
+                commentsSoFar
+                itemsSoFar
         )

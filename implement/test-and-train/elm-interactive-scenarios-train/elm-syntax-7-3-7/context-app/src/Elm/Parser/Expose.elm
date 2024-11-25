@@ -5,7 +5,7 @@ import Elm.Parser.Tokens as Tokens
 import Elm.Syntax.Exposing exposing (Exposing(..), TopLevelExpose(..))
 import Elm.Syntax.Node exposing (Node(..))
 import ParserFast exposing (Parser)
-import ParserWithComments exposing (WithComments)
+import ParserWithComments exposing (WithComments(..))
 import Rope
 
 
@@ -13,12 +13,16 @@ exposeDefinition : Parser (WithComments (Node Exposing))
 exposeDefinition =
     ParserFast.map3WithRange
         (\range commentsAfterExposing commentsBefore exposingListInnerResult ->
-            { comments =
-                commentsAfterExposing
+            let
+                (WithComments comments syntax) =
+                    exposingListInnerResult
+            in
+            WithComments
+                (commentsAfterExposing
                     |> Rope.prependTo commentsBefore
-                    |> Rope.prependTo exposingListInnerResult.comments
-            , syntax = Node range exposingListInnerResult.syntax
-            }
+                    |> Rope.prependTo comments
+                )
+                (Node range syntax)
         )
         (ParserFast.symbolFollowedBy "exposing" Layout.maybeLayout)
         (ParserFast.symbolFollowedBy "(" Layout.optimisticLayout)
@@ -32,16 +36,23 @@ exposingListInner =
     ParserFast.oneOf2
         (ParserFast.map3
             (\headElement commentsAfterHeadElement tailElements ->
-                { comments =
-                    headElement.comments
+                let
+                    (WithComments headElementComments headElementSyntax) =
+                        headElement
+
+                    (WithComments tailElementsComments tailElementsSyntax) =
+                        tailElements
+                in
+                WithComments
+                    (headElementComments
                         |> Rope.prependTo commentsAfterHeadElement
-                        |> Rope.prependTo tailElements.comments
-                , syntax =
-                    Explicit
-                        (headElement.syntax
-                            :: tailElements.syntax
+                        |> Rope.prependTo tailElementsComments
+                    )
+                    (Explicit
+                        (headElementSyntax
+                            :: tailElementsSyntax
                         )
-                }
+                    )
             )
             exposable
             Layout.maybeLayout
@@ -53,9 +64,9 @@ exposingListInner =
         )
         (ParserFast.mapWithRange
             (\range commentsAfterDotDot ->
-                { comments = commentsAfterDotDot
-                , syntax = All range
-                }
+                WithComments
+                    commentsAfterDotDot
+                    (All range)
             )
             (ParserFast.symbolFollowedBy ".." Layout.maybeLayout)
         )
@@ -73,9 +84,9 @@ infixExpose : ParserFast.Parser (WithComments (Node TopLevelExpose))
 infixExpose =
     ParserFast.map2WithRange
         (\range infixName () ->
-            { comments = Rope.empty
-            , syntax = Node range (InfixExpose infixName)
-            }
+            WithComments
+                Rope.empty
+                (Node range (InfixExpose infixName))
         )
         (ParserFast.symbolFollowedBy "("
             (ParserFast.ifFollowedByWhileWithoutLinebreak
@@ -90,9 +101,13 @@ typeExpose : Parser (WithComments (Node TopLevelExpose))
 typeExpose =
     ParserFast.map3
         (\(Node typeNameRange typeName) commentsBeforeMaybeOpen maybeOpen ->
-            { comments = commentsBeforeMaybeOpen |> Rope.prependTo maybeOpen.comments
-            , syntax =
-                case maybeOpen.syntax of
+            let
+                (WithComments maybeOpenComments maybeOpenSyntax) =
+                    maybeOpen
+            in
+            WithComments
+                (commentsBeforeMaybeOpen |> Rope.prependTo maybeOpenComments)
+                (case maybeOpenSyntax of
                     Nothing ->
                         Node typeNameRange (TypeOrAliasExpose typeName)
 
@@ -101,20 +116,25 @@ typeExpose =
                             { start = typeNameRange.start
                             , end = openRange.end
                             }
-                            (TypeExpose { name = typeName, open = maybeOpen.syntax })
-            }
+                            (TypeExpose { name = typeName, open = maybeOpenSyntax })
+                )
         )
         Tokens.typeNameNode
         Layout.optimisticLayout
         (ParserFast.map2WithRangeOrSucceed
             (\range left right ->
-                { comments = left |> Rope.prependTo right, syntax = Just range }
+                WithComments
+                    (left |> Rope.prependTo right)
+                    (Just range)
             )
             (ParserFast.symbolFollowedBy "(" Layout.maybeLayout)
             (ParserFast.symbolFollowedBy ".." Layout.maybeLayout
                 |> ParserFast.followedBySymbol ")"
             )
-            { comments = Rope.empty, syntax = Nothing }
+            (WithComments
+                Rope.empty
+                Nothing
+            )
         )
 
 
@@ -122,8 +142,7 @@ functionExpose : Parser (WithComments (Node TopLevelExpose))
 functionExpose =
     Tokens.functionNameMapWithRange
         (\range name ->
-            { comments = Rope.empty
-            , syntax =
-                Node range (FunctionExpose name)
-            }
+            WithComments
+                Rope.empty
+                (Node range (FunctionExpose name))
         )

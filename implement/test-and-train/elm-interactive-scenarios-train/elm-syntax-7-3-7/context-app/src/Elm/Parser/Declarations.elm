@@ -16,7 +16,7 @@ import Elm.Syntax.Signature exposing (Signature)
 import Elm.Syntax.Type exposing (ValueConstructor)
 import Elm.Syntax.TypeAnnotation exposing (TypeAnnotation)
 import ParserFast exposing (Parser)
-import ParserWithComments exposing (Comments, WithComments)
+import ParserWithComments exposing (Comments, WithComments(..))
 import Rope
 
 
@@ -35,11 +35,14 @@ declarationWithDocumentation =
     ParserFast.map2
         (\documentation afterDocumentation ->
             let
+                (WithComments afterDocumentationComments afterDocumentationSyntax) =
+                    afterDocumentation
+
                 start : Location
                 start =
                     (Node.range documentation).start
             in
-            case afterDocumentation.syntax of
+            case afterDocumentationSyntax of
                 FunctionDeclarationAfterDocumentation functionDeclarationAfterDocumentation ->
                     case functionDeclarationAfterDocumentation.signature of
                         Just signature ->
@@ -50,9 +53,9 @@ declarationWithDocumentation =
                                 (Node expressionRange _) =
                                     functionDeclarationAfterDocumentation.expression
                             in
-                            { comments = afterDocumentation.comments
-                            , syntax =
-                                Node { start = start, end = expressionRange.end }
+                            WithComments
+                                afterDocumentationComments
+                                (Node { start = start, end = expressionRange.end }
                                     (Declaration.FunctionDeclaration
                                         { documentation = Just documentation
                                         , signature =
@@ -69,7 +72,7 @@ declarationWithDocumentation =
                                                 }
                                         }
                                     )
-                            }
+                                )
 
                         Nothing ->
                             let
@@ -79,9 +82,9 @@ declarationWithDocumentation =
                                 (Node expressionRange _) =
                                     functionDeclarationAfterDocumentation.expression
                             in
-                            { comments = afterDocumentation.comments
-                            , syntax =
-                                Node { start = start, end = expressionRange.end }
+                            WithComments
+                                afterDocumentationComments
+                                (Node { start = start, end = expressionRange.end }
                                     (Declaration.FunctionDeclaration
                                         { documentation = Just documentation
                                         , signature = Nothing
@@ -93,7 +96,7 @@ declarationWithDocumentation =
                                                 }
                                         }
                                     )
-                            }
+                                )
 
                 TypeDeclarationAfterDocumentation typeDeclarationAfterDocumentation ->
                     let
@@ -110,9 +113,9 @@ declarationWithDocumentation =
                                     in
                                     headVariantRange.end
                     in
-                    { comments = afterDocumentation.comments
-                    , syntax =
-                        Node { start = start, end = end }
+                    WithComments
+                        afterDocumentationComments
+                        (Node { start = start, end = end }
                             (Declaration.CustomTypeDeclaration
                                 { documentation = Just documentation
                                 , name = typeDeclarationAfterDocumentation.name
@@ -122,16 +125,16 @@ declarationWithDocumentation =
                                         :: List.reverse typeDeclarationAfterDocumentation.tailVariantsReverse
                                 }
                             )
-                    }
+                        )
 
                 TypeAliasDeclarationAfterDocumentation typeAliasDeclarationAfterDocumentation ->
                     let
                         (Node typeAnnotationRange _) =
                             typeAliasDeclarationAfterDocumentation.typeAnnotation
                     in
-                    { comments = afterDocumentation.comments
-                    , syntax =
-                        Node { start = start, end = typeAnnotationRange.end }
+                    WithComments
+                        afterDocumentationComments
+                        (Node { start = start, end = typeAnnotationRange.end }
                             (Declaration.AliasDeclaration
                                 { documentation = Just documentation
                                 , name = typeAliasDeclarationAfterDocumentation.name
@@ -139,18 +142,18 @@ declarationWithDocumentation =
                                 , typeAnnotation = typeAliasDeclarationAfterDocumentation.typeAnnotation
                                 }
                             )
-                    }
+                        )
 
                 PortDeclarationAfterDocumentation portDeclarationAfterName ->
                     let
                         (Node typeAnnotationRange _) =
                             portDeclarationAfterName.typeAnnotation
                     in
-                    { comments =
-                        Rope.one documentation
-                            |> Rope.filledPrependTo afterDocumentation.comments
-                    , syntax =
-                        Node
+                    WithComments
+                        (Rope.one documentation
+                            |> Rope.filledPrependTo afterDocumentationComments
+                        )
+                        (Node
                             { start = portDeclarationAfterName.startLocation
                             , end = typeAnnotationRange.end
                             }
@@ -159,7 +162,7 @@ declarationWithDocumentation =
                                 , typeAnnotation = portDeclarationAfterName.typeAnnotation
                                 }
                             )
-                    }
+                        )
         )
         Comments.declarationDocumentation
         (Layout.layoutStrictFollowedByWithComments
@@ -172,8 +175,8 @@ declarationWithDocumentation =
         |> ParserFast.validate
             (\result ->
                 let
-                    (Node _ decl) =
-                        result.syntax
+                    (WithComments _ (Node _ decl)) =
+                        result
                 in
                 case decl of
                     Declaration.FunctionDeclaration letFunctionDeclaration ->
@@ -247,42 +250,64 @@ functionAfterDocumentation : Parser (WithComments DeclarationAfterDocumentation)
 functionAfterDocumentation =
     ParserFast.map6
         (\startName commentsAfterStartName maybeSignature arguments commentsAfterEqual result ->
-            { comments =
-                (case maybeSignature of
+            let
+                (WithComments argumentsComments argumentsSyntax) =
+                    arguments
+
+                (WithComments resultComments resultSyntax) =
+                    result
+
+                maybeSignatureSyntax =
+                    case maybeSignature of
+                        Nothing ->
+                            Nothing
+
+                        Just (WithComments signatureComments signatureSyntax) ->
+                            Just signatureSyntax
+            in
+            WithComments
+                ((case maybeSignature of
                     Nothing ->
                         commentsAfterStartName
 
-                    Just signature ->
-                        commentsAfterStartName |> Rope.prependTo signature.comments
-                )
-                    |> Rope.prependTo arguments.comments
+                    Just (WithComments signatureComments _) ->
+                        commentsAfterStartName |> Rope.prependTo signatureComments
+                 )
+                    |> Rope.prependTo argumentsComments
                     |> Rope.prependTo commentsAfterEqual
-                    |> Rope.prependTo result.comments
-            , syntax =
-                FunctionDeclarationAfterDocumentation
+                    |> Rope.prependTo resultComments
+                )
+                (FunctionDeclarationAfterDocumentation
                     { startName = startName
-                    , signature = maybeSignature |> Maybe.map .syntax
-                    , arguments = arguments.syntax
-                    , expression = result.syntax
+                    , signature = maybeSignatureSyntax
+                    , arguments = argumentsSyntax
+                    , expression = resultSyntax
                     }
-            }
+                )
         )
         -- infix declarations itself don't have documentation
         Tokens.functionNameNode
         Layout.maybeLayout
         (ParserFast.map4OrSucceed
             (\commentsBeforeTypeAnnotation typeAnnotationResult implementationName afterImplementationName ->
+                let
+                    (WithComments typeAnnotationComments typeAnnotationSyntax) =
+                        typeAnnotationResult
+
+                    (WithComments implementationNameComments implementationNameSyntax) =
+                        implementationName
+                in
                 Just
-                    { comments =
-                        commentsBeforeTypeAnnotation
-                            |> Rope.prependTo typeAnnotationResult.comments
-                            |> Rope.prependTo implementationName.comments
+                    (WithComments
+                        (commentsBeforeTypeAnnotation
+                            |> Rope.prependTo typeAnnotationComments
+                            |> Rope.prependTo implementationNameComments
                             |> Rope.prependTo afterImplementationName
-                    , syntax =
-                        { implementationName = implementationName.syntax
-                        , typeAnnotation = typeAnnotationResult.syntax
+                        )
+                        { implementationName = implementationNameSyntax
+                        , typeAnnotation = typeAnnotationSyntax
                         }
-                    }
+                    )
             )
             (ParserFast.symbolFollowedBy ":" Layout.maybeLayout)
             TypeAnnotation.typeAnnotation
@@ -302,6 +327,12 @@ functionDeclarationWithoutDocumentation =
     ParserFast.map6WithStartLocation
         (\startNameStart startNameNode commentsAfterStartName maybeSignature arguments commentsAfterEqual result ->
             let
+                (WithComments argumentsComments argumentsSyntax) =
+                    arguments
+
+                (WithComments resultComments resultSyntax) =
+                    result
+
                 allComments : Comments
                 allComments =
                     (case maybeSignature of
@@ -311,31 +342,31 @@ functionDeclarationWithoutDocumentation =
                         Just signature ->
                             commentsAfterStartName |> Rope.prependTo signature.comments
                     )
-                        |> Rope.prependTo arguments.comments
+                        |> Rope.prependTo argumentsComments
                         |> Rope.prependTo commentsAfterEqual
-                        |> Rope.prependTo result.comments
+                        |> Rope.prependTo resultComments
             in
             case maybeSignature of
                 Nothing ->
                     let
                         (Node expressionRange _) =
-                            result.syntax
+                            resultSyntax
                     in
-                    { comments = allComments
-                    , syntax =
-                        Node { start = startNameStart, end = expressionRange.end }
+                    WithComments
+                        allComments
+                        (Node { start = startNameStart, end = expressionRange.end }
                             (Declaration.FunctionDeclaration
                                 { documentation = Nothing
                                 , signature = Nothing
                                 , declaration =
                                     Node { start = startNameStart, end = expressionRange.end }
                                         { name = startNameNode
-                                        , arguments = arguments.syntax
-                                        , expression = result.syntax
+                                        , arguments = argumentsSyntax
+                                        , expression = resultSyntax
                                         }
                                 }
                             )
-                    }
+                        )
 
                 Just signature ->
                     let
@@ -343,36 +374,43 @@ functionDeclarationWithoutDocumentation =
                             signature.implementationName
 
                         (Node expressionRange _) =
-                            result.syntax
+                            resultSyntax
                     in
-                    { comments = allComments
-                    , syntax =
-                        Node { start = startNameStart, end = expressionRange.end }
+                    WithComments
+                        allComments
+                        (Node { start = startNameStart, end = expressionRange.end }
                             (Declaration.FunctionDeclaration
                                 { documentation = Nothing
                                 , signature = Just (Node.combine Signature startNameNode signature.typeAnnotation)
                                 , declaration =
                                     Node { start = implementationNameRange.start, end = expressionRange.end }
                                         { name = signature.implementationName
-                                        , arguments = arguments.syntax
-                                        , expression = result.syntax
+                                        , arguments = argumentsSyntax
+                                        , expression = resultSyntax
                                         }
                                 }
                             )
-                    }
+                        )
         )
         Tokens.functionNameNotInfixNode
         Layout.maybeLayout
         (ParserFast.map4OrSucceed
             (\commentsBeforeTypeAnnotation typeAnnotationResult implementationName afterImplementationName ->
+                let
+                    (WithComments typeAnnotationComments typeAnnotationSyntax) =
+                        typeAnnotationResult
+
+                    (WithComments implementationNameComments implementationNameSyntax) =
+                        implementationName
+                in
                 Just
                     { comments =
                         commentsBeforeTypeAnnotation
-                            |> Rope.prependTo typeAnnotationResult.comments
-                            |> Rope.prependTo implementationName.comments
+                            |> Rope.prependTo typeAnnotationComments
+                            |> Rope.prependTo implementationNameComments
                             |> Rope.prependTo afterImplementationName
-                    , implementationName = implementationName.syntax
-                    , typeAnnotation = typeAnnotationResult.syntax
+                    , implementationName = implementationNameSyntax
+                    , typeAnnotation = typeAnnotationSyntax
                     }
             )
             (ParserFast.symbolFollowedBy ":" Layout.maybeLayout)
@@ -389,8 +427,8 @@ functionDeclarationWithoutDocumentation =
         |> ParserFast.validate
             (\result ->
                 let
-                    (Node _ decl) =
-                        result.syntax
+                    (WithComments _ (Node _ decl)) =
+                        result
                 in
                 case decl of
                     Declaration.FunctionDeclaration letFunctionDeclaration ->
@@ -422,9 +460,13 @@ parameterPatternsEqual =
     ParserWithComments.until Tokens.equal
         (ParserFast.map2
             (\patternResult commentsAfterPattern ->
-                { comments = patternResult.comments |> Rope.prependTo commentsAfterPattern
-                , syntax = patternResult.syntax
-                }
+                let
+                    (WithComments patternComments patternSyntax) =
+                        patternResult
+                in
+                WithComments
+                    (patternComments |> Rope.prependTo commentsAfterPattern)
+                    patternSyntax
             )
             Patterns.patternNotDirectlyComposing
             Layout.maybeLayout
@@ -435,18 +477,18 @@ infixDeclaration : Parser (WithComments (Node Declaration))
 infixDeclaration =
     ParserFast.map9WithRange
         (\range commentsAfterInfix direction commentsAfterDirection precedence commentsAfterPrecedence operator commentsAfterOperator commentsAfterEqual fn ->
-            { comments =
-                commentsAfterInfix
+            WithComments
+                (commentsAfterInfix
                     |> Rope.prependTo commentsAfterDirection
                     |> Rope.prependTo commentsAfterPrecedence
                     |> Rope.prependTo commentsAfterOperator
                     |> Rope.prependTo commentsAfterEqual
-            , syntax =
-                Node range
+                )
+                (Node range
                     (Declaration.InfixDeclaration
                         { direction = direction, precedence = precedence, operator = operator, function = fn }
                     )
-            }
+                )
         )
         (ParserFast.keywordFollowedBy "infix" Layout.maybeLayout)
         infixDirection
@@ -484,18 +526,22 @@ portDeclarationAfterDocumentation : Parser (WithComments DeclarationAfterDocumen
 portDeclarationAfterDocumentation =
     ParserFast.map5
         (\commentsAfterPort ((Node nameRange _) as name) commentsAfterName commentsAfterColon typeAnnotationResult ->
-            { comments =
-                commentsAfterPort
+            let
+                (WithComments typeAnnotationComments typeAnnotationSyntax) =
+                    typeAnnotationResult
+            in
+            WithComments
+                (commentsAfterPort
                     |> Rope.prependTo commentsAfterName
-                    |> Rope.prependTo typeAnnotationResult.comments
+                    |> Rope.prependTo typeAnnotationComments
                     |> Rope.prependTo commentsAfterColon
-            , syntax =
-                PortDeclarationAfterDocumentation
+                )
+                (PortDeclarationAfterDocumentation
                     { startLocation = { row = nameRange.start.row, column = 1 }
                     , name = name
-                    , typeAnnotation = typeAnnotationResult.syntax
+                    , typeAnnotation = typeAnnotationSyntax
                     }
-            }
+                )
         )
         (ParserFast.keywordFollowedBy "port" Layout.maybeLayout)
         Tokens.functionNameNode
@@ -509,25 +555,28 @@ portDeclarationWithoutDocumentation =
     ParserFast.map5
         (\commentsAfterPort ((Node nameRange _) as name) commentsAfterName commentsAfterColon typeAnnotationResult ->
             let
+                (WithComments typeAnnotationComments typeAnnotationSyntax) =
+                    typeAnnotationResult
+
                 (Node { end } _) =
-                    typeAnnotationResult.syntax
+                    typeAnnotationSyntax
             in
-            { comments =
-                commentsAfterPort
+            WithComments
+                (commentsAfterPort
                     |> Rope.prependTo commentsAfterName
                     |> Rope.prependTo commentsAfterColon
-                    |> Rope.prependTo typeAnnotationResult.comments
-            , syntax =
-                Node
+                    |> Rope.prependTo typeAnnotationComments
+                )
+                (Node
                     { start = { row = nameRange.start.row, column = 1 }
                     , end = end
                     }
                     (Declaration.PortDeclaration
                         { name = name
-                        , typeAnnotation = typeAnnotationResult.syntax
+                        , typeAnnotation = typeAnnotationSyntax
                         }
                     )
-            }
+                )
         )
         (ParserFast.keywordFollowedBy "port" Layout.maybeLayout)
         Tokens.functionNameNode
@@ -540,9 +589,13 @@ typeOrTypeAliasDefinitionAfterDocumentation : Parser (WithComments DeclarationAf
 typeOrTypeAliasDefinitionAfterDocumentation =
     ParserFast.map2
         (\commentsAfterType declarationAfterDocumentation ->
-            { comments = commentsAfterType |> Rope.prependTo declarationAfterDocumentation.comments
-            , syntax = declarationAfterDocumentation.syntax
-            }
+            let
+                (WithComments declarationAfterDocumentationComments declarationAfterDocumentationSyntax) =
+                    declarationAfterDocumentation
+            in
+            WithComments
+                (commentsAfterType |> Rope.prependTo declarationAfterDocumentationComments)
+                declarationAfterDocumentationSyntax
         )
         (ParserFast.keywordFollowedBy "type" Layout.maybeLayout)
         (ParserFast.oneOf2
@@ -555,19 +608,26 @@ typeAliasDefinitionAfterDocumentationAfterTypePrefix : Parser (WithComments Decl
 typeAliasDefinitionAfterDocumentationAfterTypePrefix =
     ParserFast.map6
         (\commentsAfterAlias name commentsAfterName parameters commentsAfterEquals typeAnnotationResult ->
-            { comments =
-                commentsAfterAlias
+            let
+                (WithComments parametersComments parametersSyntax) =
+                    parameters
+
+                (WithComments typeAnnotationComments typeAnnotationSyntax) =
+                    typeAnnotationResult
+            in
+            WithComments
+                (commentsAfterAlias
                     |> Rope.prependTo commentsAfterName
-                    |> Rope.prependTo parameters.comments
+                    |> Rope.prependTo parametersComments
                     |> Rope.prependTo commentsAfterEquals
-                    |> Rope.prependTo typeAnnotationResult.comments
-            , syntax =
-                TypeAliasDeclarationAfterDocumentation
+                    |> Rope.prependTo typeAnnotationComments
+                )
+                (TypeAliasDeclarationAfterDocumentation
                     { name = name
-                    , parameters = parameters.syntax
-                    , typeAnnotation = typeAnnotationResult.syntax
+                    , parameters = parametersSyntax
+                    , typeAnnotation = typeAnnotationSyntax
                     }
-            }
+                )
         )
         (ParserFast.keywordFollowedBy "alias" Layout.maybeLayout)
         Tokens.typeNameNode
@@ -581,20 +641,30 @@ customTypeDefinitionAfterDocumentationAfterTypePrefix : Parser (WithComments Dec
 customTypeDefinitionAfterDocumentationAfterTypePrefix =
     ParserFast.map6
         (\name commentsAfterName parameters commentsAfterEqual headVariant tailVariantsReverse ->
-            { comments =
-                commentsAfterName
-                    |> Rope.prependTo parameters.comments
+            let
+                (WithComments parametersComments parametersSyntax) =
+                    parameters
+
+                (WithComments headVariantComments headVariantSyntax) =
+                    headVariant
+
+                (WithComments tailVariantsReverseComments tailVariantsReverseSyntax) =
+                    tailVariantsReverse
+            in
+            WithComments
+                (commentsAfterName
+                    |> Rope.prependTo parametersComments
                     |> Rope.prependTo commentsAfterEqual
-                    |> Rope.prependTo headVariant.comments
-                    |> Rope.prependTo tailVariantsReverse.comments
-            , syntax =
-                TypeDeclarationAfterDocumentation
+                    |> Rope.prependTo headVariantComments
+                    |> Rope.prependTo tailVariantsReverseComments
+                )
+                (TypeDeclarationAfterDocumentation
                     { name = name
-                    , parameters = parameters.syntax
-                    , headVariant = headVariant.syntax
-                    , tailVariantsReverse = tailVariantsReverse.syntax
+                    , parameters = parametersSyntax
+                    , headVariant = headVariantSyntax
+                    , tailVariantsReverse = tailVariantsReverseSyntax
                     }
-            }
+                )
         )
         Tokens.typeNameNode
         Layout.maybeLayout
@@ -606,11 +676,15 @@ customTypeDefinitionAfterDocumentationAfterTypePrefix =
                 (Layout.positivelyIndentedPlusFollowedBy 1
                     (ParserFast.map2
                         (\commentsBeforePipe variantResult ->
-                            { comments =
-                                commentsBeforePipe
-                                    |> Rope.prependTo variantResult.comments
-                            , syntax = variantResult.syntax
-                            }
+                            let
+                                (WithComments variantComments variantSyntax) =
+                                    variantResult
+                            in
+                            WithComments
+                                (commentsBeforePipe
+                                    |> Rope.prependTo variantComments
+                                )
+                                variantSyntax
                         )
                         Layout.maybeLayout
                         valueConstructorOptimisticLayout
@@ -625,11 +699,14 @@ typeOrTypeAliasDefinitionWithoutDocumentation =
     ParserFast.map2WithStartLocation
         (\start commentsAfterType afterStart ->
             let
+                (WithComments afterStartComments afterStartSyntax) =
+                    afterStart
+
                 allComments : Comments
                 allComments =
-                    commentsAfterType |> Rope.prependTo afterStart.comments
+                    commentsAfterType |> Rope.prependTo afterStartComments
             in
-            case afterStart.syntax of
+            case afterStartSyntax of
                 TypeDeclarationWithoutDocumentation typeDeclarationAfterDocumentation ->
                     let
                         end : Location
@@ -645,9 +722,9 @@ typeOrTypeAliasDefinitionWithoutDocumentation =
                                     in
                                     headVariantRange.end
                     in
-                    { comments = allComments
-                    , syntax =
-                        Node { start = start, end = end }
+                    WithComments
+                        allComments
+                        (Node { start = start, end = end }
                             (Declaration.CustomTypeDeclaration
                                 { documentation = Nothing
                                 , name = typeDeclarationAfterDocumentation.name
@@ -657,16 +734,16 @@ typeOrTypeAliasDefinitionWithoutDocumentation =
                                         :: List.reverse typeDeclarationAfterDocumentation.tailVariantsReverse
                                 }
                             )
-                    }
+                        )
 
                 TypeAliasDeclarationWithoutDocumentation typeAliasDeclarationAfterDocumentation ->
                     let
                         (Node typeAnnotationRange _) =
                             typeAliasDeclarationAfterDocumentation.typeAnnotation
                     in
-                    { comments = allComments
-                    , syntax =
-                        Node { start = start, end = typeAnnotationRange.end }
+                    WithComments
+                        allComments
+                        (Node { start = start, end = typeAnnotationRange.end }
                             (Declaration.AliasDeclaration
                                 { documentation = Nothing
                                 , name = typeAliasDeclarationAfterDocumentation.name
@@ -674,7 +751,7 @@ typeOrTypeAliasDefinitionWithoutDocumentation =
                                 , typeAnnotation = typeAliasDeclarationAfterDocumentation.typeAnnotation
                                 }
                             )
-                    }
+                        )
         )
         (ParserFast.keywordFollowedBy "type"
             Layout.maybeLayout
@@ -689,19 +766,26 @@ typeAliasDefinitionWithoutDocumentationAfterTypePrefix : Parser (WithComments Ty
 typeAliasDefinitionWithoutDocumentationAfterTypePrefix =
     ParserFast.map6
         (\commentsAfterAlias name commentsAfterName parameters commentsAfterEqual typeAnnotationResult ->
-            { comments =
-                commentsAfterAlias
+            let
+                (WithComments parametersComments parametersSyntax) =
+                    parameters
+
+                (WithComments typeAnnotationComments typeAnnotationSyntax) =
+                    typeAnnotationResult
+            in
+            WithComments
+                (commentsAfterAlias
                     |> Rope.prependTo commentsAfterName
-                    |> Rope.prependTo parameters.comments
+                    |> Rope.prependTo parametersComments
                     |> Rope.prependTo commentsAfterEqual
-                    |> Rope.prependTo typeAnnotationResult.comments
-            , syntax =
-                TypeAliasDeclarationWithoutDocumentation
+                    |> Rope.prependTo typeAnnotationComments
+                )
+                (TypeAliasDeclarationWithoutDocumentation
                     { name = name
-                    , parameters = parameters.syntax
-                    , typeAnnotation = typeAnnotationResult.syntax
+                    , parameters = parametersSyntax
+                    , typeAnnotation = typeAnnotationSyntax
                     }
-            }
+                )
         )
         (ParserFast.keywordFollowedBy "alias" Layout.maybeLayout)
         Tokens.typeNameNode
@@ -715,20 +799,30 @@ customTypeDefinitionWithoutDocumentationAfterTypePrefix : Parser (WithComments T
 customTypeDefinitionWithoutDocumentationAfterTypePrefix =
     ParserFast.map6
         (\name commentsAfterName parameters commentsAfterEqual headVariant tailVariantsReverse ->
-            { comments =
-                commentsAfterName
-                    |> Rope.prependTo parameters.comments
+            let
+                (WithComments parametersComments parametersSyntax) =
+                    parameters
+
+                (WithComments headVariantComments headVariantSyntax) =
+                    headVariant
+
+                (WithComments tailVariantsReverseComments tailVariantsReverseSyntax) =
+                    tailVariantsReverse
+            in
+            WithComments
+                (commentsAfterName
+                    |> Rope.prependTo parametersComments
                     |> Rope.prependTo commentsAfterEqual
-                    |> Rope.prependTo headVariant.comments
-                    |> Rope.prependTo tailVariantsReverse.comments
-            , syntax =
-                TypeDeclarationWithoutDocumentation
+                    |> Rope.prependTo headVariantComments
+                    |> Rope.prependTo tailVariantsReverseComments
+                )
+                (TypeDeclarationWithoutDocumentation
                     { name = name
-                    , parameters = parameters.syntax
-                    , headVariant = headVariant.syntax
-                    , tailVariantsReverse = tailVariantsReverse.syntax
+                    , parameters = parametersSyntax
+                    , headVariant = headVariantSyntax
+                    , tailVariantsReverse = tailVariantsReverseSyntax
                     }
-            }
+                )
         )
         Tokens.typeNameNode
         Layout.maybeLayout
@@ -740,11 +834,15 @@ customTypeDefinitionWithoutDocumentationAfterTypePrefix =
                 (Layout.positivelyIndentedPlusFollowedBy 1
                     (ParserFast.map2
                         (\commentsBeforePipe variantResult ->
-                            { comments =
-                                commentsBeforePipe
-                                    |> Rope.prependTo variantResult.comments
-                            , syntax = variantResult.syntax
-                            }
+                            let
+                                (WithComments variantComments variantSyntax) =
+                                    variantResult
+                            in
+                            WithComments
+                                (commentsBeforePipe
+                                    |> Rope.prependTo variantComments
+                                )
+                                variantSyntax
                         )
                         Layout.maybeLayout
                         valueConstructorOptimisticLayout
@@ -759,24 +857,27 @@ valueConstructorOptimisticLayout =
     ParserFast.map3
         (\((Node nameRange _) as name) commentsAfterName argumentsReverse ->
             let
+                (WithComments argumentsReverseComments argumentsReverseSyntax) =
+                    argumentsReverse
+
                 fullRange : Range
                 fullRange =
-                    case argumentsReverse.syntax of
+                    case argumentsReverseSyntax of
                         (Node lastArgRange _) :: _ ->
                             { start = nameRange.start, end = lastArgRange.end }
 
                         [] ->
                             nameRange
             in
-            { comments =
-                commentsAfterName
-                    |> Rope.prependTo argumentsReverse.comments
-            , syntax =
-                Node fullRange
+            WithComments
+                (commentsAfterName
+                    |> Rope.prependTo argumentsReverseComments
+                )
+                (Node fullRange
                     { name = name
-                    , arguments = List.reverse argumentsReverse.syntax
+                    , arguments = List.reverse argumentsReverseSyntax
                     }
-            }
+                )
         )
         Tokens.typeNameNode
         Layout.optimisticLayout
@@ -784,9 +885,13 @@ valueConstructorOptimisticLayout =
             (Layout.positivelyIndentedFollowedBy
                 (ParserFast.map2
                     (\typeAnnotationResult commentsAfter ->
-                        { comments = typeAnnotationResult.comments |> Rope.prependTo commentsAfter
-                        , syntax = typeAnnotationResult.syntax
-                        }
+                        let
+                            (WithComments typeAnnotationComments typeAnnotationSyntax) =
+                                typeAnnotationResult
+                        in
+                        WithComments
+                            (typeAnnotationComments |> Rope.prependTo commentsAfter)
+                            typeAnnotationSyntax
                     )
                     TypeAnnotation.typeAnnotationNoFnExcludingTypedWithArguments
                     Layout.optimisticLayout
@@ -800,9 +905,9 @@ typeGenericListEquals =
     ParserWithComments.until Tokens.equal
         (ParserFast.map2
             (\name commentsAfterName ->
-                { comments = commentsAfterName
-                , syntax = name
-                }
+                WithComments
+                    commentsAfterName
+                    name
             )
             Tokens.functionNameNode
             Layout.maybeLayout

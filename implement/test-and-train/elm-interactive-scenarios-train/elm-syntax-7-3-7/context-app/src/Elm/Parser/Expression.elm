@@ -1,4 +1,4 @@
-module Elm.Parser.Expression exposing (..)
+module Elm.Parser.Expression exposing (expression)
 
 import Elm.Parser.Layout as Layout
 import Elm.Parser.Patterns as Patterns
@@ -11,7 +11,7 @@ import Elm.Syntax.Pattern exposing (Pattern)
 import Elm.Syntax.Range exposing (Range)
 import Elm.Syntax.Signature exposing (Signature)
 import ParserFast exposing (Parser)
-import ParserWithComments exposing (Comments, WithComments)
+import ParserWithComments exposing (Comments, WithComments(..))
 import Rope
 
 
@@ -238,15 +238,15 @@ glslExpressionAfterOpeningSquareBracket =
     ParserFast.symbolFollowedBy "glsl|"
         (ParserFast.mapWithRange
             (\range s ->
-                { comments = Rope.empty
-                , syntax =
-                    Node
+                WithComments
+                    Rope.empty
+                    (Node
                         -- TODO for v8: don't include extra end width (from bug in elm/parser) in range
                         { start = { row = range.start.row, column = range.start.column - 6 }
                         , end = { row = range.end.row, column = range.end.column + 2 }
                         }
                         (GLSLExpression s)
-                }
+                    )
             )
             (ParserFast.loopUntil
                 (ParserFast.symbol "|]" ())
@@ -274,26 +274,39 @@ expressionAfterOpeningSquareBracket =
         glslExpressionAfterOpeningSquareBracket
         (ParserFast.map2WithRange
             (\range commentsBefore elements ->
-                { comments = commentsBefore |> Rope.prependTo elements.comments
-                , syntax =
-                    Node
+                let
+                    (WithComments elementsComments elementsSyntax) =
+                        elements
+                in
+                WithComments
+                    (commentsBefore |> Rope.prependTo elementsComments)
+                    (Node
                         { start = { row = range.start.row, column = range.start.column - 1 }
                         , end = range.end
                         }
-                        elements.syntax
-                }
+                        elementsSyntax
+                    )
             )
             Layout.maybeLayout
             (ParserFast.oneOf2
-                (ParserFast.symbol "]" { comments = Rope.empty, syntax = ListExpr [] })
+                (ParserFast.symbol "]"
+                    (WithComments Rope.empty (ListExpr []))
+                )
                 (ParserFast.map3
                     (\head commentsAfterHead tail ->
-                        { comments =
-                            head.comments
+                        let
+                            (WithComments headComments headSyntax) =
+                                head
+
+                            (WithComments tailComments tailSyntax) =
+                                tail
+                        in
+                        WithComments
+                            (headComments
                                 |> Rope.prependTo commentsAfterHead
-                                |> Rope.prependTo tail.comments
-                        , syntax = ListExpr (head.syntax :: tail.syntax)
-                        }
+                                |> Rope.prependTo tailComments
+                            )
+                            (ListExpr (headSyntax :: tailSyntax))
                     )
                     expression
                     Layout.maybeLayout
@@ -317,29 +330,37 @@ recordExpressionFollowedByRecordAccess =
     ParserFast.symbolFollowedBy "{"
         (ParserFast.map2
             (\leftestResult recordAccesses ->
+                let
+                    (WithComments leftestComments leftestSyntax) =
+                        leftestResult
+                in
                 case recordAccesses of
                     [] ->
                         leftestResult
 
                     _ :: _ ->
-                        { comments = leftestResult.comments
-                        , syntax =
-                            recordAccesses
+                        WithComments
+                            leftestComments
+                            (recordAccesses
                                 |> List.foldl
                                     (\((Node fieldRange _) as fieldNode) ((Node leftRange _) as leftNode) ->
                                         Node { start = leftRange.start, end = fieldRange.end }
                                             (Expression.RecordAccess leftNode fieldNode)
                                     )
-                                    leftestResult.syntax
-                        }
+                                    leftestSyntax
+                            )
             )
             (ParserFast.map2WithRange
                 (\range commentsBefore afterCurly ->
-                    { comments =
-                        commentsBefore
-                            |> Rope.prependTo afterCurly.comments
-                    , syntax = Node (rangeMoveStartLeftByOneColumn range) afterCurly.syntax
-                    }
+                    let
+                        (WithComments afterCurlyComments afterCurlySyntax) =
+                            afterCurly
+                    in
+                    WithComments
+                        (commentsBefore
+                            |> Rope.prependTo afterCurlyComments
+                        )
+                        (Node (rangeMoveStartLeftByOneColumn range) afterCurlySyntax)
                 )
                 Layout.maybeLayout
                 recordContentsCurlyEnd
@@ -353,19 +374,26 @@ recordContentsCurlyEnd =
     ParserFast.oneOf2
         (ParserFast.map5
             (\nameNode commentsAfterFunctionName afterNameBeforeFields tailFields commentsBeforeClosingCurly ->
-                { comments =
-                    commentsAfterFunctionName
-                        |> Rope.prependTo afterNameBeforeFields.comments
-                        |> Rope.prependTo tailFields.comments
+                let
+                    (WithComments afterNameBeforeFieldsComments afterNameBeforeFieldsSyntax) =
+                        afterNameBeforeFields
+
+                    (WithComments tailFieldsComments tailFieldsSyntax) =
+                        tailFields
+                in
+                WithComments
+                    (commentsAfterFunctionName
+                        |> Rope.prependTo afterNameBeforeFieldsComments
+                        |> Rope.prependTo tailFieldsComments
                         |> Rope.prependTo commentsBeforeClosingCurly
-                , syntax =
-                    case afterNameBeforeFields.syntax of
+                    )
+                    (case afterNameBeforeFieldsSyntax of
                         RecordUpdateFirstSetter firstField ->
-                            RecordUpdateExpression nameNode (firstField :: tailFields.syntax)
+                            RecordUpdateExpression nameNode (firstField :: tailFieldsSyntax)
 
                         FieldsFirstValue firstFieldValue ->
-                            RecordExpr (Node.combine Tuple.pair nameNode firstFieldValue :: tailFields.syntax)
-                }
+                            RecordExpr (Node.combine Tuple.pair nameNode firstFieldValue :: tailFieldsSyntax)
+                    )
             )
             Tokens.functionNameNode
             Layout.maybeLayout
@@ -373,9 +401,13 @@ recordContentsCurlyEnd =
                 (ParserFast.symbolFollowedBy "|"
                     (ParserFast.map2
                         (\commentsBefore setterResult ->
-                            { comments = commentsBefore |> Rope.prependTo setterResult.comments
-                            , syntax = RecordUpdateFirstSetter setterResult.syntax
-                            }
+                            let
+                                (WithComments setterComments setterSyntax) =
+                                    setterResult
+                            in
+                            WithComments
+                                (commentsBefore |> Rope.prependTo setterComments)
+                                (RecordUpdateFirstSetter setterSyntax)
                         )
                         Layout.maybeLayout
                         recordSetterNodeWithLayout
@@ -384,12 +416,16 @@ recordContentsCurlyEnd =
                 (ParserFast.symbolFollowedBy "="
                     (ParserFast.map3
                         (\commentsBefore expressionResult commentsAfter ->
-                            { comments =
-                                commentsBefore
-                                    |> Rope.prependTo expressionResult.comments
+                            let
+                                (WithComments expressionComments expressionSyntax) =
+                                    expressionResult
+                            in
+                            WithComments
+                                (commentsBefore
+                                    |> Rope.prependTo expressionComments
                                     |> Rope.prependTo commentsAfter
-                            , syntax = FieldsFirstValue expressionResult.syntax
-                            }
+                                )
+                                (FieldsFirstValue expressionSyntax)
                         )
                         Layout.maybeLayout
                         expression
@@ -400,7 +436,9 @@ recordContentsCurlyEnd =
             recordFields
             (Layout.maybeLayout |> ParserFast.followedBySymbol "}")
         )
-        (ParserFast.symbol "}" { comments = Rope.empty, syntax = RecordExpr [] })
+        (ParserFast.symbol "}"
+            (WithComments Rope.empty (RecordExpr []))
+        )
 
 
 type RecordFieldsOrUpdateAfterName
@@ -414,9 +452,13 @@ recordFields =
         (ParserFast.symbolFollowedBy ","
             (ParserFast.map2
                 (\commentsBefore setterResult ->
-                    { comments = commentsBefore |> Rope.prependTo setterResult.comments
-                    , syntax = setterResult.syntax
-                    }
+                    let
+                        (WithComments setterComments setterSyntax) =
+                            setterResult
+                    in
+                    WithComments
+                        (commentsBefore |> Rope.prependTo setterComments)
+                        setterSyntax
                 )
                 Layout.maybeLayout
                 recordSetterNodeWithLayout
@@ -428,13 +470,17 @@ recordSetterNodeWithLayout : Parser (WithComments (Node RecordSetter))
 recordSetterNodeWithLayout =
     ParserFast.map5WithRange
         (\range name commentsAfterFunctionName commentsAfterEquals expressionResult commentsAfterExpression ->
-            { comments =
-                commentsAfterFunctionName
+            let
+                (WithComments expressionResultComments expressionResultSyntax) =
+                    expressionResult
+            in
+            WithComments
+                (commentsAfterFunctionName
                     |> Rope.prependTo commentsAfterEquals
-                    |> Rope.prependTo expressionResult.comments
+                    |> Rope.prependTo expressionResultComments
                     |> Rope.prependTo commentsAfterExpression
-            , syntax = Node range ( name, expressionResult.syntax )
-            }
+                )
+                (Node range ( name, expressionResultSyntax ))
         )
         Tokens.functionNameNode
         Layout.maybeLayout
@@ -449,9 +495,9 @@ literalExpression : Parser (WithComments (Node Expression))
 literalExpression =
     Tokens.singleOrTripleQuotedStringLiteralMapWithRange
         (\range string ->
-            { comments = Rope.empty
-            , syntax = Node range (Literal string)
-            }
+            WithComments
+                Rope.empty
+                (Node range (Literal string))
         )
 
 
@@ -459,9 +505,9 @@ charLiteralExpression : Parser (WithComments (Node Expression))
 charLiteralExpression =
     Tokens.characterLiteralMapWithRange
         (\range char ->
-            { comments = Rope.empty
-            , syntax = Node range (CharLiteral char)
-            }
+            WithComments
+                Rope.empty
+                (Node range (CharLiteral char))
         )
 
 
@@ -475,27 +521,36 @@ lambdaExpression =
         (ParserFast.map6WithStartLocation
             (\start commentsAfterBackslash firstArg commentsAfterFirstArg secondUpArgs commentsAfterArrow expressionResult ->
                 let
+                    (WithComments firstArgComments firstArgSyntax) =
+                        firstArg
+
+                    (WithComments secondUpArgsComments secondUpArgsSyntax) =
+                        secondUpArgs
+
+                    (WithComments expressionResultComments expressionResultSyntax) =
+                        expressionResult
+
                     (Node expressionRange _) =
-                        expressionResult.syntax
+                        expressionResultSyntax
                 in
-                { comments =
-                    commentsAfterBackslash
-                        |> Rope.prependTo firstArg.comments
+                WithComments
+                    (commentsAfterBackslash
+                        |> Rope.prependTo firstArgComments
                         |> Rope.prependTo commentsAfterFirstArg
-                        |> Rope.prependTo secondUpArgs.comments
+                        |> Rope.prependTo secondUpArgsComments
                         |> Rope.prependTo commentsAfterArrow
-                        |> Rope.prependTo expressionResult.comments
-                , syntax =
-                    Node
+                        |> Rope.prependTo expressionResultComments
+                    )
+                    (Node
                         { start = { row = start.row, column = start.column - 1 }
                         , end = expressionRange.end
                         }
                         (LambdaExpression
-                            { args = firstArg.syntax :: secondUpArgs.syntax
-                            , expression = expressionResult.syntax
+                            { args = firstArgSyntax :: secondUpArgsSyntax
+                            , expression = expressionResultSyntax
                             }
                         )
-                }
+                    )
             )
             Layout.maybeLayout
             Patterns.patternNotDirectlyComposing
@@ -504,11 +559,15 @@ lambdaExpression =
                 (ParserFast.symbol "->" ())
                 (ParserFast.map2
                     (\patternResult commentsAfter ->
-                        { comments =
-                            patternResult.comments
+                        let
+                            (WithComments patternComments patternSyntax) =
+                                patternResult
+                        in
+                        WithComments
+                            (patternComments
                                 |> Rope.prependTo commentsAfter
-                        , syntax = patternResult.syntax
-                        }
+                            )
+                            patternSyntax
                     )
                     Patterns.patternNotDirectlyComposing
                     Layout.maybeLayout
@@ -529,17 +588,23 @@ caseExpression =
         (ParserFast.map5WithStartLocation
             (\start commentsAfterCase casedExpressionResult commentsBeforeOf commentsAfterOf casesResult ->
                 let
+                    (WithComments casedExpressionResultComments casedExpressionResultSyntax) =
+                        casedExpressionResult
+
+                    (WithComments casesComments casesSyntax) =
+                        casesResult
+
                     ( firstCase, lastToSecondCase ) =
-                        casesResult.syntax
+                        casesSyntax
                 in
-                { comments =
-                    commentsAfterCase
-                        |> Rope.prependTo casedExpressionResult.comments
+                WithComments
+                    (commentsAfterCase
+                        |> Rope.prependTo casedExpressionResultComments
                         |> Rope.prependTo commentsBeforeOf
                         |> Rope.prependTo commentsAfterOf
-                        |> Rope.prependTo casesResult.comments
-                , syntax =
-                    Node
+                        |> Rope.prependTo casesComments
+                    )
+                    (Node
                         { start = { row = start.row, column = start.column - 4 }
                         , end =
                             case lastToSecondCase of
@@ -554,11 +619,11 @@ caseExpression =
                                     firstCaseExpressionRange.end
                         }
                         (CaseExpression
-                            { expression = casedExpressionResult.syntax
+                            { expression = casedExpressionResultSyntax
                             , cases = firstCase :: List.reverse lastToSecondCase
                             }
                         )
-                }
+                    )
             )
             Layout.maybeLayout
             expression
@@ -572,17 +637,26 @@ caseStatements : Parser (WithComments ( Case, List Case ))
 caseStatements =
     ParserFast.map5
         (\firstCasePatternResult commentsAfterFirstCasePattern commentsAfterFirstCaseArrowRight firstCaseExpressionResult lastToSecondCase ->
-            { comments =
-                firstCasePatternResult.comments
+            let
+                (WithComments firstCasePatternResultComments firstCasePatternResultSyntax) =
+                    firstCasePatternResult
+
+                (WithComments firstCaseExpressionResultComments firstCaseExpressionResultSyntax) =
+                    firstCaseExpressionResult
+
+                (WithComments lastToSecondCaseComments lastToSecondCaseSyntax) =
+                    lastToSecondCase
+            in
+            WithComments
+                (firstCasePatternResultComments
                     |> Rope.prependTo commentsAfterFirstCasePattern
                     |> Rope.prependTo commentsAfterFirstCaseArrowRight
-                    |> Rope.prependTo firstCaseExpressionResult.comments
-                    |> Rope.prependTo lastToSecondCase.comments
-            , syntax =
-                ( ( firstCasePatternResult.syntax, firstCaseExpressionResult.syntax )
-                , lastToSecondCase.syntax
+                    |> Rope.prependTo firstCaseExpressionResultComments
+                    |> Rope.prependTo lastToSecondCaseComments
                 )
-            }
+                ( ( firstCasePatternResultSyntax, firstCaseExpressionResultSyntax )
+                , lastToSecondCaseSyntax
+                )
         )
         Patterns.pattern
         Layout.maybeLayout
@@ -596,13 +670,20 @@ caseStatement =
     Layout.onTopIndentationFollowedBy
         (ParserFast.map4
             (\pattern commentsBeforeArrowRight commentsAfterArrowRight expr ->
-                { comments =
-                    pattern.comments
+                let
+                    (WithComments exprComments exprSyntax) =
+                        expr
+
+                    (WithComments patternComments patternSyntax) =
+                        pattern
+                in
+                WithComments
+                    (patternComments
                         |> Rope.prependTo commentsBeforeArrowRight
                         |> Rope.prependTo commentsAfterArrowRight
-                        |> Rope.prependTo expr.comments
-                , syntax = ( pattern.syntax, expr.syntax )
-                }
+                        |> Rope.prependTo exprComments
+                    )
+                    ( patternSyntax, exprSyntax )
             )
             Patterns.pattern
             Layout.maybeLayout
@@ -621,32 +702,39 @@ letExpression =
         (ParserFast.map3WithStartLocation
             (\start declarations commentsAfterIn expressionResult ->
                 let
+                    (WithComments expressionComments expressionSyntax) =
+                        expressionResult
+
                     (Node expressionRange _) =
-                        expressionResult.syntax
+                        expressionSyntax
                 in
-                { comments =
-                    declarations.comments
+                WithComments
+                    (declarations.comments
                         |> Rope.prependTo commentsAfterIn
-                        |> Rope.prependTo expressionResult.comments
-                , syntax =
-                    Node
+                        |> Rope.prependTo expressionComments
+                    )
+                    (Node
                         { start = { row = start.row, column = start.column - 3 }
                         , end = expressionRange.end
                         }
                         (LetExpression
                             { declarations = declarations.declarations
-                            , expression = expressionResult.syntax
+                            , expression = expressionSyntax
                             }
                         )
-                }
+                    )
             )
             (ParserFast.withIndentSetToColumnMinus 3
                 (ParserFast.map2
                     (\commentsAfterLet declarations ->
+                        let
+                            (WithComments declarationsComments declarationsSyntax) =
+                                declarations
+                        in
                         { comments =
                             commentsAfterLet
-                                |> Rope.prependTo declarations.comments
-                        , declarations = declarations.syntax
+                                |> Rope.prependTo declarationsComments
+                        , declarations = declarationsSyntax
                         }
                     )
                     Layout.maybeLayout
@@ -666,12 +754,19 @@ letDeclarationsIn =
     Layout.onTopIndentationFollowedBy
         (ParserFast.map3
             (\headLetResult commentsAfter tailLetResult ->
-                { comments =
-                    headLetResult.comments
+                let
+                    (WithComments headLetComments headLetSyntax) =
+                        headLetResult
+
+                    (WithComments tailLetComments tailLetSyntax) =
+                        tailLetResult
+                in
+                WithComments
+                    (headLetComments
                         |> Rope.prependTo commentsAfter
-                        |> Rope.prependTo tailLetResult.comments
-                , syntax = headLetResult.syntax :: tailLetResult.syntax
-                }
+                        |> Rope.prependTo tailLetComments
+                    )
+                    (headLetSyntax :: tailLetSyntax)
             )
             (ParserFast.oneOf2
                 letFunction
@@ -687,9 +782,13 @@ blockElement =
     Layout.onTopIndentationFollowedBy
         (ParserFast.map2
             (\letDeclarationResult commentsAfter ->
-                { comments = letDeclarationResult.comments |> Rope.prependTo commentsAfter
-                , syntax = letDeclarationResult.syntax
-                }
+                let
+                    (WithComments letDeclarationComments letDeclarationSyntax) =
+                        letDeclarationResult
+                in
+                WithComments
+                    (letDeclarationComments |> Rope.prependTo commentsAfter)
+                    letDeclarationSyntax
             )
             (ParserFast.oneOf2
                 letFunction
@@ -704,21 +803,27 @@ letDestructuringDeclaration =
     ParserFast.map4
         (\pattern commentsAfterPattern commentsAfterEquals expressionResult ->
             let
+                (WithComments patternComments patternSyntax) =
+                    pattern
+
+                (WithComments expressionComments expressionSyntax) =
+                    expressionResult
+
                 (Node { start } _) =
-                    pattern.syntax
+                    patternSyntax
 
                 (Node { end } _) =
-                    expressionResult.syntax
+                    expressionSyntax
             in
-            { comments =
-                pattern.comments
+            WithComments
+                (patternComments
                     |> Rope.prependTo commentsAfterPattern
                     |> Rope.prependTo commentsAfterEquals
-                    |> Rope.prependTo expressionResult.comments
-            , syntax =
-                Node { start = start, end = end }
-                    (LetDestructuring pattern.syntax expressionResult.syntax)
-            }
+                    |> Rope.prependTo expressionComments
+                )
+                (Node { start = start, end = end }
+                    (LetDestructuring patternSyntax expressionSyntax)
+                )
         )
         Patterns.patternNotDirectlyComposing
         Layout.maybeLayout
@@ -731,6 +836,12 @@ letFunction =
     ParserFast.map6WithStartLocation
         (\startNameStart startNameNode commentsAfterStartName maybeSignature arguments commentsAfterEqual expressionResult ->
             let
+                (WithComments argumentsComments argumentsSyntax) =
+                    arguments
+
+                (WithComments expressionComments expressionSyntax) =
+                    expressionResult
+
                 allComments : Comments
                 allComments =
                     (case maybeSignature of
@@ -740,31 +851,31 @@ letFunction =
                         Just signature ->
                             commentsAfterStartName |> Rope.prependTo signature.comments
                     )
-                        |> Rope.prependTo arguments.comments
+                        |> Rope.prependTo argumentsComments
                         |> Rope.prependTo commentsAfterEqual
-                        |> Rope.prependTo expressionResult.comments
+                        |> Rope.prependTo expressionComments
             in
             case maybeSignature of
                 Nothing ->
                     let
                         (Node expressionRange _) =
-                            expressionResult.syntax
+                            expressionSyntax
                     in
-                    { comments = allComments
-                    , syntax =
-                        Node { start = startNameStart, end = expressionRange.end }
+                    WithComments
+                        allComments
+                        (Node { start = startNameStart, end = expressionRange.end }
                             (LetFunction
                                 { documentation = Nothing
                                 , signature = Nothing
                                 , declaration =
                                     Node { start = startNameStart, end = expressionRange.end }
                                         { name = startNameNode
-                                        , arguments = arguments.syntax
-                                        , expression = expressionResult.syntax
+                                        , arguments = argumentsSyntax
+                                        , expression = expressionSyntax
                                         }
                                 }
                             )
-                    }
+                        )
 
                 Just signature ->
                     let
@@ -772,36 +883,43 @@ letFunction =
                             signature.implementationName
 
                         (Node expressionRange _) =
-                            expressionResult.syntax
+                            expressionSyntax
                     in
-                    { comments = allComments
-                    , syntax =
-                        Node { start = startNameStart, end = expressionRange.end }
+                    WithComments
+                        allComments
+                        (Node { start = startNameStart, end = expressionRange.end }
                             (LetFunction
                                 { documentation = Nothing
                                 , signature = Just (Node.combine Signature startNameNode signature.typeAnnotation)
                                 , declaration =
                                     Node { start = implementationNameRange.start, end = expressionRange.end }
                                         { name = signature.implementationName
-                                        , arguments = arguments.syntax
-                                        , expression = expressionResult.syntax
+                                        , arguments = argumentsSyntax
+                                        , expression = expressionSyntax
                                         }
                                 }
                             )
-                    }
+                        )
         )
         Tokens.functionNameNode
         Layout.maybeLayout
         (ParserFast.map4OrSucceed
             (\commentsBeforeTypeAnnotation typeAnnotationResult implementationName afterImplementationName ->
+                let
+                    (WithComments typeAnnotationComments typeAnnotationSyntax) =
+                        typeAnnotationResult
+
+                    (WithComments implementationNameComments implementationNameSyntax) =
+                        implementationName
+                in
                 Just
                     { comments =
                         commentsBeforeTypeAnnotation
-                            |> Rope.prependTo typeAnnotationResult.comments
-                            |> Rope.prependTo implementationName.comments
+                            |> Rope.prependTo typeAnnotationComments
+                            |> Rope.prependTo implementationNameComments
                             |> Rope.prependTo afterImplementationName
-                    , implementationName = implementationName.syntax
-                    , typeAnnotation = typeAnnotationResult.syntax
+                    , implementationName = implementationNameSyntax
+                    , typeAnnotation = typeAnnotationSyntax
                     }
             )
             (ParserFast.symbolFollowedBy ":" Layout.maybeLayout)
@@ -818,8 +936,11 @@ letFunction =
         |> ParserFast.validate
             (\result ->
                 let
+                    (WithComments resultComments resultSyntax) =
+                        result
+
                     (Node _ letDeclaration) =
-                        result.syntax
+                        resultSyntax
                 in
                 case letDeclaration of
                     LetDestructuring _ _ ->
@@ -851,9 +972,13 @@ parameterPatternsEqual =
     ParserWithComments.until Tokens.equal
         (ParserFast.map2
             (\patternResult commentsAfterPattern ->
-                { comments = patternResult.comments |> Rope.prependTo commentsAfterPattern
-                , syntax = patternResult.syntax
-                }
+                let
+                    (WithComments patternComments patternSyntax) =
+                        patternResult
+                in
+                WithComments
+                    (patternComments |> Rope.prependTo commentsAfterPattern)
+                    patternSyntax
             )
             Patterns.patternNotDirectlyComposing
             Layout.maybeLayout
@@ -864,19 +989,19 @@ numberExpression : Parser (WithComments (Node Expression))
 numberExpression =
     ParserFast.floatOrIntegerDecimalOrHexadecimalMapWithRange
         (\range n ->
-            { comments = Rope.empty
-            , syntax = Node range (Floatable n)
-            }
+            WithComments
+                Rope.empty
+                (Node range (Floatable n))
         )
         (\range n ->
-            { comments = Rope.empty
-            , syntax = Node range (Integer n)
-            }
+            WithComments
+                Rope.empty
+                (Node range (Integer n))
         )
         (\range n ->
-            { comments = Rope.empty
-            , syntax = Node range (Hex n)
-            }
+            WithComments
+                Rope.empty
+                (Node range (Hex n))
         )
 
 
@@ -886,29 +1011,38 @@ ifBlockExpression =
         (ParserFast.map8WithStartLocation
             (\start commentsAfterIf condition commentsBeforeThen commentsAfterThen ifTrue commentsBeforeElse commentsAfterElse ifFalse ->
                 let
+                    (WithComments conditionComments conditionSyntax) =
+                        condition
+
+                    (WithComments ifTrueComments ifTrueSyntax) =
+                        ifTrue
+
+                    (WithComments ifFalseComments ifFalseSyntax) =
+                        ifFalse
+
                     (Node ifFalseRange _) =
-                        ifFalse.syntax
+                        ifFalseSyntax
                 in
-                { comments =
-                    commentsAfterIf
-                        |> Rope.prependTo condition.comments
+                WithComments
+                    (commentsAfterIf
+                        |> Rope.prependTo conditionComments
                         |> Rope.prependTo commentsBeforeThen
                         |> Rope.prependTo commentsAfterThen
-                        |> Rope.prependTo ifTrue.comments
+                        |> Rope.prependTo ifTrueComments
                         |> Rope.prependTo commentsBeforeElse
                         |> Rope.prependTo commentsAfterElse
-                        |> Rope.prependTo ifFalse.comments
-                , syntax =
-                    Node
+                        |> Rope.prependTo ifFalseComments
+                    )
+                    (Node
                         { start = { row = start.row, column = start.column - 2 }
                         , end = ifFalseRange.end
                         }
                         (IfBlock
-                            condition.syntax
-                            ifTrue.syntax
-                            ifFalse.syntax
+                            conditionSyntax
+                            ifTrueSyntax
+                            ifFalseSyntax
                         )
-                }
+                    )
             )
             Layout.maybeLayout
             expression
@@ -961,20 +1095,23 @@ negationAfterMinus =
     ParserFast.map
         (\subExpressionResult ->
             let
+                (WithComments subExpressionResultComments subExpressionResultSyntax) =
+                    subExpressionResult
+
                 (Node subExpressionRange _) =
-                    subExpressionResult.syntax
+                    subExpressionResultSyntax
             in
-            { comments = subExpressionResult.comments
-            , syntax =
-                Node
+            WithComments
+                subExpressionResultComments
+                (Node
                     { start =
                         { row = subExpressionRange.start.row
                         , column = subExpressionRange.start.column - 1
                         }
                     , end = subExpressionRange.end
                     }
-                    (Negation subExpressionResult.syntax)
-            }
+                    (Negation subExpressionResultSyntax)
+                )
         )
         (ParserFast.lazy (\() -> subExpression))
 
@@ -983,9 +1120,9 @@ qualifiedOrVariantOrRecordConstructorReferenceExpressionFollowedByRecordAccess :
 qualifiedOrVariantOrRecordConstructorReferenceExpressionFollowedByRecordAccess =
     ParserFast.map2WithRange
         (\range firstName after ->
-            { comments = Rope.empty
-            , syntax =
-                case after of
+            WithComments
+                Rope.empty
+                (case after of
                     Nothing ->
                         Node range (FunctionOrValue [] firstName)
 
@@ -1014,7 +1151,7 @@ qualifiedOrVariantOrRecordConstructorReferenceExpressionFollowedByRecordAccess =
                                                 (Expression.RecordAccess leftNode fieldNode)
                                         )
                                         referenceNode
-            }
+                )
         )
         Tokens.typeName
         maybeDotReferenceExpressionTuple
@@ -1055,28 +1192,31 @@ unqualifiedFunctionReferenceExpressionFollowedByRecordAccess : Parser (WithComme
 unqualifiedFunctionReferenceExpressionFollowedByRecordAccess =
     ParserFast.map2
         (\leftestResult recordAccesses ->
+            let
+                (WithComments leftestComments leftestSyntax) =
+                    leftestResult
+            in
             case recordAccesses of
                 [] ->
                     leftestResult
 
                 _ :: _ ->
-                    { comments = leftestResult.comments
-                    , syntax =
-                        recordAccesses
+                    WithComments
+                        leftestComments
+                        (recordAccesses
                             |> List.foldl
                                 (\((Node fieldRange _) as fieldNode) ((Node leftRange _) as leftNode) ->
                                     Node { start = leftRange.start, end = fieldRange.end }
                                         (Expression.RecordAccess leftNode fieldNode)
                                 )
-                                leftestResult.syntax
-                    }
+                                leftestSyntax
+                        )
         )
         (Tokens.functionNameMapWithRange
             (\range unqualified ->
-                { comments = Rope.empty
-                , syntax =
-                    Node range (FunctionOrValue [] unqualified)
-                }
+                WithComments
+                    Rope.empty
+                    (Node range (FunctionOrValue [] unqualified))
             )
         )
         multiRecordAccess
@@ -1087,11 +1227,11 @@ recordAccessFunctionExpression =
     ParserFast.symbolFollowedBy "."
         (Tokens.functionNameMapWithRange
             (\range field ->
-                { comments = Rope.empty
-                , syntax =
-                    Node (range |> rangeMoveStartLeftByOneColumn)
+                WithComments
+                    Rope.empty
+                    (Node (range |> rangeMoveStartLeftByOneColumn)
                         (RecordAccessFunction ("." ++ field))
-                }
+                    )
             )
         )
 
@@ -1109,11 +1249,11 @@ tupledExpressionIfNecessaryFollowedByRecordAccess =
         (ParserFast.oneOf3
             (ParserFast.symbolWithEndLocation ")"
                 (\end ->
-                    { comments = Rope.empty
-                    , syntax =
-                        Node { start = { row = end.row, column = end.column - 2 }, end = end }
+                    WithComments
+                        Rope.empty
+                        (Node { start = { row = end.row, column = end.column - 2 }, end = end }
                             UnitExpr
-                    }
+                        )
                 )
             )
             allowedPrefixOperatorFollowedByClosingParensOneOf
@@ -1125,14 +1265,14 @@ allowedPrefixOperatorFollowedByClosingParensOneOf : Parser (WithComments (Node E
 allowedPrefixOperatorFollowedByClosingParensOneOf =
     ParserFast.whileWithoutLinebreakAnd2PartUtf16ValidateMapWithRangeBacktrackableFollowedBySymbol
         (\operatorRange operator ->
-            { comments = Rope.empty
-            , syntax =
-                Node
+            WithComments
+                Rope.empty
+                (Node
                     { start = { row = operatorRange.start.row, column = operatorRange.start.column - 1 }
                     , end = { row = operatorRange.end.row, column = operatorRange.end.column + 1 }
                     }
                     (PrefixOperator operator)
-            }
+                )
         )
         Tokens.isOperatorSymbolChar
         Tokens.isAllowedOperatorToken
@@ -1143,21 +1283,31 @@ tupledExpressionInnerAfterOpeningParens : Parser (WithComments (Node Expression)
 tupledExpressionInnerAfterOpeningParens =
     ParserFast.map4WithRange
         (\rangeAfterOpeningParens commentsBeforeFirstPart firstPart commentsAfterFirstPart tailParts ->
-            { comments =
-                commentsBeforeFirstPart
-                    |> Rope.prependTo firstPart.comments
+            let
+                (WithComments firstPartComments firstPartSyntax) =
+                    firstPart
+
+                (WithComments tailPartsComments tailPartsSyntax) =
+                    tailParts
+            in
+            WithComments
+                (commentsBeforeFirstPart
+                    |> Rope.prependTo firstPartComments
                     |> Rope.prependTo commentsAfterFirstPart
-                    |> Rope.prependTo tailParts.comments
-            , syntax =
-                case tailParts.syntax of
+                    |> Rope.prependTo tailPartsComments
+                )
+                (case tailPartsSyntax of
                     TupledParenthesizedFollowedByRecordAccesses recordAccesses ->
                         case recordAccesses of
                             [] ->
                                 Node
-                                    { start = { row = rangeAfterOpeningParens.start.row, column = rangeAfterOpeningParens.start.column - 1 }
+                                    { start =
+                                        { row = rangeAfterOpeningParens.start.row
+                                        , column = rangeAfterOpeningParens.start.column - 1
+                                        }
                                     , end = rangeAfterOpeningParens.end
                                     }
-                                    (ParenthesizedExpression firstPart.syntax)
+                                    (ParenthesizedExpression firstPartSyntax)
 
                             (Node firstRecordAccessRange _) :: _ ->
                                 let
@@ -1172,7 +1322,7 @@ tupledExpressionInnerAfterOpeningParens =
 
                                     parenthesizedNode : Node Expression
                                     parenthesizedNode =
-                                        Node range (ParenthesizedExpression firstPart.syntax)
+                                        Node range (ParenthesizedExpression firstPartSyntax)
                                 in
                                 recordAccesses
                                     |> List.foldl
@@ -1189,12 +1339,12 @@ tupledExpressionInnerAfterOpeningParens =
                             }
                             (case maybeThirdPart of
                                 Nothing ->
-                                    TupledExpression [ firstPart.syntax, secondPart ]
+                                    TupledExpression [ firstPartSyntax, secondPart ]
 
                                 Just thirdPart ->
-                                    TupledExpression [ firstPart.syntax, secondPart, thirdPart ]
+                                    TupledExpression [ firstPartSyntax, secondPart, thirdPart ]
                             )
-            }
+                )
         )
         Layout.maybeLayout
         expression
@@ -1202,34 +1352,51 @@ tupledExpressionInnerAfterOpeningParens =
         (ParserFast.oneOf2
             (ParserFast.symbolFollowedBy ")"
                 (multiRecordAccessMap
-                    (\recordAccesses -> { comments = Rope.empty, syntax = TupledParenthesizedFollowedByRecordAccesses recordAccesses })
+                    (\recordAccesses ->
+                        WithComments
+                            Rope.empty
+                            (TupledParenthesizedFollowedByRecordAccesses recordAccesses)
+                    )
                 )
             )
             (ParserFast.symbolFollowedBy ","
                 (ParserFast.map4
                     (\commentsBefore partResult commentsAfter maybeThirdPart ->
-                        { comments =
-                            commentsBefore
-                                |> Rope.prependTo partResult.comments
+                        let
+                            (WithComments partComments partSyntax) =
+                                partResult
+
+                            (WithComments maybeThirdPartComments maybeThirdPartSyntax) =
+                                maybeThirdPart
+                        in
+                        WithComments
+                            (commentsBefore
+                                |> Rope.prependTo partComments
                                 |> Rope.prependTo commentsAfter
-                                |> Rope.prependTo maybeThirdPart.comments
-                        , syntax = TupledTwoOrThree ( partResult.syntax, maybeThirdPart.syntax )
-                        }
+                                |> Rope.prependTo maybeThirdPartComments
+                            )
+                            (TupledTwoOrThree ( partSyntax, maybeThirdPartSyntax ))
                     )
                     Layout.maybeLayout
                     expression
                     Layout.maybeLayout
                     (ParserFast.oneOf2
-                        (ParserFast.symbol ")" { comments = Rope.empty, syntax = Nothing })
+                        (ParserFast.symbol ")"
+                            (WithComments Rope.empty Nothing)
+                        )
                         (ParserFast.symbolFollowedBy ","
                             (ParserFast.map3
                                 (\commentsBefore partResult commentsAfter ->
-                                    { comments =
-                                        commentsBefore
-                                            |> Rope.prependTo partResult.comments
+                                    let
+                                        (WithComments partComments partSyntax) =
+                                            partResult
+                                    in
+                                    WithComments
+                                        (commentsBefore
+                                            |> Rope.prependTo partComments
                                             |> Rope.prependTo commentsAfter
-                                    , syntax = Just partResult.syntax
-                                    }
+                                        )
+                                        (Just partSyntax)
                                 )
                                 Layout.maybeLayout
                                 expression
@@ -1263,13 +1430,20 @@ extendedSubExpressionOptimisticLayout toResult afterCommitting =
         )
         subExpressionMaybeAppliedOptimisticLayout
         (\extensionRightResult leftNodeWithComments ->
-            { comments =
-                leftNodeWithComments.comments
-                    |> Rope.prependTo extensionRightResult.comments
-            , syntax =
-                leftNodeWithComments.syntax
-                    |> applyExtensionRight extensionRightResult.syntax
-            }
+            let
+                (WithComments leftNodeComments leftNodeSyntax) =
+                    leftNodeWithComments
+
+                (WithComments extensionRightComments extensionRightSyntax) =
+                    extensionRightResult
+            in
+            WithComments
+                (leftNodeComments
+                    |> Rope.prependTo extensionRightComments
+                )
+                (leftNodeSyntax
+                    |> applyExtensionRight extensionRightSyntax
+                )
         )
         Basics.identity
 
@@ -1362,34 +1536,45 @@ subExpressionMaybeAppliedOptimisticLayout : Parser (WithComments (Node Expressio
 subExpressionMaybeAppliedOptimisticLayout =
     ParserFast.map3
         (\leftExpressionResult commentsBeforeExtension maybeArgsReverse ->
-            { comments =
-                leftExpressionResult.comments
+            let
+                (WithComments leftExpressionComments leftExpressionSyntax) =
+                    leftExpressionResult
+
+                (WithComments maybeArgsReverseComments maybeArgsReverseSyntax) =
+                    maybeArgsReverse
+            in
+            WithComments
+                (leftExpressionComments
                     |> Rope.prependTo commentsBeforeExtension
-                    |> Rope.prependTo maybeArgsReverse.comments
-            , syntax =
-                case maybeArgsReverse.syntax of
+                    |> Rope.prependTo maybeArgsReverseComments
+                )
+                (case maybeArgsReverseSyntax of
                     [] ->
-                        leftExpressionResult.syntax
+                        leftExpressionSyntax
 
                     ((Node lastArgRange _) :: _) as argsReverse ->
                         let
                             ((Node leftRange _) as leftNode) =
-                                leftExpressionResult.syntax
+                                leftExpressionSyntax
                         in
                         Node { start = leftRange.start, end = lastArgRange.end }
                             (Expression.Application
                                 (leftNode :: List.reverse argsReverse)
                             )
-            }
+                )
         )
         (ParserFast.lazy (\() -> subExpression))
         Layout.optimisticLayout
         (ParserWithComments.manyWithoutReverse
             (ParserFast.map2
                 (\arg commentsAfter ->
-                    { comments = arg.comments |> Rope.prependTo commentsAfter
-                    , syntax = arg.syntax
-                    }
+                    let
+                        (WithComments argComments argSyntax) =
+                            arg
+                    in
+                    WithComments
+                        (argComments |> Rope.prependTo commentsAfter)
+                        argSyntax
                 )
                 (Layout.positivelyIndentedFollowedBy
                     (ParserFast.lazy (\() -> subExpression))
@@ -1432,16 +1617,20 @@ infixLeft leftPrecedence symbol =
     , extensionRight =
         ParserFast.map2
             (\commentsBeforeFirst first ->
-                { comments =
-                    commentsBeforeFirst
-                        |> Rope.prependTo first.comments
-                , syntax =
-                    ExtendRightByOperation
+                let
+                    (WithComments firstComments firstSyntax) =
+                        first
+                in
+                WithComments
+                    (commentsBeforeFirst
+                        |> Rope.prependTo firstComments
+                    )
+                    (ExtendRightByOperation
                         { symbol = symbol
                         , direction = Infix.Left
-                        , expression = first.syntax
+                        , expression = firstSyntax
                         }
-                }
+                    )
             )
             Layout.maybeLayout
             (extendedSubExpressionOptimisticLayout
@@ -1464,14 +1653,18 @@ infixNonAssociative leftPrecedence symbol =
     , extensionRight =
         ParserFast.map2
             (\commentsBefore right ->
-                { comments = commentsBefore |> Rope.prependTo right.comments
-                , syntax =
-                    ExtendRightByOperation
+                let
+                    (WithComments rightComments rightSyntax) =
+                        right
+                in
+                WithComments
+                    (commentsBefore |> Rope.prependTo rightComments)
+                    (ExtendRightByOperation
                         { symbol = symbol
                         , direction = Infix.Non
-                        , expression = right.syntax
+                        , expression = rightSyntax
                         }
-                }
+                    )
             )
             Layout.maybeLayout
             (extendedSubExpressionOptimisticLayout
@@ -1506,16 +1699,20 @@ infixRight leftPrecedence symbol =
     , extensionRight =
         ParserFast.map2
             (\commentsBeforeFirst first ->
-                { comments =
-                    commentsBeforeFirst
-                        |> Rope.prependTo first.comments
-                , syntax =
-                    ExtendRightByOperation
+                let
+                    (WithComments firstComments firstSyntax) =
+                        first
+                in
+                WithComments
+                    (commentsBeforeFirst
+                        |> Rope.prependTo firstComments
+                    )
+                    (ExtendRightByOperation
                         { symbol = symbol
                         , direction = Infix.Right
-                        , expression = first.syntax
+                        , expression = firstSyntax
                         }
-                }
+                    )
             )
             Layout.maybeLayout
             (extendedSubExpressionOptimisticLayout

@@ -9,7 +9,7 @@ import Elm.Syntax.Declaration exposing (Declaration)
 import Elm.Syntax.File exposing (File)
 import Elm.Syntax.Node exposing (Node)
 import ParserFast exposing (Parser)
-import ParserWithComments exposing (WithComments)
+import ParserWithComments exposing (WithComments(..))
 import Rope
 
 
@@ -17,14 +17,24 @@ file : ParserFast.Parser File
 file =
     ParserFast.map4
         (\moduleDefinition moduleComments imports declarations ->
-            { moduleDefinition = moduleDefinition.syntax
-            , imports = imports.syntax
-            , declarations = declarations.syntax
+            let
+                (WithComments moduleDefinitionComments moduleDefinitionSyntax) =
+                    moduleDefinition
+
+                (WithComments importsComments importsSyntax) =
+                    imports
+
+                (WithComments declarationsComments declarationsSyntax) =
+                    declarations
+            in
+            { moduleDefinition = moduleDefinitionSyntax
+            , imports = importsSyntax
+            , declarations = declarationsSyntax
             , comments =
-                moduleDefinition.comments
+                moduleDefinitionComments
                     |> Rope.prependTo moduleComments
-                    |> Rope.prependTo imports.comments
-                    |> Rope.prependTo declarations.comments
+                    |> Rope.prependTo importsComments
+                    |> Rope.prependTo declarationsComments
                     |> Rope.toList
             }
         )
@@ -51,9 +61,13 @@ fileDeclarations =
         (Layout.moduleLevelIndentationFollowedBy
             (ParserFast.map2
                 (\declarationParsed commentsAfter ->
-                    { comments = declarationParsed.comments |> Rope.prependTo commentsAfter
-                    , syntax = declarationParsed.syntax
-                    }
+                    let
+                        (WithComments declarationComments declarationSyntax) =
+                            declarationParsed
+                    in
+                    WithComments
+                        (declarationComments |> Rope.prependTo commentsAfter)
+                        declarationSyntax
                 )
                 Elm.Parser.Declarations.declaration
                 Layout.optimisticLayout

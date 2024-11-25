@@ -14,7 +14,7 @@ module Elm.Parser.Layout exposing
 
 import Elm.Parser.Comments as Comments
 import ParserFast exposing (Parser)
-import ParserWithComments exposing (Comments, WithComments)
+import ParserWithComments exposing (Comments, WithComments(..))
 import Rope
 
 
@@ -143,10 +143,10 @@ layoutStrictFollowedByComments nextParser =
 layoutStrictFollowedByWithComments : Parser (WithComments syntax) -> Parser (WithComments syntax)
 layoutStrictFollowedByWithComments nextParser =
     ParserFast.map2
-        (\commentsBefore after ->
-            { comments = commentsBefore |> Rope.prependTo after.comments
-            , syntax = after.syntax
-            }
+        (\commentsBefore (WithComments comments syntax) ->
+            WithComments
+                (commentsBefore |> Rope.prependTo comments)
+                syntax
         )
         optimisticLayout
         (onTopIndentationFollowedBy nextParser)
@@ -156,7 +156,9 @@ layoutStrictFollowedBy : Parser syntax -> Parser (WithComments syntax)
 layoutStrictFollowedBy nextParser =
     ParserFast.map2
         (\commentsBefore after ->
-            { comments = commentsBefore, syntax = after }
+            WithComments
+                commentsBefore
+                after
         )
         optimisticLayout
         (onTopIndentationFollowedBy nextParser)
@@ -212,13 +214,13 @@ problemTopIndentation =
 maybeAroundBothSides : Parser (WithComments b) -> Parser (WithComments b)
 maybeAroundBothSides x =
     ParserFast.map3
-        (\before v after ->
-            { comments =
-                before
-                    |> Rope.prependTo v.comments
+        (\before (WithComments comments syntax) after ->
+            WithComments
+                (before
+                    |> Rope.prependTo comments
                     |> Rope.prependTo after
-            , syntax = v.syntax
-            }
+                )
+                syntax
         )
         maybeLayout
         x
