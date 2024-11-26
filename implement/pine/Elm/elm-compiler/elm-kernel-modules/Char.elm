@@ -115,11 +115,18 @@ isAlpha char =
 
 isAlphaNum : Char -> Bool
 isAlphaNum char =
-    if isAlpha char then
+    let
+        code =
+            Pine_kernel.concat [ Pine_kernel.take [ 1, 0 ], char ]
+    in
+    if Pine_kernel.int_is_sorted_asc [ 0x41, code, 0x5A ] then
+        True
+
+    else if Pine_kernel.int_is_sorted_asc [ 0x61, code, 0x7A ] then
         True
 
     else
-        isDigit char
+        Pine_kernel.int_is_sorted_asc [ 0x30, code, 0x39 ]
 
 
 toUpper : Char -> Char
