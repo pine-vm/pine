@@ -53,7 +53,7 @@ public class DependenciesLoader
                     string.Join("\n", new[] { error, errorFromDictionary }.WhereNotNull()));
         }
 
-        var assembly = assemblyFromCacheOrLink?.ToArray() ?? getFileFromHashSHA256?.Invoke(hash);
+        var assembly = assemblyFromCacheOrLink?.content.ToArray() ?? getFileFromHashSHA256?.Invoke(hash);
 
         if (assembly is null)
             return returnError("Did not find assembly image");

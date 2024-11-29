@@ -1,9 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
-using System.Linq;
+using System.Diagnostics;
 using System.Runtime.InteropServices;
-using System.Text;
 
 namespace Pine.Elm;
 
@@ -24,54 +23,61 @@ public class AVH4ElmFormatBinaries
             ("364469d9b64866e0595c9c2837eb330eeb1c58269d31567085fa24886b5a46d7",
             @"https://github.com/avh4/elm-format/releases/download/0.8.7/elm-format-0.8.7-mac-x64.tgz"));
 
-    public static ReadOnlyMemory<byte>? ExecutableFileForCurrentOs() =>
-        BlobLibrary.LoadFileForCurrentOs(ExecutableFileByOs);
-
     public static string RunElmFormat(string moduleTextBefore)
     {
-        var executableFile = ExecutableFileForCurrentOs()!;
+        var executableFile =
+            BlobLibrary.LoadFileForCurrentOs(ExecutableFileByOs)
+            ??
+            throw new Exception("Failed to load elm-format executable file");
 
-        var executableFileName = "elm-format" + ExecutableFile.ExecutableFileNameAppendix;
+        if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+        {
+            System.IO.File.SetUnixFileMode(
+                executableFile.cacheFilePath,
+                ExecutableFile.UnixFileModeForExecutableFile);
+        }
 
-        var inputElmModuleFileName = "ElmModuleToFormat.elm";
+        var process = new Process
+        {
+            StartInfo = new ProcessStartInfo
+            {
+                FileName = executableFile.cacheFilePath,
+                Arguments = "--stdin",
+                RedirectStandardInput = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            }
+        };
 
-        var outputElmModuleFileName = "ElmModuleFormatted.elm";
+        process.Start();
 
-        var environmentFilesNotExecutable =
-            ImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>>.Empty
-            .SetItem([inputElmModuleFileName], Encoding.UTF8.GetBytes(moduleTextBefore));
+        using (var writer = process.StandardInput)
+        {
+            writer.WriteLine(moduleTextBefore);
 
-        var executeBinaryResult =
-            ExecutableFile.ExecuteFileWithArguments(
-            environmentFilesNotExecutable: environmentFilesNotExecutable,
-            executableFile: executableFile.Value,
-            arguments: "--yes  --output \"" + outputElmModuleFileName + "\"  " + inputElmModuleFileName,
-            environmentStrings: null,
-            workingDirectoryRelative: null,
-            environmentFilesExecutable: null,
-            environmentPathExecutableFiles: null);
+            // Close the stream to signal EOF
+            writer.Close();
+        }
 
-        if (executeBinaryResult.processOutput.ExitCode is not 0)
+        string output = process.StandardOutput.ReadToEnd();
+        string error = process.StandardError.ReadToEnd();
+
+        process.WaitForExit();
+
+        if (process.ExitCode is not 0)
         {
             throw new Exception(
                 string.Join(
                     "\n",
-                    "Exit code " + executeBinaryResult.processOutput.ExitCode + " indicates failure.",
+                    "Exit code " + process.ExitCode + " indicates failure.",
                     "Standard Output:",
-                    executeBinaryResult.processOutput.StandardOutput,
+                    output,
                     "Standard Error:",
-                    executeBinaryResult.processOutput.StandardError));
+                    error));
         }
 
-        var resultFile =
-            executeBinaryResult.resultingFiles
-            .FirstOrDefault(c => c.path.SequenceEqual([outputElmModuleFileName]));
-
-        if (resultFile.path is null)
-        {
-            throw new Exception("Did not find file " + outputElmModuleFileName);
-        }
-
-        return Encoding.UTF8.GetString(resultFile.content.Span);
+        return output;
     }
 }

@@ -276,7 +276,7 @@ public static class Elm019Binaries
     }
 
     public static ReadOnlyMemory<byte> GetElmExecutableFile =>
-        BlobLibrary.LoadFileForCurrentOs(ElmExecutableFileByOs)!.Value;
+        BlobLibrary.LoadFileForCurrentOs(ElmExecutableFileByOs)!.Value.content;
 
     public static IReadOnlyDictionary<OSPlatform, (string hash, string remoteSource)> ElmExecutableFileByOs =
         ImmutableDictionary<OSPlatform, (string hash, string remoteSource)>.Empty

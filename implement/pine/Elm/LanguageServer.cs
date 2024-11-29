@@ -78,8 +78,10 @@ public class LanguageServer(System.Action<string>? logDelegate)
                 var linesCount = ElmModule.ModuleLines(contentChange.Text).Count();
 
                 Log(
-                    "Replaced all of " + textDocument.Uri + " with " + contentChange.Text.Length +
-                    " chars distributed over " + linesCount + " lines");
+                    "Replaced all of " + textDocument.Uri + " with " +
+                    Core.CommandLineInterface.FormatIntegerForDisplay(contentChange.Text.Length) +
+                    " chars distributed over " +
+                    Core.CommandLineInterface.FormatIntegerForDisplay(linesCount) + " lines");
             }
             else
             {
@@ -140,7 +142,10 @@ public class LanguageServer(System.Action<string>? logDelegate)
 
         Log(
             "Document " + textDocument.Uri + " had " +
-            linesBefore.Count + " lines and " + textDocumentContentBefore.Length + " chars before");
+            Core.CommandLineInterface.FormatIntegerForDisplay(linesBefore.Count) +
+            " lines and " +
+            Core.CommandLineInterface.FormatIntegerForDisplay(textDocumentContentBefore.Length) +
+            " chars before");
 
         var newContent =
             TextDocument_formatting_lessStore(
@@ -175,8 +180,9 @@ public class LanguageServer(System.Action<string>? logDelegate)
 
                 binaryClock.Stop();
 
-                Log("Completed elm-format on " + textDocument.Uri +
-                    " in " + (int)binaryClock.Elapsed.TotalMilliseconds + " ms");
+                Log("Completed elm-format on " + textDocument.Uri + " in " +
+                    Core.CommandLineInterface.FormatIntegerForDisplay((int)binaryClock.Elapsed.TotalMilliseconds)
+                    + " ms");
 
                 return elmFormatted;
             }

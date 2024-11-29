@@ -107,9 +107,11 @@ public class ElmTestRs
             ("e2522d5217a8a3d78e1876e184eae7b68f7d6498eb40765c1f6331b4756b4d6e",
             @"https://github.com/denoland/deno/releases/download/v1.33.4/deno-x86_64-apple-darwin.zip"));
 
-    public static ReadOnlyMemory<byte>? ElmTestRsExecutableFileForCurrentOs() => BlobLibrary.LoadFileForCurrentOs(ElmTestRsExecutableFileByOs);
+    public static ReadOnlyMemory<byte>? ElmTestRsExecutableFileForCurrentOs() =>
+        BlobLibrary.LoadFileForCurrentOs(ElmTestRsExecutableFileByOs)?.content;
 
-    public static ReadOnlyMemory<byte>? DenoExecutableFileForCurrentOs() => BlobLibrary.LoadFileForCurrentOs(DenoExecutableFileByOs);
+    public static ReadOnlyMemory<byte>? DenoExecutableFileForCurrentOs() =>
+        BlobLibrary.LoadFileForCurrentOs(DenoExecutableFileByOs)?.content;
 
     public static ElmTestRsRunReport Run(
         IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> elmProjectFiles)

@@ -51,7 +51,7 @@ public class VolatileProcess
                     string.Join("\n", new[] { error, errorFromDictionary }.WhereNotNull()));
         }
 
-        var blob = executableFileFromCacheOrLink?.ToArray() ?? getFileFromHashSHA256?.Invoke(hash);
+        var blob = executableFileFromCacheOrLink?.content.ToArray() ?? getFileFromHashSHA256?.Invoke(hash);
 
         if (blob is null)
             return returnError("Did not find blob");

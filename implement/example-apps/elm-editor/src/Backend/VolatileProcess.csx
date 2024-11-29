@@ -445,7 +445,7 @@ static public class ElmFormat
 
     static public byte[] GetElmFormatExecutableFile =>
         Pine.BlobLibrary.LoadFileForCurrentOs(ElmFormatExecutableFileByOs)
-        ?.ToArray();
+        ?.content.ToArray();
 
     static public IReadOnlyDictionary<System.Runtime.InteropServices.OSPlatform, (string hash, string remoteSource)> ElmFormatExecutableFileByOs =
         ImmutableDictionary<System.Runtime.InteropServices.OSPlatform, (string hash, string remoteSource)>.Empty

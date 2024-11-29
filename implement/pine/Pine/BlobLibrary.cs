@@ -19,7 +19,9 @@ public class BlobLibrary
 
     private static string ContainerUrl => "https://kalmit.blob.core.windows.net/blob-library";
 
-    public static ReadOnlyMemory<byte>? LoadFileForCurrentOs(IReadOnlyDictionary<OSPlatform, (string hash, string remoteSource)> dict)
+    public static (ReadOnlyMemory<byte> content, string cacheFilePath)?
+        LoadFileForCurrentOs(
+        IReadOnlyDictionary<OSPlatform, (string hash, string remoteSource)> dict)
     {
         var hashAndRemoteSource =
             dict.FirstOrDefault(c => RuntimeInformation.IsOSPlatform(c.Key)).Value;
@@ -38,9 +40,10 @@ public class BlobLibrary
     {
         try
         {
-            var getter = OverrideGetBlobWithSHA256?.Invoke(GetBlobWithSHA256Cached) ?? GetBlobWithSHA256Cached;
-
-            var blobCandidate = getter(sha256);
+            ReadOnlyMemory<byte>? blobCandidate =
+                OverrideGetBlobWithSHA256?.Invoke(hash => GetBlobWithSHA256Cached(hash)?.content)(sha256)
+                ??
+                GetBlobWithSHA256Cached(sha256)?.content;
 
             if (blobCandidate == null)
                 return null;
@@ -59,10 +62,13 @@ public class BlobLibrary
         }
     }
 
-    public static ReadOnlyMemory<byte>? GetBlobWithSHA256Cached(ReadOnlyMemory<byte> sha256) =>
+    public static (ReadOnlyMemory<byte> content, string cacheFilePath)?
+        GetBlobWithSHA256Cached(ReadOnlyMemory<byte> sha256) =>
         GetBlobWithSHA256Cached(sha256, null);
 
-    public static ReadOnlyMemory<byte>? GetBlobWithSHA256Cached(ReadOnlyMemory<byte> sha256, Func<ReadOnlyMemory<byte>?>? getIfNotCached)
+    public static (ReadOnlyMemory<byte> content, string cacheFilePath)?
+        GetBlobWithSHA256Cached(
+        ReadOnlyMemory<byte> sha256, Func<ReadOnlyMemory<byte>?>? getIfNotCached)
     {
         var sha256DirectoryName = "by-sha256";
 
@@ -77,7 +83,7 @@ public class BlobLibrary
             var fromCache = File.ReadAllBytes(cacheFilePath);
 
             if (blobHasExpectedSHA256(fromCache))
-                return fromCache;
+                return (fromCache, cacheFilePath);
         }
         catch
         { }
@@ -94,7 +100,8 @@ public class BlobLibrary
                 return tryUpdateCacheAndContinueFromBlob(fromExplicitSource.Value);
         }
 
-        ReadOnlyMemory<byte> tryUpdateCacheAndContinueFromBlob(ReadOnlyMemory<byte> responseContent)
+        (ReadOnlyMemory<byte> content, string cacheFilePath)
+            tryUpdateCacheAndContinueFromBlob(ReadOnlyMemory<byte> responseContent)
         {
             if (!blobHasExpectedSHA256(responseContent))
             {
@@ -112,10 +119,11 @@ public class BlobLibrary
                 // This happens sometimes because another process fetched the same blob and is already writing it to the file.
             }
 
-            return responseContent;
+            return (responseContent, cacheFilePath);
         }
 
-        ReadOnlyMemory<byte>? tryUpdateCacheAndContinueFromHttpResponse(HttpResponseMessage httpResponse)
+        (ReadOnlyMemory<byte> content, string cacheFilePath)?
+            tryUpdateCacheAndContinueFromHttpResponse(HttpResponseMessage httpResponse)
         {
             if (httpResponse.StatusCode == HttpStatusCode.NotFound)
                 return null;

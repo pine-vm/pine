@@ -29,14 +29,16 @@ public class NativeDependencies
             }
         }
 
-        var file = BlobLibrary.GetBlobWithSHA256Cached(
-            sha256: hash,
-            getIfNotCached:
-            () =>
-            BlobLibrary.DownloadFromUrlAndExtractBlobWithMatchingHashFromListOfRemoteSources(
-                dependency.RemoteSources, hash))
+        var file =
+            BlobLibrary.GetBlobWithSHA256Cached(
+                sha256: hash,
+                getIfNotCached:
+                () =>
+                BlobLibrary.DownloadFromUrlAndExtractBlobWithMatchingHashFromListOfRemoteSources(
+                    dependency.RemoteSources, hash))?.content
             ?? throw new Exception(
-                "Did not find dependency " + dependency.HashBase16 + " (" + dependency.ExpectedFileName + ") in any of the " +
+                "Did not find dependency " + dependency.HashBase16 +
+                " (" + dependency.ExpectedFileName + ") in any of the " +
                 dependency.RemoteSources.Count + " remote sources");
 
         ExecutableFile.CreateAndWriteFileToPath(fileAbsolutePath, file, makeExecutable: true);
