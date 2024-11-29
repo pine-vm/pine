@@ -1597,7 +1597,7 @@ compileElmSyntaxFunction :
     CompilationStack
     -> Elm.Syntax.Expression.Function
     -> Result String ( String, Expression )
-compileElmSyntaxFunction stack function =
+compileElmSyntaxFunction stackBefore function =
     let
         (Elm.Syntax.Node.Node _ functionDeclaration) =
             function.declaration
@@ -1612,6 +1612,30 @@ compileElmSyntaxFunction stack function =
 
         (Elm.Syntax.Node.Node _ functionDeclName) =
             functionDeclaration.name
+
+        newKnownTypes : List ( String, Elm.Syntax.TypeAnnotation.TypeAnnotation )
+        newKnownTypes =
+            case function.signature of
+                Nothing ->
+                    []
+
+                Just (Elm.Syntax.Node.Node _ signature) ->
+                    let
+                        (Elm.Syntax.Node.Node _ typeAnnotation) =
+                            signature.typeAnnotation
+                    in
+                    collectTypesFromFunctionTypeAnnotation typeAnnotation functionDeclaration.arguments
+
+        stack =
+            { moduleAliases = stackBefore.moduleAliases
+            , availableModules = stackBefore.availableModules
+            , inlineableDeclarations = stackBefore.inlineableDeclarations
+            , exposedDeclarations = stackBefore.exposedDeclarations
+            , localAvailableDeclarations = stackBefore.localAvailableDeclarations
+            , localTypeDeclarations = stackBefore.localTypeDeclarations
+            , depth = stackBefore.depth
+            , knownTypes = List.concat [ newKnownTypes, stackBefore.knownTypes ]
+            }
     in
     case
         compileElmSyntaxFunctionWithoutName stack
@@ -1627,6 +1651,37 @@ compileElmSyntaxFunction stack function =
                 ( functionDeclName
                 , functionWithoutName
                 )
+
+
+collectTypesFromFunctionTypeAnnotation :
+    Elm.Syntax.TypeAnnotation.TypeAnnotation
+    -> List (Elm.Syntax.Node.Node Elm.Syntax.Pattern.Pattern)
+    -> List ( String, Elm.Syntax.TypeAnnotation.TypeAnnotation )
+collectTypesFromFunctionTypeAnnotation typeAnnotation params =
+    case typeAnnotation of
+        Elm.Syntax.TypeAnnotation.FunctionTypeAnnotation (Elm.Syntax.Node.Node _ typeAnnotationParam) (Elm.Syntax.Node.Node _ typeAnnotationAfter) ->
+            case params of
+                [] ->
+                    []
+
+                (Elm.Syntax.Node.Node _ param) :: restParams ->
+                    let
+                        currentNamesTypes : List ( String, Elm.Syntax.TypeAnnotation.TypeAnnotation )
+                        currentNamesTypes =
+                            case param of
+                                Elm.Syntax.Pattern.VarPattern name ->
+                                    [ ( name, typeAnnotationParam ) ]
+
+                                _ ->
+                                    []
+                    in
+                    List.concat
+                        [ currentNamesTypes
+                        , collectTypesFromFunctionTypeAnnotation typeAnnotationAfter restParams
+                        ]
+
+        _ ->
+            []
 
 
 compileElmSyntaxFunctionWithoutName :
@@ -2816,7 +2871,11 @@ exprCannotContainSetOrDict knownTypes expr =
 
         Elm.Syntax.Expression.FunctionOrValue _ localName ->
             -- Choice type tags without arguments, like 'Nothing' or 'LT'.
-            stringStartsWithUpper localName
+            if stringStartsWithUpper localName then
+                True
+
+            else
+                nameCannotContainSetOrDict knownTypes localName
 
         Elm.Syntax.Expression.Application ((Elm.Syntax.Node.Node _ functionExpr) :: argumentsNodes) ->
             case functionExpr of
@@ -2842,8 +2901,27 @@ exprCannotContainSetOrDict knownTypes expr =
             if exprProvenToBeInt knownTypes expr then
                 True
 
+            else if exprProvenToBeString knownTypes expr then
+                True
+
             else
-                exprProvenToBeString knownTypes expr
+                exprProvenToBeChar knownTypes expr
+
+
+nameCannotContainSetOrDict : List ( String, Elm.Syntax.TypeAnnotation.TypeAnnotation ) -> String -> Bool
+nameCannotContainSetOrDict knownTypes localName =
+    case Common.assocListGet localName knownTypes of
+        Just (Elm.Syntax.TypeAnnotation.Typed (Elm.Syntax.Node.Node _ ( [], "Int" )) []) ->
+            True
+
+        Just (Elm.Syntax.TypeAnnotation.Typed (Elm.Syntax.Node.Node _ ( [], "String" )) []) ->
+            True
+
+        Just (Elm.Syntax.TypeAnnotation.Typed (Elm.Syntax.Node.Node _ ( [], "Char" )) []) ->
+            True
+
+        _ ->
+            False
 
 
 functionCannotReturnSetOrDict : ( List String, String ) -> Bool
@@ -2952,6 +3030,30 @@ exprProvenToBeString knownTypes expr =
 
         Elm.Syntax.Expression.ParenthesizedExpression (Elm.Syntax.Node.Node _ parenthesized) ->
             exprProvenToBeString knownTypes parenthesized
+
+        _ ->
+            False
+
+
+exprProvenToBeChar :
+    List ( String, Elm.Syntax.TypeAnnotation.TypeAnnotation )
+    -> Elm.Syntax.Expression.Expression
+    -> Bool
+exprProvenToBeChar knownTypes expr =
+    case expr of
+        Elm.Syntax.Expression.CharLiteral _ ->
+            True
+
+        Elm.Syntax.Expression.FunctionOrValue [] localName ->
+            case Common.assocListGet localName knownTypes of
+                Just (Elm.Syntax.TypeAnnotation.Typed (Elm.Syntax.Node.Node _ ( [], "Char" )) []) ->
+                    True
+
+                _ ->
+                    False
+
+        Elm.Syntax.Expression.ParenthesizedExpression (Elm.Syntax.Node.Node _ parenthesized) ->
+            exprProvenToBeChar knownTypes parenthesized
 
         _ ->
             False
@@ -4274,7 +4376,7 @@ shouldInlineDeclaration name expression =
         case expression of
             LiteralExpression value ->
                 {-
-                estimatePineValueSize value < 50 * 1000
+                   estimatePineValueSize value < 50 * 1000
                 -}
                 {-
                    TODO: Instead of going just by the size here, more appropriate would be to
