@@ -1,0 +1,40 @@
+{
+  "KernelApplication": [
+    "concat",
+    {
+      "List": [
+        [
+          {
+            "KernelApplication": [
+              "take",
+              { "Literal": [ [ 1, 0 ] ] }
+            ]
+          },
+          {
+            "KernelApplication": [
+              "head",
+              {
+                "KernelApplication": [
+                  "head",
+                  {
+                    "KernelApplication": [
+                      "skip",
+                      {
+                        "List": [
+                          [
+                            { "Literal": [ 1 ] },
+                            { "Environment": [] }
+                          ]
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      ]
+    }
+  ]
+}

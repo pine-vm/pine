@@ -159,6 +159,15 @@ public class Precompiled
 
         var listMemberExposedValue = popularValueDictionary["List.member.exposed"];
 
+        var stringAnyExposedValue = popularValueDictionary["String.any.exposed"];
+
+        var stringSliceExpression = popularExpressionDictionary["String.slice"];
+
+        var stringAnySliceExpressionValue =
+            ExpressionEncoding.EncodeExpressionAsValue(stringSliceExpression);
+
+        var stringSliceExposedValue = popularValueDictionary["String.slice.exposed"];
+
         var dictGetExpression = popularExpressionDictionary["dictGet"];
 
         var dictGetExpressionValue =
@@ -248,25 +257,6 @@ public class Precompiled
 
         var listAnyExpressionValue =
             ExpressionEncoding.EncodeExpressionAsValue(listAnyExpression);
-
-
-        var pineComputeValueFromStringRecursiveMainExpression =
-            popularExpressionDictionary["Pine.computeValueFromStringRecursive.main"];
-
-        var pineComputeValueFromStringRecursiveMainExpressionValue =
-            ExpressionEncoding.EncodeExpressionAsValue(pineComputeValueFromStringRecursiveMainExpression);
-
-        var pineComputeValueFromStringRecursiveFromIntExpression =
-            popularExpressionDictionary["Pine.computeValueFromStringRecursive.blobValueFromUnsignedInt"];
-
-        var pineComputeValueFromStringRecursiveFromIntExpressionValue =
-            ExpressionEncoding.EncodeExpressionAsValue(pineComputeValueFromStringRecursiveFromIntExpression);
-
-        var pineComputeValueFromStringRecursiveBlobWrapperExpression =
-            popularExpressionDictionary["Pine.computeValueFromStringRecursive.BlobValue"];
-
-        var pineComputeValueFromStringRecursiveBlobWrapperExpressionValue =
-            ExpressionEncoding.EncodeExpressionAsValue(pineComputeValueFromStringRecursiveBlobWrapperExpression);
 
         var elmKernelParser_countOffsetsInStringExpression =
             popularExpressionDictionary["Elm.Kernel.Parser.countOffsetsInString"];
@@ -402,11 +392,8 @@ public class Precompiled
                 EnvConstraintId.Create(
                     [
                     new KeyValuePair<IReadOnlyList<int>, PineValue>(
-                    [0],
-                    PineValue.List(
-                        [
-                        listFoldlExpressionValue,
-                        ]))
+                    [0,0],
+                    listFoldlExpressionValue),
                     ]);
 
             yield return
@@ -478,6 +465,20 @@ public class Precompiled
                     [new PrecompiledEntry(
                         listAnyEnvClass,
                         ListAny)]);
+        }
+
+        {
+            var stringSliceEnvClass =
+                EnvConstraintId.Create(
+                    [
+                    ]);
+
+            yield return
+                new KeyValuePair<Expression, IReadOnlyList<PrecompiledEntry>>(
+                    stringSliceExpression,
+                    [new PrecompiledEntry(
+                        stringSliceEnvClass,
+                        StringSlice)]);
         }
 
         {
@@ -635,24 +636,42 @@ public class Precompiled
         }
 
         {
-            var computeValueFromStringRecursiveEnvClass =
+            var unsafeUnsignedBlobValueFromIntExpression =
+                popularExpressionDictionary["Pine.unsafeUnsignedBlobValueFromInt"];
+
+            var unsafeUnsignedBlobValueFromIntExpressionValue =
+                ExpressionEncoding.EncodeExpressionAsValue(unsafeUnsignedBlobValueFromIntExpression);
+
+            var valueFromCharExpression =
+                popularExpressionDictionary["Pine.valueFromChar"];
+
+            var valueFromCharExpressionValue =
+                ExpressionEncoding.EncodeExpressionAsValue(valueFromCharExpression);
+
+            var computeValueFromStringRecursiveExpr =
+                popularExpressionDictionary["Pine.computeValueFromStringRecursive"];
+
+            var computeValueFromStringRecursiveExprValue =
+                ExpressionEncoding.EncodeExpressionAsValue(computeValueFromStringRecursiveExpr);
+
+            var envClass =
                 EnvConstraintId.Create(
                     [
                     new KeyValuePair<IReadOnlyList<int>, PineValue>(
-                    [0],
-                    PineValue.List(
-                        [
-                        pineComputeValueFromStringRecursiveFromIntExpressionValue,
-                        pineComputeValueFromStringRecursiveBlobWrapperExpressionValue,
-                        pineComputeValueFromStringRecursiveMainExpressionValue
-                        ]))
+                        [0],
+                        PineValue.List(
+                            [
+                            valueFromCharExpressionValue,
+                            unsafeUnsignedBlobValueFromIntExpressionValue,
+                            computeValueFromStringRecursiveExprValue
+                            ])),
                     ]);
 
             yield return
                 new KeyValuePair<Expression, IReadOnlyList<PrecompiledEntry>>(
-                    pineComputeValueFromStringRecursiveMainExpression,
+                    computeValueFromStringRecursiveExpr,
                     [new PrecompiledEntry(
-                        computeValueFromStringRecursiveEnvClass,
+                        envClass,
                         PineComputeValueFromStringRecursive)]);
         }
 
@@ -770,6 +789,315 @@ public class Precompiled
                         ElmKernelParser_chompWhileHelp)]);
             */
         }
+
+        {
+            var skipWhileWhitespaceHelpExpression =
+                popularExpressionDictionary["ParserFast.skipWhileWhitespaceHelp"];
+
+            var skipWhileWhitespaceHelpExpressionValue =
+                ExpressionEncoding.EncodeExpressionAsValue(skipWhileWhitespaceHelpExpression);
+
+            var skipWhileWhitespaceHelpEnvClass =
+                EnvConstraintId.Create(
+                    [
+                    new KeyValuePair<IReadOnlyList<int>, PineValue>(
+                        [0, 1],
+                        stringSliceExposedValue),
+                    new KeyValuePair<IReadOnlyList<int>, PineValue>(
+                        [0, 2],
+                        skipWhileWhitespaceHelpExpressionValue),
+                    ]);
+
+            yield return
+                new KeyValuePair<Expression, IReadOnlyList<PrecompiledEntry>>(
+                    skipWhileWhitespaceHelpExpression,
+                    [new PrecompiledEntry(
+                        skipWhileWhitespaceHelpEnvClass,
+                        ParserFast_skipWhileWhitespaceHelp)]);
+        }
+
+        {
+            var skipWhileWithoutLinebreakHelpExpression =
+                popularExpressionDictionary["ParserFast.skipWhileWithoutLinebreakHelp"];
+
+            var skipWhileWithoutLinebreakHelpExpressionValue =
+                ExpressionEncoding.EncodeExpressionAsValue(skipWhileWithoutLinebreakHelpExpression);
+
+            var skipWhileWithoutLinebreakHelpEnvClass =
+                EnvConstraintId.Create(
+                    [
+                    new KeyValuePair<IReadOnlyList<int>, PineValue>(
+                        [0],
+                        PineValue.List(
+                            [
+                            stringAnyExposedValue,
+                            stringSliceExposedValue,
+                            skipWhileWithoutLinebreakHelpExpressionValue,
+                            ])),
+                    ]);
+
+            EnvConstraintId envClassFromPredicate(PineValue predicateValue)
+            {
+                return
+                    EnvConstraintId.Create(
+                        [..skipWhileWithoutLinebreakHelpEnvClass.ParsedEnvItems
+                        ,new KeyValuePair<IReadOnlyList<int>, PineValue>(
+                            [1, 0],
+                            predicateValue)]);
+            }
+
+            yield return
+                new KeyValuePair<Expression, IReadOnlyList<PrecompiledEntry>>(
+                    skipWhileWithoutLinebreakHelpExpression,
+                    [new PrecompiledEntry(
+                        envClassFromPredicate(
+                            popularValueDictionary["ParserFast.isAlphaNumOrUnderscore.exposed"]),
+                        ParserFast_skipWhileWithoutLinebreakHelp_isAlphaNumOrUnderscore)]);
+
+            /*
+            yield return
+                new KeyValuePair<Expression, IReadOnlyList<PrecompiledEntry>>(
+                    skipWhileWithoutLinebreakHelpExpression,
+                    [new PrecompiledEntry(
+                        skipWhileWithoutLinebreakHelpEnvClass,
+                        ParserFast_skipWhileWithoutLinebreakHelp)]);
+            */
+        }
+
+        {
+            var skipWhileHelpExpression =
+                popularExpressionDictionary["ParserFast.skipWhileHelp"];
+
+            var skipWhileHelpExpressionValue =
+                ExpressionEncoding.EncodeExpressionAsValue(skipWhileHelpExpression);
+
+            var skipWhileHelpEnvClass =
+                EnvConstraintId.Create(
+                    [
+                    new KeyValuePair<IReadOnlyList<int>, PineValue>(
+                        [0],
+                        PineValue.List(
+                            [
+                            stringAnyExposedValue,
+                            stringSliceExposedValue,
+                            skipWhileHelpExpressionValue,
+                            ])),
+                    ]);
+
+            EnvConstraintId envClassFromPredicate(PineValue predicateValue)
+            {
+                return
+                    EnvConstraintId.Create(
+                        [..skipWhileHelpEnvClass.ParsedEnvItems
+                        ,new KeyValuePair<IReadOnlyList<int>, PineValue>(
+                            [1, 0],
+                            predicateValue)]);
+            }
+
+            yield return
+                new KeyValuePair<Expression, IReadOnlyList<PrecompiledEntry>>(
+                    skipWhileHelpExpression,
+                    [new PrecompiledEntry(
+                        envClassFromPredicate(
+                            popularValueDictionary["predicate_nestableComment_char_is_not_elm_multiline_comment_open_or_close"]),
+                        ParserFast_skipWhileHelp_not_elm_multiline_comment_open_or_close)]);
+
+            /*
+            yield return
+                new KeyValuePair<Expression, IReadOnlyList<PrecompiledEntry>>(
+                    skipWhileHelpExpression,
+                    [new PrecompiledEntry(
+                        skipWhileHelpEnvClass,
+                        ParserFast_skipWhileHelp)]);
+            */
+        }
+
+        {
+            var prependToExpression =
+                popularExpressionDictionary["Rope.prependTo"];
+
+            var prependToExpressionValue =
+                ExpressionEncoding.EncodeExpressionAsValue(prependToExpression);
+
+            yield return
+                new KeyValuePair<Expression, IReadOnlyList<PrecompiledEntry>>(
+                    prependToExpression,
+                    [PrecompiledEntry.FinalValueForAnyEnvironment(
+                        EnvConstraintId.Create([]),
+                        RopePrependTo)]);
+        }
+
+        var charToCodeExpression =
+            popularExpressionDictionary["Char.toCode"];
+
+        var charToCodeExpressionValue =
+            ExpressionEncoding.EncodeExpressionAsValue(charToCodeExpression);
+
+        {
+            var isLowerExpression =
+                popularExpressionDictionary["Char.isLower"];
+
+            var envClass =
+                EnvConstraintId.Create(
+                    [
+                    new KeyValuePair<IReadOnlyList<int>, PineValue>(
+                    [0],
+                    PineValue.List(
+                        [
+                        charToCodeExpressionValue,
+                        ]))
+                    ]);
+
+            yield return
+                new KeyValuePair<Expression, IReadOnlyList<PrecompiledEntry>>(
+                    isLowerExpression,
+                    [PrecompiledEntry.FinalValueForAnyEnvironment(
+                        envClass,
+                        CharIsLower)]);
+        }
+
+        {
+            var isUpperExpression =
+                popularExpressionDictionary["Char.isUpper"];
+
+            var envClass =
+                EnvConstraintId.Create(
+                    [
+                    new KeyValuePair<IReadOnlyList<int>, PineValue>(
+                    [0],
+                    PineValue.List(
+                        [
+                        charToCodeExpressionValue,
+                        ]))
+                    ]);
+
+            yield return
+                new KeyValuePair<Expression, IReadOnlyList<PrecompiledEntry>>(
+                    isUpperExpression,
+                    [PrecompiledEntry.FinalValueForAnyEnvironment(
+                        envClass,
+                        CharIsUpper)]);
+        }
+    }
+
+    static PineValue RopePrependTo(
+        PineValue environment,
+        PineVMParseCache parseCache)
+    {
+        /*
+        prependTo : Rope a -> Rope a -> Rope a
+        prependTo right left =
+            case left of
+                Nothing ->
+                    right
+
+                Just leftLikelyFilled ->
+                    case right of
+                        Nothing ->
+                            left
+
+                        Just rightLikelyFilled ->
+                            Just (Branch2 leftLikelyFilled rightLikelyFilled)
+
+         * */
+
+        var right =
+            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 0]);
+
+        var left =
+            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 1]);
+
+        var leftTagName =
+            PineVM.ValueFromPathInValueOrEmptyList(left, [0]);
+
+        if (leftTagName == Tag_Nothing_Name_Value)
+        {
+            return right;
+        }
+
+        var rightTagName =
+            PineVM.ValueFromPathInValueOrEmptyList(right, [0]);
+
+        if (rightTagName == Tag_Nothing_Name_Value)
+        {
+            return left;
+        }
+
+        var leftLikelyFilled =
+            PineVM.ValueFromPathInValueOrEmptyList(left, [1, 0]);
+
+        var rightLikelyFilled =
+            PineVM.ValueFromPathInValueOrEmptyList(right, [1, 0]);
+
+        return Tag_Just_Value(
+            PineValue.List(
+                [
+                Tag_Branch2_Name_Value,
+                PineValue.List([leftLikelyFilled, rightLikelyFilled])
+                ]));
+    }
+
+    static PineValue CharIsLower(
+        PineValue environment,
+        PineVMParseCache parseCache)
+    {
+        /*
+        isLower : Char -> Bool
+        isLower char =
+            let
+                code =
+                    toCode char
+            in
+            Pine_kernel.int_is_sorted_asc [ 0x61, code, 0x7A ]
+
+         * */
+
+        var charValue =
+            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 0]);
+
+        if (charValue is not PineValue.BlobValue charBlob || charBlob.Bytes.Length is not 1)
+        {
+            return PineVMValues.FalseValue;
+        }
+
+        var charCode = charBlob.Bytes.Span[0];
+
+        var isLower =
+            0x61 <= charCode &&
+            charCode <= 0x7A;
+
+        return
+            isLower
+            ?
+            PineVMValues.TrueValue
+            :
+            PineVMValues.FalseValue;
+    }
+
+    static PineValue CharIsUpper(
+        PineValue environment,
+        PineVMParseCache parseCache)
+    {
+        var charValue =
+            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 0]);
+
+        if (charValue is not PineValue.BlobValue charBlob || charBlob.Bytes.Length is not 1)
+        {
+            return PineVMValues.FalseValue;
+        }
+
+        var charCode = charBlob.Bytes.Span[0];
+
+        var isUpper =
+            0x41 <= charCode &&
+            charCode <= 0x5A;
+
+        return
+            isUpper
+            ?
+            PineVMValues.TrueValue
+            :
+            PineVMValues.FalseValue;
     }
 
     static PineValue BasicsCompare(
@@ -1572,6 +1900,23 @@ public class Precompiled
         PineValue environment,
         PineVMParseCache parseCache)
     {
+        /*
+        computeValueFromStringRecursive : List Value -> List Char -> Value
+        computeValueFromStringRecursive mappedChars string =
+            case string of
+                [] ->
+                    ListValue (List.reverse mappedChars)
+
+                nextChar :: restOfChars ->
+                    computeValueFromStringRecursive (valueFromChar nextChar :: mappedChars) restOfChars
+
+
+        valueFromChar : Char -> Value
+        valueFromChar char =
+            BlobValue (unsafeUnsignedBlobValueFromInt (Char.toCode char))
+
+        */
+
         if (PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 0]) is not PineValue.ListValue mappedCharsList)
         {
             return null;
@@ -2582,6 +2927,585 @@ public class Precompiled
                         Callback: step)));
     }
 
+    static Func<PrecompiledResult>? StringSlice(
+        PineValue environment,
+        PineVMParseCache parseCache)
+    {
+        /*
+        slice : Int -> Int -> String -> String
+        slice start end (String chars) =
+            let
+                absoluteIndex relativeIndex =
+                    {-
+                       Instead of using integer comparison together with the literal 0,
+                       check the first byte if the sign is negative.
+                    -}
+                    if
+                        Pine_kernel.equal
+                            [ Pine_kernel.take [ 1, relativeIndex ]
+                            , Pine_kernel.take [ 1, -1 ]
+                            ]
+                    then
+                        Pine_kernel.int_add [ relativeIndex, Pine_kernel.length chars ]
+
+                    else
+                        relativeIndex
+
+                absoluteStart : Int
+                absoluteStart =
+                    absoluteIndex start
+
+                sliceLength : Int
+                sliceLength =
+                    Pine_kernel.int_add
+                        [ absoluteIndex end
+                        , Pine_kernel.int_mul [ -1, absoluteStart ]
+                        ]
+            in
+            String
+                (Pine_kernel.take
+                    [ sliceLength
+                    , Pine_kernel.skip [ absoluteStart, chars ]
+                    ]
+                )
+         * */
+
+        var startValue =
+            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 0]);
+
+        var endValue =
+            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 1]);
+
+        var charsValue =
+            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 2, 1, 0]);
+
+        if (PineValueAsInteger.SignedIntegerFromValueRelaxed(startValue).IsOkOrNullable() is not { } start)
+        {
+            return null;
+        }
+
+        if (PineValueAsInteger.SignedIntegerFromValueRelaxed(endValue).IsOkOrNullable() is not { } end)
+        {
+            return null;
+        }
+
+        if (charsValue is not PineValue.ListValue charsList)
+        {
+            return null;
+        }
+
+        int absoluteIndex(int relativeIndex)
+        {
+            if (relativeIndex < 0)
+            {
+                return relativeIndex + charsList.Elements.Count;
+            }
+
+            return relativeIndex;
+        }
+
+        var absoluteStart = absoluteIndex((int)start);
+
+        var sliceLength = absoluteIndex((int)end) - absoluteStart;
+
+        var sliceChars =
+            charsList.Elements.Count <= absoluteStart
+            ?
+            PineValue.EmptyList
+            :
+            PineVM.FusedSkipAndTake(charsList, skipCount: absoluteStart, takeCount: sliceLength);
+
+        var slicedStringValue =
+            PineValue.List(
+                [
+                Tag_String_Value,
+                PineValue.List([sliceChars])
+                ]);
+
+        var finalValue =
+            new PrecompiledResult.FinalValue(
+                slicedStringValue,
+                StackFrameCount: 0);
+
+        return () => finalValue;
+    }
+
+    static Func<PrecompiledResult>? ParserFast_skipWhileWhitespaceHelp(
+        PineValue environment,
+        PineVMParseCache parseCache)
+    {
+        /*
+        skipWhileWhitespaceHelp : Int -> Int -> Int -> String -> Int -> State
+        skipWhileWhitespaceHelp offset row col src indent =
+            case String.slice offset (offset + 1) src of
+                " " ->
+                    skipWhileWhitespaceHelp (offset + 1) row (col + 1) src indent
+
+                "\n" ->
+                    skipWhileWhitespaceHelp (offset + 1) (row + 1) 1 src indent
+
+                "\u{000D}" ->
+                    skipWhileWhitespaceHelp (offset + 1) row (col + 1) src indent
+
+                -- empty or non-whitespace
+                _ ->
+                    PState src offset indent row col
+         * */
+
+
+        var offsetValue =
+            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 0]);
+
+        var rowValue =
+            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 1]);
+
+        var colValue =
+            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 2]);
+
+        var srcValue =
+            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 3]);
+
+        var srcCharsValue =
+            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 3, 1, 0]);
+
+        var indentValue =
+            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 4]);
+
+        if (PineValueAsInteger.SignedIntegerFromValueRelaxed(offsetValue).IsOkOrNullable() is not { } startOffset)
+        {
+            return null;
+        }
+
+        if (PineValueAsInteger.SignedIntegerFromValueRelaxed(rowValue).IsOkOrNullable() is not { } row)
+        {
+            return null;
+        }
+
+        if (PineValueAsInteger.SignedIntegerFromValueRelaxed(colValue).IsOkOrNullable() is not { } col)
+        {
+            return null;
+        }
+
+        if (srcCharsValue is not PineValue.ListValue srcCharsList)
+        {
+            return null;
+        }
+
+        var offset = (int)startOffset;
+
+        while (true)
+        {
+            if (srcCharsList.Elements.Count <= offset)
+            {
+                break;
+            }
+
+            var currentChar = srcCharsList.Elements[offset];
+
+            if (currentChar is not PineValue.BlobValue currentCharBlob)
+            {
+                break;
+            }
+
+            if (currentCharBlob.Bytes.Length is not 1)
+            {
+                break;
+            }
+
+            var byteValue = currentCharBlob.Bytes.Span[0];
+
+            if (byteValue is 32)
+            {
+                ++offset;
+                ++col;
+                continue;
+            }
+
+            if (byteValue is 10)
+            {
+                ++offset;
+                ++row;
+                col = 1;
+                continue;
+            }
+
+            if (byteValue is 13)
+            {
+                ++offset;
+                ++col;
+                continue;
+            }
+
+            break;
+        }
+
+        var result =
+            new PrecompiledResult.FinalValue(
+                PineValue.List(
+                    [
+                    Tag_PState_Name_Value,
+                    PineValue.List(
+                        [
+                        srcValue,
+                        PineValueAsInteger.ValueFromSignedInteger(offset),
+                        indentValue,
+                        PineValueAsInteger.ValueFromSignedInteger(row),
+                        PineValueAsInteger.ValueFromSignedInteger(col),
+                        ])
+                    ]),
+                StackFrameCount: 0);
+
+        return () => result;
+    }
+
+
+    static Func<PrecompiledResult>? ParserFast_skipWhileWithoutLinebreakHelp(
+        PineValue environment,
+        PineVMParseCache parseCache)
+    {
+        /*
+        skipWhileWithoutLinebreakHelp : (Char -> Bool) -> Int -> Int -> Int -> String -> Int -> State
+        skipWhileWithoutLinebreakHelp isGood offset row col src indent =
+            let
+                actualChar : String
+                actualChar =
+                    String.slice offset (offset + 1) src
+            in
+            if String.any isGood actualChar then
+                skipWhileWithoutLinebreakHelp isGood (offset + 1) row (col + 1) src indent
+
+            else
+                -- no match
+                PState src offset indent row col
+         * */
+
+        var isGoodFunctionValue =
+            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 0]);
+
+        var isMatchFunctionValueJson =
+            System.Text.Json.JsonSerializer.Serialize(
+                isGoodFunctionValue,
+                EncodePineExpressionAsJson.BuildJsonSerializerOptions());
+
+        if (ElmInteractiveEnvironment.ParseFunctionRecordFromValueTagged(isGoodFunctionValue, parseCache).IsOkOrNull()
+            is not { } isMatchFunctionRecord)
+        {
+            return null;
+        }
+
+        return null;
+    }
+
+    static Func<PrecompiledResult>? ParserFast_skipWhileWithoutLinebreakHelp_isAlphaNumOrUnderscore(
+        PineValue environment,
+        PineVMParseCache parseCache)
+    {
+        /*
+        isAlphaNumOrUnderscore : Char -> Bool
+        isAlphaNumOrUnderscore c =
+            Char.isAlphaNum c || c == '_'
+         * */
+
+        static bool charValuePredicate(PineValue charValue)
+        {
+            if (charValue is not PineValue.BlobValue blobValue)
+            {
+                return false;
+            }
+
+            if (blobValue.Bytes.Length is not 1)
+            {
+                return false;
+            }
+
+            var byteValue = blobValue.Bytes.Span[0];
+
+            return
+                (byteValue >= 48 && byteValue <= 57) ||
+                (byteValue >= 65 && byteValue <= 90) ||
+                (byteValue >= 97 && byteValue <= 122) ||
+                byteValue == '_';
+        }
+
+        return
+            ParserFast_skipWhileWithoutLinebreakHelp(
+                environment,
+                parseCache,
+                charValuePredicate);
+    }
+
+    static Func<PrecompiledResult>? ParserFast_skipWhileWithoutLinebreakHelp(
+        PineValue environment,
+        PineVMParseCache parseCache,
+        Func<PineValue, bool> charValuePredicate)
+    {
+        /*
+        skipWhileWithoutLinebreakHelp : (Char -> Bool) -> Int -> Int -> Int -> String -> Int -> State
+        skipWhileWithoutLinebreakHelp isGood offset row col src indent =
+            let
+                actualChar : String
+                actualChar =
+                    String.slice offset (offset + 1) src
+            in
+            if String.any isGood actualChar then
+                skipWhileWithoutLinebreakHelp isGood (offset + 1) row (col + 1) src indent
+
+            else
+                -- no match
+                PState src offset indent row col
+         * */
+
+        var offsetValue =
+            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 1]);
+
+        var rowValue =
+            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 2]);
+
+        var colValue =
+            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 3]);
+
+        var srcValue =
+            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 4]);
+
+        var srcCharsValue =
+            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 4, 1, 0]);
+
+        var indentValue =
+            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 5]);
+
+        if (PineValueAsInteger.SignedIntegerFromValueRelaxed(offsetValue).IsOkOrNullable() is not { } startOffset)
+        {
+            return null;
+        }
+
+        if (PineValueAsInteger.SignedIntegerFromValueRelaxed(colValue).IsOkOrNullable() is not { } col)
+        {
+            return null;
+        }
+
+        if (srcCharsValue is not PineValue.ListValue srcCharsList)
+        {
+            return null;
+        }
+
+        var offset = (int)startOffset;
+
+        while (true)
+        {
+            if (srcCharsList.Elements.Count <= offset)
+            {
+                break;
+            }
+
+            var currentChar = srcCharsList.Elements[offset];
+
+            if (charValuePredicate(currentChar))
+            {
+                ++offset;
+                ++col;
+                continue;
+            }
+
+            break;
+        }
+
+        var result =
+            new PrecompiledResult.FinalValue(
+                PineValue.List(
+                    [
+                    Tag_PState_Name_Value,
+                    PineValue.List(
+                        [
+                        srcValue,
+                        PineValueAsInteger.ValueFromSignedInteger(offset),
+                        indentValue,
+                        rowValue,
+                        PineValueAsInteger.ValueFromSignedInteger(col),
+                        ])
+                    ]),
+                StackFrameCount: 0);
+
+        return
+            () => result;
+    }
+
+    static PrecompiledResult.FinalValue? ParserFast_skipWhileHelp_not_elm_multiline_comment_open_or_close(
+        PineValue environment,
+        PineVMParseCache parseCache)
+    {
+        var openChar =
+            PineValue.Blob([(byte)'{']);
+
+        var closeChar =
+            PineValue.Blob([(byte)'-']);
+
+        return
+            ParserFast_skipWhileHelp(
+                environment,
+                charValuePredicate:
+                c => !(c == openChar || c == closeChar));
+    }
+
+    static PrecompiledResult.FinalValue? ParserFast_skipWhileHelp(
+        PineValue environment,
+        Func<PineValue, bool> charValuePredicate)
+    {
+        /*
+        skipWhileHelp : (Char -> Bool) -> Int -> Int -> Int -> String -> Int -> State
+        skipWhileHelp isGood offset row col src indent =
+            let
+                actualChar : String
+                actualChar =
+                    String.slice offset (offset + 1) src
+            in
+            if String.any isGood actualChar then
+                case actualChar of
+                    "\n" ->
+                        skipWhileHelp isGood (offset + 1) (row + 1) 1 src indent
+
+                    _ ->
+                        skipWhileHelp isGood (offset + 1) row (col + 1) src indent
+
+            else
+                -- no match
+                PState src offset indent row col
+
+         * 
+         * */
+
+        var offsetValue =
+            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 1]);
+
+        var rowValue =
+            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 2]);
+
+        var colValue =
+            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 3]);
+
+        var srcValue =
+            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 4]);
+
+        var srcCharsValue =
+            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 4, 1, 0]);
+
+        var indentValue =
+            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 5]);
+
+        if (PineValueAsInteger.SignedIntegerFromValueRelaxed(offsetValue).IsOkOrNullable() is not { } startOffset)
+        {
+            return null;
+        }
+
+        if (PineValueAsInteger.SignedIntegerFromValueRelaxed(rowValue).IsOkOrNullable() is not { } row)
+        {
+            return null;
+        }
+
+        if (PineValueAsInteger.SignedIntegerFromValueRelaxed(colValue).IsOkOrNullable() is not { } col)
+        {
+            return null;
+        }
+
+        if (srcCharsValue is not PineValue.ListValue srcCharsList)
+        {
+            return null;
+        }
+
+        if (startOffset < 0)
+        {
+            return null;
+        }
+
+        int offset = (int)startOffset;
+
+        while (true)
+        {
+            if (srcCharsList.Elements.Count <= offset)
+            {
+                break;
+            }
+
+            var currentChar = srcCharsList.Elements[offset];
+
+            if (!charValuePredicate(currentChar))
+            {
+                break;
+            }
+
+            ++offset;
+
+            if (currentChar == Character_ASCII_Newline_Value)
+            {
+                ++row;
+                col = 1;
+            }
+            else
+            {
+                ++col;
+            }
+        }
+
+        var finalValue =
+            PineValue.List(
+                [
+                Tag_PState_Name_Value,
+                PineValue.List(
+                    [
+                    srcValue,
+                    PineValueAsInteger.ValueFromSignedInteger(offset),
+                    indentValue,
+                    PineValueAsInteger.ValueFromSignedInteger(row),
+                    PineValueAsInteger.ValueFromSignedInteger(col),
+                    ])
+                ]);
+
+        return
+            new PrecompiledResult.FinalValue(
+                finalValue,
+                StackFrameCount: 0);
+    }
+
+    static Func<PrecompiledResult>? ParserFast_skipWhileHelp(
+        PineValue environment,
+        PineVMParseCache parseCache)
+    {
+        /*
+        skipWhileHelp : (Char -> Bool) -> Int -> Int -> Int -> String -> Int -> State
+        skipWhileHelp isGood offset row col src indent =
+            let
+                actualChar : String
+                actualChar =
+                    String.slice offset (offset + 1) src
+            in
+            if String.any isGood actualChar then
+                case actualChar of
+                    "\n" ->
+                        skipWhileHelp isGood (offset + 1) (row + 1) 1 src indent
+
+                    _ ->
+                        skipWhileHelp isGood (offset + 1) row (col + 1) src indent
+
+            else
+                -- no match
+                PState src offset indent row col
+         * */
+
+        var isGoodFunctionValue =
+            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 0]);
+
+        var isMatchFunctionValueJson =
+            System.Text.Json.JsonSerializer.Serialize(
+                isGoodFunctionValue,
+                EncodePineExpressionAsJson.BuildJsonSerializerOptions());
+
+        if (ElmInteractiveEnvironment.ParseFunctionRecordFromValueTagged(isGoodFunctionValue, parseCache).IsOkOrNull()
+            is not { } isMatchFunctionRecord)
+        {
+            return null;
+        }
+
+        return null;
+    }
 
     static Func<PrecompiledResult>? ElmCompiledAdaptivePartialApplication(
         PineValue environment,
@@ -2684,8 +3608,17 @@ public class Precompiled
     private static readonly PineValue Tag_ListValue_Value =
         PineValueAsString.ValueFromString("ListValue");
 
-    private static readonly PineValue ElmCompilerFunctionTagValue =
-        PineValueAsString.ValueFromString("Function");
+    private static readonly PineValue Tag_String_Value =
+        PineValueAsString.ValueFromString("String");
+
+    private static readonly PineValue Tag_Nothing_Name_Value =
+        PineValueAsString.ValueFromString("Nothing");
+
+    private static readonly PineValue Tag_Branch2_Name_Value =
+        PineValueAsString.ValueFromString("Branch2");
+
+    private static readonly PineValue Tag_PState_Name_Value =
+        PineValueAsString.ValueFromString("PState");
 
     private static readonly PineValue Tag_EQ_Value =
         ElmValueEncoding.ElmValueAsPineValue(ElmValue.TagInstance("EQ", []));
