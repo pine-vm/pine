@@ -2378,21 +2378,17 @@ public class PineVM : IPineVM
                 environment,
                 stackPrevValues: stackPrevValues);
 
-        return
-            conditionValue == PineVMValues.TrueValue
-            ?
-            EvaluateExpressionDefaultLessStack(
+        if (conditionValue == PineVMValues.TrueValue)
+        {
+            return EvaluateExpressionDefaultLessStack(
                 conditional.trueBranch,
                 environment,
-                stackPrevValues: stackPrevValues)
-            :
-            conditionValue == PineVMValues.FalseValue
-            ?
-            EvaluateExpressionDefaultLessStack(
+                stackPrevValues: stackPrevValues);
+        }
+
+        return EvaluateExpressionDefaultLessStack(
                 conditional.falseBranch,
                 environment,
-                stackPrevValues: stackPrevValues)
-            :
-            PineValue.EmptyList;
+            stackPrevValues: stackPrevValues);
     }
 }
