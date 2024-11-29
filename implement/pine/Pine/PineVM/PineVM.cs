@@ -1381,6 +1381,116 @@ public class PineVM : IPineVM
 
         var stack = new Stack<StackFrame>();
 
+        string? invokePrecompiledOrBuildStackFrame(
+            PineValue? expressionValue,
+            Expression expression,
+            PineValue environmentValue)
+        {
+            var currentFrame = stack.Peek();
+
+            if (!disablePrecompiled &&
+                Precompiled.SelectPrecompiled(expression, environmentValue, parseCache) is { } precompiledDelegate)
+            {
+                var precompiledResult = precompiledDelegate();
+
+                switch (precompiledResult)
+                {
+                    case Precompiled.PrecompiledResult.FinalValue finalValue:
+
+                        stackFrameCount += finalValue.StackFrameCount;
+
+                        currentFrame.PushInstructionResult(finalValue.Value);
+
+                        return null;
+
+                    case Precompiled.PrecompiledResult.ContinueParseAndEval continueParseAndEval:
+                        {
+                            if (InvocationCachedResultOrOverride(
+                                expressionValue: continueParseAndEval.ExpressionValue,
+                                environmentValue: continueParseAndEval.EnvironmentValue) is { } fromCacheOrDelegate)
+                            {
+                                currentFrame.PushInstructionResult(fromCacheOrDelegate);
+
+                                return null;
+                            }
+
+                            var contParseResult = parseCache.ParseExpression(continueParseAndEval.ExpressionValue);
+
+                            if (contParseResult.IsErrOrNull() is { } contParseErr)
+                            {
+                                return
+                                    "Failed to parse expression from value: " + contParseErr +
+                                    " - expressionValue is " + DescribeValueForErrorMessage(expressionValue) +
+                                    " - environmentValue is " + DescribeValueForErrorMessage(environmentValue);
+                            }
+
+                            if (contParseResult.IsOkOrNull() is not { } contParseOk)
+                            {
+                                throw new NotImplementedException(
+                                    "Unexpected result type: " + contParseResult.GetType().FullName);
+                            }
+
+                            return
+                                invokePrecompiledOrBuildStackFrame(
+                                    expressionValue: continueParseAndEval.ExpressionValue,
+                                    expression: contParseOk,
+                                    environmentValue: continueParseAndEval.EnvironmentValue);
+                        }
+
+                    case Precompiled.PrecompiledResult.StepwiseSpecialization specialization:
+                        {
+                            var newFrame =
+                                new StackFrame(
+                                    ExpressionValue: expressionValue,
+                                    Expression: expression,
+                                    Instructions: null,
+                                    EnvironmentValue: environmentValue,
+                                    InstructionsResultValues: null,
+                                    BeginInstructionCount: instructionCount,
+                                    BeginParseAndEvalCount: parseAndEvalCount,
+                                    BeginStackFrameCount: stackFrameCount,
+                                    Specialization: specialization.Stepwise);
+
+                            pushStackFrame(newFrame);
+
+                            return null;
+                        }
+
+                    default:
+                        throw new Exception(
+                            "Unexpected return type from precompiled: " + precompiledResult.GetType().FullName);
+                }
+            }
+            else
+            {
+                buildAndPushStackFrame
+                (
+                    expressionValue: expressionValue,
+                    expression: expression,
+                    environmentValue: environmentValue
+                );
+
+                return null;
+            }
+        }
+
+        void buildAndPushStackFrame(
+            PineValue? expressionValue,
+            Expression expression,
+            PineValue environmentValue)
+        {
+            var newFrame =
+                StackFrameFromExpression(
+                    expressionValue: expressionValue,
+                    expression: expression,
+                    environment: environmentValue,
+                    beginInstructionCount: instructionCount,
+                    beginParseAndEvalCount: parseAndEvalCount,
+                    beginStackFrameCount: stackFrameCount);
+
+            pushStackFrame(newFrame);
+        }
+
         void pushStackFrame(StackFrame newFrame)
         {
             stack.Push(newFrame);
@@ -1443,14 +1553,10 @@ public class PineVM : IPineVM
         IReadOnlyList<Expression> CompileStackTrace(int frameCountMax) =>
             [.. stack.Skip(1).Take(frameCountMax).Select(f => f.Expression)];
 
-        pushStackFrame(
-            StackFrameFromExpression(
-                expressionValue: null,
-                rootExpression,
-                rootEnvironment,
-                beginInstructionCount: instructionCount,
-                beginParseAndEvalCount: parseAndEvalCount,
-                beginStackFrameCount: stackFrameCount));
+        buildAndPushStackFrame(
+            expressionValue: null,
+            rootExpression,
+            rootEnvironment);
 
         static ExecutionErrorReport buildErrorReport(StackFrame stackFrame)
         {
@@ -1489,16 +1595,13 @@ public class PineVM : IPineVM
 
                     if (stepResult is ApplyStepwise.StepResult.Continue cont)
                     {
-                        var newFrame =
-                            StackFrameFromExpression(
+                        if (invokePrecompiledOrBuildStackFrame(
                                 expressionValue: null,
                                 expression: cont.Expression,
-                                environment: cont.EnvironmentValue,
-                                beginInstructionCount: instructionCount,
-                                beginParseAndEvalCount: parseAndEvalCount,
-                                beginStackFrameCount: stackFrameCount);
-
-                        pushStackFrame(newFrame);
+                            environmentValue: cont.EnvironmentValue) is { } error)
+                        {
+                            return error;
+                        }
 
                         continue;
                     }
@@ -1605,109 +1708,28 @@ public class PineVM : IPineVM
 
                         var parseResult = parseCache.ParseExpression(expressionValue);
 
-                        if (parseResult is Result<string, Expression>.Err parseErr)
+                        if (parseResult.IsErrOrNull() is { } parseErr)
                         {
                             return
-                                "Failed to parse expression from value: " + parseErr.Value +
+                                "Failed to parse expression from value: " + parseErr +
                                 " - expressionValue is " + DescribeValueForErrorMessage(expressionValue) +
                                 " - environmentValue is " + DescribeValueForErrorMessage(environmentValue);
                         }
 
-                        if (parseResult is not Result<string, Expression>.Ok parseOk)
+                        if (parseResult.IsOkOrNull() is not { } parseOk)
                         {
-                            throw new NotImplementedException("Unexpected result type: " + parseResult.GetType().FullName);
+                            throw new NotImplementedException(
+                                "Unexpected result type: " + parseResult.GetType().FullName);
                         }
 
-                        if (!disablePrecompiled &&
-                            Precompiled.SelectPrecompiled(parseOk.Value, environmentValue, parseCache) is { } precompiledDelegate)
                         {
-                            var precompiledResult = precompiledDelegate();
-
-                            switch (precompiledResult)
+                            if (invokePrecompiledOrBuildStackFrame(
+                                expressionValue: expressionValue,
+                                parseOk,
+                                environmentValue) is { } error)
                             {
-                                case Precompiled.PrecompiledResult.FinalValue finalValue:
-
-                                    stackFrameCount += finalValue.StackFrameCount;
-
-                                    currentFrame.PushInstructionResult(finalValue.Value);
-
-                                    continue;
-
-                                case Precompiled.PrecompiledResult.ContinueParseAndEval continueParseAndEval:
-                                    {
-                                        if (InvocationCachedResultOrOverride(
-                                            expressionValue: continueParseAndEval.ExpressionValue,
-                                            environmentValue: continueParseAndEval.EnvironmentValue) is { } fromCacheOrDelegate)
-                                        {
-                                            currentFrame.PushInstructionResult(fromCacheOrDelegate);
-
-                                            continue;
-                                        }
-
-                                        var contParseResult = parseCache.ParseExpression(continueParseAndEval.ExpressionValue);
-
-                                        if (contParseResult is Result<string, Expression>.Err contParseErr)
-                                        {
-                                            return
-                                                "Failed to parse expression from value: " + contParseErr.Value +
-                                                " - expressionValue is " + DescribeValueForErrorMessage(expressionValue) +
-                                                " - environmentValue is " + DescribeValueForErrorMessage(environmentValue);
-                                        }
-
-                                        if (contParseResult is not Result<string, Expression>.Ok contParseOk)
-                                        {
-                                            throw new NotImplementedException("Unexpected result type: " + parseResult.GetType().FullName);
-                                        }
-
-                                        var newFrame =
-                                            StackFrameFromExpression(
-                                                expressionValue: continueParseAndEval.ExpressionValue,
-                                                expression: contParseOk.Value,
-                                                environment: continueParseAndEval.EnvironmentValue,
-                                                beginInstructionCount: instructionCount,
-                                                beginParseAndEvalCount: parseAndEvalCount,
-                                                beginStackFrameCount: stackFrameCount);
-
-                                        pushStackFrame(newFrame);
-
-                                        continue;
-                                    }
-
-                                case Precompiled.PrecompiledResult.StepwiseSpecialization specialization:
-                                    {
-                                        var newFrame =
-                                            new StackFrame(
-                                                ExpressionValue: expressionValue,
-                                                Expression: parseOk.Value,
-                                                Instructions: null,
-                                                EnvironmentValue: environmentValue,
-                                                InstructionsResultValues: null,
-                                                BeginInstructionCount: instructionCount,
-                                                BeginParseAndEvalCount: parseAndEvalCount,
-                                                BeginStackFrameCount: stackFrameCount,
-                                                Specialization: specialization.Stepwise);
-
-                                        pushStackFrame(newFrame);
-
-                                        continue;
-                                    }
-
-                                default:
-                                    throw new Exception("Unexpected return type from precompiled: " + precompiledResult.GetType().FullName);
+                                return error;
                             }
-                        }
-
-                        {
-                            var newFrame =
-                                StackFrameFromExpression(
-                                    expressionValue: expressionValue,
-                                    parseOk.Value,
-                                    environmentValue,
-                                    beginInstructionCount: instructionCount,
-                                    beginParseAndEvalCount: parseAndEvalCount,
-                                    beginStackFrameCount: stackFrameCount);
-
-                            pushStackFrame(newFrame);
 
                             continue;
                         }
