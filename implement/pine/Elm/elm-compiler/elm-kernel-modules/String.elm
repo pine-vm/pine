@@ -752,7 +752,21 @@ toRationalComponentsLessSign chars =
 
 any : (Char -> Bool) -> String -> Bool
 any predicate (String chars) =
-    List.any predicate chars
+    charsAny predicate chars
+
+
+charsAny : (Char -> Bool) -> List Char -> Bool
+charsAny predicate chars =
+    case chars of
+        [] ->
+            False
+
+        char :: rest ->
+            if predicate char then
+                True
+
+            else
+                charsAny predicate rest
 
 
 toUpper : String -> String
