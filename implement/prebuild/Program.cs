@@ -11,7 +11,7 @@ public class Program
     public const string DestinationFilePath = "./Pine.Core/" + ReusedInstances.EmbeddedResourceFilePath;
 
     public const string PreviousCompilerFilePath =
-        "./history/2024-11-19-compiler-bundle/elm-syntax-parser-and-compiler.json.gzip";
+        "./history/2024-11-30-compiler-bundle/elm-syntax-parser-and-compiler.json.gzip";
 
     public static void Main()
     {
