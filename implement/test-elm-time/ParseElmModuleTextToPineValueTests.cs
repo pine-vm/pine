@@ -403,6 +403,7 @@ public class ParseElmModuleTextToPineValueTests
         TestParsingModuleText(elmModuleText, expectedExpressionStringChunks);
     }
 
+    static readonly ElmCompilerCache elmCompilerCache = new();
 
     public static ElmValue TestParsingModuleText(
         string elmModuleText,
@@ -411,12 +412,19 @@ public class ParseElmModuleTextToPineValueTests
         var expectedExpressionString =
             string.Concat(expectedExpressionStringChunks);
 
+        var parseClock = System.Diagnostics.Stopwatch.StartNew();
+
         var parsedModulePineValue =
             ParseElmModuleTextToPineValue(elmModuleText)
             .Extract(err => throw new Exception(err));
 
+        Console.WriteLine(
+            "Parsed Elm module text in " +
+            CommandLineInterface.FormatIntegerForDisplay(parseClock.ElapsedMilliseconds) +
+            " milliseconds");
+
         var responseAsElmValue =
-            ElmValueEncoding.PineValueAsElmValue(parsedModulePineValue, null, null)
+            elmCompilerCache.PineValueDecodedAsElmValue(parsedModulePineValue)
             .Extract(err => throw new Exception(err));
 
         var responseAsExpression =
