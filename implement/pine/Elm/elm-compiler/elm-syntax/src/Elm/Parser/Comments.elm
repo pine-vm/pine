@@ -1,38 +1,61 @@
-module Elm.Parser.Comments exposing (multilineComment, singleLineComment)
+module Elm.Parser.Comments exposing (declarationDocumentation, moduleDocumentation, multilineComment, singleLineComment)
 
-import Combine exposing (Parser)
-import Elm.Parser.Node
-import Elm.Parser.State exposing (State)
-import Elm.Parser.Whitespace
-import Elm.Syntax.Node exposing (Node)
-import Parser as Core exposing (Nestable(..))
+import Elm.Syntax.Documentation exposing (Documentation)
+import Elm.Syntax.Node exposing (Node(..))
+import ParserFast exposing (Parser)
 
 
-addCommentToState : Parser State (Node String) -> Parser State ()
-addCommentToState p =
-    p |> Combine.andThen (\pair -> Combine.modifyState (Elm.Parser.State.addComment pair))
-
-
-parseComment : Parser State String -> Parser State ()
-parseComment commentParser =
-    Elm.Parser.Node.parser commentParser |> addCommentToState
-
-
-singleLineComment : Parser State ()
+singleLineComment : ParserFast.Parser (Node String)
 singleLineComment =
-    parseComment
-        (Combine.succeed (\a b -> String.concat [ a, b ])
-            |> Combine.keep (Combine.string "--")
-            |> Combine.keep Elm.Parser.Whitespace.untilNewlineToken
+    ParserFast.symbolFollowedBy "--"
+        (ParserFast.whileMapWithRange
+            (\c -> c /= '\u{000D}' && c /= '\n')
+            (\range content ->
+                Node
+                    { start = { row = range.start.row, column = range.start.column - 2 }
+                    , end =
+                        { row = range.start.row
+                        , column = range.end.column
+                        }
+                    }
+                    ("--" ++ content)
+            )
         )
 
 
-multilineCommentInner : Parser State String
-multilineCommentInner =
-    Core.getChompedString (Core.multiComment "{-" "-}" Nestable)
-        |> Combine.fromCore
-
-
-multilineComment : Parser State ()
+multilineComment : ParserFast.Parser (Node String)
 multilineComment =
-    parseComment multilineCommentInner
+    ParserFast.offsetSourceAndThen
+        (\offset source ->
+            case String.slice (offset + 2) (offset + 3) source of
+                "|" ->
+                    problemUnexpectedDocumentation
+
+                _ ->
+                    multiLineCommentNoCheck
+        )
+
+
+problemUnexpectedDocumentation : Parser a
+problemUnexpectedDocumentation =
+    ParserFast.problem "unexpected documentation comment"
+
+
+multiLineCommentNoCheck : Parser (Node String)
+multiLineCommentNoCheck =
+    ParserFast.nestableMultiCommentMapWithRange Node
+        ( '{', "-" )
+        ( '-', "}" )
+
+
+moduleDocumentation : Parser (Node String)
+moduleDocumentation =
+    declarationDocumentation
+
+
+declarationDocumentation : ParserFast.Parser (Node Documentation)
+declarationDocumentation =
+    -- technically making the whole parser fail on multi-line comments would be "correct"
+    -- but in practice, all declaration comments allow layout before which already handles
+    -- these.
+    multiLineCommentNoCheck

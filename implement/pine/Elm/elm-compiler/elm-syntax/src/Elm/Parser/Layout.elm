@@ -1,120 +1,227 @@
-module Elm.Parser.Layout exposing (LayoutStatus(..), layout, layoutStrict, maybeAroundBothSides, optimisticLayout, optimisticLayoutWith)
+module Elm.Parser.Layout exposing
+    ( layoutStrict
+    , layoutStrictFollowedBy
+    , layoutStrictFollowedByComments
+    , layoutStrictFollowedByWithComments
+    , maybeAroundBothSides
+    , maybeLayout
+    , moduleLevelIndentationFollowedBy
+    , onTopIndentationFollowedBy
+    , optimisticLayout
+    , positivelyIndentedFollowedBy
+    , positivelyIndentedPlusFollowedBy
+    )
 
-import Combine exposing (Parser)
 import Elm.Parser.Comments as Comments
-import Elm.Parser.State as State exposing (State)
-import Elm.Parser.Whitespace
+import ParserFast exposing (Parser)
+import ParserWithComments exposing (Comments, WithComments(..))
+import Rope
 
 
-anyComment : Combine.Parser State ()
-anyComment =
-    Combine.oneOf
-        [ Comments.singleLineComment
-        , Comments.multilineComment
-        ]
+whitespaceAndCommentsOrEmpty : Parser Comments
+whitespaceAndCommentsOrEmpty =
+    ParserFast.skipWhileWhitespaceFollowedBy
+        -- whitespace can't be followed by more whitespace
+        --
+        -- since comments are comparatively rare
+        -- but expensive to check for, we allow shortcutting
+        (ParserFast.offsetSourceAndThenOrSucceed
+            (\offset source ->
+                case source |> String.slice offset (offset + 2) of
+                    "--" ->
+                        -- this will always succeed from here, so no need to fall back to Rope.empty
+                        Just fromSingleLineCommentNode
 
+                    "{-" ->
+                        Just fromMultilineCommentNodeOrEmptyOnProblem
 
-layout : Parser State ()
-layout =
-    Combine.many1
-        (Combine.oneOf
-            [ anyComment
-            , Combine.many1 Elm.Parser.Whitespace.realNewLine
-                |> Combine.continueWith
-                    (Combine.oneOf
-                        [ Elm.Parser.Whitespace.many1Spaces
-                        , anyComment
-                        ]
-                    )
-            , Elm.Parser.Whitespace.many1Spaces
-            ]
-        )
-        |> Combine.continueWith (verifyIndent (\stateIndent current -> stateIndent < current))
-
-
-type LayoutStatus
-    = Strict
-    | Indented
-
-
-optimisticLayoutWith : (() -> Parser State a) -> (() -> Parser State a) -> Parser State a
-optimisticLayoutWith onStrict onIndented =
-    optimisticLayout
-        |> Combine.andThen
-            (\ind ->
-                case ind of
-                    Strict ->
-                        onStrict ()
-
-                    Indented ->
-                        onIndented ()
+                    _ ->
+                        Nothing
             )
+            Rope.empty
+        )
 
 
-optimisticLayout : Parser State LayoutStatus
+fromMultilineCommentNodeOrEmptyOnProblem : Parser Comments
+fromMultilineCommentNodeOrEmptyOnProblem =
+    ParserFast.map2OrSucceed
+        (\comment commentsAfter ->
+            Rope.one comment |> Rope.filledPrependTo commentsAfter
+        )
+        (Comments.multilineComment
+            |> ParserFast.followedBySkipWhileWhitespace
+        )
+        whitespaceAndCommentsOrEmptyLoop
+        Rope.empty
+
+
+fromSingleLineCommentNode : Parser Comments
+fromSingleLineCommentNode =
+    ParserFast.map2
+        (\content commentsAfter ->
+            Rope.one content |> Rope.filledPrependTo commentsAfter
+        )
+        (Comments.singleLineComment
+            |> ParserFast.followedBySkipWhileWhitespace
+        )
+        whitespaceAndCommentsOrEmptyLoop
+
+
+whitespaceAndCommentsOrEmptyLoop : Parser Comments
+whitespaceAndCommentsOrEmptyLoop =
+    ParserFast.loopWhileSucceeds
+        (ParserFast.oneOf2
+            Comments.singleLineComment
+            Comments.multilineComment
+            |> ParserFast.followedBySkipWhileWhitespace
+        )
+        Rope.empty
+        (\right soFar -> soFar |> Rope.prependToFilled (Rope.one right))
+        identity
+
+
+maybeLayout : Parser Comments
+maybeLayout =
+    whitespaceAndCommentsOrEmpty |> endsPositivelyIndented
+
+
+endsPositivelyIndented : Parser a -> Parser a
+endsPositivelyIndented parser =
+    ParserFast.validateEndColumnIndentation
+        (\column indent -> column > indent)
+        "must be positively indented"
+        parser
+
+
+{-| Check that the indentation of an already parsed token
+would be valid after [`maybeLayout`](#maybeLayout)
+-}
+positivelyIndentedPlusFollowedBy : Int -> Parser a -> Parser a
+positivelyIndentedPlusFollowedBy extraIndent nextParser =
+    ParserFast.columnIndentAndThen
+        (\column indent ->
+            if column > indent + extraIndent then
+                nextParser
+
+            else
+                problemPositivelyIndented
+        )
+
+
+positivelyIndentedFollowedBy : Parser a -> Parser a
+positivelyIndentedFollowedBy nextParser =
+    ParserFast.columnIndentAndThen
+        (\column indent ->
+            if column > indent then
+                nextParser
+
+            else
+                problemPositivelyIndented
+        )
+
+
+problemPositivelyIndented : Parser a
+problemPositivelyIndented =
+    ParserFast.problem "must be positively indented"
+
+
+optimisticLayout : Parser Comments
 optimisticLayout =
-    Combine.many
-        (Combine.oneOf
-            [ anyComment
-            , Combine.many1 Elm.Parser.Whitespace.realNewLine
-                |> Combine.continueWith
-                    (Combine.oneOf
-                        [ Elm.Parser.Whitespace.many1Spaces
-                        , anyComment
-                        , Combine.succeed ()
-                        ]
-                    )
-            , Elm.Parser.Whitespace.many1Spaces
-            ]
+    whitespaceAndCommentsOrEmpty
+
+
+layoutStrictFollowedByComments : Parser Comments -> Parser Comments
+layoutStrictFollowedByComments nextParser =
+    ParserFast.map2
+        (\commentsBefore afterComments ->
+            commentsBefore |> Rope.prependTo afterComments
         )
-        |> Combine.continueWith compute
+        optimisticLayout
+        (onTopIndentationFollowedBy nextParser)
 
 
-compute : Parser State LayoutStatus
-compute =
-    Combine.withState
-        (\state ->
-            Combine.withLocation
-                (\l ->
-                    if l.column == 1 || List.member (l.column - 1) (State.storedColumns state) then
-                        Combine.succeed Strict
-
-                    else
-                        Combine.succeed Indented
-                )
+layoutStrictFollowedByWithComments : Parser (WithComments syntax) -> Parser (WithComments syntax)
+layoutStrictFollowedByWithComments nextParser =
+    ParserFast.map2
+        (\commentsBefore (WithComments comments syntax) ->
+            WithComments
+                (commentsBefore |> Rope.prependTo comments)
+                syntax
         )
+        optimisticLayout
+        (onTopIndentationFollowedBy nextParser)
 
 
-layoutStrict : Parser State ()
+layoutStrictFollowedBy : Parser syntax -> Parser (WithComments syntax)
+layoutStrictFollowedBy nextParser =
+    ParserFast.map2
+        (\commentsBefore after ->
+            WithComments
+                commentsBefore
+                after
+        )
+        optimisticLayout
+        (onTopIndentationFollowedBy nextParser)
+
+
+layoutStrict : Parser Comments
 layoutStrict =
-    Combine.many1
-        (Combine.oneOf
-            [ anyComment
-            , Combine.many1 Elm.Parser.Whitespace.realNewLine
-                |> Combine.continueWith (Combine.succeed ())
-            , Elm.Parser.Whitespace.many1Spaces
-            ]
-        )
-        |> Combine.continueWith (verifyIndent (\stateIndent current -> stateIndent == current))
+    optimisticLayout |> endsTopIndented
 
 
-verifyIndent : (Int -> Int -> Bool) -> Parser State ()
-verifyIndent f =
-    Combine.withState
-        (\s ->
-            Combine.withLocation
-                (\l ->
-                    if f (State.expectedColumn s) l.column then
-                        Combine.succeed ()
+moduleLevelIndentationFollowedBy : Parser a -> Parser a
+moduleLevelIndentationFollowedBy nextParser =
+    ParserFast.columnAndThen
+        (\column ->
+            if column == 1 then
+                nextParser
 
-                    else
-                        Combine.fail ("Expected higher indent than " ++ String.fromInt l.column)
-                )
+            else
+                problemModuleLevelIndentation
         )
 
 
-maybeAroundBothSides : Parser State b -> Parser State b
+problemModuleLevelIndentation : Parser a
+problemModuleLevelIndentation =
+    ParserFast.problem "must be on module-level indentation"
+
+
+endsTopIndented : Parser a -> Parser a
+endsTopIndented parser =
+    ParserFast.validateEndColumnIndentation
+        (\column indent -> column - indent == 0)
+        "must be on top indentation"
+        parser
+
+
+onTopIndentationFollowedBy : Parser a -> Parser a
+onTopIndentationFollowedBy nextParser =
+    ParserFast.columnIndentAndThen
+        (\column indent ->
+            if column - indent == 0 then
+                nextParser
+
+            else
+                problemTopIndentation
+        )
+
+
+problemTopIndentation : Parser a
+problemTopIndentation =
+    ParserFast.problem "must be on top indentation"
+
+
+maybeAroundBothSides : Parser (WithComments b) -> Parser (WithComments b)
 maybeAroundBothSides x =
-    Combine.maybe layout
-        |> Combine.continueWith x
-        |> Combine.ignore (Combine.maybe layout)
+    ParserFast.map3
+        (\before (WithComments comments syntax) after ->
+            WithComments
+                (before
+                    |> Rope.prependTo comments
+                    |> Rope.prependTo after
+                )
+                syntax
+        )
+        maybeLayout
+        x
+        maybeLayout

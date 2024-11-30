@@ -14,11 +14,11 @@ module Elm.Syntax.File exposing (File)
 
 -}
 
-import Elm.Syntax.Comments as Comments exposing (Comment)
-import Elm.Syntax.Declaration as Declaration exposing (Declaration)
-import Elm.Syntax.Import as Import exposing (Import)
-import Elm.Syntax.Module as Module exposing (Module)
-import Elm.Syntax.Node as Node exposing (Node)
+import Elm.Syntax.Comments exposing (Comment)
+import Elm.Syntax.Declaration exposing (Declaration)
+import Elm.Syntax.Import exposing (Import)
+import Elm.Syntax.Module exposing (Module)
+import Elm.Syntax.Node exposing (Node)
 
 
 {-| Type annotation for a file

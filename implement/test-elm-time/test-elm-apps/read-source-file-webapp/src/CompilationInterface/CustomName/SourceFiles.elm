@@ -1,5 +1,7 @@
 module CompilationInterface.CustomName.SourceFiles exposing (..)
 
+import Basics
+
 
 file____static_content_alpha_file_in_directory_txt : { utf8 : String }
 file____static_content_alpha_file_in_directory_txt =

@@ -8,7 +8,6 @@ import Common
 import CompileElmAppListExtra
 import Dict
 import Elm.Parser
-import Elm.Processing
 import Elm.Syntax.Declaration
 import Elm.Syntax.Encode.TypeAnnotation
 import Elm.Syntax.Exposing
@@ -4875,7 +4874,7 @@ filePathFromElmModuleName sourceDirs elmModuleName =
 
 parseElmModuleText : String -> Result (List Parser.DeadEnd) Elm.Syntax.File.File
 parseElmModuleText =
-    Elm.Parser.parse >> Result.map (Elm.Processing.process Elm.Processing.init)
+    Elm.Parser.parseToFile
 
 
 stringFromFileContent : Bytes.Bytes -> Maybe String

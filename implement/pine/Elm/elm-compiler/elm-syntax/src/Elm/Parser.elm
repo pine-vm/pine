@@ -10,17 +10,16 @@ module Elm.Parser exposing
 
 -}
 
-import Combine exposing (Parser)
 import Elm.Internal.RawFile as InternalRawFile
-import Elm.Parser.File
-import Elm.Parser.State exposing (State)
-import Elm.Processing as Processing
+import Elm.Parser.File exposing (file)
 import Elm.RawFile exposing (RawFile)
 import Elm.Syntax.File exposing (File)
-import Parser exposing (DeadEnd)
+import Parser
+import ParserFast
 
 
 {-| **@deprecated** Use [`parseToFile`](#parseToFile) instead, which is simpler and doesn't require post-processing.
+Since v7.3.3, post-processing is unnecessary.
 
 Parse some text as if it is an Elm source file.
 When parsing fails, the result will contain a list of errors indicating what went wrong (and/or where).
@@ -29,7 +28,7 @@ This `RawFile` will require some post-processing to properly setup documentation
 To process a `RawFile`, check out the `Processing` module.
 
 -}
-parse : String -> Result (List DeadEnd) RawFile
+parse : String -> Result (List Parser.DeadEnd) RawFile
 parse input =
     parseToFile input
         |> Result.map InternalRawFile.fromFile
@@ -38,17 +37,6 @@ parse input =
 {-| Parse some text as if it is an Elm source file.
 When parsing fails, the result will contain a list of errors indicating what went wrong (and/or where).
 -}
-parseToFile : String -> Result (List DeadEnd) File
+parseToFile : String -> Result (List Parser.DeadEnd) File
 parseToFile input =
-    -- A single line is added for unfinished ranges produced by `parser-combinators` on the last line.
-    case Combine.runParser (withEnd Elm.Parser.File.file) Elm.Parser.State.emptyState (input ++ "\n") of
-        Ok ( _, r ) ->
-            Ok (Processing.process Processing.init (InternalRawFile.fromFile r))
-
-        Err s ->
-            Err s
-
-
-withEnd : Parser State File -> Parser State File
-withEnd p =
-    p |> Combine.ignore Combine.end
+    ParserFast.run file input

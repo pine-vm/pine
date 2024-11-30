@@ -220,20 +220,20 @@ map4 :
     -> Decoder d
     -> Decoder value
 map4 func decoderA decoderB decoderC decoderD jsonValue =
-    case ( decoderA jsonValue, decoderB jsonValue, decoderC jsonValue, decoderD jsonValue ) of
-        ( Ok a, Ok b, Ok c, Ok d ) ->
+    case ( ( decoderA jsonValue, decoderB jsonValue ), ( decoderC jsonValue, decoderD jsonValue ) ) of
+        ( ( Ok a, Ok b ), ( Ok c, Ok d ) ) ->
             Ok (func a b c d)
 
-        ( Err err, _, _, _ ) ->
+        ( ( Err err, _ ), _ ) ->
             Err err
 
-        ( _, Err err, _, _ ) ->
+        ( ( _, Err err ), _ ) ->
             Err err
 
-        ( _, _, Err err, _ ) ->
+        ( _, ( Err err, _ ) ) ->
             Err err
 
-        ( _, _, _, Err err ) ->
+        ( _, ( _, Err err ) ) ->
             Err err
 
 
@@ -246,24 +246,32 @@ map5 :
     -> Decoder e
     -> Decoder value
 map5 func decoderA decoderB decoderC decoderD decoderE jsonValue =
-    case ( decoderA jsonValue, decoderB jsonValue, decoderC jsonValue, decoderD jsonValue, decoderE jsonValue ) of
-        ( Ok a, Ok b, Ok c, Ok d, Ok e ) ->
-            Ok (func a b c d e)
-
-        ( Err err, _, _, _, _ ) ->
+    case decoderA jsonValue of
+        Err err ->
             Err err
 
-        ( _, Err err, _, _, _ ) ->
-            Err err
+        Ok a ->
+            case decoderB jsonValue of
+                Err err ->
+                    Err err
 
-        ( _, _, Err err, _, _ ) ->
-            Err err
+                Ok b ->
+                    case decoderC jsonValue of
+                        Err err ->
+                            Err err
 
-        ( _, _, _, Err err, _ ) ->
-            Err err
+                        Ok c ->
+                            case decoderD jsonValue of
+                                Err err ->
+                                    Err err
 
-        ( _, _, _, _, Err err ) ->
-            Err err
+                                Ok d ->
+                                    case decoderE jsonValue of
+                                        Err err ->
+                                            Err err
+
+                                        Ok e ->
+                                            Ok (func a b c d e)
 
 
 map6 :
@@ -276,27 +284,37 @@ map6 :
     -> Decoder f
     -> Decoder value
 map6 func decoderA decoderB decoderC decoderD decoderE decoderF jsonValue =
-    case ( decoderA jsonValue, decoderB jsonValue, decoderC jsonValue, decoderD jsonValue, decoderE jsonValue, decoderF jsonValue ) of
-        ( Ok a, Ok b, Ok c, Ok d, Ok e, Ok f ) ->
-            Ok (func a b c d e f)
-
-        ( Err err, _, _, _, _, _ ) ->
+    case decoderA jsonValue of
+        Err err ->
             Err err
 
-        ( _, Err err, _, _, _, _ ) ->
-            Err err
+        Ok a ->
+            case decoderB jsonValue of
+                Err err ->
+                    Err err
 
-        ( _, _, Err err, _, _, _ ) ->
-            Err err
+                Ok b ->
+                    case decoderC jsonValue of
+                        Err err ->
+                            Err err
 
-        ( _, _, _, Err err, _, _ ) ->
-            Err err
+                        Ok c ->
+                            case decoderD jsonValue of
+                                Err err ->
+                                    Err err
 
-        ( _, _, _, _, Err err, _ ) ->
-            Err err
+                                Ok d ->
+                                    case decoderE jsonValue of
+                                        Err err ->
+                                            Err err
 
-        ( _, _, _, _, _, Err err ) ->
-            Err err
+                                        Ok e ->
+                                            case decoderF jsonValue of
+                                                Err err ->
+                                                    Err err
+
+                                                Ok f ->
+                                                    Ok (func a b c d e f)
 
 
 map7 :
@@ -310,30 +328,42 @@ map7 :
     -> Decoder g
     -> Decoder value
 map7 func decoderA decoderB decoderC decoderD decoderE decoderF decoderG jsonValue =
-    case ( decoderA jsonValue, decoderB jsonValue, decoderC jsonValue, decoderD jsonValue, decoderE jsonValue, decoderF jsonValue, decoderG jsonValue ) of
-        ( Ok a, Ok b, Ok c, Ok d, Ok e, Ok f, Ok g ) ->
-            Ok (func a b c d e f g)
-
-        ( Err err, _, _, _, _, _, _ ) ->
+    case decoderA jsonValue of
+        Err err ->
             Err err
 
-        ( _, Err err, _, _, _, _, _ ) ->
-            Err err
+        Ok a ->
+            case decoderB jsonValue of
+                Err err ->
+                    Err err
 
-        ( _, _, Err err, _, _, _, _ ) ->
-            Err err
+                Ok b ->
+                    case decoderC jsonValue of
+                        Err err ->
+                            Err err
 
-        ( _, _, _, Err err, _, _, _ ) ->
-            Err err
+                        Ok c ->
+                            case decoderD jsonValue of
+                                Err err ->
+                                    Err err
 
-        ( _, _, _, _, Err err, _, _ ) ->
-            Err err
+                                Ok d ->
+                                    case decoderE jsonValue of
+                                        Err err ->
+                                            Err err
 
-        ( _, _, _, _, _, Err err, _ ) ->
-            Err err
+                                        Ok e ->
+                                            case decoderF jsonValue of
+                                                Err err ->
+                                                    Err err
 
-        ( _, _, _, _, _, _, Err err ) ->
-            Err err
+                                                Ok f ->
+                                                    case decoderG jsonValue of
+                                                        Err err ->
+                                                            Err err
+
+                                                        Ok g ->
+                                                            Ok (func a b c d e f g)
 
 
 map8 :
@@ -348,33 +378,47 @@ map8 :
     -> Decoder h
     -> Decoder value
 map8 func decoderA decoderB decoderC decoderD decoderE decoderF decoderG decoderH jsonValue =
-    case ( decoderA jsonValue, decoderB jsonValue, decoderC jsonValue, decoderD jsonValue, decoderE jsonValue, decoderF jsonValue, decoderG jsonValue, decoderH jsonValue ) of
-        ( Ok a, Ok b, Ok c, Ok d, Ok e, Ok f, Ok g, Ok h ) ->
-            Ok (func a b c d e f g h)
-
-        ( Err err, _, _, _, _, _, _, _ ) ->
+    case decoderA jsonValue of
+        Err err ->
             Err err
 
-        ( _, Err err, _, _, _, _, _, _ ) ->
-            Err err
+        Ok a ->
+            case decoderB jsonValue of
+                Err err ->
+                    Err err
 
-        ( _, _, Err err, _, _, _, _, _ ) ->
-            Err err
+                Ok b ->
+                    case decoderC jsonValue of
+                        Err err ->
+                            Err err
 
-        ( _, _, _, Err err, _, _, _, _ ) ->
-            Err err
+                        Ok c ->
+                            case decoderD jsonValue of
+                                Err err ->
+                                    Err err
 
-        ( _, _, _, _, Err err, _, _, _ ) ->
-            Err err
+                                Ok d ->
+                                    case decoderE jsonValue of
+                                        Err err ->
+                                            Err err
 
-        ( _, _, _, _, _, Err err, _, _ ) ->
-            Err err
+                                        Ok e ->
+                                            case decoderF jsonValue of
+                                                Err err ->
+                                                    Err err
 
-        ( _, _, _, _, _, _, Err err, _ ) ->
-            Err err
+                                                Ok f ->
+                                                    case decoderG jsonValue of
+                                                        Err err ->
+                                                            Err err
 
-        ( _, _, _, _, _, _, _, Err err ) ->
-            Err err
+                                                        Ok g ->
+                                                            case decoderH jsonValue of
+                                                                Err err ->
+                                                                    Err err
+
+                                                                Ok h ->
+                                                                    Ok (func a b c d e f g h)
 
 
 andThen : (a -> Decoder b) -> Decoder a -> Decoder b

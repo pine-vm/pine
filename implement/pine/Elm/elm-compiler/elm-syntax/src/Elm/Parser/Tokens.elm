@@ -1,296 +1,460 @@
 module Elm.Parser.Tokens exposing
-    ( asToken
-    , caseToken
-    , characterLiteral
-    , elseToken
-    , exposingToken
-    , functionName
-    , ifToken
-    , importToken
-    , infixOperatorToken
-    , moduleToken
-    , multiLineStringLiteral
-    , ofToken
-    , portToken
-    , prefixOperatorToken
-    , stringLiteral
-    , thenToken
-    , typeName
+    ( inToken
+    , equal, parensEnd
+    , isAllowedOperatorToken, isOperatorSymbolChar
+    , characterLiteralMapWithRange, singleOrTripleQuotedStringLiteralMapWithRange
+    , functionName, functionNameNode, functionNameMapWithRange, functionNameNotInfixNode, typeName, typeNameNode, typeNameMapWithRange
     )
 
+{-|
+
+@docs inToken
+
+@docs equal, parensEnd
+@docs isAllowedOperatorToken, isOperatorSymbolChar
+
+@docs characterLiteralMapWithRange, singleOrTripleQuotedStringLiteralMapWithRange
+@docs functionName, functionNameNode, functionNameMapWithRange, functionNameNotInfixNode, typeName, typeNameNode, typeNameMapWithRange
+
+-}
+
 import Char
-import Combine exposing (Parser)
-import Combine.Char
-import Hex
-import Parser as Core exposing ((|.), (|=), Step(..))
-import Set
+import Elm.Syntax.Node exposing (Node(..))
+import Elm.Syntax.Range exposing (Range)
+import ParserFast
 
 
-reservedList : List String
-reservedList =
-    [ "module"
-    , "exposing"
-    , "import"
-    , "as"
-    , "if"
-    , "then"
-    , "else"
-    , "let"
-    , "in"
-    , "case"
-    , "of"
-    , "port"
+isNotReserved : String -> Bool
+isNotReserved name =
+    case name of
+        "module" ->
+            False
 
-    --, "infixr"
-    --, "infixl"
-    , "type"
+        "exposing" ->
+            False
 
-    --, "infix" Apparently this is not a reserved keyword
-    --, "alias" Apparently this is not a reserved keyword
-    , "where"
-    ]
+        "import" ->
+            False
 
+        "as" ->
+            False
 
-portToken : Parser s String
-portToken =
-    Combine.string "port"
+        "if" ->
+            False
 
+        "then" ->
+            False
 
-moduleToken : Parser s String
-moduleToken =
-    Combine.string "module"
+        "else" ->
+            False
 
+        "let" ->
+            False
 
-exposingToken : Parser s String
-exposingToken =
-    Combine.string "exposing"
+        "in" ->
+            False
 
+        "case" ->
+            False
 
-importToken : Parser s ()
-importToken =
-    Combine.fromCore (Core.keyword "import")
+        "of" ->
+            False
 
+        "port" ->
+            False
 
-asToken : Parser s ()
-asToken =
-    Combine.fromCore (Core.keyword "as")
+        --"infixr"
+        --"infixl"
+        "type" ->
+            False
 
+        -- "infix" Apparently this is not a reserved keyword
+        -- "alias" Apparently this is not a reserved keyword
+        "where" ->
+            False
 
-ifToken : Parser s String
-ifToken =
-    Combine.string "if"
+        _ ->
+            True
 
 
-thenToken : Parser s String
-thenToken =
-    Combine.string "then"
+inToken : ParserFast.Parser ()
+inToken =
+    ParserFast.keyword "in" ()
 
 
-elseToken : Parser s String
-elseToken =
-    Combine.string "else"
-
-
-caseToken : Parser s String
-caseToken =
-    Combine.string "case"
-
-
-ofToken : Parser s String
-ofToken =
-    Combine.string "of"
-
-
-escapedCharValue : Core.Parser Char
-escapedCharValue =
-    Core.oneOf
-        [ Core.succeed '\'' |. Core.symbol "'"
-        , Core.succeed '"' |. Core.symbol "\""
-        , Core.succeed '\n' |. Core.symbol "n"
-        , Core.succeed '\t' |. Core.symbol "t"
-        , -- Eventhough Elm-format will change \r to a unicode version. When you dont use elm-format, this will not happen.
-          Core.succeed '\u{000D}' |. Core.symbol "r"
-        , Core.succeed '\\' |. Core.symbol "\\"
-        , Core.succeed (String.toLower >> Hex.fromString >> Result.withDefault 0 >> Char.fromCode)
-            |. Core.symbol "u"
-            |. Core.symbol "{"
-            |= (Core.chompWhile (\c -> String.any ((==) c) "0123456789ABCDEFabcdef") |> Core.getChompedString)
-            |. Core.symbol "}"
-        ]
-
-
-quotedSingleQuote : Parser s Char
-quotedSingleQuote =
-    Core.succeed (String.toList >> List.head >> Maybe.withDefault ' ')
-        |. Core.symbol "'"
-        |= Core.oneOf
-            [ Core.succeed String.fromChar
-                |. Core.symbol "\\"
-                |= escapedCharValue
-            , Core.getChompedString (Core.chompIf (always True))
-            ]
-        |. Core.symbol "'"
-        |> Combine.fromCore
-
-
-characterLiteral : Parser s Char
-characterLiteral =
-    Combine.oneOf
-        [ quotedSingleQuote
-        , Combine.Char.char '\''
-            |> Combine.continueWith Combine.Char.anyChar
-            |> Combine.ignore (Combine.Char.char '\'')
-        ]
-
-
-type alias StringLiteralLoopState =
-    { escaped : Bool
-    , parts : List String
-    }
-
-
-stringLiteral : Parser s String
-stringLiteral =
-    let
-        helper : StringLiteralLoopState -> Core.Parser (Step StringLiteralLoopState String)
-        helper s =
-            if s.escaped then
-                escapedCharValue
-                    |> Core.map
-                        (\v ->
-                            Loop { escaped = False, parts = String.fromChar v :: s.parts }
-                        )
-
-            else
-                Core.oneOf
-                    [ Core.symbol "\""
-                        |> Core.map (\_ -> Done (String.concat (List.reverse s.parts)))
-                    , Core.getChompedString (Core.symbol "\\")
-                        |> Core.map (\_ -> Loop { escaped = True, parts = s.parts })
-                    , Core.succeed (\start value end -> ( start, value, end ))
-                        |= Core.getOffset
-                        |= Core.getChompedString (Core.chompWhile (\c -> c /= '"' && c /= '\\'))
-                        |= Core.getOffset
-                        |> Core.andThen
-                            (\( start, value, end ) ->
-                                if start == end then
-                                    Core.problem "Expected a string character or a double quote"
-
-                                else
-                                    Core.succeed (Loop { escaped = s.escaped, parts = value :: s.parts })
-                            )
-                    ]
-    in
-    Core.succeed identity
-        |. Core.symbol "\""
-        |= Core.loop { escaped = False, parts = [] } helper
-        |> Combine.fromCore
-
-
-type alias MultilineStringLiteralLoopState =
-    { escaped : Bool
-    , parts : List String
-    , counter : Int
-    }
-
-
-multiLineStringLiteral : Parser s String
-multiLineStringLiteral =
-    let
-        helper : MultilineStringLiteralLoopState -> Core.Parser (Step MultilineStringLiteralLoopState String)
-        helper s =
-            if s.escaped then
-                escapedCharValue
-                    |> Core.map (\v -> Loop { counter = s.counter, escaped = False, parts = String.fromChar v :: s.parts })
-
-            else
-                Core.oneOf
-                    [ Core.symbol "\"\"\""
-                        |> Core.map (\_ -> Done (String.concat (List.reverse s.parts)))
-                    , Core.symbol "\""
-                        |> Core.getChompedString
-                        |> Core.map (\v -> Loop { counter = s.counter + 1, escaped = s.escaped, parts = v :: s.parts })
-                    , Core.symbol "\\"
-                        |> Core.getChompedString
-                        |> Core.map (\_ -> Loop { counter = s.counter + 1, escaped = True, parts = s.parts })
-                    , Core.succeed (\start value end -> ( start, value, end ))
-                        |= Core.getOffset
-                        |= Core.getChompedString (Core.chompWhile (\c -> c /= '"' && c /= '\\'))
-                        |= Core.getOffset
-                        |> Core.andThen
-                            (\( start, value, end ) ->
-                                if start == end then
-                                    Core.problem "Expected a string character or a triple double quote"
-
-                                else
-                                    Core.succeed (Loop { counter = s.counter + 1, escaped = s.escaped, parts = value :: s.parts })
-                            )
-                    ]
-    in
-    Core.succeed identity
-        |. Core.symbol "\"\"\""
-        |= Core.loop { escaped = False, parts = [], counter = 0 } helper
-        |> Combine.fromCore
-
-
-functionName : Parser s String
-functionName =
-    Core.variable
-        { start = Char.isLower
-        , inner = \c -> Char.isAlphaNum c || c == '_'
-        , reserved = Set.fromList reservedList
-        }
-        |> Combine.fromCore
-
-
-typeName : Parser s String
-typeName =
-    Core.variable
-        { start = Char.isUpper
-        , inner = \c -> Char.isAlphaNum c || c == '_'
-        , reserved = Set.fromList reservedList
-        }
-        |> Combine.fromCore
-
-
-excludedOperators : List String
-excludedOperators =
-    [ ":", "->", "--", "=" ]
-
-
-allowedOperatorTokens : List Char
-allowedOperatorTokens =
-    [ '+', '-', ':', '/', '*', '>', '<', '=', '/', '&', '^', '%', '|', '!', '.', '#', '$', '≡', '~', '?', '@' ]
-
-
-allowedPrefixOperatorTokens : List Char
-allowedPrefixOperatorTokens =
-    ',' :: allowedOperatorTokens
-
-
-prefixOperatorToken : Parser s String
-prefixOperatorToken =
-    operatorTokenFromList allowedPrefixOperatorTokens
-
-
-infixOperatorToken : Parser s String
-infixOperatorToken =
-    operatorTokenFromList allowedOperatorTokens
-
-
-operatorTokenFromList : List Char -> Parser s String
-operatorTokenFromList allowedChars =
-    Combine.many1 (Combine.Char.oneOf allowedChars)
-        |> Combine.andThen
-            (\chars ->
-                let
-                    charList : String
-                    charList =
-                        String.fromList chars
-                in
-                if List.member charList excludedOperators then
-                    Combine.fail "operator is not allowed"
-
-                else
-                    Combine.succeed charList
+escapedCharValueMap : (Char -> res) -> ParserFast.Parser res
+escapedCharValueMap charToRes =
+    ParserFast.oneOf7
+        (ParserFast.symbol "'" (charToRes '\''))
+        (ParserFast.symbol "\"" (charToRes '"'))
+        (ParserFast.symbol "n" (charToRes '\n'))
+        (ParserFast.symbol "t" (charToRes '\t'))
+        -- Eventhough Elm-format will change \r to a unicode version. When you dont use elm-format, this will not happen.
+        (ParserFast.symbol "r" (charToRes '\u{000D}'))
+        (ParserFast.symbol "\\" (charToRes '\\'))
+        (ParserFast.symbolFollowedBy "u{"
+            (ParserFast.ifFollowedByWhileMapWithoutLinebreak
+                (\hex ->
+                    charToRes (Char.fromCode (hexStringToInt hex))
+                )
+                Char.isHexDigit
+                Char.isHexDigit
+                |> ParserFast.followedBySymbol "}"
             )
+        )
+
+
+hexStringToInt : String -> Int
+hexStringToInt string =
+    String.foldr
+        (\c soFar ->
+            { exponent = soFar.exponent + 1
+            , result = soFar.result + 16 ^ soFar.exponent * charToHex c
+            }
+        )
+        { exponent = 0, result = 0 }
+        string
+        |> .result
+
+
+charToHex : Char -> Int
+charToHex c =
+    case c of
+        '0' ->
+            0
+
+        '1' ->
+            1
+
+        '2' ->
+            2
+
+        '3' ->
+            3
+
+        '4' ->
+            4
+
+        '5' ->
+            5
+
+        '6' ->
+            6
+
+        '7' ->
+            7
+
+        '8' ->
+            8
+
+        '9' ->
+            9
+
+        'a' ->
+            10
+
+        'b' ->
+            11
+
+        'c' ->
+            12
+
+        'd' ->
+            13
+
+        'e' ->
+            14
+
+        'f' ->
+            15
+
+        'A' ->
+            10
+
+        'B' ->
+            11
+
+        'C' ->
+            12
+
+        'D' ->
+            13
+
+        'E' ->
+            14
+
+        -- 'F'
+        _ ->
+            15
+
+
+characterLiteralMapWithRange : (Range -> Char -> res) -> ParserFast.Parser res
+characterLiteralMapWithRange rangeAndCharToRes =
+    ParserFast.symbolFollowedBy "'"
+        (ParserFast.oneOf2MapWithStartRowColumnAndEndRowColumn
+            (\startRow startColumn char endRow endColumn ->
+                rangeAndCharToRes
+                    { start = { row = startRow, column = startColumn - 1 }
+                    , end = { row = endRow, column = endColumn + 1 }
+                    }
+                    char
+            )
+            (ParserFast.symbolFollowedBy "\\" (escapedCharValueMap identity))
+            (\startRow startColumn char endRow endColumn ->
+                rangeAndCharToRes
+                    { start = { row = startRow, column = startColumn - 1 }
+                    , end = { row = endRow, column = endColumn + 1 }
+                    }
+                    char
+            )
+            ParserFast.anyChar
+            |> ParserFast.followedBySymbol "'"
+        )
+
+
+singleOrTripleQuotedStringLiteralMapWithRange : (Range -> String -> res) -> ParserFast.Parser res
+singleOrTripleQuotedStringLiteralMapWithRange rangeAndStringToRes =
+    ParserFast.symbolFollowedBy "\""
+        (ParserFast.oneOf2MapWithStartRowColumnAndEndRowColumn
+            (\startRow startColumn string endRow endColumn ->
+                rangeAndStringToRes
+                    { start = { row = startRow, column = startColumn - 1 }
+                    , end = { row = endRow, column = endColumn }
+                    }
+                    string
+            )
+            (ParserFast.symbolFollowedBy "\"\""
+                tripleQuotedStringLiteralOfterTripleDoubleQuote
+            )
+            (\startRow startColumn string endRow endColumn ->
+                rangeAndStringToRes
+                    { start = { row = startRow, column = startColumn - 1 }
+                    , end = { row = endRow, column = endColumn }
+                    }
+                    string
+            )
+            singleQuotedStringLiteralAfterDoubleQuote
+        )
+
+
+singleQuotedStringLiteralAfterDoubleQuote : ParserFast.Parser String
+singleQuotedStringLiteralAfterDoubleQuote =
+    ParserFast.loopUntil (ParserFast.symbol "\"" ())
+        (ParserFast.oneOf2
+            (ParserFast.symbolFollowedBy "\\" (escapedCharValueMap String.fromChar))
+            (ParserFast.whileWithoutLinebreak (\c -> c /= '"' && c /= '\\'))
+        )
+        ""
+        (\extension soFar ->
+            soFar ++ extension ++ ""
+        )
+        identity
+
+
+tripleQuotedStringLiteralOfterTripleDoubleQuote : ParserFast.Parser String
+tripleQuotedStringLiteralOfterTripleDoubleQuote =
+    ParserFast.loopUntil (ParserFast.symbol "\"\"\"" ())
+        (ParserFast.oneOf3
+            (ParserFast.symbol "\"" "\"")
+            (ParserFast.symbolFollowedBy "\\" (escapedCharValueMap String.fromChar))
+            (ParserFast.while (\c -> c /= '"' && c /= '\\'))
+        )
+        ""
+        (\extension soFar ->
+            soFar ++ extension ++ ""
+        )
+        identity
+
+
+functionName : ParserFast.Parser String
+functionName =
+    ParserFast.ifFollowedByWhileValidateWithoutLinebreak
+        Char.isLower
+        isAlphaNumOrUnderscore
+        isNotReserved
+
+
+functionNameNode : ParserFast.Parser (Node String)
+functionNameNode =
+    ParserFast.ifFollowedByWhileValidateMapWithRangeWithoutLinebreak Node
+        Char.isLower
+        isAlphaNumOrUnderscore
+        isNotReserved
+
+
+functionNameMapWithRange : (Range -> String -> res) -> ParserFast.Parser res
+functionNameMapWithRange rangeAndNameToResult =
+    ParserFast.ifFollowedByWhileValidateMapWithRangeWithoutLinebreak
+        rangeAndNameToResult
+        Char.isLower
+        isAlphaNumOrUnderscore
+        isNotReserved
+
+
+functionNameNotInfixNode : ParserFast.Parser (Node String)
+functionNameNotInfixNode =
+    ParserFast.ifFollowedByWhileValidateMapWithRangeWithoutLinebreak Node
+        Char.isLower
+        isAlphaNumOrUnderscore
+        (\name -> name /= "infix" && isNotReserved name)
+
+
+typeName : ParserFast.Parser String
+typeName =
+    ParserFast.ifFollowedByWhileWithoutLinebreak
+        Char.isUpper
+        isAlphaNumOrUnderscore
+
+
+typeNameMapWithRange : (Range -> String -> res) -> ParserFast.Parser res
+typeNameMapWithRange rangeAndNameToRes =
+    ParserFast.ifFollowedByWhileMapWithRangeWithoutLinebreak rangeAndNameToRes
+        Char.isUpper
+        isAlphaNumOrUnderscore
+
+
+typeNameNode : ParserFast.Parser (Node String)
+typeNameNode =
+    ParserFast.ifFollowedByWhileMapWithRangeWithoutLinebreak Node
+        Char.isUpper
+        isAlphaNumOrUnderscore
+
+
+isAlphaNumOrUnderscore : Char -> Bool
+isAlphaNumOrUnderscore c =
+    Char.isAlphaNum c || c == '_'
+
+
+isAllowedOperatorToken : String -> Bool
+isAllowedOperatorToken operatorCandidateToValidate =
+    case operatorCandidateToValidate of
+        "==" ->
+            True
+
+        "/=" ->
+            True
+
+        "::" ->
+            True
+
+        "++" ->
+            True
+
+        "+" ->
+            True
+
+        "*" ->
+            True
+
+        "<|" ->
+            True
+
+        "|>" ->
+            True
+
+        "||" ->
+            True
+
+        "<=" ->
+            True
+
+        ">=" ->
+            True
+
+        "|=" ->
+            True
+
+        "|." ->
+            True
+
+        "//" ->
+            True
+
+        "</>" ->
+            True
+
+        "<?>" ->
+            True
+
+        "^" ->
+            True
+
+        "<<" ->
+            True
+
+        ">>" ->
+            True
+
+        "<" ->
+            True
+
+        ">" ->
+            True
+
+        "/" ->
+            True
+
+        "&&" ->
+            True
+
+        "-" ->
+            True
+
+        _ ->
+            False
+
+
+isOperatorSymbolChar : Char -> Bool
+isOperatorSymbolChar c =
+    case c of
+        '+' ->
+            True
+
+        '-' ->
+            True
+
+        '/' ->
+            True
+
+        '*' ->
+            True
+
+        '=' ->
+            True
+
+        '.' ->
+            True
+
+        '<' ->
+            True
+
+        '>' ->
+            True
+
+        ':' ->
+            True
+
+        '&' ->
+            True
+
+        '|' ->
+            True
+
+        '^' ->
+            True
+
+        '?' ->
+            True
+
+        _ ->
+            False
+
+
+equal : ParserFast.Parser ()
+equal =
+    ParserFast.symbol "=" ()
+
+
+parensEnd : ParserFast.Parser ()
+parensEnd =
+    ParserFast.symbol ")" ()

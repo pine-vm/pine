@@ -26,7 +26,7 @@ Although it is a easy and simple language, you can express a lot! See the `Expre
 import Elm.Syntax.Documentation exposing (Documentation)
 import Elm.Syntax.Infix exposing (InfixDirection)
 import Elm.Syntax.ModuleName exposing (ModuleName)
-import Elm.Syntax.Node exposing (Node(..))
+import Elm.Syntax.Node as Node exposing (Node(..))
 import Elm.Syntax.Pattern exposing (Pattern)
 import Elm.Syntax.Range exposing (Range)
 import Elm.Syntax.Signature exposing (Signature)
@@ -46,8 +46,9 @@ type alias Function =
 functionRange : Function -> Range
 functionRange function =
     let
-        (Node declarationRange _) =
-            function.declaration
+        declarationRange : Range
+        declarationRange =
+            Node.range function.declaration
 
         startRange : Range
         startRange =

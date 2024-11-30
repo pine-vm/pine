@@ -457,6 +457,17 @@ public static class PopularValues
         "(|.)",
         "|=",
         "|.",
+
+
+        "PStep",
+        "Good",
+        "Bad",
+        "PState",
+        "WithComments",
+        "Rope",
+        "Leaf",
+        "Branch2",
+
     ];
 
     public static IEnumerable<ElmValue> PopularElmValuesSource()

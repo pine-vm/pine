@@ -176,7 +176,7 @@ fileToDefinitions file =
                             Just ( Node.value t.name, CustomType ( Node.value t.name, t.constructors |> List.map (Node.value >> .name >> Node.value) ) )
 
                         AliasDeclaration a ->
-                            Just ( Node.value a.name, Alias (Node.value a.name) )
+                            Just ( Node.value a.name, Alias <| Node.value a.name )
 
                         PortDeclaration p ->
                             Just ( Node.value p.name, Function (Node.value p.name) )
@@ -191,7 +191,7 @@ fileToDefinitions file =
                                 name =
                                     Node.value declaration.name
                             in
-                            Just ( name, Function name )
+                            Just ( name, Function <| name )
 
                         InfixDeclaration i ->
                             Just ( Node.value i.operator, Operator i )
@@ -235,10 +235,10 @@ getValidOperatorInterface t1 t2 =
     case ( t1, t2 ) of
         ( Operator x, Operator y ) ->
             if Node.value x.precedence == 5 && Node.value x.direction == Left then
-                Just (Operator y)
+                Just <| Operator y
 
             else
-                Just (Operator x)
+                Just <| Operator x
 
         _ ->
             Nothing

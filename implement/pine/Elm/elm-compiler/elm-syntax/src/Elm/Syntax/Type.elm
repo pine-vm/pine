@@ -21,9 +21,9 @@ For example:
 
 -}
 
-import Elm.Syntax.Documentation as Documentation exposing (Documentation)
-import Elm.Syntax.Node as Node exposing (Node)
-import Elm.Syntax.TypeAnnotation as TypeAnnotation exposing (TypeAnnotation)
+import Elm.Syntax.Documentation exposing (Documentation)
+import Elm.Syntax.Node exposing (Node)
+import Elm.Syntax.TypeAnnotation exposing (TypeAnnotation)
 
 
 {-| Type alias that defines the syntax for a custom type.

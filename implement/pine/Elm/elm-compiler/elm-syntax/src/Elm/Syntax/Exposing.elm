@@ -26,8 +26,8 @@ For example:
 
 -}
 
-import Elm.Syntax.Node as Node exposing (Node(..))
-import Elm.Syntax.Range as Range exposing (Range)
+import Elm.Syntax.Node exposing (Node(..))
+import Elm.Syntax.Range exposing (Range)
 
 
 {-| Different kind of exposing declarations

@@ -1,32 +1,15 @@
 module List.Extra exposing
-    ( dropWhile
-    , takeWhile
+    ( find
     , unique
+    , dropWhile
     )
 
-{-| Helper for List functions. Taken from elm-community/list-extra.
+{-| Helper for List functions. find and unique taken from elm-community/list-extra.
+
+@docs find
+@docs unique
+
 -}
-
-
-{-| Take elements in order as long as the predicate evaluates to `True`
--}
-takeWhile : (a -> Bool) -> List a -> List a
-takeWhile predicate =
-    let
-        takeWhileMemo : List a -> List a -> List a
-        takeWhileMemo memo list =
-            case list of
-                [] ->
-                    List.reverse memo
-
-                x :: xs ->
-                    if predicate x then
-                        takeWhileMemo (x :: memo) xs
-
-                    else
-                        List.reverse memo
-    in
-    takeWhileMemo []
 
 
 {-| Drop elements in order as long as the predicate evaluates to `True`
@@ -68,3 +51,17 @@ uniqueHelp existing remaining accumulator =
 
             else
                 uniqueHelp (first :: existing) rest (first :: accumulator)
+
+
+find : (a -> Bool) -> List a -> Maybe a
+find predicate list =
+    case list of
+        [] ->
+            Nothing
+
+        x :: xs ->
+            if predicate x then
+                Just x
+
+            else
+                find predicate xs

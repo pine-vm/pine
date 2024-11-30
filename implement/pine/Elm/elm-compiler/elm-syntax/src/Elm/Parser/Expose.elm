@@ -1,73 +1,148 @@
 module Elm.Parser.Expose exposing (exposeDefinition)
 
-import Combine exposing (Parser)
-import Combine.Char
 import Elm.Parser.Layout as Layout
-import Elm.Parser.Node
-import Elm.Parser.Ranges as Ranges
-import Elm.Parser.State exposing (State)
-import Elm.Parser.Tokens
-import Elm.Syntax.Exposing exposing (ExposedType, Exposing(..), TopLevelExpose(..))
-import Elm.Syntax.Node as Node exposing (Node(..))
+import Elm.Parser.Tokens as Tokens
+import Elm.Syntax.Exposing exposing (Exposing(..), TopLevelExpose(..))
+import Elm.Syntax.Node exposing (Node(..))
+import ParserFast exposing (Parser)
+import ParserWithComments exposing (WithComments(..))
+import Rope
 
 
-exposeDefinition : Parser State Exposing
+exposeDefinition : Parser (WithComments (Node Exposing))
 exposeDefinition =
-    Elm.Parser.Tokens.exposingToken
-        |> Combine.continueWith (Combine.maybe Layout.layout)
-        |> Combine.continueWith exposeListWith
-
-
-exposeListWith : Parser State Exposing
-exposeListWith =
-    Combine.parens
-        (Layout.optimisticLayout
-            |> Combine.continueWith exposingListInner
-            |> Combine.ignore Layout.optimisticLayout
+    ParserFast.map3WithRange
+        (\range commentsAfterExposing commentsBefore exposingListInnerResult ->
+            let
+                (WithComments comments syntax) =
+                    exposingListInnerResult
+            in
+            WithComments
+                (commentsAfterExposing
+                    |> Rope.prependTo commentsBefore
+                    |> Rope.prependTo comments
+                )
+                (Node range syntax)
+        )
+        (ParserFast.symbolFollowedBy "exposing" Layout.maybeLayout)
+        (ParserFast.symbolFollowedBy "(" Layout.optimisticLayout)
+        (exposingListInner
+            |> ParserFast.followedBySymbol ")"
         )
 
 
-exposingListInner : Parser State Exposing
+exposingListInner : Parser (WithComments Exposing)
 exposingListInner =
-    Combine.oneOf
-        [ Ranges.withRange (Combine.succeed All |> Combine.ignore (Layout.maybeAroundBothSides (Combine.string "..")))
-        , Combine.map Explicit (Combine.sepBy1 (Combine.Char.char ',') (Layout.maybeAroundBothSides exposable))
-        ]
+    ParserFast.oneOf2
+        (ParserFast.map3
+            (\headElement commentsAfterHeadElement tailElements ->
+                let
+                    (WithComments headElementComments headElementSyntax) =
+                        headElement
 
-
-exposable : Parser State (Node TopLevelExpose)
-exposable =
-    Combine.oneOf
-        [ typeExpose
-        , infixExpose
-        , functionExpose
-        ]
-
-
-infixExpose : Parser State (Node TopLevelExpose)
-infixExpose =
-    Elm.Parser.Node.parser (Combine.map InfixExpose (Combine.parens (Combine.while ((/=) ')'))))
-
-
-typeExpose : Parser State (Node TopLevelExpose)
-typeExpose =
-    Elm.Parser.Node.parser Elm.Parser.Tokens.typeName
-        |> Combine.ignore (Combine.maybe Layout.layout)
-        |> Combine.andThen
-            (\((Node typeRange typeValue) as tipe) ->
-                Combine.oneOf
-                    [ Elm.Parser.Node.parser (Combine.parens (Layout.maybeAroundBothSides (Combine.string "..")))
-                        |> Combine.map
-                            (\(Node openRange _) ->
-                                Node
-                                    { start = typeRange.start, end = openRange.end }
-                                    (TypeExpose (ExposedType typeValue (Just openRange)))
-                            )
-                    , Combine.succeed (Node.map TypeOrAliasExpose tipe)
-                    ]
+                    (WithComments tailElementsComments tailElementsSyntax) =
+                        tailElements
+                in
+                WithComments
+                    (headElementComments
+                        |> Rope.prependTo commentsAfterHeadElement
+                        |> Rope.prependTo tailElementsComments
+                    )
+                    (Explicit
+                        (headElementSyntax
+                            :: tailElementsSyntax
+                        )
+                    )
             )
+            exposable
+            Layout.maybeLayout
+            (ParserWithComments.many
+                (ParserFast.symbolFollowedBy ","
+                    (Layout.maybeAroundBothSides exposable)
+                )
+            )
+        )
+        (ParserFast.mapWithRange
+            (\range commentsAfterDotDot ->
+                WithComments
+                    commentsAfterDotDot
+                    (All range)
+            )
+            (ParserFast.symbolFollowedBy ".." Layout.maybeLayout)
+        )
 
 
-functionExpose : Parser State (Node TopLevelExpose)
+exposable : Parser (WithComments (Node TopLevelExpose))
+exposable =
+    ParserFast.oneOf3
+        functionExpose
+        typeExpose
+        infixExpose
+
+
+infixExpose : ParserFast.Parser (WithComments (Node TopLevelExpose))
+infixExpose =
+    ParserFast.map2WithRange
+        (\range infixName () ->
+            WithComments
+                Rope.empty
+                (Node range (InfixExpose infixName))
+        )
+        (ParserFast.symbolFollowedBy "("
+            (ParserFast.ifFollowedByWhileWithoutLinebreak
+                (\c -> c /= ')' && c /= '\n' && c /= ' ')
+                (\c -> c /= ')' && c /= '\n' && c /= ' ')
+            )
+        )
+        Tokens.parensEnd
+
+
+typeExpose : Parser (WithComments (Node TopLevelExpose))
+typeExpose =
+    ParserFast.map3
+        (\(Node typeNameRange typeName) commentsBeforeMaybeOpen maybeOpen ->
+            let
+                (WithComments maybeOpenComments maybeOpenSyntax) =
+                    maybeOpen
+            in
+            WithComments
+                (commentsBeforeMaybeOpen |> Rope.prependTo maybeOpenComments)
+                (case maybeOpenSyntax of
+                    Nothing ->
+                        Node typeNameRange (TypeOrAliasExpose typeName)
+
+                    Just openRange ->
+                        Node
+                            { start = typeNameRange.start
+                            , end = openRange.end
+                            }
+                            (TypeExpose { name = typeName, open = maybeOpenSyntax })
+                )
+        )
+        Tokens.typeNameNode
+        Layout.optimisticLayout
+        (ParserFast.map2WithRangeOrSucceed
+            (\range left right ->
+                WithComments
+                    (left |> Rope.prependTo right)
+                    (Just range)
+            )
+            (ParserFast.symbolFollowedBy "(" Layout.maybeLayout)
+            (ParserFast.symbolFollowedBy ".." Layout.maybeLayout
+                |> ParserFast.followedBySymbol ")"
+            )
+            (WithComments
+                Rope.empty
+                Nothing
+            )
+        )
+
+
+functionExpose : Parser (WithComments (Node TopLevelExpose))
 functionExpose =
-    Elm.Parser.Node.parser (Combine.map FunctionExpose Elm.Parser.Tokens.functionName)
+    Tokens.functionNameMapWithRange
+        (\range name ->
+            WithComments
+                Rope.empty
+                (Node range (FunctionExpose name))
+        )

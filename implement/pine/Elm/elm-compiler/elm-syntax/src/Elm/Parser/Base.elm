@@ -1,28 +1,25 @@
-module Elm.Parser.Base exposing (moduleName, typeIndicator)
+module Elm.Parser.Base exposing (moduleName)
 
-import Combine exposing (Parser)
 import Elm.Parser.Tokens as Tokens
 import Elm.Syntax.ModuleName exposing (ModuleName)
+import Elm.Syntax.Node exposing (Node(..))
+import ParserFast
 
 
-moduleName : Parser s ModuleName
+moduleName : ParserFast.Parser (Node ModuleName)
 moduleName =
-    Combine.sepBy1 (Combine.string ".") Tokens.typeName
+    ParserFast.map2WithRange
+        (\range head tail ->
+            Node range (head :: tail)
+        )
+        Tokens.typeName
+        moduleNameOrEmpty
 
 
-typeIndicator : Parser s ( ModuleName, String )
-typeIndicator =
-    let
-        helper : ModuleName -> String -> Parser s ( ModuleName, String )
-        helper moduleNameSoFar typeOrSegment =
-            Combine.oneOf
-                [ Combine.succeed identity
-                    |> Combine.ignore (Combine.string ".")
-                    |> Combine.keep Tokens.typeName
-                    |> Combine.andThen (\t -> helper (typeOrSegment :: moduleNameSoFar) t)
-                , Combine.succeed ()
-                    |> Combine.map (\() -> ( List.reverse moduleNameSoFar, typeOrSegment ))
-                ]
-    in
-    Tokens.typeName
-        |> Combine.andThen (\typeOrSegment -> helper [] typeOrSegment)
+moduleNameOrEmpty : ParserFast.Parser ModuleName
+moduleNameOrEmpty =
+    ParserFast.map2OrSucceed
+        (\head tail -> head :: tail)
+        (ParserFast.symbolFollowedBy "." Tokens.typeName)
+        (ParserFast.lazy (\() -> moduleNameOrEmpty))
+        []

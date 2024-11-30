@@ -26,8 +26,8 @@ For example:
 
 -}
 
-import Elm.Syntax.ModuleName as ModuleName exposing (ModuleName)
-import Elm.Syntax.Node as Node exposing (Node(..))
+import Elm.Syntax.ModuleName exposing (ModuleName)
+import Elm.Syntax.Node exposing (Node(..))
 
 
 {-| Custom type for all patterns such as:

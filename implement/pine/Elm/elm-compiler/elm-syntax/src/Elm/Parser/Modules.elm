@@ -1,103 +1,182 @@
 module Elm.Parser.Modules exposing (moduleDefinition)
 
-import Combine exposing (Parser)
 import Elm.Parser.Base
 import Elm.Parser.Expose
 import Elm.Parser.Layout as Layout
-import Elm.Parser.Node
-import Elm.Parser.State exposing (State)
-import Elm.Parser.Tokens
-import Elm.Syntax.Exposing exposing (Exposing)
-import Elm.Syntax.Module exposing (DefaultModuleData, Module(..))
-import Elm.Syntax.ModuleName exposing (ModuleName)
-import Elm.Syntax.Node exposing (Node)
+import Elm.Parser.Tokens as Tokens
+import Elm.Syntax.Module exposing (Module(..))
+import Elm.Syntax.Node exposing (Node(..))
+import List.Extra
+import ParserFast exposing (Parser)
+import ParserWithComments exposing (WithComments(..))
+import Rope
 
 
-moduleDefinition : Parser State Module
+moduleDefinition : Parser (WithComments (Node Module))
 moduleDefinition =
-    Combine.oneOf
-        [ normalModuleDefinition
-        , portModuleDefinition
-        , effectModuleDefinition
-        ]
+    ParserFast.oneOf3
+        normalModuleDefinition
+        portModuleDefinition
+        effectModuleDefinition
 
 
-effectWhereClause : Parser State ( String, Node String )
+effectWhereClause : Parser (WithComments ( String, Node String ))
 effectWhereClause =
-    Combine.succeed Tuple.pair
-        |> Combine.keep Elm.Parser.Tokens.functionName
-        |> Combine.ignore (Layout.maybeAroundBothSides (Combine.string "="))
-        |> Combine.keep (Elm.Parser.Node.parser Elm.Parser.Tokens.typeName)
+    ParserFast.map4
+        (\fnName commentsAfterFnName commentsAfterEqual typeName_ ->
+            WithComments
+                (commentsAfterFnName |> Rope.prependTo commentsAfterEqual)
+                ( fnName, typeName_ )
+        )
+        Tokens.functionName
+        Layout.maybeLayout
+        (ParserFast.symbolFollowedBy "=" Layout.maybeLayout)
+        Tokens.typeNameNode
 
 
-whereBlock : Parser State { command : Maybe (Node String), subscription : Maybe (Node String) }
+whereBlock : Parser (WithComments { command : Maybe (Node String), subscription : Maybe (Node String) })
 whereBlock =
-    Combine.between
-        (Combine.string "{")
-        (Combine.string "}")
-        (Combine.sepBy1 (Combine.string ",")
-            (Layout.maybeAroundBothSides effectWhereClause)
-        )
-        |> Combine.map
-            (\pairs ->
-                { command = pairs |> List.filter (Tuple.first >> (==) "command") |> List.head |> Maybe.map Tuple.second
-                , subscription = pairs |> List.filter (Tuple.first >> (==) "subscription") |> List.head |> Maybe.map Tuple.second
-                }
+    ParserFast.symbolFollowedBy "{"
+        (ParserFast.map4
+            (\commentsBeforeHead head commentsAfterHead tail ->
+                let
+                    (WithComments headComments headSyntax) =
+                        head
+
+                    (WithComments tailComments tailSyntax) =
+                        tail
+
+                    pairs : List ( String, Node String )
+                    pairs =
+                        headSyntax :: tailSyntax
+                in
+                WithComments
+                    (commentsBeforeHead
+                        |> Rope.prependTo headComments
+                        |> Rope.prependTo commentsAfterHead
+                        |> Rope.prependTo tailComments
+                    )
+                    { command =
+                        pairs
+                            |> List.Extra.find (\( fnName, _ ) -> fnName == "command")
+                            |> Maybe.map Tuple.second
+                    , subscription =
+                        pairs
+                            |> List.Extra.find (\( fnName, _ ) -> fnName == "subscription")
+                            |> Maybe.map Tuple.second
+                    }
             )
+            Layout.maybeLayout
+            effectWhereClause
+            Layout.maybeLayout
+            (ParserWithComments.many
+                (ParserFast.symbolFollowedBy "," (Layout.maybeAroundBothSides effectWhereClause))
+            )
+        )
+        |> ParserFast.followedBySymbol "}"
 
 
-effectWhereClauses : Parser State { command : Maybe (Node String), subscription : Maybe (Node String) }
+effectWhereClauses : Parser (WithComments { command : Maybe (Node String), subscription : Maybe (Node String) })
 effectWhereClauses =
-    Combine.string "where"
-        |> Combine.continueWith Layout.layout
-        |> Combine.continueWith whereBlock
+    ParserFast.map2
+        (\commentsBefore whereResult ->
+            let
+                (WithComments whereResultComments whereResultSyntax) =
+                    whereResult
+            in
+            WithComments
+                (commentsBefore |> Rope.prependTo whereResultComments)
+                whereResultSyntax
+        )
+        (ParserFast.keywordFollowedBy "where" Layout.maybeLayout)
+        whereBlock
 
 
-effectModuleDefinition : Parser State Module
+effectModuleDefinition : Parser (WithComments (Node Module))
 effectModuleDefinition =
-    let
-        createEffectModule : Node ModuleName -> { command : Maybe (Node String), subscription : Maybe (Node String) } -> Node Exposing -> Module
-        createEffectModule name whereClauses exp =
-            EffectModule
-                { moduleName = name
-                , exposingList = exp
-                , command = whereClauses.command
-                , subscription = whereClauses.subscription
-                }
-    in
-    Combine.succeed createEffectModule
-        |> Combine.ignore (Combine.string "effect")
-        |> Combine.ignore Layout.layout
-        |> Combine.ignore Elm.Parser.Tokens.moduleToken
-        |> Combine.ignore Layout.layout
-        |> Combine.keep (Elm.Parser.Node.parser Elm.Parser.Base.moduleName)
-        |> Combine.ignore Layout.layout
-        |> Combine.keep effectWhereClauses
-        |> Combine.ignore Layout.layout
-        |> Combine.keep (Elm.Parser.Node.parser Elm.Parser.Expose.exposeDefinition)
+    ParserFast.map7WithRange
+        (\range commentsAfterEffect commentsAfterModule name commentsAfterName whereClauses commentsAfterWhereClauses exp ->
+            let
+                (WithComments whereClausesComments whereClausesSyntax) =
+                    whereClauses
+
+                (WithComments expComments expSyntax) =
+                    exp
+            in
+            WithComments
+                (commentsAfterEffect
+                    |> Rope.prependTo commentsAfterModule
+                    |> Rope.prependTo commentsAfterName
+                    |> Rope.prependTo whereClausesComments
+                    |> Rope.prependTo commentsAfterWhereClauses
+                    |> Rope.prependTo expComments
+                )
+                (Node range
+                    (EffectModule
+                        { moduleName = name
+                        , exposingList = expSyntax
+                        , command = whereClausesSyntax.command
+                        , subscription = whereClausesSyntax.subscription
+                        }
+                    )
+                )
+        )
+        (ParserFast.keywordFollowedBy "effect" Layout.maybeLayout)
+        (ParserFast.keywordFollowedBy "module" Layout.maybeLayout)
+        Elm.Parser.Base.moduleName
+        Layout.maybeLayout
+        effectWhereClauses
+        Layout.maybeLayout
+        Elm.Parser.Expose.exposeDefinition
 
 
-normalModuleDefinition : Parser State Module
+normalModuleDefinition : Parser (WithComments (Node Module))
 normalModuleDefinition =
-    Combine.map NormalModule
-        (Combine.succeed DefaultModuleData
-            |> Combine.ignore Elm.Parser.Tokens.moduleToken
-            |> Combine.ignore Layout.layout
-            |> Combine.keep (Elm.Parser.Node.parser Elm.Parser.Base.moduleName)
-            |> Combine.ignore Layout.layout
-            |> Combine.keep (Elm.Parser.Node.parser Elm.Parser.Expose.exposeDefinition)
+    ParserFast.map4WithRange
+        (\range commentsAfterModule moduleName commentsAfterModuleName exposingList ->
+            let
+                (WithComments exposingListComments exposingListSyntax) =
+                    exposingList
+            in
+            WithComments
+                (commentsAfterModule
+                    |> Rope.prependTo commentsAfterModuleName
+                    |> Rope.prependTo exposingListComments
+                )
+                (Node range
+                    (NormalModule
+                        { moduleName = moduleName
+                        , exposingList = exposingListSyntax
+                        }
+                    )
+                )
         )
+        (ParserFast.keywordFollowedBy "module" Layout.maybeLayout)
+        Elm.Parser.Base.moduleName
+        Layout.maybeLayout
+        Elm.Parser.Expose.exposeDefinition
 
 
-portModuleDefinition : Parser State Module
+portModuleDefinition : Parser (WithComments (Node Module))
 portModuleDefinition =
-    Combine.map PortModule
-        (Combine.succeed DefaultModuleData
-            |> Combine.ignore Elm.Parser.Tokens.portToken
-            |> Combine.ignore Layout.layout
-            |> Combine.ignore Elm.Parser.Tokens.moduleToken
-            |> Combine.ignore Layout.layout
-            |> Combine.keep (Elm.Parser.Node.parser Elm.Parser.Base.moduleName)
-            |> Combine.ignore Layout.layout
-            |> Combine.keep (Elm.Parser.Node.parser Elm.Parser.Expose.exposeDefinition)
+    ParserFast.map5WithRange
+        (\range commentsAfterPort commentsAfterModule moduleName commentsAfterModuleName exposingList ->
+            let
+                (WithComments exposingListComments exposingListSyntax) =
+                    exposingList
+            in
+            WithComments
+                (commentsAfterPort
+                    |> Rope.prependTo commentsAfterModule
+                    |> Rope.prependTo commentsAfterModuleName
+                    |> Rope.prependTo exposingListComments
+                )
+                (Node range
+                    (PortModule { moduleName = moduleName, exposingList = exposingListSyntax })
+                )
         )
+        (ParserFast.keywordFollowedBy "port" Layout.maybeLayout)
+        (ParserFast.keywordFollowedBy "module" Layout.maybeLayout)
+        Elm.Parser.Base.moduleName
+        Layout.maybeLayout
+        Elm.Parser.Expose.exposeDefinition

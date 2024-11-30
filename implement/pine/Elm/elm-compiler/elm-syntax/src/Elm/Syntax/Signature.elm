@@ -18,8 +18,8 @@ For example :
 
 -}
 
-import Elm.Syntax.Node as Node exposing (Node)
-import Elm.Syntax.TypeAnnotation as TypeAnnotation exposing (TypeAnnotation)
+import Elm.Syntax.Node exposing (Node)
+import Elm.Syntax.TypeAnnotation exposing (TypeAnnotation)
 
 
 {-| Type alias representing a signature in Elm.

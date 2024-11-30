@@ -1,72 +1,128 @@
 module Elm.Parser.Imports exposing (importDefinition)
 
-import Combine exposing (Parser)
 import Elm.Parser.Base
 import Elm.Parser.Expose
 import Elm.Parser.Layout as Layout
-import Elm.Parser.Node
-import Elm.Parser.State exposing (State)
-import Elm.Parser.Tokens
+import Elm.Parser.Tokens as Tokens
 import Elm.Syntax.Import exposing (Import)
-import Elm.Syntax.ModuleName exposing (ModuleName)
-import Elm.Syntax.Node as Node exposing (Node(..))
-import Elm.Syntax.Range exposing (Location, Range)
+import Elm.Syntax.Node exposing (Node(..))
+import ParserFast exposing (Parser)
+import ParserWithComments exposing (Comments, WithComments(..))
+import Rope
 
 
-importDefinition : Parser State (Node Import)
+importDefinition : Parser (WithComments (Node Import))
 importDefinition =
-    let
-        asDefinition : Parser State (Node ModuleName)
-        asDefinition =
-            Elm.Parser.Tokens.asToken
-                |> Combine.continueWith Layout.layout
-                |> Combine.continueWith (Elm.Parser.Node.parser Elm.Parser.Base.moduleName)
-
-        parseExposingDefinition : Node ModuleName -> Maybe (Node ModuleName) -> Parser State Import
-        parseExposingDefinition mod asDef =
-            Combine.oneOf
-                [ Elm.Parser.Node.parser Elm.Parser.Expose.exposeDefinition
-                    |> Combine.map Just
-                , Combine.succeed Nothing
-                ]
-                |> Combine.map (\exposing_ -> Import mod asDef exposing_)
-
-        parseAsDefinition : Node () -> Node ModuleName -> Parser State (Node Import)
-        parseAsDefinition (Node importKeywordRange ()) mod =
-            Combine.oneOf
-                [ asDefinition
-                    |> Combine.ignore Layout.optimisticLayout
-                    |> Combine.andThen (\alias_ -> parseExposingDefinition mod (Just alias_))
-                , parseExposingDefinition mod Nothing
-                ]
-                |> Combine.map (setupNode importKeywordRange.start)
-    in
-    Combine.succeed parseAsDefinition
-        |> Combine.keep (Elm.Parser.Node.parser Elm.Parser.Tokens.importToken)
-        |> Combine.ignore Layout.layout
-        |> Combine.keep (Elm.Parser.Node.parser Elm.Parser.Base.moduleName)
-        |> Combine.ignore Layout.optimisticLayout
-        |> Combine.andThen identity
-        |> Combine.ignore Layout.optimisticLayout
-
-
-setupNode : Location -> Import -> Node Import
-setupNode start imp =
-    let
-        endRange : Range
-        endRange =
-            case imp.moduleAlias of
-                Just moduleAlias ->
-                    Node.range moduleAlias
-
+    ParserFast.map5WithStartLocation
+        (\start commentsAfterImport mod commentsAfterModuleName maybeModuleAlias maybeExposingList ->
+            let
+                commentsBeforeAlias : Comments
+                commentsBeforeAlias =
+                    commentsAfterImport
+                        |> Rope.prependTo commentsAfterModuleName
+            in
+            case maybeModuleAlias of
                 Nothing ->
-                    case imp.exposingList of
-                        Just exposingList ->
-                            Node.range exposingList
-
+                    case maybeExposingList of
                         Nothing ->
-                            Node.range imp.moduleName
-    in
-    Node
-        { start = start, end = endRange.end }
-        imp
+                            let
+                                (Node modRange _) =
+                                    mod
+                            in
+                            WithComments
+                                commentsBeforeAlias
+                                (Node { start = start, end = modRange.end }
+                                    { moduleName = mod
+                                    , moduleAlias = Nothing
+                                    , exposingList = Nothing
+                                    }
+                                )
+
+                        Just exposingListValue ->
+                            let
+                                (WithComments exposingListValueComments exposingListValueSyntax) =
+                                    exposingListValue
+
+                                (Node exposingRange _) =
+                                    exposingListValueSyntax
+                            in
+                            WithComments
+                                (commentsBeforeAlias |> Rope.prependTo exposingListValueComments)
+                                (Node { start = start, end = exposingRange.end }
+                                    { moduleName = mod
+                                    , moduleAlias = Nothing
+                                    , exposingList = Just exposingListValueSyntax
+                                    }
+                                )
+
+                Just moduleAliasResult ->
+                    let
+                        (WithComments moduleAliasResultComments moduleAliasResultSyntax) =
+                            moduleAliasResult
+
+                        (Node aliasRange _) =
+                            moduleAliasResultSyntax
+                    in
+                    case maybeExposingList of
+                        Nothing ->
+                            WithComments
+                                (commentsBeforeAlias |> Rope.prependTo moduleAliasResultComments)
+                                (Node { start = start, end = aliasRange.end }
+                                    { moduleName = mod
+                                    , moduleAlias = Just moduleAliasResultSyntax
+                                    , exposingList = Nothing
+                                    }
+                                )
+
+                        Just exposingListValue ->
+                            let
+                                (WithComments exposingListValueComments exposingListValueSyntax) =
+                                    exposingListValue
+
+                                (Node exposingRange _) =
+                                    exposingListValueSyntax
+                            in
+                            WithComments
+                                (commentsBeforeAlias
+                                    |> Rope.prependTo moduleAliasResultComments
+                                    |> Rope.prependTo exposingListValueComments
+                                )
+                                (Node { start = start, end = exposingRange.end }
+                                    { moduleName = mod
+                                    , moduleAlias = Just moduleAliasResultSyntax
+                                    , exposingList = Just exposingListValueSyntax
+                                    }
+                                )
+        )
+        (ParserFast.keywordFollowedBy "import" Layout.maybeLayout)
+        Elm.Parser.Base.moduleName
+        Layout.optimisticLayout
+        (ParserFast.map3OrSucceed
+            (\commentsBefore moduleAliasNode commentsAfter ->
+                Just
+                    (WithComments
+                        (commentsBefore |> Rope.prependTo commentsAfter)
+                        moduleAliasNode
+                    )
+            )
+            (ParserFast.keywordFollowedBy "as" Layout.maybeLayout)
+            (Tokens.typeNameMapWithRange
+                (\range moduleAlias ->
+                    Node range [ moduleAlias ]
+                )
+            )
+            Layout.optimisticLayout
+            Nothing
+        )
+        (ParserFast.map2OrSucceed
+            (\(WithComments comments syntax) commentsAfter ->
+                Just
+                    (WithComments
+                        (comments |> Rope.prependTo commentsAfter)
+                        syntax
+                    )
+            )
+            Elm.Parser.Expose.exposeDefinition
+            Layout.optimisticLayout
+            Nothing
+        )

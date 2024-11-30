@@ -22,13 +22,13 @@ These can be one of the following (all declared in `Declaration`):
 
 -}
 
-import Elm.Syntax.Expression as Expression exposing (Expression, Function)
-import Elm.Syntax.Infix as Infix exposing (Infix)
-import Elm.Syntax.Node as Node exposing (Node)
-import Elm.Syntax.Pattern as Pattern exposing (Pattern)
-import Elm.Syntax.Signature as Signature exposing (Signature)
-import Elm.Syntax.Type as Type exposing (Type)
-import Elm.Syntax.TypeAlias as TypeAlias exposing (TypeAlias)
+import Elm.Syntax.Expression exposing (Expression, Function)
+import Elm.Syntax.Infix exposing (Infix)
+import Elm.Syntax.Node exposing (Node)
+import Elm.Syntax.Pattern exposing (Pattern)
+import Elm.Syntax.Signature exposing (Signature)
+import Elm.Syntax.Type exposing (Type)
+import Elm.Syntax.TypeAlias exposing (TypeAlias)
 
 
 {-| Custom type that represents all different top-level declarations.

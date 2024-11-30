@@ -14,7 +14,7 @@ module Elm.Syntax.Infix exposing (Infix, InfixDirection(..))
 
 -}
 
-import Elm.Syntax.Node as Node exposing (Node)
+import Elm.Syntax.Node exposing (Node)
 
 
 {-| Type annotation for a infix definition
