@@ -9,6 +9,7 @@ import ElmInteractive
 import ElmInteractiveCoreModules
 import ElmInteractiveKernelModules
 import ElmInteractiveParser
+import ElmInteractiveSubmissionParser
 import EncodeElmSyntaxAsPineValue
 import Json.Decode
 import Json.Encode
@@ -28,7 +29,6 @@ type alias CompileElmInteractiveEnvironmentRequest =
     { environmentBefore : Pine.Value
     , modulesTexts : List String
     }
-
 
 
 parseElmModuleTextToPineValue : String -> String
@@ -51,12 +51,12 @@ parseElmModuleTextToPineValue moduleTextJson =
 
 parseElmModuleText : String -> Result (List Parser.DeadEnd) Elm.Syntax.File.File
 parseElmModuleText =
-    ElmInteractiveParser.parseElmModuleText
+    ElmInteractiveSubmissionParser.parseElmModuleText
 
 
 parseInteractiveSubmissionToPineValue : String -> String
 parseInteractiveSubmissionToPineValue submission =
-    ElmInteractiveParser.parseInteractiveSubmissionFromString submission
+    ElmInteractiveSubmissionParser.parseInteractiveSubmissionFromString submission
         |> Result.andThen EncodeElmSyntaxAsPineValue.encodeInteractiveSubmissionAsPineValue
         |> Result.map (json_encode_pineValue Dict.empty)
         |> json_encode_Result Json.Encode.string identity

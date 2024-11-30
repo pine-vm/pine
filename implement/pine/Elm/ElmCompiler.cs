@@ -138,7 +138,8 @@ public class ElmCompiler
     public static IReadOnlyList<IReadOnlyList<string>> DefaultCompilerTreeRootModuleFilePaths =>
         [
         ["src", "ElmCompiler.elm"],
-        ["elm-syntax", "src", "Elm", "Parser.elm"]
+        ["elm-syntax", "src", "Elm", "Parser.elm"],
+        ["src", "ElmInteractiveSubmissionParser.elm"],
         ];
 
     public static TreeNodeWithStringPath ElmCompilerFileTreeFromBundledFileTree(
@@ -452,6 +453,52 @@ public class ElmCompiler
                 errValue =>
                 Result<string, PineValue>.err(
                     "Failed to parse Elm module text: 'Err': " +
+                        ElmInteractive.ElmValueEncoding.PineValueAsElmValue(errValue, null, null)
+                        .Unpack(
+                            fromErr: err => "Failed to parse as Elm value: " + err,
+                            fromOk: elmValue => ElmInteractive.ElmValue.RenderAsElmExpression(elmValue).expressionString)),
+                ok:
+                okValue => okValue,
+                invalid:
+                (err) => throw new Exception("Invalid Elm result value: " + err));
+    }
+
+    public Result<string, PineValue> ParseElmInteractiveSubmissionText(
+        string submissionText,
+        Core.PineVM.IPineVM pineVM)
+    {
+        var parsedFunctionRecord =
+            ElmInteractiveEnvironment.ParseFunctionFromElmModule(
+                interactiveEnvironment: CompilerEnvironment,
+                moduleName: "ElmInteractiveSubmissionParser",
+                declarationName: "parseInteractiveSubmissionFromString",
+                parseCache)
+            .Extract(err => throw new Exception(
+                "Failed parsing parseInteractiveSubmissionFromString from bundled env: " + err));
+
+        var submissionTextEncoded =
+            ElmInteractive.ElmValueEncoding.ElmValueAsPineValue(
+                ElmInteractive.ElmValue.StringInstance(submissionText));
+
+        var parseResultValue =
+            ElmInteractiveEnvironment.ApplyFunction(
+                pineVM,
+                parsedFunctionRecord.functionRecord,
+                [submissionTextEncoded]);
+
+        if (parseResultValue.IsErrOrNull() is { } err)
+            return "Failed to apply function: " + err;
+
+        if (parseResultValue.IsOkOrNull() is not { } applyFunctionOk)
+            throw new Exception("Unexpected result type: " + parseResultValue.GetType().FullName);
+
+        return
+            ElmInteractive.ElmValueInterop.ParseElmResultValue(
+                applyFunctionOk,
+                err:
+                errValue =>
+                Result<string, PineValue>.err(
+                    "Failed to parse submission text: 'Err': " +
                         ElmInteractive.ElmValueEncoding.PineValueAsElmValue(errValue, null, null)
                         .Unpack(
                             fromErr: err => "Failed to parse as Elm value: " + err,
