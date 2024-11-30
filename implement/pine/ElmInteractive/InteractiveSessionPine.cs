@@ -192,13 +192,11 @@ public class InteractiveSessionPine : IInteractiveSession
                 return "Failed parsing module " + string.Join(".", compilationIncrement.sourceModule.ModuleName) + ": " + parseErr;
             }
 
-            if (parseResult is not Result<string, KeyValuePair<IReadOnlyList<string>, PineValue>>.Ok parseOk)
+            if (parseResult.IsOkOrNullable() is not { } parsedModule)
             {
                 throw new NotImplementedException(
                     "Unexpected parse result type: " + parseResult.GetType());
             }
-
-            var parsedModule = parseOk.Value;
 
             var parsedModuleNameFlat = string.Join(".", parsedModule.Key);
 
@@ -432,6 +430,25 @@ public class InteractiveSessionPine : IInteractiveSession
             .Map(r => new SubmissionResponse(r, inspectionLog));
     }
 
+    public static Result<string, PineValue> ParseInteractiveSubmission(
+        ElmCompiler elmCompiler,
+        IPineVM pineVM,
+        string submission,
+        Action<string>? addInspectionLogEntry)
+    {
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+
+        void logDuration(string label) =>
+            addInspectionLogEntry?.Invoke(
+                label + " duration: " + CommandLineInterface.FormatIntegerForDisplay(clock.ElapsedMilliseconds) + " ms");
+
+        var response = elmCompiler.ParseElmInteractiveSubmissionText(submission, pineVM);
+
+        logDuration("parse via Elm compiler");
+
+        return response;
+    }
+
     public Result<string, ElmInteractive.EvaluatedStruct> Submit(
         string submission,
         Action<string>? addInspectionLogEntry)
@@ -455,8 +472,9 @@ public class InteractiveSessionPine : IInteractiveSession
                     clock.Restart();
 
                     var parseSubmissionResult =
-                        ElmInteractive.ParseInteractiveSubmission(
-                            ParseSubmissionOrCompileDefaultJavaScriptEngine,
+                        ParseInteractiveSubmission(
+                            elmCompiler,
+                            pineVM,
                             submission: submission,
                             addInspectionLogEntry: compileEntry => addInspectionLogEntry?.Invoke("Parse: " + compileEntry));
 
