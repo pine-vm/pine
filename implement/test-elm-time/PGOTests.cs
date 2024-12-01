@@ -460,6 +460,7 @@ public class PGOTests
                 new ElmValue.ElmRecord(
                     [
                     ("alfa", ElmValue.Integer(13)),
+                    ("beta", ElmValue.Integer(43)),
                     ("delta", ElmValue.Integer(17))
                     ]),
 
@@ -471,6 +472,7 @@ public class PGOTests
                 new ElmValue.ElmRecord(
                     [
                     ("alfa", ElmValue.Integer(73)),
+                    ("beta", ElmValue.Integer(43)),
                     ("delta", ElmValue.Integer(17))
                     ]),
             },
@@ -481,6 +483,7 @@ public class PGOTests
                 new ElmValue.ElmRecord(
                     [
                     ("alfa", ElmValue.Integer(41)),
+                    ("beta", ElmValue.Integer(43)),
                     ("delta", ElmValue.Integer(47))
                     ]),
 
@@ -492,6 +495,7 @@ public class PGOTests
                 new ElmValue.ElmRecord(
                     [
                     ("alfa", ElmValue.Integer(41)),
+                    ("beta", ElmValue.Integer(43)),
                     ("delta", ElmValue.Integer(79))
                     ]),
             },
@@ -502,6 +506,7 @@ public class PGOTests
                 new ElmValue.ElmRecord(
                     [
                     ("alfa", ElmValue.StringInstance("Arancino")),
+                    ("beta", ElmValue.Integer(49)),
                     ("delta", ElmValue.StringInstance("Bruschetta"))
                     ]),
 
@@ -513,6 +518,7 @@ public class PGOTests
                 new ElmValue.ElmRecord(
                     [
                     ("alfa", ElmValue.StringInstance("Pane")),
+                    ("beta", ElmValue.Integer(49)),
                     ("delta", ElmValue.StringInstance("Bruschetta"))
                     ])
             },
@@ -523,6 +529,7 @@ public class PGOTests
                 new ElmValue.ElmRecord(
                     [
                     ("alfa", ElmValue.StringInstance("hello")),
+                    ("beta", ElmValue.Integer(119)),
                     ("delta", ElmValue.StringInstance("world"))
                     ]),
 
@@ -534,6 +541,7 @@ public class PGOTests
                 new ElmValue.ElmRecord(
                     [
                     ("alfa", ElmValue.StringInstance("hello")),
+                    ("beta", ElmValue.Integer(119)),
                     ("delta", ElmValue.StringInstance("mondo"))
                     ])
             },
@@ -544,6 +552,12 @@ public class PGOTests
                 new ElmValue.ElmRecord(
                     [
                     ("alfa", ElmValue.Integer(89)),
+                    ("beta", ElmValue.Integer(113)),
+                    ("epsilon", ElmValue.Integer(117)),
+                    ("zeta", ElmValue.Integer(119)),
+                    ("eta", ElmValue.Integer(121)),
+                    ("theta", ElmValue.Integer(123)),
+                    ("iota", ElmValue.Integer(127)),
                     ("other", ElmValue.Integer(97))
                     ]),
 
@@ -555,7 +569,112 @@ public class PGOTests
                 new ElmValue.ElmRecord(
                     [
                     ("alfa", ElmValue.Integer(89)),
+                    ("beta", ElmValue.Integer(113)),
+                    ("epsilon", ElmValue.Integer(117)),
+                    ("zeta", ElmValue.Integer(119)),
+                    ("eta", ElmValue.Integer(121)),
+                    ("theta", ElmValue.Integer(123)),
+                    ("iota", ElmValue.Integer(127)),
                     ("other", ElmValue.Integer(171))
+                    ]),
+            },
+
+            new
+            {
+                record =
+                new ElmValue.ElmRecord(
+                    [
+                    ("alfa", ElmValue.Integer(1_89)),
+                    ("beta", ElmValue.Integer(1_113)),
+                    ("epsilon", ElmValue.Integer(1_117)),
+                    ("zeta", ElmValue.Integer(1_119)),
+                    ("eta", ElmValue.Integer(1_121)),
+                    ("theta", ElmValue.Integer(1_123)),
+                    ("iota", ElmValue.Integer(1_127)),
+                    ("other", ElmValue.Integer(1_013))
+                    ]),
+
+                fieldId = 3,
+
+                fieldValue = ElmValue.Integer(11_871),
+
+                expected =
+                new ElmValue.ElmRecord(
+                    [
+                    ("alfa", ElmValue.Integer(1_89)),
+                    ("beta", ElmValue.Integer(1_113)),
+                    ("epsilon", ElmValue.Integer(1_117)),
+                    ("zeta", ElmValue.Integer(1_119)),
+                    ("eta", ElmValue.Integer(1_121)),
+                    ("theta", ElmValue.Integer(1_123)),
+                    ("iota", ElmValue.Integer(1_127)),
+                    ("other", ElmValue.Integer(11_871))
+                    ]),
+            },
+
+            new
+            {
+                record =
+                new ElmValue.ElmRecord(
+                    [
+                    ("alfa", ElmValue.Integer(2_089)),
+                    ("beta", ElmValue.Integer(2_113)),
+                    ("epsilon", ElmValue.Integer(2_117)),
+                    ("zeta", ElmValue.Integer(2_119)),
+                    ("eta", ElmValue.Integer(2_121)),
+                    ("theta", ElmValue.Integer(2_123)),
+                    ("iota", ElmValue.Integer(2_127)),
+                    ("other", ElmValue.Integer(2_013))
+                    ]),
+
+                fieldId = 3,
+
+                fieldValue = ElmValue.Integer(17_951),
+
+                expected =
+                new ElmValue.ElmRecord(
+                    [
+                    ("alfa", ElmValue.Integer(2_089)),
+                    ("beta", ElmValue.Integer(2_113)),
+                    ("epsilon", ElmValue.Integer(2_117)),
+                    ("zeta", ElmValue.Integer(2_119)),
+                    ("eta", ElmValue.Integer(2_121)),
+                    ("theta", ElmValue.Integer(2_123)),
+                    ("iota", ElmValue.Integer(2_127)),
+                    ("other", ElmValue.Integer(17_951))
+                    ]),
+            },
+
+            new
+            {
+                record =
+                new ElmValue.ElmRecord(
+                    [
+                    ("alfa", ElmValue.Integer(3_089)),
+                    ("beta", ElmValue.Integer(3_113)),
+                    ("epsilon", ElmValue.Integer(3_117)),
+                    ("zeta", ElmValue.Integer(3_119)),
+                    ("eta", ElmValue.Integer(3_121)),
+                    ("theta", ElmValue.Integer(3_123)),
+                    ("iota", ElmValue.Integer(3_127)),
+                    ("other", ElmValue.Integer(3_013))
+                    ]),
+
+                fieldId = 3,
+
+                fieldValue = ElmValue.Integer(37_951),
+
+                expected =
+                new ElmValue.ElmRecord(
+                    [
+                    ("alfa", ElmValue.Integer(3_089)),
+                    ("beta", ElmValue.Integer(3_113)),
+                    ("epsilon", ElmValue.Integer(3_117)),
+                    ("zeta", ElmValue.Integer(3_119)),
+                    ("eta", ElmValue.Integer(3_121)),
+                    ("theta", ElmValue.Integer(3_123)),
+                    ("iota", ElmValue.Integer(3_127)),
+                    ("other", ElmValue.Integer(37_951))
                     ]),
             },
 
@@ -882,7 +1001,7 @@ public class PGOTests
 
         Assert.IsTrue(2 <= speedupFactor);
 
-        Assert.IsTrue(optimizedAverageInstructionCount <= 40);
+        Assert.IsTrue(optimizedAverageInstructionCount <= 45);
     }
 
     [TestMethod]
