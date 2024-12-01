@@ -57,7 +57,10 @@ public class InteractiveSessionPine : IInteractiveSession
             compilerSourceFiles: compilerSourceFiles,
             appCodeTree: appCodeTree,
             overrideSkipLowering: overrideSkipLowering,
-            BuildPineVM(caching: caching, autoPGO: autoPGO))
+            BuildPineVM(
+                caching: caching,
+                autoPGO: autoPGO,
+                new PineVM.EvaluationConfig(ParseAndEvalCountLimit: 10_000_000)))
     {
     }
 
@@ -95,16 +98,18 @@ public class InteractiveSessionPine : IInteractiveSession
 
     public static (IPineVM, PineVMCache?) BuildPineVM(
         bool caching,
-        DynamicPGOShare? autoPGO)
+        DynamicPGOShare? autoPGO,
+        PineVM.EvaluationConfig? evaluationConfig = null)
     {
         var cache = caching ? new PineVMCache() : null;
 
-        return (BuildPineVM(cache, autoPGO), cache);
+        return (BuildPineVM(cache, autoPGO, evaluationConfig), cache);
     }
 
     public static IPineVM BuildPineVM(
         PineVMCache? cache,
-        DynamicPGOShare? autoPGO)
+        DynamicPGOShare? autoPGO,
+        PineVM.EvaluationConfig? evaluationConfig)
     {
         if (autoPGO is not null)
         {
@@ -113,7 +118,9 @@ public class InteractiveSessionPine : IInteractiveSession
         }
 
         return
-            new PineVM(evalCache: cache?.EvalCache);
+            new PineVM(
+                evalCache: cache?.EvalCache,
+                evaluationConfigDefault: evaluationConfig);
     }
 
 

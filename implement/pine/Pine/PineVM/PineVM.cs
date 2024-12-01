@@ -21,6 +21,8 @@ public class PineVM : IPineVM
 
     private IDictionary<EvalCacheEntryKey, PineValue>? EvalCache { init; get; }
 
+    private EvaluationConfig? evaluationConfigDefault;
+
     private readonly Action<EvaluationReport>? reportFunctionApplication;
 
     private readonly IReadOnlyDictionary<Expression, IReadOnlyList<EnvConstraintId>>? compilationEnvClasses;
@@ -44,13 +46,17 @@ public class PineVM : IPineVM
 
     public PineVM(
         IDictionary<EvalCacheEntryKey, PineValue>? evalCache = null,
+        EvaluationConfig? evaluationConfigDefault = null,
         Action<EvaluationReport>? reportFunctionApplication = null,
         IReadOnlyDictionary<Expression, IReadOnlyList<EnvConstraintId>>? compilationEnvClasses = null,
         bool disableReductionInCompilation = false,
         bool disablePrecompiled = false,
-        IReadOnlyDictionary<PineValue, Func<EvalExprDelegate, PineValue, Result<string, PineValue>>>? overrideInvocations = null)
+        IReadOnlyDictionary<PineValue, Func<EvalExprDelegate, PineValue, Result<string, PineValue>>>? overrideInvocations = null,
+        IReadOnlyDictionary<PineValue, IReadOnlyList<string>>? expressionsDisplayNames = null)
     {
         EvalCache = evalCache;
+
+        this.evaluationConfigDefault = evaluationConfigDefault;
 
         this.reportFunctionApplication = reportFunctionApplication;
 
@@ -68,7 +74,8 @@ public class PineVM : IPineVM
         EvaluateExpressionOnCustomStack(
             expression,
             environment,
-            config: new EvaluationConfig(ParseAndEvalCountLimit: null))
+            config:
+            evaluationConfigDefault ?? new EvaluationConfig(ParseAndEvalCountLimit: null))
         .Map(report => report.ReturnValue);
 
     public record StackFrameInstructions(
@@ -1550,8 +1557,19 @@ public class PineVM : IPineVM
             return null;
         }
 
-        IReadOnlyList<Expression> CompileStackTrace(int frameCountMax) =>
-            [.. stack.Skip(1).Take(frameCountMax).Select(f => f.Expression)];
+        IReadOnlyList<Expression> CompileStackTrace(int frameCountMax)
+        {
+            var frameCount = Math.Min(frameCountMax, stack.Count - 1);
+
+            var stackTrace = new Expression[frameCount];
+
+            for (int i = 0; i < frameCount; i++)
+            {
+                stackTrace[i] = stack.ElementAt(i + 1).Expression;
+            }
+
+            return stackTrace;
+        }
 
         buildAndPushStackFrame(
             expressionValue: null,
@@ -1679,7 +1697,9 @@ public class PineVM : IPineVM
 
                             if (config.ParseAndEvalCountLimit is { } limit && parseAndEvalCount > limit)
                             {
-                                return "Parse and eval count limit exceeded: " + limit;
+                                return
+                                    "Parse and eval count limit exceeded: " +
+                                    CommandLineInterface.FormatIntegerForDisplay(limit);
                             }
                         }
 
