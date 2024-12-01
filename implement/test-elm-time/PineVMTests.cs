@@ -1059,7 +1059,8 @@ public class PineVMTests
                 testCase.expression,
                 specializations: [],
                 parseCache,
-                disableReduction: true);
+                disableReduction: true,
+                skipInlining: (_, _) => false);
 
             Assert.AreEqual(
                 testCase.expected.Instructions.Count,

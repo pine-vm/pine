@@ -279,19 +279,36 @@ public class PineVM : IPineVM
 
         compilationEnvClasses?.TryGetValue(rootExpression, out specializations);
 
+        bool skipInlining(Expression expr, EnvConstraintId? envConstraintId)
+        {
+            if (Precompiled.HasPrecompiledForExpression(expr))
+            {
+                return true;
+            }
+
+            if (envConstraintId is null && (compilationEnvClasses?.ContainsKey(expr) ?? false))
+            {
+                return true;
+            }
+
+            return false;
+        }
+
         return
-            CompileExpression(
-                rootExpression,
-                specializations ?? [],
-                parseCache: parseCache,
-                disableReduction: disableReductionInCompilation);
+        CompileExpression(
+            rootExpression,
+            specializations ?? [],
+            parseCache: parseCache,
+            disableReduction: disableReductionInCompilation,
+            skipInlining: skipInlining);
     }
 
     public static ExpressionCompilation CompileExpression(
         Expression rootExpression,
         IReadOnlyList<EnvConstraintId> specializations,
         PineVMParseCache parseCache,
-        bool disableReduction)
+        bool disableReduction,
+        Func<Expression, EnvConstraintId?, bool> skipInlining)
     {
         var generic =
             new StackFrameInstructions(
@@ -299,7 +316,8 @@ public class PineVM : IPineVM
                     rootExpression,
                     envConstraintId: null,
                     parseCache: parseCache,
-                    disableReduction: disableReduction),
+                    disableReduction: disableReduction,
+                    skipInlining: skipInlining),
                 TrackEnvConstraint: null);
 
         var specialized =
@@ -316,7 +334,8 @@ public class PineVM : IPineVM
                         rootExpression,
                         envConstraintId: specialization,
                         parseCache: parseCache,
-                        disableReduction: disableReduction),
+                        disableReduction: disableReduction,
+                        skipInlining: skipInlining),
                     TrackEnvConstraint: specialization)))
             .ToImmutableArray();
 
@@ -346,7 +365,8 @@ public class PineVM : IPineVM
         Expression rootExpression,
         EnvConstraintId? envConstraintId,
         PineVMParseCache parseCache,
-        bool disableReduction)
+        bool disableReduction,
+        Func<Expression, EnvConstraintId?, bool> skipInlining)
     {
         var expressionWithEnvConstraint =
             envConstraintId is null ?
@@ -366,14 +386,14 @@ public class PineVM : IPineVM
             expressionWithEnvConstraint
             :
             ReduceExpressionAndInlineRecursive(
-                rootExpression: rootExpression,
                 currentExpression: expressionWithEnvConstraint,
                 inlinedParents: [],
                 maxDepth: 7,
                 maxSubexpressionCount: 4_000,
                 parseCache: parseCache,
                 envConstraintId: envConstraintId,
-                disableRecurseAfterInline: false);
+                disableRecurseAfterInline: false,
+                skipInlining: skipInlining);
 
         IReadOnlyList<StackInstruction> allInstructions =
             [.. InstructionsFromExpressionTransitive(reducedExpression).Append(StackInstruction.Return)];
@@ -387,26 +407,27 @@ public class PineVM : IPineVM
         int maxDepth,
         int maxSubexpressionCount,
         PineVMParseCache parseCache,
-        bool disableRecurseAfterInline) =>
+        bool disableRecurseAfterInline,
+        Func<Expression, EnvConstraintId?, bool> skipInlining) =>
         ReduceExpressionAndInlineRecursive(
-            rootExpression: rootExpression,
             currentExpression: rootExpression,
             inlinedParents: [],
             envConstraintId: envConstraintId,
             maxDepth: maxDepth,
             maxSubexpressionCount: maxSubexpressionCount,
             parseCache: parseCache,
-            disableRecurseAfterInline: disableRecurseAfterInline);
+            disableRecurseAfterInline: disableRecurseAfterInline,
+            skipInlining: skipInlining);
 
     public static Expression ReduceExpressionAndInlineRecursive(
-        Expression rootExpression,
         Expression currentExpression,
         ImmutableStack<Expression> inlinedParents,
         EnvConstraintId? envConstraintId,
         int maxDepth,
         int maxSubexpressionCount,
         PineVMParseCache parseCache,
-        bool disableRecurseAfterInline)
+        bool disableRecurseAfterInline,
+        Func<Expression, EnvConstraintId?, bool> skipInlining)
     {
         var expressionSubstituted =
             envConstraintId is null
@@ -433,7 +454,12 @@ public class PineVM : IPineVM
              * Stopping recursion here if envConstraintId is null resulted in significantly faster
              * completion times in a test compiling all modules of the Elm compiler.
              * */
+
+            /*
+             * 2024-11-30: Enable inlining also for cases without environment classes.
+             * 
             return expressionReduced;
+            */
         }
 
 
@@ -452,19 +478,19 @@ public class PineVM : IPineVM
         {
             Expression? ContinueReduceForKnownExprValue(PineValue exprValue)
             {
-                if (parseCache.ParseExpression(exprValue) is not Result<string, Expression>.Ok parseOk)
+                if (parseCache.ParseExpression(exprValue).IsOkOrNull() is not { } parseOk)
                 {
                     return null;
                 }
 
-                if (rootExpression.Equals(parseOk.Value))
+                if (skipInlining(parseOk, envConstraintId))
                 {
                     return null;
                 }
 
                 if (noRecursion)
                 {
-                    if (inlinedParents.Contains(parseOk.Value))
+                    if (inlinedParents.Contains(parseOk))
                     {
                         return null;
                     }
@@ -486,7 +512,7 @@ public class PineVM : IPineVM
 
                             return null;
                         },
-                        parseOk.Value).expr;
+                        parseOk).expr;
 
                 if (disableRecurseAfterInline)
                 {
@@ -507,7 +533,7 @@ public class PineVM : IPineVM
                         envConstraintId: envConstraintId);
 
                 {
-                    if (300 < inlinedExprReduced.SubexpressionCount)
+                    if (500 < inlinedExprReduced.SubexpressionCount)
                     {
                         return null;
                     }
@@ -521,7 +547,7 @@ public class PineVM : IPineVM
                         {
                             ++conditionsCount;
 
-                            if (3 < conditionsCount)
+                            if (5 < conditionsCount)
                             {
                                 return null;
                             }
@@ -533,7 +559,7 @@ public class PineVM : IPineVM
                         {
                             ++invocationsCount;
 
-                            if (4 < invocationsCount)
+                            if (5 < invocationsCount)
                             {
                                 return null;
                             }
@@ -545,18 +571,18 @@ public class PineVM : IPineVM
 
                 var inlinedFinal =
                     ReduceExpressionAndInlineRecursive(
-                        rootExpression: rootExpression,
                         // currentExpression: inlinedExpr,
                         currentExpression: inlinedExprReduced,
-                        inlinedParents: inlinedParents.Push(parseOk.Value),
+                        inlinedParents: inlinedParents.Push(parseOk),
                         envConstraintId: envConstraintId,
                         maxDepth: maxDepth - 1,
                         maxSubexpressionCount: maxSubexpressionCount,
                         parseCache: parseCache,
+                        skipInlining: skipInlining,
                         disableRecurseAfterInline: disableRecurseAfterInline);
 
                 {
-                    if (300 < inlinedFinal.SubexpressionCount)
+                    if (500 < inlinedFinal.SubexpressionCount)
                     {
                         return null;
                     }
@@ -570,7 +596,7 @@ public class PineVM : IPineVM
                         {
                             ++conditionsCount;
 
-                            if (3 < conditionsCount)
+                            if (5 < conditionsCount)
                             {
                                 return null;
                             }
@@ -582,7 +608,7 @@ public class PineVM : IPineVM
                         {
                             ++invocationsCount;
 
-                            if (4 < invocationsCount)
+                            if (5 < invocationsCount)
                             {
                                 return null;
                             }
@@ -597,10 +623,11 @@ public class PineVM : IPineVM
 
             if (!parseAndEvalExpr.encoded.ReferencesEnvironment)
             {
-                if (CompilePineToDotNet.ReducePineExpression.TryEvaluateExpressionIndependent(parseAndEvalExpr.encoded) is
-                    Result<string, PineValue>.Ok evalExprOk)
+                if (CompilePineToDotNet.ReducePineExpression.TryEvaluateExpressionIndependent(
+                    parseAndEvalExpr.encoded).IsOkOrNull() is
+                    { } evalExprOk)
                 {
-                    return ContinueReduceForKnownExprValue(evalExprOk.Value);
+                    return ContinueReduceForKnownExprValue(evalExprOk);
                 }
             }
 

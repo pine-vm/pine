@@ -1212,14 +1212,14 @@ public class CodeAnalysis
 
             currentExpression =
                 PineVM.ReduceExpressionAndInlineRecursive(
-                    rootExpression: rootExpression,
                     currentExpression: currentExpression,
                     inlinedParents: [],
                     envConstraintId: envClass,
                     maxDepth: 2,
                     maxSubexpressionCount: 4_000,
                     parseCache: parseCache,
-                    disableRecurseAfterInline: true);
+                    disableRecurseAfterInline: true,
+                    skipInlining: (_, _) => false);
 
             if (currentExpression == lastExpression)
                 break;
@@ -1304,7 +1304,8 @@ public class CodeAnalysis
                     maxDepth: 7,
                     maxSubexpressionCount: 4_000,
                     parseCache: parseCache,
-                    disableRecurseAfterInline: false);
+                    disableRecurseAfterInline: false,
+                    skipInlining: (_, _) => false);
 
             var origReducedExpr =
                 projectCompilation(envClass);
