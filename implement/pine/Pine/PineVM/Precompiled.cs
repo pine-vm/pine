@@ -854,6 +854,14 @@ public class Precompiled
                             popularValueDictionary["ParserFast.isAlphaNumOrUnderscore.exposed"]),
                         ParserFast_skipWhileWithoutLinebreakHelp_isAlphaNumOrUnderscore)]);
 
+            yield return
+                new KeyValuePair<Expression, IReadOnlyList<PrecompiledEntry>>(
+                    skipWhileWithoutLinebreakHelpExpression,
+                    [new PrecompiledEntry(
+                        envClassFromPredicate(
+                            popularValueDictionary["predicate_first_arg_is_not_ASCII_quote_or_backslash"]),
+                        ParserFast_skipWhileWithoutLinebreakHelp_is_not_ASCII_quote_or_backslash)]);
+
             /*
             yield return
                 new KeyValuePair<Expression, IReadOnlyList<PrecompiledEntry>>(
@@ -3225,6 +3233,35 @@ public class Precompiled
                 (byteValue >= 65 && byteValue <= 90) ||
                 (byteValue >= 97 && byteValue <= 122) ||
                 byteValue == '_';
+        }
+
+        return
+            ParserFast_skipWhileWithoutLinebreakHelp(
+                environment,
+                parseCache,
+                charValuePredicate);
+    }
+
+    static Func<PrecompiledResult>? ParserFast_skipWhileWithoutLinebreakHelp_is_not_ASCII_quote_or_backslash(
+        PineValue environment,
+        PineVMParseCache parseCache)
+    {
+        static bool charValuePredicate(PineValue charValue)
+        {
+            if (charValue is not PineValue.BlobValue blobValue)
+            {
+                return false;
+            }
+
+            if (blobValue.Bytes.Length is not 1)
+            {
+                return true;
+            }
+
+            var byteValue = blobValue.Bytes.Span[0];
+
+            return
+                byteValue != '"' && byteValue != '\\';
         }
 
         return
