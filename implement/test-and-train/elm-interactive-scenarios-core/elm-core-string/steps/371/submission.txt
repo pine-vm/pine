@@ -1,0 +1,1 @@
+String.foldl  String.cons  "init"  "time"

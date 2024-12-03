@@ -108,6 +108,29 @@ reverse (String chars) =
     String (Pine_kernel.reverse chars)
 
 
+foldl : (Char -> b -> b) -> b -> String -> b
+foldl func acc (String chars) =
+    foldlChars func acc chars
+
+
+foldlChars : (Char -> b -> b) -> b -> List Char -> b
+foldlChars func acc chars =
+    let
+        nextChar =
+            Pine_kernel.head chars
+    in
+    if Pine_kernel.equal [ nextChar, [] ] then
+        acc
+
+    else
+        foldlChars func (func nextChar acc) (Pine_kernel.skip [ 1, chars ])
+
+
+foldr : (Char -> b -> b) -> b -> String -> b
+foldr func acc (String chars) =
+    foldlChars func acc (Pine_kernel.reverse chars)
+
+
 repeat : Int -> String -> String
 repeat n (String chars) =
     String (Pine_kernel.concat (List.repeat n chars))
@@ -657,11 +680,6 @@ linesHelper currentLineStart currentLines offset chars =
             currentLines
             (Pine_kernel.int_add [ offset, 1 ])
             chars
-
-
-foldr : (Char -> b -> b) -> b -> String -> b
-foldr func acc (String list) =
-    List.foldr func acc list
 
 
 toFloat : String -> Maybe Float
