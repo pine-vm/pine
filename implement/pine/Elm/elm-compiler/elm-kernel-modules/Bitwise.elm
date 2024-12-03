@@ -150,7 +150,14 @@ shiftRightZfBy offset bytes =
         in
         Pine_kernel.concat
             [ sign
-            , truncateLeadingZeros beforeTruncate
+            , truncateLeadingZeros
+                (Pine_kernel.reverse
+                    (Pine_kernel.take
+                        [ 4
+                        , Pine_kernel.reverse beforeTruncate
+                        ]
+                    )
+                )
             ]
 
     else

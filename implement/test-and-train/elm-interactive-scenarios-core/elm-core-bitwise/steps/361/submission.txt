@@ -1,1 +1,1 @@
-Bitwise.shiftRightZfBy  1  32
+Bitwise.shiftRightZfBy  0  15783277244
