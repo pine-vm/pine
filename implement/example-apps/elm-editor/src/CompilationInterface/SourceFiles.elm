@@ -1,7 +1,7 @@
-module CompilationInterface.SourceFiles exposing (..)
+{- For documentation of the compilation interface, see <https://github.com/pine-vm/pine/blob/main/guide/how-to-use-elm-compilation-interfaces.md#compilationinterfacesourcefiles-elm-module> -}
 
-{-| For documentation of the compilation interface, see <https://github.com/pine-vm/pine/blob/main/guide/how-to-use-elm-compilation-interfaces.md#compilationinterfacesourcefiles-elm-module>
--}
+
+module CompilationInterface.SourceFiles exposing (..)
 
 
 type FileTreeNode blobStructure

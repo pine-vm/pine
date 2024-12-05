@@ -1,7 +1,7 @@
-module CompilationInterface.GenerateJsonConverters exposing (..)
+{- For documentation of the compilation interface, see <https://github.com/pine-vm/pine/blob/main/guide/how-to-use-elm-compilation-interfaces.md#compilationinterfacegeneratejsonconverters-elm-module> -}
 
-{-| For documentation of the compilation interface, see <https://github.com/pine-vm/pine/blob/main/guide/how-to-use-elm-compilation-interfaces.md#compilationinterfacegeneratejsonconverters-elm-module>
--}
+
+module CompilationInterface.GenerateJsonConverters exposing (..)
 
 import Frontend.ContainerHtml
 import Frontend.MonacoEditor

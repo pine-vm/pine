@@ -1,11 +1,9 @@
 module ElmCompilerTests exposing (..)
 
 import BigInt
-import Dict
 import Expect
 import FirCompiler
 import Pine
-import Result.Extra
 import Test
 
 
@@ -1057,14 +1055,16 @@ emitClosureExpressionTests =
                                     environmentFunctions
                                     rootFunctionApplication
                         in
-                        emitClosureResult
-                            |> Result.andThen
-                                ((\applicationExpr ->
-                                    Pine.evaluateExpression Pine.emptyEvalEnvironment applicationExpr
-                                        |> Result.mapError Pine.displayStringFromPineError
-                                 )
-                                    >> Result.map (Expect.equal testCase.expectedValue)
-                                )
-                            |> Result.Extra.unpack Expect.fail identity
+                        case emitClosureResult of
+                            Ok applicationExpr ->
+                                case Pine.evaluateExpression Pine.emptyEvalEnvironment applicationExpr of
+                                    Ok value ->
+                                        Expect.equal value testCase.expectedValue
+
+                                    Err error ->
+                                        Expect.fail (Pine.displayStringFromPineError error)
+
+                            Err error ->
+                                Expect.fail error
             )
         |> Test.describe "emit closure expression"

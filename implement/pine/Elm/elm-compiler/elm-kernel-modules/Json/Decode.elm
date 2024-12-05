@@ -901,4 +901,34 @@ dropWhileList predicate stringList =
 
 isCharRemovedOnTrim : Char -> Bool
 isCharRemovedOnTrim char =
-    Char.toCode char <= 32
+    if Pine_kernel.equal [ char, ' ' ] then
+        True
+
+    else if Pine_kernel.equal [ char, '\t' ] then
+        True
+
+    else if Pine_kernel.equal [ char, '\n' ] then
+        True
+
+    else if Pine_kernel.equal [ char, '\u{000D}' ] then
+        True
+
+    else
+        False
+
+
+errorToString : Error -> String
+errorToString err =
+    case err of
+        Field key subError ->
+            "Field `" ++ key ++ "`: " ++ errorToString subError
+
+        Index index subError ->
+            "Index " ++ String.fromInt index ++ ": " ++ errorToString subError
+
+        OneOf errors ->
+            "One of the following errors occurred:\n\n"
+                ++ String.join "\n\n" (List.map errorToString errors)
+
+        Failure message value ->
+            message ++ "\n\n" ++ Json.Encode.encode 4 value

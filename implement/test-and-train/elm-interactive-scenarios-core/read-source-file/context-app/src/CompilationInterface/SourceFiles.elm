@@ -8,10 +8,9 @@ type alias Base64AndUtf8 =
     { utf8 : String, base64 : String }
 
 
-file____a_file_txt : { utf8 : String, gzip : { base64 : String } }
+file____a_file_txt : { utf8 : String }
 file____a_file_txt =
     { utf8 = "The compiler replaces this value."
-    , gzip = { base64 = "The compiler replaces this value." }
     }
 
 

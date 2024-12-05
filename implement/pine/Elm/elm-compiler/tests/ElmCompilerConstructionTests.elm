@@ -3,7 +3,6 @@ module ElmCompilerConstructionTests exposing (..)
 import ElmCompilerConstruction
 import Expect
 import Pine
-import Result.Extra
 import Test
 
 
@@ -57,18 +56,19 @@ generateTemplateEvaluatingToExpressionTests =
                             template =
                                 ElmCompilerConstruction.generateTemplateEvaluatingToExpression testedExpression
                         in
-                        Pine.evaluateExpression
-                            Pine.emptyEvalEnvironment
-                            template
-                            |> Result.mapError (Pine.displayStringFromPineError >> (++) "Failed evaluate template: ")
-                            |> Result.andThen
-                                (\value ->
-                                    value
-                                        |> Pine.parseExpressionFromValue
-                                        |> Result.mapError ((++) "Failed decode expression from value: ")
-                                )
-                            |> Result.Extra.unpack
+                        case Pine.evaluateExpression Pine.emptyEvalEnvironment template of
+                            Ok value ->
+                                case Pine.parseExpressionFromValue value of
+                                    Ok parsedExpression ->
+                                        Expect.equal testedExpression parsedExpression
+
+                                    Err decodeError ->
+                                        Expect.fail ("Failed decode expression from value: " ++ decodeError)
+
+                            Err evaluationError ->
                                 Expect.fail
-                                (Expect.equal testedExpression)
+                                    ("Failed evaluate template: "
+                                        ++ Pine.displayStringFromPineError evaluationError
+                                    )
             )
         |> Test.describe "generate template evaluating to expression"

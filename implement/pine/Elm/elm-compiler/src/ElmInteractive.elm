@@ -18,9 +18,7 @@ import ElmCompiler
 import FirCompiler exposing (Expression(..))
 import Json.Decode
 import Json.Encode
-import Maybe.Extra
 import Pine
-import Result.Extra
 import Set
 
 
@@ -461,22 +459,24 @@ elmValueAsElmRecord elmValue =
             Err "Value is not a list."
 
 
-tryMapElmValueToChar : ElmValue -> Maybe Char
-tryMapElmValueToChar elmValue =
-    case elmValue of
-        ElmChar char ->
-            Just char
-
-        _ ->
-            Nothing
-
-
 tryMapElmValueToString : List ElmValue -> Maybe String
 tryMapElmValueToString elmValues =
-    elmValues
-        |> List.map tryMapElmValueToChar
-        |> Maybe.Extra.combine
-        |> Maybe.map String.fromList
+    tryMapElmValueToStringRecursive elmValues []
+
+
+tryMapElmValueToStringRecursive : List ElmValue -> List Char -> Maybe String
+tryMapElmValueToStringRecursive elmValues accumulatedChars =
+    case elmValues of
+        [] ->
+            Just (String.fromList (List.reverse accumulatedChars))
+
+        elmValue :: rest ->
+            case elmValue of
+                ElmChar char ->
+                    tryMapElmValueToStringRecursive rest (char :: accumulatedChars)
+
+                _ ->
+                    Nothing
 
 
 elmValueDictToList : ElmValue -> List ( ElmValue, ElmValue )
@@ -814,12 +814,21 @@ json_decode_pineValueWithDictionary :
 json_decode_pineValueWithDictionary parentDictionary =
     json_decode_optionalNullableField "Dictionary" json_decode_pineValueDictionary
         |> Json.Decode.andThen
-            (Maybe.map
-                (Dict.union (Dict.map (always LiteralValue) parentDictionary)
-                    >> resolveDictionaryToLiteralValues
-                    >> Result.Extra.unpack Json.Decode.fail Json.Decode.succeed
-                )
-                >> Maybe.withDefault (Json.Decode.succeed parentDictionary)
+            (\maybeDictionary ->
+                case maybeDictionary of
+                    Nothing ->
+                        Json.Decode.succeed parentDictionary
+
+                    Just dictionary ->
+                        case
+                            resolveDictionaryToLiteralValues
+                                (Dict.union (Dict.map (always LiteralValue) parentDictionary) dictionary)
+                        of
+                            Err errorMessage ->
+                                Json.Decode.fail errorMessage
+
+                            Ok resolvedDictionary ->
+                                Json.Decode.succeed resolvedDictionary
             )
         |> Json.Decode.andThen
             (\mergedDictionary ->

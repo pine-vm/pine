@@ -46,6 +46,16 @@ decode (Decoder decoder) bytes =
         Nothing
 
 
+bytes : Int -> Decoder Bytes
+bytes length =
+    Decoder
+        (\blob offset ->
+            ( Pine_kernel.int_add [ offset, length ]
+            , Bytes.Elm_Bytes (Pine_kernel.take [ length, Pine_kernel.skip [ offset, blob ] ])
+            )
+        )
+
+
 {-| Decode one byte into an integer from `0` to `255`.
 -}
 unsignedInt8 : Decoder Int

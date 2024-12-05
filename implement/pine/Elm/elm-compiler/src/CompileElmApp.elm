@@ -21,17 +21,13 @@ import Elm.Syntax.Signature
 import Elm.Syntax.Type
 import Elm.Syntax.TypeAlias
 import Elm.Syntax.TypeAnnotation
+import FNV1a
 import FileTree
-import Flate
-import JaroWinkler
 import Json.Decode
 import Json.Encode
 import List
 import List.Extra
-import Maybe
 import Parser
-import Result.Extra
-import SHA256
 import Set
 
 
@@ -155,7 +151,6 @@ type InterfaceBlobSingleEncoding
     = Base64Encoding
     | Utf8Encoding
     | BytesEncoding
-    | GZipEncoding
 
 
 type alias InterfaceSourceFilesFunctionConfig =
@@ -661,8 +656,16 @@ loweredForCompilationRoot entryPointClasses config sourceFiles =
                     let
                         allSupportedDeclarationNames =
                             entryPointMatchesResults
-                                |> List.map (Result.Extra.unpack .supportedDeclarationNames (always Set.empty))
-                                |> List.foldl Set.union Set.empty
+                                |> List.foldl
+                                    (\entryPointMatchesResult ->
+                                        case entryPointMatchesResult of
+                                            Err { supportedDeclarationNames } ->
+                                                Set.union supportedDeclarationNames
+
+                                            Ok _ ->
+                                                identity
+                                    )
+                                    Set.empty
                     in
                     Ok
                         { compiledFiles = sourceFiles
@@ -950,10 +953,11 @@ mapAppFilesToSupportJsonConverters { generatedModuleNamePrefix, sourceDirs } typ
                 |> List.map String.trim
                 |> String.join "\n\n\n"
 
+        generatedModuleHash : String
         generatedModuleHash =
             generatedModuleTextWithoutModuleDeclaration
-                |> SHA256.fromString
-                |> SHA256.toHex
+                |> FNV1a.hash
+                |> String.fromInt
 
         generatedModuleName =
             generatedModuleNamePrefix ++ [ "Generated_" ++ String.left 8 generatedModuleHash ]
@@ -1169,10 +1173,11 @@ buildJsonConverterFunctionsForTypeAnnotation typeAnnotation =
         typeAnnotationText =
             buildTypeAnnotationText typeAnnotation
 
+        nameCommonPart : String
         nameCommonPart =
             typeAnnotationText
-                |> SHA256.fromString
-                |> SHA256.toHex
+                |> FNV1a.hash
+                |> String.fromInt
                 |> String.left 10
 
         encodeFunctionName =
@@ -1211,10 +1216,11 @@ buildEstimateJsonEncodeLengthFunctionForTypeAnnotation typeAnnotation =
         typeAnnotationText =
             buildTypeAnnotationText typeAnnotation
 
+        nameCommonPart : String
         nameCommonPart =
             typeAnnotationText
-                |> SHA256.fromString
-                |> SHA256.toHex
+                |> FNV1a.hash
+                |> String.fromInt
                 |> String.left 10
 
         encodeFunctionName =
@@ -1303,10 +1309,11 @@ type FileTreeNode blobStructure
                                 generatedModuleTextWithoutModuleDeclaration =
                                     String.join "\n\n" (Set.toList generatedModuleDeclarations)
 
+                                generatedModuleHash : String
                                 generatedModuleHash =
                                     generatedModuleTextWithoutModuleDeclaration
-                                        |> SHA256.fromString
-                                        |> SHA256.toHex
+                                        |> FNV1a.hash
+                                        |> String.fromInt
 
                                 generatedModuleName =
                                     interfaceModuleName ++ [ "Generated_" ++ String.left 8 generatedModuleHash ]
@@ -1422,10 +1429,11 @@ mapElmMakeModuleText sourceDirs dependencies ( sourceFiles, moduleFilePath, modu
                                         |> Set.toList
                                         |> String.join "\n\n"
 
+                                generatedModuleHash : String
                                 generatedModuleHash =
                                     generatedModuleTextWithoutModuleDeclaration
-                                        |> SHA256.fromString
-                                        |> SHA256.toHex
+                                        |> FNV1a.hash
+                                        |> String.fromInt
 
                                 generatedModuleName =
                                     interfaceModuleName ++ [ "Generated_" ++ String.left 8 generatedModuleHash ]
@@ -3824,11 +3832,6 @@ buildUtf8ElmExpression bytes =
             Ok (stringExpressionFromString asUtf8)
 
 
-buildGZipBase64ElmExpression : Bytes.Bytes -> Result String String
-buildGZipBase64ElmExpression bytes =
-    buildBase64ElmExpression (Flate.deflateGZip bytes)
-
-
 buildUint32Uint8ElmExpression : Bytes.Bytes -> Result String String
 buildUint32Uint8ElmExpression bytes =
     let
@@ -4063,25 +4066,6 @@ findFileTreeNodeWithPathMatchingRepresentationInFunctionName sourceDirs sourceFi
 
         [] ->
             let
-                filesWithSimilarity =
-                    nodesGroupedByRepresentation
-                        |> Dict.keys
-                        |> List.map
-                            (\pathRepresentation ->
-                                ( pathRepresentation
-                                , JaroWinkler.similarity pathRepresentation pathPattern
-                                )
-                            )
-                        |> List.sortBy (Tuple.second >> negate)
-
-                pointOutSimilarNamesLines =
-                    case filesWithSimilarity |> List.filter (Tuple.second >> (<=) 0.5) of
-                        ( mostSimilarRepresentation, _ ) :: _ ->
-                            [ "Did you mean '" ++ mostSimilarRepresentation ++ "'?" ]
-
-                        _ ->
-                            []
-
                 examplesListItems =
                     Dict.keys nodesGroupedByRepresentation
 
@@ -4096,15 +4080,11 @@ findFileTreeNodeWithPathMatchingRepresentationInFunctionName sourceDirs sourceFi
                             else
                                 [ "..." ]
                            )
-
-                sourceFilesPaths =
-                    Dict.keys sourceFiles
             in
             [ [ "Did not find any file or directory with a path matching the representation '"
                     ++ pathPattern
                     ++ "'."
               ]
-            , pointOutSimilarNamesLines
             , [ "There are "
                     ++ String.fromInt (Dict.size sourceFiles)
                     ++ " files and directories available in this compilation: "
@@ -4309,7 +4289,6 @@ encodingFromSourceFileFieldName =
     [ ( "base64", Base64Encoding )
     , ( "utf8", Utf8Encoding )
     , ( "bytes", BytesEncoding )
-    , ( "gzip", GZipEncoding )
     ]
         |> Dict.fromList
 
@@ -4440,11 +4419,6 @@ prepareRecordTreeEmitForTreeOrBlobUnderPath pathPrefix tree =
             , valueModuleBuildExpression = buildUtf8ElmExpression
             }
 
-        mappingGZipBase64 =
-            { fieldName = "gzipBase64"
-            , valueModuleBuildExpression = buildGZipBase64ElmExpression
-            }
-
         mappingUint32Uint8 =
             { fieldName = "uint32_uint8"
             , valueModuleBuildExpression = buildUint32Uint8ElmExpression
@@ -4465,7 +4439,8 @@ prepareRecordTreeEmitForTreeOrBlobUnderPath pathPrefix tree =
             , ( [ "bytes" ], mappingBytes )
             , ( [], mappingBytes )
             , ( [ "utf8" ], ( mappingUtf8, Nothing ) )
-            , ( [ "gzip", "base64" ], ( mappingGZipBase64, Nothing ) )
+
+            -- , ( [ "gzip", "base64" ], ( mappingGZipBase64, Nothing ) )
             ]
                 |> Dict.fromList
 
@@ -4695,7 +4670,7 @@ attemptMapRecordTreeLeaves pathPrefix attemptMapLeaf tree =
 
         RecordTreeBranch fields ->
             let
-                ( successes, errors ) =
+                ( errors, successes ) =
                     fields
                         |> List.map
                             (\( fieldName, fieldNode ) ->
@@ -4703,14 +4678,29 @@ attemptMapRecordTreeLeaves pathPrefix attemptMapLeaf tree =
                                     |> Result.map (Tuple.pair fieldName)
                                     |> Result.mapError (List.map (Tuple.mapFirst ((::) fieldName)))
                             )
-                        |> Result.Extra.partition
-                        |> Tuple.mapSecond List.concat
+                        |> listResultPartition
+                        |> Tuple.mapFirst List.concat
             in
             if errors == [] then
                 Ok (RecordTreeBranch successes)
 
             else
                 Err errors
+
+
+listResultPartition : List (Result e a) -> ( List e, List a )
+listResultPartition results =
+    List.foldr
+        (\r ( err, succ ) ->
+            case r of
+                Ok v ->
+                    ( err, v :: succ )
+
+                Err e ->
+                    ( e :: err, succ )
+        )
+        ( [], [] )
+        results
 
 
 mapRecordTreeLeaves : (a -> b) -> CompilationInterfaceRecordTreeNode a -> CompilationInterfaceRecordTreeNode b
@@ -5017,10 +5007,11 @@ areAppFilesEqual : AppFiles -> AppFiles -> Bool
 areAppFilesEqual a b =
     {- Avoid bug in Elm core library as reported at https://github.com/elm/bytes/issues/15 :
        Convert to other representation before comparing.
+       TODO: Remove conversion after switching to platorm that supports bytes comparison.
     -}
     let
         representationForComparison =
-            Dict.map (always (SHA256.fromBytes >> SHA256.toHex))
+            Dict.map (always Base64.fromBytes)
     in
     representationForComparison a == representationForComparison b
 
@@ -5031,7 +5022,14 @@ resultCombineConcatenatingErrors =
         (\result previousAggregate ->
             case previousAggregate of
                 Err previousErrors ->
-                    Err (previousErrors ++ (result |> Result.Extra.error |> Maybe.map List.singleton |> Maybe.withDefault []))
+                    Err
+                        (case result of
+                            Err error ->
+                                error :: previousErrors
+
+                            Ok _ ->
+                                previousErrors
+                        )
 
                 Ok previousList ->
                     case result of
