@@ -89,16 +89,24 @@ public class ElmCompiler
 
     public ElmInteractiveEnvironment.FunctionRecord ExpandElmInteractiveEnvironmentWithModules { get; }
 
+    public ElmInteractiveEnvironment.FunctionRecord ParseElmModuleSyntax { get; }
+
+    public ElmInteractiveEnvironment.FunctionRecord? ParseInteractiveSubmission { get; }
+
     private static readonly PineVM.PineVMParseCache parseCache = new();
 
     private ElmCompiler(
         PineValue compilerEnvironment,
         ElmInteractiveEnvironment.FunctionRecord compileParsedInteractiveSubmission,
-        ElmInteractiveEnvironment.FunctionRecord expandElmInteractiveEnvironmentWithModules)
+        ElmInteractiveEnvironment.FunctionRecord expandElmInteractiveEnvironmentWithModules,
+        ElmInteractiveEnvironment.FunctionRecord parseElmModuleSyntax,
+        ElmInteractiveEnvironment.FunctionRecord? parseInteractiveSubmission)
     {
         CompilerEnvironment = compilerEnvironment;
         CompileParsedInteractiveSubmission = compileParsedInteractiveSubmission;
         ExpandElmInteractiveEnvironmentWithModules = expandElmInteractiveEnvironmentWithModules;
+        ParseElmModuleSyntax = parseElmModuleSyntax;
+        ParseInteractiveSubmission = parseInteractiveSubmission;
     }
 
     public static Task<Result<string, ElmCompiler>> GetElmCompilerAsync(
@@ -395,41 +403,112 @@ public class ElmCompiler
 
     public static Result<string, ElmCompiler> ElmCompilerFromEnvValue(PineValue compiledEnv)
     {
-        return
+        var parseCompileSubmissionResult =
             ElmInteractiveEnvironment.ParseFunctionFromElmModule(
                 interactiveEnvironment: compiledEnv,
                 moduleName: "ElmCompiler",
                 declarationName: "compileParsedInteractiveSubmission",
-                parseCache)
-            .MapError(err => "Failed parsing function to compile interactive submission: " + err)
-            .AndThen(compileParsedInteractiveSubmission =>
+                parseCache);
+
+        {
+            if (parseCompileSubmissionResult.IsErrOrNull() is { } err)
+            {
+                return "Failed parsing function to compile interactive submission: " + err;
+            }
+        }
+
+        if (parseCompileSubmissionResult.IsOkOrNullable() is not { } compileParsedInteractiveSubmission)
+        {
+            throw new NotImplementedException(
+                "Unexpected result type: " + parseCompileSubmissionResult.GetType());
+        }
+
+        var parseExpandEnvWithModulesResult =
             ElmInteractiveEnvironment.ParseFunctionFromElmModule(
                 interactiveEnvironment: compiledEnv,
                 moduleName: "ElmCompiler",
                 declarationName: "expandElmInteractiveEnvironmentWithModules",
-                parseCache)
-            .Map(expandElmInteractiveEnvironmentWithModules =>
-            new ElmCompiler(
-                compiledEnv,
-                compileParsedInteractiveSubmission:
-                compileParsedInteractiveSubmission.functionRecord,
-                expandElmInteractiveEnvironmentWithModules:
-                expandElmInteractiveEnvironmentWithModules.functionRecord)));
+                parseCache);
+
+        {
+            if (parseExpandEnvWithModulesResult.IsErrOrNull() is { } err)
+            {
+                return "Failed parsing function to expand Elm interactive environment with modules: " + err;
+            }
+        }
+
+        if (parseExpandEnvWithModulesResult.IsOkOrNullable() is not { } expandElmInteractiveEnvironmentWithModules)
+        {
+            throw new NotImplementedException(
+                "Unexpected result type: " + parseExpandEnvWithModulesResult.GetType());
+        }
+
+        var parseParseToFileResult =
+            ElmInteractiveEnvironment.ParseFunctionFromElmModule(
+                interactiveEnvironment: compiledEnv,
+                moduleName: "Elm.Parser",
+                declarationName: "parseToFile",
+                parseCache);
+
+        {
+            if (parseParseToFileResult.IsErrOrNull() is { } err)
+            {
+                return "Failed parsing function to parse Elm file: " + err;
+            }
+        }
+
+        if (parseParseToFileResult.IsOkOrNullable() is not { } parseToFile)
+        {
+            throw new NotImplementedException(
+                "Unexpected result type: " + parseParseToFileResult.GetType());
+        }
+
+        var parseParseInteractiveSubmissionResult =
+            ElmInteractiveEnvironment.ParseFunctionFromElmModule(
+                interactiveEnvironment: compiledEnv,
+                moduleName: "ElmInteractiveSubmissionParser",
+                declarationName: "parseInteractiveSubmissionFromString",
+                parseCache);
+
+        /*
+        Currently not required because module ElmInteractiveSubmissionParser is not shipped with older versions we sometimes load here.
+
+        {
+            if (parseParseInteractiveSubmissionResult.IsErrOrNull() is { } err)
+            {
+                return "Failed parsing function to parse interactive submission: " + err;
+            }
+        }
+
+        if (parseParseInteractiveSubmissionResult.IsOkOrNullable() is not { } parseInteractiveSubmission)
+        {
+            throw new NotImplementedException(
+                "Unexpected result type: " + parseParseInteractiveSubmissionResult.GetType());
+        }
+        */
+
+        var parseInteractiveSubmission =
+            parseParseInteractiveSubmissionResult
+            .Unpack(
+                fromErr: _ => null,
+                fromOk: ok => ok.functionRecord);
+
+        return new ElmCompiler(
+            compiledEnv,
+            compileParsedInteractiveSubmission:
+            compileParsedInteractiveSubmission.functionRecord,
+            expandElmInteractiveEnvironmentWithModules:
+            expandElmInteractiveEnvironmentWithModules.functionRecord,
+            parseElmModuleSyntax:
+            parseToFile.functionRecord,
+            parseInteractiveSubmission:
+            parseInteractiveSubmission);
     }
 
     public Result<string, PineValue> ParseElmModuleText(
         string elmModuleText,
         Core.PineVM.IPineVM pineVM)
     {
-        var parsedFunctionRecord =
-            ElmInteractiveEnvironment.ParseFunctionFromElmModule(
-                interactiveEnvironment: CompilerEnvironment,
-                moduleName: "Elm.Parser",
-                declarationName: "parseToFile",
-                parseCache)
-            .Extract(err => throw new Exception(
-                "Failed parsing Elm.Parser.parseToFile from bundled env: " + err));
-
         var elmModuleTextEncoded =
             ElmInteractive.ElmValueEncoding.ElmValueAsPineValue(
                 ElmInteractive.ElmValue.StringInstance(elmModuleText));
@@ -437,7 +516,7 @@ public class ElmCompiler
         var parseToFileResultValue =
             ElmInteractiveEnvironment.ApplyFunction(
                 pineVM,
-                parsedFunctionRecord.functionRecord,
+                ParseElmModuleSyntax,
                 [elmModuleTextEncoded]);
 
         if (parseToFileResultValue.IsErrOrNull() is { } err)
@@ -467,15 +546,6 @@ public class ElmCompiler
         string submissionText,
         Core.PineVM.IPineVM pineVM)
     {
-        var parsedFunctionRecord =
-            ElmInteractiveEnvironment.ParseFunctionFromElmModule(
-                interactiveEnvironment: CompilerEnvironment,
-                moduleName: "ElmInteractiveSubmissionParser",
-                declarationName: "parseInteractiveSubmissionFromString",
-                parseCache)
-            .Extract(err => throw new Exception(
-                "Failed parsing parseInteractiveSubmissionFromString from bundled env: " + err));
-
         var submissionTextEncoded =
             ElmInteractive.ElmValueEncoding.ElmValueAsPineValue(
                 ElmInteractive.ElmValue.StringInstance(submissionText));
@@ -483,7 +553,7 @@ public class ElmCompiler
         var parseResultValue =
             ElmInteractiveEnvironment.ApplyFunction(
                 pineVM,
-                parsedFunctionRecord.functionRecord,
+                ParseInteractiveSubmission,
                 [submissionTextEncoded]);
 
         if (parseResultValue.IsErrOrNull() is { } err)

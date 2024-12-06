@@ -119,11 +119,11 @@ public static class ElmValueEncoding
 
                             var mapToStringResult = PineValueAsString.StringFromValue(charsList);
 
-                            if (mapToStringResult is Result<string, string>.Ok ok)
-                                return ElmValue.StringInstance(ok.Value);
+                            if (mapToStringResult.IsOkOrNull() is { } ok)
+                                return ElmValue.StringInstance(ok);
 
-                            if (mapToStringResult is Result<string, string>.Err err)
-                                return "Failed to convert value under String tag: Failed mapping char " + err.Value;
+                            if (mapToStringResult.IsErrOrNull() is { } err)
+                                return "Failed to convert value under String tag: Failed mapping char " + err;
 
                             throw new NotImplementedException("Unexpected result type: " + mapToStringResult.GetType().FullName);
                         }
@@ -150,13 +150,14 @@ public static class ElmValueEncoding
                                     additionalReusableDecodings,
                                     reportNewDecoding);
 
-                            if (asRecordResult is Result<string, ElmValue.ElmRecord>.Ok ok)
-                                return ok.Value;
+                            if (asRecordResult.IsOkOrNull() is { } ok)
+                                return ok;
 
-                            if (asRecordResult is Result<string, ElmValue.ElmRecord>.Err err)
-                                return "Failed to convert value under Record tag: " + err.Value;
+                            if (asRecordResult.IsErrOrNull() is { } err)
+                                return "Failed to convert value under Record tag: " + err;
 
-                            throw new NotImplementedException("Unexpected result type: " + asRecordResult.GetType().FullName);
+                            throw new NotImplementedException(
+                                "Unexpected result type: " + asRecordResult.GetType().FullName);
                         }
                     }
 
@@ -197,13 +198,13 @@ public static class ElmValueEncoding
 
                             var denominatorValue = tagArgumentsList.Elements[1];
 
-                            if (PineValueAsInteger.SignedIntegerFromValueStrict(numeratorValue) is not Result<string, System.Numerics.BigInteger>.Ok numeratorOk)
+                            if (PineValueAsInteger.SignedIntegerFromValueStrict(numeratorValue).IsOkOrNullable() is not { } numeratorOk)
                                 return "Failed to parse numerator under Float tag";
 
-                            if (PineValueAsInteger.SignedIntegerFromValueStrict(denominatorValue) is not Result<string, System.Numerics.BigInteger>.Ok denominatorOk)
+                            if (PineValueAsInteger.SignedIntegerFromValueStrict(denominatorValue).IsOkOrNullable() is not { } denominatorOk)
                                 return "Failed to parse denominator under Float tag";
 
-                            return ElmValue.ElmFloat.Normalized(numeratorOk.Value, denominatorOk.Value);
+                            return ElmValue.ElmFloat.Normalized(numeratorOk, denominatorOk);
                         }
                     }
 
@@ -302,14 +303,14 @@ public static class ElmValueEncoding
                         additionalReusableDecodings,
                         reportNewDecoding);
 
-                if (itemAsElmValueResult is Result<string, ElmValue>.Ok ok)
+                if (itemAsElmValueResult.IsOkOrNull() is { } ok)
                 {
-                    itemsAsElmValues[i] = ok.Value;
+                    itemsAsElmValues[i] = ok;
                     continue;
                 }
 
-                if (itemAsElmValueResult is Result<string, ElmValue>.Err err)
-                    return "Failed to convert list item [" + i + "]: " + err.Value;
+                if (itemAsElmValueResult.IsErrOrNull() is { } err)
+                    return "Failed to convert list item [" + i + "]: " + err;
 
                 throw new NotImplementedException(
                     "Unexpected result type: " + itemAsElmValueResult.GetType().FullName);
@@ -344,10 +345,10 @@ public static class ElmValueEncoding
 
         var parseTagNameResult = PineValueAsString.StringFromValue(tagNameValue);
 
-        if (parseTagNameResult is Result<string, string>.Err tagNameErr)
-            return "First element is not a string: " + tagNameErr.Value;
+        if (parseTagNameResult.IsErrOrNull() is { } tagNameErr)
+            return "First element is not a string: " + tagNameErr;
 
-        if (parseTagNameResult is not Result<string, string>.Ok tagNameOk)
+        if (parseTagNameResult.IsOkOrNull() is not { } tagNameOk)
             throw new NotImplementedException(
                 "Unexpected result type: " + parseTagNameResult.GetType().FullName);
 
@@ -356,7 +357,7 @@ public static class ElmValueEncoding
         if (tagArgumentsValue is not PineValue.ListValue tagArgumentsList)
             return "Second element is not a list.";
 
-        return (tagNameOk.Value, tagArgumentsList.Elements);
+        return (tagNameOk, tagArgumentsList.Elements);
     }
 
 
@@ -385,7 +386,7 @@ public static class ElmValueEncoding
 
             var fieldNameResult = PineValueAsString.StringFromValue(fieldNameValue);
 
-            if (fieldNameResult is Result<string, string>.Ok fieldName)
+            if (fieldNameResult.IsOkOrNull() is { } fieldName)
             {
                 var fieldValueResult =
                     PineValueAsElmValue(
@@ -393,17 +394,17 @@ public static class ElmValueEncoding
                         additionalReusableDecodings,
                         reportNewDecoding);
 
-                if (fieldValueResult is Result<string, ElmValue>.Ok fieldValueOk)
+                if (fieldValueResult.IsOkOrNull() is { } fieldValueOk)
                 {
-                    recordFields[i] = (fieldName.Value, fieldValueOk.Value);
+                    recordFields[i] = (fieldName, fieldValueOk);
                     continue;
                 }
 
                 return "Failed decoding field value: " + fieldValueResult;
             }
 
-            if (fieldNameResult is Result<string, string>.Err error)
-                return "Failed decoding field name: " + error.Value;
+            if (fieldNameResult.IsErrOrNull() is { } error)
+                return "Failed decoding field name: " + error;
 
             throw new NotImplementedException(
                 "Unexpected result type: " + fieldNameResult.GetType().FullName);
@@ -460,14 +461,14 @@ public static class ElmValueEncoding
 
             var fieldNameResult = PineValueAsString.StringFromValue(fieldNameValue);
 
-            if (fieldNameResult is Result<string, string>.Ok fieldName)
+            if (fieldNameResult.IsOkOrNull() is { } fieldName)
             {
-                recordFields[i] = (fieldName.Value, fieldValue);
+                recordFields[i] = (fieldName, fieldValue);
                 continue;
             }
 
-            if (fieldNameResult is Result<string, string>.Err error)
-                return "Failed decoding field name: " + error.Value;
+            if (fieldNameResult.IsErrOrNull() is { } error)
+                return "Failed decoding field name: " + error;
 
             throw new NotImplementedException(
                 "Unexpected result type: " + fieldNameResult.GetType().FullName);
@@ -517,11 +518,10 @@ public static class ElmValueEncoding
                         PineValue.List([PineValueAsString.ValueFromString(elmString.Value)])]),
 
                 ElmValue.ElmTag elmTag =>
-                PineValue.List(
-                    [PineValueAsString.ValueFromString(elmTag.TagName),
-                        PineValue.List(
-                            [..elmTag.Arguments
-                            .Select(item => ElmValueAsPineValue(item,additionalReusableEncodings, reportNewEncoding))])]),
+                TagAsPineValue(
+                    elmTag.TagName,
+                    [..elmTag.Arguments
+                    .Select(item => ElmValueAsPineValue(item,additionalReusableEncodings, reportNewEncoding))]),
 
                 ElmValue.ElmRecord elmRecord =>
                 ElmRecordAsPineValue(
@@ -561,4 +561,11 @@ public static class ElmValueEncoding
                     PineValue.List(
                         [PineValueAsString.ValueFromString(field.FieldName),
                         field.FieldValue]))])])]);
+
+    public static PineValue TagAsPineValue(string tagName, IReadOnlyList<PineValue> tagArguments) =>
+        PineValue.List(
+            [
+            PineValueAsString.ValueFromString(tagName),
+            PineValue.List(tagArguments)
+            ]);
 }
