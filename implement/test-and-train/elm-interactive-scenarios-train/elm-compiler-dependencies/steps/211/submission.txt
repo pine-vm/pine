@@ -1,0 +1,1 @@
+FNV1a.hash  "Lorem ipsum"
