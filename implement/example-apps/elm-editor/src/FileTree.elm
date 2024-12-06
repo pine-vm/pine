@@ -2,8 +2,6 @@ module FileTree exposing (..)
 
 import Common
 import Dict
-import List
-import Tuple
 
 
 type FileTreeNode blobStructure

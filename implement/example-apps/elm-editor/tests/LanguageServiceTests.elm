@@ -6,6 +6,7 @@ import FileTree
 import Frontend.MonacoEditor
 import LanguageService
 import LanguageServiceInterface
+import LanguageServiceWorker
 import Test
 
 
@@ -951,7 +952,7 @@ buildLanguageServiceStateFindingParsableModuleText { maxLinesToRemoveBeforeCurso
     List.range 0 maxLinesToRemoveBeforeCursor
         |> List.foldr
             (fileTreeWithPreviousLinesRemoved >> LanguageService.updateLanguageServiceState)
-            LanguageService.initLanguageServiceState
+            LanguageServiceWorker.initLanguageServiceState
 
 
 fileContentFromString : String -> LanguageServiceInterface.FileTreeBlobNode

@@ -4,8 +4,7 @@ module LanguageService exposing (..)
 These functions enable features like completion suggestions and hover tips in the code editor.
 -}
 
-import CompilationInterface.SourceFiles
-import CompileElmApp
+import Elm.Parser
 import Elm.Syntax.Comments
 import Elm.Syntax.Declaration
 import Elm.Syntax.Exposing
@@ -22,7 +21,6 @@ import Elm.Syntax.TypeAnnotation
 import FileTree
 import Frontend.MonacoEditor
 import LanguageServiceInterface
-import Maybe.Extra
 
 
 type alias LanguageServiceState =
@@ -102,8 +100,29 @@ type alias LocationUnderFilePath =
     LanguageServiceInterface.LocationUnderFilePath
 
 
-initLanguageServiceState : LanguageServiceState
-initLanguageServiceState =
+initLanguageServiceState : List { moduleText : String, implicitImport : Bool } -> LanguageServiceState
+initLanguageServiceState elmCoreModules =
+    let
+        elmCoreModulesParseResults : List ElmCoreModule
+        elmCoreModulesParseResults =
+            elmCoreModules
+                |> List.filterMap
+                    (\coreModule ->
+                        coreModule.moduleText
+                            |> Elm.Parser.parseToFile
+                            |> Result.toMaybe
+                            |> Maybe.map
+                                (\syntax ->
+                                    { parseResult =
+                                        { filePath = [ "elm-core" ]
+                                        , text = coreModule.moduleText
+                                        , syntax = syntax
+                                        }
+                                    , implicitImport = coreModule.implicitImport
+                                    }
+                                )
+                    )
+    in
     { fileTreeParseCache = FileTree.TreeNode []
     , coreModulesCache = elmCoreModulesParseResults
     }
@@ -136,7 +155,7 @@ provideHover request languageServiceState =
                                 let
                                     hoverRangeLines =
                                         getTextLinesFromRangeAndText hoverRange parsedFileLastSuccess.text
-                                            |> List.filter (String.isEmpty >> not)
+                                            |> List.filter (\line -> line /= "")
                                 in
                                 rangeIntersectsLocation
                                     { row = request.positionLineNumber, column = request.positionColumn }
@@ -216,8 +235,14 @@ hoverItemsFromParsedModule parsedModule languageServiceState =
 
         getModuleByImportedName importedName =
             importedModules
-                |> List.filter (.importedName >> (==) importedName)
-                |> List.filterMap .parsedModule
+                |> List.filterMap
+                    (\importedModule ->
+                        if importedModule.importedName == importedName then
+                            importedModule.parsedModule
+
+                        else
+                            Nothing
+                    )
                 |> List.head
 
         fromImportSyntax : List ( Elm.Syntax.Range.Range, String )
@@ -340,7 +365,10 @@ hoverItemsFromParsedModule parsedModule languageServiceState =
                     else
                         case
                             importedModules
-                                |> List.filter (.importedName >> (==) moduleName)
+                                |> List.filter
+                                    (\importedModule ->
+                                        importedModule.importedName == moduleName
+                                    )
                                 |> List.head
                         of
                             Nothing ->
@@ -356,7 +384,7 @@ hoverItemsFromParsedModule parsedModule languageServiceState =
                                           , { filePath = referencedModuleParsed.filePath
                                             , range =
                                                 monacoRangeFromSyntaxRange
-                                                    (CompileElmApp.syntaxRangeCoveringCompleteString parsedModule.text)
+                                                    (syntaxRangeCoveringCompleteString parsedModule.text)
                                             }
                                           , (moduleCompletionItemFromModuleSyntax
                                                 { importedModuleNameRestAfterPrefix = Nothing
@@ -410,8 +438,8 @@ hoverItemsFromParsedModule parsedModule languageServiceState =
 listTypeReferencesFromTypeAnnotation :
     Elm.Syntax.Node.Node Elm.Syntax.TypeAnnotation.TypeAnnotation
     -> List (Elm.Syntax.Node.Node ( Elm.Syntax.ModuleName.ModuleName, String ))
-listTypeReferencesFromTypeAnnotation node =
-    case Elm.Syntax.Node.value node of
+listTypeReferencesFromTypeAnnotation (Elm.Syntax.Node.Node _ typeAnnotation) =
+    case typeAnnotation of
         Elm.Syntax.TypeAnnotation.GenericType _ ->
             []
 
@@ -425,12 +453,13 @@ listTypeReferencesFromTypeAnnotation node =
             List.concatMap listTypeReferencesFromTypeAnnotation tupled
 
         Elm.Syntax.TypeAnnotation.Record record ->
-            List.concatMap (Elm.Syntax.Node.value >> Tuple.second >> listTypeReferencesFromTypeAnnotation)
+            List.concatMap (\(Elm.Syntax.Node.Node _ ( _, value )) -> listTypeReferencesFromTypeAnnotation value)
                 record
 
-        Elm.Syntax.TypeAnnotation.GenericRecord _ record ->
-            List.concatMap (Elm.Syntax.Node.value >> Tuple.second >> listTypeReferencesFromTypeAnnotation)
-                (Elm.Syntax.Node.value record)
+        Elm.Syntax.TypeAnnotation.GenericRecord _ (Elm.Syntax.Node.Node _ record) ->
+            List.concatMap
+                (\(Elm.Syntax.Node.Node _ ( _, value )) -> listTypeReferencesFromTypeAnnotation value)
+                record
 
         Elm.Syntax.TypeAnnotation.FunctionTypeAnnotation input return ->
             List.concatMap listTypeReferencesFromTypeAnnotation [ input, return ]
@@ -542,62 +571,79 @@ provideCompletionItemsInModule :
     -> List Frontend.MonacoEditor.MonacoCompletionItem
 provideCompletionItemsInModule request languageServiceState =
     let
+        (Elm.Syntax.Node.Node _ moduleDefinition) =
+            request.fileOpenedInEditor.syntax.moduleDefinition
+
+        fileOpenedInEditorModuleName : Elm.Syntax.ModuleName.ModuleName
         fileOpenedInEditorModuleName =
-            Elm.Syntax.Module.moduleName (Elm.Syntax.Node.value request.fileOpenedInEditor.syntax.moduleDefinition)
+            Elm.Syntax.Module.moduleName moduleDefinition
 
+        lineUntilPosition : String
         lineUntilPosition =
-            request.textUntilPosition
-                |> String.lines
-                |> List.reverse
-                |> List.head
-                |> Maybe.withDefault ""
+            case List.reverse (String.lines request.textUntilPosition) of
+                [] ->
+                    ""
 
+                line :: _ ->
+                    line
+
+        lineUntilPositionWords : List String
         lineUntilPositionWords =
             stringSplitByChar (\c -> not (charIsAllowedInDeclarationName c || c == '.')) lineUntilPosition
 
+        completionPrefix : List String
         completionPrefix =
-            lineUntilPositionWords
-                |> List.reverse
-                |> List.head
-                |> Maybe.map (String.split "." >> List.reverse >> List.drop 1 >> List.reverse)
-                |> Maybe.withDefault []
+            case List.reverse lineUntilPositionWords of
+                [] ->
+                    []
 
+                word :: _ ->
+                    List.drop 1 (List.reverse (String.split "." word))
+
+        completionPrefixIsNamespace : Bool
         completionPrefixIsNamespace =
             case completionPrefix of
                 [] ->
                     True
 
                 prefixFirstElement :: _ ->
-                    prefixFirstElement
-                        |> String.toList
-                        |> List.head
-                        |> Maybe.map Char.isUpper
-                        |> Maybe.withDefault True
+                    case String.uncons prefixFirstElement of
+                        Nothing ->
+                            True
 
+                        Just ( firstChar, _ ) ->
+                            Char.isUpper firstChar
+
+        modulesAvailableForImport : List ParsedModuleCache
         modulesAvailableForImport =
             modulesAvailableForImportFromState languageServiceState
 
+        moduleNamesToNotSuggestForImport : List Elm.Syntax.ModuleName.ModuleName
         moduleNamesToNotSuggestForImport =
             [ fileOpenedInEditorModuleName ]
 
         modulesToSuggestForImport =
             modulesAvailableForImport
                 |> List.map .syntax
-                |> List.filter
+                |> List.filterMap
                     (\availableModule ->
-                        not
-                            (List.any
-                                ((==)
-                                    (Elm.Syntax.Module.moduleName (Elm.Syntax.Node.value availableModule.moduleDefinition))
-                                )
-                                moduleNamesToNotSuggestForImport
-                            )
+                        let
+                            (Elm.Syntax.Node.Node _ availableModuleDefinition) =
+                                availableModule.moduleDefinition
+
+                            availableModuleName : Elm.Syntax.ModuleName.ModuleName
+                            availableModuleName =
+                                Elm.Syntax.Module.moduleName availableModuleDefinition
+                        in
+                        if List.member availableModuleName moduleNamesToNotSuggestForImport then
+                            Nothing
+
+                        else
+                            Just ( availableModule, availableModuleName )
                     )
                 |> List.sortBy
-                    (.moduleDefinition
-                        >> Elm.Syntax.Node.value
-                        >> Elm.Syntax.Module.moduleName
-                        >> String.join "."
+                    (\( _, availableModuleName ) ->
+                        String.join "." availableModuleName
                     )
 
         importedModules =
@@ -606,21 +652,30 @@ provideCompletionItemsInModule request languageServiceState =
         currentModuleDeclarations =
             completionItemsFromModule request.fileOpenedInEditor
 
+        fromLocals : List Frontend.MonacoEditor.MonacoCompletionItem
         fromLocals =
             currentModuleDeclarations.fromLocals
-                |> List.filter
-                    (.range
-                        >> rangeIntersectsLocation
-                            { row = request.cursorLineNumber, column = String.length lineUntilPosition }
-                    )
-                |> List.map .completionItem
+                |> List.filterMap
+                    (\completionItem ->
+                        if
+                            rangeIntersectsLocation
+                                { row = request.cursorLineNumber, column = String.length lineUntilPosition }
+                                completionItem.range
+                        then
+                            Just completionItem.completionItem
 
+                        else
+                            Nothing
+                    )
+
+        importExposings : List Frontend.MonacoEditor.MonacoCompletionItem
         importExposings =
             List.concat
                 [ importExposingsFromFile request.fileOpenedInEditor languageServiceState
                 , List.map Tuple.second (commonImplicitTopLevelImports languageServiceState)
                 ]
 
+        localDeclarationsAndImportExposings : List Frontend.MonacoEditor.MonacoCompletionItem
         localDeclarationsAndImportExposings =
             List.concat
                 [ List.map .completionItem currentModuleDeclarations.fromTopLevel
@@ -628,6 +683,7 @@ provideCompletionItemsInModule request languageServiceState =
                 , fromLocals
                 ]
 
+        localDeclarationsAfterPrefix : List Frontend.MonacoEditor.MonacoCompletionItem
         localDeclarationsAfterPrefix =
             if completionPrefix == [] then
                 localDeclarationsAndImportExposings
@@ -635,7 +691,10 @@ provideCompletionItemsInModule request languageServiceState =
             else
                 case
                     importedModules
-                        |> List.filter (.importedName >> (==) completionPrefix)
+                        |> List.filter
+                            (\importedModule ->
+                                importedModule.importedName == completionPrefix
+                            )
                         |> List.head
                         |> Maybe.andThen .parsedModule
                 of
@@ -667,28 +726,36 @@ provideCompletionItemsInModule request languageServiceState =
             importedModulesAfterPrefix
                 |> List.filterMap
                     (\( importedModuleNameRestAfterPrefix, importedModule ) ->
-                        importedModule.parsedModule
-                            |> Maybe.map
-                                (.syntax
-                                    >> moduleCompletionItemFromModuleSyntax
+                        case importedModule.parsedModule of
+                            Nothing ->
+                                Nothing
+
+                            Just importedModuleParsed ->
+                                Just
+                                    (moduleCompletionItemFromModuleSyntax
                                         { importedName = Just importedModule.importedName
                                         , importedModuleNameRestAfterPrefix = Just importedModuleNameRestAfterPrefix
                                         }
-                                )
+                                        importedModuleParsed.syntax
+                                    )
                     )
     in
-    if List.head lineUntilPositionWords == Just "import" then
-        modulesToSuggestForImport
-            |> List.map
-                (moduleCompletionItemFromModuleSyntax
-                    { importedModuleNameRestAfterPrefix = Nothing, importedName = Nothing }
-                )
+    case lineUntilPositionWords of
+        "import" :: _ ->
+            modulesToSuggestForImport
+                |> List.map
+                    (\( availableModule, _ ) ->
+                        moduleCompletionItemFromModuleSyntax
+                            { importedModuleNameRestAfterPrefix = Nothing, importedName = Nothing }
+                            availableModule
+                    )
 
-    else if completionPrefixIsNamespace then
-        fromImports ++ List.sortBy .insertText localDeclarationsAfterPrefix
+        _ ->
+            if completionPrefixIsNamespace then
+                fromImports ++ List.sortBy .insertText localDeclarationsAfterPrefix
 
-    else
-        []
+            else
+                []
 
 
 importedModulesFromFile :
@@ -710,9 +777,12 @@ importedModulesFromFile fileOpenedInEditor languageServiceState =
                 |> List.map
                     (\coreModule ->
                         let
+                            (Elm.Syntax.Node.Node _ moduleDefinition) =
+                                coreModule.parseResult.syntax.moduleDefinition
+
+                            canonicalName : Elm.Syntax.ModuleName.ModuleName
                             canonicalName =
-                                Elm.Syntax.Module.moduleName
-                                    (Elm.Syntax.Node.value coreModule.parseResult.syntax.moduleDefinition)
+                                Elm.Syntax.Module.moduleName moduleDefinition
                         in
                         { filePath = coreModule.parseResult.filePath
                         , canonicalName = canonicalName
@@ -725,27 +795,31 @@ importedModulesFromFile fileOpenedInEditor languageServiceState =
         parsedModuleFromModuleName canonicalModuleName =
             modulesAvailableForImportFromState languageServiceState
                 |> List.filter
-                    (.syntax
-                        >> .moduleDefinition
-                        >> Elm.Syntax.Node.value
-                        >> Elm.Syntax.Module.moduleName
-                        >> (==) canonicalModuleName
+                    (\moduleAvailable ->
+                        let
+                            (Elm.Syntax.Node.Node _ moduleDefinition) =
+                                moduleAvailable.syntax.moduleDefinition
+                        in
+                        Elm.Syntax.Module.moduleName moduleDefinition == canonicalModuleName
                     )
                 |> List.head
 
         explicitlyImportedModules =
             fileOpenedInEditor.syntax.imports
-                |> List.map Elm.Syntax.Node.value
                 |> List.filterMap
-                    (\importSyntax ->
+                    (\(Elm.Syntax.Node.Node _ importSyntax) ->
                         let
-                            canonicalName =
-                                Elm.Syntax.Node.value importSyntax.moduleName
+                            (Elm.Syntax.Node.Node moduleNameRange canonicalName) =
+                                importSyntax.moduleName
 
+                            importedName : List String
                             importedName =
-                                importSyntax.moduleAlias
-                                    |> Maybe.map Elm.Syntax.Node.value
-                                    |> Maybe.withDefault canonicalName
+                                case importSyntax.moduleAlias of
+                                    Nothing ->
+                                        canonicalName
+
+                                    Just (Elm.Syntax.Node.Node _ moduleAlias) ->
+                                        moduleAlias
                         in
                         case parsedModuleFromModuleName canonicalName of
                             Nothing ->
@@ -757,7 +831,7 @@ importedModulesFromFile fileOpenedInEditor languageServiceState =
                                     , canonicalName = canonicalName
                                     , importedName = importedName
                                     , parsedModule = Just parsedModule
-                                    , referencesRanges = [ Elm.Syntax.Node.range importSyntax.moduleName ]
+                                    , referencesRanges = [ moduleNameRange ]
                                     }
                     )
     in
@@ -768,7 +842,10 @@ modulesAvailableForImportFromState : LanguageServiceState -> List ParsedModuleCa
 modulesAvailableForImportFromState languageServiceState =
     (languageServiceState.fileTreeParseCache
         |> FileTree.flatListOfBlobsFromFileTreeNode
-        |> List.filterMap (Tuple.second >> .parsedFileLastSuccess)
+        |> List.filterMap
+            (\( _, fileCache ) ->
+                fileCache.parsedFileLastSuccess
+            )
     )
         ++ List.map .parseResult languageServiceState.coreModulesCache
 
@@ -779,17 +856,16 @@ importExposingsFromFile :
     -> List Frontend.MonacoEditor.MonacoCompletionItem
 importExposingsFromFile fileOpenedInEditor languageServiceState =
     fileOpenedInEditor.syntax.imports
-        |> List.map Elm.Syntax.Node.value
         |> List.concatMap
-            (\importSyntax ->
+            (\(Elm.Syntax.Node.Node _ importSyntax) ->
                 case importSyntax.exposingList of
                     Nothing ->
                         []
 
-                    Just exposingList ->
+                    Just (Elm.Syntax.Node.Node _ exposingList) ->
                         let
-                            canonicalName =
-                                Elm.Syntax.Node.value importSyntax.moduleName
+                            (Elm.Syntax.Node.Node _ canonicalName) =
+                                importSyntax.moduleName
                         in
                         case
                             languageServiceState.fileTreeParseCache
@@ -801,7 +877,11 @@ importExposingsFromFile fileOpenedInEditor languageServiceState =
                                                 Nothing
 
                                             Just moduleCandidate ->
-                                                if Elm.Syntax.Module.moduleName (Elm.Syntax.Node.value moduleCandidate.syntax.moduleDefinition) == canonicalName then
+                                                let
+                                                    (Elm.Syntax.Node.Node _ candidateModuleDefinition) =
+                                                        moduleCandidate.syntax.moduleDefinition
+                                                in
+                                                if Elm.Syntax.Module.moduleName candidateModuleDefinition == canonicalName then
                                                     Just moduleCandidate
 
                                                 else
@@ -819,17 +899,18 @@ importExposingsFromFile fileOpenedInEditor languageServiceState =
                                             |> List.filter .isExposed
                                             |> List.map .completionItem
                                 in
-                                case Elm.Syntax.Node.value exposingList of
+                                case exposingList of
                                     Elm.Syntax.Exposing.All _ ->
                                         importedModuleItems
 
                                     Elm.Syntax.Exposing.Explicit topLevelExposings ->
                                         topLevelExposings
                                             |> List.concatMap
-                                                (\topLevelExpose ->
+                                                (\(Elm.Syntax.Node.Node _ topLevelExpose) ->
                                                     let
+                                                        exposedName : String
                                                         exposedName =
-                                                            case Elm.Syntax.Node.value topLevelExpose of
+                                                            case topLevelExpose of
                                                                 Elm.Syntax.Exposing.InfixExpose name ->
                                                                     name
 
@@ -843,7 +924,10 @@ importExposingsFromFile fileOpenedInEditor languageServiceState =
                                                                     typeExpose.name
                                                     in
                                                     importedModuleItems
-                                                        |> List.filter (.insertText >> (==) exposedName)
+                                                        |> List.filter
+                                                            (\{ insertText } ->
+                                                                insertText == exposedName
+                                                            )
                                                 )
             )
 
@@ -859,6 +943,7 @@ commonImplicitTopLevelImports languageServiceState =
                     (Elm.Syntax.Node.Node _ moduleDefinition) =
                         coreModule.parseResult.syntax.moduleDefinition
 
+                    moduleName : Elm.Syntax.ModuleName.ModuleName
                     moduleName =
                         Elm.Syntax.Module.moduleName moduleDefinition
 
@@ -921,11 +1006,21 @@ moduleCompletionItemFromModuleSyntax :
     -> Frontend.MonacoEditor.MonacoCompletionItem
 moduleCompletionItemFromModuleSyntax { importedModuleNameRestAfterPrefix, importedName } moduleSyntax =
     let
-        canonicalName =
-            Elm.Syntax.Module.moduleName (Elm.Syntax.Node.value moduleSyntax.moduleDefinition)
+        (Elm.Syntax.Node.Node _ moduleDefinition) =
+            moduleSyntax.moduleDefinition
 
+        canonicalName : Elm.Syntax.ModuleName.ModuleName
+        canonicalName =
+            Elm.Syntax.Module.moduleName moduleDefinition
+
+        insertText : String
         insertText =
-            String.join "." (Maybe.withDefault canonicalName importedModuleNameRestAfterPrefix)
+            case importedModuleNameRestAfterPrefix of
+                Nothing ->
+                    String.join "." canonicalName
+
+                Just moduleNameRestAfterPrefix ->
+                    String.join "." moduleNameRestAfterPrefix
     in
     { label =
         if Maybe.withDefault canonicalName importedName == canonicalName then
@@ -942,28 +1037,62 @@ moduleCompletionItemFromModuleSyntax { importedModuleNameRestAfterPrefix, import
 documentationStringFromModuleSyntax : Elm.Syntax.File.File -> Maybe String
 documentationStringFromModuleSyntax parsedModule =
     let
-        moduleDefinitionRange =
-            Elm.Syntax.Node.range parsedModule.moduleDefinition
+        (Elm.Syntax.Node.Node moduleDefinitionRange _) =
+            parsedModule.moduleDefinition
 
+        importsAndDeclarationsRanges : List Elm.Syntax.Range.Range
+        importsAndDeclarationsRanges =
+            List.concat
+                [ List.map (\(Elm.Syntax.Node.Node range _) -> range) parsedModule.imports
+                , List.map (\(Elm.Syntax.Node.Node range _) -> range) parsedModule.declarations
+                ]
+
+        importsAndDeclarationsRange : Elm.Syntax.Range.Range
         importsAndDeclarationsRange =
-            List.map Elm.Syntax.Node.range parsedModule.imports
-                ++ List.map Elm.Syntax.Node.range parsedModule.declarations
-                |> Elm.Syntax.Range.combine
+            Elm.Syntax.Range.combine importsAndDeclarationsRanges
 
+        maybeModuleComment : Maybe (Elm.Syntax.Node.Node Elm.Syntax.Comments.Comment)
         maybeModuleComment =
-            parsedModule.comments
-                |> List.filter
-                    (\comment ->
-                        (Elm.Syntax.Node.range comment).start.row
-                            > moduleDefinitionRange.start.row
-                            && (Elm.Syntax.Node.range comment).start.row
-                            < importsAndDeclarationsRange.start.row
-                    )
-                |> List.sortBy (Elm.Syntax.Node.range >> .start >> .row)
-                |> List.head
+            List.foldl
+                (\comment maybeComment ->
+                    let
+                        (Elm.Syntax.Node.Node commentRange _) =
+                            comment
+                    in
+                    case maybeComment of
+                        Nothing ->
+                            if
+                                (commentRange.start.row > moduleDefinitionRange.start.row)
+                                    && (commentRange.start.row < importsAndDeclarationsRange.start.row)
+                            then
+                                Just comment
+
+                            else
+                                Nothing
+
+                        Just prevComment ->
+                            let
+                                (Elm.Syntax.Node.Node prevCommentRange _) =
+                                    prevComment
+                            in
+                            if
+                                (commentRange.start.row > prevCommentRange.end.row)
+                                    && (commentRange.start.row < importsAndDeclarationsRange.start.row)
+                            then
+                                Just comment
+
+                            else
+                                Just prevComment
+                )
+                Nothing
+                parsedModule.comments
     in
-    maybeModuleComment
-        |> Maybe.map (Elm.Syntax.Node.value >> removeWrappingFromMultilineComment)
+    case maybeModuleComment of
+        Nothing ->
+            Nothing
+
+        Just (Elm.Syntax.Node.Node _ commentNode) ->
+            Just (removeWrappingFromMultilineComment commentNode)
 
 
 completionItemsFromModule :
@@ -983,6 +1112,7 @@ completionItemsFromModule :
         }
 completionItemsFromModule moduleCache =
     let
+        textLines : List String
         textLines =
             String.lines moduleCache.text
 
@@ -995,19 +1125,25 @@ completionItemsFromModule moduleCache =
                 |> List.reverse
                 |> listMapFirstElement (String.dropLeft (range.start.column - 1))
 
-        exposingList =
-            Elm.Syntax.Node.value
-                (case Elm.Syntax.Node.value moduleCache.syntax.moduleDefinition of
-                    Elm.Syntax.Module.EffectModule effectModule ->
-                        effectModule.exposingList
+        (Elm.Syntax.Node.Node _ moduleDefinition) =
+            moduleCache.syntax.moduleDefinition
 
-                    Elm.Syntax.Module.NormalModule normalModule ->
-                        normalModule.exposingList
+        exposingListNode : Elm.Syntax.Node.Node Elm.Syntax.Exposing.Exposing
+        exposingListNode =
+            case moduleDefinition of
+                Elm.Syntax.Module.EffectModule effectModule ->
+                    effectModule.exposingList
 
-                    Elm.Syntax.Module.PortModule portModule ->
-                        portModule.exposingList
-                )
+                Elm.Syntax.Module.NormalModule normalModule ->
+                    normalModule.exposingList
 
+                Elm.Syntax.Module.PortModule portModule ->
+                    portModule.exposingList
+
+        (Elm.Syntax.Node.Node _ exposingList) =
+            exposingListNode
+
+        exposesFunction : String -> Bool
         exposesFunction functionName =
             Elm.Syntax.Exposing.exposesFunction functionName exposingList
 
@@ -1018,9 +1154,8 @@ completionItemsFromModule moduleCache =
 
                 Elm.Syntax.Exposing.Explicit topLovelExposings ->
                     topLovelExposings
-                        |> List.map Elm.Syntax.Node.value
                         |> List.any
-                            (\topLevelExpose ->
+                            (\(Elm.Syntax.Node.Node _ topLevelExpose) ->
                                 case topLevelExpose of
                                     Elm.Syntax.Exposing.TypeOrAliasExpose exposedName ->
                                         exposedName == name
@@ -1163,7 +1298,7 @@ updateLanguageServiceState fileTree state =
                                     let
                                         parsedFile =
                                             asString
-                                                |> CompileElmApp.parseElmModuleText
+                                                |> Elm.Parser.parseToFile
                                                 |> Result.toMaybe
                                                 |> Maybe.map
                                                     (\syntax ->
@@ -1174,12 +1309,29 @@ updateLanguageServiceState fileTree state =
                                                     )
                                     in
                                     Just { text = asString, parsedFile = parsedFile }
+
+                        parsedFileFromPreviouslyCached =
+                            case maybePreviousCached of
+                                Nothing ->
+                                    Nothing
+
+                                Just previousCached ->
+                                    previousCached.parsedFileLastSuccess
                     in
                     { sourceBase64 = fileTreeBlob.asBase64
                     , textContent = textContent
                     , parsedFileLastSuccess =
-                        Maybe.andThen .parsedFile textContent
-                            |> Maybe.Extra.orElse (Maybe.andThen .parsedFileLastSuccess maybePreviousCached)
+                        case textContent of
+                            Nothing ->
+                                parsedFileFromPreviouslyCached
+
+                            Just fromTextContent ->
+                                case fromTextContent.parsedFile of
+                                    Nothing ->
+                                        parsedFileFromPreviouslyCached
+
+                                    Just parsedFile ->
+                                        Just parsedFile
                     }
             in
             case maybePreviousCached of
@@ -1198,63 +1350,10 @@ updateLanguageServiceState fileTree state =
     }
 
 
-elmCoreModules : List { moduleText : String, implicitImport : Bool }
-elmCoreModules =
-    [ CompilationInterface.SourceFiles.file_tree____elm_core_modules_implicit_import
-        |> listAllFilesFromSourceFileTreeNode
-        |> List.map (\( _, fileContent ) -> { moduleText = fileContent.utf8, implicitImport = True })
-    , [ CompilationInterface.SourceFiles.file_tree____elm_core_modules_explicit_import
-      , CompilationInterface.SourceFiles.file_tree____elm_kernel_modules_json_src
-      , CompilationInterface.SourceFiles.file_tree____elm_kernel_modules_http_src
-      , CompilationInterface.SourceFiles.file_tree____elm_kernel_modules_time_src
-      , CompilationInterface.SourceFiles.file_tree____elm_kernel_modules_html_src
-      , CompilationInterface.SourceFiles.file_tree____elm_kernel_modules_browser_src
-      ]
-        |> List.concatMap listAllFilesFromSourceFileTreeNode
-        |> List.map (\( _, fileContent ) -> { moduleText = fileContent.utf8, implicitImport = False })
-    ]
-        |> List.concat
-
-
-listAllFilesFromSourceFileTreeNode : CompilationInterface.SourceFiles.FileTreeNode a -> List ( List String, a )
-listAllFilesFromSourceFileTreeNode node =
-    case node of
-        CompilationInterface.SourceFiles.BlobNode blob ->
-            [ ( [], blob ) ]
-
-        CompilationInterface.SourceFiles.TreeNode tree ->
-            tree
-                |> List.concatMap
-                    (\( entryName, entryNode ) ->
-                        listAllFilesFromSourceFileTreeNode entryNode |> List.map (Tuple.mapFirst ((::) entryName))
-                    )
-
-
-elmCoreModulesParseResults : List ElmCoreModule
-elmCoreModulesParseResults =
-    elmCoreModules
-        |> List.filterMap
-            (\coreModule ->
-                coreModule.moduleText
-                    |> CompileElmApp.parseElmModuleText
-                    |> Result.toMaybe
-                    |> Maybe.map
-                        (\syntax ->
-                            { parseResult =
-                                { filePath = [ "elm-core" ]
-                                , text = coreModule.moduleText
-                                , syntax = syntax
-                                }
-                            , implicitImport = coreModule.implicitImport
-                            }
-                        )
-            )
-
-
 listDeclarationsAndReferencesInFile : Elm.Syntax.File.File -> ParsedDeclarationsAndReferences
-listDeclarationsAndReferencesInFile =
-    .declarations
-        >> listConcatMapParsedDeclarationsAndReferences listDeclarationsAndReferencesInDeclaration
+listDeclarationsAndReferencesInFile fileSyntax =
+    fileSyntax.declarations
+        |> listConcatMapParsedDeclarationsAndReferences listDeclarationsAndReferencesInDeclaration
 
 
 listDeclarationsAndReferencesInDeclaration :
@@ -1305,8 +1404,14 @@ declarationsAndReferencesForAliasDeclaration declarationRange aliasDeclaration =
 declarationOrReferenceForAliasDeclaration : Elm.Syntax.TypeAlias.TypeAlias -> ParsedDeclaration
 declarationOrReferenceForAliasDeclaration aliasDeclaration =
     let
-        aliasName =
-            Elm.Syntax.Node.value aliasDeclaration.name
+        (Elm.Syntax.Node.Node _ aliasName) =
+            aliasDeclaration.name
+
+        (Elm.Syntax.Node.Node typeAnnotationRange _) =
+            aliasDeclaration.typeAnnotation
+
+        (Elm.Syntax.Node.Node aliasNameRange _) =
+            aliasDeclaration.name
     in
     TypeAliasDeclaration
         { name = aliasName
@@ -1314,13 +1419,18 @@ declarationOrReferenceForAliasDeclaration aliasDeclaration =
             { buildMarkdown =
                 \getTextLinesFromRange ->
                     let
+                        documentationStringFromSyntax : Maybe String
                         documentationStringFromSyntax =
-                            aliasDeclaration.documentation
-                                |> Maybe.map (Elm.Syntax.Node.value >> removeWrappingFromMultilineComment)
+                            case aliasDeclaration.documentation of
+                                Nothing ->
+                                    Nothing
+
+                                Just (Elm.Syntax.Node.Node _ comment) ->
+                                    Just (removeWrappingFromMultilineComment comment)
 
                         codeRange =
-                            [ Elm.Syntax.Node.range aliasDeclaration.name
-                            , Elm.Syntax.Node.range aliasDeclaration.typeAnnotation
+                            [ aliasNameRange
+                            , typeAnnotationRange
                             ]
                                 |> Elm.Syntax.Range.combine
                                 |> expandRangeToLineStart
@@ -1339,28 +1449,40 @@ listDeclarationsAndReferencesFromTypeDeclaration :
     -> ParsedDeclarationsAndReferences
 listDeclarationsAndReferencesFromTypeDeclaration declarationRange choiceTypeDeclaration =
     let
+        documentationStringFromSyntax : Maybe String
         documentationStringFromSyntax =
-            choiceTypeDeclaration.documentation
-                |> Maybe.map (Elm.Syntax.Node.value >> removeWrappingFromMultilineComment)
+            case choiceTypeDeclaration.documentation of
+                Nothing ->
+                    Nothing
 
+                Just (Elm.Syntax.Node.Node _ comment) ->
+                    Just (removeWrappingFromMultilineComment comment)
+
+        (Elm.Syntax.Node.Node nameRange _) =
+            choiceTypeDeclaration.name
+
+        constructorsRanges =
+            choiceTypeDeclaration.constructors
+                |> List.map (\(Elm.Syntax.Node.Node constructorRange _) -> constructorRange)
+
+        codeRange : Elm.Syntax.Range.Range
         codeRange =
-            Elm.Syntax.Node.range choiceTypeDeclaration.name
-                :: List.map Elm.Syntax.Node.range choiceTypeDeclaration.constructors
+            nameRange
+                :: constructorsRanges
                 |> Elm.Syntax.Range.combine
                 |> expandRangeToLineStart
 
-        choiceTypeName =
-            Elm.Syntax.Node.value choiceTypeDeclaration.name
+        (Elm.Syntax.Node.Node _ choiceTypeName) =
+            choiceTypeDeclaration.name
 
         tagsDeclarations : List (FunctionOrValueDeclarationStruct ParsedDocumentation)
         tagsDeclarations =
             choiceTypeDeclaration.constructors
                 |> List.map
-                    (\constructorNode ->
+                    (\(Elm.Syntax.Node.Node _ constructor) ->
                         let
-                            tagName =
-                                Elm.Syntax.Node.value
-                                    (Elm.Syntax.Node.value constructorNode).name
+                            (Elm.Syntax.Node.Node _ tagName) =
+                                constructor.name
                         in
                         { name = tagName
                         , documentation =
@@ -1398,19 +1520,22 @@ listDeclarationsAndReferencesFromTypeDeclaration declarationRange choiceTypeDecl
         ]
     , references =
         choiceTypeDeclaration.constructors
-            |> List.concatMap (Elm.Syntax.Node.value >> .arguments >> List.concatMap listTypeReferencesFromTypeAnnotation)
+            |> List.concatMap
+                (\(Elm.Syntax.Node.Node _ constructor) ->
+                    List.concatMap listTypeReferencesFromTypeAnnotation constructor.arguments
+                )
     }
 
 
 listDeclarationsAndReferencesInExpression :
     Elm.Syntax.Node.Node Elm.Syntax.Expression.Expression
     -> ParsedDeclarationsAndReferences
-listDeclarationsAndReferencesInExpression expressionNode =
+listDeclarationsAndReferencesInExpression (Elm.Syntax.Node.Node expressionRange expression) =
     let
         empty =
             { declarations = [], references = [] }
     in
-    case Elm.Syntax.Node.value expressionNode of
+    case expression of
         Elm.Syntax.Expression.UnitExpr ->
             empty
 
@@ -1426,7 +1551,7 @@ listDeclarationsAndReferencesInExpression expressionNode =
 
         Elm.Syntax.Expression.FunctionOrValue moduleName localName ->
             { declarations = []
-            , references = [ Elm.Syntax.Node.Node (Elm.Syntax.Node.range expressionNode) ( moduleName, localName ) ]
+            , references = [ Elm.Syntax.Node.Node expressionRange ( moduleName, localName ) ]
             }
 
         Elm.Syntax.Expression.IfBlock ifExpr thenExpr elseExpr ->
@@ -1469,7 +1594,10 @@ listDeclarationsAndReferencesInExpression expressionNode =
         Elm.Syntax.Expression.CaseExpression caseBlock ->
             [ listDeclarationsAndReferencesInExpression caseBlock.expression
             , caseBlock.cases
-                |> listConcatMapParsedDeclarationsAndReferences (Tuple.second >> listDeclarationsAndReferencesInExpression)
+                |> listConcatMapParsedDeclarationsAndReferences
+                    (\( _, caseBranch ) ->
+                        listDeclarationsAndReferencesInExpression caseBranch
+                    )
             ]
                 |> concatParsedDeclarationsAndReferences
 
@@ -1478,10 +1606,15 @@ listDeclarationsAndReferencesInExpression expressionNode =
 
         Elm.Syntax.Expression.RecordExpr recordExpr ->
             recordExpr
-                |> listConcatMapParsedDeclarationsAndReferences (Elm.Syntax.Node.value >> Tuple.second >> listDeclarationsAndReferencesInExpression)
+                |> listConcatMapParsedDeclarationsAndReferences
+                    (\(Elm.Syntax.Node.Node _ ( _, recordField )) ->
+                        listDeclarationsAndReferencesInExpression recordField
+                    )
 
         Elm.Syntax.Expression.ListExpr listExpr ->
-            listExpr |> listConcatMapParsedDeclarationsAndReferences listDeclarationsAndReferencesInExpression
+            listExpr
+                |> listConcatMapParsedDeclarationsAndReferences
+                    listDeclarationsAndReferencesInExpression
 
         Elm.Syntax.Expression.RecordAccess recordAccess _ ->
             listDeclarationsAndReferencesInExpression recordAccess
@@ -1489,12 +1622,19 @@ listDeclarationsAndReferencesInExpression expressionNode =
         Elm.Syntax.Expression.RecordAccessFunction _ ->
             empty
 
-        Elm.Syntax.Expression.RecordUpdateExpression recordName recordUpdateExpression ->
-            [ { references = [ Elm.Syntax.Node.Node (Elm.Syntax.Node.range recordName) ( [], Elm.Syntax.Node.value recordName ) ]
+        Elm.Syntax.Expression.RecordUpdateExpression (Elm.Syntax.Node.Node recordNameRange recordName) recordUpdateExpression ->
+            [ { references =
+                    [ Elm.Syntax.Node.Node
+                        recordNameRange
+                        ( [], recordName )
+                    ]
               , declarations = []
               }
             , recordUpdateExpression
-                |> listConcatMapParsedDeclarationsAndReferences (Elm.Syntax.Node.value >> Tuple.second >> listDeclarationsAndReferencesInExpression)
+                |> listConcatMapParsedDeclarationsAndReferences
+                    (\(Elm.Syntax.Node.Node _ ( _, recordField )) ->
+                        listDeclarationsAndReferencesInExpression recordField
+                    )
             ]
                 |> concatParsedDeclarationsAndReferences
 
@@ -1508,8 +1648,11 @@ listDeclarationsAndReferencesForFunction :
     -> ParsedDeclarationsAndReferences
 listDeclarationsAndReferencesForFunction declRange function =
     let
-        functionName =
-            Elm.Syntax.Node.value (Elm.Syntax.Node.value function.declaration).name
+        (Elm.Syntax.Node.Node functionDeclarationRange functionDeclaration) =
+            function.declaration
+
+        (Elm.Syntax.Node.Node _ functionName) =
+            functionDeclaration.name
 
         functionItem =
             FunctionOrValueDeclaration
@@ -1518,15 +1661,33 @@ listDeclarationsAndReferencesForFunction declRange function =
                     { buildMarkdown =
                         \getTextLinesFromRange ->
                             let
+                                documentationStringFromSyntax : Maybe String
                                 documentationStringFromSyntax =
-                                    function.documentation
-                                        |> Maybe.map (Elm.Syntax.Node.value >> removeWrappingFromMultilineComment)
+                                    case function.documentation of
+                                        Nothing ->
+                                            Nothing
 
+                                        Just (Elm.Syntax.Node.Node _ comment) ->
+                                            Just (removeWrappingFromMultilineComment comment)
+
+                                typeAnnotationText : Maybe String
                                 typeAnnotationText =
-                                    function.signature
-                                        |> Maybe.map (Elm.Syntax.Node.value >> .typeAnnotation)
-                                        |> Maybe.map (Elm.Syntax.Node.range >> getTextLinesFromRange >> String.join " ")
+                                    case function.signature of
+                                        Nothing ->
+                                            Nothing
 
+                                        Just (Elm.Syntax.Node.Node _ signature) ->
+                                            let
+                                                (Elm.Syntax.Node.Node typeAnnotationRange _) =
+                                                    signature.typeAnnotation
+                                            in
+                                            Just
+                                                (typeAnnotationRange
+                                                    |> getTextLinesFromRange
+                                                    |> String.join " "
+                                                )
+
+                                codeLines : List String
                                 codeLines =
                                     [ functionName ++ Maybe.withDefault "" (Maybe.map ((++) " : ") typeAnnotationText) ]
                             in
@@ -1534,20 +1695,30 @@ listDeclarationsAndReferencesForFunction declRange function =
                     }
                 }
 
+        signatureReferences : List (Elm.Syntax.Node.Node ( Elm.Syntax.ModuleName.ModuleName, String ))
         signatureReferences =
-            function.signature
-                |> Maybe.map (Elm.Syntax.Node.value >> .typeAnnotation >> listTypeReferencesFromTypeAnnotation)
-                |> Maybe.withDefault []
+            case function.signature of
+                Nothing ->
+                    []
 
+                Just (Elm.Syntax.Node.Node _ signature) ->
+                    listTypeReferencesFromTypeAnnotation signature.typeAnnotation
+
+        expressionNode : Elm.Syntax.Node.Node Elm.Syntax.Expression.Expression
         expressionNode =
-            (Elm.Syntax.Node.value function.declaration).expression
+            functionDeclaration.expression
 
         getTypeAnnotationFromArgumentIndex argumentIndex =
-            function.signature
-                |> Maybe.andThen (Elm.Syntax.Node.value >> .typeAnnotation >> getTypeAnnotationFromFunctionArgumentIndex argumentIndex)
+            case function.signature of
+                Nothing ->
+                    Nothing
+
+                Just (Elm.Syntax.Node.Node _ signature) ->
+                    signature.typeAnnotation
+                        |> getTypeAnnotationFromFunctionArgumentIndex argumentIndex
 
         arguments =
-            (Elm.Syntax.Node.value function.declaration).arguments
+            functionDeclaration.arguments
                 |> List.indexedMap
                     (\argumentIndex argument ->
                         listDeclarationsAndReferencesFromPattern
@@ -1563,7 +1734,7 @@ listDeclarationsAndReferencesForFunction declRange function =
       , listDeclarationsAndReferencesInExpression expressionNode
       ]
         |> concatParsedDeclarationsAndReferences
-        |> constrainDeclarationsScopesToRange (Elm.Syntax.Node.range function.declaration)
+        |> constrainDeclarationsScopesToRange functionDeclarationRange
     ]
         |> concatParsedDeclarationsAndReferences
 
@@ -1572,8 +1743,8 @@ getTypeAnnotationFromFunctionArgumentIndex :
     Int
     -> Elm.Syntax.Node.Node Elm.Syntax.TypeAnnotation.TypeAnnotation
     -> Maybe (Elm.Syntax.Node.Node Elm.Syntax.TypeAnnotation.TypeAnnotation)
-getTypeAnnotationFromFunctionArgumentIndex argumentIndex typeAnnotation =
-    case Elm.Syntax.Node.value typeAnnotation of
+getTypeAnnotationFromFunctionArgumentIndex argumentIndex ((Elm.Syntax.Node.Node _ typeAnnotation) as typeAnnotationNode) =
+    case typeAnnotation of
         Elm.Syntax.TypeAnnotation.FunctionTypeAnnotation argumentType returnType ->
             if argumentIndex < 1 then
                 Just argumentType
@@ -1583,7 +1754,7 @@ getTypeAnnotationFromFunctionArgumentIndex argumentIndex typeAnnotation =
 
         _ ->
             if argumentIndex < 1 then
-                Just typeAnnotation
+                Just typeAnnotationNode
 
             else
                 Nothing
@@ -1593,8 +1764,8 @@ listDeclarationsAndReferencesFromPattern :
     { typeAnnotation : Maybe (Elm.Syntax.Node.Node Elm.Syntax.TypeAnnotation.TypeAnnotation) }
     -> Elm.Syntax.Node.Node Elm.Syntax.Pattern.Pattern
     -> ParsedDeclarationsAndReferences
-listDeclarationsAndReferencesFromPattern config patternNode =
-    case Elm.Syntax.Node.value patternNode of
+listDeclarationsAndReferencesFromPattern config (Elm.Syntax.Node.Node patternRange pattern) =
+    case pattern of
         Elm.Syntax.Pattern.TuplePattern tuplePattern ->
             listConcatMapParsedDeclarationsAndReferences
                 (listDeclarationsAndReferencesFromPattern { typeAnnotation = Nothing })
@@ -1618,17 +1789,27 @@ listDeclarationsAndReferencesFromPattern config patternNode =
                             { buildMarkdown =
                                 \getTextLinesFromRange ->
                                     let
+                                        typeAnnotationText : Maybe String
                                         typeAnnotationText =
-                                            config.typeAnnotation
-                                                |> Maybe.map (Elm.Syntax.Node.range >> getTextLinesFromRange >> String.join " ")
+                                            case config.typeAnnotation of
+                                                Nothing ->
+                                                    Nothing
 
+                                                Just (Elm.Syntax.Node.Node typeAnnotationRange _) ->
+                                                    Just
+                                                        (typeAnnotationRange
+                                                            |> getTextLinesFromRange
+                                                            |> String.join " "
+                                                        )
+
+                                        codeLines : List String
                                         codeLines =
                                             [ name ++ Maybe.withDefault "" (Maybe.map ((++) " : ") typeAnnotationText) ]
                                     in
                                     documentationMarkdownFromCodeLinesAndDocumentation codeLines Nothing
                             }
                         }
-                  , TopLevelScope (Elm.Syntax.Node.range patternNode)
+                  , TopLevelScope patternRange
                   )
                 ]
             , references = []
@@ -1636,7 +1817,7 @@ listDeclarationsAndReferencesFromPattern config patternNode =
 
         Elm.Syntax.Pattern.NamedPattern named arguments ->
             [ { declarations = []
-              , references = [ Elm.Syntax.Node.Node (Elm.Syntax.Node.range patternNode) ( named.moduleName, named.name ) ]
+              , references = [ Elm.Syntax.Node.Node patternRange ( named.moduleName, named.name ) ]
               }
             , listConcatMapParsedDeclarationsAndReferences
                 (listDeclarationsAndReferencesFromPattern { typeAnnotation = Nothing })
@@ -1719,9 +1900,11 @@ expandRangeToLineStart range =
 removeWrappingFromMultilineComment : String -> String
 removeWrappingFromMultilineComment withWrapping =
     let
+        trimmed : String
         trimmed =
             String.trim withWrapping
 
+        lessPrefix : String
         lessPrefix =
             String.trimLeft
                 (if String.startsWith "{-|" trimmed then
@@ -1747,25 +1930,21 @@ locationIsInComment : Elm.Syntax.Range.Location -> Elm.Syntax.File.File -> Bool
 locationIsInComment location parsedModule =
     parsedModule
         |> listCommentsInFile
-        |> List.map
-            (\commentNode ->
+        |> List.any
+            (\(Elm.Syntax.Node.Node commentRange comment) ->
                 -- Map ranges of single-line comments to cover more of line in `rangeIntersectsLocation`
                 let
-                    originalRange =
-                        Elm.Syntax.Node.range commentNode
-
                     range =
-                        if String.startsWith "--" (Elm.Syntax.Node.value commentNode) then
-                            { originalRange
-                                | end = { row = originalRange.end.row, column = originalRange.end.column + 9999 }
+                        if String.startsWith "--" comment then
+                            { commentRange
+                                | end = { row = commentRange.end.row, column = commentRange.end.column + 9999 }
                             }
 
                         else
-                            originalRange
+                            commentRange
                 in
-                Elm.Syntax.Node.Node range (Elm.Syntax.Node.value commentNode)
+                rangeIntersectsLocation location range
             )
-        |> List.any (Elm.Syntax.Node.range >> rangeIntersectsLocation location)
 
 
 listCommentsInFile : Elm.Syntax.File.File -> List (Elm.Syntax.Node.Node Elm.Syntax.Comments.Comment)
@@ -1773,7 +1952,10 @@ listCommentsInFile parsedModule =
     let
         fromDeclarations =
             parsedModule.declarations
-                |> List.concatMap (Elm.Syntax.Node.value >> listCommentsFromDeclaration)
+                |> List.concatMap
+                    (\(Elm.Syntax.Node.Node _ declaration) ->
+                        listCommentsFromDeclaration declaration
+                    )
     in
     parsedModule.comments ++ fromDeclarations
 
@@ -1811,14 +1993,35 @@ rangeIntersectsLocation location range =
 
 
 getTextLinesFromRangeAndText : Elm.Syntax.Range.Range -> String -> List String
-getTextLinesFromRangeAndText range =
-    String.lines
-        >> List.take range.end.row
-        >> List.drop (range.start.row - 1)
-        >> List.reverse
-        >> listMapFirstElement (String.left (range.end.column - 1))
-        >> List.reverse
-        >> listMapFirstElement (String.dropLeft (range.start.column - 1))
+getTextLinesFromRangeAndText range text =
+    text
+        |> String.lines
+        |> List.take range.end.row
+        |> List.drop (range.start.row - 1)
+        |> List.reverse
+        |> listMapFirstElement (String.left (range.end.column - 1))
+        |> List.reverse
+        |> listMapFirstElement (String.dropLeft (range.start.column - 1))
+
+
+syntaxRangeCoveringCompleteString : String -> Elm.Syntax.Range.Range
+syntaxRangeCoveringCompleteString string =
+    let
+        lines =
+            String.lines string
+    in
+    { start = { row = 1, column = 1 }
+    , end =
+        { row = List.length lines + 1
+        , column =
+            case lines |> List.reverse |> List.head of
+                Nothing ->
+                    1
+
+                Just lastLine ->
+                    String.length lastLine + 1
+        }
+    }
 
 
 charIsAllowedInDeclarationName : Char -> Bool
@@ -1838,8 +2041,9 @@ listMapFirstElement mapElement list =
 
 
 stringSplitByChar : (Char -> Bool) -> String -> List String
-stringSplitByChar charSplits =
-    String.toList >> listCharSplitByChar charSplits >> List.map String.fromList
+stringSplitByChar charSplits string =
+    List.map String.fromList
+        (listCharSplitByChar charSplits (String.toList string))
 
 
 listCharSplitByChar : (Char -> Bool) -> List Char -> List (List Char)

@@ -4,6 +4,7 @@ port module LanguageServiceWorker exposing (..)
 -}
 
 import CompilationInterface.GenerateJsonConverters
+import CompilationInterface.SourceFiles
 import Json.Decode
 import Json.Encode
 import LanguageService
@@ -40,9 +41,14 @@ subscriptions _ =
 
 init : () -> ( State, Cmd.Cmd Event )
 init () =
-    ( LanguageService.initLanguageServiceState
+    ( initLanguageServiceState
     , Cmd.none
     )
+
+
+initLanguageServiceState : LanguageService.LanguageServiceState
+initLanguageServiceState =
+    LanguageService.initLanguageServiceState elmCoreModules
 
 
 update : Event -> State -> ( State, Cmd.Cmd Event )
@@ -113,3 +119,35 @@ sendResponseCmd : LanguageServiceInterface.ResponseWithId -> Cmd.Cmd e
 sendResponseCmd response =
     sendResponse
         (CompilationInterface.GenerateJsonConverters.jsonEncodeLanguageServiceResponse response)
+
+
+elmCoreModules : List { moduleText : String, implicitImport : Bool }
+elmCoreModules =
+    [ CompilationInterface.SourceFiles.file_tree____elm_core_modules_implicit_import
+        |> listAllFilesFromSourceFileTreeNode
+        |> List.map (\( _, fileContent ) -> { moduleText = fileContent.utf8, implicitImport = True })
+    , [ CompilationInterface.SourceFiles.file_tree____elm_core_modules_explicit_import
+      , CompilationInterface.SourceFiles.file_tree____elm_kernel_modules_json_src
+      , CompilationInterface.SourceFiles.file_tree____elm_kernel_modules_http_src
+      , CompilationInterface.SourceFiles.file_tree____elm_kernel_modules_time_src
+      , CompilationInterface.SourceFiles.file_tree____elm_kernel_modules_html_src
+      , CompilationInterface.SourceFiles.file_tree____elm_kernel_modules_browser_src
+      ]
+        |> List.concatMap listAllFilesFromSourceFileTreeNode
+        |> List.map (\( _, fileContent ) -> { moduleText = fileContent.utf8, implicitImport = False })
+    ]
+        |> List.concat
+
+
+listAllFilesFromSourceFileTreeNode : CompilationInterface.SourceFiles.FileTreeNode a -> List ( List String, a )
+listAllFilesFromSourceFileTreeNode node =
+    case node of
+        CompilationInterface.SourceFiles.BlobNode blob ->
+            [ ( [], blob ) ]
+
+        CompilationInterface.SourceFiles.TreeNode tree ->
+            tree
+                |> List.concatMap
+                    (\( entryName, entryNode ) ->
+                        listAllFilesFromSourceFileTreeNode entryNode |> List.map (Tuple.mapFirst ((::) entryName))
+                    )
