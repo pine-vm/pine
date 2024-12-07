@@ -10,7 +10,7 @@ on:
 jobs:
   build-and-deploy:
 
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
 
     steps:
     - uses: actions/checkout@v4
@@ -33,5 +33,5 @@ jobs:
     - name: Deploy to Netlify
       working-directory: ./implement/pine/Elm/learn-elm
       run: |
-        npm  install  netlify-cli  --save-dev
+        npm  install  netlify-cli  --global
         netlify  deploy  --dir ./out/netlify  --site silent-teacher  --alias preview  --auth  ${{ secrets.WEBSITE_NETLIFY_AUTH_TOKEN }}
