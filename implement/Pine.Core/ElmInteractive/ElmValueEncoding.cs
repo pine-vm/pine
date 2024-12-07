@@ -513,9 +513,7 @@ public static class ElmValueEncoding
                 PineValueAsInteger.ValueFromSignedInteger((int)elmInteger.Value),
 
                 ElmValue.ElmString elmString =>
-                PineValue.List(
-                    [ElmValue.ElmStringTypeTagNameAsValue,
-                        PineValue.List([PineValueAsString.ValueFromString(elmString.Value)])]),
+                StringAsPineValue(elmString.Value),
 
                 ElmValue.ElmTag elmTag =>
                 TagAsPineValue(
@@ -567,5 +565,12 @@ public static class ElmValueEncoding
             [
             PineValueAsString.ValueFromString(tagName),
             PineValue.List(tagArguments)
+            ]);
+
+    public static PineValue StringAsPineValue(string elmString) =>
+        PineValue.List(
+            [
+            ElmValue.ElmStringTypeTagNameAsValue,
+            PineValue.List([PineValueAsString.ValueFromString(elmString)])
             ]);
 }

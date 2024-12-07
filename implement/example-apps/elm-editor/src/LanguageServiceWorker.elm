@@ -68,7 +68,7 @@ update event stateBefore =
                 Ok requestInWorkspace ->
                     let
                         ( result, state ) =
-                            handleRequest requestInWorkspace.request stateBefore
+                            LanguageService.handleRequest requestInWorkspace.request stateBefore
                     in
                     ( state
                     , sendResponseCmd
@@ -76,43 +76,6 @@ update event stateBefore =
                         , response = result
                         }
                     )
-
-
-handleRequest :
-    LanguageServiceInterface.RequestInWorkspace
-    -> State
-    -> ( Result String LanguageServiceInterface.Response, State )
-handleRequest requestInWorkspace stateBefore =
-    let
-        languageServiceState =
-            LanguageService.updateLanguageServiceState requestInWorkspace.workspace stateBefore
-
-        serviceResponse =
-            case requestInWorkspace.request of
-                LanguageServiceInterface.ProvideHoverRequest provideHoverRequest ->
-                    LanguageServiceInterface.ProvideHoverResponse
-                        (LanguageService.provideHover
-                            provideHoverRequest
-                            languageServiceState
-                        )
-
-                LanguageServiceInterface.ProvideCompletionItemsRequest provideCompletionItemsRequest ->
-                    LanguageServiceInterface.ProvideCompletionItemsResponse
-                        (LanguageService.provideCompletionItems
-                            provideCompletionItemsRequest
-                            languageServiceState
-                        )
-
-                LanguageServiceInterface.ProvideDefinitionRequest provideDefinitionRequest ->
-                    LanguageServiceInterface.ProvideDefinitionResponse
-                        (LanguageService.provideDefinition
-                            provideDefinitionRequest
-                            languageServiceState
-                        )
-    in
-    ( Ok serviceResponse
-    , languageServiceState
-    )
 
 
 sendResponseCmd : LanguageServiceInterface.ResponseWithId -> Cmd.Cmd e

@@ -93,6 +93,12 @@ public class ElmCompiler
 
     public ElmInteractiveEnvironment.FunctionRecord? ParseInteractiveSubmission { get; }
 
+    public LanguageServiceInterfaceStruct? LanguageServiceInterface { get; }
+
+    public record LanguageServiceInterfaceStruct(
+        ElmInteractiveEnvironment.FunctionRecord InitState,
+        ElmInteractiveEnvironment.FunctionRecord HandleRequest);
+
     private static readonly PineVM.PineVMParseCache parseCache = new();
 
     private ElmCompiler(
@@ -100,13 +106,15 @@ public class ElmCompiler
         ElmInteractiveEnvironment.FunctionRecord compileParsedInteractiveSubmission,
         ElmInteractiveEnvironment.FunctionRecord expandElmInteractiveEnvironmentWithModules,
         ElmInteractiveEnvironment.FunctionRecord parseElmModuleSyntax,
-        ElmInteractiveEnvironment.FunctionRecord? parseInteractiveSubmission)
+        ElmInteractiveEnvironment.FunctionRecord? parseInteractiveSubmission,
+        LanguageServiceInterfaceStruct? languageServiceInterface)
     {
         CompilerEnvironment = compilerEnvironment;
         CompileParsedInteractiveSubmission = compileParsedInteractiveSubmission;
         ExpandElmInteractiveEnvironmentWithModules = expandElmInteractiveEnvironmentWithModules;
         ParseElmModuleSyntax = parseElmModuleSyntax;
         ParseInteractiveSubmission = parseInteractiveSubmission;
+        LanguageServiceInterface = languageServiceInterface;
     }
 
     public static Task<Result<string, ElmCompiler>> GetElmCompilerAsync(
@@ -148,6 +156,7 @@ public class ElmCompiler
         ["src", "ElmCompiler.elm"],
         ["elm-syntax", "src", "Elm", "Parser.elm"],
         ["src", "ElmInteractiveSubmissionParser.elm"],
+        ["src", "LanguageService.elm"],
         ];
 
     public static TreeNodeWithStringPath ElmCompilerFileTreeFromBundledFileTree(
@@ -493,6 +502,33 @@ public class ElmCompiler
                 fromErr: _ => null,
                 fromOk: ok => ok.functionRecord);
 
+        LanguageServiceInterfaceStruct? languageServiceInterface = null;
+
+        {
+            var parseInitStateResult =
+                ElmInteractiveEnvironment.ParseFunctionFromElmModule(
+                    interactiveEnvironment: compiledEnv,
+                    moduleName: "LanguageService",
+                    declarationName: "initLanguageServiceState",
+                    parseCache);
+
+            var parseHandleRequest =
+                ElmInteractiveEnvironment.ParseFunctionFromElmModule(
+                    interactiveEnvironment: compiledEnv,
+                    moduleName: "LanguageService",
+                    declarationName: "handleRequest",
+                    parseCache);
+
+            if (parseInitStateResult.IsOkOrNullable() is { } parseInitOk &&
+                parseHandleRequest.IsOkOrNullable() is { } parseHandleRequestOk)
+            {
+                languageServiceInterface =
+                    new LanguageServiceInterfaceStruct(
+                        parseInitOk.functionRecord,
+                        parseHandleRequestOk.functionRecord);
+            }
+        }
+
         return new ElmCompiler(
             compiledEnv,
             compileParsedInteractiveSubmission:
@@ -502,7 +538,9 @@ public class ElmCompiler
             parseElmModuleSyntax:
             parseToFile.functionRecord,
             parseInteractiveSubmission:
-            parseInteractiveSubmission);
+            parseInteractiveSubmission,
+            languageServiceInterface:
+            languageServiceInterface);
     }
 
     public Result<string, PineValue> ParseElmModuleText(
