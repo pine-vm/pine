@@ -2,6 +2,9 @@ import * as path from 'path';
 import { workspace, ExtensionContext } from 'vscode';
 
 import {
+	CloseAction,
+	ErrorAction,
+	ErrorHandlerResult,
 	LanguageClient,
 	LanguageClientOptions,
 	ServerOptions,
@@ -62,6 +65,51 @@ export function activate(context: ExtensionContext) {
 			console.error("Init ls failed: ", error);
 
 			return true;
+		},
+
+		/*
+
+		export type ErrorHandlerResult = {
+			/**
+			 * The action to take.
+			 *
+			action: ErrorAction;
+			/**
+			 * An optional message to be presented to the user.
+			 *
+			message?: string;
+			/**
+			 * If set to true the client assumes that the corresponding
+			 * error handler has presented an appropriate message to the
+			 * user and the message will only be log to the client's
+			 * output channel.
+			 *
+			handled?: boolean;
+		};
+		*/
+		errorHandler: {
+
+			error: (error, message, count) => {
+
+				console.error("errorHandler.error: ", error, message, count);
+
+				const errorHandlerResult: ErrorHandlerResult = {
+					action: ErrorAction.Continue,
+					message: "Failed message to Pine language server: " + message?.jsonrpc,
+					handled: null
+				};
+
+				return errorHandlerResult;
+			},
+
+			closed: () => {
+				console.error("closed");
+
+				return {
+					action: CloseAction.DoNotRestart,
+					message: "closed connection to Pine language server"
+				};
+			}
 		}
 	};
 

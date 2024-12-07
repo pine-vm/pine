@@ -876,7 +876,11 @@ public class Program
 
                 log("Starting language server...");
 
-                var languageServer = new LanguageServer(logDelegate: log);
+                var vmCache = new PineVMCache();
+
+                var pineVM = new PineVM(evalCache: vmCache.EvalCache);
+
+                var languageServer = new LanguageServer(logDelegate: log, pineVM);
 
                 var rpcHandler =
                     new StreamJsonRpc.HeaderDelimitedMessageHandler(
@@ -884,9 +888,13 @@ public class Program
                         receivingStream: Console.OpenStandardInput(),
                         formatter: LanguageServerRpcTarget.JsonRpcMessageFormatterDefault());
 
+                var jsonRpcTarget = new LanguageServerRpcTarget(languageServer, LogDelegate: log);
+
                 using var jsonRpc = new StreamJsonRpc.JsonRpc(
                     rpcHandler,
-                    target: new LanguageServerRpcTarget(languageServer));
+                    target: jsonRpcTarget);
+
+                jsonRpcTarget.JsonRpc = jsonRpc;
 
                 jsonRpc.StartListening();
 

@@ -6,7 +6,8 @@ namespace Pine.Core.LanguageServerProtocol;
 public record ServerCapabilities(
     bool? DocumentFormattingProvider = null,
     TextDocumentSyncKind? TextDocumentSync = null,
-    ServerCapabilitiesWorkspace? Workspace = null);
+    ServerCapabilitiesWorkspace? Workspace = null,
+    bool? HoverProvider = null);
 
 /// <summary>
 /// https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#textDocumentSyncKind

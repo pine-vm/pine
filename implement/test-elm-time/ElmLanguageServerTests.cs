@@ -1,4 +1,4 @@
-using Microsoft.VisualStudio.TestTools.UnitTesting;
+﻿using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Pine;
 using Pine.Core.LanguageServerProtocol;
 using Pine.Elm;
@@ -42,7 +42,9 @@ public class ElmLanguageServerTests
             var initParams =
                 new InitializeParams(
                     ProcessId: Environment.ProcessId,
-                    Capabilities: new ClientCapabilities(),
+                    Capabilities:
+                    new ClientCapabilities(
+                        Workspace: null),
                     RootPath: null,
                     RootUri: null,
                     WorkspaceFolders: [],
@@ -83,7 +85,7 @@ public class ElmLanguageServerTests
 
         var implementDirectory = new DirectoryInfo(currentDirectory);
 
-        while (implementDirectory.Name != "implement")
+        while (implementDirectory.Name is not "implement")
         {
             implementDirectory =
                 implementDirectory.Parent ?? throw new Exception("Could not find 'implement' directory");

@@ -1,9 +1,9 @@
 {
 	"name": "pine",
 	"displayName": "Pine",
-	"description": "Code navigation features for the Elm programming language",
+	"description": "Elm developer tools",
 	"license": "MIT",
-	"version": "0.0.1",
+	"version": "0.1.0",
 	"repository": {
 		"type": "git",
 		"url": "https://github.com/pine-vm/pine"
@@ -15,30 +15,30 @@
 	"icon": "src/pine-icon.png",
 	"keywords": [],
 	"languages": [
-      {
-        "id": "elm",
-        "aliases": [
-          "Elm",
-          "elm"
-        ],
-        "extensions": [
-          ".elm"
-        ],
-        "configuration": "./src/language-configuration.json"
-      }
-    ],
-    "grammars": [
-      {
-        "language": "elm",
-        "scopeName": "source.elm",
-        "path": "./src/syntax.json"
-      }
-    ],
+		{
+			"id": "elm",
+			"aliases": [
+				"Elm",
+				"elm"
+			],
+			"extensions": [
+				".elm"
+			],
+			"configuration": "./src/language-configuration.json"
+		}
+	],
+	"grammars": [
+		{
+			"language": "elm",
+			"scopeName": "source.elm",
+			"path": "./src/syntax.json"
+		}
+	],
 	"engines": {
 		"vscode": "^1.75.0"
 	},
 	"activationEvents": [
-		"onLanguage:elm"
+		"workspaceContains:**/elm.json"
 	],
 	"main": "./client/out/extension",
 	"contributes": {

@@ -1,11 +1,22 @@
 using Pine.Core.LanguageServerProtocol;
 using StreamJsonRpc;
+using System;
 using System.Collections.Generic;
+using System.Threading.Tasks;
 
 namespace Pine.Elm;
 
-public record LanguageServerRpcTarget(LanguageServer Server)
+public record LanguageServerRpcTarget(
+    LanguageServer Server,
+    Action<string>? LogDelegate)
 {
+    public JsonRpc? JsonRpc { get; set; } = null;
+
+    private void Log(string message)
+    {
+        LogDelegate?.Invoke(message);
+    }
+
     public static IJsonRpcMessageFormatter JsonRpcMessageFormatterDefault() =>
         new SystemTextJsonFormatter()
         {
@@ -15,14 +26,37 @@ public record LanguageServerRpcTarget(LanguageServer Server)
             }
         };
 
-
     /// <summary>
     /// https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#initialize
     /// </summary>
     [JsonRpcMethod("initialize", UseSingleObjectParameterDeserialization = true)]
     public InitializeResult Initialize(InitializeParams initializeParams)
     {
-        return Server.Initialize(initializeParams);
+        var (response, requests) = Server.Initialize(initializeParams);
+
+        if (requests.Count > 0)
+        {
+            if (JsonRpc is not { } jsonRpc)
+            {
+                Log("Failed dynamic registration on Initialize: sendRequest is null");
+            }
+            else
+            {
+                Task task = Task.Delay(TimeSpan.FromSeconds(1)).ContinueWith(_ =>
+                {
+                    Log("Sending requests on initialize after delay");
+
+                    foreach (var request in requests)
+                    {
+                        Log($"Sending request on initialize: {request.Key}");
+
+                        jsonRpc.InvokeWithParameterObjectAsync(request.Key, request.Value);
+                    }
+                });
+            }
+        }
+
+        return response;
     }
 
     /// <summary>
@@ -64,6 +98,15 @@ public record LanguageServerRpcTarget(LanguageServer Server)
     }
 
     /// <summary>
+    /// https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#workspace_didChangeWatchedFiles
+    /// </summary>
+    [JsonRpcMethod("workspace/didChangeWatchedFiles", UseSingleObjectParameterDeserialization = false)]
+    public void Workspace_didChangeWatchedFiles(IReadOnlyList<FileEvent> changes)
+    {
+        Server.Workspace_didChangeWatchedFiles(changes);
+    }
+
+    /// <summary>
     /// https://microsoft.github.io/language-server-protocol/specifications/lsp/3.18/specification/#textDocument_formatting
     /// </summary>
     [JsonRpcMethod("textDocument/formatting")]
@@ -72,5 +115,15 @@ public record LanguageServerRpcTarget(LanguageServer Server)
         FormattingOptions options)
     {
         return Server.TextDocument_formatting(textDocument, options);
+    }
+
+    /// <summary>
+    /// https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#textDocument_hover
+    /// </summary>
+    [JsonRpcMethod("textDocument/hover", UseSingleObjectParameterDeserialization = true)]
+    public Hover? TextDocument_hover(
+        TextDocumentPositionParams positionParams)
+    {
+        return Server.TextDocument_hover(positionParams);
     }
 }
