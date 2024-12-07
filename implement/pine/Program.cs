@@ -808,20 +808,45 @@ public class Program
 
             langServerCommand.OnExecute(() =>
             {
-                Stream? logFileStream = null;
+                string? logFileDirFromOption = logFileDirOption.Value();
 
-                if (logFileDirOption.Value() is { } logFileDir)
+                static string? logFileDirFromEnv()
                 {
-                    var logFileName =
-                    DateTimeOffset.UtcNow.ToString("yyyy-MM-dd-HH-mm-ss") + "-" + Environment.ProcessId + ".log";
+                    if (LogFileDirFromEnvironmentVariable() is not { } general)
+                    {
+                        return null;
+                    }
 
+                    return Path.Combine(general, "lang-server");
+                }
+
+                IReadOnlyList<string> logFileDirs =
+                [.. new[]
+                {
+                    logFileDirFromOption,
+                    logFileDirFromEnv()
+                }.WhereNotNull()
+                ];
+
+                List<Stream> logFileStreams = [];
+
+                var logFileName =
+                DateTimeOffset.UtcNow.ToString("yyyy-MM-dd-HH-mm-ss") + "-" + Environment.ProcessId + ".log";
+
+                Console.Error.WriteLine(
+                    "Got " + logFileDirs.Count + " log file directories: " +
+                    string.Join(", ", logFileDirs));
+
+                foreach (var logFileDir in logFileDirs)
+                {
                     var logFilePath = Path.Combine(logFileDir, logFileName);
 
                     Console.Error.WriteLine("Creating log file at " + logFilePath);
 
                     Directory.CreateDirectory(logFileDir);
 
-                    logFileStream = new FileStream(path: logFilePath, FileMode.Create, FileAccess.ReadWrite, FileShare.Read);
+                    logFileStreams.Add(
+                        new FileStream(path: logFilePath, FileMode.Create, FileAccess.ReadWrite, FileShare.Read));
                 }
 
                 void log(string content)
@@ -832,12 +857,22 @@ public class Program
 
                     Console.Error.WriteLine(lineContent);
 
-                    if (logFileStream is not null)
+                    foreach (var logFileStream in logFileStreams)
                     {
                         logFileStream.Write(Encoding.UTF8.GetBytes(lineContent + "\n"));
                         logFileStream.Flush();
                     }
                 }
+
+                AppDomain.CurrentDomain.UnhandledException += (sender, args) =>
+                {
+                    log("Unhandled exception: " + args.ExceptionObject);
+                };
+
+                System.Threading.Tasks.TaskScheduler.UnobservedTaskException += (sender, args) =>
+                {
+                    log("Unobserved task exception: " + args.Exception);
+                };
 
                 log("Starting language server...");
 
@@ -861,6 +896,9 @@ public class Program
                 }
             });
         });
+
+    static string? LogFileDirFromEnvironmentVariable() =>
+        Environment.GetEnvironmentVariable("PINE_LOG_DIR");
 
     private static CommandLineApplication AddCompileInteractiveEnvCommand(CommandLineApplication app) =>
         app.Command("compile-interactive-env", compileCommand =>
