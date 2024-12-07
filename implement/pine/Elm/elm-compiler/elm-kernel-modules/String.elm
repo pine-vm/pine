@@ -682,6 +682,86 @@ linesHelper currentLineStart currentLines offset chars =
             chars
 
 
+words : String -> List String
+words (String chars) =
+    wordsHelper 0 [] 0 chars
+
+
+wordsHelper : Int -> List String -> Int -> List Char -> List String
+wordsHelper currentWordStart currentWords offset chars =
+    let
+        nextChar =
+            Pine_kernel.head (Pine_kernel.skip [ offset, chars ])
+    in
+    if Pine_kernel.equal [ nextChar, [] ] then
+        let
+            currentWordLength : Int
+            currentWordLength =
+                Pine_kernel.int_add
+                    [ offset
+                    , Pine_kernel.int_mul [ currentWordStart, -1 ]
+                    ]
+
+            currentWordChars : List Char
+            currentWordChars =
+                Pine_kernel.take
+                    [ currentWordLength
+                    , Pine_kernel.skip [ currentWordStart, chars ]
+                    ]
+        in
+        if Pine_kernel.equal [ currentWordChars, [] ] then
+            currentWords
+
+        else
+            Pine_kernel.concat
+                [ currentWords
+                , [ String currentWordChars ]
+                ]
+
+    else
+        let
+            currentIsBreak : Bool
+            currentIsBreak =
+                isCharRemovedOnTrim nextChar
+        in
+        if currentIsBreak then
+            let
+                currentWordLength : Int
+                currentWordLength =
+                    Pine_kernel.int_add
+                        [ offset
+                        , Pine_kernel.int_mul [ currentWordStart, -1 ]
+                        ]
+
+                currentWordChars : List Char
+                currentWordChars =
+                    Pine_kernel.take
+                        [ currentWordLength
+                        , Pine_kernel.skip [ currentWordStart, chars ]
+                        ]
+            in
+            if Pine_kernel.equal [ currentWordChars, [] ] then
+                wordsHelper
+                    (Pine_kernel.int_add [ offset, 1 ])
+                    currentWords
+                    (Pine_kernel.int_add [ offset, 1 ])
+                    chars
+
+            else
+                wordsHelper
+                    (Pine_kernel.int_add [ offset, 1 ])
+                    (Pine_kernel.concat [ currentWords, [ String currentWordChars ] ])
+                    (Pine_kernel.int_add [ offset, 1 ])
+                    chars
+
+        else
+            wordsHelper
+                currentWordStart
+                currentWords
+                (Pine_kernel.int_add [ offset, 1 ])
+                chars
+
+
 toFloat : String -> Maybe Float
 toFloat (String chars) =
     let
