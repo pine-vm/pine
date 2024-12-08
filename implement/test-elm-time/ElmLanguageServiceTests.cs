@@ -1,4 +1,5 @@
-﻿using Microsoft.VisualStudio.TestTools.UnitTesting;
+using Microsoft.VisualStudio.TestTools.UnitTesting;
+using Pine;
 using Pine.Core;
 using Pine.Core.PineVM;
 using Pine.Elm;
@@ -184,20 +185,20 @@ public class ElmLanguageServiceTests
                 filePathOpenedInEditor,
                 new TreeNodeWithStringPath.BlobNode(Encoding.UTF8.GetBytes(elmModuleText)));
 
-        var hoverRequest =
-            new Pine.Elm.LanguageServiceInterface.ProvideHoverRequestStruct(
-                FilePathOpenedInEditor: filePathOpenedInEditor,
-                PositionLineNumber: beforeCursorLines.Length,
-                PositionColumn: beforeCursorLines.Last().Length,
-                LineText: lineText);
-
         var languageService =
             LanguageServiceState.InitLanguageServiceState(pineVM)
             .Extract(err => throw new Exception(err));
 
+        MutateServiceAddingFiles(mergedWorkspace, languageService, pineVM);
+
+        var hoverRequest =
+            new Pine.Elm.LanguageServiceInterface.ProvideHoverRequestStruct(
+                FilePathOpenedInEditor: filePathOpenedInEditor,
+                PositionLineNumber: beforeCursorLines.Length,
+                PositionColumn: beforeCursorLines.Last().Length);
+
         var hoverResponse =
             languageService.ProvideHover(
-                mergedWorkspace,
                 hoverRequest,
                 pineVM)
             .Extract(err => throw new Exception(err));
@@ -205,6 +206,32 @@ public class ElmLanguageServiceTests
         Assert.AreEqual(
             expectedHoverText,
             string.Concat(hoverResponse));
+    }
+
+    private static void MutateServiceAddingFiles(
+        TreeNodeWithStringPath fileTree,
+        LanguageServiceState languageServiceState,
+        IPineVM pineVM)
+    {
+
+        foreach (var file in fileTree.EnumerateBlobsTransitive())
+        {
+            var asText = Encoding.UTF8.GetString(file.blobContent.Span);
+
+            var asBase64 = Convert.ToBase64String(file.blobContent.Span);
+
+            var addFileResult =
+                languageServiceState.HandleRequest(
+                new Pine.Elm.LanguageServiceInterface.Request.AddFileRequest(
+                    FilePath: file.path,
+                    Blob: new Pine.Elm.LanguageServiceInterface.FileTreeBlobNode(
+                        AsBase64: asBase64,
+                        AsText: asText)),
+                pineVM);
+
+            if (addFileResult.IsErrOrNull() is { } err)
+                throw new Exception(err);
+        }
     }
 
     private static void AssertCompletionItems(
@@ -233,20 +260,7 @@ public class ElmLanguageServiceTests
                 filePathOpenedInEditor,
                 new TreeNodeWithStringPath.BlobNode(Encoding.UTF8.GetBytes(elmModuleTextBefore)));
 
-        /*
-         * We send one request with a module content that is a valid syntax tree,
-         * since the current implementation reuses the last successfully parsed syntax tree
-         * for various requests.
-         * */
-
-        languageService.ProvideHover(
-            mergedWorkspaceBefore,
-            new Pine.Elm.LanguageServiceInterface.ProvideHoverRequestStruct(
-                FilePathOpenedInEditor: filePathOpenedInEditor,
-                PositionLineNumber: 1,
-                PositionColumn: 1,
-                LineText: ElmTime.ElmSyntax.ElmModule.ModuleLines(elmModuleTextBefore).First()),
-            pineVM);
+        MutateServiceAddingFiles(mergedWorkspaceBefore, languageService, pineVM);
 
         var elmModuleText =
             beforeCursor + afterCursor;
@@ -276,11 +290,10 @@ public class ElmLanguageServiceTests
             new Pine.Elm.LanguageServiceInterface.ProvideCompletionItemsRequestStruct(
                 FilePathOpenedInEditor: filePathOpenedInEditor,
                 CursorLineNumber: beforeCursorLines.Length,
-                TextUntilPosition: beforeCursorLines.Last());
+                CursorColumn: beforeCursorLines.Last().Length + 1);
 
         var completionItemsResponse =
             languageService.ProvideCompletionItems(
-                mergedWorkspace,
                 completionItemsRequest,
                 pineVM)
             .Extract(err => throw new Exception(err));

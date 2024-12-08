@@ -46,8 +46,8 @@ type alias DidChangeContentEventStruct =
 
 type alias RequestCompletionItemsStruct =
     { uri : String
-    , textUntilPosition : String
     , cursorLineNumber : Int
+    , cursorColumn : Int
     }
 
 

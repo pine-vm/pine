@@ -8,7 +8,8 @@ namespace Pine.Elm.LanguageServiceInterface;
 /*
 
 type Response
-    = ProvideHoverResponse (List String)
+    = WorkspaceSummaryResponse
+    | ProvideHoverResponse (List String)
     | ProvideCompletionItemsResponse (List Frontend.MonacoEditor.MonacoCompletionItem)
     | ProvideDefinitionResponse (List LocationUnderFilePath)
 
@@ -16,6 +17,9 @@ type Response
 
 public abstract record Response
 {
+    public record WorkspaceSummaryResponse
+        : Response;
+
     public record ProvideHoverResponse(
         IReadOnlyList<string> Strings)
         : Response;
@@ -48,6 +52,18 @@ public static class ResponseEncoding
         if (elmValue is not ElmValue.ElmTag responseTag)
         {
             return "Expected Elm tag, got: " + elmValue.GetType();
+        }
+
+        if (responseTag.TagName is "WorkspaceSummaryResponse")
+        {
+            if (responseTag.Arguments.Count is not 0)
+            {
+                return
+                    "Unexpected response tag arguments count: " +
+                    responseTag.Arguments.Count;
+            }
+
+            return new Response.WorkspaceSummaryResponse();
         }
 
         if (responseTag.TagName is "ProvideHoverResponse")

@@ -126,4 +126,14 @@ public record LanguageServerRpcTarget(
     {
         return Server.TextDocument_hover(positionParams);
     }
+
+    /// <summary>
+    /// https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#textDocument_completion
+    /// </summary>
+    [JsonRpcMethod("textDocument/completion", UseSingleObjectParameterDeserialization = true)]
+    public CompletionItem[] TextDocument_completion(
+        TextDocumentPositionParams positionParams)
+    {
+        return Server.TextDocument_completion(positionParams);
+    }
 }

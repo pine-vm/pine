@@ -4,13 +4,11 @@ using Pine.Core.PineVM;
 using Pine.ElmInteractive;
 using System.Collections.Generic;
 using System.Linq;
-using static Pine.Elm.ElmCompiler;
 
 namespace Pine.Elm;
 
 public class LanguageServiceState(
-    ElmCompiler elmCompiler,
-    LanguageServiceInterfaceStruct languageServiceInterface,
+    ElmCompiler.LanguageServiceInterfaceStruct languageServiceInterface,
     PineValue initState)
 {
     private PineValue state = initState;
@@ -86,19 +84,83 @@ public class LanguageServiceState(
             initElmValue.ToString();
 
         return new LanguageServiceState(
-            elmCompiler,
             languageServiceInterface,
             initOk);
     }
 
+    public Result<string, Interface.Response.WorkspaceSummaryResponse>
+        DeleteFile(
+        IReadOnlyList<string> filePath,
+        IPineVM pineVM)
+    {
+        var genericRequestResult =
+            HandleRequest(
+                new Interface.Request.DeleteFileRequest(filePath),
+                pineVM);
+
+        if (genericRequestResult.IsErrOrNull() is { } err)
+        {
+            return err;
+        }
+
+        if (genericRequestResult.IsOkOrNull() is not { } requestOk)
+        {
+            throw new System.NotImplementedException(
+                "Unexpected request result type: " + genericRequestResult.GetType());
+        }
+
+        if (requestOk is not Interface.Response.WorkspaceSummaryResponse workspaceSummary)
+        {
+            throw new System.NotImplementedException(
+                "Unexpected request result type: " + requestOk.GetType());
+        }
+
+        return workspaceSummary;
+    }
+
+    public Result<string, Interface.Response.WorkspaceSummaryResponse>
+        AddFile(
+        IReadOnlyList<string> filePath,
+        string fileContentAsText,
+        IPineVM pineVM)
+    {
+        var asBase64 =
+            System.Convert.ToBase64String(
+                System.Text.Encoding.UTF8.GetBytes(fileContentAsText));
+
+        var genericRequestResult =
+            HandleRequest(
+                new Interface.Request.AddFileRequest(
+                    filePath,
+                    new Interface.FileTreeBlobNode(AsBase64: asBase64, AsText: fileContentAsText)),
+                pineVM);
+
+        if (genericRequestResult.IsErrOrNull() is { } err)
+        {
+            return err;
+        }
+
+        if (genericRequestResult.IsOkOrNull() is not { } requestOk)
+        {
+            throw new System.NotImplementedException(
+                "Unexpected request result type: " + genericRequestResult.GetType());
+        }
+
+        if (requestOk is not Interface.Response.WorkspaceSummaryResponse workspaceSummary)
+        {
+            throw new System.NotImplementedException(
+                "Unexpected request result type: " + requestOk.GetType());
+        }
+
+        return workspaceSummary;
+    }
+
     public Result<string, IReadOnlyList<string>> ProvideHover(
-        TreeNodeWithStringPath workspace,
         Interface.ProvideHoverRequestStruct provideHoverRequest,
         IPineVM pineVM)
     {
         var genericRequestResult =
             HandleRequest(
-                workspace,
                 new Interface.Request.ProvideHoverRequest(provideHoverRequest),
                 pineVM);
 
@@ -124,13 +186,11 @@ public class LanguageServiceState(
 
     public Result<string, IReadOnlyList<MonacoEditor.MonacoCompletionItem>>
         ProvideCompletionItems(
-            TreeNodeWithStringPath workspace,
             Interface.ProvideCompletionItemsRequestStruct provideCompletionItemsRequest,
             IPineVM pineVM)
     {
         var genericRequestResult =
             HandleRequest(
-                workspace,
                 new Interface.Request.ProvideCompletionItemsRequest(provideCompletionItemsRequest),
                 pineVM);
 
@@ -156,33 +216,18 @@ public class LanguageServiceState(
     }
 
     public Result<string, Interface.Response> HandleRequest(
-        TreeNodeWithStringPath workspace,
         Interface.Request request,
         IPineVM pineVM)
     {
-        var mappedWorkspace = Workspace(workspace);
-
-        var workspaceEncoded =
-            EncodeFileTreeNodeAsPineValue(mappedWorkspace);
-
         var requestEncoded =
             Interface.RequestEncoding.Encode(request);
-
-        var requestInWorkspaceValue =
-            ElmValueEncoding.ElmRecordAsPineValue(
-            [
-                ("workspace",
-                workspaceEncoded),
-                ("request",
-                requestEncoded)
-            ]);
 
         var handleRequestResult =
             ElmTime.ElmInteractive.ElmInteractiveEnvironment.ApplyFunction(
                 pineVM,
-                languageServiceInterface.HandleRequest,
+                languageServiceInterface.HandleRequestInCurrentWorkspace,
                 [
-                    requestInWorkspaceValue,
+                    requestEncoded,
                     state,
                 ]);
 
@@ -235,9 +280,6 @@ public class LanguageServiceState(
         var langServiceResponseOkElmValue =
             ElmValueEncoding.PineValueAsElmValue(langServiceResponseOk, null, null)
             .Extract(err => throw new System.Exception("Failed to parse request response result: " + err));
-
-        var langServiceResponseOkExpr =
-            langServiceResponseOkElmValue.ToString();
 
         if (langServiceResponseOkElmValue is not ElmValue.ElmTag responseTag)
         {
@@ -360,4 +402,7 @@ public class LanguageServiceState(
         throw new System.NotImplementedException(
             "Unexpected node type: " + workspace.GetType());
     }
+
+
+    readonly ElmCompilerCache inspectionElmCompilerCache = new();
 }

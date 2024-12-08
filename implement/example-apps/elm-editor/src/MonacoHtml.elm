@@ -241,7 +241,7 @@ monacoHtmlDocumentFromCdnUrl cdnUrlToMin =
         parent?.messageFromMonacoFrame?.({ EditorActionInspectSyntaxEvent: []});
     }
 
-    function editorProvideCompletionItemsFromRangeAndLeadingText(uri, range, textUntilPosition, cursorLineNumber) {
+    function editorProvideCompletionItemsFromRangeAndLeadingText(uri, range, textUntilPosition, cursorLineNumber, cursorColumn) {
 
         return new Promise(function (resolve, reject) {
 
@@ -272,6 +272,7 @@ monacoHtmlDocumentFromCdnUrl cdnUrlToMin =
                     { uri: uri
                     , textUntilPosition: textUntilPosition
                     , cursorLineNumber: cursorLineNumber
+                    , cursorColumn: cursorColumn
                     }
                     ]});
         });
@@ -446,7 +447,8 @@ monacoHtmlDocumentFromCdnUrl cdnUrlToMin =
                     uri,
                     range,
                     textUntilPosition,
-                    position.lineNumber);
+                    position.lineNumber,
+                    position.column);
             },
 
             triggerCharacters: [".", " "]

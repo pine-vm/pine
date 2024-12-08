@@ -38,13 +38,16 @@ type alias RequestInWorkspace =
 
 
 type Request
-    = ProvideHoverRequest ProvideHoverRequestStruct
+    = AddFileRequest (List String) FileTreeBlobNode
+    | DeleteFileRequest (List String)
+    | ProvideHoverRequest ProvideHoverRequestStruct
     | ProvideCompletionItemsRequest ProvideCompletionItemsRequestStruct
     | ProvideDefinitionRequest ProvideHoverRequestStruct
 
 
 type Response
-    = ProvideHoverResponse (List String)
+    = WorkspaceSummaryResponse
+    | ProvideHoverResponse (List String)
     | ProvideCompletionItemsResponse (List Frontend.MonacoEditor.MonacoCompletionItem)
     | ProvideDefinitionResponse (List LocationUnderFilePath)
 
@@ -53,14 +56,13 @@ type alias ProvideHoverRequestStruct =
     { filePathOpenedInEditor : List String
     , positionLineNumber : Int
     , positionColumn : Int
-    , lineText : String
     }
 
 
 type alias ProvideCompletionItemsRequestStruct =
     { filePathOpenedInEditor : List String
     , cursorLineNumber : Int
-    , textUntilPosition : String
+    , cursorColumn : Int
     }
 
 

@@ -256,7 +256,7 @@ hoverExpectationFromScenario :
     -> List String
     -> Expect.Expectation
 hoverExpectationFromScenario otherFiles ( fileOpenedInEditorPath, fileOpenedInEditorText ) expectedItems =
-    case String.split "👈🚁" fileOpenedInEditorText of
+    case String.split "👈🚁" (String.trimLeft fileOpenedInEditorText) of
         [ textUntilCursor, textAfterCursor ] ->
             hoverExpectationFromScenarioDescribingOpenFile
                 otherFiles
@@ -286,17 +286,8 @@ hoverExpectationFromScenarioDescribingOpenFile otherFiles fileOpenedInEditor exp
                 otherFiles
                 fileOpenedInEditor
 
-        wholeText =
-            fileOpenedInEditor.textUntilCursor ++ fileOpenedInEditor.textAfterCursor
-
         positionLineNumber =
             fileOpenedInEditor.textUntilCursor |> String.lines |> List.length
-
-        lineText =
-            wholeText
-                |> String.lines
-                |> List.drop (positionLineNumber - 1)
-                |> List.head
 
         positionColumn =
             fileOpenedInEditor.textUntilCursor
@@ -310,9 +301,8 @@ hoverExpectationFromScenarioDescribingOpenFile otherFiles fileOpenedInEditor exp
         computedItems =
             LanguageService.provideHover
                 { filePathOpenedInEditor = fileOpenedInEditor.filePath
-                , positionLineNumber = fileOpenedInEditor.textUntilCursor |> String.lines |> List.length
+                , positionLineNumber = positionLineNumber
                 , positionColumn = positionColumn
-                , lineText = Maybe.withDefault "" lineText
                 }
                 languageServiceState
 
@@ -896,18 +886,34 @@ expectationFromScenarioDescribingOpenFile :
     -> Expect.Expectation
 expectationFromScenarioDescribingOpenFile modifyLanguageServiceState otherFiles fileOpenedInEditor expectedItems =
     let
-        languageServiceState =
+        languageServiceStateBefore =
             buildLanguageServiceStateFindingParsableModuleText
-                { maxLinesToRemoveBeforeCursor = 3 }
+                { maxLinesToRemoveBeforeCursor = 1 }
                 otherFiles
                 fileOpenedInEditor
                 |> modifyLanguageServiceState
+
+        ( _, languageServiceState ) =
+            LanguageService.addFile
+                fileOpenedInEditor.filePath
+                (fileContentFromString
+                    (String.concat [ fileOpenedInEditor.textUntilCursor, fileOpenedInEditor.textAfterCursor ])
+                )
+                languageServiceStateBefore
     in
     Expect.equal expectedItems
         (LanguageService.provideCompletionItems
             { filePathOpenedInEditor = fileOpenedInEditor.filePath
-            , textUntilPosition = fileOpenedInEditor.textUntilCursor
             , cursorLineNumber = fileOpenedInEditor.textUntilCursor |> String.lines |> List.length
+            , cursorColumn =
+                (fileOpenedInEditor.textUntilCursor
+                    |> String.lines
+                    |> List.reverse
+                    |> List.head
+                    |> Maybe.map String.length
+                    |> Maybe.withDefault 0
+                )
+                    + 1
             }
             languageServiceState
         )

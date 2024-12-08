@@ -42,9 +42,7 @@ public class ElmLanguageServerTests
             var initParams =
                 new InitializeParams(
                     ProcessId: Environment.ProcessId,
-                    Capabilities:
-                    new ClientCapabilities(
-                        Workspace: null),
+                    Capabilities: new ClientCapabilities(Workspace: null, TextDocument: null),
                     RootPath: null,
                     RootUri: null,
                     WorkspaceFolders: [],

@@ -1254,6 +1254,9 @@ updateWorkspaceWithoutCmdToUpdateEditor updateConfig event stateBefore =
 
                                         LanguageServiceInterface.ProvideDefinitionResponse locationsInFiles ->
                                             provideDefinitionInMonacoEditorCmd locationsInFiles
+
+                                        LanguageServiceInterface.WorkspaceSummaryResponse ->
+                                            Cmd.none
                             in
                             ( stateBefore
                             , cmd
@@ -1386,7 +1389,6 @@ updateToProvideHoverRequest request workspaceStateBefore =
                     { filePathOpenedInEditor = directoryPath ++ [ fileName ]
                     , positionLineNumber = request.positionLineNumber
                     , positionColumn = request.positionColumn
-                    , lineText = request.lineText
                     }
                 )
                 workspaceStateBefore
@@ -1413,7 +1415,6 @@ updateToProvideDefinitionRequest request workspaceStateBefore =
                     { filePathOpenedInEditor = directoryPath ++ [ fileName ]
                     , positionLineNumber = request.positionLineNumber
                     , positionColumn = request.positionColumn
-                    , lineText = request.lineText
                     }
                 )
                 workspaceStateBefore
@@ -1437,7 +1438,7 @@ updateToProvideCompletionItemsRequest request workspaceStateBefore =
                 (LanguageServiceInterface.ProvideCompletionItemsRequest
                     { filePathOpenedInEditor = directoryPath ++ [ fileName ]
                     , cursorLineNumber = request.cursorLineNumber
-                    , textUntilPosition = request.textUntilPosition
+                    , cursorColumn = request.cursorColumn
                     }
                 )
                 workspaceStateBefore

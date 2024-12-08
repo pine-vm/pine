@@ -95,7 +95,7 @@ export function activate(context: ExtensionContext) {
 
 				const errorHandlerResult: ErrorHandlerResult = {
 					action: ErrorAction.Continue,
-					message: "Failed message to Pine language server: " + message?.jsonrpc,
+					message: "Failed message to Pine language server: " + error.name + ": " + error.message,
 					handled: null
 				};
 

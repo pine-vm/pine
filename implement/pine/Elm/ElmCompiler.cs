@@ -97,7 +97,7 @@ public class ElmCompiler
 
     public record LanguageServiceInterfaceStruct(
         ElmInteractiveEnvironment.FunctionRecord InitState,
-        ElmInteractiveEnvironment.FunctionRecord HandleRequest);
+        ElmInteractiveEnvironment.FunctionRecord HandleRequestInCurrentWorkspace);
 
     private static readonly PineVM.PineVMParseCache parseCache = new();
 
@@ -516,7 +516,7 @@ public class ElmCompiler
                 ElmInteractiveEnvironment.ParseFunctionFromElmModule(
                     interactiveEnvironment: compiledEnv,
                     moduleName: "LanguageService",
-                    declarationName: "handleRequest",
+                    declarationName: "handleRequestInCurrentWorkspace",
                     parseCache);
 
             if (parseInitStateResult.IsOkOrNullable() is { } parseInitOk &&

@@ -255,6 +255,38 @@ public static class ElmInteractiveEnvironment
             };
     }
 
+    public static PineValue StripInteractiveDeclsFromEnvironment(PineValue interactiveEnvironment)
+    {
+        return
+            interactiveEnvironment switch
+            {
+                PineValue.ListValue listValue =>
+                PineValue.List(
+                    [..listValue.Elements
+                    .Where(envItem => !EnvItemLooksLikeInteractiveDecl(envItem))]),
+
+                _ =>
+                interactiveEnvironment
+            };
+    }
+
+    public static bool EnvItemLooksLikeInteractiveDecl(PineValue envItemValue)
+    {
+        if (envItemValue is not PineValue.ListValue listValue)
+            return false;
+
+        if (listValue.Elements.Count is not 2)
+            return false;
+
+        if (PineValueAsString.StringFromValue(listValue.Elements[0]).IsOkOrNull() is not { } name)
+            return false;
+
+        if (name.Length < 1)
+            return false;
+
+        return char.IsLower(name[0]);
+    }
+
     public static Result<string, (string moduleName, PineValue moduleValue, ElmModule moduleContent)> ParseNamedElmModule(
         PineValue moduleValue) =>
         ParseTagged(moduleValue)

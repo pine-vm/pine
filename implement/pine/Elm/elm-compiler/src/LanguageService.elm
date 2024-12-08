@@ -136,32 +136,139 @@ handleRequest requestInWorkspace stateBefore =
     let
         languageServiceState =
             updateLanguageServiceState requestInWorkspace.workspace stateBefore
+    in
+    handleRequestInCurrentWorkspace
+        requestInWorkspace.request
+        languageServiceState
 
-        serviceResponse =
-            case requestInWorkspace.request of
+
+handleRequestInCurrentWorkspace :
+    LanguageServiceInterface.Request
+    -> LanguageServiceState
+    -> ( Result String LanguageServiceInterface.Response, LanguageServiceState )
+handleRequestInCurrentWorkspace request stateBefore =
+    let
+        ( serviceResponse, state ) =
+            case request of
+                LanguageServiceInterface.AddFileRequest filePath content ->
+                    addFile filePath content stateBefore
+
+                LanguageServiceInterface.DeleteFileRequest filePath ->
+                    let
+                        newFileTree =
+                            case FileTree.removeNodeAtPath filePath stateBefore.fileTreeParseCache of
+                                Nothing ->
+                                    stateBefore.fileTreeParseCache
+
+                                Just afterRemove ->
+                                    afterRemove
+                    in
+                    ( LanguageServiceInterface.WorkspaceSummaryResponse
+                    , { stateBefore | fileTreeParseCache = newFileTree }
+                    )
+
                 LanguageServiceInterface.ProvideHoverRequest provideHoverRequest ->
-                    LanguageServiceInterface.ProvideHoverResponse
+                    ( LanguageServiceInterface.ProvideHoverResponse
                         (provideHover
                             provideHoverRequest
-                            languageServiceState
+                            stateBefore
                         )
+                    , stateBefore
+                    )
 
                 LanguageServiceInterface.ProvideCompletionItemsRequest provideCompletionItemsRequest ->
-                    LanguageServiceInterface.ProvideCompletionItemsResponse
+                    ( LanguageServiceInterface.ProvideCompletionItemsResponse
                         (provideCompletionItems
                             provideCompletionItemsRequest
-                            languageServiceState
+                            stateBefore
                         )
+                    , stateBefore
+                    )
 
                 LanguageServiceInterface.ProvideDefinitionRequest provideDefinitionRequest ->
-                    LanguageServiceInterface.ProvideDefinitionResponse
+                    ( LanguageServiceInterface.ProvideDefinitionResponse
                         (provideDefinition
                             provideDefinitionRequest
-                            languageServiceState
+                            stateBefore
                         )
+                    , stateBefore
+                    )
     in
     ( Ok serviceResponse
-    , languageServiceState
+    , state
+    )
+
+
+addFile :
+    List String
+    -> LanguageServiceInterface.FileTreeBlobNode
+    -> LanguageServiceState
+    -> ( LanguageServiceInterface.Response, LanguageServiceState )
+addFile filePath content stateBefore =
+    let
+        maybePreviousCached : Maybe LanguageServiceStateFileTreeNodeBlob
+        maybePreviousCached =
+            FileTree.getBlobAtPathFromFileTree filePath stateBefore.fileTreeParseCache
+
+        maybeTextContent : Maybe FileTextContent
+        maybeTextContent =
+            case content.asText of
+                Nothing ->
+                    Nothing
+
+                Just asString ->
+                    let
+                        parsedFile =
+                            asString
+                                |> Elm.Parser.parseToFile
+                                |> Result.toMaybe
+                                |> Maybe.map
+                                    (\syntax ->
+                                        { filePath = filePath
+                                        , text = asString
+                                        , syntax = syntax
+                                        }
+                                    )
+                    in
+                    Just { text = asString, parsedFile = parsedFile }
+
+        parsedFileFromPreviouslyCached : Maybe ParsedModuleCache
+        parsedFileFromPreviouslyCached =
+            case maybePreviousCached of
+                Nothing ->
+                    Nothing
+
+                Just previousCached ->
+                    previousCached.parsedFileLastSuccess
+
+        parsedFileLastSuccess : Maybe ParsedModuleCache
+        parsedFileLastSuccess =
+            case maybeTextContent of
+                Nothing ->
+                    parsedFileFromPreviouslyCached
+
+                Just textContent ->
+                    case textContent.parsedFile of
+                        Nothing ->
+                            parsedFileFromPreviouslyCached
+
+                        Just parsedFile ->
+                            Just parsedFile
+
+        newFileTree : FileTree.FileTreeNode LanguageServiceStateFileTreeNodeBlob
+        newFileTree =
+            FileTree.setNodeAtPathInSortedFileTree
+                ( filePath
+                , FileTree.BlobNode
+                    { sourceBase64 = content.asBase64
+                    , textContent = maybeTextContent
+                    , parsedFileLastSuccess = parsedFileLastSuccess
+                    }
+                )
+                stateBefore.fileTreeParseCache
+    in
+    ( LanguageServiceInterface.WorkspaceSummaryResponse
+    , { stateBefore | fileTreeParseCache = newFileTree }
     )
 
 
@@ -183,6 +290,19 @@ provideHover request languageServiceState =
 
                 Just parsedFileLastSuccess ->
                     let
+                        lineText : String
+                        lineText =
+                            case currentFileCacheItem.textContent of
+                                Nothing ->
+                                    ""
+
+                                Just textContent ->
+                                    textContent.text
+                                        |> String.lines
+                                        |> List.drop (request.positionLineNumber - 1)
+                                        |> List.head
+                                        |> Maybe.withDefault ""
+
                         { hoverItems } =
                             hoverItemsFromParsedModule parsedFileLastSuccess languageServiceState
                     in
@@ -198,7 +318,7 @@ provideHover request languageServiceState =
                                     { row = request.positionLineNumber, column = request.positionColumn }
                                     hoverRange
                                     && List.all
-                                        (\hoverRangeLine -> String.contains hoverRangeLine request.lineText)
+                                        (\hoverRangeLine -> String.contains hoverRangeLine lineText)
                                         hoverRangeLines
                             )
                         |> List.map Tuple.second
@@ -509,7 +629,10 @@ provideCompletionItems :
     -> LanguageServiceState
     -> List Frontend.MonacoEditor.MonacoCompletionItem
 provideCompletionItems request languageServiceState =
-    case languageServiceState.fileTreeParseCache |> FileTree.getBlobAtPathFromFileTree request.filePathOpenedInEditor of
+    case
+        FileTree.getBlobAtPathFromFileTree request.filePathOpenedInEditor
+            languageServiceState.fileTreeParseCache
+    of
         Nothing ->
             []
 
@@ -528,15 +651,7 @@ provideCompletionItems request languageServiceState =
                                 Just parsedFile ->
                                     locationIsInComment
                                         { row = request.cursorLineNumber
-                                        , column =
-                                            (request.textUntilPosition
-                                                |> String.lines
-                                                |> List.reverse
-                                                |> List.head
-                                                |> Maybe.withDefault ""
-                                                |> String.length
-                                            )
-                                                + 1
+                                        , column = request.cursorColumn
                                         }
                                         parsedFile.syntax
             in
@@ -549,10 +664,21 @@ provideCompletionItems request languageServiceState =
                         []
 
                     Just fileOpenedInEditor ->
+                        let
+                            text : String
+                            text =
+                                case currentFileCacheItem.textContent of
+                                    Nothing ->
+                                        fileOpenedInEditor.text
+
+                                    Just textContent ->
+                                        textContent.text
+                        in
                         provideCompletionItemsInModule
                             { fileOpenedInEditor = fileOpenedInEditor
+                            , newText = text
                             , cursorLineNumber = request.cursorLineNumber
-                            , textUntilPosition = request.textUntilPosition
+                            , cursorColumn = request.cursorColumn
                             }
                             languageServiceState
 
@@ -603,7 +729,7 @@ monacoRangeFromSyntaxRange syntaxRange =
 
 
 provideCompletionItemsInModule :
-    { fileOpenedInEditor : ParsedModuleCache, cursorLineNumber : Int, textUntilPosition : String }
+    { fileOpenedInEditor : ParsedModuleCache, newText : String, cursorLineNumber : Int, cursorColumn : Int }
     -> LanguageServiceState
     -> List Frontend.MonacoEditor.MonacoCompletionItem
 provideCompletionItemsInModule request languageServiceState =
@@ -615,14 +741,18 @@ provideCompletionItemsInModule request languageServiceState =
         fileOpenedInEditorModuleName =
             Elm.Syntax.Module.moduleName moduleDefinition
 
+        lineText : String
+        lineText =
+            request.newText
+                |> String.lines
+                |> List.drop (request.cursorLineNumber - 1)
+                |> List.head
+                |> Maybe.withDefault ""
+
         lineUntilPosition : String
         lineUntilPosition =
-            case List.reverse (String.lines request.textUntilPosition) of
-                [] ->
-                    ""
-
-                line :: _ ->
-                    line
+            lineText
+                |> String.left (request.cursorColumn - 1)
 
         lineUntilPositionWords : List String
         lineUntilPositionWords =
@@ -1259,7 +1389,10 @@ completionItemsFromModule moduleCache =
     }
 
 
-completionItemsFromParsedDeclarationOrReference : (Elm.Syntax.Range.Range -> List String) -> ParsedDeclaration -> List Frontend.MonacoEditor.MonacoCompletionItem
+completionItemsFromParsedDeclarationOrReference :
+    (Elm.Syntax.Range.Range -> List String)
+    -> ParsedDeclaration
+    -> List Frontend.MonacoEditor.MonacoCompletionItem
 completionItemsFromParsedDeclarationOrReference getTextLinesFromRange declarationOrReference =
     let
         buildCompletionItem { name, buildMarkdown, kind } =
@@ -1326,6 +1459,7 @@ updateLanguageServiceState fileTree state =
 
                 buildNewEntry () =
                     let
+                        textContent : Maybe FileTextContent
                         textContent =
                             case fileTreeBlob.asText of
                                 Nothing ->

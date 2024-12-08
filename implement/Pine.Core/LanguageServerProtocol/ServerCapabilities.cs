@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+
 namespace Pine.Core.LanguageServerProtocol;
 
 /// <summary>
@@ -7,7 +9,8 @@ public record ServerCapabilities(
     bool? DocumentFormattingProvider = null,
     TextDocumentSyncKind? TextDocumentSync = null,
     ServerCapabilitiesWorkspace? Workspace = null,
-    bool? HoverProvider = null);
+    bool? HoverProvider = null,
+    CompletionOptions? CompletionProvider = null);
 
 /// <summary>
 /// https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#textDocumentSyncKind
@@ -43,4 +46,12 @@ public record ServerCapabilitiesWorkspace(
 public record WorkspaceFoldersServerCapabilities(
     bool? Supported,
     bool? ChangeNotifications);
+
+/// <summary>
+/// https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#completionOptions
+/// </summary>
+public record CompletionOptions(
+    IReadOnlyList<string>? TriggerCharacters,
+    IReadOnlyList<string>? AllCommitCharacters,
+    bool? ResolveProvider);
 

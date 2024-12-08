@@ -6,7 +6,6 @@ using Pine.Core.PineVM;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
-using System.Collections.Immutable;
 
 namespace Pine.Elm;
 
@@ -16,16 +15,60 @@ public class LanguageServer(
 {
     private readonly ConcurrentDictionary<string, string> clientTextDocumentContents = new();
 
-    private readonly ConcurrentDictionary<string, string> filesContents = new();
-
     private IReadOnlyList<WorkspaceFolder> workspaceFolders = [];
 
     private InitializeParams? initializeParams;
 
     private readonly System.Action<string>? logDelegate = logDelegate;
 
-    private readonly System.Threading.Tasks.Task<Result<string, LanguageServiceState>> languageServiceStateTask =
-        System.Threading.Tasks.Task.Run(() => LanguageServiceState.InitLanguageServiceState(pineVM));
+    private System.Threading.Tasks.Task<Result<string, WorkspaceState>>? languageServiceStateTask;
+
+    private class WorkspaceState(
+        IReadOnlyList<WorkspaceFolder> workspaceFolders,
+        LanguageServiceState languageServiceState)
+    {
+        public static Result<string, WorkspaceState> Init(
+            IReadOnlyList<WorkspaceFolder> workspaceFolders,
+            IPineVM pineVM)
+        {
+            var initServiceStateResult = LanguageServiceState.InitLanguageServiceState(pineVM);
+
+            if (initServiceStateResult.IsErrOrNull() is { } err)
+            {
+                return err;
+            }
+
+            if (initServiceStateResult.IsOkOrNull() is not { } languageServiceState)
+            {
+                throw new System.NotImplementedException(
+                    "Unexpected language service state result type: " + initServiceStateResult.GetType());
+            }
+
+            return new WorkspaceState(workspaceFolders, languageServiceState);
+        }
+
+        public Result<string, Interface.Response.WorkspaceSummaryResponse> AddFile(
+            IReadOnlyList<string> filePath,
+            string fileContent,
+            IPineVM pineVM)
+        {
+            return languageServiceState.AddFile(filePath, fileContent, pineVM);
+        }
+
+        public Result<string, Interface.Response.WorkspaceSummaryResponse> DeleteFile(
+            IReadOnlyList<string> filePath,
+            IPineVM pineVM)
+        {
+            return languageServiceState.DeleteFile(filePath, pineVM);
+        }
+
+        public Result<string, Interface.Response> HandleRequest(
+            Interface.Request request,
+            IPineVM pineVM)
+        {
+            return languageServiceState.HandleRequest(request, pineVM);
+        }
+    }
 
     private void Log(string message)
     {
@@ -57,6 +100,12 @@ public class LanguageServer(
                 DocumentFormattingProvider = true,
                 HoverProvider = true,
 
+                CompletionProvider =
+                new CompletionOptions(
+                    TriggerCharacters: [".", " "],
+                    AllCommitCharacters: null,
+                    ResolveProvider: null),
+
                 Workspace = new ServerCapabilitiesWorkspace
                 {
                     WorkspaceFolders = new WorkspaceFoldersServerCapabilities(Supported: true, ChangeNotifications: true),
@@ -67,7 +116,7 @@ public class LanguageServer(
                 Version: ElmTime.Program.AppVersionId)
         );
 
-        System.Threading.Tasks.Task.Run(() => InitializeFilesContents(initializeParams));
+        System.Threading.Tasks.Task.Run(() => InitializeWorkspaceState(initializeParams));
 
         return (response, requests);
     }
@@ -105,7 +154,7 @@ public class LanguageServer(
             ];
     }
 
-    void InitializeFilesContents(InitializeParams initializeParams)
+    void InitializeWorkspaceState(InitializeParams initializeParams)
     {
         IEnumerable<string> composeDirectories()
         {
@@ -144,6 +193,34 @@ public class LanguageServer(
 
         Log("Starting to initialize files contents for " + sourceDirectories.Count + " directories");
 
+        languageServiceStateTask = System.Threading.Tasks.Task.Run(() =>
+        {
+            var initResult = WorkspaceState.Init(workspaceFolders, pineVM);
+
+            if (initResult.IsErrOrNull() is { } err)
+            {
+                Log("Failed initializing language service state: " + err);
+            }
+
+            return initResult;
+        });
+
+        var taskResult = languageServiceStateTask.Result;
+
+        if (taskResult.IsErrOrNull() is { } err)
+        {
+            Log("Failed initializing language service state: " + err);
+            return;
+        }
+
+        if (taskResult.IsOkOrNull() is not { } languageServiceState)
+        {
+            throw new System.NotImplementedException(
+                "Unexpected language service state result type: " + taskResult.GetType());
+        }
+
+        var filesContents = new Dictionary<string, string>();
+
         foreach (var sourceDirectory in sourceDirectories)
         {
             try
@@ -157,9 +234,28 @@ public class LanguageServer(
                 {
                     try
                     {
+                        var clock = System.Diagnostics.Stopwatch.StartNew();
+
                         var fileContent = System.IO.File.ReadAllText(elmFile);
+
                         filesContents[elmFile] = fileContent;
-                        Log("Read file " + elmFile + " with " + fileContent.Length + " chars");
+
+                        Log(
+                            "Read file " + elmFile + " with " +
+                            CommandLineInterface.FormatIntegerForDisplay(fileContent.Length) +
+                            " chars in " +
+                            CommandLineInterface.FormatIntegerForDisplay((int)clock.Elapsed.TotalMilliseconds) + " ms");
+
+                        clock.Restart();
+
+                        languageServiceState.AddFile(
+                            PathItemsFromFlatPath(elmFile),
+                            fileContent,
+                            pineVM);
+
+                        Log(
+                            "Processed file " + elmFile + " in language service in " +
+                            CommandLineInterface.FormatIntegerForDisplay((int)clock.Elapsed.TotalMilliseconds) + " ms");
                     }
                     catch (System.Exception e)
                     {
@@ -193,7 +289,7 @@ public class LanguageServer(
 
         workspaceFolders = newWorkspaceFolders;
 
-        System.Threading.Tasks.Task.Run(() => InitializeFilesContents(initializeParams));
+        System.Threading.Tasks.Task.Run(() => InitializeWorkspaceState(initializeParams));
     }
 
     public void TextDocument_didOpen(TextDocumentItem textDocument)
@@ -268,8 +364,49 @@ public class LanguageServer(
             "Workspace_didChangeWatchedFiles: " + changes.Count + " changes: " +
             string.Join(", ", changes.Select(change => change.Uri)));
 
+        if (this.languageServiceStateTask is not { } languageServiceStateTask)
+        {
+            Log("Error processing file changes: language service state not initialized");
+            return;
+        }
+
+        {
+            if (languageServiceStateTask.Result.IsErrOrNull() is { } err)
+            {
+                Log("Error processing file changes: language service state not initialized: " + err);
+                return;
+            }
+        }
+
+        if (languageServiceStateTask.Result.IsOkOrNull() is not { } languageServiceState)
+        {
+            throw new System.NotImplementedException(
+                "Unexpected language service state result type: " + languageServiceStateTask.Result.GetType());
+        }
+
         foreach (var change in changes)
         {
+            var localPathResult = DocumentUriAsLocalPath(change.Uri);
+
+            if (localPathResult.IsErrOrNull() is { } err)
+            {
+                Log("Ignoring URI: " + err + ": " + change.Uri);
+                continue;
+            }
+
+            if (localPathResult.IsOkOrNull() is not { } localPath)
+            {
+                throw new System.NotImplementedException(
+                    "Unexpected result type: " + localPathResult.GetType());
+            }
+
+            if (change.Type is FileChangeType.Deleted)
+            {
+                languageServiceState.DeleteFile(
+                    PathItemsFromFlatPath(localPath),
+                    pineVM);
+            }
+
             if (change.Type is not FileChangeType.Created &&
                 change.Type is not FileChangeType.Changed)
             {
@@ -279,25 +416,28 @@ public class LanguageServer(
 
             try
             {
-                var localPathResult = DocumentUriAsLocalPath(change.Uri);
-
-                if (localPathResult.IsErrOrNull() is { } err)
-                {
-                    Log("Ignoring URI: " + err + ": " + change.Uri);
-                    continue;
-                }
-
-                if (localPathResult.IsOkOrNull() is not { } localPath)
-                {
-                    throw new System.NotImplementedException(
-                        "Unexpected result type: " + localPathResult.GetType());
-                }
+                var clock = System.Diagnostics.Stopwatch.StartNew();
 
                 var fileContent = System.IO.File.ReadAllText(localPath);
 
-                filesContents[change.Uri] = fileContent;
+                Log(
+                    "Read file " + change.Uri + " with " +
+                    CommandLineInterface.FormatIntegerForDisplay(fileContent.Length) +
+                    " chars in " +
+                    CommandLineInterface.FormatIntegerForDisplay((int)clock.Elapsed.TotalMilliseconds) +
+                    " ms");
 
-                Log("Read file " + change.Uri + " with " + fileContent.Length + " chars");
+                clock.Restart();
+
+                languageServiceState.AddFile(
+                    PathItemsFromFlatPath(localPath),
+                    fileContent,
+                    pineVM);
+
+                Log(
+                    "Processed file " + change.Uri + " in language service in " +
+                    CommandLineInterface.FormatIntegerForDisplay((int)clock.Elapsed.TotalMilliseconds) +
+                    " ms");
             }
             catch (System.Exception e)
             {
@@ -310,19 +450,21 @@ public class LanguageServer(
         TextDocumentIdentifier textDocument,
         FormattingOptions options)
     {
-        Log("TextDocument_formatting: " + textDocument.Uri);
+        var textDocumentUri = System.Uri.UnescapeDataString(textDocument.Uri);
 
-        clientTextDocumentContents.TryGetValue(textDocument.Uri, out var textDocumentContentBefore);
+        Log("TextDocument_formatting: " + textDocumentUri);
+
+        clientTextDocumentContents.TryGetValue(textDocumentUri, out var textDocumentContentBefore);
 
         if (textDocumentContentBefore is not null)
         {
-            Log("Found document " + textDocument.Uri + " in client-managed state");
+            Log("Found document " + textDocumentUri + " in client-managed state");
         }
         else
         {
             try
             {
-                textDocumentContentBefore ??= System.IO.File.ReadAllText(textDocument.Uri);
+                textDocumentContentBefore ??= System.IO.File.ReadAllText(textDocumentUri);
             }
             catch (System.Exception e)
             {
@@ -348,7 +490,7 @@ public class LanguageServer(
         }
 
         Log(
-            "Document " + textDocument.Uri + " had " +
+            "Document " + textDocumentUri + " had " +
             CommandLineInterface.FormatIntegerForDisplay(linesBefore.Count) +
             " lines and " +
             CommandLineInterface.FormatIntegerForDisplay(textDocumentContentBefore.Length) +
@@ -362,9 +504,9 @@ public class LanguageServer(
         if (newContent is null)
             return [];
 
-        if (clientTextDocumentContents.ContainsKey(textDocument.Uri))
+        if (clientTextDocumentContents.ContainsKey(textDocumentUri))
         {
-            clientTextDocumentContents[textDocument.Uri] = newContent;
+            clientTextDocumentContents[textDocumentUri] = newContent;
         }
 
         return
@@ -428,36 +570,10 @@ public class LanguageServer(
                 "Unexpected result type: " + localPathResult.GetType());
         }
 
-        filesContents.TryGetValue(textDocumentUri, out var fileText);
-
-        clientTextDocumentContents.TryGetValue(textDocumentUri, out var clientTextDocumentContent);
-
-        var openFileText = clientTextDocumentContent ?? fileText;
-
-        if (openFileText is null)
-        {
-            Log("Did not find contents for file " + localPath);
-            return null;
-        }
-
-        var textLines =
-            ElmModule.ModuleLines(openFileText);
-
-        var lineText = textLines.ElementAtOrDefault((int)positionParams.Position.Line);
-
-        if (lineText is null)
-        {
-            Log("Failed to find line " + positionParams.Position.Line + " in " + localPath);
-            return null;
-        }
-
         var filePathOpenedInEditor = PathItemsFromFlatPath(localPath);
-
-        var fileTree = CombinedFileTree();
 
         var hoverStrings =
             ProvideHover(
-                fileTree,
                 new Interface.ProvideHoverRequestStruct(
                     filePathOpenedInEditor,
                     /*
@@ -465,8 +581,7 @@ public class LanguageServer(
                      * inherited from the Monaco editor API.
                      * */
                     (int)positionParams.Position.Line + 1,
-                    (int)positionParams.Position.Character + 1,
-                    LineText: lineText),
+                    (int)positionParams.Position.Character + 1),
                 pineVM);
 
         {
@@ -485,7 +600,8 @@ public class LanguageServer(
 
         Log(
             "Completed hover in " +
-            CommandLineInterface.FormatIntegerForDisplay(clock.ElapsedMilliseconds) + " ms");
+            CommandLineInterface.FormatIntegerForDisplay(clock.ElapsedMilliseconds) + " ms, returning " +
+            hoverStringsOk.Count + " items");
 
         return new Hover
         (
@@ -494,62 +610,80 @@ public class LanguageServer(
         );
     }
 
-    public TreeNodeWithStringPath CombinedFileTree()
+    public CompletionItem[] TextDocument_completion(
+    TextDocumentPositionParams positionParams)
     {
-        if (workspaceFolders is not { } folders)
+        var textDocumentUri = System.Uri.UnescapeDataString(positionParams.TextDocument.Uri);
+
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+
+        Log("TextDocument_completion: " + textDocumentUri + " at " + positionParams.Position);
+
+        var localPathResult = DocumentUriAsLocalPath(textDocumentUri);
         {
-            return TreeNodeWithStringPath.EmptyTree;
+            if (localPathResult.IsErrOrNull() is { } err)
+            {
+                Log("Ignoring URI: " + err + ": " + textDocumentUri);
+                return [];
+            }
         }
 
-        IReadOnlyList<string> workspacePathsFlat =
-            [..folders
-            .Select(folder => DocumentUriAsLocalPath(folder.Uri).ToMaybe())
-            .WhereNotNothing()
-            ];
+        if (localPathResult.IsOkOrNull() is not { } localPath)
+        {
+            throw new System.NotImplementedException(
+                "Unexpected result type: " + localPathResult.GetType());
+        }
 
-        IReadOnlyList<IReadOnlyList<string>> workspacePaths =
-            [..workspacePathsFlat
-            .Select(PathItemsFromFlatPath)
-            ];
+        var filePathOpenedInEditor = PathItemsFromFlatPath(localPath);
 
-        static System.ReadOnlyMemory<byte> FileContentFromText(string text) =>
-            new System.Text.UTF8Encoding().GetBytes(text);
+        var completionItems =
+            ProvideCompletionItems(
+                new Interface.ProvideCompletionItemsRequestStruct(
+                    filePathOpenedInEditor,
+                    /*
+                     * The language service currently uses the 1-based line and column numbers
+                     * inherited from the Monaco editor API.
+                     * */
+                    CursorLineNumber:
+                    (int)positionParams.Position.Line + 1,
+                    CursorColumn:
+                    (int)positionParams.Position.Character + 1),
+                pineVM);
 
-        static IReadOnlyDictionary<IReadOnlyList<string>, System.ReadOnlyMemory<byte>> mapDict(
-            IReadOnlyDictionary<string, string> dict) =>
-            dict
-            .SelectMany(
-                kv =>
-                {
-                    if (DocumentUriAsLocalPath(kv.Key).IsOkOrNull() is not { } localPath)
-                    {
-                        return [];
-                    }
+        {
+            if (completionItems.IsErrOrNull() is { } err)
+            {
+                Log("Failed to provide completion items: " + err);
+                return [];
+            }
+        }
 
-                    var pathItems = PathItemsFromFlatPath(localPath);
-                    var fileContent = FileContentFromText(kv.Value);
+        if (completionItems.IsOkOrNull() is not { } completionItemsOk)
+        {
+            throw new System.NotImplementedException(
+                "Unexpected result type: " + completionItems.GetType());
+        }
 
-                    return
-                    (IReadOnlyList<KeyValuePair<IReadOnlyList<string>, System.ReadOnlyMemory<byte>>>)
-                    [new KeyValuePair<IReadOnlyList<string>, System.ReadOnlyMemory<byte>>(pathItems, fileContent)];
-                })
-            .ToImmutableDictionary();
-
-        var filesContentsDictionary =
-            mapDict(filesContents);
-
-        var clientTextDocumentContentsDictionary =
-            mapDict(clientTextDocumentContents);
-
-        var workspaceTree =
-            MergeIntoFileTree(
-                TreeNodeWithStringPath.EmptyTree,
-                filesContentsDictionary);
+        Log(
+            "Completed completion in " +
+            CommandLineInterface.FormatIntegerForDisplay(clock.ElapsedMilliseconds) + " ms, returning " +
+            completionItemsOk.Count + " items");
 
         return
-            MergeIntoFileTree(
-                workspaceTree,
-                clientTextDocumentContentsDictionary);
+            [..completionItemsOk
+            .Select(monacoCompletionItem =>
+            new CompletionItem(
+                Label: monacoCompletionItem.Label,
+                SortText: null,
+                FilterText: null,
+                InsertText: monacoCompletionItem.InsertText,
+                TextEditText: null,
+                Detail: null,
+                Documentation: monacoCompletionItem.Documentation,
+                Preselect: null,
+                Deprecated: null,
+                CommitCharacters: null))
+            ];
     }
 
     static IReadOnlyList<string> PathItemsFromFlatPath(string path)
@@ -576,13 +710,11 @@ public class LanguageServer(
     }
 
     public Result<string, IReadOnlyList<string>> ProvideHover(
-        TreeNodeWithStringPath workspace,
         Interface.ProvideHoverRequestStruct provideHoverRequest,
         IPineVM pineVM)
     {
         var genericRequestResult =
             HandleRequest(
-                workspace,
                 new Interface.Request.ProvideHoverRequest(provideHoverRequest),
                 pineVM);
 
@@ -608,13 +740,11 @@ public class LanguageServer(
 
     public Result<string, IReadOnlyList<MonacoEditor.MonacoCompletionItem>>
         ProvideCompletionItems(
-            TreeNodeWithStringPath workspace,
             Interface.ProvideCompletionItemsRequestStruct provideCompletionItemsRequest,
             IPineVM pineVM)
     {
         var genericRequestResult =
             HandleRequest(
-                workspace,
                 new Interface.Request.ProvideCompletionItemsRequest(provideCompletionItemsRequest),
                 pineVM);
 
@@ -640,10 +770,14 @@ public class LanguageServer(
     }
 
     public Result<string, Interface.Response> HandleRequest(
-        TreeNodeWithStringPath workspace,
         Interface.Request request,
         IPineVM pineVM)
     {
+        if (this.languageServiceStateTask is not { } languageServiceStateTask)
+        {
+            return "Language service state not initialized";
+        }
+
         if (languageServiceStateTask.Result.IsErrOrNull() is { } err)
         {
             return err;
@@ -656,7 +790,7 @@ public class LanguageServer(
         }
 
         return
-            languageServiceState.HandleRequest(workspace, request, pineVM);
+            languageServiceState.HandleRequest(request, pineVM);
     }
 
     public static Result<string, string> DocumentUriAsLocalPath(string documentUri)
