@@ -4,6 +4,7 @@ module LanguageService exposing (..)
 These functions enable features like completion suggestions and hover tips in the code editor.
 -}
 
+import Common
 import Elm.Parser
 import Elm.Syntax.Comments
 import Elm.Syntax.Declaration
@@ -219,16 +220,16 @@ addFile filePath content stateBefore =
                 Just asString ->
                     let
                         parsedFile =
-                            asString
-                                |> Elm.Parser.parseToFile
-                                |> Result.toMaybe
-                                |> Maybe.map
-                                    (\syntax ->
+                            case Elm.Parser.parseToFile asString of
+                                Err _ ->
+                                    Nothing
+
+                                Ok syntax ->
+                                    Just
                                         { filePath = filePath
                                         , text = asString
                                         , syntax = syntax
                                         }
-                                    )
                     in
                     Just { text = asString, parsedFile = parsedFile }
 
@@ -290,36 +291,15 @@ provideHover request languageServiceState =
 
                 Just parsedFileLastSuccess ->
                     let
-                        lineText : String
-                        lineText =
-                            case currentFileCacheItem.textContent of
-                                Nothing ->
-                                    ""
-
-                                Just textContent ->
-                                    textContent.text
-                                        |> String.lines
-                                        |> List.drop (request.positionLineNumber - 1)
-                                        |> List.head
-                                        |> Maybe.withDefault ""
-
                         { hoverItems } =
                             hoverItemsFromParsedModule parsedFileLastSuccess languageServiceState
                     in
                     hoverItems
                         |> List.filter
                             (\( hoverRange, _ ) ->
-                                let
-                                    hoverRangeLines =
-                                        getTextLinesFromRangeAndText hoverRange parsedFileLastSuccess.text
-                                            |> List.filter (\line -> line /= "")
-                                in
                                 rangeIntersectsLocation
                                     { row = request.positionLineNumber, column = request.positionColumn }
                                     hoverRange
-                                    && List.all
-                                        (\hoverRangeLine -> String.contains hoverRangeLine lineText)
-                                        hoverRangeLines
                             )
                         |> List.map Tuple.second
 
@@ -919,7 +899,10 @@ provideCompletionItemsInModule request languageServiceState =
 
         _ ->
             if completionPrefixIsNamespace then
-                fromImports ++ List.sortBy .insertText localDeclarationsAfterPrefix
+                List.concat
+                    [ fromImports
+                    , List.sortBy .insertText localDeclarationsAfterPrefix
+                    ]
 
             else
                 []
@@ -961,15 +944,18 @@ importedModulesFromFile fileOpenedInEditor languageServiceState =
 
         parsedModuleFromModuleName canonicalModuleName =
             modulesAvailableForImportFromState languageServiceState
-                |> List.filter
+                |> Common.listFind
                     (\moduleAvailable ->
                         let
                             (Elm.Syntax.Node.Node _ moduleDefinition) =
                                 moduleAvailable.syntax.moduleDefinition
                         in
-                        Elm.Syntax.Module.moduleName moduleDefinition == canonicalModuleName
+                        if Elm.Syntax.Module.moduleName moduleDefinition == canonicalModuleName then
+                            True
+
+                        else
+                            False
                     )
-                |> List.head
 
         explicitlyImportedModules =
             fileOpenedInEditor.syntax.imports
@@ -1002,19 +988,20 @@ importedModulesFromFile fileOpenedInEditor languageServiceState =
                                     }
                     )
     in
-    implicitlyImportedModules ++ explicitlyImportedModules
+    List.concat [ implicitlyImportedModules, explicitlyImportedModules ]
 
 
 modulesAvailableForImportFromState : LanguageServiceState -> List ParsedModuleCache
 modulesAvailableForImportFromState languageServiceState =
-    (languageServiceState.fileTreeParseCache
-        |> FileTree.flatListOfBlobsFromFileTreeNode
-        |> List.filterMap
-            (\( _, fileCache ) ->
-                fileCache.parsedFileLastSuccess
-            )
-    )
-        ++ List.map .parseResult languageServiceState.coreModulesCache
+    List.concat
+        [ languageServiceState.fileTreeParseCache
+            |> FileTree.flatListOfBlobsFromFileTreeNode
+            |> List.filterMap
+                (\( _, fileCache ) ->
+                    fileCache.parsedFileLastSuccess
+                )
+        , List.map .parseResult languageServiceState.coreModulesCache
+        ]
 
 
 importExposingsFromFile :
@@ -1188,14 +1175,31 @@ moduleCompletionItemFromModuleSyntax { importedModuleNameRestAfterPrefix, import
 
                 Just moduleNameRestAfterPrefix ->
                     String.join "." moduleNameRestAfterPrefix
-    in
-    { label =
-        if Maybe.withDefault canonicalName importedName == canonicalName then
-            insertText
 
-        else
-            String.join "." canonicalName ++ " as " ++ insertText
-    , documentation = Maybe.withDefault "" (documentationStringFromModuleSyntax moduleSyntax)
+        label : String
+        label =
+            case importedName of
+                Nothing ->
+                    insertText
+
+                Just importedName_ ->
+                    if importedName_ == canonicalName then
+                        insertText
+
+                    else
+                        String.join "." canonicalName ++ " as " ++ insertText
+
+        documentation : String
+        documentation =
+            case documentationStringFromModuleSyntax moduleSyntax of
+                Nothing ->
+                    ""
+
+                Just documentationString ->
+                    documentationString
+    in
+    { label = label
+    , documentation = documentation
     , insertText = insertText
     , kind = Frontend.MonacoEditor.ModuleCompletionItemKind
     }
@@ -1438,15 +1442,28 @@ completionItemsFromParsedDeclarationOrReference getTextLinesFromRange declaratio
 
 documentationMarkdownFromCodeLinesAndDocumentation : List String -> Maybe String -> String
 documentationMarkdownFromCodeLinesAndDocumentation codeLines maybeDocumentation =
-    (markdownElmCodeBlockFromCodeLines codeLines
-        :: Maybe.withDefault [] (Maybe.map List.singleton maybeDocumentation)
-    )
-        |> String.join "\n\n"
+    let
+        lessDocumentation =
+            markdownElmCodeBlockFromCodeLines codeLines
+    in
+    case maybeDocumentation of
+        Nothing ->
+            lessDocumentation
+
+        Just documentation ->
+            String.concat
+                [ lessDocumentation
+                , "\n\n"
+                , documentation
+                ]
 
 
 markdownElmCodeBlockFromCodeLines : List String -> String
 markdownElmCodeBlockFromCodeLines codeLines =
-    String.join "\n" (List.map ((++) "    ") codeLines)
+    String.concat
+        [ "    "
+        , String.join "\n    " codeLines
+        ]
 
 
 updateLanguageServiceState : LanguageServiceInterface.FileTreeNode -> LanguageServiceState -> LanguageServiceState
@@ -1468,16 +1485,16 @@ updateLanguageServiceState fileTree state =
                                 Just asString ->
                                     let
                                         parsedFile =
-                                            asString
-                                                |> Elm.Parser.parseToFile
-                                                |> Result.toMaybe
-                                                |> Maybe.map
-                                                    (\syntax ->
+                                            case Elm.Parser.parseToFile asString of
+                                                Err _ ->
+                                                    Nothing
+
+                                                Ok syntax ->
+                                                    Just
                                                         { filePath = blobPath
                                                         , text = asString
                                                         , syntax = syntax
                                                         }
-                                                    )
                                     in
                                     Just { text = asString, parsedFile = parsedFile }
 
@@ -1841,8 +1858,8 @@ listDeclarationsAndReferencesForFunction declRange function =
                                         Just (Elm.Syntax.Node.Node _ comment) ->
                                             Just (removeWrappingFromMultilineComment comment)
 
-                                typeAnnotationText : Maybe String
-                                typeAnnotationText =
+                                maybeTypeAnnotationText : Maybe String
+                                maybeTypeAnnotationText =
                                     case function.signature of
                                         Nothing ->
                                             Nothing
@@ -1860,7 +1877,14 @@ listDeclarationsAndReferencesForFunction declRange function =
 
                                 codeLines : List String
                                 codeLines =
-                                    [ functionName ++ Maybe.withDefault "" (Maybe.map ((++) " : ") typeAnnotationText) ]
+                                    case maybeTypeAnnotationText of
+                                        Nothing ->
+                                            [ functionName
+                                            ]
+
+                                        Just typeAnnotationText ->
+                                            [ String.concat [ functionName, " : ", typeAnnotationText ]
+                                            ]
                             in
                             documentationMarkdownFromCodeLinesAndDocumentation codeLines documentationStringFromSyntax
                     }
@@ -1960,8 +1984,8 @@ listDeclarationsAndReferencesFromPattern config (Elm.Syntax.Node.Node patternRan
                             { buildMarkdown =
                                 \getTextLinesFromRange ->
                                     let
-                                        typeAnnotationText : Maybe String
-                                        typeAnnotationText =
+                                        maybeTypeAnnotationText : Maybe String
+                                        maybeTypeAnnotationText =
                                             case config.typeAnnotation of
                                                 Nothing ->
                                                     Nothing
@@ -1975,7 +1999,14 @@ listDeclarationsAndReferencesFromPattern config (Elm.Syntax.Node.Node patternRan
 
                                         codeLines : List String
                                         codeLines =
-                                            [ name ++ Maybe.withDefault "" (Maybe.map ((++) " : ") typeAnnotationText) ]
+                                            case maybeTypeAnnotationText of
+                                                Nothing ->
+                                                    [ name
+                                                    ]
+
+                                                Just typeAnnotationText ->
+                                                    [ String.concat [ name, " : ", typeAnnotationText ]
+                                                    ]
                                     in
                                     documentationMarkdownFromCodeLinesAndDocumentation codeLines Nothing
                             }
@@ -2047,16 +2078,19 @@ constrainScopeToRange range scope =
             LocalScope range
 
 
+listConcatMapParsedDeclarationsAndReferences :
+    (a -> ParsedDeclarationsAndReferences)
+    -> List a
+    -> ParsedDeclarationsAndReferences
+listConcatMapParsedDeclarationsAndReferences map =
+    List.map map >> concatParsedDeclarationsAndReferences
+
+
 concatParsedDeclarationsAndReferences : List ParsedDeclarationsAndReferences -> ParsedDeclarationsAndReferences
 concatParsedDeclarationsAndReferences list =
     { declarations = List.concatMap .declarations list
     , references = List.concatMap .references list
     }
-
-
-listConcatMapParsedDeclarationsAndReferences : (a -> ParsedDeclarationsAndReferences) -> List a -> ParsedDeclarationsAndReferences
-listConcatMapParsedDeclarationsAndReferences map =
-    List.map map >> concatParsedDeclarationsAndReferences
 
 
 expandRangeToLineStart : Elm.Syntax.Range.Range -> Elm.Syntax.Range.Range
@@ -2128,20 +2162,40 @@ listCommentsInFile parsedModule =
                         listCommentsFromDeclaration declaration
                     )
     in
-    parsedModule.comments ++ fromDeclarations
+    List.concat
+        [ parsedModule.comments
+        , fromDeclarations
+        ]
 
 
-listCommentsFromDeclaration : Elm.Syntax.Declaration.Declaration -> List (Elm.Syntax.Node.Node Elm.Syntax.Comments.Comment)
+listCommentsFromDeclaration :
+    Elm.Syntax.Declaration.Declaration
+    -> List (Elm.Syntax.Node.Node Elm.Syntax.Comments.Comment)
 listCommentsFromDeclaration declaration =
     case declaration of
         Elm.Syntax.Declaration.FunctionDeclaration function ->
-            function.documentation |> Maybe.map List.singleton |> Maybe.withDefault []
+            case function.documentation of
+                Nothing ->
+                    []
+
+                Just documentation ->
+                    [ documentation ]
 
         Elm.Syntax.Declaration.AliasDeclaration typeAlias ->
-            typeAlias.documentation |> Maybe.map List.singleton |> Maybe.withDefault []
+            case typeAlias.documentation of
+                Nothing ->
+                    []
+
+                Just documentation ->
+                    [ documentation ]
 
         Elm.Syntax.Declaration.CustomTypeDeclaration typeDeclaration ->
-            typeDeclaration.documentation |> Maybe.map List.singleton |> Maybe.withDefault []
+            case typeDeclaration.documentation of
+                Nothing ->
+                    []
+
+                Just documentation ->
+                    [ documentation ]
 
         Elm.Syntax.Declaration.PortDeclaration _ ->
             []
