@@ -1302,8 +1302,28 @@ public class Program
 
         try
         {
+            var filteredSourceTree =
+                loadCompositionResult.origin is LoadCompositionOrigin.FromLocalFileSystem
+                ?
+                LoadFromLocalFilesystem.RemoveNoiseFromTree(
+                    loadCompositionResult.tree,
+                    discardGitDirectory: true)
+                :
+                loadCompositionResult.tree;
+
+            var discardedFiles =
+                loadCompositionResult.tree
+                .EnumerateBlobsTransitive()
+                .Where(originalBlob => filteredSourceTree.GetNodeAtPath(originalBlob.path) is not TreeNodeWithStringPath.BlobNode)
+                .ToImmutableArray();
+
+            if (0 < discardedFiles.Length)
+            {
+                Console.WriteLine("Discarded " + discardedFiles.Length + " files from the input directory.");
+            }
+
             var sourceFiles =
-                PineValueComposition.TreeToFlatDictionaryWithPathComparer(loadCompositionResult.tree);
+                PineValueComposition.TreeToFlatDictionaryWithPathComparer(filteredSourceTree);
 
             var elmJsonSourceDirectories =
                 readElmJsonSourceDirectories() ?? [];
@@ -2071,7 +2091,8 @@ public class Program
                             loadInputDirectoryOk.origin is LoadCompositionOrigin.FromLocalFileSystem
                             ?
                             LoadFromLocalFilesystem.RemoveNoiseFromTree(
-                                loadInputDirectoryOk.tree, discardGitDirectory: true)
+                                loadInputDirectoryOk.tree,
+                                discardGitDirectory: true)
                             :
                             loadInputDirectoryOk.tree;
 
