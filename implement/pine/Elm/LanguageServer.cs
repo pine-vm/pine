@@ -6,12 +6,12 @@ using Pine.Core.PineVM;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
+using Pine.PineVM;
 
 namespace Pine.Elm;
 
 public class LanguageServer(
-    System.Action<string>? logDelegate,
-    IPineVM pineVM)
+    System.Action<string>? logDelegate)
 {
     private readonly ConcurrentDictionary<string, string> clientTextDocumentContents = new();
 
@@ -49,24 +49,21 @@ public class LanguageServer(
 
         public Result<string, Interface.Response.WorkspaceSummaryResponse> AddFile(
             IReadOnlyList<string> filePath,
-            string fileContent,
-            IPineVM pineVM)
+            string fileContent)
         {
-            return languageServiceState.AddFile(filePath, fileContent, pineVM);
+            return languageServiceState.AddFile(filePath, fileContent);
         }
 
         public Result<string, Interface.Response.WorkspaceSummaryResponse> DeleteFile(
-            IReadOnlyList<string> filePath,
-            IPineVM pineVM)
+            IReadOnlyList<string> filePath)
         {
-            return languageServiceState.DeleteFile(filePath, pineVM);
+            return languageServiceState.DeleteFile(filePath);
         }
 
         public Result<string, Interface.Response> HandleRequest(
-            Interface.Request request,
-            IPineVM pineVM)
+            Interface.Request request)
         {
-            return languageServiceState.HandleRequest(request, pineVM);
+            return languageServiceState.HandleRequest(request);
         }
     }
 
@@ -195,6 +192,10 @@ public class LanguageServer(
 
         languageServiceStateTask = System.Threading.Tasks.Task.Run(() =>
         {
+            var vmCache = new PineVMCache();
+
+            var pineVM = new PineVM.PineVM(evalCache: vmCache.EvalCache);
+
             var initResult = WorkspaceState.Init(workspaceFolders, pineVM);
 
             if (initResult.IsErrOrNull() is { } err)
@@ -250,8 +251,7 @@ public class LanguageServer(
 
                         languageServiceState.AddFile(
                             PathItemsFromFlatPath(elmFile),
-                            fileContent,
-                            pineVM);
+                            fileContent);
 
                         Log(
                             "Processed file " + elmFile + " in language service in " +
@@ -403,8 +403,7 @@ public class LanguageServer(
             if (change.Type is FileChangeType.Deleted)
             {
                 languageServiceState.DeleteFile(
-                    PathItemsFromFlatPath(localPath),
-                    pineVM);
+                    PathItemsFromFlatPath(localPath));
             }
 
             if (change.Type is not FileChangeType.Created &&
@@ -431,8 +430,7 @@ public class LanguageServer(
 
                 languageServiceState.AddFile(
                     PathItemsFromFlatPath(localPath),
-                    fileContent,
-                    pineVM);
+                    fileContent);
 
                 Log(
                     "Processed file " + change.Uri + " in language service in " +
@@ -581,8 +579,7 @@ public class LanguageServer(
                      * inherited from the Monaco editor API.
                      * */
                     (int)positionParams.Position.Line + 1,
-                    (int)positionParams.Position.Character + 1),
-                pineVM);
+                    (int)positionParams.Position.Character + 1));
 
         {
             if (hoverStrings.IsErrOrNull() is { } err)
@@ -647,8 +644,7 @@ public class LanguageServer(
                     CursorLineNumber:
                     (int)positionParams.Position.Line + 1,
                     CursorColumn:
-                    (int)positionParams.Position.Character + 1),
-                pineVM);
+                    (int)positionParams.Position.Character + 1));
 
         {
             if (completionItems.IsErrOrNull() is { } err)
@@ -710,13 +706,11 @@ public class LanguageServer(
     }
 
     public Result<string, IReadOnlyList<string>> ProvideHover(
-        Interface.ProvideHoverRequestStruct provideHoverRequest,
-        IPineVM pineVM)
+        Interface.ProvideHoverRequestStruct provideHoverRequest)
     {
         var genericRequestResult =
             HandleRequest(
-                new Interface.Request.ProvideHoverRequest(provideHoverRequest),
-                pineVM);
+                new Interface.Request.ProvideHoverRequest(provideHoverRequest));
 
         if (genericRequestResult.IsErrOrNull() is { } err)
         {
@@ -740,13 +734,11 @@ public class LanguageServer(
 
     public Result<string, IReadOnlyList<MonacoEditor.MonacoCompletionItem>>
         ProvideCompletionItems(
-            Interface.ProvideCompletionItemsRequestStruct provideCompletionItemsRequest,
-            IPineVM pineVM)
+            Interface.ProvideCompletionItemsRequestStruct provideCompletionItemsRequest)
     {
         var genericRequestResult =
             HandleRequest(
-                new Interface.Request.ProvideCompletionItemsRequest(provideCompletionItemsRequest),
-                pineVM);
+                new Interface.Request.ProvideCompletionItemsRequest(provideCompletionItemsRequest));
 
         if (genericRequestResult.IsErrOrNull() is { } err)
         {
@@ -770,8 +762,7 @@ public class LanguageServer(
     }
 
     public Result<string, Interface.Response> HandleRequest(
-        Interface.Request request,
-        IPineVM pineVM)
+        Interface.Request request)
     {
         if (this.languageServiceStateTask is not { } languageServiceStateTask)
         {
@@ -790,7 +781,7 @@ public class LanguageServer(
         }
 
         return
-            languageServiceState.HandleRequest(request, pineVM);
+            languageServiceState.HandleRequest(request);
     }
 
     public static Result<string, string> DocumentUriAsLocalPath(string documentUri)

@@ -876,11 +876,7 @@ public class Program
 
                 log("Starting language server...");
 
-                var vmCache = new PineVMCache();
-
-                var pineVM = new PineVM(evalCache: vmCache.EvalCache);
-
-                var languageServer = new LanguageServer(logDelegate: log, pineVM);
+                var languageServer = new LanguageServer(logDelegate: log);
 
                 var rpcHandler =
                     new StreamJsonRpc.HeaderDelimitedMessageHandler(

@@ -9,7 +9,8 @@ namespace Pine.Elm;
 
 public class LanguageServiceState(
     ElmCompiler.LanguageServiceInterfaceStruct languageServiceInterface,
-    PineValue initState)
+    PineValue initState,
+    IPineVM pineVM)
 {
     private PineValue state = initState;
 
@@ -85,18 +86,16 @@ public class LanguageServiceState(
 
         return new LanguageServiceState(
             languageServiceInterface,
-            initOk);
+            initOk,
+            pineVM);
     }
 
     public Result<string, Interface.Response.WorkspaceSummaryResponse>
         DeleteFile(
-        IReadOnlyList<string> filePath,
-        IPineVM pineVM)
+        IReadOnlyList<string> filePath)
     {
         var genericRequestResult =
-            HandleRequest(
-                new Interface.Request.DeleteFileRequest(filePath),
-                pineVM);
+            HandleRequest(new Interface.Request.DeleteFileRequest(filePath));
 
         if (genericRequestResult.IsErrOrNull() is { } err)
         {
@@ -121,8 +120,7 @@ public class LanguageServiceState(
     public Result<string, Interface.Response.WorkspaceSummaryResponse>
         AddFile(
         IReadOnlyList<string> filePath,
-        string fileContentAsText,
-        IPineVM pineVM)
+        string fileContentAsText)
     {
         var asBase64 =
             System.Convert.ToBase64String(
@@ -132,8 +130,7 @@ public class LanguageServiceState(
             HandleRequest(
                 new Interface.Request.AddFileRequest(
                     filePath,
-                    new Interface.FileTreeBlobNode(AsBase64: asBase64, AsText: fileContentAsText)),
-                pineVM);
+                    new Interface.FileTreeBlobNode(AsBase64: asBase64, AsText: fileContentAsText)));
 
         if (genericRequestResult.IsErrOrNull() is { } err)
         {
@@ -161,8 +158,7 @@ public class LanguageServiceState(
     {
         var genericRequestResult =
             HandleRequest(
-                new Interface.Request.ProvideHoverRequest(provideHoverRequest),
-                pineVM);
+                new Interface.Request.ProvideHoverRequest(provideHoverRequest));
 
         if (genericRequestResult.IsErrOrNull() is { } err)
         {
@@ -191,8 +187,7 @@ public class LanguageServiceState(
     {
         var genericRequestResult =
             HandleRequest(
-                new Interface.Request.ProvideCompletionItemsRequest(provideCompletionItemsRequest),
-                pineVM);
+                new Interface.Request.ProvideCompletionItemsRequest(provideCompletionItemsRequest));
 
         if (genericRequestResult.IsErrOrNull() is { } err)
         {
@@ -216,95 +211,97 @@ public class LanguageServiceState(
     }
 
     public Result<string, Interface.Response> HandleRequest(
-        Interface.Request request,
-        IPineVM pineVM)
+        Interface.Request request)
     {
         var requestEncoded =
             Interface.RequestEncoding.Encode(request);
 
-        var handleRequestResult =
-            ElmTime.ElmInteractive.ElmInteractiveEnvironment.ApplyFunction(
-                pineVM,
-                languageServiceInterface.HandleRequestInCurrentWorkspace,
-                [
-                    requestEncoded,
-                    state,
-                ]);
-
+        lock (pineVM)
         {
-            if (handleRequestResult.IsErrOrNull() is { } err)
+            var handleRequestResult =
+                ElmTime.ElmInteractive.ElmInteractiveEnvironment.ApplyFunction(
+                    pineVM,
+                    languageServiceInterface.HandleRequestInCurrentWorkspace,
+                    [
+                        requestEncoded,
+                        state,
+                    ]);
+
             {
-                throw new System.Exception("Failed to handle request: " + err);
-            }
-        }
-
-        if (handleRequestResult.IsOkOrNull() is not { } handleRequestOk)
-        {
-            throw new System.NotImplementedException(
-                "Unexpected handle request result type: " + handleRequestResult.GetType());
-        }
-
-        if (handleRequestOk is not PineValue.ListValue handleRequestOkList)
-        {
-            throw new System.NotImplementedException(
-                "Unexpected handle request result type: " + handleRequestOk.GetType());
-        }
-
-        if (handleRequestOkList.Elements.Count is not 2)
-        {
-            throw new System.NotImplementedException(
-                "Unexpected handle request result length: " + handleRequestOkList.Elements.Count);
-        }
-
-        var requestResponseResultValue =
-            handleRequestOkList.Elements[0];
-
-        var langServiceStateValue =
-            handleRequestOkList.Elements[1];
-
-        state = langServiceStateValue;
-
-        var langServiceResponseOk =
-            ElmValueInterop.ParseElmResultValue(
-                requestResponseResultValue,
-                err: err =>
+                if (handleRequestResult.IsErrOrNull() is { } err)
                 {
-                    throw new System.Exception("Failed to parse request response result: " + err);
-                },
-                ok:
-                ok => ok,
-                invalid:
-                err => throw new System.Exception("Invalid form: " + err));
-
-
-        var langServiceResponseOkElmValue =
-            ElmValueEncoding.PineValueAsElmValue(langServiceResponseOk, null, null)
-            .Extract(err => throw new System.Exception("Failed to parse request response result: " + err));
-
-        if (langServiceResponseOkElmValue is not ElmValue.ElmTag responseTag)
-        {
-            throw new System.NotImplementedException(
-                "Unexpected response type: " + langServiceResponseOkElmValue.GetType());
-        }
-
-        var decodeResponseResult =
-            Interface.ResponseEncoding.Decode(langServiceResponseOk);
-
-        {
-            if (decodeResponseResult.IsErrOrNull() is { } err)
-            {
-                return
-                    "Failed to decode response: " + err;
+                    throw new System.Exception("Failed to handle request: " + err);
+                }
             }
-        }
 
-        if (decodeResponseResult.IsOkOrNull() is not { } decodedResponse)
-        {
-            throw new System.NotImplementedException(
-                "Unexpected response type: " + decodeResponseResult.GetType());
-        }
+            if (handleRequestResult.IsOkOrNull() is not { } handleRequestOk)
+            {
+                throw new System.NotImplementedException(
+                    "Unexpected handle request result type: " + handleRequestResult.GetType());
+            }
 
-        return decodedResponse;
+            if (handleRequestOk is not PineValue.ListValue handleRequestOkList)
+            {
+                throw new System.NotImplementedException(
+                    "Unexpected handle request result type: " + handleRequestOk.GetType());
+            }
+
+            if (handleRequestOkList.Elements.Count is not 2)
+            {
+                throw new System.NotImplementedException(
+                    "Unexpected handle request result length: " + handleRequestOkList.Elements.Count);
+            }
+
+            var requestResponseResultValue =
+                handleRequestOkList.Elements[0];
+
+            var langServiceStateValue =
+                handleRequestOkList.Elements[1];
+
+            state = langServiceStateValue;
+
+            var langServiceResponseOk =
+                ElmValueInterop.ParseElmResultValue(
+                    requestResponseResultValue,
+                    err: err =>
+                    {
+                        throw new System.Exception("Failed to parse request response result: " + err);
+                    },
+                    ok:
+                    ok => ok,
+                    invalid:
+                    err => throw new System.Exception("Invalid form: " + err));
+
+
+            var langServiceResponseOkElmValue =
+                ElmValueEncoding.PineValueAsElmValue(langServiceResponseOk, null, null)
+                .Extract(err => throw new System.Exception("Failed to parse request response result: " + err));
+
+            if (langServiceResponseOkElmValue is not ElmValue.ElmTag responseTag)
+            {
+                throw new System.NotImplementedException(
+                    "Unexpected response type: " + langServiceResponseOkElmValue.GetType());
+            }
+
+            var decodeResponseResult =
+                Interface.ResponseEncoding.Decode(langServiceResponseOk);
+
+            {
+                if (decodeResponseResult.IsErrOrNull() is { } err)
+                {
+                    return
+                        "Failed to decode response: " + err;
+                }
+            }
+
+            if (decodeResponseResult.IsOkOrNull() is not { } decodedResponse)
+            {
+                throw new System.NotImplementedException(
+                    "Unexpected response type: " + decodeResponseResult.GetType());
+            }
+
+            return decodedResponse;
+        }
     }
 
     public static PineValue EncodeFileTreeNodeAsPineValue(

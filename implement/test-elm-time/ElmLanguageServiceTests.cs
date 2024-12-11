@@ -1,5 +1,4 @@
 using Microsoft.VisualStudio.TestTools.UnitTesting;
-using Pine;
 using Pine.Core;
 using Pine.Core.PineVM;
 using Pine.Elm;
@@ -189,7 +188,7 @@ public class ElmLanguageServiceTests
             LanguageServiceState.InitLanguageServiceState(pineVM)
             .Extract(err => throw new Exception(err));
 
-        MutateServiceAddingFiles(mergedWorkspace, languageService, pineVM);
+        MutateServiceAddingFiles(mergedWorkspace, languageService);
 
         var hoverRequest =
             new Pine.Elm.LanguageServiceInterface.ProvideHoverRequestStruct(
@@ -210,8 +209,7 @@ public class ElmLanguageServiceTests
 
     private static void MutateServiceAddingFiles(
         TreeNodeWithStringPath fileTree,
-        LanguageServiceState languageServiceState,
-        IPineVM pineVM)
+        LanguageServiceState languageServiceState)
     {
 
         foreach (var file in fileTree.EnumerateBlobsTransitive())
@@ -226,8 +224,7 @@ public class ElmLanguageServiceTests
                     FilePath: file.path,
                     Blob: new Pine.Elm.LanguageServiceInterface.FileTreeBlobNode(
                         AsBase64: asBase64,
-                        AsText: asText)),
-                pineVM);
+                        AsText: asText)));
 
             if (addFileResult.IsErrOrNull() is { } err)
                 throw new Exception(err);
@@ -260,7 +257,7 @@ public class ElmLanguageServiceTests
                 filePathOpenedInEditor,
                 new TreeNodeWithStringPath.BlobNode(Encoding.UTF8.GetBytes(elmModuleTextBefore)));
 
-        MutateServiceAddingFiles(mergedWorkspaceBefore, languageService, pineVM);
+        MutateServiceAddingFiles(mergedWorkspaceBefore, languageService);
 
         var elmModuleText =
             beforeCursor + afterCursor;
