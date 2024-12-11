@@ -7,7 +7,7 @@ namespace Pine.Core.LanguageServerProtocol;
 /// </summary>
 public record ServerCapabilities(
     bool? DocumentFormattingProvider = null,
-    TextDocumentSyncKind? TextDocumentSync = null,
+    TextDocumentSyncOptions? TextDocumentSync = null,
     ServerCapabilitiesWorkspace? Workspace = null,
     bool? HoverProvider = null,
     CompletionOptions? CompletionProvider = null);
@@ -54,4 +54,20 @@ public record CompletionOptions(
     IReadOnlyList<string>? TriggerCharacters,
     IReadOnlyList<string>? AllCommitCharacters,
     bool? ResolveProvider);
+
+
+/// <summary>
+/// https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#textDocumentSyncOptions
+/// </summary>
+public record TextDocumentSyncOptions(
+    TextDocumentSyncKind? Change,
+    bool? WillSave,
+    bool? WillSaveWaitUntil,
+    SaveOptions? Save);
+
+/// <summary>
+/// https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#saveOptions
+/// </summary>
+public record SaveOptions(
+    bool? IncludeText);
 

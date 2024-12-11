@@ -7,12 +7,14 @@ public record ClientCapabilities(
     ClientCapabilitiesWorkspace? Workspace,
     TextDocumentClientCapabilities? TextDocument);
 
+
 /// <summary>
 /// https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#clientCapabilities
 /// </summary>
 public record ClientCapabilitiesWorkspace(
     DidChangeWatchedFilesClientCapabilities? DidChangeWatchedFiles,
     bool? WorkspaceFolders);
+
 
 /// <summary>
 /// https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#didChangeWatchedFilesClientCapabilities
@@ -21,11 +23,14 @@ public record DidChangeWatchedFilesClientCapabilities(
     bool? DynamicRegistration,
     bool? RelativePatternSupport);
 
+
 /// <summary>
 /// https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#textDocumentClientCapabilities
 /// </summary>
 public record TextDocumentClientCapabilities(
-    CompletionClientCapabilities? Completion);
+    CompletionClientCapabilities? Completion,
+    PublishDiagnosticsClientCapabilities? PublishDiagnostics);
+
 
 /// <summary>
 /// https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#completionClientCapabilities
@@ -43,4 +48,14 @@ public record CompletionClientCapabilitiesCompletionItem(
     bool? CommitCharactersSupport,
     bool? DeprecatedSupport,
     bool? PreselectSupport);
+
+
+/// <summary>
+/// https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#publishDiagnosticsClientCapabilities
+/// </summary>
+public record PublishDiagnosticsClientCapabilities(
+    bool? RelatedInformation,
+    bool? VersionSupport,
+    bool? CodeDescriptionSupport,
+    bool? DataSupport);
 

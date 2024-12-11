@@ -136,4 +136,37 @@ public record LanguageServerRpcTarget(
     {
         return Server.TextDocument_completion(positionParams);
     }
+
+
+    /// <summary>
+    /// https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#textDocument_didSave
+    /// </summary>
+    [JsonRpcMethod("textDocument/didSave", UseSingleObjectParameterDeserialization = true)]
+    public void TextDocument_didSave(DidSaveTextDocumentParams didSaveParams)
+    {
+        Server.TextDocument_didSave(
+            didSaveParams,
+            publishDiagnostics:
+            (documentId, diagnostics) => PublishDiagnosticsAsync(documentId.Uri, diagnostics));
+    }
+
+    public async Task PublishDiagnosticsAsync(string documentUri, IReadOnlyList<Diagnostic> diagnostics)
+    {
+        if (JsonRpc is not { } jsonRpc)
+        {
+            Log("Failed to publish diagnostics: JsonRpc is null");
+            return;
+        }
+
+        var parameters = new PublishDiagnosticsParams
+        (
+            Uri: documentUri,
+            Diagnostics: diagnostics,
+            Version: null
+        );
+
+        Log($"Publishing {diagnostics.Count} diagnostics for {documentUri}");
+
+        await jsonRpc.NotifyAsync("textDocument/publishDiagnostics", parameters);
+    }
 }

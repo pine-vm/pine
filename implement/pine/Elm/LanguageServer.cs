@@ -6,13 +6,18 @@ using Pine.Core.PineVM;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.InteropServices;
 using Pine.PineVM;
+using Pine.Elm019;
+using System.Collections.Immutable;
 
 namespace Pine.Elm;
 
 public class LanguageServer(
     System.Action<string>? logDelegate)
 {
+    private readonly ConcurrentDictionary<string, string> allSeenDocumentUris = new();
+
     private readonly ConcurrentDictionary<string, string> clientTextDocumentContents = new();
 
     private IReadOnlyList<WorkspaceFolder> workspaceFolders = [];
@@ -92,7 +97,12 @@ public class LanguageServer(
         (
             Capabilities: new ServerCapabilities
             {
-                TextDocumentSync = TextDocumentSyncKind.Full,
+                TextDocumentSync =
+                new TextDocumentSyncOptions(
+                    Change: TextDocumentSyncKind.Full,
+                    WillSave: null,
+                    WillSaveWaitUntil: null,
+                    Save: new SaveOptions(IncludeText: true)),
 
                 DocumentFormattingProvider = true,
                 HoverProvider = true,
@@ -299,6 +309,8 @@ public class LanguageServer(
         Log("TextDocument_didOpen: " + decodedUri);
 
         clientTextDocumentContents[decodedUri] = textDocument.Text;
+
+        allSeenDocumentUris[decodedUri] = decodedUri;
     }
 
     public void TextDocument_didChange(
@@ -608,7 +620,7 @@ public class LanguageServer(
     }
 
     public CompletionItem[] TextDocument_completion(
-    TextDocumentPositionParams positionParams)
+        TextDocumentPositionParams positionParams)
     {
         var textDocumentUri = System.Uri.UnescapeDataString(positionParams.TextDocument.Uri);
 
@@ -680,6 +692,282 @@ public class LanguageServer(
                 Deprecated: null,
                 CommitCharacters: null))
             ];
+    }
+
+    public void TextDocument_didSave(
+        DidSaveTextDocumentParams didSaveParams,
+        System.Action<TextDocumentIdentifier, IReadOnlyList<Diagnostic>> publishDiagnostics)
+    {
+        var textDocumentUri = System.Uri.UnescapeDataString(didSaveParams.TextDocument.Uri);
+
+        allSeenDocumentUris[textDocumentUri] = textDocumentUri;
+
+        Log("TextDocument_didSave: " + textDocumentUri);
+
+        if (didSaveParams.Text is { } text)
+        {
+            clientTextDocumentContents[textDocumentUri] = text;
+        }
+
+        var localPathResult = DocumentUriAsLocalPath(textDocumentUri);
+        {
+            if (localPathResult.IsErrOrNull() is { } err)
+            {
+                Log("Ignoring URI: " + err + ": " + textDocumentUri);
+                return;
+            }
+        }
+
+        if (localPathResult.IsOkOrNull() is not { } localPath)
+        {
+            throw new System.NotImplementedException(
+                "Unexpected result type: " + localPathResult.GetType());
+        }
+
+        var elmJsonFilePath =
+            FindElmJsonFile(localPath) ?? initializeParams?.RootPath;
+
+        if (elmJsonFilePath is null)
+        {
+            Log("Failed to find elm.json file for " + textDocumentUri);
+            return;
+        }
+
+        var workingDirectoryAbsolute =
+            System.IO.Path.GetDirectoryName(elmJsonFilePath);
+
+        if (workingDirectoryAbsolute is null)
+        {
+            Log("Failed to get elm.json directory for " + textDocumentUri);
+            return;
+        }
+
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+
+        Log("Begin elm make for " + textDocumentUri);
+
+        var elmMakeOutput =
+            ElmMake(
+                workingDirectoryAbsolute: workingDirectoryAbsolute,
+                pathToFileWithElmEntryPoint: localPath);
+
+        Log("Completed elm make for " + textDocumentUri + " in " +
+            CommandLineInterface.FormatIntegerForDisplay(clock.ElapsedMilliseconds) + " ms");
+
+        Log("elm make exit code: " + elmMakeOutput.ExitCode);
+        Log("elm make output: " + elmMakeOutput.StandardOutput);
+        Log("elm make error: " + elmMakeOutput.StandardError);
+
+        if (elmMakeOutput.ExitCode is 0)
+        {
+            publishDiagnostics(
+                new TextDocumentIdentifier(didSaveParams.TextDocument.Uri),
+                []);
+
+            return;
+        }
+
+        var parseReportResult =
+            ParseReportFromElmMake(elmMakeOutput.StandardError);
+
+        {
+            if (parseReportResult.IsErrOrNull() is { } err)
+            {
+                Log("Failed to parse elm make report: " + err);
+                return;
+            }
+        }
+
+        if (parseReportResult.IsOkOrNull() is not { } parseReportOk)
+        {
+            throw new System.NotImplementedException(
+                "Unexpected result type: " + parseReportResult.GetType());
+        }
+
+        if (parseReportOk is ElmMakeReport.ElmMakeReportError generalError)
+        {
+            Log("Elm make general error: " + generalError.Message);
+
+            return;
+        }
+
+        if (parseReportOk is ElmMakeReport.ElmMakeReportCompileErrors compileErrors)
+        {
+            var errorsByPath =
+                compileErrors.Errors
+                .GroupBy(error => error.Path)
+                .ToDictionary(group => group.Key, group => group.ToList());
+
+            foreach (var (path, errors) in errorsByPath)
+            {
+                var pathErrors =
+                    errors
+                    .SelectMany(error => error.Problems)
+                    .ToImmutableArray();
+
+                Log("Elm make errors for " + path + ": " + pathErrors.Length);
+
+                var correspondingUri =
+                    allSeenDocumentUris
+                    .FirstOrDefault(uri => DocumentUriAsLocalPath(uri.Value).WithDefault(null) == path).Key;
+
+                if (correspondingUri is null)
+                {
+                    Log("No corresponding URI for " + path);
+                }
+
+                IReadOnlyList<Diagnostic> diagnostics =
+                    [..pathErrors
+                    .Select(problem =>
+                        new Diagnostic(
+                            Range: new Range(
+                                Start: new Position(
+                                    Line: (uint)problem.Region.Start.Line - 1,
+                                    Character: (uint)problem.Region.Start.Column - 1),
+                                End: new Position(
+                                    Line: (uint)problem.Region.End.Line - 1,
+                                    Character: (uint)problem.Region.End.Column - 1)),
+                            Severity: DiagnosticSeverity.Error,
+                            Code: null,
+                            Source: "elm make",
+                            Message: string.Join("", problem.Message.Select(MessageItemToString)),
+                            CodeDescription: null,
+                            Tags: null,
+                            RelatedInformation: null))
+                    ];
+
+                publishDiagnostics(
+                    new TextDocumentIdentifier(didSaveParams.TextDocument.Uri),
+                    diagnostics);
+            }
+        }
+    }
+
+    public static string MessageItemToString(MessageItem messageItem)
+    {
+        if (messageItem is MessageItem.StringMessage stringMessage)
+        {
+            return stringMessage.Value;
+        }
+
+        if (messageItem is MessageItem.StyledMessage styledMessage)
+        {
+            return styledMessage.String;
+        }
+
+        throw new System.NotImplementedException(
+            "Unexpected message item type: " + messageItem.GetType());
+    }
+
+    public static Result<string, ElmMakeReport> ParseReportFromElmMake(string elmMakeOutput)
+    {
+        try
+        {
+            var elmMakeReport =
+                ElmMakeReportConverter.Deserialize(elmMakeOutput);
+
+            return elmMakeReport;
+        }
+        catch (System.Exception e)
+        {
+            return "Failed to parse elm make report: " + e;
+        }
+    }
+
+    /// <summary>
+    /// Use the 'elm make' command on the Elm executable file.
+    /// </summary>
+    public static ExecutableFile.ProcessOutput ElmMake(
+        string workingDirectoryAbsolute,
+        string pathToFileWithElmEntryPoint)
+    {
+        var arguments =
+            string.Join(" ", ["make", pathToFileWithElmEntryPoint, "--report=json  --output=/dev/null"]);
+
+        var executableFile =
+            BlobLibrary.LoadFileForCurrentOs(ElmTime.Elm019.Elm019Binaries.ElmExecutableFileByOs)
+            ??
+            throw new System.Exception("Failed to load elm-format executable file");
+
+        if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+        {
+            System.IO.File.SetUnixFileMode(
+                executableFile.cacheFilePath,
+                ExecutableFile.UnixFileModeForExecutableFile);
+        }
+
+        var process = new System.Diagnostics.Process
+        {
+            StartInfo = new System.Diagnostics.ProcessStartInfo
+            {
+                WorkingDirectory = workingDirectoryAbsolute,
+                FileName = executableFile.cacheFilePath,
+                Arguments = arguments,
+                UseShellExecute = false,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                CreateNoWindow = true,
+            },
+        };
+
+
+        //  Avoid elm make failing on `getAppUserDataDirectory`.
+        /* Also, work around problems with elm make like this:
+        -- HTTP PROBLEM ----------------------------------------------------------------
+
+        The following HTTP request failed:
+            <https://github.com/elm/core/zipball/1.0.0/>
+
+        Here is the error message I was able to extract:
+
+        HttpExceptionRequest Request { host = "github.com" port = 443 secure = True
+        requestHeaders = [("User-Agent","elm/0.19.0"),("Accept-Encoding","gzip")]
+        path = "/elm/core/zipball/1.0.0/" queryString = "" method = "GET" proxy =
+        Nothing rawBody = False redirectCount = 10 responseTimeout =
+        ResponseTimeoutDefault requestVersion = HTTP/1.1 } (StatusCodeException
+        (Response {responseStatus = Status {statusCode = 429, statusMessage = "Too
+        Many Requests"}, responseVersion = HTTP/1.1, responseHeaders =
+        [("Server","GitHub.com"),("Date","Sun, 18 Nov 2018 16:53:18
+        GMT"),("Content-Type","text/html"),("Transfer-Encoding","chunked"),("Status","429
+        Too Many
+        Requests"),("Retry-After","120")
+
+        To avoid elm make failing with this error, break isolation here and reuse elm home directory.
+        An alternative would be retrying when this error is parsed from `commandResults.processOutput.StandardError`.
+        */
+        process.StartInfo.Environment["ELM_HOME"] = ElmTime.Elm019.Elm019Binaries.GetElmHomeDirectory();
+
+        process.Start();
+        var standardOutput = process.StandardOutput.ReadToEnd();
+        var standardError = process.StandardError.ReadToEnd();
+
+        process.WaitForExit();
+        var exitCode = process.ExitCode;
+        process.Close();
+
+        return new ExecutableFile.ProcessOutput(
+            StandardError: standardError,
+            StandardOutput: standardOutput,
+            ExitCode: exitCode);
+    }
+
+    public static string? FindElmJsonFile(string elmModuleFilePath)
+    {
+        var directoryName = System.IO.Path.GetDirectoryName(elmModuleFilePath);
+
+        while (directoryName is not null)
+        {
+            var elmJsonFilePath = System.IO.Path.Combine(directoryName, "elm.json");
+
+            if (System.IO.File.Exists(elmJsonFilePath))
+            {
+                return elmJsonFilePath;
+            }
+
+            directoryName = System.IO.Path.GetDirectoryName(directoryName);
+        }
+
+        return null;
     }
 
     static IReadOnlyList<string> PathItemsFromFlatPath(string path)
