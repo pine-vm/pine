@@ -13,32 +13,6 @@ public class ReusedInstancesTests
         ReusedInstances.Instance.AssertReferenceEquality();
     }
 
-    [TestMethod]
-    public void Embedded_precompiled_pine_value_lists()
-    {
-        var fromFreshBuild =
-            ReusedInstances.BuildPineListValueReusedInstances(
-                ReusedInstances.ExpressionsSource());
-
-        var fromFreshBuildListValues =
-            ReusedInstances.BuildListValuesFromBundledListValues(
-                fromFreshBuild.PineValueLists);
-
-        var file =
-            ReusedInstances.BuildPrecompiledDictFile(fromFreshBuild);
-
-        var parsedFile =
-            ReusedInstances.LoadFromPrebuiltJson(file);
-
-        AssertPineValueListDictsAreEquivalent(
-            parsedFile.PineValueLists,
-            fromFreshBuild.PineValueLists);
-
-        AssertPineValueListDictsAreEquivalent(
-            ReusedInstances.Instance.ListValues,
-            fromFreshBuildListValues);
-    }
-
     public static void AssertPineValueListDictsAreEquivalent(
         IReadOnlyDictionary<PineValue.ListValue.ListValueStruct, PineValue.ListValue> a,
         IReadOnlyDictionary<PineValue.ListValue.ListValueStruct, PineValue.ListValue> b)

@@ -28,6 +28,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\pine\pine.csproj" />
+    <ProjectReference Include="..\PineTest\Pine.UnitTests\Pine.UnitTests.csproj" />
   </ItemGroup>
 
   <ItemGroup>

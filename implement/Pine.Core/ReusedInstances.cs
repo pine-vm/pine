@@ -123,7 +123,9 @@ public record ReusedInstances(
         {
             System.Console.WriteLine("Failed loading from embedded resource: " + err);
 
-            return BuildPineListValueReusedInstances(loadExpressionRootsSource());
+            return BuildPineListValueReusedInstances(
+                loadExpressionRootsSource(),
+                additionalRoots: []);
         });
 
     public static Result<string, PineListValueReusedInstances> LoadEmbeddedPrebuilt(
@@ -217,7 +219,8 @@ public record ReusedInstances(
         IReadOnlyDictionary<PineValue.ListValue.ListValueStruct, PineValue.ListValue> PineValueLists);
 
     public static PineListValueReusedInstances BuildPineListValueReusedInstances(
-        IEnumerable<Expression> expressionRootsSource)
+        IEnumerable<Expression> expressionRootsSource,
+        IEnumerable<PineValue> additionalRoots)
     {
         var rowStringValue =
             PineValueAsString.ValueFromString("row");
@@ -289,7 +292,8 @@ public record ReusedInstances(
             var (allListsComponents, _) =
                 PineValue.CollectAllComponentsFromRoots(
                     valuesExpectedInCompilerLists
-                    .Concat(tempElmValueEncodingDict.Values));
+                    .Concat(tempElmValueEncodingDict.Values)
+                    .Concat(additionalRoots));
 
             var allListsComponentsSorted =
                 allListsComponents

@@ -468,6 +468,73 @@ public static class PopularValues
         "Leaf",
         "Branch2",
 
+        // module LanguageService
+
+        "LanguageService",
+        "LanguageServiceState",
+
+        "filePath",
+        "text",
+        "parsedFile",
+        "syntax",
+
+        "DeclarationScope",
+        "TopLevelScope",
+        "LocalScope",
+
+        "Declaration",
+        "FunctionOrValueDeclaration",
+        "TypeAliasDeclaration",
+        "ChoiceTypeDeclaration",
+
+        "LocationUnderFilePath",
+        "CookedDocumentation",
+        "Range",
+
+        // module Frontend.MonacoEditor
+
+        "EditorMarkerSeverity",
+        "ErrorSeverity",
+        "WarningSeverity",
+        "InfoSeverity",
+        "HintSeverity",
+
+        "MonacoCompletionItem",
+        "label",
+        "kind",
+        "detail",
+        "documentation",
+        "sortText",
+        "filterText",
+        "insertText",
+        "range",
+        "commitCharacters",
+        "additionalTextEdits",
+        "command",
+        "data",
+
+        "MonacoCompletionItemKind",
+        "ConstructorCompletionItemKind",
+        "EnumCompletionItemKind",
+        "EnumMemberCompletionItemKind",
+        "FunctionCompletionItemKind",
+        "ModuleCompletionItemKind",
+        "StructCompletionItemKind",
+
+        "MonacoLocation",
+        "uri",
+        "range",
+
+        "MonacoPosition",
+        "lineNumber",
+        "column",
+
+        "MonacoRange",
+        "startLineNumber",
+        "startColumn",
+        "endLineNumber",
+        "endColumn",
+
     ];
 
     public static IEnumerable<ElmValue> PopularElmValuesSource()

@@ -1,6 +1,7 @@
 using Pine.Core;
 using Pine.Core.Elm;
 using Pine.Elm;
+using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 
@@ -18,9 +19,22 @@ public class Program
         System.Console.WriteLine(
             "Current working directory: " + System.Environment.CurrentDirectory);
 
+        BuildAndSaveValueDictionary(
+            additionalRoots: []);
+
+        var elmCompilerValue = BundleElmCompiler();
+
+        BuildAndSaveValueDictionary(
+            additionalRoots: [elmCompilerValue]);
+    }
+
+    public static void BuildAndSaveValueDictionary(
+        IEnumerable<PineValue> additionalRoots)
+    {
         var fromFreshBuild =
             ReusedInstances.BuildPineListValueReusedInstances(
-                ReusedInstances.ExpressionsSource());
+                ReusedInstances.ExpressionsSource(),
+                additionalRoots: additionalRoots);
 
         var file =
             ReusedInstances.BuildPrecompiledDictFile(fromFreshBuild);
@@ -40,9 +54,8 @@ public class Program
 
         System.Console.WriteLine(
             "Saved the prebuilt dictionary with " +
-            fromFreshBuild.PineValueLists.Count + " list values to " + absolutePath);
-
-        BundleElmCompiler();
+            CommandLineInterface.FormatIntegerForDisplay(fromFreshBuild.PineValueLists.Count) +
+            " list values to " + absolutePath);
     }
 
     public static ElmCompiler LoadPreviousCompiler()
@@ -68,7 +81,7 @@ public class Program
             .Extract(err => throw new System.Exception(err));
     }
 
-    public static void BundleElmCompiler()
+    public static PineValue BundleElmCompiler()
     {
         var previousCompiler = LoadPreviousCompiler();
 
@@ -120,6 +133,8 @@ public class Program
             BundledElmEnvironments.CompressAndWriteBundleFile(
                 ImmutableDictionary<TreeNodeWithStringPath, PineValue>.Empty
                 .SetItem(elmCompilerSource, elmCompilerSecond.CompilerEnvironment));
+
+            return elmCompilerSecond.CompilerEnvironment;
         }
         else
         {
@@ -156,6 +171,24 @@ public class Program
             System.Console.WriteLine("Read " + fileContent.Length + " bytes from compact-build.json");
 
             BundledElmEnvironments.CompressAndWriteBundleFile(fileContent);
+
+            var loadResult =
+                BundledElmEnvironments.LoadBundledCompiledEnvironments(
+                    new System.IO.MemoryStream(fileContent),
+                    gzipDecompress: false);
+
+            if (loadResult.IsErrOrNull() is { } err)
+            {
+                throw new System.Exception(err);
+            }
+
+            if (loadResult.IsOkOrNull() is not { } loadOk)
+            {
+                throw new System.Exception(
+                    "Unexpected result type: " + loadResult);
+            }
+
+            return loadOk.First().Value;
         }
     }
 }

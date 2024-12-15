@@ -100,6 +100,15 @@ public abstract record PineValue : IEquatable<PineValue>
         [..Enumerable.Range(0, 0x1_00_00)
         .Select(i => new BlobValue(new byte[] { 4, (byte)(i >> 8), (byte)(i & 0xff) }))];
 
+    public static BlobValue ReusedBlobTupleFromBytes(byte first, byte second) =>
+        ReusedBlobTuple[first * 256 + second];
+
+    public static BlobValue ReusedBlobInteger3ByteNegativeFromBytes(byte second, byte third) =>
+        ReusedBlobInteger3ByteNegative[second * 256 + third];
+
+    public static BlobValue ReusedBlobInteger3BytePositiveFromBytes(byte second, byte third) =>
+        ReusedBlobInteger3BytePositive[second * 256 + third];
+
     public static readonly FrozenSet<BlobValue> ReusedBlobs =
         new HashSet<BlobValue>(
             [EmptyBlob,

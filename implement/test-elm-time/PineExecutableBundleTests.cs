@@ -1,4 +1,6 @@
 using Microsoft.VisualStudio.TestTools.UnitTesting;
+using Pine.Core;
+using Pine.UnitTests;
 
 namespace TestElmTime;
 
@@ -100,6 +102,37 @@ public class PineExecutableBundleTests
     }
 
     [TestMethod]
+    public void Embedded_precompiled_pine_value_lists()
+    {
+        var elmCompilerValue =
+            BundledElmCompilerValue()
+            ?? throw new System.Exception("Elm compiler value not found in bundled environments");
+
+        var fromFreshBuild =
+            ReusedInstances.BuildPineListValueReusedInstances(
+                ReusedInstances.ExpressionsSource(),
+                additionalRoots: [elmCompilerValue]);
+
+        var fromFreshBuildListValues =
+            ReusedInstances.BuildListValuesFromBundledListValues(
+                fromFreshBuild.PineValueLists);
+
+        var file =
+            ReusedInstances.BuildPrecompiledDictFile(fromFreshBuild);
+
+        var parsedFile =
+            ReusedInstances.LoadFromPrebuiltJson(file);
+
+        ReusedInstancesTests.AssertPineValueListDictsAreEquivalent(
+            parsedFile.PineValueLists,
+            fromFreshBuild.PineValueLists);
+
+        ReusedInstancesTests.AssertPineValueListDictsAreEquivalent(
+            ReusedInstances.Instance.ListValues,
+            fromFreshBuildListValues);
+    }
+
+    [TestMethod]
     public void Bundled_Elm_kernel_module_sources_equal()
     {
         /*
@@ -110,5 +143,20 @@ public class PineExecutableBundleTests
          * */
 
         // TODO
+    }
+
+
+    public static PineValue? BundledElmCompilerValue()
+    {
+        var compilerSourceFiles =
+            Pine.Elm.ElmCompiler.CompilerSourceFilesDefault.Value;
+
+        var combinedSourceFiles =
+            Pine.Elm.ElmCompiler.ElmCompilerFileTreeFromBundledFileTree(compilerSourceFiles);
+
+        var elmCompilerFromBundleValue =
+            Pine.Core.Elm.BundledElmEnvironments.BundledElmEnvironmentFromFileTree(combinedSourceFiles);
+
+        return elmCompilerFromBundleValue;
     }
 }

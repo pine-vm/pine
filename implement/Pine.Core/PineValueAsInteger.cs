@@ -35,8 +35,41 @@ public static class PineValueAsInteger
         return Result<string, ReadOnlyMemory<byte>>.ok(array);
     }
 
-    public static PineValue ValueFromSignedInteger(System.Numerics.BigInteger integer) =>
-        PineValue.Blob(BlobValueFromSignedInteger(integer));
+    public static PineValue ValueFromSignedInteger(System.Numerics.BigInteger integer)
+    {
+        var absoluteValue = System.Numerics.BigInteger.Abs(integer);
+
+        var signByte =
+            (byte)(absoluteValue == integer ? 4 : 2);
+
+        Span<byte> absoluteBuffer = stackalloc byte[64];
+
+        absoluteBuffer[0] = signByte;
+
+        if (absoluteValue.TryWriteBytes(absoluteBuffer[1..], out var bytesWritten, isUnsigned: true, isBigEndian: true))
+        {
+            if (bytesWritten is 1)
+            {
+                return PineValue.ReusedBlobTupleFromBytes(signByte, absoluteBuffer[1]);
+            }
+
+            if (bytesWritten is 2)
+            {
+                if (signByte is 2)
+                {
+                    return PineValue.ReusedBlobInteger3ByteNegativeFromBytes(absoluteBuffer[1], absoluteBuffer[2]);
+                }
+                else
+                {
+                    return PineValue.ReusedBlobInteger3BytePositiveFromBytes(absoluteBuffer[1], absoluteBuffer[2]);
+                }
+            }
+
+            return PineValue.Blob(absoluteBuffer[..(1 + bytesWritten)].ToArray());
+        }
+
+        return PineValue.Blob(BlobValueFromSignedInteger(integer));
+    }
 
     public static ReadOnlyMemory<byte> BlobValueFromSignedInteger(System.Numerics.BigInteger integer)
     {
