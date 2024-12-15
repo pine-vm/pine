@@ -236,13 +236,19 @@ string (String chars) =
 
 encodeCharsAsBlob : List Char -> Int
 encodeCharsAsBlob chars =
-    if chars == [] then
-        -- 'concat' on an empty list would not yield a blob
-        emptyBlob
+    encodeCharsAsBlobHelp emptyBlob chars
 
-    else
-        Pine_kernel.concat
-            (List.map encodeCharAsBlob chars)
+
+encodeCharsAsBlobHelp : Int -> List Char -> Int
+encodeCharsAsBlobHelp acc chars =
+    case chars of
+        [] ->
+            acc
+
+        char :: rest ->
+            encodeCharsAsBlobHelp
+                (Pine_kernel.concat [ acc, encodeCharAsBlob char ])
+                rest
 
 
 encodeCharAsBlob : Char -> Int

@@ -181,6 +181,8 @@ public class Precompiled
 
         var compareExposedValue = popularValueDictionary["Basics.compare.exposed"];
 
+        var idivExposedValue = popularValueDictionary["Basics.idiv.exposed"];
+
 
         var assocListGetExpression = popularExpressionDictionary["assocListGet"];
 
@@ -426,6 +428,33 @@ public class Precompiled
         }
 
         {
+            var listFilterMapHelpExpression =
+                popularExpressionDictionary["List.filterMapHelp"];
+
+            var listFilterMapHelpExpressionValue =
+                ExpressionEncoding.EncodeExpressionAsValue(listFilterMapHelpExpression);
+
+            var listFilterMapEnvClass =
+                EnvConstraintId.Create(
+                    [
+                    new KeyValuePair<IReadOnlyList<int>, PineValue>(
+                    [0],
+                    PineValue.List(
+                        [
+                        adaptivePartialApplicationExpressionValue,
+                        listFilterMapHelpExpressionValue,
+                        ]))
+                    ]);
+
+            yield return
+                new KeyValuePair<Expression, IReadOnlyList<PrecompiledEntry>>(
+                    listFilterMapHelpExpression,
+                    [new PrecompiledEntry(
+                        listFilterMapEnvClass,
+                        ListFilterMapHelp)]);
+        }
+
+        {
             var listAllEnvClass =
                 EnvConstraintId.Create(
                     [
@@ -479,6 +508,28 @@ public class Precompiled
                     [new PrecompiledEntry(
                         stringSliceEnvClass,
                         StringSlice)]);
+        }
+
+        {
+            var stringLinesHelperExpression = popularExpressionDictionary["String.linesHelper"];
+
+            var stringLinesHelperExpressionValue =
+                ExpressionEncoding.EncodeExpressionAsValue(stringLinesHelperExpression);
+
+            var stringLinesHelperEnvClass =
+                EnvConstraintId.Create(
+                    [
+                    new KeyValuePair<IReadOnlyList<int>, PineValue>(
+                    [0, 0],
+                    stringLinesHelperExpressionValue)
+                    ]);
+
+            yield return
+                new KeyValuePair<Expression, IReadOnlyList<PrecompiledEntry>>(
+                    stringLinesHelperExpression,
+                    [new PrecompiledEntry(
+                        stringLinesHelperEnvClass,
+                        StringLinesHelper)]);
         }
 
         {
@@ -986,6 +1037,41 @@ public class Precompiled
                         envClass,
                         CharIsUpper)]);
         }
+
+        {
+            var encodeCharAsBlobExpression =
+                popularExpressionDictionary["Bytes.Encode.encodeCharAsBlob"];
+
+            var encodeCharAsBlobExpressionValue =
+                ExpressionEncoding.EncodeExpressionAsValue(encodeCharAsBlobExpression);
+
+            var encodeCharsAsBlobHelpExpression =
+                popularExpressionDictionary["Bytes.Encode.encodeCharsAsBlobHelp"];
+
+            var encodeCharsAsBlobHelpExpressionValue =
+                ExpressionEncoding.EncodeExpressionAsValue(encodeCharsAsBlobHelpExpression);
+
+            var envClass =
+                EnvConstraintId.Create(
+                    [
+                    new KeyValuePair<IReadOnlyList<int>, PineValue>(
+                    [0, 0],
+                    encodeCharAsBlobExpressionValue),
+                    new KeyValuePair<IReadOnlyList<int>, PineValue>(
+                    [0, 1],
+                    idivExposedValue),
+                    new KeyValuePair<IReadOnlyList<int>, PineValue>(
+                    [0, 2],
+                    encodeCharsAsBlobHelpExpressionValue),
+                    ]);
+
+            yield return
+                new KeyValuePair<Expression, IReadOnlyList<PrecompiledEntry>>(
+                    encodeCharsAsBlobHelpExpression,
+                    [PrecompiledEntry.FinalValueForAnyEnvironment(
+                        envClass,
+                        BytesEncode_encodeCharsAsBlobHelp)]);
+        }
     }
 
     static PineValue RopePrependTo(
@@ -1106,6 +1192,203 @@ public class Precompiled
             PineVMValues.TrueValue
             :
             PineVMValues.FalseValue;
+    }
+
+    static PineValue BytesEncode_encodeCharsAsBlobHelp(
+        PineValue environment,
+        PineVMParseCache parseCache)
+    {
+        /*
+        encodeCharsAsBlobHelp : Int -> List Char -> Int
+        encodeCharsAsBlobHelp acc chars =
+            case chars of
+                [] ->
+                    acc
+
+                char :: rest ->
+                    encodeCharsAsBlobHelp
+                        (Pine_kernel.concat [ acc, encodeCharAsBlob char ])
+                        rest
+
+
+        encodeCharAsBlob : Char -> Int
+        encodeCharAsBlob char =
+            let
+                code =
+                    Char.toCode char
+            in
+            if Pine_kernel.int_is_sorted_asc [ code, 0x7F ] then
+                -- 1-byte encoding
+                char
+
+            else if Pine_kernel.int_is_sorted_asc [ code, 0x07FF ] then
+                -- 2-byte encoding
+                let
+                    byte1 =
+                        Pine_kernel.bit_or
+                            [ 0xC0
+                            , code // 64
+                            ]
+
+                    byte2 =
+                        Pine_kernel.bit_or
+                            [ maskSingleByteMSB
+                            , Pine_kernel.bit_and [ 63, code ]
+                            ]
+                in
+                Pine_kernel.concat
+                    [ Pine_kernel.bit_and [ byte1, maskSingleByte ]
+                    , Pine_kernel.bit_and [ byte2, maskSingleByte ]
+                    ]
+
+            else if Pine_kernel.int_is_sorted_asc [ code, 0xFFFF ] then
+                -- 3-byte encoding
+                let
+                    byte1 =
+                        Pine_kernel.bit_or
+                            [ 0xE0
+                            , code // 4096
+                            ]
+
+                    byte2 =
+                        Pine_kernel.bit_or
+                            [ maskSingleByteMSB
+                            , Pine_kernel.bit_and [ 63, code // 64 ]
+                            ]
+
+                    byte3 =
+                        Pine_kernel.bit_or
+                            [ maskSingleByteMSB
+                            , Pine_kernel.bit_and [ 63, code ]
+                            ]
+                in
+                Pine_kernel.concat
+                    [ Pine_kernel.bit_and [ byte1, maskSingleByte ]
+                    , Pine_kernel.bit_and [ byte2, maskSingleByte ]
+                    , Pine_kernel.bit_and [ byte3, maskSingleByte ]
+                    ]
+
+            else
+                -- 4-byte encoding for code points >= 0x10000
+                let
+                    byte1 =
+                        Pine_kernel.bit_or
+                            [ Pine_kernel.bit_and [ 0xF0, maskSingleByte ]
+                            , code // 262144
+                            ]
+
+                    byte2 =
+                        Pine_kernel.bit_or
+                            [ maskSingleByteMSB
+                            , Pine_kernel.bit_and [ 63, code // 4096 ]
+                            ]
+
+                    byte3 =
+                        Pine_kernel.bit_or
+                            [ maskSingleByteMSB
+                            , Pine_kernel.bit_and [ 63, code // 64 ]
+                            ]
+
+                    byte4 =
+                        Pine_kernel.bit_or
+                            [ maskSingleByteMSB
+                            , Pine_kernel.bit_and [ 63, code ]
+                            ]
+                in
+                Pine_kernel.concat
+                    [ Pine_kernel.bit_and [ byte1, maskSingleByte ]
+                    , Pine_kernel.bit_and [ byte2, maskSingleByte ]
+                    , Pine_kernel.bit_and [ byte3, maskSingleByte ]
+                    , Pine_kernel.bit_and [ byte4, maskSingleByte ]
+                    ]
+
+         * */
+
+        var acc =
+            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 0]);
+
+        var chars =
+            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 1]);
+
+        if (chars == PineValue.EmptyList)
+        {
+            return acc;
+        }
+
+        if (chars is not PineValue.ListValue charsList)
+        {
+            return acc;
+        }
+
+        if (charsList.Elements.Count is 0)
+        {
+            return acc;
+        }
+
+        var accBlob =
+            acc as PineValue.BlobValue ?? PineValue.EmptyBlob;
+
+        var buffer = new byte[accBlob.Bytes.Length + charsList.Elements.Count * 4];
+
+        accBlob.Bytes.CopyTo(buffer);
+
+        int bytesWritten = accBlob.Bytes.Length;
+
+        for (var i = 0; i < charsList.Elements.Count; ++i)
+        {
+            var charValue = charsList.Elements[i];
+
+            if (charValue is not PineValue.BlobValue charBlob)
+            {
+                break;
+            }
+
+            var charCode =
+                charBlob.Bytes.Length is 1
+                ?
+                charBlob.Bytes.Span[0]
+                :
+                charBlob.Bytes.Length is 2
+                ?
+                (charBlob.Bytes.Span[0] << 8) |
+                charBlob.Bytes.Span[1]
+                :
+                charBlob.Bytes.Length is 3
+                ?
+                (charBlob.Bytes.Span[0] << 16) |
+                (charBlob.Bytes.Span[1] << 8) |
+                charBlob.Bytes.Span[2]
+                :
+                (charBlob.Bytes.Span[0] << 24) |
+                (charBlob.Bytes.Span[1] << 16) |
+                (charBlob.Bytes.Span[2] << 8) |
+                charBlob.Bytes.Span[3];
+
+            if (charCode <= 0x7F)
+            {
+                buffer[bytesWritten++] = (byte)charCode;
+            }
+            else if (charCode <= 0x7FF)
+            {
+                buffer[bytesWritten++] = (byte)(0xC0 | (charCode >> 6));
+                buffer[bytesWritten++] = (byte)(0x80 | (charCode & 0x3F));
+            }
+            else if (charCode <= 0xFFFF)
+            {
+                buffer[bytesWritten++] = (byte)(0xE0 | (charCode >> 12));
+                buffer[bytesWritten++] = (byte)(0x80 | ((charCode >> 6) & 0x3F));
+                buffer[bytesWritten++] = (byte)(0x80 | (charCode & 0x3F));
+            }
+            else
+            {
+                buffer[bytesWritten++] = (byte)(0xF0 | (charCode >> 18));
+                buffer[bytesWritten++] = (byte)(0x80 | ((charCode >> 12) & 0x3F));
+                buffer[bytesWritten++] = (byte)(0x80 | ((charCode >> 6) & 0x3F));
+                buffer[bytesWritten++] = (byte)(0x80 | (charCode & 0x3F));
+            }
+        }
+
+        return PineValue.Blob(buffer.AsMemory(0, bytesWritten));
     }
 
     static PineValue BasicsCompare(
@@ -2772,6 +3055,130 @@ public class Precompiled
                         Callback: step)));
     }
 
+    static Func<PrecompiledResult>? ListFilterMapHelp(
+        PineValue environment,
+        PineVMParseCache parseCache)
+    {
+        /*
+        filterMapHelp : (a -> Maybe b) -> List a -> List b -> List b
+        filterMapHelp f xs acc =
+            case xs of
+                [] ->
+                    Pine_kernel.reverse acc
+
+                x :: remaining ->
+                    case f x of
+                        Just value ->
+                            filterMapHelp f remaining (Pine_kernel.concat [ [ value ], acc ])
+
+                        Nothing ->
+                            filterMapHelp f remaining acc
+
+         * */
+
+        var argumentMapItem =
+            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 0]);
+
+        var argumentListValue =
+            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 1]);
+
+        var argumentAccumulated =
+            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 2]);
+
+        if (argumentListValue is not PineValue.ListValue itemsList)
+        {
+            return null;
+        }
+
+        var accumulatedReversed =
+            KernelFunction.reverse(argumentAccumulated);
+
+        if (itemsList.Elements.Count < 1)
+        {
+            return () => new PrecompiledResult.FinalValue(accumulatedReversed, StackFrameCount: 0);
+        }
+
+        if (ElmInteractiveEnvironment.ParseFunctionRecordFromValueTagged(argumentMapItem, parseCache)
+            is not Result<string, ElmInteractiveEnvironment.FunctionRecord>.Ok functionRecordOk)
+        {
+            return null;
+        }
+
+        var functionRecordRemainingParamCount =
+            functionRecordOk.Value.functionParameterCount -
+            functionRecordOk.Value.argumentsAlreadyCollected.Count;
+
+        if (functionRecordRemainingParamCount is not 1)
+        {
+            return null;
+        }
+
+        var environmentFunctionsEntry =
+            PineValue.List(functionRecordOk.Value.envFunctions);
+
+        PineValue environmentForItem(PineValue itemValue)
+        {
+            var argumentsList =
+                PineValue.List([.. functionRecordOk.Value.argumentsAlreadyCollected, itemValue]);
+
+            return
+                PineValue.List([environmentFunctionsEntry, argumentsList]);
+        }
+
+        var includedItems = new PineValue[itemsList.Elements.Count];
+
+        var itemIndex = 0;
+
+        var includedItemCount = 0;
+
+        PineVM.ApplyStepwise.StepResult step(PineValue itemResultValue)
+        {
+            var itemResultValueTag =
+                PineVM.ValueFromPathInValueOrEmptyList(itemResultValue, [0]);
+
+            if (itemResultValueTag == Tag_Just_Name_Value)
+            {
+                includedItems[includedItemCount] =
+                    PineVM.ValueFromPathInValueOrEmptyList(itemResultValue, [1, 0]);
+
+                ++includedItemCount;
+            }
+            else
+            {
+                if (itemResultValueTag != Tag_Nothing_Name_Value)
+                {
+                    throw new ParseExpressionException("Error in case-of block: No matching branch.");
+                }
+            }
+
+            ++itemIndex;
+
+            if (itemIndex < itemsList.Elements.Count)
+            {
+                return
+                    new PineVM.ApplyStepwise.StepResult.Continue(
+                        Expression: functionRecordOk.Value.innerFunction,
+                        EnvironmentValue: environmentForItem(itemsList.Elements[itemIndex]),
+                        Callback: step);
+            }
+
+            var resultValue =
+                KernelFunction.concat(
+                    [accumulatedReversed,
+                    PineValue.List(includedItems[..includedItemCount])]);
+
+            return new PineVM.ApplyStepwise.StepResult.Complete(resultValue);
+        }
+
+        return
+            () => new PrecompiledResult.StepwiseSpecialization(
+                new PineVM.ApplyStepwise(
+                    start:
+                    new PineVM.ApplyStepwise.StepResult.Continue(
+                        Expression: functionRecordOk.Value.innerFunction,
+                        EnvironmentValue: environmentForItem(itemsList.Elements[itemIndex]),
+                        Callback: step)));
+    }
 
     static Func<PrecompiledResult>? ListAll(
         PineValue environment,
@@ -3036,6 +3443,257 @@ public class Precompiled
                 StackFrameCount: 0);
 
         return () => finalValue;
+    }
+
+
+    static Func<PrecompiledResult>? StringLinesHelper(
+        PineValue environment,
+        PineVMParseCache parseCache)
+    {
+        /*
+        
+        linesHelper : Int -> List String -> Int -> List Char -> List String
+        linesHelper currentLineStart currentLines offset chars =
+            let
+                nextChar =
+                    Pine_kernel.head (Pine_kernel.skip [ offset, chars ])
+
+                nextTwoChars =
+                    Pine_kernel.take [ 2, Pine_kernel.skip [ offset, chars ] ]
+            in
+            if Pine_kernel.equal [ nextChar, [] ] then
+                let
+                    currentLineLength =
+                        Pine_kernel.int_add [ offset, -currentLineStart ]
+
+                    currentLineChars : List Char
+                    currentLineChars =
+                        Pine_kernel.take
+                            [ currentLineLength
+                            , Pine_kernel.skip [ currentLineStart, chars ]
+                            ]
+                in
+                Pine_kernel.concat
+                    [ currentLines
+                    , [ String (Pine_kernel.skip [ currentLineStart, chars ]) ]
+                    ]
+
+            else if Pine_kernel.equal [ nextTwoChars, [ '\u{000D}', '\n' ] ] then
+                let
+                    currentLineLength =
+                        Pine_kernel.int_add [ offset, -currentLineStart ]
+
+                    currentLineChars : List Char
+                    currentLineChars =
+                        Pine_kernel.take
+                            [ currentLineLength
+                            , Pine_kernel.skip [ currentLineStart, chars ]
+                            ]
+                in
+                linesHelper
+                    (Pine_kernel.int_add [ offset, 2 ])
+                    (Pine_kernel.concat [ currentLines, [ String currentLineChars ] ])
+                    (Pine_kernel.int_add [ offset, 2 ])
+                    chars
+
+            else if Pine_kernel.equal [ nextTwoChars, [ '\n', '\u{000D}' ] ] then
+                let
+                    currentLineLength =
+                        Pine_kernel.int_add [ offset, -currentLineStart ]
+
+                    currentLineChars : List Char
+                    currentLineChars =
+                        Pine_kernel.take
+                            [ currentLineLength
+                            , Pine_kernel.skip [ currentLineStart, chars ]
+                            ]
+                in
+                linesHelper
+                    (Pine_kernel.int_add [ offset, 2 ])
+                    (Pine_kernel.concat [ currentLines, [ String currentLineChars ] ])
+                    (Pine_kernel.int_add [ offset, 2 ])
+                    chars
+
+            else if Pine_kernel.equal [ nextChar, '\n' ] then
+                let
+                    currentLineLength =
+                        Pine_kernel.int_add [ offset, -currentLineStart ]
+
+                    currentLineChars : List Char
+                    currentLineChars =
+                        Pine_kernel.take
+                            [ currentLineLength
+                            , Pine_kernel.skip [ currentLineStart, chars ]
+                            ]
+                in
+                linesHelper
+                    (Pine_kernel.int_add [ offset, 1 ])
+                    (Pine_kernel.concat [ currentLines, [ String currentLineChars ] ])
+                    (Pine_kernel.int_add [ offset, 1 ])
+                    chars
+
+            else if Pine_kernel.equal [ nextChar, '\u{000D}' ] then
+                let
+                    currentLineLength =
+                        Pine_kernel.int_add [ offset, -currentLineStart ]
+
+                    currentLineChars : List Char
+                    currentLineChars =
+                        Pine_kernel.take
+                            [ currentLineLength
+                            , Pine_kernel.skip [ currentLineStart, chars ]
+                            ]
+                in
+                linesHelper
+                    (Pine_kernel.int_add [ offset, 1 ])
+                    (Pine_kernel.concat [ currentLines, [ String currentLineChars ] ])
+                    (Pine_kernel.int_add [ offset, 1 ])
+                    chars
+
+            else
+                linesHelper
+                    currentLineStart
+                    currentLines
+                    (Pine_kernel.int_add [ offset, 1 ])
+                    chars
+         * */
+
+        var currentLineStartValue =
+            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 0]);
+
+        var currentLinesValue =
+            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 1]);
+
+        var offsetValue =
+            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 2]);
+
+        var charsValue =
+            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 3]);
+
+        if (PineValueAsInteger.SignedIntegerFromValueRelaxed(currentLineStartValue).IsOkOrNullable() is not { } currentLineStart)
+        {
+            return null;
+        }
+
+        if (PineValueAsInteger.SignedIntegerFromValueRelaxed(offsetValue).IsOkOrNullable() is not { } offset)
+        {
+            return null;
+        }
+
+        if (charsValue is not PineValue.ListValue charsList)
+        {
+            return null;
+        }
+
+        int offsetInt = (int)offset;
+        int currentLineStartInt = (int)currentLineStart;
+
+        var linesValues = new List<PineValue>();
+
+        while (true)
+        {
+            var remainingCharsCount =
+                charsList.Elements.Count - offsetInt;
+
+            if (remainingCharsCount < 1)
+            {
+                break;
+            }
+
+            var nextChar = charsList.Elements[offsetInt];
+
+            if (nextChar is not PineValue.BlobValue nextCharBlob)
+            {
+                break;
+            }
+
+            if (nextCharBlob.Bytes.Length is not 1)
+            {
+                ++offsetInt;
+
+                continue;
+            }
+
+            var nextCharByte = nextCharBlob.Bytes.Span[0];
+
+            if (1 < remainingCharsCount)
+            {
+                var nextNextChar = charsList.Elements[offsetInt + 1];
+
+                if (nextNextChar is PineValue.BlobValue nextNextCharBlob &&
+                    nextNextCharBlob.Bytes.Length is 1)
+                {
+                    var nextNextCharByte = nextNextCharBlob.Bytes.Span[0];
+
+                    if (nextCharByte is 10 && nextNextCharByte is 13 ||
+                        nextCharByte is 13 && nextNextCharByte is 10)
+                    {
+                        var currentLineLength =
+                            offsetInt - currentLineStartInt;
+
+                        var currentLineChars =
+                            PineVM.FusedSkipAndTake(
+                                charsList,
+                                skipCount: currentLineStartInt,
+                                takeCount: currentLineLength);
+
+                        linesValues.Add(
+                            PineValue.List(
+                                [Tag_String_Value,
+                                    PineValue.List([currentLineChars])
+                                ]));
+
+                        offsetInt += 2;
+                        currentLineStartInt = offsetInt;
+
+                        continue;
+                    }
+                }
+            }
+
+            if (nextCharByte is 10 || nextCharByte is 13)
+            {
+                var currentLineLength =
+                    offsetInt - currentLineStartInt;
+
+                var currentLineChars =
+                    PineVM.FusedSkipAndTake(charsList, skipCount: currentLineStartInt, takeCount: currentLineLength);
+
+                linesValues.Add(
+                    PineValue.List(
+                        [Tag_String_Value,
+                        PineValue.List([currentLineChars])
+                        ]));
+
+                ++offsetInt;
+                currentLineStartInt = offsetInt;
+
+                continue;
+            }
+
+            ++offsetInt;
+        }
+
+        {
+            var currentLineLength = offsetInt - currentLineStartInt;
+
+            var currentLineChars =
+                PineVM.FusedSkipAndTake(
+                    charsList,
+                    skipCount: currentLineStartInt,
+                    takeCount: currentLineLength);
+
+            linesValues.Add(
+                PineValue.List(
+                    [Tag_String_Value,
+                    PineValue.List([currentLineChars])
+                    ]));
+        }
+
+        var finalValue =
+            KernelFunction.concat([currentLinesValue, PineValue.List(linesValues)]);
+
+        return () => new PrecompiledResult.FinalValue(finalValue, StackFrameCount: 0);
     }
 
     static Func<PrecompiledResult>? ParserFast_skipWhileWhitespaceHelp(
@@ -3650,6 +4308,9 @@ public class Precompiled
 
     private static readonly PineValue Tag_Nothing_Name_Value =
         PineValueAsString.ValueFromString("Nothing");
+
+    private static readonly PineValue Tag_Just_Name_Value =
+        PineValueAsString.ValueFromString("Just");
 
     private static readonly PineValue Tag_Branch2_Name_Value =
         PineValueAsString.ValueFromString("Branch2");
