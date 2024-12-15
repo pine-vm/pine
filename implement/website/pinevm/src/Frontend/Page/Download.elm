@@ -8,6 +8,8 @@ import FontAwesome
 import FontAwesome.Brands
 import Frontend.View as View
 import Frontend.Visuals as Visuals
+import Html
+import Html.Attributes
 
 
 type alias DownloadLinksByPlatform =
@@ -46,6 +48,11 @@ dockerImageUrl =
     "https://github.com/pine-vm/pine/pkgs/container/pine"
 
 
+vscodeMarketplaceUrl : String
+vscodeMarketplaceUrl =
+    "https://marketplace.visualstudio.com/items?itemName=Pine.pine"
+
+
 downloads : DownloadLinksByPlatform
 downloads =
     { linux = "https://github.com/pine-vm/pine/releases/download/v0.3.28/pine-bin-v0.3.28-linux-x64.zip"
@@ -70,7 +77,8 @@ view device =
     , [ [ Element.text "Docker Image "
         , FontAwesome.Brands.docker |> FontAwesome.view |> Element.html
         ]
-            |> Element.paragraph (Visuals.headingAttributes 2)
+            |> Element.paragraph
+                (Element.Font.center :: Visuals.headingAttributes 2)
       , [ Element.text "Official Pine Docker Image"
         , Element.text dockerImageUrl
         ]
@@ -89,7 +97,49 @@ view device =
       ]
         |> Element.column
             [ Element.width Element.fill
-            , Element.spacing (Visuals.defaultFontSize * 2)
+            , Element.spacing Visuals.defaultFontSize
+            ]
+    , [ [ Element.text "Visual Studio Code Extension "
+
+        -- , FontAwesome.Brands.microsoft |> FontAwesome.view |> Element.html
+        ]
+            |> Element.paragraph
+                (Element.Font.center :: Visuals.headingAttributes 2)
+      , Html.a
+            [ Html.Attributes.href vscodeMarketplaceUrl
+            ]
+            [ Html.img
+                [ Html.Attributes.src "https://img.shields.io/badge/VS%20Marketplace-Pine-blue?logo=visual-studio-code"
+                , Html.Attributes.alt "Install Pine extension from Visual Studio Marketplace"
+                ]
+                []
+            ]
+            |> Element.html
+            |> Element.el
+                [ Element.width Element.fill
+                , Element.alignTop
+                , Element.Font.center
+                ]
+      , [ Element.text "The Pine extension for Visual Studio Code integrates tools for developing with Elm, including formatting, code completion, error highlighting, and navigation features. Install it directly from the Marketplace using the link below."
+        ]
+            |> Element.paragraph []
+      , [ Element.text vscodeMarketplaceUrl ]
+            |> List.map
+                (\linkLabel ->
+                    Visuals.linkElementFromUrlAndLabel
+                        { url = vscodeMarketplaceUrl
+                        , labelElement = Element.paragraph [] [ linkLabel ]
+                        , newTabLink = False
+                        }
+                )
+            |> Element.column
+                [ Element.spacing (Visuals.defaultFontSize // 2)
+                , Element.width Element.fill
+                ]
+      ]
+        |> Element.column
+            [ Element.width Element.fill
+            , Element.spacing Visuals.defaultFontSize
             ]
     ]
         |> Element.column
