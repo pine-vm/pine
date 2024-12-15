@@ -40,6 +40,9 @@ public abstract record Request
 
     public record ProvideCompletionItemsRequest(ProvideCompletionItemsRequestStruct Request)
         : Request;
+
+    public record ProvideDefinitionRequest(ProvideHoverRequestStruct Request)
+        : Request;
 }
 
 public record ProvideHoverRequestStruct(
@@ -114,6 +117,13 @@ public static class RequestEncoding
                     "ProvideCompletionItemsRequest",
                     [
                         Encode(provideCompletionItemsRequest.Request)
+                    ]),
+
+            Request.ProvideDefinitionRequest provideDefinitionRequest =>
+                ElmValueEncoding.TagAsPineValue(
+                    "ProvideDefinitionRequest",
+                    [
+                        Encode(provideDefinitionRequest.Request)
                     ]),
 
             _ =>

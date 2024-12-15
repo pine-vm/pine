@@ -3,7 +3,7 @@
 	"displayName": "Pine",
 	"description": "Elm developer tools",
 	"license": "MIT",
-	"version": "0.1.2",
+	"version": "0.2.0",
 	"author": "Michael Rätzel",
 	"repository": {
 		"type": "git",

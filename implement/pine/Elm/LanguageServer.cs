@@ -113,6 +113,8 @@ public class LanguageServer(
                     AllCommitCharacters: null,
                     ResolveProvider: null),
 
+                DefinitionProvider = true,
+
                 Workspace = new ServerCapabilitiesWorkspace
                 {
                     WorkspaceFolders = new WorkspaceFoldersServerCapabilities(Supported: true, ChangeNotifications: true),
@@ -318,6 +320,8 @@ public class LanguageServer(
         IReadOnlyList<TextDocumentContentChangeEvent> contentChanges)
     {
         var textDocumentUri = System.Uri.UnescapeDataString(textDocument.Uri);
+
+        allSeenDocumentUris[textDocumentUri] = textDocumentUri;
 
         Log(
             "TextDocument_didChange: " + textDocumentUri +
@@ -694,6 +698,116 @@ public class LanguageServer(
             ];
     }
 
+    public IReadOnlyList<Location> TextDocument_definition(
+        TextDocumentPositionParams positionParams)
+    {
+        var textDocumentUri = System.Uri.UnescapeDataString(positionParams.TextDocument.Uri);
+
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+
+        Log("TextDocument_definition: " + textDocumentUri + " at " + positionParams.Position);
+
+        var localPathResult = DocumentUriAsLocalPath(textDocumentUri);
+        {
+            if (localPathResult.IsErrOrNull() is { } err)
+            {
+                Log("Ignoring URI: " + err + ": " + textDocumentUri);
+                return [];
+            }
+        }
+
+        if (localPathResult.IsOkOrNull() is not { } localPath)
+        {
+            throw new System.NotImplementedException(
+                "Unexpected result type: " + localPathResult.GetType());
+        }
+
+        var filePathOpenedInEditor = PathItemsFromFlatPath(localPath);
+
+        var provideDefinitionResult =
+            ProvideDefinition(
+                new Interface.ProvideHoverRequestStruct(
+                    filePathOpenedInEditor,
+                    PositionLineNumber: (int)positionParams.Position.Line + 1,
+                    PositionColumn: (int)positionParams.Position.Character + 1));
+
+        {
+            if (provideDefinitionResult.IsErrOrNull() is { } err)
+            {
+                Log("Failed to provide definition: " + err);
+                return [];
+            }
+        }
+
+        if (provideDefinitionResult.IsOkOrNull() is not { } provideDefinitionOk)
+        {
+            throw new System.NotImplementedException(
+                "Unexpected result type: " + provideDefinitionResult.GetType());
+        }
+
+        Log(
+            "Completed provide definition in " +
+            CommandLineInterface.FormatIntegerForDisplay(clock.ElapsedMilliseconds) + " ms, returning " +
+            provideDefinitionOk.Count + " items");
+
+
+        string? correspondingUri(IReadOnlyList<string> path)
+        {
+            var flatPathForward = string.Join('/', path);
+            var flatPathBackward = string.Join('\\', path);
+
+            var fromSeenUris =
+                allSeenDocumentUris
+                .FirstOrDefault(uri =>
+                DocumentUriAsLocalPath(uri.Value).IsOkOrNull() is { } asLocalOk &&
+                (asLocalOk == flatPathBackward ||
+                asLocalOk == flatPathBackward)).Key;
+
+            if (fromSeenUris is not null)
+                return fromSeenUris;
+
+            return
+                System.Uri.TryCreate(flatPathForward, System.UriKind.Absolute, out var uri)
+                ?
+                uri.AbsoluteUri
+                :
+                null;
+        }
+
+        var locations =
+            provideDefinitionOk
+            .SelectMany(location =>
+            {
+                if (correspondingUri(location.FilePath) is not { } uri)
+                {
+                    Log("No corresponding URI for " + string.Join('/', location.FilePath));
+
+                    return (IReadOnlyList<Location>)[];
+                }
+
+                return
+                    [new Location(
+                        uri,
+                        new Range(
+                            Start: new Position(
+                                Line: (uint)location.Range.StartLineNumber - 1,
+                                Character: (uint)location.Range.StartColumn - 1),
+                            End: new Position(
+                                Line: (uint)location.Range.EndLineNumber - 1,
+                                Character: (uint)location.Range.EndColumn - 1)))];
+            })
+            .ToImmutableArray();
+
+        Log(
+            "Returning " + locations.Length + " locations: " +
+            string.Join(
+                ", ",
+                locations
+                .Select(l => l.Uri + ": " + l.Range.Start.Line)));
+
+        return locations;
+    }
+
     public void TextDocument_didSave(
         DidSaveTextDocumentParams didSaveParams,
         System.Action<TextDocumentIdentifier, IReadOnlyList<Diagnostic>> publishDiagnostics)
@@ -1047,6 +1161,36 @@ public class LanguageServer(
 
         return Result<string, IReadOnlyList<MonacoEditor.MonacoCompletionItem>>.ok(
             provideCompletionItemsResponse.CompletionItems);
+    }
+
+    public Result<string, IReadOnlyList<Interface.LocationUnderFilePath>>
+        ProvideDefinition(
+            Interface.ProvideHoverRequestStruct provideDefinitionRequest)
+    {
+        var genericRequestResult =
+            HandleRequest(
+                new Interface.Request.ProvideDefinitionRequest(provideDefinitionRequest));
+
+        if (genericRequestResult.IsErrOrNull() is { } err)
+        {
+            return err;
+        }
+
+        if (genericRequestResult.IsOkOrNull() is not { } requestOk)
+        {
+            throw new System.NotImplementedException(
+                "Unexpected request result type: " + genericRequestResult.GetType());
+        }
+
+        if (requestOk is not Interface.Response.ProvideDefinitionResponse provideDefinitionResponse)
+        {
+            throw new System.NotImplementedException(
+                "Unexpected request result type: " + requestOk.GetType());
+        }
+
+        return
+            Result<string, IReadOnlyList<Interface.LocationUnderFilePath>>.ok(
+                provideDefinitionResponse.Locations);
     }
 
     public Result<string, Interface.Response> HandleRequest(

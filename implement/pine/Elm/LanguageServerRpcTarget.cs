@@ -137,6 +137,16 @@ public record LanguageServerRpcTarget(
         return Server.TextDocument_completion(positionParams);
     }
 
+    /// <summary>
+    /// https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#textDocument_definition
+    /// </summary>
+    [JsonRpcMethod("textDocument/definition", UseSingleObjectParameterDeserialization = true)]
+    public IReadOnlyList<Location> TextDocument_definition(
+        TextDocumentPositionParams positionParams)
+    {
+        return Server.TextDocument_definition(positionParams);
+    }
+
 
     /// <summary>
     /// https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#textDocument_didSave

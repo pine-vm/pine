@@ -9,7 +9,8 @@ Elm developer tools packaged as [Visual Studio Code](https://code.visualstudio.c
 - Error highlighting
 
 - Completions: Shows completion suggestions matching the current context
-- Hover tips: Shows type annotations and documentation for a type alias, module, custom type or function
+- Hover tips: Shows type annotations and documentation for a type alias, module, type or function
+- Go to Definition: Jump to the definition of a type alias, module, type or function
 
 ## Install
 

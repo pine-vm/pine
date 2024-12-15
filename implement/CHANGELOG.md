@@ -47,3 +47,7 @@ Published the first version of the Elm developer tools VSCode extension, with a 
 + Added feature: Completions: Shows completion suggestions matching the current context
 + Added feature: Hover tips: Shows type annotations and documentation for a type alias, module, custom type or function
 
+## 2024-12-15 - Expanded VSCode Extension and Language Server
+
++ Added feature: 'Go to Definition'
+

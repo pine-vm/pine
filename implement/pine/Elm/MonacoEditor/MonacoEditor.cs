@@ -47,6 +47,25 @@ public abstract record CompletionItemKind
     public record StructCompletionItemKind : CompletionItemKind;
 }
 
+/*
+
+type alias MonacoRange =
+    {-
+       <https://microsoft.github.io/monaco-editor/typedoc/interfaces/IRange.html>
+    -}
+    { startLineNumber : Int
+    , startColumn : Int
+    , endLineNumber : Int
+    , endColumn : Int
+    }
+
+ * */
+public record MonacoRange(
+    int StartLineNumber,
+    int StartColumn,
+    int EndLineNumber,
+    int EndColumn);
+
 public static class CompletionItemEncoding
 {
     public static Result<string, MonacoCompletionItem> Decode(PineValue pineValue)
@@ -186,5 +205,93 @@ public static class CompletionItemEncoding
         }
 
         return "Unexpected tag name: " + tag.TagName;
+    }
+}
+public static class MonacoRangeEncoding
+{
+    public static Result<string, MonacoRange> Decode(PineValue pineValue)
+    {
+        var decodeElmValueResult = ElmValueEncoding.PineValueAsElmValue(pineValue, null, null);
+
+        if (decodeElmValueResult.IsErrOrNull() is { } err)
+        {
+            return "Failed decoding as Elm value: " + err;
+        }
+
+        if (decodeElmValueResult.IsOkOrNull() is not { } elmValue)
+        {
+            throw new System.NotImplementedException
+                ("Unexpected result type: " + decodeElmValueResult.GetType());
+        }
+
+        return Decode(elmValue);
+    }
+
+    public static Result<string, MonacoRange> Decode(ElmValue elmValue)
+    {
+        if (elmValue is not ElmValue.ElmRecord record)
+        {
+            return "Expected Elm record, got: " + elmValue.GetType();
+        }
+
+        // We expect exactly 4 fields: startLineNumber, startColumn, endLineNumber, endColumn
+        if (record.Fields.Count is not 4)
+        {
+            return "Expected 4 fields, got: " + record.Fields.Count;
+        }
+
+        if (record["startLineNumber"] is not { } startLineNumberValue)
+        {
+            return
+                "Expected field 'startLineNumber' to be present, got: " +
+                string.Join(", ", record.Fields.Select(f => f.FieldName));
+        }
+
+        if (startLineNumberValue is not ElmValue.ElmInteger startLineNumberInteger)
+        {
+            return "Expected field 'startLineNumber' to be an integer, got: " + startLineNumberValue.GetType();
+        }
+
+        if (record["startColumn"] is not { } startColumnValue)
+        {
+            return
+                "Expected field 'startColumn' to be present, got: " +
+                string.Join(", ", record.Fields.Select(f => f.FieldName));
+        }
+
+        if (startColumnValue is not ElmValue.ElmInteger startColumnInteger)
+        {
+            return "Expected field 'startColumn' to be an integer, got: " + startColumnValue.GetType();
+        }
+
+        if (record["endLineNumber"] is not { } endLineNumberValue)
+        {
+            return
+                "Expected field 'endLineNumber' to be present, got: " +
+                string.Join(", ", record.Fields.Select(f => f.FieldName));
+        }
+
+        if (endLineNumberValue is not ElmValue.ElmInteger endLineNumberInteger)
+        {
+            return "Expected field 'endLineNumber' to be an integer, got: " + endLineNumberValue.GetType();
+        }
+
+        if (record["endColumn"] is not { } endColumnValue)
+        {
+            return
+                "Expected field 'endColumn' to be present, got: " +
+                string.Join(", ", record.Fields.Select(f => f.FieldName));
+        }
+
+        if (endColumnValue is not ElmValue.ElmInteger endColumnInteger)
+        {
+            return "Expected field 'endColumn' to be an integer, got: " + endColumnValue.GetType();
+        }
+
+        return new MonacoRange(
+            (int)startLineNumberInteger.Value,
+            (int)startColumnInteger.Value,
+            (int)endLineNumberInteger.Value,
+            (int)endColumnInteger.Value);
     }
 }
