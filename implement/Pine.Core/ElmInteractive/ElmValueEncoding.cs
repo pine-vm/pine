@@ -55,36 +55,55 @@ public static class ElmValueEncoding
         PineBlobValueAsElmValue((PineValue.BlobValue)PineValue.Blob([(byte)(twoBytes >> 8), (byte)twoBytes])))];
 
     public static Result<string, ElmValue> PineBlobValueAsElmValue(
-        PineValue.BlobValue blobValue) =>
-        blobValue.Bytes.Length is 0
-        ?
-        EmptyBlob
-        :
-        blobValue.Bytes.Length is 1 && ReusedBlobSingle is { } internedBlobSingle ?
-        internedBlobSingle[blobValue.Bytes.Span[0]]
-        :
-        blobValue.Bytes.Length is 2 && ReusedBlobTuple is { } internedBlobTuple ?
-        internedBlobTuple[blobValue.Bytes.Span[0] * 0x100 + blobValue.Bytes.Span[1]]
-        :
-        (blobValue.Bytes.Span[0] switch
-        {
-            4 or 2 =>
-            PineValueAsInteger.SignedIntegerFromValueRelaxed(blobValue)
-            .Map(bigInt => (ElmValue)new ElmValue.ElmInteger(bigInt)),
+        PineValue.BlobValue blobValue)
+    {
+        if (blobValue.Bytes.Length is 0)
+            return EmptyBlob;
 
-            _ =>
-            blobValue.Bytes.Length > 10
-            ?
-            /*
-            PineVM.ParseExpressionFromValueDefault(pineValue)
-            .Map(_ => (ElmValue)new ElmValue.ElmInternal("expression"))
-            .WithDefault(new ElmValue.ElmInternal("___error_skipped_large_blob___"))
-            */
-            new ElmValue.ElmInternal("___error_skipped_large_blob___")
-            :
-            PineValueAsInteger.UnsignedIntegerFromValue(blobValue)
-            .Map(bigInt => ElmValue.CharInstance((int)bigInt))
-        });
+        if (blobValue.Bytes.Length is 1 && ReusedBlobSingle is { } internedBlobSingle)
+        {
+            return internedBlobSingle[blobValue.Bytes.Span[0]];
+        }
+
+        if (blobValue.Bytes.Length is 2 && ReusedBlobTuple is { } internedBlobTuple)
+        {
+            return internedBlobTuple[blobValue.Bytes.Span[0] * 0x100 + blobValue.Bytes.Span[1]];
+        }
+
+        var firstByte = blobValue.Bytes.Span[0];
+
+        if (firstByte is 2 || firstByte is 4)
+        {
+            var asBigIntResult =
+                PineValueAsInteger.SignedIntegerFromValueRelaxed(blobValue);
+
+            if (asBigIntResult.IsOkOrNullable() is { } bigInt)
+            {
+                return new ElmValue.ElmInteger(bigInt);
+            }
+
+            if (asBigIntResult.IsErrOrNull() is { } err)
+            {
+                return "Failed to convert blob to integer: " + err;
+            }
+
+            throw new NotImplementedException(
+                "Unexpected result type: " + asBigIntResult.GetType().FullName);
+        }
+
+        if (blobValue.Bytes.Length < 4)
+        {
+            if (PineValueAsInteger.UnsignedIntegerFromValue(blobValue).IsOkOrNullable() is { } asBigInt)
+            {
+                if(UnicodeUtility.IsValidUnicodeScalar(asBigInt))
+                {
+                    return ElmValue.CharInstance((int)asBigInt);
+                }
+            }
+        }
+
+        return new ElmValue.ElmInternal("___error_skipped_large_blob___");
+    }
 
     public static Result<string, ElmValue> PineListValueAsElmValue(
         PineValue.ListValue listValue,
