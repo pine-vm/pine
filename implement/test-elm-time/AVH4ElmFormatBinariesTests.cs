@@ -1,5 +1,6 @@
-using Microsoft.VisualStudio.TestTools.UnitTesting;
+﻿using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Pine.Elm;
+using System.Text;
 
 namespace TestElmTime;
 
@@ -43,5 +44,38 @@ a =
         Assert.AreEqual(
             expectedElmModuleTextAfterFormatting.Trim(),
             formatted.Trim());
+    }
+
+    [TestMethod]
+    public void Format_elm_module_text_containing_unicode()
+    {
+        var elmModuleTextBeforeFormatting =
+            """
+            module Common exposing (..)
+
+            alfa : String
+            alfa =
+                "🌲"
+            """;
+
+        var expectedElmModuleTextAfterFormatting =
+            """
+            module Common exposing (..)
+
+
+            alfa : String
+            alfa =
+                "🌲"
+            """;
+
+        var formatted =
+            AVH4ElmFormatBinaries.RunElmFormat(elmModuleTextBeforeFormatting);
+
+        var formattedTrimmed =
+            formatted.Trim();
+
+        Assert.AreEqual(
+            expectedElmModuleTextAfterFormatting.Trim(),
+            formattedTrimmed);
     }
 }

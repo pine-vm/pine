@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
+using System.Text;
 
 namespace Pine.Elm;
 
@@ -47,18 +48,28 @@ public class AVH4ElmFormatBinaries
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
                 UseShellExecute = false,
-                CreateNoWindow = true
+                CreateNoWindow = true,
+                StandardOutputEncoding = Encoding.UTF8,
+                StandardErrorEncoding = Encoding.UTF8
             }
         };
 
         process.Start();
 
-        using (var writer = process.StandardInput)
+        using (var writer = new System.IO.StreamWriter(
+            process.StandardInput.BaseStream,
+            new UTF8Encoding(false),
+            1024,
+            leaveOpen: false))
         {
-            writer.WriteLine(moduleTextBefore);
+            // Ensure input ends with newline
+            if (!moduleTextBefore.EndsWith("\n"))
+            {
+                moduleTextBefore += "\n";
+            }
 
-            // Close the stream to signal EOF
-            writer.Close();
+            writer.Write(moduleTextBefore);
+            writer.Flush();
         }
 
         string output = process.StandardOutput.ReadToEnd();
