@@ -22,7 +22,8 @@ type Request
     | DeleteFileRequest (List String)
     | ProvideHoverRequest ProvideHoverRequestStruct
     | ProvideCompletionItemsRequest ProvideCompletionItemsRequestStruct
-    | ProvideDefinitionRequest ProvideHoverRequestStruct
+    | ProvideDefinitionRequest ProvideDefinitionRequestStruct
+    | TextDocumentSymbolRequest (List String)
 
  * */
 public abstract record Request
@@ -42,6 +43,9 @@ public abstract record Request
         : Request;
 
     public record ProvideDefinitionRequest(ProvideHoverRequestStruct Request)
+        : Request;
+
+    public record TextDocumentSymbolRequest(IReadOnlyList<string> FilePath)
         : Request;
 }
 
@@ -124,6 +128,16 @@ public static class RequestEncoding
                     "ProvideDefinitionRequest",
                     [
                         Encode(provideDefinitionRequest.Request)
+                    ]),
+
+            Request.TextDocumentSymbolRequest textDocumentSymbolRequest =>
+                ElmValueEncoding.TagAsPineValue(
+                    "TextDocumentSymbolRequest",
+                    [
+                        PineValue.List(
+                            [..textDocumentSymbolRequest.FilePath
+                            .Select(ElmValueEncoding.StringAsPineValue)
+                            ])
                     ]),
 
             _ =>

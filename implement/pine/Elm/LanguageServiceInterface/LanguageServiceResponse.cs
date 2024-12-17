@@ -13,6 +13,7 @@ type Response
     | ProvideHoverResponse (List String)
     | ProvideCompletionItemsResponse (List Frontend.MonacoEditor.MonacoCompletionItem)
     | ProvideDefinitionResponse (List LocationUnderFilePath)
+    | TextDocumentSymbolResponse (List DocumentSymbol)
 
  * */
 
@@ -32,6 +33,10 @@ public abstract record Response
     public record ProvideDefinitionResponse(
         IReadOnlyList<LocationUnderFilePath> Locations)
         : Response;
+
+    public record TextDocumentSymbolResponse(
+        IReadOnlyList<DocumentSymbol> Symbols)
+        : Response;
 }
 
 /*
@@ -45,6 +50,70 @@ type alias LocationUnderFilePath =
 public record LocationUnderFilePath(
     IReadOnlyList<string> FilePath,
     MonacoEditor.MonacoRange Range);
+
+
+/*
+
+type DocumentSymbol
+    = DocumentSymbol DocumentSymbolStruct
+
+
+type alias DocumentSymbolStruct =
+    { name : String
+    , kind : SymbolKind
+    , range : Frontend.MonacoEditor.MonacoRange
+    , selectionRange : Frontend.MonacoEditor.MonacoRange
+    , children : List DocumentSymbol
+    }
+
+
+type SymbolKind
+    = SymbolKind_File
+    | SymbolKind_Module
+    | SymbolKind_Namespace
+    | SymbolKind_Package
+    | SymbolKind_Class
+    | SymbolKind_Enum
+    | SymbolKind_Interface
+    | SymbolKind_Function
+    | SymbolKind_Constant
+    | SymbolKind_String
+    | SymbolKind_Number
+    | SymbolKind_Boolean
+    | SymbolKind_Array
+    | SymbolKind_EnumMember
+    | SymbolKind_Struct
+
+ * */
+
+public record DocumentSymbol(
+    DocumentSymbolStruct Struct);
+
+public record DocumentSymbolStruct(
+    string Name,
+    SymbolKind Kind,
+    MonacoEditor.MonacoRange Range,
+    MonacoEditor.MonacoRange SelectionRange,
+    IReadOnlyList<DocumentSymbol> Children);
+
+public enum SymbolKind
+{
+    File = 1,
+    Module = 2,
+    Namespace = 3,
+    Package = 4,
+    Class = 5,
+    Enum = 10,
+    Interface = 11,
+    Function = 12,
+    Constant = 14,
+    String = 15,
+    Number = 16,
+    Boolean = 17,
+    Array = 18,
+    EnumMember = 22,
+    Struct = 23
+}
 
 public static class ResponseEncoding
 {
@@ -196,7 +265,50 @@ public static class ResponseEncoding
 
                 locations[i] = location;
             }
+
             return new Response.ProvideDefinitionResponse(locations);
+        }
+
+        if (responseTag.TagName is "TextDocumentSymbolResponse")
+        {
+            if (responseTag.Arguments.Count is not 1)
+            {
+                return
+                    "Unexpected response tag arguments count: " +
+                    responseTag.Arguments.Count;
+            }
+
+            if (responseTag.Arguments[0] is not ElmValue.ElmList responseList)
+            {
+                return
+                    "Unexpected response tag argument type: " +
+                    responseTag.Arguments[0].GetType();
+            }
+
+            var symbols = new DocumentSymbol[responseList.Elements.Count];
+
+            for (var i = 0; i < responseList.Elements.Count; i++)
+            {
+                var symbolResult =
+                    DocumentSymbolEncoding.Decode(responseList.Elements[i]);
+
+                {
+                    if (symbolResult.IsErrOrNull() is { } err)
+                    {
+                        return "Failed decoding symbol at index [" + i + "]: " + err;
+                    }
+                }
+
+                if (symbolResult.IsOkOrNull() is not { } symbol)
+                {
+                    throw new System.NotImplementedException
+                        ("Unexpected result type: " + symbolResult.GetType());
+                }
+
+                symbols[i] = symbol;
+            }
+
+            return new Response.TextDocumentSymbolResponse(symbols);
         }
 
         return
@@ -285,4 +397,341 @@ public static class LocationUnderFilePathEncoding
         return new LocationUnderFilePath(filePathArray, range);
     }
 }
+
+public static class DocumentSymbolEncoding
+{
+    public static Result<string, DocumentSymbol> Decode(ElmValue elmValue)
+    {
+        if (elmValue is not ElmValue.ElmTag tag)
+        {
+            return "Expected Elm tag, got: " + elmValue.GetType();
+        }
+        if (tag.TagName is "DocumentSymbol")
+        {
+            if (tag.Arguments.Count is not 1)
+            {
+                return
+                    "Unexpected tag arguments count: " +
+                    tag.Arguments.Count;
+            }
+            if (tag.Arguments[0] is not ElmValue.ElmRecord record)
+            {
+                return
+                    "Unexpected tag argument type: " +
+                    tag.Arguments[0].GetType();
+            }
+            return DecodeDocumentSymbolStruct(record);
+        }
+        return "Unexpected tag name: " + tag.TagName;
+    }
+
+    public static Result<string, DocumentSymbol> DecodeDocumentSymbolStruct(ElmValue elmValue)
+    {
+        if (elmValue is not ElmValue.ElmRecord record)
+        {
+            return "Expected Elm record, got: " + elmValue.GetType();
+        }
+
+        if (record.Fields.Count is not 5)
+        {
+            return "Expected 5 fields, got: " + record.Fields.Count;
+        }
+
+        if (record["name"] is not { } nameValue)
+        {
+            return
+                "Expected field 'name' to be present, got: " +
+                string.Join(", ", record.Fields.Select(f => f.FieldName));
+        }
+
+        if (nameValue is not ElmValue.ElmString nameString)
+        {
+            return "Expected field 'name' to be a string, got: " + nameValue.GetType();
+        }
+
+        if (record["kind"] is not { } kindValue)
+        {
+            return
+                "Expected field 'kind' to be present, got: " +
+                string.Join(", ", record.Fields.Select(f => f.FieldName));
+        }
+
+        var decodeKindResult = SymbolKindEncoding.Decode(kindValue);
+        {
+            if (decodeKindResult.IsErrOrNull() is { } err)
+            {
+                return "Failed decoding kind: " + err;
+            }
+        }
+
+        if (decodeKindResult.IsOkOrNullable() is not { } kind)
+        {
+            throw new System.NotImplementedException
+                ("Unexpected result type: " + decodeKindResult.GetType());
+        }
+
+        if (record["range"] is not { } rangeValue)
+        {
+            return
+                "Expected field 'range' to be present, got: " +
+                string.Join(", ", record.Fields.Select(f => f.FieldName));
+        }
+
+        var rangeDecodeResult =
+            MonacoEditor.MonacoRangeEncoding.Decode(rangeValue);
+        {
+            if (rangeDecodeResult.IsErrOrNull() is { } rangeDecodeErr)
+            {
+                return "Failed decoding range: " + rangeDecodeErr;
+            }
+        }
+
+        if (rangeDecodeResult.IsOkOrNull() is not { } range)
+        {
+            throw new System.NotImplementedException
+                ("Unexpected result type: " + rangeDecodeResult.GetType());
+        }
+
+        if (record["selectionRange"] is not { } selectionRangeValue)
+        {
+            return
+                "Expected field 'selectionRange' to be present, got: " +
+                string.Join(", ", record.Fields.Select(f => f.FieldName));
+        }
+
+        var selectionRangeDecodeResult =
+            MonacoEditor.MonacoRangeEncoding.Decode(selectionRangeValue);
+        {
+            if (selectionRangeDecodeResult.IsErrOrNull() is { } selectionRangeDecodeErr)
+            {
+                return "Failed decoding selectionRange: " + selectionRangeDecodeErr;
+            }
+        }
+
+        if (selectionRangeDecodeResult.IsOkOrNull() is not { } selectionRange)
+        {
+            throw new System.NotImplementedException
+                ("Unexpected result type: " + selectionRangeDecodeResult.GetType());
+        }
+
+        if (record["children"] is not { } childrenValue)
+        {
+            return
+                "Expected field 'children' to be present, got: " +
+                string.Join(", ", record.Fields.Select(f => f.FieldName));
+        }
+
+        if (childrenValue is not ElmValue.ElmList childrenList)
+        {
+            return "Expected field 'children' to be a list, got: " + childrenValue.GetType();
+        }
+
+        var children = new DocumentSymbol[childrenList.Elements.Count];
+
+        for (var i = 0; i < childrenList.Elements.Count; i++)
+        {
+            var childResult = Decode(childrenList.Elements[i]);
+            {
+                if (childResult.IsErrOrNull() is { } err)
+                {
+                    return "Failed decoding child at index [" + i + "]: " + err;
+                }
+            }
+
+            if (childResult.IsOkOrNull() is not { } child)
+            {
+                throw new System.NotImplementedException
+                    ("Unexpected result type: " + childResult.GetType());
+            }
+            children[i] = child;
+        }
+
+        return new DocumentSymbol(new DocumentSymbolStruct(
+            nameString.Value,
+            kind,
+            range,
+            selectionRange,
+            children));
+    }
+}
+
+public static class SymbolKindEncoding
+{
+    public static Result<string, SymbolKind> Decode(ElmValue elmValue)
+    {
+        if (elmValue is not ElmValue.ElmTag tag)
+        {
+            return "Expected Elm tag, got: " + elmValue.GetType();
+        }
+
+        if (tag.TagName is "SymbolKind_File")
+        {
+            if (tag.Arguments.Count is not 0)
+            {
+                return
+                    "Unexpected tag arguments count: " +
+                    tag.Arguments.Count;
+            }
+
+            return SymbolKind.File;
+        }
+
+        if (tag.TagName is "SymbolKind_Module")
+        {
+            if (tag.Arguments.Count is not 0)
+            {
+                return
+                    "Unexpected tag arguments count: " +
+                    tag.Arguments.Count;
+            }
+            return SymbolKind.Module;
+        }
+
+        if (tag.TagName is "SymbolKind_Namespace")
+        {
+            if (tag.Arguments.Count is not 0)
+            {
+                return
+                    "Unexpected tag arguments count: " +
+                    tag.Arguments.Count;
+            }
+            return SymbolKind.Namespace;
+        }
+
+        if (tag.TagName is "SymbolKind_Package")
+        {
+            if (tag.Arguments.Count is not 0)
+            {
+                return
+                    "Unexpected tag arguments count: " +
+                    tag.Arguments.Count;
+            }
+            return SymbolKind.Package;
+        }
+
+        if (tag.TagName is "SymbolKind_Class")
+        {
+            if (tag.Arguments.Count is not 0)
+            {
+                return
+                    "Unexpected tag arguments count: " +
+                    tag.Arguments.Count;
+            }
+            return SymbolKind.Class;
+        }
+
+        if (tag.TagName is "SymbolKind_Enum")
+        {
+            if (tag.Arguments.Count is not 0)
+            {
+                return
+                    "Unexpected tag arguments count: " +
+                    tag.Arguments.Count;
+            }
+            return SymbolKind.Enum;
+        }
+
+        if (tag.TagName is "SymbolKind_Interface")
+        {
+            if (tag.Arguments.Count is not 0)
+            {
+                return
+                    "Unexpected tag arguments count: " +
+                    tag.Arguments.Count;
+            }
+            return SymbolKind.Interface;
+        }
+
+        if (tag.TagName is "SymbolKind_Function")
+        {
+            if (tag.Arguments.Count is not 0)
+            {
+                return
+                    "Unexpected tag arguments count: " +
+                    tag.Arguments.Count;
+            }
+            return SymbolKind.Function;
+        }
+
+        if (tag.TagName is "SymbolKind_Constant")
+        {
+            if (tag.Arguments.Count is not 0)
+            {
+                return
+                    "Unexpected tag arguments count: " +
+                    tag.Arguments.Count;
+            }
+            return SymbolKind.Constant;
+        }
+
+        if (tag.TagName is "SymbolKind_String")
+        {
+            if (tag.Arguments.Count is not 0)
+            {
+                return
+                    "Unexpected tag arguments count: " +
+                    tag.Arguments.Count;
+            }
+            return SymbolKind.String;
+        }
+
+        if (tag.TagName is "SymbolKind_Number")
+        {
+            if (tag.Arguments.Count is not 0)
+            {
+                return
+                    "Unexpected tag arguments count: " +
+                    tag.Arguments.Count;
+            }
+            return SymbolKind.Number;
+        }
+
+        if (tag.TagName is "SymbolKind_Boolean")
+        {
+            if (tag.Arguments.Count is not 0)
+            {
+                return
+                    "Unexpected tag arguments count: " +
+                    tag.Arguments.Count;
+            }
+            return SymbolKind.Boolean;
+        }
+
+        if (tag.TagName is "SymbolKind_Array")
+        {
+            if (tag.Arguments.Count is not 0)
+            {
+                return
+                    "Unexpected tag arguments count: " +
+                    tag.Arguments.Count;
+            }
+            return SymbolKind.Array;
+        }
+
+        if (tag.TagName is "SymbolKind_EnumMember")
+        {
+            if (tag.Arguments.Count is not 0)
+            {
+                return
+                    "Unexpected tag arguments count: " +
+                    tag.Arguments.Count;
+            }
+            return SymbolKind.EnumMember;
+        }
+
+        if (tag.TagName is "SymbolKind_Struct")
+        {
+            if (tag.Arguments.Count is not 0)
+            {
+                return
+                    "Unexpected tag arguments count: " +
+                    tag.Arguments.Count;
+            }
+            return SymbolKind.Struct;
+        }
+
+        return "Unexpected tag name: " + tag.TagName;
+    }
+}
+
 

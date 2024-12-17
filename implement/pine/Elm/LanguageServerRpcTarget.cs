@@ -23,6 +23,18 @@ public record LanguageServerRpcTarget(
             JsonSerializerOptions = new System.Text.Json.JsonSerializerOptions
             {
                 PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase,
+
+                /*
+                 * 2024-12-17: Sending null instead of omitting the property caused the VSCode client to fail parsing
+                 * responses to `textDocument/documentSymbol` with errors like this:
+                 * ----
+                    [Error - 7:59:39 PM] Request textDocument/documentSymbol failed.
+                    TypeError: Cannot read properties of undefined (reading 'range')
+                        at asSymbolInformation (c:\Users\winfail\.vscode\extensions\pine.pine-0.2.1\client\node_modules\vscode-languageclient\lib\common\protocolConverter.js:591:33)
+
+                The null value confused the client parsing into thinking the entry was a `SymbolInformation` instead of a `DocumentSymbol`.
+                 * */
+                DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull,
             }
         };
 
@@ -147,6 +159,16 @@ public record LanguageServerRpcTarget(
         return Server.TextDocument_definition(positionParams);
     }
 
+    /// <summary>
+    /// https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#textDocument_documentSymbol
+    /// </summary>
+    [JsonRpcMethod("textDocument/documentSymbol")]
+    public IReadOnlyList<DocumentSymbol> TextDocument_documentSymbol(TextDocumentIdentifier textDocument)
+    {
+        var documentSymbols = Server.TextDocument_documentSymbol(textDocument);
+
+        return documentSymbols;
+    }
 
     /// <summary>
     /// https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#textDocument_didSave

@@ -29,7 +29,8 @@ public record DidChangeWatchedFilesClientCapabilities(
 /// </summary>
 public record TextDocumentClientCapabilities(
     CompletionClientCapabilities? Completion,
-    PublishDiagnosticsClientCapabilities? PublishDiagnostics);
+    PublishDiagnosticsClientCapabilities? PublishDiagnostics,
+    DocumentSymbolClientCapabilities DocumentSymbol);
 
 
 /// <summary>

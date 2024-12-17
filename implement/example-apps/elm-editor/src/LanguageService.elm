@@ -213,6 +213,15 @@ handleRequestInCurrentWorkspace request stateBefore =
                         )
                     , stateBefore
                     )
+
+                LanguageServiceInterface.TextDocumentSymbolRequest filePath ->
+                    ( LanguageServiceInterface.TextDocumentSymbolResponse
+                        (textDocumentSymbol
+                            filePath
+                            stateBefore
+                        )
+                    , stateBefore
+                    )
     in
     ( Ok serviceResponse
     , state
@@ -779,12 +788,80 @@ provideDefinition request languageServiceState =
                             )
 
 
+textDocumentSymbol :
+    List String
+    -> LanguageServiceState
+    -> List LanguageServiceInterface.DocumentSymbol
+textDocumentSymbol filePath languageServiceState =
+    case FileTree.getBlobAtPathFromFileTree filePath languageServiceState.fileTreeParseCache of
+        Nothing ->
+            []
+
+        Just currentFileCacheItem ->
+            case currentFileCacheItem.parsedFileLastSuccess of
+                Nothing ->
+                    []
+
+                Just parsedFileLastSuccess ->
+                    parsedFileLastSuccess.completionItems.fromTopLevel
+                        |> List.map
+                            (\completionItem ->
+                                let
+                                    (CompletionItem label _ completionItemKind _) =
+                                        completionItem.completionItem
+
+                                    monacoRange : Frontend.MonacoEditor.MonacoRange
+                                    monacoRange =
+                                        monacoRangeFromRange completionItem.range
+
+                                    symbolKind : LanguageServiceInterface.SymbolKind
+                                    symbolKind =
+                                        case completionItemKind of
+                                            Frontend.MonacoEditor.ConstructorCompletionItemKind ->
+                                                LanguageServiceInterface.SymbolKind_EnumMember
+
+                                            Frontend.MonacoEditor.EnumCompletionItemKind ->
+                                                LanguageServiceInterface.SymbolKind_Enum
+
+                                            Frontend.MonacoEditor.EnumMemberCompletionItemKind ->
+                                                LanguageServiceInterface.SymbolKind_EnumMember
+
+                                            Frontend.MonacoEditor.FunctionCompletionItemKind ->
+                                                LanguageServiceInterface.SymbolKind_Function
+
+                                            Frontend.MonacoEditor.ModuleCompletionItemKind ->
+                                                LanguageServiceInterface.SymbolKind_Module
+
+                                            Frontend.MonacoEditor.StructCompletionItemKind ->
+                                                LanguageServiceInterface.SymbolKind_Struct
+                                in
+                                LanguageServiceInterface.DocumentSymbol
+                                    { name = label
+                                    , range = monacoRange
+                                    , selectionRange = monacoRange
+                                    , kind = symbolKind
+
+                                    -- TODO: Move choice type tags to children
+                                    , children = []
+                                    }
+                            )
+
+
 monacoRangeFromSyntaxRange : Elm.Syntax.Range.Range -> Frontend.MonacoEditor.MonacoRange
 monacoRangeFromSyntaxRange syntaxRange =
     { startLineNumber = syntaxRange.start.row
     , startColumn = syntaxRange.start.column
     , endLineNumber = syntaxRange.end.row
     , endColumn = syntaxRange.end.column
+    }
+
+
+monacoRangeFromRange : Range -> Frontend.MonacoEditor.MonacoRange
+monacoRangeFromRange (Range ( startRow, startColumn ) ( endRow, endColumn )) =
+    { startLineNumber = startRow
+    , startColumn = startColumn
+    , endLineNumber = endRow
+    , endColumn = endColumn
     }
 
 

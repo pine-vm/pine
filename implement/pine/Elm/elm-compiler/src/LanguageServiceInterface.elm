@@ -42,7 +42,8 @@ type Request
     | DeleteFileRequest (List String)
     | ProvideHoverRequest ProvideHoverRequestStruct
     | ProvideCompletionItemsRequest ProvideCompletionItemsRequestStruct
-    | ProvideDefinitionRequest ProvideHoverRequestStruct
+    | ProvideDefinitionRequest ProvideDefinitionRequestStruct
+    | TextDocumentSymbolRequest (List String)
 
 
 type Response
@@ -50,6 +51,7 @@ type Response
     | ProvideHoverResponse (List String)
     | ProvideCompletionItemsResponse (List Frontend.MonacoEditor.MonacoCompletionItem)
     | ProvideDefinitionResponse (List LocationUnderFilePath)
+    | TextDocumentSymbolResponse (List DocumentSymbol)
 
 
 type alias ProvideHoverRequestStruct =
@@ -74,3 +76,34 @@ type alias LocationUnderFilePath =
     { filePath : List String
     , range : Frontend.MonacoEditor.MonacoRange
     }
+
+
+type DocumentSymbol
+    = DocumentSymbol DocumentSymbolStruct
+
+
+type alias DocumentSymbolStruct =
+    { name : String
+    , kind : SymbolKind
+    , range : Frontend.MonacoEditor.MonacoRange
+    , selectionRange : Frontend.MonacoEditor.MonacoRange
+    , children : List DocumentSymbol
+    }
+
+
+type SymbolKind
+    = SymbolKind_File
+    | SymbolKind_Module
+    | SymbolKind_Namespace
+    | SymbolKind_Package
+    | SymbolKind_Class
+    | SymbolKind_Enum
+    | SymbolKind_Interface
+    | SymbolKind_Function
+    | SymbolKind_Constant
+    | SymbolKind_String
+    | SymbolKind_Number
+    | SymbolKind_Boolean
+    | SymbolKind_Array
+    | SymbolKind_EnumMember
+    | SymbolKind_Struct

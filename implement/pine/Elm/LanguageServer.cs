@@ -115,6 +115,8 @@ public class LanguageServer(
 
                 DefinitionProvider = true,
 
+                DocumentSymbolProvider = true,
+
                 Workspace = new ServerCapabilitiesWorkspace
                 {
                     WorkspaceFolders = new WorkspaceFoldersServerCapabilities(Supported: true, ChangeNotifications: true),
@@ -808,6 +810,130 @@ public class LanguageServer(
         return locations;
     }
 
+    public IReadOnlyList<DocumentSymbol> TextDocument_documentSymbol(
+        TextDocumentIdentifier textDocument)
+    {
+        var textDocumentUri = System.Uri.UnescapeDataString(textDocument.Uri);
+
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+
+        Log("textDocument/documentSymbol: " + textDocumentUri);
+
+        var localPathResult = DocumentUriAsLocalPath(textDocumentUri);
+        {
+            if (localPathResult.IsErrOrNull() is { } err)
+            {
+                Log("Ignoring URI: " + err + ": " + textDocumentUri);
+                return [];
+            }
+        }
+
+        if (localPathResult.IsOkOrNull() is not { } localPath)
+        {
+            throw new System.NotImplementedException(
+                "Unexpected result type: " + localPathResult.GetType());
+        }
+
+        var fileContent = System.IO.File.ReadAllText(localPath);
+
+        Log(
+            "Read file " + textDocumentUri + " with " +
+            CommandLineInterface.FormatIntegerForDisplay(fileContent.Length) +
+            " chars in " +
+            CommandLineInterface.FormatIntegerForDisplay((int)clock.Elapsed.TotalMilliseconds) +
+            " ms");
+
+        clock.Restart();
+
+        if (languageServiceStateTask.Result.IsOkOrNull() is not { } languageServiceState)
+        {
+            throw new System.NotImplementedException(
+                "Unexpected language service state result type: " + languageServiceStateTask.Result.GetType());
+        }
+
+        languageServiceState.AddFile(
+            PathItemsFromFlatPath(localPath),
+            fileContent);
+
+        var filePathOpenedInEditor = PathItemsFromFlatPath(localPath);
+
+        var documentSymbols =
+            TextDocumentSymbolRequest(filePathOpenedInEditor);
+
+        {
+            if (documentSymbols.IsErrOrNull() is { } err)
+            {
+                Log("Failed to provide document symbols: " + err);
+                return [];
+            }
+        }
+
+        if (documentSymbols.IsOkOrNull() is not { } documentSymbolsOk)
+        {
+            throw new System.NotImplementedException(
+                "Unexpected result type: " + documentSymbols.GetType());
+        }
+
+        Log(
+            "Completed document symbols in " +
+            CommandLineInterface.FormatIntegerForDisplay(clock.ElapsedMilliseconds) + " ms, returning " +
+            documentSymbolsOk.Count + " items");
+
+        static SymbolKind mapSymbolKind(Interface.SymbolKind symbolKind)
+        {
+            return symbolKind switch
+            {
+                Interface.SymbolKind.File => SymbolKind.File,
+                Interface.SymbolKind.Module => SymbolKind.Module,
+                Interface.SymbolKind.Namespace => SymbolKind.Namespace,
+                Interface.SymbolKind.Package => SymbolKind.Package,
+                Interface.SymbolKind.Class => SymbolKind.Class,
+                Interface.SymbolKind.Enum => SymbolKind.Enum,
+                Interface.SymbolKind.Interface => SymbolKind.Interface,
+                Interface.SymbolKind.Function => SymbolKind.Function,
+                Interface.SymbolKind.Constant => SymbolKind.Constant,
+                Interface.SymbolKind.String => SymbolKind.String,
+                Interface.SymbolKind.Number => SymbolKind.Number,
+                Interface.SymbolKind.Boolean => SymbolKind.Boolean,
+                Interface.SymbolKind.Array => SymbolKind.Array,
+                Interface.SymbolKind.EnumMember => SymbolKind.EnumMember,
+                Interface.SymbolKind.Struct => SymbolKind.Struct,
+
+                _ =>
+                throw new System.NotImplementedException("Unexpected symbol kind: " + symbolKind)
+            };
+        }
+
+        static DocumentSymbol mapDocumentSymbol(Interface.DocumentSymbolStruct documentSymbol)
+        {
+            return new DocumentSymbol(
+                Name: documentSymbol.Name,
+                Detail: null,
+                Kind: mapSymbolKind(documentSymbol.Kind),
+                Range: new Range(
+                    Start: new Position(
+                        Line: (uint)documentSymbol.Range.StartLineNumber - 1,
+                        Character: (uint)documentSymbol.Range.StartColumn - 1),
+                    End: new Position(
+                        Line: (uint)documentSymbol.Range.EndLineNumber - 1,
+                        Character: (uint)documentSymbol.Range.EndColumn - 1)),
+                SelectionRange: new Range(
+                    Start: new Position(
+                        Line: (uint)documentSymbol.SelectionRange.StartLineNumber - 1,
+                        Character: (uint)documentSymbol.SelectionRange.StartColumn - 1),
+                    End: new Position(
+                        Line: (uint)documentSymbol.SelectionRange.EndLineNumber - 1,
+                        Character: (uint)documentSymbol.SelectionRange.EndColumn - 1)),
+                Children:
+                [..documentSymbol.Children
+                    .Select(cn => mapDocumentSymbol(cn.Struct))]);
+        }
+
+        return
+            [..documentSymbolsOk
+            .Select(ds => mapDocumentSymbol(ds.Struct))];
+    }
+
     public void TextDocument_didSave(
         DidSaveTextDocumentParams didSaveParams,
         System.Action<TextDocumentIdentifier, IReadOnlyList<Diagnostic>> publishDiagnostics)
@@ -1191,6 +1317,35 @@ public class LanguageServer(
         return
             Result<string, IReadOnlyList<Interface.LocationUnderFilePath>>.ok(
                 provideDefinitionResponse.Locations);
+    }
+
+    public Result<string, IReadOnlyList<Interface.DocumentSymbol>> TextDocumentSymbolRequest(
+        IReadOnlyList<string> filePath)
+    {
+        var genericRequestResult =
+            HandleRequest(
+                new Interface.Request.TextDocumentSymbolRequest(filePath));
+
+        if (genericRequestResult.IsErrOrNull() is { } err)
+        {
+            return err;
+        }
+
+        if (genericRequestResult.IsOkOrNull() is not { } requestOk)
+        {
+            throw new System.NotImplementedException(
+                "Unexpected request result type: " + genericRequestResult.GetType());
+        }
+
+        if (requestOk is not Interface.Response.TextDocumentSymbolResponse documentSymbolResponse)
+        {
+            throw new System.NotImplementedException(
+                "Unexpected request result type: " + requestOk.GetType());
+        }
+
+        return
+            Result<string, IReadOnlyList<Interface.DocumentSymbol>>.ok(
+                documentSymbolResponse.Symbols);
     }
 
     public Result<string, Interface.Response> HandleRequest(
