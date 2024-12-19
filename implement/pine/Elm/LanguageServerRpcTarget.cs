@@ -171,6 +171,16 @@ public record LanguageServerRpcTarget(
     }
 
     /// <summary>
+    /// https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#textDocument_references
+    /// </summary>
+    [JsonRpcMethod("textDocument/references", UseSingleObjectParameterDeserialization = true)]
+    public IReadOnlyList<Location> TextDocument_references(
+        TextDocumentPositionParams referenceParams)
+    {
+        return Server.TextDocument_references(referenceParams);
+    }
+
+    /// <summary>
     /// https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#textDocument_didSave
     /// </summary>
     [JsonRpcMethod("textDocument/didSave", UseSingleObjectParameterDeserialization = true)]

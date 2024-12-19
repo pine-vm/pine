@@ -24,6 +24,7 @@ type Request
     | ProvideCompletionItemsRequest ProvideCompletionItemsRequestStruct
     | ProvideDefinitionRequest ProvideDefinitionRequestStruct
     | TextDocumentSymbolRequest (List String)
+    | TextDocumentReferencesRequest ProvideReferencesRequestStruct
 
  * */
 public abstract record Request
@@ -46,6 +47,9 @@ public abstract record Request
         : Request;
 
     public record TextDocumentSymbolRequest(IReadOnlyList<string> FilePath)
+        : Request;
+
+    public record TextDocumentReferencesRequest(ProvideHoverRequestStruct Request)
         : Request;
 }
 
@@ -138,6 +142,13 @@ public static class RequestEncoding
                             [..textDocumentSymbolRequest.FilePath
                             .Select(ElmValueEncoding.StringAsPineValue)
                             ])
+                    ]),
+
+            Request.TextDocumentReferencesRequest textDocumentReferenceRequest =>
+                ElmValueEncoding.TagAsPineValue(
+                    "TextDocumentReferencesRequest",
+                    [
+                        Encode(textDocumentReferenceRequest.Request)
                     ]),
 
             _ =>

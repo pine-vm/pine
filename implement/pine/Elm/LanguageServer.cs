@@ -117,6 +117,8 @@ public class LanguageServer(
 
                 DocumentSymbolProvider = true,
 
+                ReferencesProvider = true,
+
                 Workspace = new ServerCapabilitiesWorkspace
                 {
                     WorkspaceFolders = new WorkspaceFoldersServerCapabilities(Supported: true, ChangeNotifications: true),
@@ -752,52 +754,16 @@ public class LanguageServer(
             CommandLineInterface.FormatIntegerForDisplay(clock.ElapsedMilliseconds) + " ms, returning " +
             provideDefinitionOk.Count + " items");
 
-
-        string? correspondingUri(IReadOnlyList<string> path)
-        {
-            var flatPathForward = string.Join('/', path);
-            var flatPathBackward = string.Join('\\', path);
-
-            var fromSeenUris =
-                allSeenDocumentUris
-                .FirstOrDefault(uri =>
-                DocumentUriAsLocalPath(uri.Value).IsOkOrNull() is { } asLocalOk &&
-                (asLocalOk == flatPathBackward ||
-                asLocalOk == flatPathBackward)).Key;
-
-            if (fromSeenUris is not null)
-                return fromSeenUris;
-
-            return
-                System.Uri.TryCreate(flatPathForward, System.UriKind.Absolute, out var uri)
-                ?
-                uri.AbsoluteUri
-                :
-                null;
-        }
-
         var locations =
-            provideDefinitionOk
-            .SelectMany(location =>
-            {
-                if (correspondingUri(location.FilePath) is not { } uri)
+            MapLocations(
+                locations: provideDefinitionOk,
+                noMatchingUri:
+                filePath =>
                 {
-                    Log("No corresponding URI for " + string.Join('/', location.FilePath));
+                    Log("No corresponding URI for " + string.Join('/', filePath));
 
-                    return (IReadOnlyList<Location>)[];
-                }
-
-                return
-                    [new Location(
-                        uri,
-                        new Range(
-                            Start: new Position(
-                                Line: (uint)location.Range.StartLineNumber - 1,
-                                Character: (uint)location.Range.StartColumn - 1),
-                            End: new Position(
-                                Line: (uint)location.Range.EndLineNumber - 1,
-                                Character: (uint)location.Range.EndColumn - 1)))];
-            })
+                    return [];
+                })
             .ToImmutableArray();
 
         Log(
@@ -932,6 +898,79 @@ public class LanguageServer(
         return
             [..documentSymbolsOk
             .Select(ds => mapDocumentSymbol(ds.Struct))];
+    }
+
+    public IReadOnlyList<Location> TextDocument_references(
+        TextDocumentPositionParams positionParams)
+    {
+        var textDocumentUri =
+            System.Uri.UnescapeDataString(positionParams.TextDocument.Uri);
+
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+
+        Log("TextDocument_references: " + textDocumentUri + " at " + positionParams.Position);
+
+        var localPathResult = DocumentUriAsLocalPath(textDocumentUri);
+        {
+            if (localPathResult.IsErrOrNull() is { } err)
+            {
+                Log("Ignoring URI: " + err + ": " + textDocumentUri);
+                return [];
+            }
+        }
+
+        if (localPathResult.IsOkOrNull() is not { } localPath)
+        {
+            throw new System.NotImplementedException(
+                "Unexpected result type: " + localPathResult.GetType());
+        }
+
+        var filePathOpenedInEditor = PathItemsFromFlatPath(localPath);
+
+        var provideReferenceResult =
+            TextDocumentReferencesRequest(
+                new Interface.ProvideHoverRequestStruct(
+                    filePathOpenedInEditor,
+                    PositionLineNumber: (int)positionParams.Position.Line + 1,
+                    PositionColumn: (int)positionParams.Position.Character + 1));
+        {
+            if (provideReferenceResult.IsErrOrNull() is { } err)
+            {
+                Log("Failed to provide references: " + err);
+                return [];
+            }
+        }
+
+        if (provideReferenceResult.IsOkOrNull() is not { } provideReferenceOk)
+        {
+            throw new System.NotImplementedException(
+                "Unexpected result type: " + provideReferenceResult.GetType());
+        }
+
+        Log(
+            "Completed provide references in " +
+            CommandLineInterface.FormatIntegerForDisplay(clock.ElapsedMilliseconds) + " ms, returning " +
+            provideReferenceOk.Count + " items");
+
+        var locations =
+            MapLocations(
+                locations: provideReferenceOk,
+                noMatchingUri:
+                filePath =>
+                {
+                    Log("No corresponding URI for " + string.Join('/', filePath));
+                    return [];
+                })
+            .ToImmutableArray();
+
+        Log(
+            "Returning " + locations.Length + " locations: " +
+            string.Join(
+                ", ",
+                locations
+                .Select(l => l.Uri + ": " + l.Range.Start.Line)));
+
+        return locations;
     }
 
     public void TextDocument_didSave(
@@ -1348,6 +1387,34 @@ public class LanguageServer(
                 documentSymbolResponse.Symbols);
     }
 
+    public Result<string, IReadOnlyList<Interface.LocationUnderFilePath>> TextDocumentReferencesRequest(
+        Interface.ProvideHoverRequestStruct referenceRequest)
+    {
+        var genericRequestResult =
+            HandleRequest(
+                new Interface.Request.TextDocumentReferencesRequest(referenceRequest));
+
+        if (genericRequestResult.IsErrOrNull() is { } err)
+        {
+            return err;
+        }
+
+        if (genericRequestResult.IsOkOrNull() is not { } requestOk)
+        {
+            throw new System.NotImplementedException(
+                "Unexpected request result type: " + genericRequestResult.GetType());
+        }
+
+        if (requestOk is not Interface.Response.TextDocumentReferencesResponse provideReferenceResponse)
+        {
+            throw new System.NotImplementedException(
+                "Unexpected request result type: " + requestOk.GetType());
+        }
+
+        return Result<string, IReadOnlyList<Interface.LocationUnderFilePath>>.ok(
+            provideReferenceResponse.Locations);
+    }
+
     public Result<string, Interface.Response> HandleRequest(
         Interface.Request request)
     {
@@ -1369,6 +1436,56 @@ public class LanguageServer(
 
         return
             languageServiceState.HandleRequest(request);
+    }
+
+    public IEnumerable<Location> MapLocations(
+        IEnumerable<Interface.LocationUnderFilePath> locations,
+        System.Func<IReadOnlyList<string>, IEnumerable<Location>> noMatchingUri)
+    {
+        return
+            locations
+            .SelectMany(location =>
+            {
+                if (CorrespondingUri(location.FilePath) is not { } uri)
+                {
+                    return noMatchingUri(location.FilePath);
+                }
+
+                return
+                    [new Location(
+                        uri,
+                        new Range(
+                            Start: new Position(
+                                Line: (uint)location.Range.StartLineNumber - 1,
+                                Character: (uint)location.Range.StartColumn - 1),
+                            End: new Position(
+                                Line: (uint)location.Range.EndLineNumber - 1,
+                                Character: (uint)location.Range.EndColumn - 1)))
+                    ];
+            });
+    }
+
+    string? CorrespondingUri(IReadOnlyList<string> path)
+    {
+        var flatPathForward = string.Join('/', path);
+        var flatPathBackward = string.Join('\\', path);
+
+        var fromSeenUris =
+            allSeenDocumentUris
+            .FirstOrDefault(uri =>
+            DocumentUriAsLocalPath(uri.Value).IsOkOrNull() is { } asLocalOk &&
+            (asLocalOk == flatPathBackward ||
+            asLocalOk == flatPathBackward)).Key;
+
+        if (fromSeenUris is not null)
+            return fromSeenUris;
+
+        return
+            System.Uri.TryCreate(flatPathForward, System.UriKind.Absolute, out var uri)
+            ?
+            uri.AbsoluteUri
+            :
+            null;
     }
 
     public static Result<string, string> DocumentUriAsLocalPath(string documentUri)

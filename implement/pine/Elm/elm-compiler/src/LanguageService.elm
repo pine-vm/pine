@@ -222,6 +222,15 @@ handleRequestInCurrentWorkspace request stateBefore =
                         )
                     , stateBefore
                     )
+
+                LanguageServiceInterface.TextDocumentReferencesRequest referenceRequest ->
+                    ( LanguageServiceInterface.TextDocumentReferencesResponse
+                        (textDocumentReferences
+                            referenceRequest
+                            stateBefore
+                        )
+                    , stateBefore
+                    )
     in
     ( Ok serviceResponse
     , state
@@ -845,6 +854,119 @@ textDocumentSymbol filePath languageServiceState =
                                     , children = []
                                     }
                             )
+
+
+textDocumentReferences :
+    LanguageServiceInterface.ProvideReferencesRequestStruct
+    -> LanguageServiceState
+    -> List LanguageServiceInterface.LocationUnderFilePath
+textDocumentReferences referenceRequest languageServiceState =
+    let
+        maybeDefinition : Maybe LanguageServiceInterface.LocationUnderFilePath
+        maybeDefinition =
+            provideDefinition
+                { filePathOpenedInEditor = referenceRequest.filePathOpenedInEditor
+                , positionLineNumber = referenceRequest.positionLineNumber
+                , positionColumn = referenceRequest.positionColumn
+                }
+                languageServiceState
+                |> List.head
+    in
+    case maybeDefinition of
+        Just definitionLocation ->
+            let
+                definitionLocationRange : Range
+                definitionLocationRange =
+                    Range ( definitionLocation.range.startLineNumber, definitionLocation.range.startColumn )
+                        ( definitionLocation.range.endLineNumber, definitionLocation.range.endColumn )
+            in
+            findReferences ( definitionLocation.filePath, definitionLocationRange ) languageServiceState
+
+        Nothing ->
+            -- Fallback: try to find a top-level declaration covering this position
+            case
+                FileTree.getBlobAtPathFromFileTree referenceRequest.filePathOpenedInEditor
+                    languageServiceState.fileTreeParseCache
+            of
+                Nothing ->
+                    []
+
+                Just currentFileCacheItem ->
+                    case currentFileCacheItem.parsedFileLastSuccess of
+                        Nothing ->
+                            []
+
+                        Just parsedFile ->
+                            let
+                                pos : ( Int, Int )
+                                pos =
+                                    ( referenceRequest.positionLineNumber, referenceRequest.positionColumn )
+
+                                maybeTopLevelDefinitionLocation =
+                                    parsedFile.completionItems.fromTopLevel
+                                        |> Common.listMapFind
+                                            (\decl ->
+                                                if rangeContainsLocation pos decl.range then
+                                                    Just
+                                                        ( parsedFile.filePath
+                                                        , decl.range
+                                                        )
+
+                                                else
+                                                    Nothing
+                                            )
+                            in
+                            case maybeTopLevelDefinitionLocation of
+                                Nothing ->
+                                    []
+
+                                Just syntheticDefinitionLocation ->
+                                    findReferences syntheticDefinitionLocation languageServiceState
+
+
+findReferences :
+    ( List String, Range )
+    -> LanguageServiceState
+    -> List LanguageServiceInterface.LocationUnderFilePath
+findReferences ( targetDefinitionFilePath, targetDefinitionRange ) languageServiceState =
+    let
+        allParsedModules : List ParsedCookedModuleCache
+        allParsedModules =
+            List.concat
+                [ languageServiceState.fileTreeParseCache
+                    |> FileTree.flatListOfBlobsFromFileTreeNode
+                    |> List.filterMap (\( _, blob ) -> blob.parsedFileLastSuccess)
+                , List.map .parseResult languageServiceState.coreModulesCache
+                ]
+
+        findReferencesInModule :
+            ParsedCookedModuleCache
+            -> List LanguageServiceInterface.LocationUnderFilePath
+        findReferencesInModule parsedModule =
+            let
+                { fromDeclarations } =
+                    hoverItemsFromParsedModule parsedModule languageServiceState
+            in
+            fromDeclarations
+                |> List.filterMap
+                    (\( Range ( startLine, startColumn ) ( endLine, endColumn ), LocationUnderFilePath defFilePath defRange, _ ) ->
+                        if defFilePath == targetDefinitionFilePath && defRange == targetDefinitionRange then
+                            Just
+                                { filePath = parsedModule.filePath
+                                , range =
+                                    { startLineNumber = startLine
+                                    , startColumn = startColumn
+                                    , endLineNumber = endLine
+                                    , endColumn = endColumn
+                                    }
+                                }
+
+                        else
+                            Nothing
+                    )
+    in
+    allParsedModules
+        |> List.concatMap findReferencesInModule
 
 
 monacoRangeFromSyntaxRange : Elm.Syntax.Range.Range -> Frontend.MonacoEditor.MonacoRange

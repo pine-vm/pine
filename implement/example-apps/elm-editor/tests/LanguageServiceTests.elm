@@ -853,6 +853,196 @@ beta =
         ]
 
 
+find_references : Test.Test
+find_references =
+    let
+        otherFiles =
+            [ ( [ "src", "Alpha.elm" ]
+              , """
+module Alpha exposing (..)
+
+
+from_alpha = 123
+
+
+"""
+              )
+            , ( [ "src", "Delta.elm" ]
+              , """
+module Delta exposing (..)
+
+import Alpha
+
+
+{-| Comment on function
+-}
+from_delta : ( Int, String )
+from_delta =
+    ( Alpha.from_alpha, "" )
+
+
+beta =
+    Alpha.from_alpha
+
+
+"""
+              )
+            ]
+
+        expectationFromScenarioInMain mainModuleText expectedItems =
+            referenceExpectationFromScenario
+                otherFiles
+                ( [ "src", "Main.elm" ], mainModuleText )
+                expectedItems
+    in
+    Test.describe "Find references"
+        [ Test.test "Single ref to local top-level function" <|
+            \_ ->
+                expectationFromScenarioInMain
+                    """
+module Main exposing (State)
+
+
+name = i👈🚁nit
+
+
+init : State
+init =
+    0
+"""
+                    [ { filePath = [ "src", "Main.elm" ]
+                      , range = { startLineNumber = 5, startColumn = 8, endLineNumber = 5, endColumn = 12 }
+                      }
+                    ]
+        , Test.test "From decl signature of local top-level function" <|
+            \_ ->
+                expectationFromScenarioInMain
+                    """
+module Main exposing (State)
+
+
+name = init
+
+
+in👈🚁it : State
+init =
+    0
+"""
+                    [ { filePath = [ "src", "Main.elm" ]
+                      , range = { startLineNumber = 5, startColumn = 8, endLineNumber = 5, endColumn = 12 }
+                      }
+                    ]
+        , Test.test "From decl name of local top-level function" <|
+            \_ ->
+                expectationFromScenarioInMain
+                    """
+module Main exposing (State)
+
+
+name = init
+
+
+init : State
+in👈🚁it =
+    0
+"""
+                    [ { filePath = [ "src", "Main.elm" ]
+                      , range = { startLineNumber = 5, startColumn = 8, endLineNumber = 5, endColumn = 12 }
+                      }
+                    ]
+        , Test.test "To top-level function from other module via canonical name" <|
+            \_ ->
+                expectationFromScenarioInMain
+                    """
+module Main exposing (State)
+
+import Alpha
+
+
+name =
+    Alpha.from_👈🚁alpha
+
+"""
+                    [ { filePath = [ "src", "Delta.elm" ]
+                      , range = { endColumn = 23, endLineNumber = 11, startColumn = 13, startLineNumber = 11 }
+                      }
+                    , { filePath = [ "src", "Delta.elm" ]
+                      , range = { endColumn = 21, endLineNumber = 15, startColumn = 11, startLineNumber = 15 }
+                      }
+                    , { filePath = [ "src", "Main.elm" ]
+                      , range = { endColumn = 21, endLineNumber = 8, startColumn = 11, startLineNumber = 8 }
+                      }
+                    ]
+        , Test.test "To top-level function from other module via alias" <|
+            \_ ->
+                expectationFromScenarioInMain
+                    """
+module Main exposing (State)
+
+import Alpha as ModuleAlias
+
+
+name =
+    ModuleAlias.from_👈🚁alpha
+
+
+"""
+                    [ { filePath = [ "src", "Delta.elm" ]
+                      , range = { endColumn = 23, endLineNumber = 11, startColumn = 13, startLineNumber = 11 }
+                      }
+                    , { filePath = [ "src", "Delta.elm" ]
+                      , range = { endColumn = 21, endLineNumber = 15, startColumn = 11, startLineNumber = 15 }
+                      }
+                    , { filePath = [ "src", "Main.elm" ]
+                      , range = { endColumn = 27, endLineNumber = 8, startColumn = 17, startLineNumber = 8 }
+                      }
+                    ]
+        , Test.test "To top-level function from other module via exposed" <|
+            \_ ->
+                expectationFromScenarioInMain
+                    """
+module Main exposing (State)
+
+import Alpha exposing (from_alpha)
+
+
+name =
+    from_👈🚁alpha
+
+
+"""
+                    [ { filePath = [ "src", "Delta.elm" ]
+                      , range = { endColumn = 23, endLineNumber = 11, startColumn = 13, startLineNumber = 11 }
+                      }
+                    , { filePath = [ "src", "Delta.elm" ]
+                      , range = { endColumn = 21, endLineNumber = 15, startColumn = 11, startLineNumber = 15 }
+                      }
+                    , { filePath = [ "src", "Main.elm" ]
+                      , range = { endColumn = 21, endLineNumber = 8, startColumn = 11, startLineNumber = 8 }
+                      }
+                    ]
+        , Test.test "From ref to local" <|
+            \_ ->
+                expectationFromScenarioInMain
+                    """
+module Main exposing (State)
+
+
+name =
+    let
+        local = 123
+    in
+    loc👈🚁al
+
+
+"""
+                    [ { filePath = [ "src", "Main.elm" ]
+                      , range = { endColumn = 10, endLineNumber = 9, startColumn = 5, startLineNumber = 9 }
+                      }
+                    ]
+        ]
+
+
 completionItemsExpectationFromScenario :
     (LanguageService.LanguageServiceState -> LanguageService.LanguageServiceState)
     -> List ( List String, String )
@@ -917,6 +1107,65 @@ expectationFromScenarioDescribingOpenFile modifyLanguageServiceState otherFiles 
             }
             languageServiceState
         )
+
+
+referenceExpectationFromScenario :
+    List ( List String, String )
+    -> ( List String, String )
+    -> List LanguageServiceInterface.LocationUnderFilePath
+    -> Expect.Expectation
+referenceExpectationFromScenario otherFiles ( fileOpenedInEditorPath, fileOpenedInEditorText ) expectedItems =
+    case String.split "👈🚁" fileOpenedInEditorText of
+        [ textUntilCursor, textAfterCursor ] ->
+            referenceExpectationFromScenarioDescribingOpenFile
+                otherFiles
+                { filePath = fileOpenedInEditorPath
+                , textUntilCursor = textUntilCursor
+                , textAfterCursor = textAfterCursor
+                }
+                expectedItems
+
+        splitElements ->
+            Expect.fail
+                ("Unexpected shape of fileOpenedInEditorText: Unexpected number of split symbols: "
+                    ++ String.fromInt (List.length splitElements - 1)
+                )
+
+
+referenceExpectationFromScenarioDescribingOpenFile :
+    List ( List String, String )
+    -> { filePath : List String, textUntilCursor : String, textAfterCursor : String }
+    -> List LanguageServiceInterface.LocationUnderFilePath
+    -> Expect.Expectation
+referenceExpectationFromScenarioDescribingOpenFile otherFiles fileOpenedInEditor expectedItems =
+    let
+        languageServiceState =
+            buildLanguageServiceStateFindingParsableModuleText
+                { maxLinesToRemoveBeforeCursor = 0 }
+                otherFiles
+                fileOpenedInEditor
+
+        positionLineNumber =
+            fileOpenedInEditor.textUntilCursor |> String.lines |> List.length
+
+        positionColumn =
+            fileOpenedInEditor.textUntilCursor
+                |> String.lines
+                |> List.reverse
+                |> List.head
+                |> Maybe.map (String.length >> (+) 1)
+                |> Maybe.withDefault 0
+
+        computedItems : List LanguageServiceInterface.LocationUnderFilePath
+        computedItems =
+            LanguageService.textDocumentReferences
+                { filePathOpenedInEditor = fileOpenedInEditor.filePath
+                , positionLineNumber = positionLineNumber
+                , positionColumn = positionColumn
+                }
+                languageServiceState
+    in
+    Expect.equal expectedItems computedItems
 
 
 buildLanguageServiceStateFindingParsableModuleText :

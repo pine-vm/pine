@@ -14,6 +14,7 @@ type Response
     | ProvideCompletionItemsResponse (List Frontend.MonacoEditor.MonacoCompletionItem)
     | ProvideDefinitionResponse (List LocationUnderFilePath)
     | TextDocumentSymbolResponse (List DocumentSymbol)
+    | TextDocumentReferencesResponse (List LocationUnderFilePath)
 
  * */
 
@@ -36,6 +37,10 @@ public abstract record Response
 
     public record TextDocumentSymbolResponse(
         IReadOnlyList<DocumentSymbol> Symbols)
+        : Response;
+
+    public record TextDocumentReferencesResponse(
+        IReadOnlyList<LocationUnderFilePath> Locations)
         : Response;
 }
 
@@ -236,34 +241,19 @@ public static class ResponseEncoding
                     responseTag.Arguments.Count;
             }
 
-            if (responseTag.Arguments[0] is not ElmValue.ElmList responseList)
+            var locationsResult =
+                DecodeLocationUnderFilePathList(responseTag.Arguments[0]);
             {
-                return
-                    "Unexpected response tag argument type: " +
-                    responseTag.Arguments[0].GetType();
+                if (locationsResult.IsErrOrNull() is { } err)
+                {
+                    return "Failed decoding locations: " + err;
+                }
             }
 
-            var locations = new LocationUnderFilePath[responseList.Elements.Count];
-
-            for (var i = 0; i < responseList.Elements.Count; i++)
+            if (locationsResult.IsOkOrNull() is not { } locations)
             {
-                var locationResult =
-                    LocationUnderFilePathEncoding.Decode(responseList.Elements[i]);
-
-                {
-                    if (locationResult.IsErrOrNull() is { } err)
-                    {
-                        return "Failed decoding location at index [" + i + "]: " + err;
-                    }
-                }
-
-                if (locationResult.IsOkOrNull() is not { } location)
-                {
-                    throw new System.NotImplementedException
-                        ("Unexpected result type: " + locationResult.GetType());
-                }
-
-                locations[i] = location;
+                throw new System.NotImplementedException
+                    ("Unexpected result type: " + locationsResult.GetType());
             }
 
             return new Response.ProvideDefinitionResponse(locations);
@@ -311,9 +301,69 @@ public static class ResponseEncoding
             return new Response.TextDocumentSymbolResponse(symbols);
         }
 
+        if (responseTag.TagName is "TextDocumentReferencesResponse")
+        {
+            if (responseTag.Arguments.Count is not 1)
+            {
+                return
+                    "Unexpected response tag arguments count: " +
+                    responseTag.Arguments.Count;
+            }
+
+            var locationsResult =
+                DecodeLocationUnderFilePathList(responseTag.Arguments[0]);
+            {
+                if (locationsResult.IsErrOrNull() is { } err)
+                {
+                    return "Failed decoding locations: " + err;
+                }
+            }
+
+            if (locationsResult.IsOkOrNull() is not { } locations)
+            {
+                throw new System.NotImplementedException
+                    ("Unexpected result type: " + locationsResult.GetType());
+            }
+
+            return new Response.TextDocumentReferencesResponse(locations);
+        }
+
         return
             "Unexpected response tag: " +
             responseTag.TagName;
+    }
+
+    public static Result<string, IReadOnlyList<LocationUnderFilePath>> DecodeLocationUnderFilePathList(
+        ElmValue elmValue)
+    {
+        if (elmValue is not ElmValue.ElmList list)
+        {
+            return "Expected Elm list, got: " + elmValue.GetType();
+        }
+
+        var locations = new LocationUnderFilePath[list.Elements.Count];
+
+        for (var i = 0; i < list.Elements.Count; i++)
+        {
+            var locationResult =
+                LocationUnderFilePathEncoding.Decode(list.Elements[i]);
+            {
+                if (locationResult.IsErrOrNull() is { } err)
+                {
+                    return "Failed decoding location at index [" + i + "]: " + err;
+                }
+            }
+
+            if (locationResult.IsOkOrNull() is not { } location)
+            {
+                throw new System.NotImplementedException
+                    ("Unexpected result type: " + locationResult.GetType());
+            }
+
+            locations[i] = location;
+        }
+
+        return locations;
     }
 }
 

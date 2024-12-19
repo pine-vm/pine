@@ -44,6 +44,7 @@ type Request
     | ProvideCompletionItemsRequest ProvideCompletionItemsRequestStruct
     | ProvideDefinitionRequest ProvideDefinitionRequestStruct
     | TextDocumentSymbolRequest (List String)
+    | TextDocumentReferencesRequest ProvideReferencesRequestStruct
 
 
 type Response
@@ -52,6 +53,7 @@ type Response
     | ProvideCompletionItemsResponse (List Frontend.MonacoEditor.MonacoCompletionItem)
     | ProvideDefinitionResponse (List LocationUnderFilePath)
     | TextDocumentSymbolResponse (List DocumentSymbol)
+    | TextDocumentReferencesResponse (List LocationUnderFilePath)
 
 
 type alias ProvideHoverRequestStruct =
@@ -69,6 +71,10 @@ type alias ProvideCompletionItemsRequestStruct =
 
 
 type alias ProvideDefinitionRequestStruct =
+    ProvideHoverRequestStruct
+
+
+type alias ProvideReferencesRequestStruct =
     ProvideHoverRequestStruct
 
 
