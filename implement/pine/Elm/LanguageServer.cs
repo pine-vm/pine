@@ -10,6 +10,8 @@ using System.Runtime.InteropServices;
 using Pine.PineVM;
 using Pine.Elm019;
 using System.Collections.Immutable;
+using System.Text;
+using System.Threading.Tasks;
 
 namespace Pine.Elm;
 
@@ -1026,9 +1028,10 @@ public class LanguageServer(
         Log("Begin elm make for " + textDocumentUri);
 
         var elmMakeOutput =
-            ElmMake(
+            ElmMakeRunner.ElmMakeAsync(
                 workingDirectoryAbsolute: workingDirectoryAbsolute,
-                pathToFileWithElmEntryPoint: localPath);
+                pathToFileWithElmEntryPoint: localPath)
+            .Result;
 
         Log("Completed elm make for " + textDocumentUri + " in " +
             CommandLineInterface.FormatIntegerForDisplay(clock.ElapsedMilliseconds) + " ms");
@@ -1151,83 +1154,6 @@ public class LanguageServer(
         {
             return "Failed to parse elm make report: " + e;
         }
-    }
-
-    /// <summary>
-    /// Use the 'elm make' command on the Elm executable file.
-    /// </summary>
-    public static ExecutableFile.ProcessOutput ElmMake(
-        string workingDirectoryAbsolute,
-        string pathToFileWithElmEntryPoint)
-    {
-        var arguments =
-            string.Join(" ", ["make", pathToFileWithElmEntryPoint, "--report=json  --output=/dev/null"]);
-
-        var executableFile =
-            BlobLibrary.LoadFileForCurrentOs(ElmTime.Elm019.Elm019Binaries.ElmExecutableFileByOs)
-            ??
-            throw new System.Exception("Failed to load elm-format executable file");
-
-        if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-        {
-            System.IO.File.SetUnixFileMode(
-                executableFile.cacheFilePath,
-                ExecutableFile.UnixFileModeForExecutableFile);
-        }
-
-        var process = new System.Diagnostics.Process
-        {
-            StartInfo = new System.Diagnostics.ProcessStartInfo
-            {
-                WorkingDirectory = workingDirectoryAbsolute,
-                FileName = executableFile.cacheFilePath,
-                Arguments = arguments,
-                UseShellExecute = false,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                CreateNoWindow = true,
-            },
-        };
-
-
-        //  Avoid elm make failing on `getAppUserDataDirectory`.
-        /* Also, work around problems with elm make like this:
-        -- HTTP PROBLEM ----------------------------------------------------------------
-
-        The following HTTP request failed:
-            <https://github.com/elm/core/zipball/1.0.0/>
-
-        Here is the error message I was able to extract:
-
-        HttpExceptionRequest Request { host = "github.com" port = 443 secure = True
-        requestHeaders = [("User-Agent","elm/0.19.0"),("Accept-Encoding","gzip")]
-        path = "/elm/core/zipball/1.0.0/" queryString = "" method = "GET" proxy =
-        Nothing rawBody = False redirectCount = 10 responseTimeout =
-        ResponseTimeoutDefault requestVersion = HTTP/1.1 } (StatusCodeException
-        (Response {responseStatus = Status {statusCode = 429, statusMessage = "Too
-        Many Requests"}, responseVersion = HTTP/1.1, responseHeaders =
-        [("Server","GitHub.com"),("Date","Sun, 18 Nov 2018 16:53:18
-        GMT"),("Content-Type","text/html"),("Transfer-Encoding","chunked"),("Status","429
-        Too Many
-        Requests"),("Retry-After","120")
-
-        To avoid elm make failing with this error, break isolation here and reuse elm home directory.
-        An alternative would be retrying when this error is parsed from `commandResults.processOutput.StandardError`.
-        */
-        process.StartInfo.Environment["ELM_HOME"] = ElmTime.Elm019.Elm019Binaries.GetElmHomeDirectory();
-
-        process.Start();
-        var standardOutput = process.StandardOutput.ReadToEnd();
-        var standardError = process.StandardError.ReadToEnd();
-
-        process.WaitForExit();
-        var exitCode = process.ExitCode;
-        process.Close();
-
-        return new ExecutableFile.ProcessOutput(
-            StandardError: standardError,
-            StandardOutput: standardOutput,
-            ExitCode: exitCode);
     }
 
     public static string? FindElmJsonFile(string elmModuleFilePath)

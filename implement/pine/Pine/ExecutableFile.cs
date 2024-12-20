@@ -6,6 +6,8 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
+using System.Text;
+using System.Threading.Tasks;
 
 namespace Pine;
 
@@ -16,7 +18,25 @@ public class ExecutableFile
         string StandardOutput,
         int ExitCode);
 
+
     public static (ProcessOutput processOutput, IReadOnlyCollection<(IReadOnlyList<string> path, ReadOnlyMemory<byte> content)> resultingFiles) ExecuteFileWithArguments(
+        IReadOnlyDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> environmentFilesNotExecutable,
+        ReadOnlyMemory<byte> executableFile,
+        string arguments,
+        IDictionary<string, string>? environmentStrings,
+        IReadOnlyList<string>? workingDirectoryRelative = null,
+        IReadOnlyDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>>? environmentFilesExecutable = null,
+        IReadOnlyDictionary<string, ReadOnlyMemory<byte>>? environmentPathExecutableFiles = null) =>
+        ExecuteFileWithArgumentsAsync(
+            environmentFilesNotExecutable,
+            executableFile,
+            arguments,
+            environmentStrings,
+            workingDirectoryRelative,
+            environmentFilesExecutable,
+            environmentPathExecutableFiles).Result;
+
+    public static async Task<(ProcessOutput processOutput, IReadOnlyCollection<(IReadOnlyList<string> path, ReadOnlyMemory<byte> content)> resultingFiles)> ExecuteFileWithArgumentsAsync(
         IReadOnlyDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> environmentFilesNotExecutable,
         ReadOnlyMemory<byte> executableFile,
         string arguments,
@@ -130,12 +150,59 @@ public class ExecutableFile
         foreach (var envString in environmentStringsWithExecutableFiles.EmptyIfNull())
             process.StartInfo.Environment[envString.Key] = envString.Value;
 
-        process.Start();
-        var standardOutput = process.StandardOutput.ReadToEnd();
-        var standardError = process.StandardError.ReadToEnd();
+        var standardOutputBuilder = new StringBuilder();
+        var standardErrorBuilder = new StringBuilder();
 
-        process.WaitForExit();
+        // We'll use TaskCompletionSource to wait until all output has been read
+        var stdoutTcs = new TaskCompletionSource<bool>();
+        var stderrTcs = new TaskCompletionSource<bool>();
+
+        // Event handler for standard output
+        process.OutputDataReceived += (sender, e) =>
+        {
+            if (e.Data is null)
+            {
+                // No more output
+                stdoutTcs.TrySetResult(true);
+            }
+            else
+            {
+                standardOutputBuilder.AppendLine(e.Data);
+            }
+        };
+
+        // Event handler for standard error
+        process.ErrorDataReceived += (sender, e) =>
+        {
+            if (e.Data is null)
+            {
+                // No more error output
+                stderrTcs.TrySetResult(true);
+            }
+            else
+            {
+                standardErrorBuilder.AppendLine(e.Data);
+            }
+        };
+
+        // Start the process and begin asynchronous reads
+        if (!process.Start())
+        {
+            throw new Exception("Failed to start elm make process.");
+        }
+
+        process.BeginOutputReadLine();
+        process.BeginErrorReadLine();
+
+        // Wait for the process to exit, then for all output to be collected
+        await process.WaitForExitAsync();
+
+        // At this point, the process has exited, but we need to ensure we collected all output lines.
+        // The event handlers complete when they receive a null Data line.
+        await Task.WhenAll(stdoutTcs.Task, stderrTcs.Task);
+
         var exitCode = process.ExitCode;
+
         process.Close();
 
         var createdFiles =
@@ -155,8 +222,8 @@ public class ExecutableFile
         return (new ProcessOutput
         (
             ExitCode: exitCode,
-            StandardError: standardError,
-            StandardOutput: standardOutput
+            StandardError: standardErrorBuilder.ToString(),
+            StandardOutput: standardOutputBuilder.ToString()
         ), createdFiles);
     }
 
