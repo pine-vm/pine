@@ -4,15 +4,15 @@ Elm developer tools packaged as [Visual Studio Code](https://code.visualstudio.c
 
 ## Features
 
-- Syntax highlighting
-- Formatting
-- Error highlighting
++ Syntax highlighting
++ Formatting
++ Error highlighting
 
-- Completions: Shows completion suggestions matching the current context
-- Hover tips: Shows type annotations and documentation for a type alias, module, type or function
-- Go to Definition: Jump to the definition of a type alias, module, type or function
-- Go to symbol / Module outline
-- Find All References
++ Completions - Shows completion suggestions matching the current context
++ Hover tips - Shows type annotations and documentation for a type alias, module, type, or function
++ Go to Definition - Jump to the definition of a type alias, module, type, or function
++ Go to symbol - module outline
++ Find All References
 
 ## Install
 
