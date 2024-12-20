@@ -6,12 +6,9 @@ using Pine.Core.PineVM;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
-using System.Runtime.InteropServices;
 using Pine.PineVM;
 using Pine.Elm019;
 using System.Collections.Immutable;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace Pine.Elm;
 
@@ -204,10 +201,6 @@ public class LanguageServer(
             }
         }
 
-        IReadOnlyList<string> sourceDirectories = [.. composeDirectories().Distinct()];
-
-        Log("Starting to initialize files contents for " + sourceDirectories.Count + " directories");
-
         languageServiceStateTask = System.Threading.Tasks.Task.Run(() =>
         {
             var vmCache = new PineVMCache();
@@ -238,6 +231,12 @@ public class LanguageServer(
                 "Unexpected language service state result type: " + taskResult.GetType());
         }
 
+        IReadOnlyList<string> sourceDirectories = [.. composeDirectories().Distinct()];
+
+        Log("Starting to initialize files contents for " + sourceDirectories.Count + " directories");
+
+        var aggregateClock = System.Diagnostics.Stopwatch.StartNew();
+
         var filesContents = new Dictionary<string, string>();
 
         foreach (var sourceDirectory in sourceDirectories)
@@ -253,7 +252,7 @@ public class LanguageServer(
                 {
                     try
                     {
-                        var clock = System.Diagnostics.Stopwatch.StartNew();
+                        var fileClock = System.Diagnostics.Stopwatch.StartNew();
 
                         var fileContent = System.IO.File.ReadAllText(elmFile);
 
@@ -263,9 +262,9 @@ public class LanguageServer(
                             "Read file " + elmFile + " with " +
                             CommandLineInterface.FormatIntegerForDisplay(fileContent.Length) +
                             " chars in " +
-                            CommandLineInterface.FormatIntegerForDisplay((int)clock.Elapsed.TotalMilliseconds) + " ms");
+                            CommandLineInterface.FormatIntegerForDisplay((int)fileClock.Elapsed.TotalMilliseconds) + " ms");
 
-                        clock.Restart();
+                        fileClock.Restart();
 
                         languageServiceState.AddFile(
                             PathItemsFromFlatPath(elmFile),
@@ -273,7 +272,7 @@ public class LanguageServer(
 
                         Log(
                             "Processed file " + elmFile + " in language service in " +
-                            CommandLineInterface.FormatIntegerForDisplay((int)clock.Elapsed.TotalMilliseconds) + " ms");
+                            CommandLineInterface.FormatIntegerForDisplay((int)fileClock.Elapsed.TotalMilliseconds) + " ms");
                     }
                     catch (System.Exception e)
                     {
@@ -287,7 +286,9 @@ public class LanguageServer(
             }
         }
 
-        Log("Finished initializing contents for " + filesContents.Count + " files");
+        Log(
+            "Finished initializing contents for " + filesContents.Count + " Elm modules in " +
+            CommandLineInterface.FormatIntegerForDisplay((int)aggregateClock.Elapsed.TotalMilliseconds) + " ms");
     }
 
     public void Workspace_didChangeWorkspaceFolders(WorkspaceFoldersChangeEvent workspaceFoldersChangeEvent)

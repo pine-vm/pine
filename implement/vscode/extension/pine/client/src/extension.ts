@@ -1,5 +1,5 @@
 import * as path from 'path';
-import { workspace, ExtensionContext } from 'vscode';
+import { workspace, ExtensionContext, window, OutputChannel } from 'vscode';
 
 import {
     CloseAction,
@@ -14,37 +14,59 @@ import {
 let client: LanguageClient;
 
 
-const langServerCommand: string =
+const langServerExecutablePathDefault: string =
     "pine";
 
 
 const logDir: string =
     "./ls-log/";
 
+const pineOutputChannel: OutputChannel =
+    window.createOutputChannel("Pine Logs");
+
 function buildServerOptions(context: ExtensionContext): ServerOptions {
 
-    /*
-    https://github.com/denoland/vscode_deno/blob/df2633e58a95554158065ac5e6fc9b87e6c02c7a/client/src/commands.ts#L167-L179
-    */
+    const config =
+        workspace.getConfiguration('pineLanguageServer');
+
+    const customPath =
+        sanitizePathFromSettings(
+            config.get<string>('pathToPineBinary')?.trim() || '');
+
+    const langServerExecutablePath =
+        customPath !== ''
+            ? customPath
+            : langServerExecutablePathDefault;
+
+    pineOutputChannel.appendLine("lang-server executable path: " + langServerExecutablePath);
+
     return {
         run: {
-            command: langServerCommand
-            // , args: ["lsp", "--log-dir=" + logDir]
-            , args: ["lsp"]
-            , transport: TransportKind.stdio
+            command: langServerExecutablePath,
+            args: ["lsp"],
+            transport: TransportKind.stdio
         },
         debug: {
-            command: langServerCommand
-            // , args: ["lsp", "--log-dir=" + logDir]
-            , args: ["lsp"]
-            , transport: TransportKind.stdio
-        },
+            command: langServerExecutablePath,
+            args: ["lsp"],
+            transport: TransportKind.stdio
+        }
     };
+}
+
+function sanitizePathFromSettings(input: string): string {
+    /*
+    Remove leading and trailing quotes,
+    as could be present when using "Copy as path" in Windows Explorer
+    */
+    const withoutQuotes = input.replace(/^"|"$/g, '');
+
+    return withoutQuotes;
 }
 
 export function activate(context: ExtensionContext) {
 
-    console.info("Begin activate...");
+    pineOutputChannel.appendLine("Pine extension activated.");
 
     const serverOptions: ServerOptions = buildServerOptions(context);
 

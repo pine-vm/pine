@@ -3,7 +3,7 @@
 	"displayName": "Pine",
 	"description": "Elm developer tools",
 	"license": "MIT",
-	"version": "0.3.0",
+	"version": "0.3.1",
 	"author": "Michael Rätzel",
 	"repository": {
 		"type": "git",
@@ -54,7 +54,7 @@
 		},
 		"configuration": {
 			"type": "object",
-			"title": "Example configuration",
+			"title": "Pine",
 			"properties": {
 				"pineLanguageServer.maxNumberOfProblems": {
 					"scope": "resource",
@@ -72,6 +72,12 @@
 					],
 					"default": "off",
 					"description": "Traces the communication between VS Code and the language server."
+				},
+				"pineLanguageServer.pathToPineBinary": {
+					"scope": "window",
+					"type": "string",
+					"default": "",
+					"description": "Path to the Pine language server binary. Empty string falls back to 'pine'."
 				}
 			}
 		}

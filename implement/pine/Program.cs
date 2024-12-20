@@ -874,7 +874,7 @@ public class Program
                     log("Unobserved task exception: " + args.Exception);
                 };
 
-                log("Starting language server...");
+                log("Pine version " + AppVersionId + " starting language server...");
 
                 var languageServer = new LanguageServer(logDelegate: log);
 
