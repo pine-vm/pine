@@ -22,6 +22,7 @@ import Elm.Syntax.TypeAnnotation
 import FileTree
 import Frontend.MonacoEditor
 import LanguageServiceInterface
+import List.Extra
 
 
 type alias LanguageServiceState =
@@ -68,7 +69,7 @@ type alias ElmCoreModule =
 
 
 type DeclarationScope
-    = TopLevelScope Range
+    = TopLevelScope
     | LocalScope Range
 
 
@@ -85,7 +86,7 @@ type SourceContentForCooking
 
 
 type alias ParsedDeclaration =
-    Declaration CookedDocumentation
+    Declaration ( DeclarationRange, CookedDocumentation )
 
 
 {-| Documentation prepared as markdown string
@@ -94,8 +95,31 @@ type CookedDocumentation
     = CookedDocumentation String
 
 
-type LocationUnderFilePath
-    = LocationUnderFilePath (List String) Range
+type LocationUnderFilePath range
+    = LocationUnderFilePath (List String) range
+
+
+type alias ModuleCompletionItems =
+    { fromTopLevel :
+        List
+            { completionItem : CompletionItem
+            , isExposed : Bool
+            , range : DeclarationRange
+            }
+    , fromLocals : List ( CompletionItem, DeclarationRange, Range )
+    }
+
+
+type DeclarationRange
+    = DeclarationRange
+        -- Complete declaration
+        Range
+        -- Instances of the own name, used for renaming
+        (List Range)
+
+
+type SyntaxNode value
+    = SyntaxNode Range value
 
 
 type Range
@@ -227,6 +251,15 @@ handleRequestInCurrentWorkspace request stateBefore =
                     ( LanguageServiceInterface.TextDocumentReferencesResponse
                         (textDocumentReferences
                             referenceRequest
+                            stateBefore
+                        )
+                    , stateBefore
+                    )
+
+                LanguageServiceInterface.TextDocumentRenameRequest renameParams ->
+                    ( LanguageServiceInterface.TextDocumentRenameResponse
+                        (textDocumentRename
+                            renameParams
                             stateBefore
                         )
                     , stateBefore
@@ -368,7 +401,7 @@ hoverItemsFromParsedModule :
     ParsedCookedModuleCache
     -> LanguageServiceState
     ->
-        { fromDeclarations : List ( Range, LocationUnderFilePath, String )
+        { fromDeclarations : List ( Range, LocationUnderFilePath DeclarationRange, String )
         , hoverItems : List ( Range, String )
         }
 hoverItemsFromParsedModule parsedModule languageServiceState =
@@ -377,7 +410,7 @@ hoverItemsFromParsedModule parsedModule languageServiceState =
         importedModules =
             importedModulesFromFile parsedModule languageServiceState
 
-        parsedReferences : List (Elm.Syntax.Node.Node ( List String, String ))
+        parsedReferences : List (SyntaxNode ( List String, String ))
         parsedReferences =
             listReferencesInFile parsedModule.syntax
 
@@ -386,28 +419,29 @@ hoverItemsFromParsedModule parsedModule languageServiceState =
                 List
                     { completionItem : CompletionItem
                     , isExposed : Bool
-                    , range : Range
+                    , range : DeclarationRange
                     }
-            , fromLocals : List ( CompletionItem, Range )
+            , fromLocals : List ( CompletionItem, DeclarationRange, Range )
             }
         currentModuleDeclarations =
             parsedModule.completionItems
 
-        localDeclarationsAndImportExposings : List ( DeclarationScope, CompletionItem )
+        localDeclarationsAndImportExposings : List ( DeclarationRange, DeclarationScope, CompletionItem )
         localDeclarationsAndImportExposings =
             List.concat
                 [ List.concat
                     [ List.map
                         (\fromTopLevel ->
-                            ( TopLevelScope fromTopLevel.range
+                            ( fromTopLevel.range
+                            , TopLevelScope
                             , fromTopLevel.completionItem
                             )
                         )
                         currentModuleDeclarations.fromTopLevel
                     , commonImplicitTopLevelImports languageServiceState
                         |> List.map
-                            (\( range, completionItem ) ->
-                                ( TopLevelScope range, completionItem )
+                            (\( declRange, completionItem ) ->
+                                ( declRange, TopLevelScope, completionItem )
                             )
 
                     {-
@@ -416,7 +450,9 @@ hoverItemsFromParsedModule parsedModule languageServiceState =
                     -}
                     ]
                 , List.map
-                    (\( completionItem, range ) -> ( LocalScope range, completionItem ))
+                    (\( completionItem, declRange, scopeRange ) ->
+                        ( declRange, LocalScope scopeRange, completionItem )
+                    )
                     currentModuleDeclarations.fromLocals
                 ]
 
@@ -474,22 +510,22 @@ hoverItemsFromParsedModule parsedModule languageServiceState =
             List
                 ( String
                 , ( Maybe Range
-                  , LocationUnderFilePath
+                  , LocationUnderFilePath DeclarationRange
                   , CompletionItem
                   )
                 )
         localModuleItemsBeforeFiltering =
             localDeclarationsAndImportExposings
                 |> List.map
-                    (\( scope, (CompletionItem completionItemLabel _ _ _) as completionItem ) ->
+                    (\( declRange, scope, (CompletionItem completionItemLabel _ _ _) as completionItem ) ->
                         let
                             ( maybeFilterRange, completionItemRange ) =
                                 case scope of
-                                    TopLevelScope topLevelRange ->
-                                        ( Nothing, topLevelRange )
+                                    TopLevelScope ->
+                                        ( Nothing, declRange )
 
                                     LocalScope scopeRange ->
-                                        ( Just scopeRange, scopeRange )
+                                        ( Just scopeRange, declRange )
                         in
                         ( completionItemLabel
                         , ( maybeFilterRange
@@ -502,9 +538,9 @@ hoverItemsFromParsedModule parsedModule languageServiceState =
                     )
 
         getHoverForFunctionOrName :
-            Elm.Syntax.Node.Node ( Elm.Syntax.ModuleName.ModuleName, String )
-            -> Maybe ( LocationUnderFilePath, String )
-        getHoverForFunctionOrName (Elm.Syntax.Node.Node functionOrNameNodeRange ( moduleName, nameInModule )) =
+            SyntaxNode ( Elm.Syntax.ModuleName.ModuleName, String )
+            -> Maybe ( LocationUnderFilePath DeclarationRange, String )
+        getHoverForFunctionOrName (SyntaxNode (Range ( startRow, startColumn ) _) ( moduleName, nameInModule )) =
             if moduleName == [] then
                 case Common.assocListGet nameInModule localModuleItemsBeforeFiltering of
                     Nothing ->
@@ -518,7 +554,7 @@ hoverItemsFromParsedModule parsedModule languageServiceState =
                             Just filterRange ->
                                 if
                                     rangeContainsLocation
-                                        ( functionOrNameNodeRange.start.row, functionOrNameNodeRange.start.column )
+                                        ( startRow, startColumn )
                                         filterRange
                                 then
                                     Just ( locationUnderFilePath, completionItemDocumentation )
@@ -552,27 +588,29 @@ hoverItemsFromParsedModule parsedModule languageServiceState =
                                 )
 
         getForHoversForReferenceNode :
-            Elm.Syntax.Node.Node ( List String, String )
-            -> List ( Range, LocationUnderFilePath, String )
+            SyntaxNode ( List String, String )
+            -> List ( Range, LocationUnderFilePath DeclarationRange, String )
         getForHoversForReferenceNode functionOrNameNode =
             let
-                (Elm.Syntax.Node.Node wholeRange ( moduleName, nameInModule )) =
+                (SyntaxNode wholeRange ( moduleName, nameInModule )) =
                     functionOrNameNode
 
-                wholeRangeEnd =
-                    wholeRange.end
+                (Range ( wholeRangeStartLine, wholeRangeStartColumn ) ( wholeRangeEndLine, wholeRangeEndColumn )) =
+                    wholeRange
 
+                rangeModulePart : Range
                 rangeModulePart =
-                    { wholeRange
-                        | end = { wholeRangeEnd | column = wholeRangeEnd.column - String.length nameInModule }
-                    }
+                    Range
+                        ( wholeRangeStartLine, wholeRangeStartColumn )
+                        ( wholeRangeEndLine, wholeRangeEndColumn - String.length nameInModule - 1 )
 
+                forNameInModuleRange : Range
                 forNameInModuleRange =
-                    { wholeRange
-                        | start = { wholeRangeEnd | column = wholeRangeEnd.column - String.length nameInModule }
-                    }
+                    Range
+                        ( wholeRangeStartLine, wholeRangeEndColumn - String.length nameInModule )
+                        ( wholeRangeEndLine, wholeRangeEndColumn )
 
-                forModule : List ( Range, LocationUnderFilePath, String )
+                forModule : List ( Range, LocationUnderFilePath DeclarationRange, String )
                 forModule =
                     if moduleName == [] then
                         []
@@ -602,25 +640,22 @@ hoverItemsFromParsedModule parsedModule languageServiceState =
                                                     }
                                                     referencedModuleParsed.syntax
                                         in
-                                        [ ( rangeFromRecordRange rangeModulePart
+                                        [ ( rangeModulePart
                                           , LocationUnderFilePath
                                                 referencedModule.filePath
-                                                (Range
-                                                    ( rangeModulePart.start.row, rangeModulePart.start.column )
-                                                    ( rangeModulePart.end.row, rangeModulePart.end.column )
-                                                )
+                                                (DeclarationRange rangeModulePart [])
                                           , documentation
                                           )
                                         ]
 
-                forNameInModule : List ( Range, LocationUnderFilePath, String )
+                forNameInModule : List ( Range, LocationUnderFilePath DeclarationRange, String )
                 forNameInModule =
                     case getHoverForFunctionOrName functionOrNameNode of
                         Nothing ->
                             []
 
                         Just ( sourceLocation, hover ) ->
-                            [ ( rangeFromRecordRange forNameInModuleRange
+                            [ ( forNameInModuleRange
                               , sourceLocation
                               , hover
                               )
@@ -631,7 +666,7 @@ hoverItemsFromParsedModule parsedModule languageServiceState =
                 , forNameInModule
                 ]
 
-        fromDeclarations : List ( Range, LocationUnderFilePath, String )
+        fromDeclarations : List ( Range, LocationUnderFilePath DeclarationRange, String )
         fromDeclarations =
             List.concatMap getForHoversForReferenceNode parsedReferences
 
@@ -654,14 +689,20 @@ hoverItemsFromParsedModule parsedModule languageServiceState =
 
 listTypeReferencesFromTypeAnnotation :
     Elm.Syntax.Node.Node Elm.Syntax.TypeAnnotation.TypeAnnotation
-    -> List (Elm.Syntax.Node.Node ( Elm.Syntax.ModuleName.ModuleName, String ))
+    -> List (SyntaxNode ( Elm.Syntax.ModuleName.ModuleName, String ))
 listTypeReferencesFromTypeAnnotation (Elm.Syntax.Node.Node _ typeAnnotation) =
     case typeAnnotation of
         Elm.Syntax.TypeAnnotation.GenericType _ ->
             []
 
-        Elm.Syntax.TypeAnnotation.Typed instantiated arguments ->
-            instantiated :: List.concatMap listTypeReferencesFromTypeAnnotation arguments
+        Elm.Syntax.TypeAnnotation.Typed (Elm.Syntax.Node.Node instantiatedRangeRecord instantiatedVal) arguments ->
+            let
+                instantiatedRange : Range
+                instantiatedRange =
+                    rangeFromRecordRange instantiatedRangeRecord
+            in
+            SyntaxNode instantiatedRange instantiatedVal
+                :: List.concatMap listTypeReferencesFromTypeAnnotation arguments
 
         Elm.Syntax.TypeAnnotation.Unit ->
             []
@@ -760,6 +801,27 @@ provideDefinition :
     -> LanguageServiceState
     -> List LanguageServiceInterface.LocationUnderFilePath
 provideDefinition request languageServiceState =
+    provideDefinitionInternal
+        request
+        languageServiceState
+        |> List.map
+            (\(LocationUnderFilePath filePath (DeclarationRange (Range ( startRow, startColumn ) ( endRow, endColumn )) _)) ->
+                { filePath = filePath
+                , range =
+                    { startLineNumber = startRow
+                    , startColumn = startColumn
+                    , endLineNumber = endRow
+                    , endColumn = endColumn
+                    }
+                }
+            )
+
+
+provideDefinitionInternal :
+    LanguageServiceInterface.ProvideDefinitionRequestStruct
+    -> LanguageServiceState
+    -> List (LocationUnderFilePath DeclarationRange)
+provideDefinitionInternal request languageServiceState =
     case FileTree.getBlobAtPathFromFileTree request.filePathOpenedInEditor languageServiceState.fileTreeParseCache of
         Nothing ->
             []
@@ -776,21 +838,13 @@ provideDefinition request languageServiceState =
                     in
                     fromDeclarations
                         |> List.filterMap
-                            (\( refRange, LocationUnderFilePath filePath (Range ( startRow, startColumn ) ( endRow, endColumn )), _ ) ->
+                            (\( refRange, locationUnderFile, _ ) ->
                                 if
                                     rangeContainsLocation
                                         ( request.positionLineNumber, request.positionColumn )
                                         refRange
                                 then
-                                    Just
-                                        { filePath = filePath
-                                        , range =
-                                            { startLineNumber = startRow
-                                            , startColumn = startColumn
-                                            , endLineNumber = endRow
-                                            , endColumn = endColumn
-                                            }
-                                        }
+                                    Just locationUnderFile
 
                                 else
                                     Nothing
@@ -819,9 +873,12 @@ textDocumentSymbol filePath languageServiceState =
                                     (CompletionItem label _ completionItemKind _) =
                                         completionItem.completionItem
 
+                                    (DeclarationRange itemRangeWhole _) =
+                                        completionItem.range
+
                                     monacoRange : Frontend.MonacoEditor.MonacoRange
                                     monacoRange =
-                                        monacoRangeFromRange completionItem.range
+                                        monacoRangeFromRange itemRangeWhole
 
                                     symbolKind : LanguageServiceInterface.SymbolKind
                                     symbolKind =
@@ -861,10 +918,42 @@ textDocumentReferences :
     -> LanguageServiceState
     -> List LanguageServiceInterface.LocationUnderFilePath
 textDocumentReferences referenceRequest languageServiceState =
+    case
+        textDocumentReferencesGroupedByFilePath
+            referenceRequest
+            languageServiceState
+    of
+        Nothing ->
+            []
+
+        Just ( _, references ) ->
+            references
+                |> List.concatMap
+                    (\( filePath, ranges ) ->
+                        ranges
+                            |> List.map
+                                (\(Range ( startRow, startColumn ) ( endRow, endColumn )) ->
+                                    { filePath = filePath
+                                    , range =
+                                        { startLineNumber = startRow
+                                        , startColumn = startColumn
+                                        , endLineNumber = endRow
+                                        , endColumn = endColumn
+                                        }
+                                    }
+                                )
+                    )
+
+
+textDocumentReferencesGroupedByFilePath :
+    LanguageServiceInterface.ProvideReferencesRequestStruct
+    -> LanguageServiceState
+    -> Maybe ( ( List String, DeclarationRange ), List ( List String, List Range ) )
+textDocumentReferencesGroupedByFilePath referenceRequest languageServiceState =
     let
-        maybeDefinition : Maybe LanguageServiceInterface.LocationUnderFilePath
+        maybeDefinition : Maybe (LocationUnderFilePath DeclarationRange)
         maybeDefinition =
-            provideDefinition
+            provideDefinitionInternal
                 { filePathOpenedInEditor = referenceRequest.filePathOpenedInEditor
                 , positionLineNumber = referenceRequest.positionLineNumber
                 , positionColumn = referenceRequest.positionColumn
@@ -873,14 +962,19 @@ textDocumentReferences referenceRequest languageServiceState =
                 |> List.head
     in
     case maybeDefinition of
-        Just definitionLocation ->
+        Just (LocationUnderFilePath definitionLocationFilePath definitionLocationRange) ->
             let
-                definitionLocationRange : Range
-                definitionLocationRange =
-                    Range ( definitionLocation.range.startLineNumber, definitionLocation.range.startColumn )
-                        ( definitionLocation.range.endLineNumber, definitionLocation.range.endColumn )
+                (DeclarationRange definitionLocationRangeWhole _) =
+                    definitionLocationRange
+
+                references : List ( List String, List Range )
+                references =
+                    findReferences ( definitionLocationFilePath, definitionLocationRangeWhole ) languageServiceState
             in
-            findReferences ( definitionLocation.filePath, definitionLocationRange ) languageServiceState
+            Just
+                ( ( definitionLocationFilePath, definitionLocationRange )
+                , references
+                )
 
         Nothing ->
             -- Fallback: try to find a top-level declaration covering this position
@@ -889,12 +983,12 @@ textDocumentReferences referenceRequest languageServiceState =
                     languageServiceState.fileTreeParseCache
             of
                 Nothing ->
-                    []
+                    Nothing
 
                 Just currentFileCacheItem ->
                     case currentFileCacheItem.parsedFileLastSuccess of
                         Nothing ->
-                            []
+                            Nothing
 
                         Just parsedFile ->
                             let
@@ -902,11 +996,22 @@ textDocumentReferences referenceRequest languageServiceState =
                                 pos =
                                     ( referenceRequest.positionLineNumber, referenceRequest.positionColumn )
 
+                                maybeTopLevelDefinitionLocation : Maybe ( List String, DeclarationRange )
                                 maybeTopLevelDefinitionLocation =
                                     parsedFile.completionItems.fromTopLevel
                                         |> Common.listMapFind
                                             (\decl ->
-                                                if rangeContainsLocation pos decl.range then
+                                                let
+                                                    (DeclarationRange _ declRangesName) =
+                                                        decl.range
+                                                in
+                                                if
+                                                    List.any
+                                                        (\range ->
+                                                            rangeContainsLocation pos range
+                                                        )
+                                                        declRangesName
+                                                then
                                                     Just
                                                         ( parsedFile.filePath
                                                         , decl.range
@@ -918,16 +1023,28 @@ textDocumentReferences referenceRequest languageServiceState =
                             in
                             case maybeTopLevelDefinitionLocation of
                                 Nothing ->
-                                    []
+                                    Nothing
 
                                 Just syntheticDefinitionLocation ->
-                                    findReferences syntheticDefinitionLocation languageServiceState
+                                    let
+                                        ( definitionFilePath, DeclarationRange definitionRange _ ) =
+                                            syntheticDefinitionLocation
+
+                                        references =
+                                            findReferences
+                                                ( definitionFilePath, definitionRange )
+                                                languageServiceState
+                                    in
+                                    Just
+                                        ( syntheticDefinitionLocation
+                                        , references
+                                        )
 
 
 findReferences :
     ( List String, Range )
     -> LanguageServiceState
-    -> List LanguageServiceInterface.LocationUnderFilePath
+    -> List ( List String, List Range )
 findReferences ( targetDefinitionFilePath, targetDefinitionRange ) languageServiceState =
     let
         allParsedModules : List ParsedCookedModuleCache
@@ -941,32 +1058,118 @@ findReferences ( targetDefinitionFilePath, targetDefinitionRange ) languageServi
 
         findReferencesInModule :
             ParsedCookedModuleCache
-            -> List LanguageServiceInterface.LocationUnderFilePath
+            -> Maybe ( List String, List Range )
         findReferencesInModule parsedModule =
             let
                 { fromDeclarations } =
                     hoverItemsFromParsedModule parsedModule languageServiceState
-            in
-            fromDeclarations
-                |> List.filterMap
-                    (\( Range ( startLine, startColumn ) ( endLine, endColumn ), LocationUnderFilePath defFilePath defRange, _ ) ->
-                        if defFilePath == targetDefinitionFilePath && defRange == targetDefinitionRange then
-                            Just
-                                { filePath = parsedModule.filePath
-                                , range =
-                                    { startLineNumber = startLine
-                                    , startColumn = startColumn
-                                    , endLineNumber = endLine
-                                    , endColumn = endColumn
-                                    }
-                                }
 
-                        else
-                            Nothing
+                ranges : List Range
+                ranges =
+                    fromDeclarations
+                        |> List.filterMap
+                            (\( range, LocationUnderFilePath defFilePath (DeclarationRange defRange _), _ ) ->
+                                if defFilePath == targetDefinitionFilePath && defRange == targetDefinitionRange then
+                                    Just range
+
+                                else
+                                    Nothing
+                            )
+            in
+            if ranges == [] then
+                Nothing
+
+            else
+                Just
+                    ( parsedModule.filePath
+                    , ranges
                     )
     in
     allParsedModules
-        |> List.concatMap findReferencesInModule
+        |> List.filterMap findReferencesInModule
+
+
+textDocumentRename :
+    LanguageServiceInterface.RenameParams
+    -> LanguageServiceState
+    -> LanguageServiceInterface.WorkspaceEdit
+textDocumentRename renameParams languageServiceState =
+    case
+        textDocumentReferencesGroupedByFilePath
+            { filePathOpenedInEditor = renameParams.filePath
+            , positionLineNumber = renameParams.positionLineNumber
+            , positionColumn = renameParams.positionColumn
+            }
+            languageServiceState
+    of
+        Nothing ->
+            []
+
+        Just ( ( declFilePath, DeclarationRange _ declNamesRanges ), referencesGroupedByFilePath ) ->
+            let
+                newName : String
+                newName =
+                    renameParams.newName
+
+                declarationEdits : List LanguageServiceInterface.TextEdit
+                declarationEdits =
+                    List.map
+                        (\range ->
+                            { range = monacoRangeFromRange range
+                            , newText = newName
+                            }
+                        )
+                        declNamesRanges
+
+                declarationFileReferencesEdits : List LanguageServiceInterface.TextEdit
+                declarationFileReferencesEdits =
+                    case Common.assocListGet declFilePath referencesGroupedByFilePath of
+                        Nothing ->
+                            []
+
+                        Just ranges ->
+                            List.map
+                                (\range ->
+                                    { range = monacoRangeFromRange range
+                                    , newText = newName
+                                    }
+                                )
+                                ranges
+
+                otherFilesReferencesEdits : List LanguageServiceInterface.TextDocumentEdit
+                otherFilesReferencesEdits =
+                    referencesGroupedByFilePath
+                        |> List.concatMap
+                            (\( filePath, ranges ) ->
+                                if filePath == declFilePath then
+                                    []
+
+                                else
+                                    [ { filePath = filePath
+                                      , edits =
+                                            List.map
+                                                (\range ->
+                                                    { range = monacoRangeFromRange range
+                                                    , newText = newName
+                                                    }
+                                                )
+                                                ranges
+                                      }
+                                    ]
+                            )
+
+                workspaceEdits : List LanguageServiceInterface.TextDocumentEdit
+                workspaceEdits =
+                    { filePath = declFilePath
+                    , edits =
+                        List.concat
+                            [ declarationEdits
+                            , declarationFileReferencesEdits
+                            ]
+                    }
+                        :: otherFilesReferencesEdits
+            in
+            workspaceEdits
 
 
 monacoRangeFromSyntaxRange : Elm.Syntax.Range.Range -> Frontend.MonacoEditor.MonacoRange
@@ -1085,11 +1288,11 @@ provideCompletionItemsInModule request languageServiceState =
         fromLocals =
             currentModuleDeclarations.fromLocals
                 |> List.filterMap
-                    (\( completionItem, completionItemRange ) ->
+                    (\( completionItem, _, scopeRange ) ->
                         if
                             rangeContainsLocation
                                 ( request.cursorLineNumber, String.length lineUntilPosition )
-                                completionItemRange
+                                scopeRange
                         then
                             Just completionItem
 
@@ -1387,7 +1590,7 @@ importExposingsFromFile fileOpenedInEditor languageServiceState =
 
 commonImplicitTopLevelImports :
     LanguageServiceState
-    -> List ( Range, CompletionItem )
+    -> List ( DeclarationRange, CompletionItem )
 commonImplicitTopLevelImports languageServiceState =
     languageServiceState.coreModulesCache
         |> List.concatMap
@@ -1565,17 +1768,6 @@ documentationStringFromModuleSyntax parsedModule =
             Just (removeWrappingFromMultilineComment commentNode)
 
 
-type alias ModuleCompletionItems =
-    { fromTopLevel :
-        List
-            { completionItem : CompletionItem
-            , isExposed : Bool
-            , range : Range
-            }
-    , fromLocals : List ( CompletionItem, Range )
-    }
-
-
 completionItemsFromModule : ParsedModuleCache -> ModuleCompletionItems
 completionItemsFromModule moduleCache =
     let
@@ -1609,14 +1801,14 @@ completionItemsFromModule moduleCache =
             List
                 { completionItem : CompletionItem
                 , isExposed : Bool
-                , range : Range
+                , range : DeclarationRange
                 }
         fromTopLevel =
             cookedDeclarations
                 |> List.concatMap
                     (\( declName, ( declOrRef, scope ) ) ->
                         case scope of
-                            TopLevelScope scopeRange ->
+                            TopLevelScope ->
                                 let
                                     isExposed : Bool
                                     isExposed =
@@ -1634,10 +1826,10 @@ completionItemsFromModule moduleCache =
                                     declName
                                     declOrRef
                                     |> List.map
-                                        (\completionItem ->
+                                        (\( completionItem, declRangeInner ) ->
                                             { completionItem = completionItem
                                             , isExposed = isExposed
-                                            , range = scopeRange
+                                            , range = declRangeInner
                                             }
                                         )
 
@@ -1645,20 +1837,23 @@ completionItemsFromModule moduleCache =
                                 []
                     )
 
-        fromLocals : List ( CompletionItem, Range )
+        fromLocals : List ( CompletionItem, DeclarationRange, Range )
         fromLocals =
             cookedDeclarations
                 |> List.concatMap
                     (\( declName, ( declOrRef, scope ) ) ->
                         case scope of
-                            TopLevelScope _ ->
+                            TopLevelScope ->
                                 []
 
-                            LocalScope range ->
+                            LocalScope scopeRange ->
                                 completionItemsFromParsedDeclaration
                                     declName
                                     declOrRef
-                                    |> List.map (\completionItem -> ( completionItem, range ))
+                                    |> List.map
+                                        (\( completionItem, declRangeInner ) ->
+                                            ( completionItem, declRangeInner, scopeRange )
+                                        )
                     )
     in
     { fromTopLevel = fromTopLevel
@@ -1694,38 +1889,46 @@ exposingListExposesTypeOrAlias name exposingList =
 completionItemsFromParsedDeclaration :
     String
     -> ParsedDeclaration
-    -> List CompletionItem
+    -> List ( CompletionItem, DeclarationRange )
 completionItemsFromParsedDeclaration declName declarationOrReference =
     case declarationOrReference of
-        FunctionOrValueDeclaration (CookedDocumentation markdown) ->
-            [ CompletionItem
-                declName
-                declName
-                Frontend.MonacoEditor.FunctionCompletionItemKind
-                markdown
+        FunctionOrValueDeclaration ( topLevelRange, CookedDocumentation markdown ) ->
+            [ ( CompletionItem
+                    declName
+                    declName
+                    Frontend.MonacoEditor.FunctionCompletionItemKind
+                    markdown
+              , topLevelRange
+              )
             ]
 
-        TypeAliasDeclaration (CookedDocumentation markdown) ->
-            [ CompletionItem
-                declName
-                declName
-                Frontend.MonacoEditor.StructCompletionItemKind
-                markdown
+        TypeAliasDeclaration ( topLevelRange, CookedDocumentation markdown ) ->
+            [ ( CompletionItem
+                    declName
+                    declName
+                    Frontend.MonacoEditor.StructCompletionItemKind
+                    markdown
+              , topLevelRange
+              )
             ]
 
-        ChoiceTypeDeclaration (CookedDocumentation choiceTypeMarkdown) tags ->
-            CompletionItem
+        ChoiceTypeDeclaration ( topLevelRange, CookedDocumentation choiceTypeMarkdown ) tags ->
+            ( CompletionItem
                 declName
                 declName
                 Frontend.MonacoEditor.EnumCompletionItemKind
                 choiceTypeMarkdown
+            , topLevelRange
+            )
                 :: List.map
-                    (\( tagName, CookedDocumentation tagMarkdown ) ->
-                        CompletionItem
+                    (\( tagName, ( tagRange, CookedDocumentation tagMarkdown ) ) ->
+                        ( CompletionItem
                             tagName
                             tagName
                             Frontend.MonacoEditor.EnumMemberCompletionItemKind
                             tagMarkdown
+                        , tagRange
+                        )
                     )
                     tags
 
@@ -1837,22 +2040,104 @@ updateLanguageServiceState fileTree state =
     }
 
 
-listReferencesInFile : Elm.Syntax.File.File -> List (Elm.Syntax.Node.Node ( Elm.Syntax.ModuleName.ModuleName, String ))
+listReferencesInFile : Elm.Syntax.File.File -> List (SyntaxNode ( Elm.Syntax.ModuleName.ModuleName, String ))
 listReferencesInFile fileSyntax =
-    List.concatMap
-        listReferencesInDeclaration
-        fileSyntax.declarations
+    let
+        fromExposing : List (SyntaxNode ( Elm.Syntax.ModuleName.ModuleName, String ))
+        fromExposing =
+            case fileSyntax.moduleDefinition of
+                Elm.Syntax.Node.Node _ (Elm.Syntax.Module.NormalModule normalModule) ->
+                    case normalModule.exposingList of
+                        Elm.Syntax.Node.Node _ exposingList ->
+                            listReferencesInExposingList exposingList
+
+                Elm.Syntax.Node.Node _ (Elm.Syntax.Module.EffectModule effectModule) ->
+                    case effectModule.exposingList of
+                        Elm.Syntax.Node.Node _ exposingList ->
+                            listReferencesInExposingList exposingList
+
+                Elm.Syntax.Node.Node _ (Elm.Syntax.Module.PortModule portModule) ->
+                    case portModule.exposingList of
+                        Elm.Syntax.Node.Node _ exposingList ->
+                            listReferencesInExposingList exposingList
+
+        fromDeclarations : List (SyntaxNode ( Elm.Syntax.ModuleName.ModuleName, String ))
+        fromDeclarations =
+            List.concatMap
+                listReferencesInDeclaration
+                fileSyntax.declarations
+    in
+    List.concat
+        [ fromExposing
+        , fromDeclarations
+        ]
 
 
-listDeclarationsInFile : Elm.Syntax.File.File -> SourceContentForCooking -> List ( String, ( ParsedDeclaration, DeclarationScope ) )
+listDeclarationsInFile :
+    Elm.Syntax.File.File
+    -> SourceContentForCooking
+    -> List ( String, ( ParsedDeclaration, DeclarationScope ) )
 listDeclarationsInFile fileSyntax sourceContent =
     fileSyntax.declarations
         |> List.concatMap (listDeclarationsInDeclaration sourceContent)
 
 
+listReferencesInExposingList : Elm.Syntax.Exposing.Exposing -> List (SyntaxNode ( List String, String ))
+listReferencesInExposingList exposingList =
+    case exposingList of
+        Elm.Syntax.Exposing.All _ ->
+            []
+
+        Elm.Syntax.Exposing.Explicit topLevelExposings ->
+            topLevelExposings
+                |> List.concatMap
+                    (\(Elm.Syntax.Node.Node topLevelExposeRangeRecord topLevelExpose) ->
+                        let
+                            topLevelExposeRange : Range
+                            topLevelExposeRange =
+                                rangeFromRecordRange topLevelExposeRangeRecord
+                        in
+                        case topLevelExpose of
+                            Elm.Syntax.Exposing.InfixExpose _ ->
+                                []
+
+                            Elm.Syntax.Exposing.FunctionExpose functionName ->
+                                [ SyntaxNode topLevelExposeRange ( [], functionName ) ]
+
+                            Elm.Syntax.Exposing.TypeOrAliasExpose typeOrAliasName ->
+                                [ SyntaxNode topLevelExposeRange ( [], typeOrAliasName ) ]
+
+                            Elm.Syntax.Exposing.TypeExpose typeExpose ->
+                                let
+                                    topLevelExposeRangeStartRecord : Elm.Syntax.Range.Location
+                                    topLevelExposeRangeStartRecord =
+                                        topLevelExposeRangeRecord.start
+
+                                    rangeStartRow : Int
+                                    rangeStartRow =
+                                        topLevelExposeRangeStartRecord.row
+
+                                    rangeStartColumn : Int
+                                    rangeStartColumn =
+                                        topLevelExposeRangeStartRecord.column
+
+                                    rangeEndColumn : Int
+                                    rangeEndColumn =
+                                        rangeStartColumn + String.length typeExpose.name
+
+                                    range : Range
+                                    range =
+                                        Range
+                                            ( rangeStartRow, rangeStartColumn )
+                                            ( rangeStartRow, rangeEndColumn )
+                                in
+                                [ SyntaxNode range ( [], typeExpose.name ) ]
+                    )
+
+
 listReferencesInDeclaration :
     Elm.Syntax.Node.Node Elm.Syntax.Declaration.Declaration
-    -> List (Elm.Syntax.Node.Node ( Elm.Syntax.ModuleName.ModuleName, String ))
+    -> List (SyntaxNode ( Elm.Syntax.ModuleName.ModuleName, String ))
 listReferencesInDeclaration declarationNode =
     let
         (Elm.Syntax.Node.Node _ declaration) =
@@ -1882,11 +2167,7 @@ listDeclarationsInDeclaration :
     SourceContentForCooking
     -> Elm.Syntax.Node.Node Elm.Syntax.Declaration.Declaration
     -> List ( String, ( ParsedDeclaration, DeclarationScope ) )
-listDeclarationsInDeclaration sourceContent declarationNode =
-    let
-        (Elm.Syntax.Node.Node declarationRange declaration) =
-            declarationNode
-    in
+listDeclarationsInDeclaration sourceContent (Elm.Syntax.Node.Node declarationRange declaration) =
     case declaration of
         Elm.Syntax.Declaration.FunctionDeclaration function ->
             listDeclarationsForFunction
@@ -1918,7 +2199,7 @@ listDeclarationsInDeclaration sourceContent declarationNode =
 
 referencesForAliasDeclaration :
     Elm.Syntax.TypeAlias.TypeAlias
-    -> List (Elm.Syntax.Node.Node ( Elm.Syntax.ModuleName.ModuleName, String ))
+    -> List (SyntaxNode ( Elm.Syntax.ModuleName.ModuleName, String ))
 referencesForAliasDeclaration aliasDeclaration =
     listTypeReferencesFromTypeAnnotation aliasDeclaration.typeAnnotation
 
@@ -1928,47 +2209,35 @@ declarationsForAliasDeclaration :
     -> Elm.Syntax.Range.Range
     -> Elm.Syntax.TypeAlias.TypeAlias
     -> List ( String, ( ParsedDeclaration, DeclarationScope ) )
-declarationsForAliasDeclaration sourceContent declarationRange aliasDeclaration =
+declarationsForAliasDeclaration (SourceContentForCooking textLines) declarationRangeRecord aliasDeclaration =
     let
-        (Elm.Syntax.Node.Node _ aliasName) =
-            aliasDeclaration.name
-    in
-    [ ( aliasName
-      , ( declarationOrReferenceForAliasDeclaration sourceContent aliasDeclaration
-        , TopLevelScope (rangeFromRecordRange declarationRange)
-        )
-      )
-    ]
+        declarationRange : Range
+        declarationRange =
+            rangeFromRecordRange declarationRangeRecord
 
+        (Range _ declarationRangeEnd) =
+            declarationRange
 
-declarationOrReferenceForAliasDeclaration :
-    SourceContentForCooking
-    -> Elm.Syntax.TypeAlias.TypeAlias
-    -> ParsedDeclaration
-declarationOrReferenceForAliasDeclaration (SourceContentForCooking textLines) aliasDeclaration =
-    let
-        (Elm.Syntax.Node.Node typeAnnotationRange _) =
-            aliasDeclaration.typeAnnotation
-
-        (Elm.Syntax.Node.Node aliasNameRange _) =
+        (Elm.Syntax.Node.Node aliasNameRangeRecord aliasName) =
             aliasDeclaration.name
 
-        documentationStringFromSyntax : Maybe String
-        documentationStringFromSyntax =
+        ( documentationStringFromSyntax, rangeLessDocumentation ) =
             case aliasDeclaration.documentation of
                 Nothing ->
-                    Nothing
+                    ( Nothing
+                    , declarationRange
+                    )
 
-                Just (Elm.Syntax.Node.Node _ comment) ->
-                    Just (removeWrappingFromMultilineComment comment)
+                Just (Elm.Syntax.Node.Node commentRangeRecord comment) ->
+                    ( Just (removeWrappingFromMultilineComment comment)
+                    , Range
+                        ( commentRangeRecord.end.row + 1, 1 )
+                        declarationRangeEnd
+                    )
 
         codeRange : Range
         codeRange =
-            [ aliasNameRange
-            , typeAnnotationRange
-            ]
-                |> Elm.Syntax.Range.combine
-                |> rangeFromRecordRange
+            rangeLessDocumentation
                 |> expandRangeToLineStart
 
         codeLines : List String
@@ -1976,19 +2245,35 @@ declarationOrReferenceForAliasDeclaration (SourceContentForCooking textLines) al
             sliceRangeFromTextLines
                 textLines
                 codeRange
+
+        aliasNameRange : Range
+        aliasNameRange =
+            rangeFromRecordRange aliasNameRangeRecord
+
+        aliasDecl : Declaration ( DeclarationRange, CookedDocumentation )
+        aliasDecl =
+            TypeAliasDeclaration
+                ( DeclarationRange
+                    codeRange
+                    [ aliasNameRange ]
+                , CookedDocumentation
+                    (documentationMarkdownFromCodeLinesAndDocumentation
+                        codeLines
+                        documentationStringFromSyntax
+                    )
+                )
     in
-    TypeAliasDeclaration
-        (CookedDocumentation
-            (documentationMarkdownFromCodeLinesAndDocumentation
-                codeLines
-                documentationStringFromSyntax
-            )
+    [ ( aliasName
+      , ( aliasDecl
+        , TopLevelScope
         )
+      )
+    ]
 
 
 listReferencesFromTypeDeclaration :
     Elm.Syntax.Type.Type
-    -> List (Elm.Syntax.Node.Node ( List String, String ))
+    -> List (SyntaxNode ( List String, String ))
 listReferencesFromTypeDeclaration choiceTypeDeclaration =
     choiceTypeDeclaration.constructors
         |> List.concatMap
@@ -2002,30 +2287,39 @@ listDeclarationsFromTypeDeclaration :
     -> Elm.Syntax.Range.Range
     -> Elm.Syntax.Type.Type
     -> List ( String, ( ParsedDeclaration, DeclarationScope ) )
-listDeclarationsFromTypeDeclaration (SourceContentForCooking textLines) declarationRange choiceTypeDeclaration =
+listDeclarationsFromTypeDeclaration (SourceContentForCooking textLines) declarationRangeRecord choiceTypeDeclaration =
     let
-        documentationStringFromSyntax : Maybe String
-        documentationStringFromSyntax =
+        declarationRange : Range
+        declarationRange =
+            rangeFromRecordRange declarationRangeRecord
+
+        (Range _ declarationRangeEnd) =
+            declarationRange
+
+        ( documentationStringFromSyntax, rangeLessDocumentation ) =
             case choiceTypeDeclaration.documentation of
                 Nothing ->
-                    Nothing
+                    ( Nothing
+                    , declarationRange
+                    )
 
-                Just (Elm.Syntax.Node.Node _ comment) ->
-                    Just (removeWrappingFromMultilineComment comment)
+                Just (Elm.Syntax.Node.Node commentRangeRecord comment) ->
+                    ( Just (removeWrappingFromMultilineComment comment)
+                    , Range
+                        ( commentRangeRecord.end.row + 1, 1 )
+                        declarationRangeEnd
+                    )
 
-        (Elm.Syntax.Node.Node nameRange _) =
+        (Elm.Syntax.Node.Node nameRangeRecord choiceTypeName) =
             choiceTypeDeclaration.name
 
-        constructorsRanges =
-            choiceTypeDeclaration.constructors
-                |> List.map (\(Elm.Syntax.Node.Node constructorRange _) -> constructorRange)
+        nameRange : Range
+        nameRange =
+            rangeFromRecordRange nameRangeRecord
 
         codeRange : Range
         codeRange =
-            nameRange
-                :: constructorsRanges
-                |> Elm.Syntax.Range.combine
-                |> rangeFromRecordRange
+            rangeLessDocumentation
                 |> expandRangeToLineStart
 
         choiceTypeCodeLines : List String
@@ -2033,40 +2327,53 @@ listDeclarationsFromTypeDeclaration (SourceContentForCooking textLines) declarat
             sliceRangeFromTextLines
                 textLines
                 codeRange
+                |> List.Extra.dropWhile String.isEmpty
 
-        (Elm.Syntax.Node.Node _ choiceTypeName) =
-            choiceTypeDeclaration.name
-
-        tagsDeclarations : List ( String, CookedDocumentation )
+        tagsDeclarations : List ( String, ( DeclarationRange, CookedDocumentation ) )
         tagsDeclarations =
             choiceTypeDeclaration.constructors
                 |> List.map
-                    (\(Elm.Syntax.Node.Node _ constructor) ->
+                    (\(Elm.Syntax.Node.Node constructorRangeRecord constructor) ->
                         let
-                            (Elm.Syntax.Node.Node _ tagName) =
+                            (Elm.Syntax.Node.Node tagNameRecordRange tagName) =
                                 constructor.name
+
+                            wholeConstructorRange : Range
+                            wholeConstructorRange =
+                                rangeFromRecordRange constructorRangeRecord
+
+                            tagNameRange : Range
+                            tagNameRange =
+                                rangeFromRecordRange tagNameRecordRange
                         in
                         ( tagName
-                        , CookedDocumentation
-                            ([ markdownElmCodeBlockFromCodeLines [ tagName ]
-                             , "A variant of the choice type `" ++ choiceTypeName ++ "`"
-                             , markdownElmCodeBlockFromCodeLines choiceTypeCodeLines
-                             ]
-                                |> String.join "\n\n"
-                            )
+                        , ( DeclarationRange
+                                wholeConstructorRange
+                                [ tagNameRange ]
+                          , CookedDocumentation
+                                ([ markdownElmCodeBlockFromCodeLines [ tagName ]
+                                 , "A variant of the choice type `" ++ choiceTypeName ++ "`"
+                                 , markdownElmCodeBlockFromCodeLines choiceTypeCodeLines
+                                 ]
+                                    |> String.join "\n\n"
+                                )
+                          )
                         )
                     )
     in
     [ ( choiceTypeName
       , ( ChoiceTypeDeclaration
-            (CookedDocumentation
+            ( DeclarationRange
+                codeRange
+                [ nameRange ]
+            , CookedDocumentation
                 (documentationMarkdownFromCodeLinesAndDocumentation
                     choiceTypeCodeLines
                     documentationStringFromSyntax
                 )
             )
             tagsDeclarations
-        , TopLevelScope (rangeFromRecordRange declarationRange)
+        , TopLevelScope
         )
       )
     ]
@@ -2074,7 +2381,7 @@ listDeclarationsFromTypeDeclaration (SourceContentForCooking textLines) declarat
 
 listReferencesInExpression :
     Elm.Syntax.Node.Node Elm.Syntax.Expression.Expression
-    -> List (Elm.Syntax.Node.Node ( List String, String ))
+    -> List (SyntaxNode ( List String, String ))
 listReferencesInExpression (Elm.Syntax.Node.Node expressionRange expression) =
     case expression of
         Elm.Syntax.Expression.UnitExpr ->
@@ -2089,7 +2396,10 @@ listReferencesInExpression (Elm.Syntax.Node.Node expressionRange expression) =
                 |> List.concatMap listReferencesInExpression
 
         Elm.Syntax.Expression.FunctionOrValue moduleName localName ->
-            [ Elm.Syntax.Node.Node expressionRange ( moduleName, localName ) ]
+            [ SyntaxNode
+                (rangeFromRecordRange expressionRange)
+                ( moduleName, localName )
+            ]
 
         Elm.Syntax.Expression.IfBlock ifExpr thenExpr elseExpr ->
             [ ifExpr, thenExpr, elseExpr ]
@@ -2133,8 +2443,11 @@ listReferencesInExpression (Elm.Syntax.Node.Node expressionRange expression) =
             [ listReferencesInExpression caseBlock.expression
             , caseBlock.cases
                 |> List.concatMap
-                    (\( _, caseBranch ) ->
-                        listReferencesInExpression caseBranch
+                    (\( casePattern, caseBranch ) ->
+                        List.concat
+                            [ listReferencesFromPattern casePattern
+                            , listReferencesInExpression caseBranch
+                            ]
                     )
             ]
                 |> List.concat
@@ -2160,8 +2473,8 @@ listReferencesInExpression (Elm.Syntax.Node.Node expressionRange expression) =
             []
 
         Elm.Syntax.Expression.RecordUpdateExpression (Elm.Syntax.Node.Node recordNameRange recordName) recordUpdateExpression ->
-            [ [ Elm.Syntax.Node.Node
-                    recordNameRange
+            [ [ SyntaxNode
+                    (rangeFromRecordRange recordNameRange)
                     ( [], recordName )
               ]
             , recordUpdateExpression
@@ -2299,13 +2612,13 @@ listDeclarationsInExpression sourceContent (Elm.Syntax.Node.Node rangeRecord exp
 
 listReferencesForFunction :
     Elm.Syntax.Expression.Function
-    -> List (Elm.Syntax.Node.Node ( Elm.Syntax.ModuleName.ModuleName, String ))
+    -> List (SyntaxNode ( Elm.Syntax.ModuleName.ModuleName, String ))
 listReferencesForFunction function =
     let
         (Elm.Syntax.Node.Node _ functionDeclaration) =
             function.declaration
 
-        signatureReferences : List (Elm.Syntax.Node.Node ( Elm.Syntax.ModuleName.ModuleName, String ))
+        signatureReferences : List (SyntaxNode ( Elm.Syntax.ModuleName.ModuleName, String ))
         signatureReferences =
             case function.signature of
                 Nothing ->
@@ -2314,19 +2627,18 @@ listReferencesForFunction function =
                 Just (Elm.Syntax.Node.Node _ signature) ->
                     listTypeReferencesFromTypeAnnotation signature.typeAnnotation
 
-        expressionNode : Elm.Syntax.Node.Node Elm.Syntax.Expression.Expression
-        expressionNode =
-            functionDeclaration.expression
+        expressionNodes : List (SyntaxNode ( Elm.Syntax.ModuleName.ModuleName, String ))
+        expressionNodes =
+            listReferencesInExpression functionDeclaration.expression
 
-        arguments : List (Elm.Syntax.Node.Node ( Elm.Syntax.ModuleName.ModuleName, String ))
+        arguments : List (SyntaxNode ( Elm.Syntax.ModuleName.ModuleName, String ))
         arguments =
             functionDeclaration.arguments
                 |> List.concatMap listReferencesFromPattern
     in
     [ signatureReferences
     , arguments
-    , listReferencesInExpression
-        expressionNode
+    , expressionNodes
     ]
         |> List.concat
 
@@ -2341,8 +2653,12 @@ listDeclarationsForFunction ((SourceContentForCooking textLines) as sourceConten
         (Elm.Syntax.Node.Node _ functionDeclaration) =
             function.declaration
 
-        (Elm.Syntax.Node.Node _ functionName) =
+        (Elm.Syntax.Node.Node functionNameRangeRecord functionName) =
             functionDeclaration.name
+
+        functionNameRange : Range
+        functionNameRange =
+            rangeFromRecordRange functionNameRangeRecord
 
         documentationStringFromSyntax : Maybe String
         documentationStringFromSyntax =
@@ -2353,24 +2669,32 @@ listDeclarationsForFunction ((SourceContentForCooking textLines) as sourceConten
                 Just (Elm.Syntax.Node.Node _ comment) ->
                     Just (removeWrappingFromMultilineComment comment)
 
-        maybeTypeAnnotationText : Maybe String
-        maybeTypeAnnotationText =
+        ( maybeTypeAnnotationText, signatureNameRanges ) =
             case function.signature of
                 Nothing ->
-                    Nothing
+                    ( Nothing, [] )
 
                 Just (Elm.Syntax.Node.Node _ signature) ->
                     let
                         (Elm.Syntax.Node.Node typeAnnotationRange _) =
                             signature.typeAnnotation
+
+                        (Elm.Syntax.Node.Node nameRangeRecord _) =
+                            signature.name
+
+                        nameRange : Range
+                        nameRange =
+                            rangeFromRecordRange nameRangeRecord
                     in
-                    Just
+                    ( Just
                         (Range
                             ( typeAnnotationRange.start.row, typeAnnotationRange.start.column )
                             ( typeAnnotationRange.end.row, typeAnnotationRange.end.column )
                             |> sliceRangeFromTextLines textLines
                             |> String.join " "
                         )
+                    , [ nameRange ]
+                    )
 
         codeLines : List String
         codeLines =
@@ -2383,10 +2707,13 @@ listDeclarationsForFunction ((SourceContentForCooking textLines) as sourceConten
                     [ String.concat [ functionName, " : ", typeAnnotationText ]
                     ]
 
-        functionItem : Declaration CookedDocumentation
+        functionItem : Declaration ( DeclarationRange, CookedDocumentation )
         functionItem =
             FunctionOrValueDeclaration
-                (CookedDocumentation
+                ( DeclarationRange
+                    (rangeFromRecordRange declRange)
+                    (List.concat [ signatureNameRanges, [ functionNameRange ] ])
+                , CookedDocumentation
                     (documentationMarkdownFromCodeLinesAndDocumentation
                         codeLines
                         documentationStringFromSyntax
@@ -2421,7 +2748,7 @@ listDeclarationsForFunction ((SourceContentForCooking textLines) as sourceConten
     in
     List.concat
         [ [ ( functionName
-            , ( functionItem, TopLevelScope (rangeFromRecordRange declRange) )
+            , ( functionItem, TopLevelScope )
             )
           ]
         , arguments
@@ -2454,7 +2781,7 @@ getTypeAnnotationFromFunctionArgumentIndex argumentIndex ((Elm.Syntax.Node.Node 
 
 listReferencesFromPattern :
     Elm.Syntax.Node.Node Elm.Syntax.Pattern.Pattern
-    -> List (Elm.Syntax.Node.Node ( List String, String ))
+    -> List (SyntaxNode ( List String, String ))
 listReferencesFromPattern (Elm.Syntax.Node.Node patternRange pattern) =
     case pattern of
         Elm.Syntax.Pattern.TuplePattern tuplePattern ->
@@ -2476,7 +2803,33 @@ listReferencesFromPattern (Elm.Syntax.Node.Node patternRange pattern) =
             []
 
         Elm.Syntax.Pattern.NamedPattern named arguments ->
-            [ [ Elm.Syntax.Node.Node patternRange ( named.moduleName, named.name ) ]
+            let
+                rangeStartOffset : Int
+                rangeStartOffset =
+                    (List.map String.length named.moduleName
+                        |> List.sum
+                    )
+                        + List.length named.moduleName
+
+                nameStartColumn : Int
+                nameStartColumn =
+                    patternRange.start.column + rangeStartOffset
+
+                nameEndColumn : Int
+                nameEndColumn =
+                    nameStartColumn + String.length named.name
+
+                rangeStartRow : Int
+                rangeStartRow =
+                    patternRange.start.row
+
+                nameRange : Range
+                nameRange =
+                    Range
+                        ( rangeStartRow, nameStartColumn )
+                        ( rangeStartRow, nameEndColumn )
+            in
+            [ [ SyntaxNode nameRange ( named.moduleName, named.name ) ]
             , List.concatMap
                 listReferencesFromPattern
                 arguments
@@ -2495,7 +2848,7 @@ listDeclarationsFromPattern :
     -> { typeAnnotation : Maybe (Elm.Syntax.Node.Node Elm.Syntax.TypeAnnotation.TypeAnnotation) }
     -> Elm.Syntax.Node.Node Elm.Syntax.Pattern.Pattern
     -> List ( String, ( ParsedDeclaration, DeclarationScope ) )
-listDeclarationsFromPattern ((SourceContentForCooking textLines) as sourceContent) config (Elm.Syntax.Node.Node patternRange pattern) =
+listDeclarationsFromPattern ((SourceContentForCooking textLines) as sourceContent) config (Elm.Syntax.Node.Node patternRangeRecord pattern) =
     case pattern of
         Elm.Syntax.Pattern.TuplePattern tuplePattern ->
             List.concatMap
@@ -2539,13 +2892,20 @@ listDeclarationsFromPattern ((SourceContentForCooking textLines) as sourceConten
                         Just typeAnnotationText ->
                             [ String.concat [ name, " : ", typeAnnotationText ]
                             ]
+
+                patternRange : Range
+                patternRange =
+                    rangeFromRecordRange patternRangeRecord
             in
             [ ( name
               , ( FunctionOrValueDeclaration
-                    (CookedDocumentation
+                    ( DeclarationRange
+                        patternRange
+                        [ patternRange ]
+                    , CookedDocumentation
                         (documentationMarkdownFromCodeLinesAndDocumentation codeLines Nothing)
                     )
-                , TopLevelScope (rangeFromRecordRange patternRange)
+                , TopLevelScope
                 )
               )
             ]
@@ -2566,7 +2926,7 @@ listDeclarationsFromPattern ((SourceContentForCooking textLines) as sourceConten
 
 listReferencesInLetBlock :
     Elm.Syntax.Expression.LetBlock
-    -> List (Elm.Syntax.Node.Node ( List String, String ))
+    -> List (SyntaxNode ( List String, String ))
 listReferencesInLetBlock letBlock =
     [ List.concatMap listReferencesInLetDeclaration letBlock.declarations
     , listReferencesInExpression letBlock.expression
@@ -2589,7 +2949,7 @@ listDeclarationsInLetBlock sourceContent letBlock =
 
 listReferencesInLetDeclaration :
     Elm.Syntax.Node.Node Elm.Syntax.Expression.LetDeclaration
-    -> List (Elm.Syntax.Node.Node ( List String, String ))
+    -> List (SyntaxNode ( List String, String ))
 listReferencesInLetDeclaration declarationNode =
     let
         (Elm.Syntax.Node.Node _ declaration) =
@@ -2626,7 +2986,7 @@ constrainScopeToRange range scope =
         LocalScope _ ->
             scope
 
-        TopLevelScope _ ->
+        TopLevelScope ->
             LocalScope range
 
 

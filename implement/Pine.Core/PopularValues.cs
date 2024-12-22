@@ -490,6 +490,7 @@ public static class PopularValues
         "LocationUnderFilePath",
         "CookedDocumentation",
         "Range",
+        "DeclarationRange",
 
         // module Frontend.MonacoEditor
 

@@ -862,6 +862,11 @@ find_references =
 module Alpha exposing (..)
 
 
+type BinaryChoice
+    = Yes
+    | No
+
+
 from_alpha = 123
 
 
@@ -911,7 +916,7 @@ init =
     0
 """
                     [ { filePath = [ "src", "Main.elm" ]
-                      , range = { startLineNumber = 5, startColumn = 8, endLineNumber = 5, endColumn = 12 }
+                      , range = { startLineNumber = 4, startColumn = 8, endLineNumber = 4, endColumn = 12 }
                       }
                     ]
         , Test.test "From decl signature of local top-level function" <|
@@ -929,14 +934,14 @@ init =
     0
 """
                     [ { filePath = [ "src", "Main.elm" ]
-                      , range = { startLineNumber = 5, startColumn = 8, endLineNumber = 5, endColumn = 12 }
+                      , range = { startLineNumber = 4, startColumn = 8, endLineNumber = 4, endColumn = 12 }
                       }
                     ]
         , Test.test "From decl name of local top-level function" <|
             \_ ->
                 expectationFromScenarioInMain
                     """
-module Main exposing (State)
+module Main exposing (..)
 
 
 name = init
@@ -947,14 +952,14 @@ in👈🚁it =
     0
 """
                     [ { filePath = [ "src", "Main.elm" ]
-                      , range = { startLineNumber = 5, startColumn = 8, endLineNumber = 5, endColumn = 12 }
+                      , range = { startLineNumber = 4, startColumn = 8, endLineNumber = 4, endColumn = 12 }
                       }
                     ]
         , Test.test "To top-level function from other module via canonical name" <|
             \_ ->
                 expectationFromScenarioInMain
                     """
-module Main exposing (State)
+module Main exposing (..)
 
 import Alpha
 
@@ -970,14 +975,14 @@ name =
                       , range = { endColumn = 21, endLineNumber = 15, startColumn = 11, startLineNumber = 15 }
                       }
                     , { filePath = [ "src", "Main.elm" ]
-                      , range = { endColumn = 21, endLineNumber = 8, startColumn = 11, startLineNumber = 8 }
+                      , range = { endColumn = 21, endLineNumber = 7, startColumn = 11, startLineNumber = 7 }
                       }
                     ]
         , Test.test "To top-level function from other module via alias" <|
             \_ ->
                 expectationFromScenarioInMain
                     """
-module Main exposing (State)
+module Main exposing (..)
 
 import Alpha as ModuleAlias
 
@@ -994,14 +999,14 @@ name =
                       , range = { endColumn = 21, endLineNumber = 15, startColumn = 11, startLineNumber = 15 }
                       }
                     , { filePath = [ "src", "Main.elm" ]
-                      , range = { endColumn = 27, endLineNumber = 8, startColumn = 17, startLineNumber = 8 }
+                      , range = { endColumn = 27, endLineNumber = 7, startColumn = 17, startLineNumber = 7 }
                       }
                     ]
         , Test.test "To top-level function from other module via exposed" <|
             \_ ->
                 expectationFromScenarioInMain
                     """
-module Main exposing (State)
+module Main exposing (..)
 
 import Alpha exposing (from_alpha)
 
@@ -1025,7 +1030,7 @@ name =
             \_ ->
                 expectationFromScenarioInMain
                     """
-module Main exposing (State)
+module Main exposing (..)
 
 
 name =
@@ -1037,7 +1042,150 @@ name =
 
 """
                     [ { filePath = [ "src", "Main.elm" ]
-                      , range = { endColumn = 10, endLineNumber = 9, startColumn = 5, startLineNumber = 9 }
+                      , range = { endColumn = 10, endLineNumber = 8, startColumn = 5, startLineNumber = 8 }
+                      }
+                    ]
+        , Test.test "To choice type from other module via canonical name" <|
+            \_ ->
+                expectationFromScenarioInMain
+                    """
+module Main exposing (..)
+
+import Alpha
+
+
+a_choice : Alpha.Binary👈🚁Choice
+a_choice =
+    Alpha.Yes
+
+"""
+                    [ { filePath = [ "src", "Main.elm" ]
+                      , range = { endColumn = 30, endLineNumber = 6, startColumn = 18, startLineNumber = 6 }
+                      }
+                    ]
+        , Test.test "To choice type tag from other module via canonical name" <|
+            \_ ->
+                expectationFromScenarioInMain
+                    """
+module Main exposing (..)
+
+import Alpha
+
+
+a_choice : Alpha.BinaryChoice
+a_choice =
+    Alpha.Y👈🚁es
+
+"""
+                    [ { filePath = [ "src", "Main.elm" ]
+                      , range = { endColumn = 14, endLineNumber = 8, startColumn = 11, startLineNumber = 8 }
+                      }
+                    ]
+        , Test.test "To choice type tag without args from current module in decl" <|
+            \_ ->
+                expectationFromScenarioInMain
+                    """
+module Main exposing (..)
+
+
+type BinaryChoice
+    = Y👈🚁es
+    | No
+
+
+a_choice : BinaryChoice
+a_choice =
+    Yes
+
+
+map_choice : BinaryChoice -> Int
+map_choice choice =
+    case choice of
+        Yes ->
+            1
+
+        No ->
+            0
+
+"""
+                    [ { filePath = [ "src", "Main.elm" ]
+                      , range = { endColumn = 8, endLineNumber = 11, startColumn = 5, startLineNumber = 11 }
+                      }
+                    , { filePath = [ "src", "Main.elm" ]
+                      , range = { endColumn = 12, endLineNumber = 17, startColumn = 9, startLineNumber = 17 }
+                      }
+                    ]
+        , Test.test "To choice type tag with arg from current module in decl" <|
+            \_ ->
+                expectationFromScenarioInMain
+                    """
+module Main exposing (..)
+
+
+type Choice
+    = Alfa
+    | Be👈🚁ta Int
+
+
+a_choice : Choice
+a_choice =
+    Alfa
+
+
+map_choice : BinaryChoice -> Int
+map_choice choice =
+    case choice of
+        Alfa ->
+            1
+
+        Beta val ->
+            val
+
+"""
+                    [ { filePath = [ "src", "Main.elm" ]
+                      , range = { endColumn = 13, endLineNumber = 20, startColumn = 9, startLineNumber = 20 }
+                      }
+                    ]
+        , Test.test "from function signature in export exposing list" <|
+            \_ ->
+                expectationFromScenarioInMain
+                    """
+module Main exposing (Choice, decl_alfa)
+
+
+type Choice
+    = Alfa
+    | Beta Int
+
+
+decl_al👈🚁fa : Int
+decl_alfa = 1
+
+
+"""
+                    [ { filePath = [ "src", "Main.elm" ]
+                      , range = { endColumn = 40, endLineNumber = 1, startColumn = 31, startLineNumber = 1 }
+                      }
+                    ]
+        , Test.test "from type decl in export exposing list" <|
+            \_ ->
+                expectationFromScenarioInMain
+                    """
+module Main exposing (Choice(..), decl_alfa)
+
+
+type Cho👈🚁ice
+    = Alfa
+    | Beta Int
+
+
+decl_alfa : Int
+decl_alfa = 1
+
+
+"""
+                    [ { filePath = [ "src", "Main.elm" ]
+                      , range = { endColumn = 29, endLineNumber = 1, startColumn = 23, startLineNumber = 1 }
                       }
                     ]
         ]
@@ -1115,7 +1263,7 @@ referenceExpectationFromScenario :
     -> List LanguageServiceInterface.LocationUnderFilePath
     -> Expect.Expectation
 referenceExpectationFromScenario otherFiles ( fileOpenedInEditorPath, fileOpenedInEditorText ) expectedItems =
-    case String.split "👈🚁" fileOpenedInEditorText of
+    case String.split "👈🚁" (String.trimLeft fileOpenedInEditorText) of
         [ textUntilCursor, textAfterCursor ] ->
             referenceExpectationFromScenarioDescribingOpenFile
                 otherFiles

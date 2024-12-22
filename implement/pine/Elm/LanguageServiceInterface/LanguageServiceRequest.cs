@@ -25,6 +25,7 @@ type Request
     | ProvideDefinitionRequest ProvideDefinitionRequestStruct
     | TextDocumentSymbolRequest (List String)
     | TextDocumentReferencesRequest ProvideReferencesRequestStruct
+    | TextDocumentRenameRequest RenameParams
 
  * */
 public abstract record Request
@@ -51,6 +52,9 @@ public abstract record Request
 
     public record TextDocumentReferencesRequest(ProvideHoverRequestStruct Request)
         : Request;
+
+    public record TextDocumentRenameRequest(RenameParams Request)
+        : Request;
 }
 
 public record ProvideHoverRequestStruct(
@@ -72,6 +76,22 @@ public record ProvideCompletionItemsRequestStruct(
     IReadOnlyList<string> FilePathOpenedInEditor,
     int CursorLineNumber,
     int CursorColumn);
+
+/*
+type alias RenameParams =
+    { filePath : List String
+    , positionLineNumber : Int
+    , positionColumn : Int
+    , newName : String
+    }
+
+*/
+
+public record RenameParams(
+    IReadOnlyList<string> FilePath,
+    int PositionLineNumber,
+    int PositionColumn,
+    string NewName);
 
 public static class RequestEncoding
 {
@@ -151,6 +171,13 @@ public static class RequestEncoding
                         Encode(textDocumentReferenceRequest.Request)
                     ]),
 
+            Request.TextDocumentRenameRequest textDocumentRenameRequest =>
+                ElmValueEncoding.TagAsPineValue(
+                    "TextDocumentRenameRequest",
+                    [
+                        Encode(textDocumentRenameRequest.Request)
+                    ]),
+
             _ =>
             throw new System.NotImplementedException(
                 "Unexpected request type: " + request.GetType())
@@ -188,6 +215,25 @@ public static class RequestEncoding
                     PineValueAsInteger.ValueFromSignedInteger(provideCompletionItemsRequest.CursorLineNumber)),
                     ("cursorColumn",
                     PineValueAsInteger.ValueFromSignedInteger(provideCompletionItemsRequest.CursorColumn))
+                ]);
+    }
+
+    public static PineValue Encode(RenameParams renameParams)
+    {
+        return
+            ElmValueEncoding.ElmRecordAsPineValue(
+                [
+                    ("filePath",
+                    PineValue.List(
+                        [..renameParams.FilePath
+                        .Select(ElmValueEncoding.StringAsPineValue)
+                        ])),
+                    ("positionLineNumber",
+                    PineValueAsInteger.ValueFromSignedInteger(renameParams.PositionLineNumber)),
+                    ("positionColumn",
+                    PineValueAsInteger.ValueFromSignedInteger(renameParams.PositionColumn)),
+                    ("newName",
+                    ElmValueEncoding.StringAsPineValue(renameParams.NewName))
                 ]);
     }
 }

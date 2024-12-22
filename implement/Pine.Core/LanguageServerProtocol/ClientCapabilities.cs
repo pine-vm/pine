@@ -30,7 +30,8 @@ public record DidChangeWatchedFilesClientCapabilities(
 public record TextDocumentClientCapabilities(
     CompletionClientCapabilities? Completion,
     PublishDiagnosticsClientCapabilities? PublishDiagnostics,
-    DocumentSymbolClientCapabilities DocumentSymbol);
+    DocumentSymbolClientCapabilities? DocumentSymbol,
+    RenameClientCapabilities? Rename);
 
 
 /// <summary>
@@ -59,4 +60,12 @@ public record PublishDiagnosticsClientCapabilities(
     bool? VersionSupport,
     bool? CodeDescriptionSupport,
     bool? DataSupport);
+
+/// <summary>
+/// https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#renameClientCapabilities
+/// </summary>
+public record RenameClientCapabilities(
+    bool? DynamicRegistration,
+    bool? PrepareSupport,
+    bool? HonorsChangeAnnotations);
 

@@ -1,3 +1,4 @@
+using Pine.Core;
 using Pine.Core.LanguageServerProtocol;
 using StreamJsonRpc;
 using System;
@@ -178,6 +179,26 @@ public record LanguageServerRpcTarget(
         TextDocumentPositionParams referenceParams)
     {
         return Server.TextDocument_references(referenceParams);
+    }
+
+    [JsonRpcMethod("textDocument/rename", UseSingleObjectParameterDeserialization = true)]
+    public WorkspaceEdit? TextDocument_rename(RenameParams renameParams)
+    {
+        var renameResult = Server.TextDocument_rename(renameParams);
+
+        if (renameResult.IsErrOrNull() is { } err)
+        {
+            Log($"Rename failed: {err}");
+            return null;
+        }
+
+        if (renameResult is not Result<string, WorkspaceEdit?>.Ok workspaceEditOk)
+        {
+            throw new InvalidOperationException(
+                "Unexpected result type: " + renameResult.GetType().FullName);
+        }
+
+        return workspaceEditOk.Value;
     }
 
     /// <summary>

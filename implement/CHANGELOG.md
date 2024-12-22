@@ -51,3 +51,11 @@ Published the first version of the Elm developer tools VSCode extension, with a 
 
 + Added feature: 'Go to Definition'
 
+## 2024-12-19 - Expanded VSCode Extension and Language Server
+
++ Added feature: 'Find All References'
+
+## 2024-12-22 - Expanded VSCode Extension and Language Server
+
++ Added feature: 'Rename Symbol'
+

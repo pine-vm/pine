@@ -1263,6 +1263,9 @@ updateWorkspaceWithoutCmdToUpdateEditor updateConfig event stateBefore =
 
                                         LanguageServiceInterface.TextDocumentReferencesResponse _ ->
                                             Cmd.none
+
+                                        LanguageServiceInterface.TextDocumentRenameResponse _ ->
+                                            Cmd.none
                             in
                             ( stateBefore
                             , cmd

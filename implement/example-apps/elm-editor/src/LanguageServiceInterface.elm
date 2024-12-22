@@ -45,6 +45,7 @@ type Request
     | ProvideDefinitionRequest ProvideDefinitionRequestStruct
     | TextDocumentSymbolRequest (List String)
     | TextDocumentReferencesRequest ProvideReferencesRequestStruct
+    | TextDocumentRenameRequest RenameParams
 
 
 type Response
@@ -54,6 +55,7 @@ type Response
     | ProvideDefinitionResponse (List LocationUnderFilePath)
     | TextDocumentSymbolResponse (List DocumentSymbol)
     | TextDocumentReferencesResponse (List LocationUnderFilePath)
+    | TextDocumentRenameResponse WorkspaceEdit
 
 
 type alias ProvideHoverRequestStruct =
@@ -76,6 +78,14 @@ type alias ProvideDefinitionRequestStruct =
 
 type alias ProvideReferencesRequestStruct =
     ProvideHoverRequestStruct
+
+
+type alias RenameParams =
+    { filePath : List String
+    , positionLineNumber : Int
+    , positionColumn : Int
+    , newName : String
+    }
 
 
 type alias LocationUnderFilePath =
@@ -113,3 +123,19 @@ type SymbolKind
     | SymbolKind_Array
     | SymbolKind_EnumMember
     | SymbolKind_Struct
+
+
+type alias WorkspaceEdit =
+    List TextDocumentEdit
+
+
+type alias TextDocumentEdit =
+    { filePath : List String
+    , edits : List TextEdit
+    }
+
+
+type alias TextEdit =
+    { range : Frontend.MonacoEditor.MonacoRange
+    , newText : String
+    }

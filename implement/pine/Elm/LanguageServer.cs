@@ -118,6 +118,8 @@ public class LanguageServer(
 
                 ReferencesProvider = true,
 
+                RenameProvider = true,
+
                 Workspace = new ServerCapabilitiesWorkspace
                 {
                     WorkspaceFolders = new WorkspaceFoldersServerCapabilities(Supported: true, ChangeNotifications: true),
@@ -976,6 +978,99 @@ public class LanguageServer(
         return locations;
     }
 
+    public Result<string, WorkspaceEdit?> TextDocument_rename(
+        RenameParams renameParams)
+    {
+        var textDocumentUri =
+            System.Uri.UnescapeDataString(renameParams.TextDocument.Uri);
+
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+
+        Log("TextDocument_rename: " + textDocumentUri + " at " + renameParams.Position);
+
+        var localPathResult = DocumentUriAsLocalPath(textDocumentUri);
+        {
+            if (localPathResult.IsErrOrNull() is { } err)
+            {
+                Log("Ignoring URI: " + err + ": " + textDocumentUri);
+
+                return "Ignoring URI: " + err + ": " + textDocumentUri;
+            }
+        }
+
+        if (localPathResult.IsOkOrNull() is not { } localPath)
+        {
+            throw new System.NotImplementedException(
+                "Unexpected result type: " + localPathResult.GetType());
+        }
+
+        var filePathOpenedInEditor = PathItemsFromFlatPath(localPath);
+
+        var provideRenameResult =
+            TextDocumentRenameRequest(
+                new Interface.RenameParams(
+                    filePathOpenedInEditor,
+                    /*
+                     * The language service currently uses the 1-based line and column numbers
+                     * inherited from the Monaco editor API.
+                     * */
+                    PositionLineNumber: (int)renameParams.Position.Line + 1,
+                    PositionColumn: (int)renameParams.Position.Character + 1,
+                    NewName: renameParams.NewName));
+
+        {
+            if (provideRenameResult.IsErrOrNull() is { } err)
+            {
+                Log("Failed to provide rename: " + err);
+
+                return "Failed to provide rename: " + err;
+            }
+        }
+
+        if (provideRenameResult.IsOkOrNull() is not { } provideRenameOk)
+        {
+            throw new System.NotImplementedException(
+                "Unexpected result type: " + provideRenameResult.GetType());
+        }
+
+        Log(
+            "Completed rename in " +
+            CommandLineInterface.FormatIntegerForDisplay(clock.ElapsedMilliseconds) + " ms, returning " +
+            provideRenameOk.Edits.Sum(fe => fe.Edits.Count) + " edits across " +
+            provideRenameOk.Edits.Count + " files");
+
+        var documentChanges =
+            provideRenameOk.Edits
+            .SelectMany(documentEdit =>
+            {
+                if (CorrespondingUri(documentEdit.FilePath) is not { } documentUri)
+                {
+                    Log("No corresponding URI for " + documentEdit.FilePath);
+                    return (IReadOnlyList<TextDocumentEdit>)[];
+                }
+
+                var editsInDocument =
+                    documentEdit.Edits
+                    .Select(edit =>
+                        new TextEdit(
+                            Range: new Range(
+                                Start: new Position(
+                                    Line: (uint)edit.Range.StartLineNumber - 1,
+                                    Character: (uint)edit.Range.StartColumn - 1),
+                                End: new Position(
+                                    Line: (uint)edit.Range.EndLineNumber - 1,
+                                    Character: (uint)edit.Range.EndColumn - 1)),
+                            NewText: edit.NewText));
+
+                return [new TextDocumentEdit(
+                    new OptionalVersionedTextDocumentIdentifier(documentUri, Version: null),
+                    [.. editsInDocument])];
+            })
+            .ToImmutableArray();
+
+        return new WorkspaceEdit(documentChanges);
+    }
+
     public void TextDocument_didSave(
         DidSaveTextDocumentParams didSaveParams,
         System.Action<TextDocumentIdentifier, IReadOnlyList<Diagnostic>> publishDiagnostics)
@@ -1340,6 +1435,34 @@ public class LanguageServer(
 
         return Result<string, IReadOnlyList<Interface.LocationUnderFilePath>>.ok(
             provideReferenceResponse.Locations);
+    }
+
+    public Result<string, Interface.WorkspaceEdit> TextDocumentRenameRequest(
+        Interface.RenameParams renameParams)
+    {
+        var genericRequestResult =
+            HandleRequest(
+                new Interface.Request.TextDocumentRenameRequest(renameParams));
+
+        if (genericRequestResult.IsErrOrNull() is { } err)
+        {
+            return err;
+        }
+
+        if (genericRequestResult.IsOkOrNull() is not { } requestOk)
+        {
+            throw new System.NotImplementedException(
+                "Unexpected request result type: " + genericRequestResult.GetType());
+        }
+
+        if (requestOk is not Interface.Response.TextDocumentRenameResponse renameResponse)
+        {
+            throw new System.NotImplementedException(
+                "Unexpected request result type: " + requestOk.GetType());
+        }
+
+        return Result<string, Interface.WorkspaceEdit>.ok(
+            renameResponse.WorkspaceEdit);
     }
 
     public Result<string, Interface.Response> HandleRequest(

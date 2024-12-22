@@ -8,11 +8,12 @@ Elm developer tools packaged as [Visual Studio Code](https://code.visualstudio.c
 + Formatting
 + Error highlighting
 
-+ Completions - Shows completion suggestions matching the current context
-+ Hover tips - Shows type annotations and documentation for a type alias, module, type, or function
-+ Go to Definition - Jump to the definition of a type alias, module, type, or function
++ Completions - shows completion suggestions matching the current context
++ Hover tips - shows type annotations and documentation for a type alias, module, type, or function
++ Go to Definition - jump to the definition of a type alias, module, type, or function
 + Go to symbol - module outline
 + Find All References
++ Rename Symbol - renames a symbol across files
 
 ## Install
 

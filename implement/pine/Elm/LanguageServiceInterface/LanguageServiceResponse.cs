@@ -15,6 +15,7 @@ type Response
     | ProvideDefinitionResponse (List LocationUnderFilePath)
     | TextDocumentSymbolResponse (List DocumentSymbol)
     | TextDocumentReferencesResponse (List LocationUnderFilePath)
+    | TextDocumentRenameResponse WorkspaceEdit
 
  * */
 
@@ -41,6 +42,10 @@ public abstract record Response
 
     public record TextDocumentReferencesResponse(
         IReadOnlyList<LocationUnderFilePath> Locations)
+        : Response;
+
+    public record TextDocumentRenameResponse(
+        WorkspaceEdit WorkspaceEdit)
         : Response;
 }
 
@@ -119,6 +124,37 @@ public enum SymbolKind
     EnumMember = 22,
     Struct = 23
 }
+
+/*
+
+type alias WorkspaceEdit =
+    List TextDocumentEdit
+
+
+type alias TextDocumentEdit =
+    { filePath : List String
+    , edits : List TextEdit
+    }
+
+
+type alias TextEdit =
+    { range : Frontend.MonacoEditor.MonacoRange
+    , newText : String
+    }
+
+ * */
+
+public record WorkspaceEdit(
+    IReadOnlyList<TextDocumentEdit> Edits);
+
+public record TextDocumentEdit(
+    IReadOnlyList<string> FilePath,
+    IReadOnlyList<TextEdit> Edits);
+
+public record TextEdit(
+    MonacoEditor.MonacoRange Range,
+    string NewText);
+
 
 public static class ResponseEncoding
 {
@@ -326,6 +362,33 @@ public static class ResponseEncoding
             }
 
             return new Response.TextDocumentReferencesResponse(locations);
+        }
+
+        if (responseTag.TagName is "TextDocumentRenameResponse")
+        {
+            if (responseTag.Arguments.Count is not 1)
+            {
+                return
+                    "Unexpected response tag arguments count: " +
+                    responseTag.Arguments.Count;
+            }
+
+            var workspaceEditResult =
+                WorkspaceEditEncoding.Decode(responseTag.Arguments[0]);
+            {
+                if (workspaceEditResult.IsErrOrNull() is { } err)
+                {
+                    return "Failed decoding workspace edit: " + err;
+                }
+            }
+
+            if (workspaceEditResult.IsOkOrNull() is not { } workspaceEdit)
+            {
+                throw new System.NotImplementedException
+                    ("Unexpected result type: " + workspaceEditResult.GetType());
+            }
+
+            return new Response.TextDocumentRenameResponse(workspaceEdit);
         }
 
         return
@@ -784,4 +847,162 @@ public static class SymbolKindEncoding
     }
 }
 
+public static class WorkspaceEditEncoding
+{
+    public static Result<string, WorkspaceEdit> Decode(ElmValue elmValue)
+    {
+        if (elmValue is not ElmValue.ElmList list)
+        {
+            return "Expected Elm list, got: " + elmValue.GetType();
+        }
+        var textDocumentEdits = new TextDocumentEdit[list.Elements.Count];
+        for (var i = 0; i < list.Elements.Count; i++)
+        {
+            var textDocumentEditResult =
+                TextDocumentEditEncoding.Decode(list.Elements[i]);
+            {
+                if (textDocumentEditResult.IsErrOrNull() is { } err)
+                {
+                    return "Failed decoding text document edit at index [" + i + "]: " + err;
+                }
+            }
+
+            if (textDocumentEditResult.IsOkOrNull() is not { } textDocumentEdit)
+            {
+                throw new System.NotImplementedException
+                    ("Unexpected result type: " + textDocumentEditResult.GetType());
+            }
+
+            textDocumentEdits[i] = textDocumentEdit;
+        }
+        return new WorkspaceEdit(textDocumentEdits);
+    }
+}
+
+public static class TextDocumentEditEncoding
+{
+    public static Result<string, TextDocumentEdit> Decode(ElmValue elmValue)
+    {
+        if (elmValue is not ElmValue.ElmRecord record)
+        {
+            return "Expected Elm record, got: " + elmValue.GetType();
+        }
+
+        if (record.Fields.Count is not 2)
+        {
+            return "Expected 2 fields, got: " + record.Fields.Count;
+        }
+
+        if (record["filePath"] is not { } filePathValue)
+        {
+            return
+                "Expected field 'filePath' to be present, got: " +
+                string.Join(", ", record.Fields.Select(f => f.FieldName));
+        }
+
+        if (filePathValue is not ElmValue.ElmList filePathListValue)
+        {
+            return "Expected field 'filePath' to be a list, got: " + filePathValue.GetType();
+        }
+
+        var filePathArray = new string[filePathListValue.Elements.Count];
+
+        for (var i = 0; i < filePathListValue.Elements.Count; i++)
+        {
+            if (filePathListValue.Elements[i] is not ElmValue.ElmString strVal)
+            {
+                return "Expected element of 'filePath' to be a string, got: " + filePathListValue.Elements[i].GetType();
+            }
+
+            filePathArray[i] = strVal.Value;
+        }
+
+        if (record["edits"] is not { } editsValue)
+        {
+            return
+                "Expected field 'edits' to be present, got: " +
+                string.Join(", ", record.Fields.Select(f => f.FieldName));
+        }
+
+        if (editsValue is not ElmValue.ElmList editsListValue)
+        {
+            return "Expected field 'edits' to be a list, got: " + editsValue.GetType();
+        }
+
+        var textEdits = new TextEdit[editsListValue.Elements.Count];
+
+        for (var i = 0; i < editsListValue.Elements.Count; i++)
+        {
+            var textEditResult = TextEditEncoding.Decode(editsListValue.Elements[i]);
+            {
+                if (textEditResult.IsErrOrNull() is { } err)
+                {
+                    return "Failed decoding text edit at index [" + i + "]: " + err;
+                }
+            }
+            if (textEditResult.IsOkOrNull() is not { } textEdit)
+            {
+                throw new System.NotImplementedException
+                    ("Unexpected result type: " + textEditResult.GetType());
+            }
+
+            textEdits[i] = textEdit;
+        }
+
+        return new TextDocumentEdit(filePathArray, textEdits);
+    }
+}
+
+public static class TextEditEncoding
+{
+    public static Result<string, TextEdit> Decode(ElmValue elmValue)
+    {
+        if (elmValue is not ElmValue.ElmRecord record)
+        {
+            return "Expected Elm record, got: " + elmValue.GetType();
+        }
+
+        if (record.Fields.Count is not 2)
+        {
+            return "Expected 2 fields, got: " + record.Fields.Count;
+        }
+
+        if (record["range"] is not { } rangeValue)
+        {
+            return
+                "Expected field 'range' to be present, got: " +
+                string.Join(", ", record.Fields.Select(f => f.FieldName));
+        }
+
+        var rangeDecodeResult =
+            MonacoEditor.MonacoRangeEncoding.Decode(rangeValue);
+
+        {
+            if (rangeDecodeResult.IsErrOrNull() is { } rangeDecodeErr)
+            {
+                return "Failed decoding range: " + rangeDecodeErr;
+            }
+        }
+
+        if (rangeDecodeResult.IsOkOrNull() is not { } range)
+        {
+            throw new System.NotImplementedException
+                ("Unexpected result type: " + rangeDecodeResult.GetType());
+        }
+
+        if (record["newText"] is not { } newTextValue)
+        {
+            return
+                "Expected field 'newText' to be present, got: " +
+                string.Join(", ", record.Fields.Select(f => f.FieldName));
+        }
+
+        if (newTextValue is not ElmValue.ElmString newTextString)
+        {
+            return "Expected field 'newText' to be a string, got: " + newTextValue.GetType();
+        }
+
+        return new TextEdit(range, newTextString.Value);
+    }
+}
 
