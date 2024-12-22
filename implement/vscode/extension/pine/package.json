@@ -17,6 +17,9 @@
 	"keywords": [
 		"elm"
 	],
+	"sponsor": {
+		"url": "https://github.com/sponsors/Viir"
+	},
 	"engines": {
 		"vscode": "^1.75.0"
 	},
