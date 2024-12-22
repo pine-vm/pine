@@ -5,6 +5,7 @@ These functions enable features like completion suggestions and hover tips in th
 -}
 
 import Common
+import Dict
 import Elm.Parser
 import Elm.Syntax.Comments
 import Elm.Syntax.Declaration
@@ -26,14 +27,14 @@ import List.Extra
 
 
 type alias LanguageServiceState =
-    { fileTreeParseCache : FileTree.FileTreeNode LanguageServiceStateFileTreeNodeBlob
+    { documentCache : Dict.Dict String LanguageServiceStateFileTreeNodeBlob
     , coreModulesCache : List ElmCoreModule
     }
 
 
 type alias LanguageServiceStateFileTreeNodeBlob =
     { {- Avoid bug in Elm core library as reported at https://github.com/elm/bytes/issues/15 :
-         Convert to other representation before comparing.
+         Convert to other representation for equality check.
       -}
       sourceBase64 : String
     , textContent : Maybe FileTextContent
@@ -48,14 +49,14 @@ type alias FileTextContent =
 
 
 type alias ParsedModuleCache =
-    { filePath : List String
+    { fileUri : String
     , text : String
     , syntax : Elm.Syntax.File.File
     }
 
 
 type alias ParsedCookedModuleCache =
-    { filePath : List String
+    { fileUri : String
     , text : String
     , syntax : Elm.Syntax.File.File
     , completionItems : ModuleCompletionItems
@@ -96,7 +97,7 @@ type CookedDocumentation
 
 
 type LocationUnderFilePath range
-    = LocationUnderFilePath (List String) range
+    = LocationUnderFilePath String range
 
 
 type alias ModuleCompletionItems =
@@ -152,12 +153,12 @@ initLanguageServiceState elmCoreModules =
                             |> Maybe.map
                                 (\syntax ->
                                     { parseResult =
-                                        { filePath = [ "elm-core" ]
+                                        { fileUri = "elm-core"
                                         , text = coreModule.moduleText
                                         , syntax = syntax
                                         , completionItems =
                                             completionItemsFromModule
-                                                { filePath = [ "elm-core" ]
+                                                { fileUri = "elm-core"
                                                 , text = coreModule.moduleText
                                                 , syntax = syntax
                                                 }
@@ -167,7 +168,7 @@ initLanguageServiceState elmCoreModules =
                                 )
                     )
     in
-    { fileTreeParseCache = FileTree.TreeNode []
+    { documentCache = Dict.empty
     , coreModulesCache = elmCoreModulesParseResults
     }
 
@@ -194,21 +195,19 @@ handleRequestInCurrentWorkspace request stateBefore =
     let
         ( serviceResponse, state ) =
             case request of
-                LanguageServiceInterface.AddFileRequest filePath content ->
-                    addFile filePath content stateBefore
+                LanguageServiceInterface.AddFileRequest fileUri fileContent ->
+                    addFile ( fileUri, fileContent ) stateBefore
 
-                LanguageServiceInterface.DeleteFileRequest filePath ->
+                LanguageServiceInterface.DeleteFileRequest fileUri ->
                     let
-                        newFileTree =
-                            case FileTree.removeNodeAtPath filePath stateBefore.fileTreeParseCache of
-                                Nothing ->
-                                    stateBefore.fileTreeParseCache
-
-                                Just afterRemove ->
-                                    afterRemove
+                        documentCache : Dict.Dict String LanguageServiceStateFileTreeNodeBlob
+                        documentCache =
+                            Dict.remove fileUri stateBefore.documentCache
                     in
                     ( LanguageServiceInterface.WorkspaceSummaryResponse
-                    , { stateBefore | fileTreeParseCache = newFileTree }
+                    , { stateBefore
+                        | documentCache = documentCache
+                      }
                     )
 
                 LanguageServiceInterface.ProvideHoverRequest provideHoverRequest ->
@@ -271,19 +270,20 @@ handleRequestInCurrentWorkspace request stateBefore =
 
 
 addFile :
-    List String
-    -> LanguageServiceInterface.FileTreeBlobNode
+    ( String
+    , LanguageServiceInterface.FileTreeBlobNode
+    )
     -> LanguageServiceState
     -> ( LanguageServiceInterface.Response, LanguageServiceState )
-addFile filePath content stateBefore =
+addFile ( fileUri, fileContent ) stateBefore =
     let
         maybePreviousCached : Maybe LanguageServiceStateFileTreeNodeBlob
         maybePreviousCached =
-            FileTree.getBlobAtPathFromFileTree filePath stateBefore.fileTreeParseCache
+            Dict.get fileUri stateBefore.documentCache
 
         maybeTextContent : Maybe FileTextContent
         maybeTextContent =
-            case content.asText of
+            case fileContent.asText of
                 Nothing ->
                     Nothing
 
@@ -296,12 +296,12 @@ addFile filePath content stateBefore =
 
                                 Ok syntax ->
                                     Just
-                                        { filePath = filePath
+                                        { fileUri = fileUri
                                         , text = asString
                                         , syntax = syntax
                                         , completionItems =
                                             completionItemsFromModule
-                                                { filePath = filePath
+                                                { fileUri = fileUri
                                                 , text = asString
                                                 , syntax = syntax
                                                 }
@@ -335,20 +335,20 @@ addFile filePath content stateBefore =
                         Just parsedFile ->
                             Just parsedFile
 
-        newFileTree : FileTree.FileTreeNode LanguageServiceStateFileTreeNodeBlob
-        newFileTree =
-            FileTree.setNodeAtPathInSortedFileTree
-                ( filePath
-                , FileTree.BlobNode
-                    { sourceBase64 = content.asBase64
-                    , textContent = maybeTextContent
-                    , parsedFileLastSuccess = parsedFileLastSuccess
-                    }
-                )
-                stateBefore.fileTreeParseCache
+        documentCache : Dict.Dict String LanguageServiceStateFileTreeNodeBlob
+        documentCache =
+            Dict.insert
+                fileUri
+                { sourceBase64 = fileContent.asBase64
+                , textContent = maybeTextContent
+                , parsedFileLastSuccess = parsedFileLastSuccess
+                }
+                stateBefore.documentCache
     in
     ( LanguageServiceInterface.WorkspaceSummaryResponse
-    , { stateBefore | fileTreeParseCache = newFileTree }
+    , { stateBefore
+        | documentCache = documentCache
+      }
     )
 
 
@@ -359,7 +359,7 @@ provideHover :
     -> LanguageServiceState
     -> List String
 provideHover request languageServiceState =
-    case languageServiceState.fileTreeParseCache |> FileTree.getBlobAtPathFromFileTree request.filePathOpenedInEditor of
+    case Dict.get request.filePathOpenedInEditor languageServiceState.documentCache of
         Nothing ->
             []
 
@@ -389,7 +389,7 @@ provideHover request languageServiceState =
 
 
 type alias ImportedModule =
-    { filePath : List String
+    { fileUri : String
     , canonicalName : List String
     , importedName : Elm.Syntax.ModuleName.ModuleName
     , parsedModule : Maybe ParsedCookedModuleCache
@@ -530,7 +530,7 @@ hoverItemsFromParsedModule parsedModule languageServiceState =
                         ( completionItemLabel
                         , ( maybeFilterRange
                           , LocationUnderFilePath
-                                parsedModule.filePath
+                                parsedModule.fileUri
                                 completionItemRange
                           , completionItem
                           )
@@ -578,7 +578,7 @@ hoverItemsFromParsedModule parsedModule languageServiceState =
                                     if itemInsertText == nameInModule && item.isExposed then
                                         Just
                                             ( LocationUnderFilePath
-                                                referencedModule.filePath
+                                                referencedModule.fileUri
                                                 item.range
                                             , itemDocumentation
                                             )
@@ -642,7 +642,7 @@ hoverItemsFromParsedModule parsedModule languageServiceState =
                                         in
                                         [ ( rangeModulePart
                                           , LocationUnderFilePath
-                                                referencedModule.filePath
+                                                referencedModule.fileUri
                                                 (DeclarationRange rangeModulePart [])
                                           , documentation
                                           )
@@ -730,10 +730,7 @@ provideCompletionItems :
     -> LanguageServiceState
     -> List Frontend.MonacoEditor.MonacoCompletionItem
 provideCompletionItems request languageServiceState =
-    case
-        FileTree.getBlobAtPathFromFileTree request.filePathOpenedInEditor
-            languageServiceState.fileTreeParseCache
-    of
+    case Dict.get request.filePathOpenedInEditor languageServiceState.documentCache of
         Nothing ->
             []
 
@@ -822,7 +819,7 @@ provideDefinitionInternal :
     -> LanguageServiceState
     -> List (LocationUnderFilePath DeclarationRange)
 provideDefinitionInternal request languageServiceState =
-    case FileTree.getBlobAtPathFromFileTree request.filePathOpenedInEditor languageServiceState.fileTreeParseCache of
+    case Dict.get request.filePathOpenedInEditor languageServiceState.documentCache of
         Nothing ->
             []
 
@@ -852,11 +849,11 @@ provideDefinitionInternal request languageServiceState =
 
 
 textDocumentSymbol :
-    List String
+    String
     -> LanguageServiceState
     -> List LanguageServiceInterface.DocumentSymbol
-textDocumentSymbol filePath languageServiceState =
-    case FileTree.getBlobAtPathFromFileTree filePath languageServiceState.fileTreeParseCache of
+textDocumentSymbol fileUri languageServiceState =
+    case Dict.get fileUri languageServiceState.documentCache of
         Nothing ->
             []
 
@@ -948,7 +945,7 @@ textDocumentReferences referenceRequest languageServiceState =
 textDocumentReferencesGroupedByFilePath :
     LanguageServiceInterface.ProvideReferencesRequestStruct
     -> LanguageServiceState
-    -> Maybe ( ( List String, DeclarationRange ), List ( List String, List Range ) )
+    -> Maybe ( ( String, DeclarationRange ), List ( String, List Range ) )
 textDocumentReferencesGroupedByFilePath referenceRequest languageServiceState =
     let
         maybeDefinition : Maybe (LocationUnderFilePath DeclarationRange)
@@ -967,7 +964,7 @@ textDocumentReferencesGroupedByFilePath referenceRequest languageServiceState =
                 (DeclarationRange definitionLocationRangeWhole _) =
                     definitionLocationRange
 
-                references : List ( List String, List Range )
+                references : List ( String, List Range )
                 references =
                     findReferences ( definitionLocationFilePath, definitionLocationRangeWhole ) languageServiceState
             in
@@ -978,10 +975,7 @@ textDocumentReferencesGroupedByFilePath referenceRequest languageServiceState =
 
         Nothing ->
             -- Fallback: try to find a top-level declaration covering this position
-            case
-                FileTree.getBlobAtPathFromFileTree referenceRequest.filePathOpenedInEditor
-                    languageServiceState.fileTreeParseCache
-            of
+            case Dict.get referenceRequest.filePathOpenedInEditor languageServiceState.documentCache of
                 Nothing ->
                     Nothing
 
@@ -996,7 +990,7 @@ textDocumentReferencesGroupedByFilePath referenceRequest languageServiceState =
                                 pos =
                                     ( referenceRequest.positionLineNumber, referenceRequest.positionColumn )
 
-                                maybeTopLevelDefinitionLocation : Maybe ( List String, DeclarationRange )
+                                maybeTopLevelDefinitionLocation : Maybe ( String, DeclarationRange )
                                 maybeTopLevelDefinitionLocation =
                                     parsedFile.completionItems.fromTopLevel
                                         |> Common.listMapFind
@@ -1013,7 +1007,7 @@ textDocumentReferencesGroupedByFilePath referenceRequest languageServiceState =
                                                         declRangesName
                                                 then
                                                     Just
-                                                        ( parsedFile.filePath
+                                                        ( parsedFile.fileUri
                                                         , decl.range
                                                         )
 
@@ -1042,23 +1036,23 @@ textDocumentReferencesGroupedByFilePath referenceRequest languageServiceState =
 
 
 findReferences :
-    ( List String, Range )
+    ( String, Range )
     -> LanguageServiceState
-    -> List ( List String, List Range )
+    -> List ( String, List Range )
 findReferences ( targetDefinitionFilePath, targetDefinitionRange ) languageServiceState =
     let
         allParsedModules : List ParsedCookedModuleCache
         allParsedModules =
             List.concat
-                [ languageServiceState.fileTreeParseCache
-                    |> FileTree.flatListOfBlobsFromFileTreeNode
+                [ languageServiceState.documentCache
+                    |> Dict.toList
                     |> List.filterMap (\( _, blob ) -> blob.parsedFileLastSuccess)
                 , List.map .parseResult languageServiceState.coreModulesCache
                 ]
 
         findReferencesInModule :
             ParsedCookedModuleCache
-            -> Maybe ( List String, List Range )
+            -> Maybe ( String, List Range )
         findReferencesInModule parsedModule =
             let
                 { fromDeclarations } =
@@ -1081,7 +1075,7 @@ findReferences ( targetDefinitionFilePath, targetDefinitionRange ) languageServi
 
             else
                 Just
-                    ( parsedModule.filePath
+                    ( parsedModule.fileUri
                     , ranges
                     )
     in
@@ -1406,7 +1400,7 @@ importedModulesFromFile :
     -> LanguageServiceState
     ->
         List
-            { filePath : List String
+            { fileUri : String
             , canonicalName : List String
             , importedName : Elm.Syntax.ModuleName.ModuleName
             , parsedModule : Maybe ParsedCookedModuleCache
@@ -1428,7 +1422,7 @@ importedModulesFromFile fileOpenedInEditor languageServiceState =
                                     Elm.Syntax.Module.moduleName moduleDefinition
                             in
                             Just
-                                { filePath = coreModule.parseResult.filePath
+                                { fileUri = coreModule.parseResult.fileUri
                                 , canonicalName = canonicalName
                                 , importedName = canonicalName
                                 , parsedModule = Just coreModule.parseResult
@@ -1477,7 +1471,7 @@ importedModulesFromFile fileOpenedInEditor languageServiceState =
 
                             Just parsedModule ->
                                 Just
-                                    { filePath = parsedModule.filePath
+                                    { fileUri = parsedModule.fileUri
                                     , canonicalName = canonicalName
                                     , importedName = importedName
                                     , parsedModule = Just parsedModule
@@ -1491,8 +1485,8 @@ importedModulesFromFile fileOpenedInEditor languageServiceState =
 modulesAvailableForImportFromState : LanguageServiceState -> List ParsedCookedModuleCache
 modulesAvailableForImportFromState languageServiceState =
     List.concat
-        [ languageServiceState.fileTreeParseCache
-            |> FileTree.flatListOfBlobsFromFileTreeNode
+        [ languageServiceState.documentCache
+            |> Dict.toList
             |> List.filterMap
                 (\( _, fileCache ) ->
                     fileCache.parsedFileLastSuccess
@@ -1519,8 +1513,8 @@ importExposingsFromFile fileOpenedInEditor languageServiceState =
                                 importSyntax.moduleName
                         in
                         case
-                            languageServiceState.fileTreeParseCache
-                                |> FileTree.flatListOfBlobsFromFileTreeNode
+                            languageServiceState.documentCache
+                                |> Dict.toList
                                 |> Common.listMapFind
                                     (\( _, fileCache ) ->
                                         case fileCache.parsedFileLastSuccess of
@@ -1962,10 +1956,12 @@ markdownElmCodeBlockFromCodeLines codeLines =
 updateLanguageServiceState : LanguageServiceInterface.FileTreeNode -> LanguageServiceState -> LanguageServiceState
 updateLanguageServiceState fileTree state =
     let
+        compileFileCacheEntry : ( String, LanguageServiceInterface.FileTreeBlobNode ) -> LanguageServiceStateFileTreeNodeBlob
         compileFileCacheEntry ( blobPath, fileTreeBlob ) =
             let
+                maybePreviousCached : Maybe LanguageServiceStateFileTreeNodeBlob
                 maybePreviousCached =
-                    state.fileTreeParseCache |> FileTree.getBlobAtPathFromFileTree blobPath
+                    Dict.get blobPath state.documentCache
 
                 buildNewEntry () =
                     let
@@ -1984,12 +1980,12 @@ updateLanguageServiceState fileTree state =
 
                                                 Ok syntax ->
                                                     Just
-                                                        { filePath = blobPath
+                                                        { fileUri = blobPath
                                                         , text = asString
                                                         , syntax = syntax
                                                         , completionItems =
                                                             completionItemsFromModule
-                                                                { filePath = blobPath
+                                                                { fileUri = blobPath
                                                                 , text = asString
                                                                 , syntax = syntax
                                                                 }
@@ -2034,9 +2030,26 @@ updateLanguageServiceState fileTree state =
 
                     else
                         buildNewEntry ()
+
+        documentCache : Dict.Dict String LanguageServiceStateFileTreeNodeBlob
+        documentCache =
+            fileTree
+                |> FileTree.flatListOfBlobsFromFileTreeNode
+                |> List.map
+                    (\( filePath, fileContent ) ->
+                        let
+                            filePathFlat : String
+                            filePathFlat =
+                                String.join "/" filePath
+                        in
+                        ( filePathFlat
+                        , compileFileCacheEntry ( filePathFlat, fileContent )
+                        )
+                    )
+                |> Dict.fromList
     in
     { state
-        | fileTreeParseCache = FileTree.mapBlobsWithPath compileFileCacheEntry fileTree
+        | documentCache = documentCache
     }
 
 

@@ -52,16 +52,16 @@ public class LanguageServer(
         }
 
         public Result<string, Interface.Response.WorkspaceSummaryResponse> AddFile(
-            IReadOnlyList<string> filePath,
+            string fileUri,
             string fileContent)
         {
-            return languageServiceState.AddFile(filePath, fileContent);
+            return languageServiceState.AddFile(fileUri, fileContent);
         }
 
         public Result<string, Interface.Response.WorkspaceSummaryResponse> DeleteFile(
-            IReadOnlyList<string> filePath)
+            string fileUri)
         {
-            return languageServiceState.DeleteFile(filePath);
+            return languageServiceState.DeleteFile(fileUri);
         }
 
         public Result<string, Interface.Response> HandleRequest(
@@ -268,8 +268,14 @@ public class LanguageServer(
 
                         fileClock.Restart();
 
+                        if (System.Uri.TryCreate(elmFile, System.UriKind.Absolute, out var uri) is false)
+                        {
+                            Log("Failed to create URI: " + elmFile);
+                            continue;
+                        }
+
                         languageServiceState.AddFile(
-                            PathItemsFromFlatPath(elmFile),
+                            uri.AbsoluteUri,
                             fileContent);
 
                         Log(
@@ -315,7 +321,7 @@ public class LanguageServer(
 
     public void TextDocument_didOpen(TextDocumentItem textDocument)
     {
-        var decodedUri = System.Uri.UnescapeDataString(textDocument.Uri);
+        var decodedUri = DocumentUriCleaned(textDocument.Uri);
 
         Log("TextDocument_didOpen: " + decodedUri);
 
@@ -328,7 +334,7 @@ public class LanguageServer(
         VersionedTextDocumentIdentifier textDocument,
         IReadOnlyList<TextDocumentContentChangeEvent> contentChanges)
     {
-        var textDocumentUri = System.Uri.UnescapeDataString(textDocument.Uri);
+        var textDocumentUri = DocumentUriCleaned(textDocument.Uri);
 
         allSeenDocumentUris[textDocumentUri] = textDocumentUri;
 
@@ -365,7 +371,7 @@ public class LanguageServer(
 
     public void TextDocument_didClose(TextDocumentIdentifier textDocument)
     {
-        var decodedUri = System.Uri.UnescapeDataString(textDocument.Uri);
+        var decodedUri = DocumentUriCleaned(textDocument.Uri);
 
         clientTextDocumentContents.TryRemove(decodedUri, out var _);
 
@@ -381,7 +387,7 @@ public class LanguageServer(
                 change
                 with
                 {
-                    Uri = System.Uri.UnescapeDataString(change.Uri)
+                    Uri = DocumentUriCleaned(change.Uri)
                 })
             .ToList();
 
@@ -427,8 +433,7 @@ public class LanguageServer(
 
             if (change.Type is FileChangeType.Deleted)
             {
-                languageServiceState.DeleteFile(
-                    PathItemsFromFlatPath(localPath));
+                languageServiceState.DeleteFile(change.Uri);
             }
 
             if (change.Type is not FileChangeType.Created &&
@@ -454,7 +459,7 @@ public class LanguageServer(
                 clock.Restart();
 
                 languageServiceState.AddFile(
-                    PathItemsFromFlatPath(localPath),
+                    change.Uri,
                     fileContent);
 
                 Log(
@@ -473,11 +478,27 @@ public class LanguageServer(
         TextDocumentIdentifier textDocument,
         FormattingOptions options)
     {
-        var textDocumentUri = System.Uri.UnescapeDataString(textDocument.Uri);
+        var textDocumentUri = DocumentUriCleaned(textDocument.Uri);
 
         Log("TextDocument_formatting: " + textDocumentUri);
 
         clientTextDocumentContents.TryGetValue(textDocumentUri, out var textDocumentContentBefore);
+
+        var localPathResult = DocumentUriAsLocalPath(textDocumentUri);
+
+        {
+            if (localPathResult.IsErrOrNull() is { } err)
+            {
+                Log("Ignoring URI: " + err + ": " + textDocumentUri);
+                return [];
+            }
+        }
+
+        if (localPathResult.IsOkOrNull() is not { } localPath)
+        {
+            throw new System.NotImplementedException(
+                "Unexpected result type: " + localPathResult.GetType());
+        }
 
         if (textDocumentContentBefore is not null)
         {
@@ -487,7 +508,7 @@ public class LanguageServer(
         {
             try
             {
-                textDocumentContentBefore ??= System.IO.File.ReadAllText(textDocumentUri);
+                textDocumentContentBefore ??= System.IO.File.ReadAllText(localPath);
             }
             catch (System.Exception e)
             {
@@ -570,35 +591,16 @@ public class LanguageServer(
     public Hover? TextDocument_hover(
         TextDocumentPositionParams positionParams)
     {
-        var textDocumentUri = System.Uri.UnescapeDataString(positionParams.TextDocument.Uri);
+        var textDocumentUri = DocumentUriCleaned(positionParams.TextDocument.Uri);
 
         var clock = System.Diagnostics.Stopwatch.StartNew();
 
         Log("TextDocument_hover: " + textDocumentUri + " at " + positionParams.Position);
 
-        var localPathResult = DocumentUriAsLocalPath(textDocumentUri);
-
-        {
-            if (localPathResult.IsErrOrNull() is { } err)
-            {
-                Log("Ignoring URI: " + err + ": " + textDocumentUri);
-
-                return null;
-            }
-        }
-
-        if (localPathResult.IsOkOrNull() is not { } localPath)
-        {
-            throw new System.NotImplementedException(
-                "Unexpected result type: " + localPathResult.GetType());
-        }
-
-        var filePathOpenedInEditor = PathItemsFromFlatPath(localPath);
-
         var hoverStrings =
             ProvideHover(
                 new Interface.ProvideHoverRequestStruct(
-                    filePathOpenedInEditor,
+                    textDocumentUri,
                     /*
                      * The language service currently uses the 1-based line and column numbers
                      * inherited from the Monaco editor API.
@@ -635,33 +637,16 @@ public class LanguageServer(
     public CompletionItem[] TextDocument_completion(
         TextDocumentPositionParams positionParams)
     {
-        var textDocumentUri = System.Uri.UnescapeDataString(positionParams.TextDocument.Uri);
+        var textDocumentUri = DocumentUriCleaned(positionParams.TextDocument.Uri);
 
         var clock = System.Diagnostics.Stopwatch.StartNew();
 
         Log("TextDocument_completion: " + textDocumentUri + " at " + positionParams.Position);
 
-        var localPathResult = DocumentUriAsLocalPath(textDocumentUri);
-        {
-            if (localPathResult.IsErrOrNull() is { } err)
-            {
-                Log("Ignoring URI: " + err + ": " + textDocumentUri);
-                return [];
-            }
-        }
-
-        if (localPathResult.IsOkOrNull() is not { } localPath)
-        {
-            throw new System.NotImplementedException(
-                "Unexpected result type: " + localPathResult.GetType());
-        }
-
-        var filePathOpenedInEditor = PathItemsFromFlatPath(localPath);
-
         var completionItems =
             ProvideCompletionItems(
                 new Interface.ProvideCompletionItemsRequestStruct(
-                    filePathOpenedInEditor,
+                    textDocumentUri,
                     /*
                      * The language service currently uses the 1-based line and column numbers
                      * inherited from the Monaco editor API.
@@ -710,33 +695,16 @@ public class LanguageServer(
     public IReadOnlyList<Location> TextDocument_definition(
         TextDocumentPositionParams positionParams)
     {
-        var textDocumentUri = System.Uri.UnescapeDataString(positionParams.TextDocument.Uri);
+        var textDocumentUri = DocumentUriCleaned(positionParams.TextDocument.Uri);
 
         var clock = System.Diagnostics.Stopwatch.StartNew();
 
         Log("TextDocument_definition: " + textDocumentUri + " at " + positionParams.Position);
 
-        var localPathResult = DocumentUriAsLocalPath(textDocumentUri);
-        {
-            if (localPathResult.IsErrOrNull() is { } err)
-            {
-                Log("Ignoring URI: " + err + ": " + textDocumentUri);
-                return [];
-            }
-        }
-
-        if (localPathResult.IsOkOrNull() is not { } localPath)
-        {
-            throw new System.NotImplementedException(
-                "Unexpected result type: " + localPathResult.GetType());
-        }
-
-        var filePathOpenedInEditor = PathItemsFromFlatPath(localPath);
-
         var provideDefinitionResult =
             ProvideDefinition(
                 new Interface.ProvideHoverRequestStruct(
-                    filePathOpenedInEditor,
+                    textDocumentUri,
                     PositionLineNumber: (int)positionParams.Position.Line + 1,
                     PositionColumn: (int)positionParams.Position.Character + 1));
 
@@ -784,13 +752,14 @@ public class LanguageServer(
     public IReadOnlyList<DocumentSymbol> TextDocument_documentSymbol(
         TextDocumentIdentifier textDocument)
     {
-        var textDocumentUri = System.Uri.UnescapeDataString(textDocument.Uri);
+        var textDocumentUri = DocumentUriCleaned(textDocument.Uri);
 
         var clock = System.Diagnostics.Stopwatch.StartNew();
 
         Log("textDocument/documentSymbol: " + textDocumentUri);
 
         var localPathResult = DocumentUriAsLocalPath(textDocumentUri);
+
         {
             if (localPathResult.IsErrOrNull() is { } err)
             {
@@ -823,13 +792,11 @@ public class LanguageServer(
         }
 
         languageServiceState.AddFile(
-            PathItemsFromFlatPath(localPath),
+            textDocumentUri,
             fileContent);
 
-        var filePathOpenedInEditor = PathItemsFromFlatPath(localPath);
-
         var documentSymbols =
-            TextDocumentSymbolRequest(filePathOpenedInEditor);
+            TextDocumentSymbolRequest(textDocumentUri);
 
         {
             if (documentSymbols.IsErrOrNull() is { } err)
@@ -908,34 +875,16 @@ public class LanguageServer(
     public IReadOnlyList<Location> TextDocument_references(
         TextDocumentPositionParams positionParams)
     {
-        var textDocumentUri =
-            System.Uri.UnescapeDataString(positionParams.TextDocument.Uri);
+        var textDocumentUri = DocumentUriCleaned(positionParams.TextDocument.Uri);
 
         var clock = System.Diagnostics.Stopwatch.StartNew();
 
         Log("TextDocument_references: " + textDocumentUri + " at " + positionParams.Position);
 
-        var localPathResult = DocumentUriAsLocalPath(textDocumentUri);
-        {
-            if (localPathResult.IsErrOrNull() is { } err)
-            {
-                Log("Ignoring URI: " + err + ": " + textDocumentUri);
-                return [];
-            }
-        }
-
-        if (localPathResult.IsOkOrNull() is not { } localPath)
-        {
-            throw new System.NotImplementedException(
-                "Unexpected result type: " + localPathResult.GetType());
-        }
-
-        var filePathOpenedInEditor = PathItemsFromFlatPath(localPath);
-
         var provideReferenceResult =
             TextDocumentReferencesRequest(
                 new Interface.ProvideHoverRequestStruct(
-                    filePathOpenedInEditor,
+                    textDocumentUri,
                     PositionLineNumber: (int)positionParams.Position.Line + 1,
                     PositionColumn: (int)positionParams.Position.Character + 1));
         {
@@ -981,35 +930,16 @@ public class LanguageServer(
     public Result<string, WorkspaceEdit?> TextDocument_rename(
         RenameParams renameParams)
     {
-        var textDocumentUri =
-            System.Uri.UnescapeDataString(renameParams.TextDocument.Uri);
+        var textDocumentUri = DocumentUriCleaned(renameParams.TextDocument.Uri);
 
         var clock = System.Diagnostics.Stopwatch.StartNew();
 
         Log("TextDocument_rename: " + textDocumentUri + " at " + renameParams.Position);
 
-        var localPathResult = DocumentUriAsLocalPath(textDocumentUri);
-        {
-            if (localPathResult.IsErrOrNull() is { } err)
-            {
-                Log("Ignoring URI: " + err + ": " + textDocumentUri);
-
-                return "Ignoring URI: " + err + ": " + textDocumentUri;
-            }
-        }
-
-        if (localPathResult.IsOkOrNull() is not { } localPath)
-        {
-            throw new System.NotImplementedException(
-                "Unexpected result type: " + localPathResult.GetType());
-        }
-
-        var filePathOpenedInEditor = PathItemsFromFlatPath(localPath);
-
         var provideRenameResult =
             TextDocumentRenameRequest(
                 new Interface.RenameParams(
-                    filePathOpenedInEditor,
+                    textDocumentUri,
                     /*
                      * The language service currently uses the 1-based line and column numbers
                      * inherited from the Monaco editor API.
@@ -1041,14 +971,8 @@ public class LanguageServer(
 
         var documentChanges =
             provideRenameOk.Edits
-            .SelectMany(documentEdit =>
+            .Select(documentEdit =>
             {
-                if (CorrespondingUri(documentEdit.FilePath) is not { } documentUri)
-                {
-                    Log("No corresponding URI for " + documentEdit.FilePath);
-                    return (IReadOnlyList<TextDocumentEdit>)[];
-                }
-
                 var editsInDocument =
                     documentEdit.Edits
                     .Select(edit =>
@@ -1062,9 +986,10 @@ public class LanguageServer(
                                     Character: (uint)edit.Range.EndColumn - 1)),
                             NewText: edit.NewText));
 
-                return [new TextDocumentEdit(
-                    new OptionalVersionedTextDocumentIdentifier(documentUri, Version: null),
-                    [.. editsInDocument])];
+                return
+                new TextDocumentEdit(
+                    new OptionalVersionedTextDocumentIdentifier(documentEdit.FilePath, Version: null),
+                    [.. editsInDocument]);
             })
             .ToImmutableArray();
 
@@ -1075,7 +1000,7 @@ public class LanguageServer(
         DidSaveTextDocumentParams didSaveParams,
         System.Action<TextDocumentIdentifier, IReadOnlyList<Diagnostic>> publishDiagnostics)
     {
-        var textDocumentUri = System.Uri.UnescapeDataString(didSaveParams.TextDocument.Uri);
+        var textDocumentUri = DocumentUriCleaned(didSaveParams.TextDocument.Uri);
 
         allSeenDocumentUris[textDocumentUri] = textDocumentUri;
 
@@ -1185,15 +1110,6 @@ public class LanguageServer(
 
                 Log("Elm make errors for " + path + ": " + pathErrors.Length);
 
-                var correspondingUri =
-                    allSeenDocumentUris
-                    .FirstOrDefault(uri => DocumentUriAsLocalPath(uri.Value).WithDefault(null) == path).Key;
-
-                if (correspondingUri is null)
-                {
-                    Log("No corresponding URI for " + path);
-                }
-
                 IReadOnlyList<Diagnostic> diagnostics =
                     [..pathErrors
                     .Select(problem =>
@@ -1269,11 +1185,6 @@ public class LanguageServer(
         }
 
         return null;
-    }
-
-    static IReadOnlyList<string> PathItemsFromFlatPath(string path)
-    {
-        return path.Split(['\\', '/']);
     }
 
     public static TreeNodeWithStringPath MergeIntoFileTree(
@@ -1381,11 +1292,11 @@ public class LanguageServer(
     }
 
     public Result<string, IReadOnlyList<Interface.DocumentSymbol>> TextDocumentSymbolRequest(
-        IReadOnlyList<string> filePath)
+        string fileUri)
     {
         var genericRequestResult =
             HandleRequest(
-                new Interface.Request.TextDocumentSymbolRequest(filePath));
+                new Interface.Request.TextDocumentSymbolRequest(fileUri));
 
         if (genericRequestResult.IsErrOrNull() is { } err)
         {
@@ -1494,48 +1405,32 @@ public class LanguageServer(
     {
         return
             locations
-            .SelectMany(location =>
+            .Select(location =>
             {
-                if (CorrespondingUri(location.FilePath) is not { } uri)
-                {
-                    return noMatchingUri(location.FilePath);
-                }
-
                 return
-                    [new Location(
-                        uri,
+                    new Location(
+                        location.FilePath,
                         new Range(
                             Start: new Position(
                                 Line: (uint)location.Range.StartLineNumber - 1,
                                 Character: (uint)location.Range.StartColumn - 1),
                             End: new Position(
                                 Line: (uint)location.Range.EndLineNumber - 1,
-                                Character: (uint)location.Range.EndColumn - 1)))
-                    ];
+                                Character: (uint)location.Range.EndColumn - 1)));
             });
     }
 
-    string? CorrespondingUri(IReadOnlyList<string> path)
+    public static string DocumentUriCleaned(string documentUri)
     {
-        var flatPathForward = string.Join('/', path);
-        var flatPathBackward = string.Join('\\', path);
+        /*
+         * The client in VSCode appears to send document URIs like this:
+         * file:///k%3A/Source/Repos/
+         * Therefore we need to decode before handing to System.Uri
+         * */
 
-        var fromSeenUris =
-            allSeenDocumentUris
-            .FirstOrDefault(uri =>
-            DocumentUriAsLocalPath(uri.Value).IsOkOrNull() is { } asLocalOk &&
-            (asLocalOk == flatPathBackward ||
-            asLocalOk == flatPathBackward)).Key;
+        var unescaped = System.Uri.UnescapeDataString(documentUri);
 
-        if (fromSeenUris is not null)
-            return fromSeenUris;
-
-        return
-            System.Uri.TryCreate(flatPathForward, System.UriKind.Absolute, out var uri)
-            ?
-            uri.AbsoluteUri
-            :
-            null;
+        return unescaped.Replace("\\", "/");
     }
 
     public static Result<string, string> DocumentUriAsLocalPath(string documentUri)

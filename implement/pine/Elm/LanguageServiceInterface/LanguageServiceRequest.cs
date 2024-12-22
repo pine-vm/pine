@@ -18,12 +18,12 @@ public record FileTreeBlobNode(
 /*
 
 type Request
-    = AddFileRequest (List String) FileTreeBlobNode
-    | DeleteFileRequest (List String)
+    = AddFileRequest String FileTreeBlobNode
+    | DeleteFileRequest String
     | ProvideHoverRequest ProvideHoverRequestStruct
     | ProvideCompletionItemsRequest ProvideCompletionItemsRequestStruct
     | ProvideDefinitionRequest ProvideDefinitionRequestStruct
-    | TextDocumentSymbolRequest (List String)
+    | TextDocumentSymbolRequest String
     | TextDocumentReferencesRequest ProvideReferencesRequestStruct
     | TextDocumentRenameRequest RenameParams
 
@@ -31,11 +31,11 @@ type Request
 public abstract record Request
 {
     public record AddFileRequest(
-        IReadOnlyList<string> FilePath,
+        string FilePath,
         FileTreeBlobNode Blob)
         : Request;
 
-    public record DeleteFileRequest(IReadOnlyList<string> FilePath)
+    public record DeleteFileRequest(string FilePath)
         : Request;
 
     public record ProvideHoverRequest(ProvideHoverRequestStruct Request)
@@ -47,7 +47,7 @@ public abstract record Request
     public record ProvideDefinitionRequest(ProvideHoverRequestStruct Request)
         : Request;
 
-    public record TextDocumentSymbolRequest(IReadOnlyList<string> FilePath)
+    public record TextDocumentSymbolRequest(string FilePath)
         : Request;
 
     public record TextDocumentReferencesRequest(ProvideHoverRequestStruct Request)
@@ -58,14 +58,14 @@ public abstract record Request
 }
 
 public record ProvideHoverRequestStruct(
-    IReadOnlyList<string> FilePathOpenedInEditor,
+    string FilePathOpenedInEditor,
     int PositionLineNumber,
     int PositionColumn);
 
 /*
 
 type alias ProvideCompletionItemsRequestStruct =
-    { filePathOpenedInEditor : List String
+    { filePathOpenedInEditor : String
     , cursorLineNumber : Int
     , cursorColumn : Int
     }
@@ -73,13 +73,13 @@ type alias ProvideCompletionItemsRequestStruct =
  * */
 
 public record ProvideCompletionItemsRequestStruct(
-    IReadOnlyList<string> FilePathOpenedInEditor,
+    string FilePathOpenedInEditor,
     int CursorLineNumber,
     int CursorColumn);
 
 /*
 type alias RenameParams =
-    { filePath : List String
+    { filePath : String
     , positionLineNumber : Int
     , positionColumn : Int
     , newName : String
@@ -88,7 +88,7 @@ type alias RenameParams =
 */
 
 public record RenameParams(
-    IReadOnlyList<string> FilePath,
+    string FilePath,
     int PositionLineNumber,
     int PositionColumn,
     string NewName);
@@ -103,10 +103,7 @@ public static class RequestEncoding
                 ElmValueEncoding.TagAsPineValue(
                     "AddFileRequest",
                     [
-                        PineValue.List(
-                            [..addFileRequest.FilePath
-                            .Select(ElmValueEncoding.StringAsPineValue)
-                            ]),
+                        ElmValueEncoding.StringAsPineValue(addFileRequest.FilePath),
                         ElmValueEncoding.ElmValueAsPineValue(
                             new ElmValue.ElmRecord(
                                 [
@@ -127,10 +124,7 @@ public static class RequestEncoding
                 ElmValueEncoding.TagAsPineValue(
                     "DeleteFileRequest",
                     [
-                        PineValue.List(
-                            [..deleteFileRequest.FilePath
-                            .Select(ElmValueEncoding.StringAsPineValue)
-                            ])
+                        ElmValueEncoding.StringAsPineValue(deleteFileRequest.FilePath),
                     ]),
 
             Request.ProvideHoverRequest provideHoverRequest =>
@@ -158,10 +152,7 @@ public static class RequestEncoding
                 ElmValueEncoding.TagAsPineValue(
                     "TextDocumentSymbolRequest",
                     [
-                        PineValue.List(
-                            [..textDocumentSymbolRequest.FilePath
-                            .Select(ElmValueEncoding.StringAsPineValue)
-                            ])
+                        ElmValueEncoding.StringAsPineValue(textDocumentSymbolRequest.FilePath)
                     ]),
 
             Request.TextDocumentReferencesRequest textDocumentReferenceRequest =>
@@ -190,10 +181,7 @@ public static class RequestEncoding
             ElmValueEncoding.ElmRecordAsPineValue(
                 [
                     ("filePathOpenedInEditor",
-                    PineValue.List(
-                        [..provideHoverRequest.FilePathOpenedInEditor
-                        .Select(ElmValueEncoding.StringAsPineValue)
-                        ])),
+                    ElmValueEncoding.StringAsPineValue(provideHoverRequest.FilePathOpenedInEditor)),
                     ("positionLineNumber",
                     PineValueAsInteger.ValueFromSignedInteger(provideHoverRequest.PositionLineNumber)),
                     ("positionColumn",
@@ -207,10 +195,7 @@ public static class RequestEncoding
             ElmValueEncoding.ElmRecordAsPineValue(
                 [
                     ("filePathOpenedInEditor",
-                    PineValue.List(
-                        [..provideCompletionItemsRequest.FilePathOpenedInEditor
-                        .Select(ElmValueEncoding.StringAsPineValue)
-                        ])),
+                    ElmValueEncoding.StringAsPineValue(provideCompletionItemsRequest.FilePathOpenedInEditor)),
                     ("cursorLineNumber",
                     PineValueAsInteger.ValueFromSignedInteger(provideCompletionItemsRequest.CursorLineNumber)),
                     ("cursorColumn",
@@ -224,10 +209,7 @@ public static class RequestEncoding
             ElmValueEncoding.ElmRecordAsPineValue(
                 [
                     ("filePath",
-                    PineValue.List(
-                        [..renameParams.FilePath
-                        .Select(ElmValueEncoding.StringAsPineValue)
-                        ])),
+                    ElmValueEncoding.StringAsPineValue(renameParams.FilePath)),
                     ("positionLineNumber",
                     PineValueAsInteger.ValueFromSignedInteger(renameParams.PositionLineNumber)),
                     ("positionColumn",

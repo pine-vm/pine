@@ -52,13 +52,13 @@ public abstract record Response
 /*
 
 type alias LocationUnderFilePath =
-    { filePath : List String
+    { filePath : String
     , range : Frontend.MonacoEditor.MonacoRange
     }
  * */
 
 public record LocationUnderFilePath(
-    IReadOnlyList<string> FilePath,
+    string FilePath,
     MonacoEditor.MonacoRange Range);
 
 
@@ -132,7 +132,7 @@ type alias WorkspaceEdit =
 
 
 type alias TextDocumentEdit =
-    { filePath : List String
+    { filePath : String
     , edits : List TextEdit
     }
 
@@ -148,7 +148,7 @@ public record WorkspaceEdit(
     IReadOnlyList<TextDocumentEdit> Edits);
 
 public record TextDocumentEdit(
-    IReadOnlyList<string> FilePath,
+    string FilePath,
     IReadOnlyList<TextEdit> Edits);
 
 public record TextEdit(
@@ -470,20 +470,9 @@ public static class LocationUnderFilePathEncoding
                 string.Join(", ", record.Fields.Select(f => f.FieldName));
         }
 
-        if (filePathValue is not ElmValue.ElmList filePathListValue)
+        if (filePathValue is not ElmValue.ElmString filePathString)
         {
-            return "Expected field 'filePath' to be a list, got: " + filePathValue.GetType();
-        }
-
-        // Decode filePath as a list of strings
-        var filePathArray = new string[filePathListValue.Elements.Count];
-        for (var i = 0; i < filePathListValue.Elements.Count; i++)
-        {
-            if (filePathListValue.Elements[i] is not ElmValue.ElmString strVal)
-            {
-                return "Expected element of 'filePath' to be a string, got: " + filePathListValue.Elements[i].GetType();
-            }
-            filePathArray[i] = strVal.Value;
+            return "Expected field 'filePath' to be a string, got: " + filePathValue.GetType();
         }
 
         if (record["range"] is not { } rangeValue)
@@ -507,7 +496,7 @@ public static class LocationUnderFilePathEncoding
                 ("Unexpected result type: " + rangeDecodeResult.GetType());
         }
 
-        return new LocationUnderFilePath(filePathArray, range);
+        return new LocationUnderFilePath(filePathString.Value, range);
     }
 }
 
@@ -900,21 +889,9 @@ public static class TextDocumentEditEncoding
                 string.Join(", ", record.Fields.Select(f => f.FieldName));
         }
 
-        if (filePathValue is not ElmValue.ElmList filePathListValue)
+        if (filePathValue is not ElmValue.ElmString filePathString)
         {
-            return "Expected field 'filePath' to be a list, got: " + filePathValue.GetType();
-        }
-
-        var filePathArray = new string[filePathListValue.Elements.Count];
-
-        for (var i = 0; i < filePathListValue.Elements.Count; i++)
-        {
-            if (filePathListValue.Elements[i] is not ElmValue.ElmString strVal)
-            {
-                return "Expected element of 'filePath' to be a string, got: " + filePathListValue.Elements[i].GetType();
-            }
-
-            filePathArray[i] = strVal.Value;
+            return "Expected field 'filePath' to be a string, got: " + filePathValue.GetType();
         }
 
         if (record["edits"] is not { } editsValue)
@@ -949,7 +926,7 @@ public static class TextDocumentEditEncoding
             textEdits[i] = textEdit;
         }
 
-        return new TextDocumentEdit(filePathArray, textEdits);
+        return new TextDocumentEdit(filePathString.Value, textEdits);
     }
 }
 

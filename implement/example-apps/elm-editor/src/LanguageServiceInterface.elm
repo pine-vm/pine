@@ -38,12 +38,12 @@ type alias RequestInWorkspace =
 
 
 type Request
-    = AddFileRequest (List String) FileTreeBlobNode
-    | DeleteFileRequest (List String)
+    = AddFileRequest String FileTreeBlobNode
+    | DeleteFileRequest String
     | ProvideHoverRequest ProvideHoverRequestStruct
     | ProvideCompletionItemsRequest ProvideCompletionItemsRequestStruct
     | ProvideDefinitionRequest ProvideDefinitionRequestStruct
-    | TextDocumentSymbolRequest (List String)
+    | TextDocumentSymbolRequest String
     | TextDocumentReferencesRequest ProvideReferencesRequestStruct
     | TextDocumentRenameRequest RenameParams
 
@@ -59,14 +59,14 @@ type Response
 
 
 type alias ProvideHoverRequestStruct =
-    { filePathOpenedInEditor : List String
+    { filePathOpenedInEditor : String
     , positionLineNumber : Int
     , positionColumn : Int
     }
 
 
 type alias ProvideCompletionItemsRequestStruct =
-    { filePathOpenedInEditor : List String
+    { filePathOpenedInEditor : String
     , cursorLineNumber : Int
     , cursorColumn : Int
     }
@@ -81,7 +81,7 @@ type alias ProvideReferencesRequestStruct =
 
 
 type alias RenameParams =
-    { filePath : List String
+    { filePath : String
     , positionLineNumber : Int
     , positionColumn : Int
     , newName : String
@@ -89,7 +89,7 @@ type alias RenameParams =
 
 
 type alias LocationUnderFilePath =
-    { filePath : List String
+    { filePath : String
     , range : Frontend.MonacoEditor.MonacoRange
     }
 
@@ -130,7 +130,7 @@ type alias WorkspaceEdit =
 
 
 type alias TextDocumentEdit =
-    { filePath : List String
+    { filePath : String
     , edits : List TextEdit
     }
 

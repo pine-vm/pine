@@ -92,10 +92,10 @@ public class LanguageServiceState(
 
     public Result<string, Interface.Response.WorkspaceSummaryResponse>
         DeleteFile(
-        IReadOnlyList<string> filePath)
+        string fileUri)
     {
         var genericRequestResult =
-            HandleRequest(new Interface.Request.DeleteFileRequest(filePath));
+            HandleRequest(new Interface.Request.DeleteFileRequest(fileUri));
 
         if (genericRequestResult.IsErrOrNull() is { } err)
         {
@@ -119,7 +119,7 @@ public class LanguageServiceState(
 
     public Result<string, Interface.Response.WorkspaceSummaryResponse>
         AddFile(
-        IReadOnlyList<string> filePath,
+        string fileUri,
         string fileContentAsText)
     {
         var asBase64 =
@@ -129,7 +129,7 @@ public class LanguageServiceState(
         var genericRequestResult =
             HandleRequest(
                 new Interface.Request.AddFileRequest(
-                    filePath,
+                    fileUri,
                     new Interface.FileTreeBlobNode(AsBase64: asBase64, AsText: fileContentAsText)));
 
         if (genericRequestResult.IsErrOrNull() is { } err)

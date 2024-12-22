@@ -192,7 +192,7 @@ public class ElmLanguageServiceTests
 
         var hoverRequest =
             new Pine.Elm.LanguageServiceInterface.ProvideHoverRequestStruct(
-                FilePathOpenedInEditor: filePathOpenedInEditor,
+                FilePathOpenedInEditor: string.Join("/", filePathOpenedInEditor),
                 PositionLineNumber: beforeCursorLines.Length,
                 PositionColumn: beforeCursorLines.Last().Length);
 
@@ -221,7 +221,7 @@ public class ElmLanguageServiceTests
             var addFileResult =
                 languageServiceState.HandleRequest(
                 new Pine.Elm.LanguageServiceInterface.Request.AddFileRequest(
-                    FilePath: file.path,
+                    FilePath: string.Join("/", file.path),
                     Blob: new Pine.Elm.LanguageServiceInterface.FileTreeBlobNode(
                         AsBase64: asBase64,
                         AsText: asText)));
@@ -285,7 +285,7 @@ public class ElmLanguageServiceTests
 
         var completionItemsRequest =
             new Pine.Elm.LanguageServiceInterface.ProvideCompletionItemsRequestStruct(
-                FilePathOpenedInEditor: filePathOpenedInEditor,
+                FilePathOpenedInEditor: string.Join("/", filePathOpenedInEditor),
                 CursorLineNumber: beforeCursorLines.Length,
                 CursorColumn: beforeCursorLines.Last().Length + 1);
 

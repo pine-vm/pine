@@ -1395,7 +1395,8 @@ updateToProvideHoverRequest request workspaceStateBefore =
             in
             updateForRequestToLanguageService
                 (LanguageServiceInterface.ProvideHoverRequest
-                    { filePathOpenedInEditor = directoryPath ++ [ fileName ]
+                    { filePathOpenedInEditor =
+                        String.join "/" (List.concat [ directoryPath, [ fileName ] ])
                     , positionLineNumber = request.positionLineNumber
                     , positionColumn = request.positionColumn
                     }
@@ -1421,7 +1422,8 @@ updateToProvideDefinitionRequest request workspaceStateBefore =
             in
             updateForRequestToLanguageService
                 (LanguageServiceInterface.ProvideDefinitionRequest
-                    { filePathOpenedInEditor = directoryPath ++ [ fileName ]
+                    { filePathOpenedInEditor =
+                        String.join "/" (List.concat [ directoryPath, [ fileName ] ])
                     , positionLineNumber = request.positionLineNumber
                     , positionColumn = request.positionColumn
                     }
@@ -1445,7 +1447,8 @@ updateToProvideCompletionItemsRequest request workspaceStateBefore =
             in
             updateForRequestToLanguageService
                 (LanguageServiceInterface.ProvideCompletionItemsRequest
-                    { filePathOpenedInEditor = directoryPath ++ [ fileName ]
+                    { filePathOpenedInEditor =
+                        String.join "/" (List.concat [ directoryPath, [ fileName ] ])
                     , cursorLineNumber = request.cursorLineNumber
                     , cursorColumn = request.cursorColumn
                     }
@@ -4281,7 +4284,7 @@ provideDefinitionInMonacoEditorCmd locationsInFiles =
         monacoLocations =
             List.map
                 (\locationInFile ->
-                    { uri = monacoUriForFilePath locationInFile.filePath
+                    { uri = monacoUriForFilePath [ locationInFile.filePath ]
                     , range = locationInFile.range
                     }
                 )
