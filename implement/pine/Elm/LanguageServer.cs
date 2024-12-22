@@ -239,38 +239,54 @@ public class LanguageServer(
 
         var aggregateClock = System.Diagnostics.Stopwatch.StartNew();
 
-        var filesContents = new Dictionary<string, string>();
+        var aggregateElmModuleFiles = new HashSet<string>();
+        var aggregateElmJsonFiles = new HashSet<string>();
 
         foreach (var sourceDirectory in sourceDirectories)
         {
             try
             {
-                var elmFiles =
+                var elmModuleFiles =
                     System.IO.Directory.GetFiles(sourceDirectory, "*.elm", System.IO.SearchOption.AllDirectories);
 
-                Log("Found " + elmFiles.Length + " Elm files in " + sourceDirectory);
+                Log("Found " + elmModuleFiles.Length + " Elm module files in " + sourceDirectory);
 
-                foreach (var elmFile in elmFiles)
+                var elmJsonFiles =
+                    System.IO.Directory.GetFiles(sourceDirectory, "elm.json", System.IO.SearchOption.AllDirectories);
+
+                Log("Found " + elmJsonFiles.Length + " elm.json files in " + sourceDirectory);
+
+                foreach (var filePath in elmJsonFiles.Concat(elmModuleFiles))
                 {
                     try
                     {
+                        var fileName = System.IO.Path.GetFileName(filePath);
+
                         var fileClock = System.Diagnostics.Stopwatch.StartNew();
 
-                        var fileContent = System.IO.File.ReadAllText(elmFile);
+                        var fileContent = System.IO.File.ReadAllText(filePath);
 
-                        filesContents[elmFile] = fileContent;
+                        if (fileName.EndsWith(".elm", System.StringComparison.InvariantCultureIgnoreCase))
+                        {
+                            aggregateElmModuleFiles.Add(filePath);
+                        }
+
+                        if (string.Equals(fileName, "elm.json", System.StringComparison.InvariantCultureIgnoreCase))
+                        {
+                            aggregateElmJsonFiles.Add(filePath);
+                        }
 
                         Log(
-                            "Read file " + elmFile + " with " +
+                            "Read file " + filePath + " with " +
                             CommandLineInterface.FormatIntegerForDisplay(fileContent.Length) +
                             " chars in " +
                             CommandLineInterface.FormatIntegerForDisplay((int)fileClock.Elapsed.TotalMilliseconds) + " ms");
 
                         fileClock.Restart();
 
-                        if (System.Uri.TryCreate(elmFile, System.UriKind.Absolute, out var uri) is false)
+                        if (System.Uri.TryCreate(filePath, System.UriKind.Absolute, out var uri) is false)
                         {
-                            Log("Failed to create URI: " + elmFile);
+                            Log("Failed to create URI: " + filePath);
                             continue;
                         }
 
@@ -279,7 +295,7 @@ public class LanguageServer(
                             fileContent);
 
                         Log(
-                            "Processed file " + elmFile + " in language service in " +
+                            "Processed file " + filePath + " in language service in " +
                             CommandLineInterface.FormatIntegerForDisplay((int)fileClock.Elapsed.TotalMilliseconds) + " ms");
                     }
                     catch (System.Exception e)
@@ -295,7 +311,10 @@ public class LanguageServer(
         }
 
         Log(
-            "Finished initializing contents for " + filesContents.Count + " Elm modules in " +
+            "Finished initializing contents for " + aggregateElmModuleFiles.Count +
+            " Elm modules and " +
+            aggregateElmJsonFiles.Count +
+            " elm.json files in " +
             CommandLineInterface.FormatIntegerForDisplay((int)aggregateClock.Elapsed.TotalMilliseconds) + " ms");
     }
 
