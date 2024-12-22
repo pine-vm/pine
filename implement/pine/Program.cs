@@ -8,6 +8,7 @@ using Pine.Core;
 using Pine.Core.Elm;
 using Pine.Elm;
 using Pine.Elm.Platform;
+using Pine.Elm019;
 using Pine.PineVM;
 using System;
 using System.Collections.Generic;
@@ -876,7 +877,11 @@ public class Program
 
                 log("Pine version " + AppVersionId + " starting language server...");
 
-                var languageServer = new LanguageServer(logDelegate: log);
+                var languageServer =
+                new LanguageServer(
+                    logDelegate: log,
+                    elmPackagesSearchDirectories:
+                    [Path.Combine(Elm019Binaries.GetElmHomeDirectory(), "0.19.1", "packages")]);
 
                 var rpcHandler =
                     new StreamJsonRpc.HeaderDelimitedMessageHandler(
@@ -1291,7 +1296,7 @@ public class Program
                 System.Text.Json.JsonSerializer.Deserialize<ElmJsonStructure>(elmJsonFile.Bytes.Span);
 
             return
-                [..elmJsonFileParsed?.sourceDirectories
+                [..elmJsonFileParsed?.SourceDirectories
                 .Select(flat => flat.Split('/', '\\'))
                 ];
         }

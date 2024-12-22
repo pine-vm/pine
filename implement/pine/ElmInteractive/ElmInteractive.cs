@@ -2,6 +2,7 @@ using ElmTime.Elm019;
 using ElmTime.JavaScript;
 using Pine;
 using Pine.Core;
+using Pine.Elm019;
 using Pine.ElmInteractive;
 using System;
 using System.Collections.Concurrent;
@@ -897,7 +898,7 @@ public class ElmInteractive
             System.Text.Json.JsonSerializer.Deserialize<ElmJsonStructure>(elmJsonFile.Bytes.Span);
 
         IReadOnlyList<IReadOnlyList<string>> elmJsonSourceDirectories =
-            [..elmJsonFileParsed?.sourceDirectories
+            [..elmJsonFileParsed?.SourceDirectories
             .Select(flat => flat.Split('/', '\\'))
             ];
 

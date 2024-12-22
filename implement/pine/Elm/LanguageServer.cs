@@ -13,7 +13,8 @@ using System.Collections.Immutable;
 namespace Pine.Elm;
 
 public class LanguageServer(
-    System.Action<string>? logDelegate)
+    System.Action<string>? logDelegate,
+    IReadOnlyList<string> elmPackagesSearchDirectories)
 {
     private readonly ConcurrentDictionary<string, string> allSeenDocumentUris = new();
 
@@ -26,6 +27,13 @@ public class LanguageServer(
     private readonly System.Action<string>? logDelegate = logDelegate;
 
     private System.Threading.Tasks.Task<Result<string, WorkspaceState>>? languageServiceStateTask;
+
+    /*
+     * TODO: Use the version identifier from elm.json as scope.
+     * */
+    private readonly ConcurrentDictionary<string, string> elmJsonDirectDependencies = new();
+
+    private readonly ConcurrentDictionary<string, string> elmJsonDirectDependenciesLoaded = new();
 
     private class WorkspaceState(
         IReadOnlyList<WorkspaceFolder> workspaceFolders,
@@ -266,16 +274,6 @@ public class LanguageServer(
 
                         var fileContent = System.IO.File.ReadAllText(filePath);
 
-                        if (fileName.EndsWith(".elm", System.StringComparison.InvariantCultureIgnoreCase))
-                        {
-                            aggregateElmModuleFiles.Add(filePath);
-                        }
-
-                        if (string.Equals(fileName, "elm.json", System.StringComparison.InvariantCultureIgnoreCase))
-                        {
-                            aggregateElmJsonFiles.Add(filePath);
-                        }
-
                         Log(
                             "Read file " + filePath + " with " +
                             CommandLineInterface.FormatIntegerForDisplay(fileContent.Length) +
@@ -297,6 +295,18 @@ public class LanguageServer(
                         Log(
                             "Processed file " + filePath + " in language service in " +
                             CommandLineInterface.FormatIntegerForDisplay((int)fileClock.Elapsed.TotalMilliseconds) + " ms");
+
+                        if (fileName.EndsWith(".elm", System.StringComparison.InvariantCultureIgnoreCase))
+                        {
+                            aggregateElmModuleFiles.Add(filePath);
+                        }
+
+                        if (string.Equals(fileName, "elm.json", System.StringComparison.InvariantCultureIgnoreCase))
+                        {
+                            aggregateElmJsonFiles.Add(filePath);
+
+                            CollectDirectDependenciesFromElmJsonFile(fileContent);
+                        }
                     }
                     catch (System.Exception e)
                     {
@@ -316,6 +326,8 @@ public class LanguageServer(
             aggregateElmJsonFiles.Count +
             " elm.json files in " +
             CommandLineInterface.FormatIntegerForDisplay((int)aggregateClock.Elapsed.TotalMilliseconds) + " ms");
+
+        LoadDirectDependenciesFromElmJsonFiles(languageServiceState);
     }
 
     public void Workspace_didChangeWorkspaceFolders(WorkspaceFoldersChangeEvent workspaceFoldersChangeEvent)
@@ -453,6 +465,7 @@ public class LanguageServer(
             if (change.Type is FileChangeType.Deleted)
             {
                 languageServiceState.DeleteFile(change.Uri);
+                continue;
             }
 
             if (change.Type is not FileChangeType.Created &&
@@ -467,6 +480,8 @@ public class LanguageServer(
                 var clock = System.Diagnostics.Stopwatch.StartNew();
 
                 var fileContent = System.IO.File.ReadAllText(localPath);
+
+                var fileName = System.IO.Path.GetFileName(localPath);
 
                 Log(
                     "Read file " + change.Uri + " with " +
@@ -485,10 +500,135 @@ public class LanguageServer(
                     "Processed file " + change.Uri + " in language service in " +
                     CommandLineInterface.FormatIntegerForDisplay((int)clock.Elapsed.TotalMilliseconds) +
                     " ms");
+
+                if (string.Equals(fileName, "elm.json", System.StringComparison.InvariantCultureIgnoreCase))
+                {
+                    CollectDirectDependenciesFromElmJsonFile(fileContent);
+                }
             }
             catch (System.Exception e)
             {
                 Log("Failed reading file: " + e);
+            }
+        }
+
+        LoadDirectDependenciesFromElmJsonFiles(languageServiceState);
+    }
+
+    private void CollectDirectDependenciesFromElmJsonFile(string elmJson)
+    {
+        try
+        {
+            var elmJsonFileParsed =
+                System.Text.Json.JsonSerializer.Deserialize<ElmJsonStructure>(elmJson);
+
+            foreach (var (packageName, packageVersion) in elmJsonFileParsed?.Dependencies.Direct ?? [])
+            {
+                elmJsonDirectDependencies.TryGetValue(packageName, out var existingVersion);
+
+                elmJsonDirectDependencies[packageName] = packageVersion;
+
+                if (existingVersion is null)
+                {
+                    Log("Registered direct dependency: " + packageName + " " + packageVersion);
+                }
+                else if (existingVersion != packageVersion)
+                {
+                    Log("Updated direct dependency: " + packageName + " " + packageVersion);
+                }
+            }
+        }
+        catch (System.Exception e)
+        {
+            Log("Failed reading elm.json file: " + e);
+        }
+    }
+
+    private void LoadDirectDependenciesFromElmJsonFiles(
+        WorkspaceState workspaceState)
+    {
+        int? searchAndLoadPackage(string packageName, string version)
+        {
+            foreach (var searchDirectory in elmPackagesSearchDirectories)
+            {
+                var packageDirectory = System.IO.Path.Combine(searchDirectory, packageName);
+
+                if (!System.IO.Directory.Exists(packageDirectory))
+                {
+                    continue;
+                }
+
+                var versionDirectory = System.IO.Path.Combine(packageDirectory, version);
+
+                if (!System.IO.Directory.Exists(versionDirectory))
+                {
+                    continue;
+                }
+
+                var elmModuleFiles =
+                    System.IO.Directory.GetFiles(versionDirectory, "*.elm", System.IO.SearchOption.AllDirectories);
+
+                Log(
+                    "Package: " + packageName + " version " + version +
+                    ": Found " + elmModuleFiles.Length +
+                    " Elm module files in " + versionDirectory);
+
+                foreach (var filePath in elmModuleFiles)
+                {
+                    try
+                    {
+                        var fileName = System.IO.Path.GetFileName(filePath);
+                        var fileContent = System.IO.File.ReadAllText(filePath);
+
+                        Log(
+                            "Read file " + filePath + " with " +
+                            CommandLineInterface.FormatIntegerForDisplay(fileContent.Length) +
+                            " chars");
+
+                        if (System.Uri.TryCreate(filePath, System.UriKind.Absolute, out var uri) is false)
+                        {
+                            Log("Failed to create URI: " + filePath);
+                            continue;
+                        }
+
+                        workspaceState.AddFile(
+                            uri.AbsoluteUri,
+                            fileContent);
+                    }
+                    catch (System.Exception e)
+                    {
+                        Log("Failed reading file: " + e);
+                    }
+                }
+
+                return elmModuleFiles.Length;
+            }
+
+            return null;
+        }
+
+        foreach (var dependency in elmJsonDirectDependencies)
+        {
+            elmJsonDirectDependenciesLoaded.TryGetValue(dependency.Key, out var loadedVersion);
+
+            if (loadedVersion == dependency.Value)
+            {
+                continue;
+            }
+
+            var clock = System.Diagnostics.Stopwatch.StartNew();
+
+            if (searchAndLoadPackage(dependency.Key, dependency.Value) is { } packageElmModuleCount)
+            {
+                elmJsonDirectDependenciesLoaded[dependency.Key] = dependency.Value;
+
+                Log(
+                    "Loaded package: " + dependency.Key + " " + dependency.Value +
+                    " in " + CommandLineInterface.FormatIntegerForDisplay((int)clock.Elapsed.TotalMilliseconds) + " ms");
+            }
+            else
+            {
+                Log("Did not find package: " + dependency.Key + " " + dependency.Value);
             }
         }
     }
