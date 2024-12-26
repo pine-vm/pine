@@ -15,9 +15,13 @@ type alias NewsItem =
     }
 
 
-elmTimeNews : List NewsItem
-elmTimeNews =
-    [ { year = 2023
+newsItems : List NewsItem
+newsItems =
+    [ { year = 2024
+      , title = "Introducing the Pine VS Code extension and Elm language server"
+      , url = "https://michaelrätzel.com/blog/introducing-the-pine-vs-code-extension-and-elm-language-server"
+      }
+    , { year = 2023
       , title = "Database Functions in Elm-Time - Easy Database Updates in Production"
       , url = "https://michaelrätzel.com/blog/database-functions-in-elm-time-easy-database-updates-in-production"
       }
@@ -58,7 +62,7 @@ view _ =
                 }
                 |> Element.el [ Element.width Element.fill ]
     in
-    elmTimeNews
+    newsItems
         |> List.sortBy (.year >> negate)
         |> List.Extra.gatherEqualsBy .year
         |> List.map
