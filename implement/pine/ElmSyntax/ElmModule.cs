@@ -148,13 +148,21 @@ public static class ElmModule
 
     public static Result<string, IReadOnlyList<string>> ParseModuleName(string moduleText)
     {
-        foreach (var moduleTextLine in moduleText.Trim().ModuleLines())
         {
-            var match = Regex.Match(moduleTextLine, @"^(port\s+)?module\s+([\w.]+)\s+exposing");
+            var match = Regex.Match(moduleText, @"^(port\s+)?module\s+([\w.]+)\s+exposing");
 
             if (match.Success)
             {
                 return Result<string, IReadOnlyList<string>>.ok(match.Groups[2].Value.Split('.'));
+            }
+        }
+
+        {
+            var match = Regex.Match(moduleText, @"^effect\s+module\s+([\w.]+)\s+(where|exposing)");
+
+            if (match.Success)
+            {
+                return Result<string, IReadOnlyList<string>>.ok(match.Groups[1].Value.Split('.'));
             }
         }
 

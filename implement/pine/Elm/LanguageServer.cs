@@ -553,11 +553,6 @@ public class LanguageServer(
             {
                 var packageDirectory = System.IO.Path.Combine(searchDirectory, packageName);
 
-                if (!System.IO.Directory.Exists(packageDirectory))
-                {
-                    continue;
-                }
-
                 var versionDirectory = System.IO.Path.Combine(packageDirectory, version);
 
                 if (!System.IO.Directory.Exists(versionDirectory))
@@ -568,10 +563,45 @@ public class LanguageServer(
                 var elmModuleFiles =
                     System.IO.Directory.GetFiles(versionDirectory, "*.elm", System.IO.SearchOption.AllDirectories);
 
+                var elmJsonFiles =
+                    System.IO.Directory.GetFiles(versionDirectory, "elm.json", System.IO.SearchOption.AllDirectories);
+
                 Log(
                     "Package: " + packageName + " version " + version +
                     ": Found " + elmModuleFiles.Length +
-                    " Elm module files in " + versionDirectory);
+                    " Elm module files and " +
+                    elmJsonFiles.Length +
+                    " elm.json file(s) in " + versionDirectory);
+
+                var exposedModuleNames = new HashSet<string>();
+
+                foreach (var elmJsonFile in elmJsonFiles)
+                {
+                    try
+                    {
+                        var fileContent = System.IO.File.ReadAllText(elmJsonFile);
+
+                        var elmJsonFileParsed =
+                            System.Text.Json.JsonSerializer.Deserialize<ElmJsonStructure>(fileContent);
+
+                        if (elmJsonFileParsed is null)
+                        {
+                            Log("Failed parsing elm.json file: " + elmJsonFile);
+                            continue;
+                        }
+
+                        foreach (var exposedModuleName in elmJsonFileParsed.ExposedModules)
+                        {
+                            exposedModuleNames.Add(exposedModuleName);
+                        }
+                    }
+                    catch (System.Exception e)
+                    {
+                        Log("Failed reading elm.json file: " + e);
+                    }
+                }
+
+                var elmModuleNamesAdded = new HashSet<string>();
 
                 foreach (var filePath in elmModuleFiles)
                 {
@@ -585,6 +615,28 @@ public class LanguageServer(
                             CommandLineInterface.FormatIntegerForDisplay(fileContent.Length) +
                             " chars");
 
+                        var parseModuleNameResult = ElmModule.ParseModuleName(fileContent);
+
+                        if (parseModuleNameResult.IsErrOrNull() is { } err)
+                        {
+                            Log("Failed parsing module name: " + err);
+                            continue;
+                        }
+
+                        if (parseModuleNameResult.IsOkOrNull() is not { } moduleName)
+                        {
+                            throw new System.NotImplementedException(
+                                "Unexpected result type: " + parseModuleNameResult.GetType());
+                        }
+
+                        var moduleNameFlat = string.Join('.', moduleName);
+
+                        if (0 < exposedModuleNames.Count && !exposedModuleNames.Contains(moduleNameFlat))
+                        {
+                            Log("Ignoring non-exposed module: " + moduleNameFlat);
+                            continue;
+                        }
+
                         if (System.Uri.TryCreate(filePath, System.UriKind.Absolute, out var uri) is false)
                         {
                             Log("Failed to create URI: " + filePath);
@@ -594,6 +646,8 @@ public class LanguageServer(
                         workspaceState.AddFile(
                             uri.AbsoluteUri,
                             fileContent);
+
+                        elmModuleNamesAdded.Add(moduleNameFlat);
                     }
                     catch (System.Exception e)
                     {
@@ -601,7 +655,11 @@ public class LanguageServer(
                     }
                 }
 
-                return elmModuleFiles.Length;
+                Log(
+                    "Loaded package: " + packageName + " " + version +
+                    ": Added " + elmModuleNamesAdded.Count + " exposed Elm modules");
+
+                return elmModuleNamesAdded.Count;
             }
 
             return null;

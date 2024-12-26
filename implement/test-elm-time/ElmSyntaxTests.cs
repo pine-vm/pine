@@ -11,6 +11,98 @@ namespace TestElmTime;
 public class ElmSyntaxTests
 {
     [TestMethod]
+    public void Parse_Elm_module_name()
+    {
+        var testCases = new[]
+        {
+            new
+            {
+                moduleText = @"module TestModule exposing (..)",
+
+                expectedModuleName =
+                (IReadOnlyList<string>)["TestModule"]
+            },
+
+            new
+            {
+                moduleText =
+                """
+                port module LanguageServiceWorker exposing (..)
+                """,
+                expectedModuleName =
+                (IReadOnlyList<string>)["LanguageServiceWorker"]
+            },
+
+            new
+            {
+                moduleText =
+                """
+                module Elm.JsArray
+                    exposing
+                        ( JsArray
+                        , empty
+                        , singleton
+                        , length
+                        , initialize
+                        , initializeFromList
+                        , unsafeGet
+                        , unsafeSet
+                        , push
+                        , foldl
+                        , foldr
+                        , map
+                        , indexedMap
+                        , slice
+                        , appendN
+                        )
+                """,
+
+                expectedModuleName =
+                (IReadOnlyList<string>)["Elm", "JsArray"]
+            },
+
+            new
+            {
+                moduleText =
+                """
+                effect module Task where { command = MyCmd } exposing
+                  ( Task
+                  , succeed, fail
+                  , map, map2, map3, map4, map5
+                  , sequence
+                  , andThen
+                  , onError, mapError
+                  , perform, attempt
+                  )
+                """,
+
+                expectedModuleName =
+                (IReadOnlyList<string>)["Task"]
+            },
+        };
+
+        foreach (var testCase in testCases)
+        {
+            var parseModuleNameResult = ElmModule.ParseModuleName(testCase.moduleText);
+
+            if (parseModuleNameResult.IsErrOrNull() is { } err)
+            {
+                Assert.Fail("Failed to parse module name: " + err);
+            }
+
+            if (parseModuleNameResult.IsOkOrNull() is not { } parsedName)
+            {
+                Assert.Fail("Unknown result type: " + parseModuleNameResult);
+                return;
+            }
+
+            Assert.IsTrue(
+                parsedName.SequenceEqual(testCase.expectedModuleName),
+                message: "Module name");
+        }
+    }
+
+    [TestMethod]
     public void Parse_Elm_module_text_imports()
     {
         var testCases = new[]

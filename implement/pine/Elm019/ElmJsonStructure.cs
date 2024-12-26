@@ -46,9 +46,65 @@ namespace Pine.Elm019;
 
  * */
 
+/*
+{
+    "type": "package",
+    "name": "stil4m/elm-syntax",
+    "summary": "Elm Syntax in Elm: for parsing and writing Elm in Elm",
+    "license": "MIT",
+    "version": "7.3.8",
+    "exposed-modules": [
+        "Elm.Dependency",
+        "Elm.Interface",
+        "Elm.Parser",
+        "Elm.Processing",
+        "Elm.RawFile",
+        "Elm.Writer",
+        "Elm.Syntax.Comments",
+        "Elm.Syntax.Declaration",
+        "Elm.Syntax.Documentation",
+        "Elm.Syntax.Exposing",
+        "Elm.Syntax.Expression",
+        "Elm.Syntax.File",
+        "Elm.Syntax.Import",
+        "Elm.Syntax.Infix",
+        "Elm.Syntax.Module",
+        "Elm.Syntax.ModuleName",
+        "Elm.Syntax.Node",
+        "Elm.Syntax.Pattern",
+        "Elm.Syntax.Range",
+        "Elm.Syntax.Signature",
+        "Elm.Syntax.TypeAlias",
+        "Elm.Syntax.TypeAnnotation",
+        "Elm.Syntax.Type"
+    ],
+    "elm-version": "0.19.0 <= v < 0.20.0",
+    "dependencies": {
+        "elm/core": "1.0.0 <= v < 2.0.0",
+        "elm/json": "1.0.0 <= v < 2.0.0",
+        "elm/parser": "1.0.0 <= v < 2.0.0",
+        "rtfeldman/elm-hex": "1.0.0 <= v < 2.0.0",
+        "stil4m/structured-writer": "1.0.1 <= v < 2.0.0"
+    },
+    "test-dependencies": {
+        "elm-explorations/test": "2.0.0 <= v < 3.0.0"
+    }
+}
+ * */
+
 public record ElmJsonStructure(
     [property: JsonPropertyName("type")]
     string Type,
+    [property: JsonPropertyName("name")]
+    string Name,
+    [property: JsonPropertyName("summary")]
+    string Summary,
+    [property: JsonPropertyName("license")]
+    string License,
+    [property: JsonPropertyName("version")]
+    string Version,
+    [property: JsonPropertyName("exposed-modules")]
+    IReadOnlyList<string> ExposedModules,
     [property: JsonPropertyName("source-directories")]
     IReadOnlyList<string> SourceDirectories,
     [property: JsonPropertyName("elm-version")]
