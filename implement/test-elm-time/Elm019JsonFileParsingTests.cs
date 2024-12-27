@@ -69,7 +69,10 @@ public class Elm019JsonFileParsingTests
 
         Assert.AreEqual("0.19.1", elmJsonParsed.ElmVersion);
 
-        var directDependencies = elmJsonParsed.Dependencies.Direct;
+        var directDependencies =
+            elmJsonParsed.Dependencies.Direct
+            ??
+            throw new System.Exception("directDependencies is null");
 
         Assert.AreEqual(8, directDependencies.Count);
 
@@ -89,7 +92,10 @@ public class Elm019JsonFileParsingTests
 
         Assert.AreEqual("1.0.0", directDependencies["folkertdev/elm-sha2"]);
 
-        var indirectDependencies = elmJsonParsed.Dependencies.Indirect;
+        var indirectDependencies =
+            elmJsonParsed.Dependencies.Indirect
+            ??
+            throw new System.Exception("indirectDependencies is null");
 
         Assert.AreEqual(4, indirectDependencies.Count);
 
@@ -194,5 +200,104 @@ public class Elm019JsonFileParsingTests
         Assert.AreEqual("Elm.Syntax.Type", elmJsonParsed.ExposedModules[22]);
 
         Assert.AreEqual("0.19.0 <= v < 0.20.0", elmJsonParsed.ElmVersion);
+
+        var dependencies =
+            elmJsonParsed.Dependencies.Flat
+            ??
+            throw new System.Exception("dependencies is null");
+
+        Assert.AreEqual(5, dependencies.Count);
+
+        Assert.AreEqual("1.0.0 <= v < 2.0.0", dependencies["elm/core"]);
+
+        Assert.AreEqual("1.0.0 <= v < 2.0.0", dependencies["elm/json"]);
+
+        Assert.AreEqual("1.0.0 <= v < 2.0.0", dependencies["elm/parser"]);
+
+        Assert.AreEqual("1.0.0 <= v < 2.0.0", dependencies["rtfeldman/elm-hex"]);
+
+        Assert.AreEqual("1.0.1 <= v < 2.0.0", dependencies["stil4m/structured-writer"]);
+
+    }
+
+    [TestMethod]
+    public void Parse_elm_json_of_package_type_with_exposed_modules_as_object()
+    {
+        var elmJsonFile =
+            """
+            {
+                "type": "package",
+                "name": "elm/core",
+                "summary": "Elm's standard libraries",
+                "license": "BSD-3-Clause",
+                "version": "1.0.5",
+                "exposed-modules": {
+                    "Primitives": [
+                        "Basics",
+                        "String",
+                        "Char",
+                        "Bitwise",
+                        "Tuple"
+                    ],
+                    "Collections": [
+                        "List",
+                        "Dict",
+                        "Set",
+                        "Array"
+                    ],
+                    "Error Handling": [
+                        "Maybe",
+                        "Result"
+                    ],
+                    "Debug": [
+                        "Debug"
+                    ],
+                    "Effects": [
+                        "Platform.Cmd",
+                        "Platform.Sub",
+                        "Platform",
+                        "Process",
+                        "Task"
+                    ]
+                },
+                "elm-version": "0.19.0 <= v < 0.20.0",
+                "dependencies": {},
+                "test-dependencies": {}
+            }
+            """;
+
+        var elmJsonParsed =
+            JsonSerializer.Deserialize<ElmJsonStructure>(elmJsonFile);
+
+        Assert.IsNotNull(elmJsonParsed);
+
+        Assert.AreEqual("package", elmJsonParsed.Type);
+
+        Assert.AreEqual("elm/core", elmJsonParsed.Name);
+
+        Assert.AreEqual(17, elmJsonParsed.ExposedModules.Count);
+
+        Assert.AreEqual("Basics", elmJsonParsed.ExposedModules[0]);
+        Assert.AreEqual("String", elmJsonParsed.ExposedModules[1]);
+        Assert.AreEqual("Char", elmJsonParsed.ExposedModules[2]);
+        Assert.AreEqual("Bitwise", elmJsonParsed.ExposedModules[3]);
+        Assert.AreEqual("Tuple", elmJsonParsed.ExposedModules[4]);
+
+        Assert.AreEqual("List", elmJsonParsed.ExposedModules[5]);
+        Assert.AreEqual("Dict", elmJsonParsed.ExposedModules[6]);
+        Assert.AreEqual("Set", elmJsonParsed.ExposedModules[7]);
+        Assert.AreEqual("Array", elmJsonParsed.ExposedModules[8]);
+
+        Assert.AreEqual("Maybe", elmJsonParsed.ExposedModules[9]);
+        Assert.AreEqual("Result", elmJsonParsed.ExposedModules[10]);
+
+        Assert.AreEqual("Debug", elmJsonParsed.ExposedModules[11]);
+
+        Assert.AreEqual("Platform.Cmd", elmJsonParsed.ExposedModules[12]);
+        Assert.AreEqual("Platform.Sub", elmJsonParsed.ExposedModules[13]);
+        Assert.AreEqual("Platform", elmJsonParsed.ExposedModules[14]);
+        Assert.AreEqual("Process", elmJsonParsed.ExposedModules[15]);
+        Assert.AreEqual("Task", elmJsonParsed.ExposedModules[16]);
+
     }
 }

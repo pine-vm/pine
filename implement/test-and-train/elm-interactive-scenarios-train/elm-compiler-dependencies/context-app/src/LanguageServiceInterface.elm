@@ -38,8 +38,9 @@ type alias RequestInWorkspace =
 
 
 type Request
-    = AddFileRequest String FileTreeBlobNode
-    | DeleteFileRequest String
+    = AddWorkspaceFileRequest String FileTreeBlobNode
+    | AddElmPackageVersionRequest ElmPackageVersionIdentifer (List ( List String, FileTreeBlobNode ))
+    | DeleteWorkspaceFileRequest String
     | ProvideHoverRequest ProvideHoverRequestStruct
     | ProvideCompletionItemsRequest ProvideCompletionItemsRequestStruct
     | ProvideDefinitionRequest ProvideDefinitionRequestStruct
@@ -52,14 +53,14 @@ type Response
     = WorkspaceSummaryResponse
     | ProvideHoverResponse (List String)
     | ProvideCompletionItemsResponse (List Frontend.MonacoEditor.MonacoCompletionItem)
-    | ProvideDefinitionResponse (List LocationUnderFilePath)
+    | ProvideDefinitionResponse (List LocationInFile)
     | TextDocumentSymbolResponse (List DocumentSymbol)
-    | TextDocumentReferencesResponse (List LocationUnderFilePath)
+    | TextDocumentReferencesResponse (List LocationInFile)
     | TextDocumentRenameResponse WorkspaceEdit
 
 
 type alias ProvideHoverRequestStruct =
-    { filePathOpenedInEditor : String
+    { fileLocation : FileLocation
     , positionLineNumber : Int
     , positionColumn : Int
     }
@@ -88,8 +89,8 @@ type alias RenameParams =
     }
 
 
-type alias LocationUnderFilePath =
-    { filePath : String
+type alias LocationInFile =
+    { fileLocation : FileLocation
     , range : Frontend.MonacoEditor.MonacoRange
     }
 
@@ -139,3 +140,16 @@ type alias TextEdit =
     { range : Frontend.MonacoEditor.MonacoRange
     , newText : String
     }
+
+
+type FileLocation
+    = WorkspaceFileLocation String
+    | ElmPackageFileLocation ElmPackageVersionIdentifer (List String)
+
+
+type ElmPackageVersionIdentifer
+    = ElmPackageVersion019Identifer
+        -- Package name, like "elm/core"
+        String
+        -- version tag
+        String

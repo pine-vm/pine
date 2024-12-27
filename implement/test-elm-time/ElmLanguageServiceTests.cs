@@ -192,14 +192,14 @@ public class ElmLanguageServiceTests
 
         var hoverRequest =
             new Pine.Elm.LanguageServiceInterface.ProvideHoverRequestStruct(
-                FilePathOpenedInEditor: string.Join("/", filePathOpenedInEditor),
+                FileLocation:
+                new Pine.Elm.LanguageServiceInterface.FileLocation.WorkspaceFileLocation(
+                    string.Join("/", filePathOpenedInEditor)),
                 PositionLineNumber: beforeCursorLines.Length,
                 PositionColumn: beforeCursorLines.Last().Length);
 
         var hoverResponse =
-            languageService.ProvideHover(
-                hoverRequest,
-                pineVM)
+            languageService.ProvideHover(hoverRequest)
             .Extract(err => throw new Exception(err));
 
         Assert.AreEqual(
@@ -220,7 +220,7 @@ public class ElmLanguageServiceTests
 
             var addFileResult =
                 languageServiceState.HandleRequest(
-                new Pine.Elm.LanguageServiceInterface.Request.AddFileRequest(
+                new Pine.Elm.LanguageServiceInterface.Request.AddWorkspaceFileRequest(
                     FilePath: string.Join("/", file.path),
                     Blob: new Pine.Elm.LanguageServiceInterface.FileTreeBlobNode(
                         AsBase64: asBase64,
@@ -290,9 +290,7 @@ public class ElmLanguageServiceTests
                 CursorColumn: beforeCursorLines.Last().Length + 1);
 
         var completionItemsResponse =
-            languageService.ProvideCompletionItems(
-                completionItemsRequest,
-                pineVM)
+            languageService.ProvideCompletionItems(completionItemsRequest)
             .Extract(err => throw new Exception(err));
 
         if (completionItemsResponse.Count != expectedCompletionItems.Count)

@@ -18,8 +18,9 @@ public record FileTreeBlobNode(
 /*
 
 type Request
-    = AddFileRequest String FileTreeBlobNode
-    | DeleteFileRequest String
+    = AddWorkspaceFileRequest String FileTreeBlobNode
+    | AddElmPackageVersionRequest ElmPackageVersionIdentifer (List ( List String, FileTreeBlobNode ))
+    | DeleteWorkspaceFileRequest String
     | ProvideHoverRequest ProvideHoverRequestStruct
     | ProvideCompletionItemsRequest ProvideCompletionItemsRequestStruct
     | ProvideDefinitionRequest ProvideDefinitionRequestStruct
@@ -28,14 +29,20 @@ type Request
     | TextDocumentRenameRequest RenameParams
 
  * */
+
 public abstract record Request
 {
-    public record AddFileRequest(
+    public record AddWorkspaceFileRequest(
         string FilePath,
         FileTreeBlobNode Blob)
         : Request;
 
-    public record DeleteFileRequest(string FilePath)
+    public record DeleteWorkspaceFileRequest(string FilePath)
+        : Request;
+
+    public record AddElmPackageVersionRequest(
+        ElmPackageVersion019Identifer ElmPackageVersionIdentifer,
+        List<(IReadOnlyList<string> ModulePath, FileTreeBlobNode Blob)> ModulePathsAndBlobs)
         : Request;
 
     public record ProvideHoverRequest(ProvideHoverRequestStruct Request)
@@ -57,8 +64,19 @@ public abstract record Request
         : Request;
 }
 
+/*
+
+type alias ProvideHoverRequestStruct =
+    { fileLocation : FileLocation
+    , positionLineNumber : Int
+    , positionColumn : Int
+    }
+
+ * */
+
+
 public record ProvideHoverRequestStruct(
-    string FilePathOpenedInEditor,
+    FileLocation FileLocation,
     int PositionLineNumber,
     int PositionColumn);
 
@@ -99,32 +117,39 @@ public static class RequestEncoding
     {
         return request switch
         {
-            Request.AddFileRequest addFileRequest =>
+            Request.AddWorkspaceFileRequest addFileRequest =>
                 ElmValueEncoding.TagAsPineValue(
-                    "AddFileRequest",
+                    "AddWorkspaceFileRequest",
                     [
                         ElmValueEncoding.StringAsPineValue(addFileRequest.FilePath),
-                        ElmValueEncoding.ElmValueAsPineValue(
-                            new ElmValue.ElmRecord(
-                                [
-                                ("asBase64",
-                                new ElmValue.ElmString(addFileRequest.Blob.AsBase64)),
-
-                                ("asText",
-                                    addFileRequest.Blob.AsText is { } asText
-                                    ?
-                                    ElmValue.TagInstance("Just", [new ElmValue.ElmString(asText)])
-                                    :
-                                    ElmValue.TagInstance("Nothing", [])
-                                    )
-                                ]))
+                        Encode(addFileRequest.Blob)
                     ]),
 
-            Request.DeleteFileRequest deleteFileRequest =>
+            Request.DeleteWorkspaceFileRequest deleteFileRequest =>
                 ElmValueEncoding.TagAsPineValue(
-                    "DeleteFileRequest",
+                    "DeleteWorkspaceFileRequest",
                     [
                         ElmValueEncoding.StringAsPineValue(deleteFileRequest.FilePath),
+                    ]),
+
+            Request.AddElmPackageVersionRequest addElmPackageRequest =>
+                ElmValueEncoding.TagAsPineValue(
+                    "AddElmPackageVersionRequest",
+                    [
+                        ElmValueEncoding.ElmValueAsPineValue(
+                            ElmPackageVersionIdentiferEncoding.Encode(addElmPackageRequest.ElmPackageVersionIdentifer)),
+
+                        PineValue.List(
+                            [..addElmPackageRequest.ModulePathsAndBlobs.Select(
+                                modulePathAndBlob =>
+                                PineValue.List(
+                                    [
+                                    PineValue.List(
+                                        [..modulePathAndBlob.ModulePath.Select(ElmValueEncoding.StringAsPineValue)]),
+                                    Encode(modulePathAndBlob.Blob)
+                                    ]))
+                            ])
+
                     ]),
 
             Request.ProvideHoverRequest provideHoverRequest =>
@@ -175,13 +200,32 @@ public static class RequestEncoding
         };
     }
 
+    public static PineValue Encode(FileTreeBlobNode fileTreeBlobNode)
+    {
+        return
+            ElmValueEncoding.ElmValueAsPineValue(
+                new ElmValue.ElmRecord(
+                    [
+                        ("asBase64",
+                        new ElmValue.ElmString(fileTreeBlobNode.AsBase64)),
+                        ("asText",
+                            fileTreeBlobNode.AsText is { } asText
+                            ?
+                            ElmValue.TagInstance("Just", [new ElmValue.ElmString(asText)])
+                            :
+                            ElmValue.TagInstance("Nothing", [])
+                            )
+                        ]));
+    }
+
     public static PineValue Encode(ProvideHoverRequestStruct provideHoverRequest)
     {
         return
             ElmValueEncoding.ElmRecordAsPineValue(
                 [
-                    ("filePathOpenedInEditor",
-                    ElmValueEncoding.StringAsPineValue(provideHoverRequest.FilePathOpenedInEditor)),
+                    ("fileLocation",
+                    ElmValueEncoding.ElmValueAsPineValue(
+                        FileLocationEncoding.EncodeAsElmValue(provideHoverRequest.FileLocation))),
                     ("positionLineNumber",
                     PineValueAsInteger.ValueFromSignedInteger(provideHoverRequest.PositionLineNumber)),
                     ("positionColumn",

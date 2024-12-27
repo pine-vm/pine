@@ -300,7 +300,7 @@ hoverExpectationFromScenarioDescribingOpenFile otherFiles fileOpenedInEditor exp
         computedItems : List String
         computedItems =
             LanguageService.provideHover
-                { filePathOpenedInEditor = fileOpenedInEditor.filePath
+                { fileLocation = fileLocationFromPathItems fileOpenedInEditor.filePath
                 , positionLineNumber = positionLineNumber
                 , positionColumn = positionColumn
                 }
@@ -894,6 +894,7 @@ beta =
               )
             ]
 
+        expectationFromScenarioInMain : String -> List LanguageServiceInterface.LocationInFile -> Expect.Expectation
         expectationFromScenarioInMain mainModuleText expectedItems =
             referenceExpectationFromScenario
                 otherFiles
@@ -915,7 +916,7 @@ init : State
 init =
     0
 """
-                    [ { filePath = [ "src", "Main.elm" ]
+                    [ { fileLocation = fileLocationFromPathItems [ "src", "Main.elm" ]
                       , range = { startLineNumber = 4, startColumn = 8, endLineNumber = 4, endColumn = 12 }
                       }
                     ]
@@ -933,7 +934,7 @@ in👈🚁it : State
 init =
     0
 """
-                    [ { filePath = [ "src", "Main.elm" ]
+                    [ { fileLocation = fileLocationFromPathItems [ "src", "Main.elm" ]
                       , range = { startLineNumber = 4, startColumn = 8, endLineNumber = 4, endColumn = 12 }
                       }
                     ]
@@ -951,7 +952,7 @@ init : State
 in👈🚁it =
     0
 """
-                    [ { filePath = [ "src", "Main.elm" ]
+                    [ { fileLocation = fileLocationFromPathItems [ "src", "Main.elm" ]
                       , range = { startLineNumber = 4, startColumn = 8, endLineNumber = 4, endColumn = 12 }
                       }
                     ]
@@ -968,13 +969,13 @@ name =
     Alpha.from_👈🚁alpha
 
 """
-                    [ { filePath = [ "src", "Delta.elm" ]
+                    [ { fileLocation = fileLocationFromPathItems [ "src", "Delta.elm" ]
                       , range = { endColumn = 23, endLineNumber = 11, startColumn = 13, startLineNumber = 11 }
                       }
-                    , { filePath = [ "src", "Delta.elm" ]
+                    , { fileLocation = fileLocationFromPathItems [ "src", "Delta.elm" ]
                       , range = { endColumn = 21, endLineNumber = 15, startColumn = 11, startLineNumber = 15 }
                       }
-                    , { filePath = [ "src", "Main.elm" ]
+                    , { fileLocation = fileLocationFromPathItems [ "src", "Main.elm" ]
                       , range = { endColumn = 21, endLineNumber = 7, startColumn = 11, startLineNumber = 7 }
                       }
                     ]
@@ -992,13 +993,13 @@ name =
 
 
 """
-                    [ { filePath = [ "src", "Delta.elm" ]
+                    [ { fileLocation = fileLocationFromPathItems [ "src", "Delta.elm" ]
                       , range = { endColumn = 23, endLineNumber = 11, startColumn = 13, startLineNumber = 11 }
                       }
-                    , { filePath = [ "src", "Delta.elm" ]
+                    , { fileLocation = fileLocationFromPathItems [ "src", "Delta.elm" ]
                       , range = { endColumn = 21, endLineNumber = 15, startColumn = 11, startLineNumber = 15 }
                       }
-                    , { filePath = [ "src", "Main.elm" ]
+                    , { fileLocation = fileLocationFromPathItems [ "src", "Main.elm" ]
                       , range = { endColumn = 27, endLineNumber = 7, startColumn = 17, startLineNumber = 7 }
                       }
                     ]
@@ -1016,13 +1017,13 @@ name =
 
 
 """
-                    [ { filePath = [ "src", "Delta.elm" ]
+                    [ { fileLocation = fileLocationFromPathItems [ "src", "Delta.elm" ]
                       , range = { endColumn = 23, endLineNumber = 11, startColumn = 13, startLineNumber = 11 }
                       }
-                    , { filePath = [ "src", "Delta.elm" ]
+                    , { fileLocation = fileLocationFromPathItems [ "src", "Delta.elm" ]
                       , range = { endColumn = 21, endLineNumber = 15, startColumn = 11, startLineNumber = 15 }
                       }
-                    , { filePath = [ "src", "Main.elm" ]
+                    , { fileLocation = fileLocationFromPathItems [ "src", "Main.elm" ]
                       , range = { endColumn = 21, endLineNumber = 8, startColumn = 11, startLineNumber = 8 }
                       }
                     ]
@@ -1041,7 +1042,7 @@ name =
 
 
 """
-                    [ { filePath = [ "src", "Main.elm" ]
+                    [ { fileLocation = fileLocationFromPathItems [ "src", "Main.elm" ]
                       , range = { endColumn = 10, endLineNumber = 8, startColumn = 5, startLineNumber = 8 }
                       }
                     ]
@@ -1059,7 +1060,7 @@ a_choice =
     Alpha.Yes
 
 """
-                    [ { filePath = [ "src", "Main.elm" ]
+                    [ { fileLocation = fileLocationFromPathItems [ "src", "Main.elm" ]
                       , range = { endColumn = 30, endLineNumber = 6, startColumn = 18, startLineNumber = 6 }
                       }
                     ]
@@ -1077,7 +1078,7 @@ a_choice =
     Alpha.Y👈🚁es
 
 """
-                    [ { filePath = [ "src", "Main.elm" ]
+                    [ { fileLocation = fileLocationFromPathItems [ "src", "Main.elm" ]
                       , range = { endColumn = 14, endLineNumber = 8, startColumn = 11, startLineNumber = 8 }
                       }
                     ]
@@ -1108,10 +1109,10 @@ map_choice choice =
             0
 
 """
-                    [ { filePath = [ "src", "Main.elm" ]
+                    [ { fileLocation = fileLocationFromPathItems [ "src", "Main.elm" ]
                       , range = { endColumn = 8, endLineNumber = 11, startColumn = 5, startLineNumber = 11 }
                       }
-                    , { filePath = [ "src", "Main.elm" ]
+                    , { fileLocation = fileLocationFromPathItems [ "src", "Main.elm" ]
                       , range = { endColumn = 12, endLineNumber = 17, startColumn = 9, startLineNumber = 17 }
                       }
                     ]
@@ -1142,7 +1143,7 @@ map_choice choice =
             val
 
 """
-                    [ { filePath = [ "src", "Main.elm" ]
+                    [ { fileLocation = fileLocationFromPathItems [ "src", "Main.elm" ]
                       , range = { endColumn = 13, endLineNumber = 20, startColumn = 9, startLineNumber = 20 }
                       }
                     ]
@@ -1163,7 +1164,7 @@ decl_alfa = 1
 
 
 """
-                    [ { filePath = [ "src", "Main.elm" ]
+                    [ { fileLocation = fileLocationFromPathItems [ "src", "Main.elm" ]
                       , range = { endColumn = 40, endLineNumber = 1, startColumn = 31, startLineNumber = 1 }
                       }
                     ]
@@ -1184,7 +1185,7 @@ decl_alfa = 1
 
 
 """
-                    [ { filePath = [ "src", "Main.elm" ]
+                    [ { fileLocation = fileLocationFromPathItems [ "src", "Main.elm" ]
                       , range = { endColumn = 29, endLineNumber = 1, startColumn = 23, startLineNumber = 1 }
                       }
                     ]
@@ -1233,15 +1234,15 @@ expectationFromScenarioDescribingOpenFile modifyLanguageServiceState otherFiles 
 
         ( _, languageServiceState ) =
             LanguageService.addFile
-                fileOpenedInEditor.filePath
-                (fileContentFromString
+                ( String.join "/" fileOpenedInEditor.filePath
+                , fileContentFromString
                     (String.concat [ fileOpenedInEditor.textUntilCursor, fileOpenedInEditor.textAfterCursor ])
                 )
                 languageServiceStateBefore
     in
     Expect.equal expectedItems
         (LanguageService.provideCompletionItems
-            { filePathOpenedInEditor = fileOpenedInEditor.filePath
+            { filePathOpenedInEditor = String.join "/" fileOpenedInEditor.filePath
             , cursorLineNumber = fileOpenedInEditor.textUntilCursor |> String.lines |> List.length
             , cursorColumn =
                 (fileOpenedInEditor.textUntilCursor
@@ -1260,7 +1261,7 @@ expectationFromScenarioDescribingOpenFile modifyLanguageServiceState otherFiles 
 referenceExpectationFromScenario :
     List ( List String, String )
     -> ( List String, String )
-    -> List LanguageServiceInterface.LocationUnderFilePath
+    -> List LanguageServiceInterface.LocationInFile
     -> Expect.Expectation
 referenceExpectationFromScenario otherFiles ( fileOpenedInEditorPath, fileOpenedInEditorText ) expectedItems =
     case String.split "👈🚁" (String.trimLeft fileOpenedInEditorText) of
@@ -1283,7 +1284,7 @@ referenceExpectationFromScenario otherFiles ( fileOpenedInEditorPath, fileOpened
 referenceExpectationFromScenarioDescribingOpenFile :
     List ( List String, String )
     -> { filePath : List String, textUntilCursor : String, textAfterCursor : String }
-    -> List LanguageServiceInterface.LocationUnderFilePath
+    -> List LanguageServiceInterface.LocationInFile
     -> Expect.Expectation
 referenceExpectationFromScenarioDescribingOpenFile otherFiles fileOpenedInEditor expectedItems =
     let
@@ -1304,10 +1305,10 @@ referenceExpectationFromScenarioDescribingOpenFile otherFiles fileOpenedInEditor
                 |> Maybe.map (String.length >> (+) 1)
                 |> Maybe.withDefault 0
 
-        computedItems : List LanguageServiceInterface.LocationUnderFilePath
+        computedItems : List LanguageServiceInterface.LocationInFile
         computedItems =
             LanguageService.textDocumentReferences
-                { filePathOpenedInEditor = fileOpenedInEditor.filePath
+                { fileLocation = fileLocationFromPathItems fileOpenedInEditor.filePath
                 , positionLineNumber = positionLineNumber
                 , positionColumn = positionColumn
                 }
@@ -1388,3 +1389,9 @@ stringTrimUpToLineBreaks string =
                             ""
             in
             String.trimLeft firstLine ++ right
+
+
+fileLocationFromPathItems : List String -> LanguageServiceInterface.FileLocation
+fileLocationFromPathItems pathItems =
+    LanguageServiceInterface.WorkspaceFileLocation
+        (String.join "/" pathItems)

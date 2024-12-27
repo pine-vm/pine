@@ -95,7 +95,7 @@ public class LanguageServiceState(
         string fileUri)
     {
         var genericRequestResult =
-            HandleRequest(new Interface.Request.DeleteFileRequest(fileUri));
+            HandleRequest(new Interface.Request.DeleteWorkspaceFileRequest(fileUri));
 
         if (genericRequestResult.IsErrOrNull() is { } err)
         {
@@ -128,7 +128,7 @@ public class LanguageServiceState(
 
         var genericRequestResult =
             HandleRequest(
-                new Interface.Request.AddFileRequest(
+                new Interface.Request.AddWorkspaceFileRequest(
                     fileUri,
                     new Interface.FileTreeBlobNode(AsBase64: asBase64, AsText: fileContentAsText)));
 
@@ -152,9 +152,42 @@ public class LanguageServiceState(
         return workspaceSummary;
     }
 
+    public Result<string, Interface.Response.WorkspaceSummaryResponse>
+        AddElmPackage(
+        Interface.ElmPackageVersion019Identifer packageVersionId,
+        IReadOnlyList<KeyValuePair<IReadOnlyList<string>, string>> filesContentsAsText)
+    {
+        var genericRequestResult =
+            HandleRequest(
+                new Interface.Request.AddElmPackageVersionRequest(
+                    packageVersionId,
+                    filesContentsAsText.Select(e =>
+                    (e.Key,
+                    new Interface.FileTreeBlobNode(
+                        AsBase64: System.Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(e.Value)), AsText: e.Value))).ToList()));
+
+        if (genericRequestResult.IsErrOrNull() is { } err)
+        {
+            return err;
+        }
+
+        if (genericRequestResult.IsOkOrNull() is not { } requestOk)
+        {
+            throw new System.NotImplementedException(
+                "Unexpected request result type: " + genericRequestResult.GetType());
+        }
+
+        if (requestOk is not Interface.Response.WorkspaceSummaryResponse workspaceSummary)
+        {
+            throw new System.NotImplementedException(
+                "Unexpected request result type: " + requestOk.GetType());
+        }
+
+        return workspaceSummary;
+    }
+
     public Result<string, IReadOnlyList<string>> ProvideHover(
-        Interface.ProvideHoverRequestStruct provideHoverRequest,
-        IPineVM pineVM)
+        Interface.ProvideHoverRequestStruct provideHoverRequest)
     {
         var genericRequestResult =
             HandleRequest(
@@ -182,8 +215,7 @@ public class LanguageServiceState(
 
     public Result<string, IReadOnlyList<MonacoEditor.MonacoCompletionItem>>
         ProvideCompletionItems(
-            Interface.ProvideCompletionItemsRequestStruct provideCompletionItemsRequest,
-            IPineVM pineVM)
+            Interface.ProvideCompletionItemsRequestStruct provideCompletionItemsRequest)
     {
         var genericRequestResult =
             HandleRequest(

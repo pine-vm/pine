@@ -1395,8 +1395,8 @@ updateToProvideHoverRequest request workspaceStateBefore =
             in
             updateForRequestToLanguageService
                 (LanguageServiceInterface.ProvideHoverRequest
-                    { filePathOpenedInEditor =
-                        String.join "/" (List.concat [ directoryPath, [ fileName ] ])
+                    { fileLocation =
+                        fileLocationFromPathItems (List.concat [ directoryPath, [ fileName ] ])
                     , positionLineNumber = request.positionLineNumber
                     , positionColumn = request.positionColumn
                     }
@@ -1422,13 +1422,19 @@ updateToProvideDefinitionRequest request workspaceStateBefore =
             in
             updateForRequestToLanguageService
                 (LanguageServiceInterface.ProvideDefinitionRequest
-                    { filePathOpenedInEditor =
-                        String.join "/" (List.concat [ directoryPath, [ fileName ] ])
+                    { fileLocation =
+                        fileLocationFromPathItems (List.concat [ directoryPath, [ fileName ] ])
                     , positionLineNumber = request.positionLineNumber
                     , positionColumn = request.positionColumn
                     }
                 )
                 workspaceStateBefore
+
+
+fileLocationFromPathItems : List String -> LanguageServiceInterface.FileLocation
+fileLocationFromPathItems pathItems =
+    LanguageServiceInterface.WorkspaceFileLocation
+        (String.join "/" pathItems)
 
 
 updateToProvideCompletionItemsRequest :
@@ -4277,16 +4283,22 @@ provideHoverInMonacoEditorCmd =
         >> sendMessageToMonacoFrame
 
 
-provideDefinitionInMonacoEditorCmd : List LanguageServiceInterface.LocationUnderFilePath -> Cmd WorkspaceEventStructure
+provideDefinitionInMonacoEditorCmd : List LanguageServiceInterface.LocationInFile -> Cmd WorkspaceEventStructure
 provideDefinitionInMonacoEditorCmd locationsInFiles =
     let
         monacoLocations : List Frontend.MonacoEditor.MonacoLocation
         monacoLocations =
-            List.map
+            List.filterMap
                 (\locationInFile ->
-                    { uri = monacoUriForFilePath [ locationInFile.filePath ]
-                    , range = locationInFile.range
-                    }
+                    case locationInFile.fileLocation of
+                        LanguageServiceInterface.WorkspaceFileLocation filePath ->
+                            Just
+                                { uri = monacoUriForFilePath [ filePath ]
+                                , range = locationInFile.range
+                                }
+
+                        LanguageServiceInterface.ElmPackageFileLocation _ _ ->
+                            Nothing
                 )
                 locationsInFiles
     in

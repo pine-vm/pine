@@ -1,5 +1,6 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using System.Linq;
+using System.Text.Json;
 using System.Text.Json.Serialization;
 
 namespace Pine.Elm019;
@@ -92,6 +93,49 @@ namespace Pine.Elm019;
 }
  * */
 
+/*
+{
+    "type": "package",
+    "name": "elm/core",
+    "summary": "Elm's standard libraries",
+    "license": "BSD-3-Clause",
+    "version": "1.0.5",
+    "exposed-modules": {
+        "Primitives": [
+            "Basics",
+            "String",
+            "Char",
+            "Bitwise",
+            "Tuple"
+        ],
+        "Collections": [
+            "List",
+            "Dict",
+            "Set",
+            "Array"
+        ],
+        "Error Handling": [
+            "Maybe",
+            "Result"
+        ],
+        "Debug": [
+            "Debug"
+        ],
+        "Effects": [
+            "Platform.Cmd",
+            "Platform.Sub",
+            "Platform",
+            "Process",
+            "Task"
+        ]
+    },
+    "elm-version": "0.19.0 <= v < 0.20.0",
+    "dependencies": {},
+    "test-dependencies": {}
+}
+
+ * */
+
 public record ElmJsonStructure(
     [property: JsonPropertyName("type")]
     string Type,
@@ -104,12 +148,14 @@ public record ElmJsonStructure(
     [property: JsonPropertyName("version")]
     string Version,
     [property: JsonPropertyName("exposed-modules")]
+    [property: JsonConverter(typeof(ExposedModulesConverter))]
     IReadOnlyList<string> ExposedModules,
     [property: JsonPropertyName("source-directories")]
     IReadOnlyList<string> SourceDirectories,
     [property: JsonPropertyName("elm-version")]
     string ElmVersion,
     [property: JsonPropertyName("dependencies")]
+    [property: JsonConverter(typeof(DependenciesConverter))]
     ElmJsonStructure.DependenciesStruct Dependencies)
 {
     public IEnumerable<RelativeDirectory> ParsedSourceDirectories =>
@@ -164,8 +210,116 @@ public record ElmJsonStructure(
 
     public record DependenciesStruct(
         [property: JsonPropertyName("direct")]
-        Dictionary<string, string> Direct,
+        IReadOnlyDictionary<string, string>? Direct,
         [property: JsonPropertyName("indirect")]
-        Dictionary<string, string> Indirect);
+        IReadOnlyDictionary<string, string>? Indirect,
+        [property: JsonPropertyName("flat")]
+        IReadOnlyDictionary<string, string>? Flat);
+}
+
+public class ExposedModulesConverter : JsonConverter<IReadOnlyList<string>>
+{
+    public override IReadOnlyList<string> Read(ref Utf8JsonReader reader, System.Type typeToConvert, JsonSerializerOptions options)
+    {
+        if (reader.TokenType == JsonTokenType.StartArray)
+        {
+            var list =
+                JsonSerializer.Deserialize<List<string>>(ref reader, options);
+
+            return list ?? [];
+        }
+
+        if (reader.TokenType == JsonTokenType.StartObject)
+        {
+            var sections =
+                JsonSerializer.Deserialize<Dictionary<string, List<string>>>(ref reader, options);
+
+            return sections?.Values.SelectMany(v => v).ToList() ?? [];
+        }
+
+        throw new JsonException("Unsupported shape for exposed-modules.");
+    }
+
+    public override void Write(Utf8JsonWriter writer, IReadOnlyList<string> value, JsonSerializerOptions options)
+    {
+        JsonSerializer.Serialize(writer, value, options);
+    }
+}
+
+public class DependenciesConverter : JsonConverter<ElmJsonStructure.DependenciesStruct>
+{
+    public override ElmJsonStructure.DependenciesStruct Read(
+        ref Utf8JsonReader reader,
+        System.Type typeToConvert,
+        JsonSerializerOptions options)
+    {
+        if (reader.TokenType != JsonTokenType.StartObject)
+            throw new JsonException("Expected object for dependencies.");
+
+        var direct = new Dictionary<string, string>();
+        var indirect = new Dictionary<string, string>();
+        var flat = new Dictionary<string, string>();
+
+        using var jsonDoc = JsonDocument.ParseValue(ref reader);
+        var root = jsonDoc.RootElement;
+
+        // Check if shape has "direct"/"indirect" or is just a flat dictionary
+        var hasDirect = root.TryGetProperty("direct", out var directElement);
+        var hasIndirect = root.TryGetProperty("indirect", out var indirectElement);
+
+        if (hasDirect || hasIndirect)
+        {
+            if (hasDirect)
+                direct = JsonSerializer.Deserialize<Dictionary<string, string>>(directElement.GetRawText(), options) ?? [];
+
+            if (hasIndirect)
+                indirect = JsonSerializer.Deserialize<Dictionary<string, string>>(indirectElement.GetRawText(), options) ?? [];
+
+            // Anything else becomes "flat"
+            foreach (var property in root.EnumerateObject())
+            {
+                if (property.Name is not "direct" and not "indirect")
+                    flat[property.Name] = property.Value.GetString() ?? "";
+            }
+        }
+        else
+        {
+            // Entire object is "flat"
+            flat = JsonSerializer.Deserialize<Dictionary<string, string>>(root.GetRawText(), options) ?? [];
+        }
+
+        return new ElmJsonStructure.DependenciesStruct(direct, indirect, flat);
+    }
+
+    public override void Write(
+        Utf8JsonWriter writer,
+        ElmJsonStructure.DependenciesStruct value,
+        JsonSerializerOptions options)
+    {
+        writer.WriteStartObject();
+
+        if (value.Direct is { } direct)
+        {
+            writer.WritePropertyName("direct");
+            JsonSerializer.Serialize(writer, direct, options);
+        }
+
+        if (value.Indirect is { } indirect)
+        {
+            writer.WritePropertyName("indirect");
+            JsonSerializer.Serialize(writer, indirect, options);
+        }
+
+        if (value.Flat is { } flat)
+        {
+            foreach (var kvp in flat)
+            {
+                writer.WritePropertyName(kvp.Key);
+                writer.WriteStringValue(kvp.Value);
+            }
+        }
+
+        writer.WriteEndObject();
+    }
 }
 

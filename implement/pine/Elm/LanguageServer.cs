@@ -31,9 +31,9 @@ public class LanguageServer(
     /*
      * TODO: Use the version identifier from elm.json as scope.
      * */
-    private readonly ConcurrentDictionary<string, string> elmJsonDirectDependencies = new();
+    private readonly ConcurrentDictionary<Interface.ElmPackageVersion019Identifer, string> elmJsonDirectDependencies = new();
 
-    private readonly ConcurrentDictionary<string, string> elmJsonDirectDependenciesLoaded = new();
+    private readonly ConcurrentDictionary<Interface.ElmPackageVersion019Identifer, string> elmJsonDirectDependenciesLoaded = new();
 
     private class WorkspaceState(
         IReadOnlyList<WorkspaceFolder> workspaceFolders,
@@ -70,6 +70,14 @@ public class LanguageServer(
             string fileUri)
         {
             return languageServiceState.DeleteFile(fileUri);
+        }
+
+        public Result<string, Interface.Response.WorkspaceSummaryResponse>
+            AddElmPackage(
+            Interface.ElmPackageVersion019Identifer packageVersionId,
+            IReadOnlyList<KeyValuePair<IReadOnlyList<string>, string>> filesContentsAsText)
+        {
+            return languageServiceState.AddElmPackage(packageVersionId, filesContentsAsText);
         }
 
         public Result<string, Interface.Response> HandleRequest(
@@ -522,19 +530,31 @@ public class LanguageServer(
             var elmJsonFileParsed =
                 System.Text.Json.JsonSerializer.Deserialize<ElmJsonStructure>(elmJson);
 
-            foreach (var (packageName, packageVersion) in elmJsonFileParsed?.Dependencies.Direct ?? [])
+            if (elmJsonFileParsed?.Dependencies.Direct is { } directDependencies)
             {
-                elmJsonDirectDependencies.TryGetValue(packageName, out var existingVersion);
-
-                elmJsonDirectDependencies[packageName] = packageVersion;
-
-                if (existingVersion is null)
+                foreach (var (packageName, packageVersion) in directDependencies)
                 {
+                    var packageNameItems = packageName.Split('/');
+
+                    if (packageNameItems.Length is not 2)
+                    {
+                        Log("Ignoring invalid package name: " + packageName);
+                        continue;
+                    }
+
+                    var packageVersionId =
+                        new Interface.ElmPackageVersion019Identifer(
+                            PackageName: packageName,
+                            VersionTag: packageVersion);
+
+                    if (elmJsonDirectDependencies.ContainsKey(packageVersionId))
+                    {
+                        continue;
+                    }
+
+                    elmJsonDirectDependencies[packageVersionId] = packageVersion;
+
                     Log("Registered direct dependency: " + packageName + " " + packageVersion);
-                }
-                else if (existingVersion != packageVersion)
-                {
-                    Log("Updated direct dependency: " + packageName + " " + packageVersion);
                 }
             }
         }
@@ -547,31 +567,36 @@ public class LanguageServer(
     private void LoadDirectDependenciesFromElmJsonFiles(
         WorkspaceState workspaceState)
     {
-        int? searchAndLoadPackage(string packageName, string version)
+        int? searchAndLoadPackage(Interface.ElmPackageVersion019Identifer packageVersionIdentifer)
         {
+            var packageName = packageVersionIdentifer.PackageName;
+            var packageVersion = packageVersionIdentifer.VersionTag;
+
             foreach (var searchDirectory in elmPackagesSearchDirectories)
             {
                 var packageDirectory = System.IO.Path.Combine(searchDirectory, packageName);
 
-                var versionDirectory = System.IO.Path.Combine(packageDirectory, version);
+                var packageVersionDirectory =
+                    System.IO.Path.Combine(packageDirectory, packageVersion)
+                    .Replace('\\', '/');
 
-                if (!System.IO.Directory.Exists(versionDirectory))
+                if (!System.IO.Directory.Exists(packageVersionDirectory))
                 {
                     continue;
                 }
 
                 var elmModuleFiles =
-                    System.IO.Directory.GetFiles(versionDirectory, "*.elm", System.IO.SearchOption.AllDirectories);
+                    System.IO.Directory.GetFiles(packageVersionDirectory, "*.elm", System.IO.SearchOption.AllDirectories);
 
                 var elmJsonFiles =
-                    System.IO.Directory.GetFiles(versionDirectory, "elm.json", System.IO.SearchOption.AllDirectories);
+                    System.IO.Directory.GetFiles(packageVersionDirectory, "elm.json", System.IO.SearchOption.AllDirectories);
 
                 Log(
-                    "Package: " + packageName + " version " + version +
+                    "Package: " + packageName + " version " + packageVersion +
                     ": Found " + elmModuleFiles.Length +
                     " Elm module files and " +
                     elmJsonFiles.Length +
-                    " elm.json file(s) in " + versionDirectory);
+                    " elm.json file(s) in " + packageVersionDirectory);
 
                 var exposedModuleNames = new HashSet<string>();
 
@@ -601,7 +626,9 @@ public class LanguageServer(
                     }
                 }
 
-                var elmModuleNamesAdded = new HashSet<string>();
+                var elmModulesToAdd =
+                    new Dictionary<IReadOnlyList<string>, string>(
+                        comparer: EnumerableExtension.EqualityComparer<IReadOnlyList<string>>());
 
                 foreach (var filePath in elmModuleFiles)
                 {
@@ -609,6 +636,12 @@ public class LanguageServer(
                     {
                         var fileName = System.IO.Path.GetFileName(filePath);
                         var fileContent = System.IO.File.ReadAllText(filePath);
+
+                        var filePathRelative =
+                            filePath[(packageVersionDirectory.Length + 1)..]
+                            .Replace('\\', '/');
+
+                        var filePathRelativeItems = filePathRelative.Split('/');
 
                         Log(
                             "Read file " + filePath + " with " +
@@ -643,11 +676,7 @@ public class LanguageServer(
                             continue;
                         }
 
-                        workspaceState.AddFile(
-                            uri.AbsoluteUri,
-                            fileContent);
-
-                        elmModuleNamesAdded.Add(moduleNameFlat);
+                        elmModulesToAdd.TryAdd(filePathRelativeItems, fileContent);
                     }
                     catch (System.Exception e)
                     {
@@ -656,10 +685,32 @@ public class LanguageServer(
                 }
 
                 Log(
-                    "Loaded package: " + packageName + " " + version +
-                    ": Added " + elmModuleNamesAdded.Count + " exposed Elm modules");
+                    "Package: " + packageName + " version " + packageVersion +
+                    ": Found " + elmModulesToAdd.Count + " Elm modules to add");
 
-                return elmModuleNamesAdded.Count;
+                var clock = System.Diagnostics.Stopwatch.StartNew();
+
+                var addPackageResponse =
+                    workspaceState.AddElmPackage(
+                        packageVersionIdentifer,
+                        [.. elmModulesToAdd]);
+
+                {
+                    if (addPackageResponse.IsErrOrNull() is { } err)
+                    {
+                        Log("Failed adding package: " + err);
+                        return null;
+                    }
+                }
+
+                Log(
+                    "Loaded package: " + packageName + " " + packageVersion +
+                    ": Added " + elmModulesToAdd.Count + " exposed Elm modules in " +
+                    CommandLineInterface.FormatIntegerForDisplay((int)clock.Elapsed.TotalMilliseconds) + " ms");
+
+                elmJsonDirectDependenciesLoaded[packageVersionIdentifer] = packageVersionDirectory;
+
+                return elmModulesToAdd.Count;
             }
 
             return null;
@@ -667,19 +718,15 @@ public class LanguageServer(
 
         foreach (var dependency in elmJsonDirectDependencies)
         {
-            elmJsonDirectDependenciesLoaded.TryGetValue(dependency.Key, out var loadedVersion);
-
-            if (loadedVersion == dependency.Value)
+            if (elmJsonDirectDependenciesLoaded.ContainsKey(dependency.Key))
             {
                 continue;
             }
 
             var clock = System.Diagnostics.Stopwatch.StartNew();
 
-            if (searchAndLoadPackage(dependency.Key, dependency.Value) is { } packageElmModuleCount)
+            if (searchAndLoadPackage(dependency.Key) is { } packageElmModuleCount)
             {
-                elmJsonDirectDependenciesLoaded[dependency.Key] = dependency.Value;
-
                 Log(
                     "Loaded package: " + dependency.Key + " " + dependency.Value +
                     " in " + CommandLineInterface.FormatIntegerForDisplay((int)clock.Elapsed.TotalMilliseconds) + " ms");
@@ -817,7 +864,7 @@ public class LanguageServer(
         var hoverStrings =
             ProvideHover(
                 new Interface.ProvideHoverRequestStruct(
-                    textDocumentUri,
+                    InterfaceFileLocationFromUri(textDocumentUri),
                     /*
                      * The language service currently uses the 1-based line and column numbers
                      * inherited from the Monaco editor API.
@@ -921,7 +968,7 @@ public class LanguageServer(
         var provideDefinitionResult =
             ProvideDefinition(
                 new Interface.ProvideHoverRequestStruct(
-                    textDocumentUri,
+                    InterfaceFileLocationFromUri(textDocumentUri),
                     PositionLineNumber: (int)positionParams.Position.Line + 1,
                     PositionColumn: (int)positionParams.Position.Character + 1));
 
@@ -948,9 +995,9 @@ public class LanguageServer(
             MapLocations(
                 locations: provideDefinitionOk,
                 noMatchingUri:
-                filePath =>
+                fileLocation =>
                 {
-                    Log("No corresponding URI for " + string.Join('/', filePath));
+                    Log("No corresponding URI for " + fileLocation);
 
                     return [];
                 })
@@ -1002,10 +1049,10 @@ public class LanguageServer(
 
         clock.Restart();
 
-        if (languageServiceStateTask.Result.IsOkOrNull() is not { } languageServiceState)
+        if (languageServiceStateTask?.Result.IsOkOrNull() is not { } languageServiceState)
         {
             throw new System.NotImplementedException(
-                "Unexpected language service state result type: " + languageServiceStateTask.Result.GetType());
+                "Unexpected language service state result type: " + languageServiceStateTask?.Result.GetType());
         }
 
         languageServiceState.AddFile(
@@ -1101,7 +1148,7 @@ public class LanguageServer(
         var provideReferenceResult =
             TextDocumentReferencesRequest(
                 new Interface.ProvideHoverRequestStruct(
-                    textDocumentUri,
+                    InterfaceFileLocationFromUri(textDocumentUri),
                     PositionLineNumber: (int)positionParams.Position.Line + 1,
                     PositionColumn: (int)positionParams.Position.Character + 1));
         {
@@ -1127,9 +1174,9 @@ public class LanguageServer(
             MapLocations(
                 locations: provideReferenceOk,
                 noMatchingUri:
-                filePath =>
+                fileLocation =>
                 {
-                    Log("No corresponding URI for " + string.Join('/', filePath));
+                    Log("No corresponding URI for " + fileLocation);
                     return [];
                 })
             .ToImmutableArray();
@@ -1478,7 +1525,7 @@ public class LanguageServer(
             provideCompletionItemsResponse.CompletionItems);
     }
 
-    public Result<string, IReadOnlyList<Interface.LocationUnderFilePath>>
+    public Result<string, IReadOnlyList<Interface.LocationInFile>>
         ProvideDefinition(
             Interface.ProvideHoverRequestStruct provideDefinitionRequest)
     {
@@ -1504,7 +1551,7 @@ public class LanguageServer(
         }
 
         return
-            Result<string, IReadOnlyList<Interface.LocationUnderFilePath>>.ok(
+            Result<string, IReadOnlyList<Interface.LocationInFile>>.ok(
                 provideDefinitionResponse.Locations);
     }
 
@@ -1537,7 +1584,7 @@ public class LanguageServer(
                 documentSymbolResponse.Symbols);
     }
 
-    public Result<string, IReadOnlyList<Interface.LocationUnderFilePath>> TextDocumentReferencesRequest(
+    public Result<string, IReadOnlyList<Interface.LocationInFile>> TextDocumentReferencesRequest(
         Interface.ProvideHoverRequestStruct referenceRequest)
     {
         var genericRequestResult =
@@ -1561,7 +1608,7 @@ public class LanguageServer(
                 "Unexpected request result type: " + requestOk.GetType());
         }
 
-        return Result<string, IReadOnlyList<Interface.LocationUnderFilePath>>.ok(
+        return Result<string, IReadOnlyList<Interface.LocationInFile>>.ok(
             provideReferenceResponse.Locations);
     }
 
@@ -1617,24 +1664,86 @@ public class LanguageServer(
     }
 
     public IEnumerable<Location> MapLocations(
-        IEnumerable<Interface.LocationUnderFilePath> locations,
-        System.Func<IReadOnlyList<string>, IEnumerable<Location>> noMatchingUri)
+        IEnumerable<Interface.LocationInFile> locations,
+        System.Func<Interface.FileLocation, IEnumerable<Location>> noMatchingUri)
     {
         return
             locations
-            .Select(location =>
+            .SelectMany(location =>
             {
+                var uri = FindMatchingUri(location.FileLocation);
+
+                if (uri is null)
+                {
+                    return noMatchingUri(location.FileLocation);
+                }
+
                 return
+                    [
                     new Location(
-                        location.FilePath,
+                        uri,
                         new Range(
                             Start: new Position(
                                 Line: (uint)location.Range.StartLineNumber - 1,
                                 Character: (uint)location.Range.StartColumn - 1),
                             End: new Position(
                                 Line: (uint)location.Range.EndLineNumber - 1,
-                                Character: (uint)location.Range.EndColumn - 1)));
+                                Character: (uint)location.Range.EndColumn - 1)))
+                    ];
             });
+    }
+
+    public Interface.FileLocation InterfaceFileLocationFromUri(string documentUri)
+    {
+        var documentUriNormalized = DocumentUriCleaned(documentUri);
+
+        foreach (var (elmPackageVersionIdentifer, packageDirectory) in elmJsonDirectDependenciesLoaded)
+        {
+            var packageDirectoryNormalized = DocumentUriCleaned(packageDirectory);
+
+            if (documentUriNormalized.StartsWith(packageDirectoryNormalized))
+            {
+                var modulePathFlat = documentUriNormalized.Substring(packageDirectoryNormalized.Length);
+
+                var modulePathItems = modulePathFlat.Split('/');
+
+                return new Interface.FileLocation.ElmPackageFileLocation(
+                    elmPackageVersionIdentifer,
+                    ModulePath: modulePathItems);
+            }
+        }
+
+        return new Interface.FileLocation.WorkspaceFileLocation(documentUriNormalized);
+    }
+
+    public string? FindMatchingUri(Interface.FileLocation fileLocation)
+    {
+        if (fileLocation is Interface.FileLocation.WorkspaceFileLocation workspaceFileLocation)
+        {
+            return workspaceFileLocation.FilePath;
+        }
+
+        if (fileLocation is Interface.FileLocation.ElmPackageFileLocation elmPackageFileLocation)
+        {
+            if (elmJsonDirectDependenciesLoaded.TryGetValue(
+                elmPackageFileLocation.ElmPackageVersionIdentifer,
+                out var packageDirectory))
+            {
+                var filePath =
+                    System.IO.Path.Combine([packageDirectory, .. elmPackageFileLocation.ModulePath])
+                    .Replace('\\', '/');
+
+                if (System.Uri.TryCreate(filePath, System.UriKind.Absolute, out var uri) is false)
+                {
+                    Log("Failed to create URI: " + filePath);
+                    return null;
+                }
+
+                return uri.AbsoluteUri;
+            }
+        }
+
+        return null;
     }
 
     public static string DocumentUriCleaned(string documentUri)

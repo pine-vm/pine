@@ -29,6 +29,11 @@ import List.Extra
 type alias LanguageServiceState =
     { documentCache : Dict.Dict String LanguageServiceStateFileTreeNodeBlob
     , coreModulesCache : List ElmCoreModule
+    , elmPackages :
+        List
+            ( LanguageServiceInterface.ElmPackageVersionIdentifer
+            , List ( List String, ( List String, Elm.Syntax.File.File, ModuleCompletionItems ) )
+            )
     }
 
 
@@ -96,8 +101,8 @@ type CookedDocumentation
     = CookedDocumentation String
 
 
-type LocationUnderFilePath range
-    = LocationUnderFilePath String range
+type LocationInFile range
+    = LocationInFile LanguageServiceInterface.FileLocation range
 
 
 type alias ModuleCompletionItems =
@@ -170,6 +175,7 @@ initLanguageServiceState elmCoreModules =
     in
     { documentCache = Dict.empty
     , coreModulesCache = elmCoreModulesParseResults
+    , elmPackages = []
     }
 
 
@@ -195,10 +201,10 @@ handleRequestInCurrentWorkspace request stateBefore =
     let
         ( serviceResponse, state ) =
             case request of
-                LanguageServiceInterface.AddFileRequest fileUri fileContent ->
+                LanguageServiceInterface.AddWorkspaceFileRequest fileUri fileContent ->
                     addFile ( fileUri, fileContent ) stateBefore
 
-                LanguageServiceInterface.DeleteFileRequest fileUri ->
+                LanguageServiceInterface.DeleteWorkspaceFileRequest fileUri ->
                     let
                         documentCache : Dict.Dict String LanguageServiceStateFileTreeNodeBlob
                         documentCache =
@@ -209,6 +215,12 @@ handleRequestInCurrentWorkspace request stateBefore =
                         | documentCache = documentCache
                       }
                     )
+
+                LanguageServiceInterface.AddElmPackageVersionRequest packageVersionIdentifer packageModules ->
+                    handleRequestAddPackage
+                        packageVersionIdentifer
+                        packageModules
+                        stateBefore
 
                 LanguageServiceInterface.ProvideHoverRequest provideHoverRequest ->
                     ( LanguageServiceInterface.ProvideHoverResponse
@@ -352,6 +364,62 @@ addFile ( fileUri, fileContent ) stateBefore =
     )
 
 
+handleRequestAddPackage :
+    LanguageServiceInterface.ElmPackageVersionIdentifer
+    -> List ( List String, LanguageServiceInterface.FileTreeBlobNode )
+    -> LanguageServiceState
+    -> ( LanguageServiceInterface.Response, LanguageServiceState )
+handleRequestAddPackage packageVersionIdentifer packageModules stateBefore =
+    let
+        parsedModules : List ( List String, ( List String, Elm.Syntax.File.File, ModuleCompletionItems ) )
+        parsedModules =
+            packageModules
+                |> List.filterMap
+                    (\( modulePath, fileContent ) ->
+                        case fileContent.asText of
+                            Nothing ->
+                                Nothing
+
+                            Just asString ->
+                                case Elm.Parser.parseToFile asString of
+                                    Err _ ->
+                                        Nothing
+
+                                    Ok syntax ->
+                                        let
+                                            (Elm.Syntax.Node.Node _ moduleDefinition) =
+                                                syntax.moduleDefinition
+
+                                            moduleName : Elm.Syntax.ModuleName.ModuleName
+                                            moduleName =
+                                                Elm.Syntax.Module.moduleName moduleDefinition
+                                        in
+                                        Just
+                                            ( moduleName
+                                            , ( modulePath
+                                              , syntax
+                                              , completionItemsFromModule
+                                                    { fileUri = String.join "/" modulePath
+                                                    , text = asString
+                                                    , syntax = syntax
+                                                    }
+                                              )
+                                            )
+                    )
+
+        state : LanguageServiceState
+        state =
+            { stateBefore
+                | elmPackages =
+                    ( packageVersionIdentifer, parsedModules )
+                        :: stateBefore.elmPackages
+            }
+    in
+    ( LanguageServiceInterface.WorkspaceSummaryResponse
+    , state
+    )
+
+
 {-| <https://microsoft.github.io/monaco-editor/typedoc/interfaces/languages.HoverProvider.html#provideHover>
 -}
 provideHover :
@@ -359,80 +427,87 @@ provideHover :
     -> LanguageServiceState
     -> List String
 provideHover request languageServiceState =
-    case Dict.get request.filePathOpenedInEditor languageServiceState.documentCache of
-        Nothing ->
-            []
-
-        Just currentFileCacheItem ->
-            case currentFileCacheItem.parsedFileLastSuccess of
+    case request.fileLocation of
+        LanguageServiceInterface.WorkspaceFileLocation filePath ->
+            case Dict.get filePath languageServiceState.documentCache of
                 Nothing ->
                     []
 
-                Just parsedFileLastSuccess ->
-                    let
-                        { hoverItems } =
-                            hoverItemsFromParsedModule parsedFileLastSuccess languageServiceState
-                    in
-                    hoverItems
-                        |> List.filterMap
-                            (\( hoverRange, hoverText ) ->
-                                if
-                                    rangeContainsLocation
-                                        ( request.positionLineNumber, request.positionColumn )
-                                        hoverRange
-                                then
-                                    Just hoverText
+                Just currentFileCacheItem ->
+                    case currentFileCacheItem.parsedFileLastSuccess of
+                        Nothing ->
+                            []
 
-                                else
-                                    Nothing
-                            )
+                        Just parsedFileLastSuccess ->
+                            let
+                                { hoverItems } =
+                                    hoverItemsFromParsedModule
+                                        ( parsedFileLastSuccess.syntax
+                                        , parsedFileLastSuccess.completionItems
+                                        , request.fileLocation
+                                        )
+                                        languageServiceState
+                            in
+                            hoverItems
+                                |> List.filterMap
+                                    (\( hoverRange, hoverText ) ->
+                                        if
+                                            rangeContainsLocation
+                                                ( request.positionLineNumber, request.positionColumn )
+                                                hoverRange
+                                        then
+                                            Just hoverText
+
+                                        else
+                                            Nothing
+                                    )
+
+        LanguageServiceInterface.ElmPackageFileLocation packageVersionIdentifer modulePath ->
+            -- TODO
+            []
 
 
 type alias ImportedModule =
-    { fileUri : String
+    { fileLocation : LanguageServiceInterface.FileLocation
     , canonicalName : List String
     , importedName : Elm.Syntax.ModuleName.ModuleName
-    , parsedModule : Maybe ParsedCookedModuleCache
+    , parsedModule : Maybe ( Elm.Syntax.File.File, ModuleCompletionItems )
     , referencesRanges : List Elm.Syntax.Range.Range
     }
 
 
 hoverItemsFromParsedModule :
-    ParsedCookedModuleCache
+    ( Elm.Syntax.File.File, ModuleCompletionItems, LanguageServiceInterface.FileLocation )
     -> LanguageServiceState
     ->
-        { fromDeclarations : List ( Range, LocationUnderFilePath DeclarationRange, String )
+        { fromDeclarations : List ( Range, LocationInFile DeclarationRange, String )
         , hoverItems : List ( Range, String )
         }
-hoverItemsFromParsedModule parsedModule languageServiceState =
+hoverItemsFromParsedModule ( parsedModuleSyntax, currentModuleDeclarations, currentModuleFileLocation ) languageServiceState =
     let
         importedModules : List ImportedModule
         importedModules =
-            importedModulesFromFile parsedModule languageServiceState
+            importedModulesFromFile
+                parsedModuleSyntax
+                languageServiceState
 
         parsedReferences : List (SyntaxNode ( List String, String ))
         parsedReferences =
-            listReferencesInFile parsedModule.syntax
+            listReferencesInFile
+                parsedModuleSyntax
 
-        currentModuleDeclarations :
-            { fromTopLevel :
-                List
-                    { completionItem : CompletionItem
-                    , isExposed : Bool
-                    , range : DeclarationRange
-                    }
-            , fromLocals : List ( CompletionItem, DeclarationRange, Range )
-            }
-        currentModuleDeclarations =
-            parsedModule.completionItems
-
-        localDeclarationsAndImportExposings : List ( DeclarationRange, DeclarationScope, CompletionItem )
+        localDeclarationsAndImportExposings :
+            List
+                ( ( LanguageServiceInterface.FileLocation, DeclarationRange )
+                , DeclarationScope
+                , CompletionItem
+                )
         localDeclarationsAndImportExposings =
             List.concat
                 [ List.concat
                     [ List.map
                         (\fromTopLevel ->
-                            ( fromTopLevel.range
+                            ( ( currentModuleFileLocation, fromTopLevel.range )
                             , TopLevelScope
                             , fromTopLevel.completionItem
                             )
@@ -451,7 +526,10 @@ hoverItemsFromParsedModule parsedModule languageServiceState =
                     ]
                 , List.map
                     (\( completionItem, declRange, scopeRange ) ->
-                        ( declRange, LocalScope scopeRange, completionItem )
+                        ( ( currentModuleFileLocation, declRange )
+                        , LocalScope scopeRange
+                        , completionItem
+                        )
                     )
                     currentModuleDeclarations.fromLocals
                 ]
@@ -473,8 +551,8 @@ hoverItemsFromParsedModule parsedModule languageServiceState =
                                 Nothing ->
                                     { fromTopLevel = [], fromLocals = [] }
 
-                                Just importedParsed ->
-                                    importedParsed.completionItems
+                                Just ( _, importedCompletionItems ) ->
+                                    importedCompletionItems
                           )
                         )
                     )
@@ -488,7 +566,7 @@ hoverItemsFromParsedModule parsedModule languageServiceState =
                             Nothing ->
                                 []
 
-                            Just importedModuleParsed ->
+                            Just ( importedModuleParsedSyntax, _ ) ->
                                 importedModule.referencesRanges
                                     |> List.map
                                         (\range ->
@@ -498,7 +576,7 @@ hoverItemsFromParsedModule parsedModule languageServiceState =
                                                         { importedModuleNameRestAfterPrefix = Nothing
                                                         , importedName = Just importedModule.importedName
                                                         }
-                                                        importedModuleParsed.syntax
+                                                        importedModuleParsedSyntax
                                             in
                                             ( rangeFromRecordRange range
                                             , documentation
@@ -510,14 +588,14 @@ hoverItemsFromParsedModule parsedModule languageServiceState =
             List
                 ( String
                 , ( Maybe Range
-                  , LocationUnderFilePath DeclarationRange
+                  , LocationInFile DeclarationRange
                   , CompletionItem
                   )
                 )
         localModuleItemsBeforeFiltering =
             localDeclarationsAndImportExposings
                 |> List.map
-                    (\( declRange, scope, (CompletionItem completionItemLabel _ _ _) as completionItem ) ->
+                    (\( ( declFileLocation, declRange ), scope, (CompletionItem completionItemLabel _ _ _) as completionItem ) ->
                         let
                             ( maybeFilterRange, completionItemRange ) =
                                 case scope of
@@ -529,9 +607,7 @@ hoverItemsFromParsedModule parsedModule languageServiceState =
                         in
                         ( completionItemLabel
                         , ( maybeFilterRange
-                          , LocationUnderFilePath
-                                parsedModule.fileUri
-                                completionItemRange
+                          , LocationInFile declFileLocation completionItemRange
                           , completionItem
                           )
                         )
@@ -539,7 +615,7 @@ hoverItemsFromParsedModule parsedModule languageServiceState =
 
         getHoverForFunctionOrName :
             SyntaxNode ( Elm.Syntax.ModuleName.ModuleName, String )
-            -> Maybe ( LocationUnderFilePath DeclarationRange, String )
+            -> Maybe ( LocationInFile DeclarationRange, String )
         getHoverForFunctionOrName (SyntaxNode (Range ( startRow, startColumn ) _) ( moduleName, nameInModule )) =
             if moduleName == [] then
                 case Common.assocListGet nameInModule localModuleItemsBeforeFiltering of
@@ -577,8 +653,8 @@ hoverItemsFromParsedModule parsedModule languageServiceState =
                                     in
                                     if itemInsertText == nameInModule && item.isExposed then
                                         Just
-                                            ( LocationUnderFilePath
-                                                referencedModule.fileUri
+                                            ( LocationInFile
+                                                referencedModule.fileLocation
                                                 item.range
                                             , itemDocumentation
                                             )
@@ -589,7 +665,7 @@ hoverItemsFromParsedModule parsedModule languageServiceState =
 
         getForHoversForReferenceNode :
             SyntaxNode ( List String, String )
-            -> List ( Range, LocationUnderFilePath DeclarationRange, String )
+            -> List ( Range, LocationInFile DeclarationRange, String )
         getForHoversForReferenceNode functionOrNameNode =
             let
                 (SyntaxNode wholeRange ( moduleName, nameInModule )) =
@@ -610,7 +686,7 @@ hoverItemsFromParsedModule parsedModule languageServiceState =
                         ( wholeRangeStartLine, wholeRangeEndColumn - String.length nameInModule )
                         ( wholeRangeEndLine, wholeRangeEndColumn )
 
-                forModule : List ( Range, LocationUnderFilePath DeclarationRange, String )
+                forModule : List ( Range, LocationInFile DeclarationRange, String )
                 forModule =
                     if moduleName == [] then
                         []
@@ -631,24 +707,24 @@ hoverItemsFromParsedModule parsedModule languageServiceState =
                                     Nothing ->
                                         []
 
-                                    Just referencedModuleParsed ->
+                                    Just ( referencedModuleParsedSyntax, _ ) ->
                                         let
                                             (CompletionItem _ _ _ documentation) =
                                                 moduleCompletionItemFromModuleSyntax
                                                     { importedModuleNameRestAfterPrefix = Nothing
                                                     , importedName = Just moduleName
                                                     }
-                                                    referencedModuleParsed.syntax
+                                                    referencedModuleParsedSyntax
                                         in
                                         [ ( rangeModulePart
-                                          , LocationUnderFilePath
-                                                referencedModule.fileUri
+                                          , LocationInFile
+                                                referencedModule.fileLocation
                                                 (DeclarationRange rangeModulePart [])
                                           , documentation
                                           )
                                         ]
 
-                forNameInModule : List ( Range, LocationUnderFilePath DeclarationRange, String )
+                forNameInModule : List ( Range, LocationInFile DeclarationRange, String )
                 forNameInModule =
                     case getHoverForFunctionOrName functionOrNameNode of
                         Nothing ->
@@ -666,7 +742,7 @@ hoverItemsFromParsedModule parsedModule languageServiceState =
                 , forNameInModule
                 ]
 
-        fromDeclarations : List ( Range, LocationUnderFilePath DeclarationRange, String )
+        fromDeclarations : List ( Range, LocationInFile DeclarationRange, String )
         fromDeclarations =
             List.concatMap getForHoversForReferenceNode parsedReferences
 
@@ -796,14 +872,14 @@ monacoCompletionItemFromCompletionItem (CompletionItem label insertText kind doc
 provideDefinition :
     LanguageServiceInterface.ProvideDefinitionRequestStruct
     -> LanguageServiceState
-    -> List LanguageServiceInterface.LocationUnderFilePath
+    -> List LanguageServiceInterface.LocationInFile
 provideDefinition request languageServiceState =
     provideDefinitionInternal
         request
         languageServiceState
         |> List.map
-            (\(LocationUnderFilePath filePath (DeclarationRange (Range ( startRow, startColumn ) ( endRow, endColumn )) _)) ->
-                { filePath = filePath
+            (\(LocationInFile fileLocation (DeclarationRange (Range ( startRow, startColumn ) ( endRow, endColumn )) _)) ->
+                { fileLocation = fileLocation
                 , range =
                     { startLineNumber = startRow
                     , startColumn = startColumn
@@ -817,35 +893,46 @@ provideDefinition request languageServiceState =
 provideDefinitionInternal :
     LanguageServiceInterface.ProvideDefinitionRequestStruct
     -> LanguageServiceState
-    -> List (LocationUnderFilePath DeclarationRange)
+    -> List (LocationInFile DeclarationRange)
 provideDefinitionInternal request languageServiceState =
-    case Dict.get request.filePathOpenedInEditor languageServiceState.documentCache of
-        Nothing ->
-            []
-
-        Just currentFileCacheItem ->
-            case currentFileCacheItem.parsedFileLastSuccess of
+    case request.fileLocation of
+        LanguageServiceInterface.WorkspaceFileLocation filePath ->
+            case Dict.get filePath languageServiceState.documentCache of
                 Nothing ->
                     []
 
-                Just parsedFileLastSuccess ->
-                    let
-                        { fromDeclarations } =
-                            hoverItemsFromParsedModule parsedFileLastSuccess languageServiceState
-                    in
-                    fromDeclarations
-                        |> List.filterMap
-                            (\( refRange, locationUnderFile, _ ) ->
-                                if
-                                    rangeContainsLocation
-                                        ( request.positionLineNumber, request.positionColumn )
-                                        refRange
-                                then
-                                    Just locationUnderFile
+                Just currentFileCacheItem ->
+                    case currentFileCacheItem.parsedFileLastSuccess of
+                        Nothing ->
+                            []
 
-                                else
-                                    Nothing
-                            )
+                        Just parsedFileLastSuccess ->
+                            let
+                                { fromDeclarations } =
+                                    hoverItemsFromParsedModule
+                                        ( parsedFileLastSuccess.syntax
+                                        , parsedFileLastSuccess.completionItems
+                                        , request.fileLocation
+                                        )
+                                        languageServiceState
+                            in
+                            fromDeclarations
+                                |> List.filterMap
+                                    (\( refRange, locationUnderFile, _ ) ->
+                                        if
+                                            rangeContainsLocation
+                                                ( request.positionLineNumber, request.positionColumn )
+                                                refRange
+                                        then
+                                            Just locationUnderFile
+
+                                        else
+                                            Nothing
+                                    )
+
+        LanguageServiceInterface.ElmPackageFileLocation packageVersionIdentifer modulePath ->
+            -- TODO
+            []
 
 
 textDocumentSymbol :
@@ -863,57 +950,65 @@ textDocumentSymbol fileUri languageServiceState =
                     []
 
                 Just parsedFileLastSuccess ->
-                    parsedFileLastSuccess.completionItems.fromTopLevel
-                        |> List.map
-                            (\completionItem ->
-                                let
-                                    (CompletionItem label _ completionItemKind _) =
-                                        completionItem.completionItem
+                    textDocumentSymbolFromCompletionItems
+                        parsedFileLastSuccess.completionItems
 
-                                    (DeclarationRange itemRangeWhole _) =
-                                        completionItem.range
 
-                                    monacoRange : Frontend.MonacoEditor.MonacoRange
-                                    monacoRange =
-                                        monacoRangeFromRange itemRangeWhole
+textDocumentSymbolFromCompletionItems :
+    ModuleCompletionItems
+    -> List LanguageServiceInterface.DocumentSymbol
+textDocumentSymbolFromCompletionItems completionItems =
+    completionItems.fromTopLevel
+        |> List.map
+            (\completionItem ->
+                let
+                    (CompletionItem label _ completionItemKind _) =
+                        completionItem.completionItem
 
-                                    symbolKind : LanguageServiceInterface.SymbolKind
-                                    symbolKind =
-                                        case completionItemKind of
-                                            Frontend.MonacoEditor.ConstructorCompletionItemKind ->
-                                                LanguageServiceInterface.SymbolKind_EnumMember
+                    (DeclarationRange itemRangeWhole _) =
+                        completionItem.range
 
-                                            Frontend.MonacoEditor.EnumCompletionItemKind ->
-                                                LanguageServiceInterface.SymbolKind_Enum
+                    monacoRange : Frontend.MonacoEditor.MonacoRange
+                    monacoRange =
+                        monacoRangeFromRange itemRangeWhole
 
-                                            Frontend.MonacoEditor.EnumMemberCompletionItemKind ->
-                                                LanguageServiceInterface.SymbolKind_EnumMember
+                    symbolKind : LanguageServiceInterface.SymbolKind
+                    symbolKind =
+                        case completionItemKind of
+                            Frontend.MonacoEditor.ConstructorCompletionItemKind ->
+                                LanguageServiceInterface.SymbolKind_EnumMember
 
-                                            Frontend.MonacoEditor.FunctionCompletionItemKind ->
-                                                LanguageServiceInterface.SymbolKind_Function
+                            Frontend.MonacoEditor.EnumCompletionItemKind ->
+                                LanguageServiceInterface.SymbolKind_Enum
 
-                                            Frontend.MonacoEditor.ModuleCompletionItemKind ->
-                                                LanguageServiceInterface.SymbolKind_Module
+                            Frontend.MonacoEditor.EnumMemberCompletionItemKind ->
+                                LanguageServiceInterface.SymbolKind_EnumMember
 
-                                            Frontend.MonacoEditor.StructCompletionItemKind ->
-                                                LanguageServiceInterface.SymbolKind_Struct
-                                in
-                                LanguageServiceInterface.DocumentSymbol
-                                    { name = label
-                                    , range = monacoRange
-                                    , selectionRange = monacoRange
-                                    , kind = symbolKind
+                            Frontend.MonacoEditor.FunctionCompletionItemKind ->
+                                LanguageServiceInterface.SymbolKind_Function
 
-                                    -- TODO: Move choice type tags to children
-                                    , children = []
-                                    }
-                            )
+                            Frontend.MonacoEditor.ModuleCompletionItemKind ->
+                                LanguageServiceInterface.SymbolKind_Module
+
+                            Frontend.MonacoEditor.StructCompletionItemKind ->
+                                LanguageServiceInterface.SymbolKind_Struct
+                in
+                LanguageServiceInterface.DocumentSymbol
+                    { name = label
+                    , range = monacoRange
+                    , selectionRange = monacoRange
+                    , kind = symbolKind
+
+                    -- TODO: Move choice type tags to children
+                    , children = []
+                    }
+            )
 
 
 textDocumentReferences :
     LanguageServiceInterface.ProvideReferencesRequestStruct
     -> LanguageServiceState
-    -> List LanguageServiceInterface.LocationUnderFilePath
+    -> List LanguageServiceInterface.LocationInFile
 textDocumentReferences referenceRequest languageServiceState =
     case
         textDocumentReferencesGroupedByFilePath
@@ -926,11 +1021,11 @@ textDocumentReferences referenceRequest languageServiceState =
         Just ( _, references ) ->
             references
                 |> List.concatMap
-                    (\( filePath, ranges ) ->
+                    (\( fileLocation, ranges ) ->
                         ranges
                             |> List.map
                                 (\(Range ( startRow, startColumn ) ( endRow, endColumn )) ->
-                                    { filePath = filePath
+                                    { fileLocation = fileLocation
                                     , range =
                                         { startLineNumber = startRow
                                         , startColumn = startColumn
@@ -945,100 +1040,112 @@ textDocumentReferences referenceRequest languageServiceState =
 textDocumentReferencesGroupedByFilePath :
     LanguageServiceInterface.ProvideReferencesRequestStruct
     -> LanguageServiceState
-    -> Maybe ( ( String, DeclarationRange ), List ( String, List Range ) )
+    ->
+        Maybe
+            ( ( LanguageServiceInterface.FileLocation, DeclarationRange )
+            , List ( LanguageServiceInterface.FileLocation, List Range )
+            )
 textDocumentReferencesGroupedByFilePath referenceRequest languageServiceState =
     let
-        maybeDefinition : Maybe (LocationUnderFilePath DeclarationRange)
+        maybeDefinition : Maybe (LocationInFile DeclarationRange)
         maybeDefinition =
             provideDefinitionInternal
-                { filePathOpenedInEditor = referenceRequest.filePathOpenedInEditor
-                , positionLineNumber = referenceRequest.positionLineNumber
-                , positionColumn = referenceRequest.positionColumn
-                }
+                referenceRequest
                 languageServiceState
                 |> List.head
     in
     case maybeDefinition of
-        Just (LocationUnderFilePath definitionLocationFilePath definitionLocationRange) ->
+        Just (LocationInFile definitionFileLocation definitionLocationRange) ->
             let
                 (DeclarationRange definitionLocationRangeWhole _) =
                     definitionLocationRange
 
-                references : List ( String, List Range )
+                references : List ( LanguageServiceInterface.FileLocation, List Range )
                 references =
-                    findReferences ( definitionLocationFilePath, definitionLocationRangeWhole ) languageServiceState
+                    findReferences ( definitionFileLocation, definitionLocationRangeWhole ) languageServiceState
             in
             Just
-                ( ( definitionLocationFilePath, definitionLocationRange )
+                ( ( definitionFileLocation
+                  , definitionLocationRange
+                  )
                 , references
                 )
 
         Nothing ->
             -- Fallback: try to find a top-level declaration covering this position
-            case Dict.get referenceRequest.filePathOpenedInEditor languageServiceState.documentCache of
-                Nothing ->
+            case referenceRequest.fileLocation of
+                LanguageServiceInterface.ElmPackageFileLocation _ _ ->
+                    -- TODO
                     Nothing
 
-                Just currentFileCacheItem ->
-                    case currentFileCacheItem.parsedFileLastSuccess of
+                LanguageServiceInterface.WorkspaceFileLocation filePathOpenedInEditor ->
+                    case Dict.get filePathOpenedInEditor languageServiceState.documentCache of
                         Nothing ->
                             Nothing
 
-                        Just parsedFile ->
-                            let
-                                pos : ( Int, Int )
-                                pos =
-                                    ( referenceRequest.positionLineNumber, referenceRequest.positionColumn )
-
-                                maybeTopLevelDefinitionLocation : Maybe ( String, DeclarationRange )
-                                maybeTopLevelDefinitionLocation =
-                                    parsedFile.completionItems.fromTopLevel
-                                        |> Common.listMapFind
-                                            (\decl ->
-                                                let
-                                                    (DeclarationRange _ declRangesName) =
-                                                        decl.range
-                                                in
-                                                if
-                                                    List.any
-                                                        (\range ->
-                                                            rangeContainsLocation pos range
-                                                        )
-                                                        declRangesName
-                                                then
-                                                    Just
-                                                        ( parsedFile.fileUri
-                                                        , decl.range
-                                                        )
-
-                                                else
-                                                    Nothing
-                                            )
-                            in
-                            case maybeTopLevelDefinitionLocation of
+                        Just currentFileCacheItem ->
+                            case currentFileCacheItem.parsedFileLastSuccess of
                                 Nothing ->
                                     Nothing
 
-                                Just syntheticDefinitionLocation ->
+                                Just parsedFile ->
                                     let
-                                        ( definitionFilePath, DeclarationRange definitionRange _ ) =
-                                            syntheticDefinitionLocation
+                                        pos : ( Int, Int )
+                                        pos =
+                                            ( referenceRequest.positionLineNumber, referenceRequest.positionColumn )
 
-                                        references =
-                                            findReferences
-                                                ( definitionFilePath, definitionRange )
-                                                languageServiceState
+                                        maybeTopLevelDefinitionLocation : Maybe ( LanguageServiceInterface.FileLocation, DeclarationRange )
+                                        maybeTopLevelDefinitionLocation =
+                                            parsedFile.completionItems.fromTopLevel
+                                                |> Common.listMapFind
+                                                    (\decl ->
+                                                        let
+                                                            (DeclarationRange _ declRangesName) =
+                                                                decl.range
+                                                        in
+                                                        if
+                                                            List.any
+                                                                (\range ->
+                                                                    rangeContainsLocation pos range
+                                                                )
+                                                                declRangesName
+                                                        then
+                                                            Just
+                                                                ( LanguageServiceInterface.WorkspaceFileLocation parsedFile.fileUri
+                                                                , decl.range
+                                                                )
+
+                                                        else
+                                                            Nothing
+                                                    )
                                     in
-                                    Just
-                                        ( syntheticDefinitionLocation
-                                        , references
-                                        )
+                                    case maybeTopLevelDefinitionLocation of
+                                        Nothing ->
+                                            Nothing
+
+                                        Just syntheticDefinitionLocation ->
+                                            let
+                                                ( definitionFileLocation, DeclarationRange definitionRange _ ) =
+                                                    syntheticDefinitionLocation
+
+                                                references : List ( LanguageServiceInterface.FileLocation, List Range )
+                                                references =
+                                                    findReferences
+                                                        ( definitionFileLocation
+                                                        , definitionRange
+                                                        )
+                                                        languageServiceState
+                                            in
+                                            Just
+                                                ( syntheticDefinitionLocation
+                                                , references
+                                                )
 
 
 findReferences :
-    ( String, Range )
+    ( LanguageServiceInterface.FileLocation, Range )
     -> LanguageServiceState
-    -> List ( String, List Range )
+    -> List ( LanguageServiceInterface.FileLocation, List Range )
 findReferences ( targetDefinitionFilePath, targetDefinitionRange ) languageServiceState =
     let
         allParsedModules : List ParsedCookedModuleCache
@@ -1052,17 +1159,22 @@ findReferences ( targetDefinitionFilePath, targetDefinitionRange ) languageServi
 
         findReferencesInModule :
             ParsedCookedModuleCache
-            -> Maybe ( String, List Range )
+            -> Maybe ( LanguageServiceInterface.FileLocation, List Range )
         findReferencesInModule parsedModule =
             let
                 { fromDeclarations } =
-                    hoverItemsFromParsedModule parsedModule languageServiceState
+                    hoverItemsFromParsedModule
+                        ( parsedModule.syntax
+                        , parsedModule.completionItems
+                        , LanguageServiceInterface.WorkspaceFileLocation parsedModule.fileUri
+                        )
+                        languageServiceState
 
                 ranges : List Range
                 ranges =
                     fromDeclarations
                         |> List.filterMap
-                            (\( range, LocationUnderFilePath defFilePath (DeclarationRange defRange _), _ ) ->
+                            (\( range, LocationInFile defFilePath (DeclarationRange defRange _), _ ) ->
                                 if defFilePath == targetDefinitionFilePath && defRange == targetDefinitionRange then
                                     Just range
 
@@ -1075,7 +1187,7 @@ findReferences ( targetDefinitionFilePath, targetDefinitionRange ) languageServi
 
             else
                 Just
-                    ( parsedModule.fileUri
+                    ( LanguageServiceInterface.WorkspaceFileLocation parsedModule.fileUri
                     , ranges
                     )
     in
@@ -1090,7 +1202,7 @@ textDocumentRename :
 textDocumentRename renameParams languageServiceState =
     case
         textDocumentReferencesGroupedByFilePath
-            { filePathOpenedInEditor = renameParams.filePath
+            { fileLocation = LanguageServiceInterface.WorkspaceFileLocation renameParams.filePath
             , positionLineNumber = renameParams.positionLineNumber
             , positionColumn = renameParams.positionColumn
             }
@@ -1099,7 +1211,10 @@ textDocumentRename renameParams languageServiceState =
         Nothing ->
             []
 
-        Just ( ( declFilePath, DeclarationRange _ declNamesRanges ), referencesGroupedByFilePath ) ->
+        Just ( ( LanguageServiceInterface.ElmPackageFileLocation _ _, _ ), _ ) ->
+            []
+
+        Just ( ( LanguageServiceInterface.WorkspaceFileLocation declFilePath, DeclarationRange _ declNamesRanges ), referencesGroupedByFilePath ) ->
             let
                 newName : String
                 newName =
@@ -1117,7 +1232,11 @@ textDocumentRename renameParams languageServiceState =
 
                 declarationFileReferencesEdits : List LanguageServiceInterface.TextEdit
                 declarationFileReferencesEdits =
-                    case Common.assocListGet declFilePath referencesGroupedByFilePath of
+                    case
+                        Common.assocListGet
+                            (LanguageServiceInterface.WorkspaceFileLocation declFilePath)
+                            referencesGroupedByFilePath
+                    of
                         Nothing ->
                             []
 
@@ -1134,22 +1253,27 @@ textDocumentRename renameParams languageServiceState =
                 otherFilesReferencesEdits =
                     referencesGroupedByFilePath
                         |> List.concatMap
-                            (\( filePath, ranges ) ->
-                                if filePath == declFilePath then
-                                    []
+                            (\( fileLocation, ranges ) ->
+                                case fileLocation of
+                                    LanguageServiceInterface.WorkspaceFileLocation filePath ->
+                                        if filePath == declFilePath then
+                                            []
 
-                                else
-                                    [ { filePath = filePath
-                                      , edits =
-                                            List.map
-                                                (\range ->
-                                                    { range = monacoRangeFromRange range
-                                                    , newText = newName
-                                                    }
-                                                )
-                                                ranges
-                                      }
-                                    ]
+                                        else
+                                            [ { filePath = filePath
+                                              , edits =
+                                                    List.map
+                                                        (\range ->
+                                                            { range = monacoRangeFromRange range
+                                                            , newText = newName
+                                                            }
+                                                        )
+                                                        ranges
+                                              }
+                                            ]
+
+                                    LanguageServiceInterface.ElmPackageFileLocation _ _ ->
+                                        []
                             )
 
                 workspaceEdits : List LanguageServiceInterface.TextDocumentEdit
@@ -1272,7 +1396,9 @@ provideCompletionItemsInModule request languageServiceState =
                     )
 
         importedModules =
-            importedModulesFromFile request.fileOpenedInEditor languageServiceState
+            importedModulesFromFile
+                request.fileOpenedInEditor.syntax
+                languageServiceState
 
         currentModuleDeclarations : ModuleCompletionItems
         currentModuleDeclarations =
@@ -1326,8 +1452,8 @@ provideCompletionItemsInModule request languageServiceState =
                     Nothing ->
                         []
 
-                    Just referencedModule ->
-                        referencedModule.completionItems.fromTopLevel
+                    Just ( _, referencedModuleCompletionItems ) ->
+                        referencedModuleCompletionItems.fromTopLevel
                             |> List.filterMap
                                 (\item ->
                                     if item.isExposed then
@@ -1362,13 +1488,13 @@ provideCompletionItemsInModule request languageServiceState =
                             Nothing ->
                                 Nothing
 
-                            Just importedModuleParsed ->
+                            Just ( importedModuleParsedSyntax, _ ) ->
                                 Just
                                     (moduleCompletionItemFromModuleSyntax
                                         { importedName = Just importedModule.importedName
                                         , importedModuleNameRestAfterPrefix = Just importedModuleNameRestAfterPrefix
                                         }
-                                        importedModuleParsed.syntax
+                                        importedModuleParsedSyntax
                                     )
                     )
     in
@@ -1396,19 +1522,13 @@ provideCompletionItemsInModule request languageServiceState =
 
 
 importedModulesFromFile :
-    ParsedCookedModuleCache
+    Elm.Syntax.File.File
     -> LanguageServiceState
-    ->
-        List
-            { fileUri : String
-            , canonicalName : List String
-            , importedName : Elm.Syntax.ModuleName.ModuleName
-            , parsedModule : Maybe ParsedCookedModuleCache
-            , referencesRanges : List Elm.Syntax.Range.Range
-            }
-importedModulesFromFile fileOpenedInEditor languageServiceState =
+    -> List ImportedModule
+importedModulesFromFile fileSyntax languageServiceState =
     let
-        implicitlyImportedModules =
+        implicitlyImportedModulesOld : List ImportedModule
+        implicitlyImportedModulesOld =
             languageServiceState.coreModulesCache
                 |> List.filterMap
                     (\coreModule ->
@@ -1422,10 +1542,11 @@ importedModulesFromFile fileOpenedInEditor languageServiceState =
                                     Elm.Syntax.Module.moduleName moduleDefinition
                             in
                             Just
-                                { fileUri = coreModule.parseResult.fileUri
+                                { fileLocation =
+                                    LanguageServiceInterface.WorkspaceFileLocation coreModule.parseResult.fileUri
                                 , canonicalName = canonicalName
                                 , importedName = canonicalName
-                                , parsedModule = Just coreModule.parseResult
+                                , parsedModule = Just ( coreModule.parseResult.syntax, coreModule.parseResult.completionItems )
                                 , referencesRanges = []
                                 }
 
@@ -1433,23 +1554,76 @@ importedModulesFromFile fileOpenedInEditor languageServiceState =
                             Nothing
                     )
 
-        parsedModuleFromModuleName canonicalModuleName =
-            modulesAvailableForImportFromState languageServiceState
-                |> Common.listFind
-                    (\moduleAvailable ->
-                        let
-                            (Elm.Syntax.Node.Node _ moduleDefinition) =
-                                moduleAvailable.syntax.moduleDefinition
-                        in
-                        if Elm.Syntax.Module.moduleName moduleDefinition == canonicalModuleName then
-                            True
+        implicitlyImportedModules : List ImportedModule
+        implicitlyImportedModules =
+            languageServiceState.elmPackages
+                |> List.concatMap
+                    (\( packageVersionIdentifer, packageModules ) ->
+                        case packageVersionIdentifer of
+                            LanguageServiceInterface.ElmPackageVersion019Identifer "elm/core" _ ->
+                                let
+                                    implicitlyImported : List ImportedModule
+                                    implicitlyImported =
+                                        packageModules
+                                            |> List.filterMap
+                                                (\( moduleModuleName, ( modulePath, moduleSyntax, moduleCompletionItems ) ) ->
+                                                    if elmCoreModuleIsImplicitlyImported moduleModuleName then
+                                                        Just
+                                                            { fileLocation =
+                                                                LanguageServiceInterface.ElmPackageFileLocation packageVersionIdentifer modulePath
+                                                            , canonicalName = moduleModuleName
+                                                            , importedName = moduleModuleName
+                                                            , parsedModule = Just ( moduleSyntax, moduleCompletionItems )
+                                                            , referencesRanges = []
+                                                            }
 
-                        else
-                            False
+                                                    else
+                                                        Nothing
+                                                )
+                                in
+                                implicitlyImported
+
+                            _ ->
+                                []
                     )
 
+        parsedModuleFromModuleName :
+            Elm.Syntax.ModuleName.ModuleName
+            -> Maybe ( LanguageServiceInterface.FileLocation, Elm.Syntax.File.File, ModuleCompletionItems )
+        parsedModuleFromModuleName canonicalModuleName =
+            case
+                modulesAvailableForImportFromState languageServiceState
+                    |> Common.listMapFind
+                        (\moduleAvailable ->
+                            let
+                                (Elm.Syntax.Node.Node _ moduleDefinition) =
+                                    moduleAvailable.syntax.moduleDefinition
+                            in
+                            if Elm.Syntax.Module.moduleName moduleDefinition == canonicalModuleName then
+                                Just
+                                    ( LanguageServiceInterface.WorkspaceFileLocation moduleAvailable.fileUri
+                                    , moduleAvailable.syntax
+                                    , moduleAvailable.completionItems
+                                    )
+
+                            else
+                                Nothing
+                        )
+            of
+                Just fromWorkspace ->
+                    Just fromWorkspace
+
+                Nothing ->
+                    case findModuleInPackagesByModuleName canonicalModuleName languageServiceState of
+                        Just fromPackage ->
+                            Just fromPackage
+
+                        Nothing ->
+                            Nothing
+
+        explicitlyImportedModules : List ImportedModule
         explicitlyImportedModules =
-            fileOpenedInEditor.syntax.imports
+            fileSyntax.imports
                 |> List.filterMap
                     (\(Elm.Syntax.Node.Node _ importSyntax) ->
                         let
@@ -1466,20 +1640,78 @@ importedModulesFromFile fileOpenedInEditor languageServiceState =
                                         moduleAlias
                         in
                         case parsedModuleFromModuleName canonicalName of
-                            Nothing ->
-                                Nothing
-
-                            Just parsedModule ->
+                            Just ( moduleFileLocation, moduleSyntax, moduleCompletionItems ) ->
                                 Just
-                                    { fileUri = parsedModule.fileUri
+                                    { fileLocation = moduleFileLocation
                                     , canonicalName = canonicalName
                                     , importedName = importedName
-                                    , parsedModule = Just parsedModule
+                                    , parsedModule = Just ( moduleSyntax, moduleCompletionItems )
                                     , referencesRanges = [ moduleNameRange ]
                                     }
+
+                            Nothing ->
+                                Nothing
                     )
     in
-    List.concat [ implicitlyImportedModules, explicitlyImportedModules ]
+    List.concat
+        [ implicitlyImportedModules
+        , implicitlyImportedModulesOld
+        , explicitlyImportedModules
+        ]
+
+
+elmCoreModuleIsImplicitlyImported : List String -> Bool
+elmCoreModuleIsImplicitlyImported moduleName =
+    case moduleName of
+        [ "Basics" ] ->
+            True
+
+        [ "List" ] ->
+            True
+
+        [ "Maybe" ] ->
+            True
+
+        [ "Result" ] ->
+            True
+
+        [ "String" ] ->
+            True
+
+        _ ->
+            False
+
+
+findModuleInPackagesByModuleName :
+    Elm.Syntax.ModuleName.ModuleName
+    -> LanguageServiceState
+    -> Maybe ( LanguageServiceInterface.FileLocation, Elm.Syntax.File.File, ModuleCompletionItems )
+findModuleInPackagesByModuleName moduleName languageServiceState =
+    languageServiceState.elmPackages
+        |> Common.listMapFind
+            (\( packageVersionIdentifer, packageModules ) ->
+                case
+                    packageModules
+                        |> List.filterMap
+                            (\( moduleModuleName, ( modulePath, moduleSyntax, moduleCompletionItems ) ) ->
+                                if moduleModuleName == moduleName then
+                                    Just
+                                        ( LanguageServiceInterface.ElmPackageFileLocation packageVersionIdentifer modulePath
+                                        , moduleSyntax
+                                        , moduleCompletionItems
+                                        )
+
+                                else
+                                    Nothing
+                            )
+                        |> List.head
+                of
+                    Nothing ->
+                        Nothing
+
+                    Just moduleCompletionItems ->
+                        Just moduleCompletionItems
+            )
 
 
 modulesAvailableForImportFromState : LanguageServiceState -> List ParsedCookedModuleCache
@@ -1584,8 +1816,28 @@ importExposingsFromFile fileOpenedInEditor languageServiceState =
 
 commonImplicitTopLevelImports :
     LanguageServiceState
-    -> List ( DeclarationRange, CompletionItem )
+    -> List ( ( LanguageServiceInterface.FileLocation, DeclarationRange ), CompletionItem )
 commonImplicitTopLevelImports languageServiceState =
+    if languageServiceState.elmPackages == [] then
+        commonImplicitTopLevelImportsOld languageServiceState
+            |> List.map
+                (\( range, completionItem ) ->
+                    ( ( LanguageServiceInterface.WorkspaceFileLocation "elm/core"
+                        -- TODO: Use constant
+                      , range
+                      )
+                    , completionItem
+                    )
+                )
+
+    else
+        commonImplicitTopLevelImportsNew languageServiceState
+
+
+commonImplicitTopLevelImportsOld :
+    LanguageServiceState
+    -> List ( DeclarationRange, CompletionItem )
+commonImplicitTopLevelImportsOld languageServiceState =
     languageServiceState.coreModulesCache
         |> List.concatMap
             (\coreModule ->
@@ -1599,43 +1851,12 @@ commonImplicitTopLevelImports languageServiceState =
 
                     moduleCompletionItems =
                         coreModule.parseResult.completionItems
-
-                    isItemExposed : CompletionItem -> Bool
-                    isItemExposed (CompletionItem _ itemInsertText _ _) =
-                        case moduleName of
-                            [ "Basics" ] ->
-                                True
-
-                            [ "String" ] ->
-                                case itemInsertText of
-                                    "String" ->
-                                        True
-
-                                    _ ->
-                                        False
-
-                            [ "Maybe" ] ->
-                                case itemInsertText of
-                                    "Maybe" ->
-                                        True
-
-                                    "Just" ->
-                                        True
-
-                                    "Nothing" ->
-                                        True
-
-                                    _ ->
-                                        False
-
-                            _ ->
-                                False
                 in
                 moduleCompletionItems.fromTopLevel
                     |> List.filterMap
                         (\item ->
                             if item.isExposed then
-                                if isItemExposed item.completionItem then
+                                if isItemImplicitlyExposed moduleName item.completionItem then
                                     Just
                                         ( item.range
                                         , item.completionItem
@@ -1648,6 +1869,97 @@ commonImplicitTopLevelImports languageServiceState =
                                 Nothing
                         )
             )
+
+
+commonImplicitTopLevelImportsNew :
+    LanguageServiceState
+    -> List ( ( LanguageServiceInterface.FileLocation, DeclarationRange ), CompletionItem )
+commonImplicitTopLevelImportsNew languageServiceState =
+    languageServiceState.elmPackages
+        |> List.concatMap
+            (\( packageVersionIdentifer, packageModules ) ->
+                case packageVersionIdentifer of
+                    LanguageServiceInterface.ElmPackageVersion019Identifer "elm/core" _ ->
+                        packageModules
+                            |> List.concatMap
+                                (\( moduleName, ( moduleFilePath, _, moduleCompletionItems ) ) ->
+                                    moduleCompletionItems.fromTopLevel
+                                        |> List.filterMap
+                                            (\item ->
+                                                if item.isExposed then
+                                                    if isItemImplicitlyExposed moduleName item.completionItem then
+                                                        Just
+                                                            ( ( LanguageServiceInterface.ElmPackageFileLocation packageVersionIdentifer moduleFilePath
+                                                              , item.range
+                                                              )
+                                                            , item.completionItem
+                                                            )
+
+                                                    else
+                                                        Nothing
+
+                                                else
+                                                    Nothing
+                                            )
+                                )
+
+                    _ ->
+                        []
+            )
+
+
+isItemImplicitlyExposed : Elm.Syntax.ModuleName.ModuleName -> CompletionItem -> Bool
+isItemImplicitlyExposed moduleName (CompletionItem _ itemInsertText _ _) =
+    case moduleName of
+        [ "Basics" ] ->
+            True
+
+        [ "String" ] ->
+            case itemInsertText of
+                "String" ->
+                    True
+
+                _ ->
+                    False
+
+        [ "Maybe" ] ->
+            case itemInsertText of
+                "Maybe" ->
+                    True
+
+                "Just" ->
+                    True
+
+                "Nothing" ->
+                    True
+
+                _ ->
+                    False
+
+        [ "List" ] ->
+            case itemInsertText of
+                "List" ->
+                    True
+
+                _ ->
+                    False
+
+        [ "Result" ] ->
+            case itemInsertText of
+                "Result" ->
+                    True
+
+                "Ok" ->
+                    True
+
+                "Err" ->
+                    True
+
+                _ ->
+                    False
+
+        _ ->
+            False
 
 
 moduleCompletionItemFromModuleSyntax :

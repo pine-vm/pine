@@ -12,10 +12,11 @@ type Response
     = WorkspaceSummaryResponse
     | ProvideHoverResponse (List String)
     | ProvideCompletionItemsResponse (List Frontend.MonacoEditor.MonacoCompletionItem)
-    | ProvideDefinitionResponse (List LocationUnderFilePath)
+    | ProvideDefinitionResponse (List LocationInFile)
     | TextDocumentSymbolResponse (List DocumentSymbol)
-    | TextDocumentReferencesResponse (List LocationUnderFilePath)
+    | TextDocumentReferencesResponse (List LocationInFile)
     | TextDocumentRenameResponse WorkspaceEdit
+
 
  * */
 
@@ -33,7 +34,7 @@ public abstract record Response
         : Response;
 
     public record ProvideDefinitionResponse(
-        IReadOnlyList<LocationUnderFilePath> Locations)
+        IReadOnlyList<LocationInFile> Locations)
         : Response;
 
     public record TextDocumentSymbolResponse(
@@ -41,7 +42,7 @@ public abstract record Response
         : Response;
 
     public record TextDocumentReferencesResponse(
-        IReadOnlyList<LocationUnderFilePath> Locations)
+        IReadOnlyList<LocationInFile> Locations)
         : Response;
 
     public record TextDocumentRenameResponse(
@@ -51,15 +52,55 @@ public abstract record Response
 
 /*
 
-type alias LocationUnderFilePath =
-    { filePath : String
+type alias LocationInFile =
+    { fileLocation : FileLocation
     , range : Frontend.MonacoEditor.MonacoRange
     }
+
+type FileLocation
+    = WorkspaceFileLocation String
+    | ElmPackageFileLocation ElmPackageVersionIdentifer (List String)
+
+
+type ElmPackageVersionIdentifer
+    = ElmPackageVersion019Identifer
+        -- Package name, like "elm/core"
+        String
+        -- version tag
+        String
+
+
  * */
 
-public record LocationUnderFilePath(
-    string FilePath,
+public record LocationInFile(
+    FileLocation FileLocation,
     MonacoEditor.MonacoRange Range);
+
+public abstract record FileLocation
+{
+    public record WorkspaceFileLocation(string FilePath)
+        : FileLocation
+    {
+        override public string ToString() =>
+            "Workspace: " + FilePath;
+    }
+
+    public record ElmPackageFileLocation(
+        ElmPackageVersion019Identifer ElmPackageVersionIdentifer,
+        IReadOnlyList<string> ModulePath)
+        : FileLocation
+    {
+        override public string ToString() =>
+            "Elm package: " +
+            ElmPackageVersionIdentifer.PackageName + "@" +
+            ElmPackageVersionIdentifer.VersionTag + "/" +
+            string.Join("/", ModulePath);
+    }
+}
+
+public record ElmPackageVersion019Identifer(
+    string PackageName,
+    string VersionTag);
 
 
 /*
@@ -278,7 +319,7 @@ public static class ResponseEncoding
             }
 
             var locationsResult =
-                DecodeLocationUnderFilePathList(responseTag.Arguments[0]);
+                DecodeLocationInFileList(responseTag.Arguments[0]);
             {
                 if (locationsResult.IsErrOrNull() is { } err)
                 {
@@ -347,7 +388,7 @@ public static class ResponseEncoding
             }
 
             var locationsResult =
-                DecodeLocationUnderFilePathList(responseTag.Arguments[0]);
+                DecodeLocationInFileList(responseTag.Arguments[0]);
             {
                 if (locationsResult.IsErrOrNull() is { } err)
                 {
@@ -396,7 +437,7 @@ public static class ResponseEncoding
             responseTag.TagName;
     }
 
-    public static Result<string, IReadOnlyList<LocationUnderFilePath>> DecodeLocationUnderFilePathList(
+    public static Result<string, IReadOnlyList<LocationInFile>> DecodeLocationInFileList(
         ElmValue elmValue)
     {
         if (elmValue is not ElmValue.ElmList list)
@@ -404,12 +445,13 @@ public static class ResponseEncoding
             return "Expected Elm list, got: " + elmValue.GetType();
         }
 
-        var locations = new LocationUnderFilePath[list.Elements.Count];
+        var locations = new LocationInFile[list.Elements.Count];
 
         for (var i = 0; i < list.Elements.Count; i++)
         {
             var locationResult =
-                LocationUnderFilePathEncoding.Decode(list.Elements[i]);
+                LocationInFileEncoding.Decode(list.Elements[i]);
+
             {
                 if (locationResult.IsErrOrNull() is { } err)
                 {
@@ -430,15 +472,17 @@ public static class ResponseEncoding
     }
 }
 
-public static class LocationUnderFilePathEncoding
+public static class LocationInFileEncoding
 {
-    public static Result<string, LocationUnderFilePath> Decode(PineValue pineValue)
+    public static Result<string, LocationInFile> Decode(PineValue pineValue)
     {
         var decodeElmValueResult = ElmValueEncoding.PineValueAsElmValue(pineValue, null, null);
 
-        if (decodeElmValueResult.IsErrOrNull() is { } err)
         {
-            return "Failed decoding as Elm value: " + err;
+            if (decodeElmValueResult.IsErrOrNull() is { } err)
+            {
+                return "Failed decoding as Elm value: " + err;
+            }
         }
 
         if (decodeElmValueResult.IsOkOrNull() is not { } elmValue)
@@ -450,29 +494,38 @@ public static class LocationUnderFilePathEncoding
         return Decode(elmValue);
     }
 
-    public static Result<string, LocationUnderFilePath> Decode(ElmValue elmValue)
+    public static Result<string, LocationInFile> Decode(ElmValue elmValue)
     {
         if (elmValue is not ElmValue.ElmRecord record)
         {
             return "Expected Elm record, got: " + elmValue.GetType();
         }
 
-        // We expect exactly 2 fields: filePath, range
+        // We expect exactly 2 fields: fileLocation, range
         if (record.Fields.Count is not 2)
         {
             return "Expected 2 fields, got: " + record.Fields.Count;
         }
 
-        if (record["filePath"] is not { } filePathValue)
+        if (record["fileLocation"] is not { } fileLocationValue)
         {
             return
-                "Expected field 'filePath' to be present, got: " +
+                "Expected field 'fileLocation' to be present, got: " +
                 string.Join(", ", record.Fields.Select(f => f.FieldName));
         }
 
-        if (filePathValue is not ElmValue.ElmString filePathString)
+        var fileLocationDecodeResult =
+            FileLocationEncoding.Decode(fileLocationValue);
+
+        if (fileLocationDecodeResult.IsErrOrNull() is { } fileLocationDecodeErr)
         {
-            return "Expected field 'filePath' to be a string, got: " + filePathValue.GetType();
+            return "Failed decoding file location: " + fileLocationDecodeErr;
+        }
+
+        if (fileLocationDecodeResult.IsOkOrNull() is not { } fileLocation)
+        {
+            throw new System.NotImplementedException
+                ("Unexpected result type: " + fileLocationDecodeResult.GetType());
         }
 
         if (record["range"] is not { } rangeValue)
@@ -496,7 +549,7 @@ public static class LocationUnderFilePathEncoding
                 ("Unexpected result type: " + rangeDecodeResult.GetType());
         }
 
-        return new LocationUnderFilePath(filePathString.Value, range);
+        return new LocationInFile(fileLocation, range);
     }
 }
 
@@ -983,3 +1036,154 @@ public static class TextEditEncoding
     }
 }
 
+public static class FileLocationEncoding
+{
+    public static ElmValue EncodeAsElmValue(FileLocation fileLocation)
+    {
+        return fileLocation switch
+        {
+            FileLocation.WorkspaceFileLocation workspaceFileLocation =>
+                ElmValue.TagInstance(
+                    "WorkspaceFileLocation",
+                    [ElmValue.StringInstance(workspaceFileLocation.FilePath)]),
+
+            FileLocation.ElmPackageFileLocation elmPackageFileLocation =>
+                ElmValue.TagInstance(
+                    "ElmPackageFileLocation",
+                    [
+                        ElmPackageVersionIdentiferEncoding.Encode(elmPackageFileLocation.ElmPackageVersionIdentifer),
+                        ElmValue.ListInstance([..elmPackageFileLocation.ModulePath.Select(mp => new ElmValue.ElmString(mp))])
+                    ]),
+
+            _ =>
+            throw new System.NotImplementedException("Unexpected file location type: " + fileLocation.GetType())
+        };
+    }
+
+    public static Result<string, FileLocation> Decode(ElmValue elmValue)
+    {
+        if (elmValue is not ElmValue.ElmTag tag)
+        {
+            return "Expected Elm tag, got: " + elmValue.GetType();
+        }
+
+        if (tag.TagName is "WorkspaceFileLocation")
+        {
+            if (tag.Arguments.Count is not 1)
+            {
+                return
+                    "Unexpected tag arguments count: " +
+                    tag.Arguments.Count;
+            }
+
+            if (tag.Arguments[0] is not ElmValue.ElmString filePathString)
+            {
+                return
+                    "Unexpected tag argument type: " +
+                    tag.Arguments[0].GetType();
+            }
+            return new FileLocation.WorkspaceFileLocation(filePathString.Value);
+        }
+
+        if (tag.TagName is "ElmPackageFileLocation")
+        {
+            if (tag.Arguments.Count is not 2)
+            {
+                return
+                    "Unexpected tag arguments count: " +
+                    tag.Arguments.Count;
+            }
+
+            var elmPackageVersionIdentiferResult =
+                ElmPackageVersionIdentiferEncoding.Decode(tag.Arguments[0]);
+
+            {
+                if (elmPackageVersionIdentiferResult.IsErrOrNull() is { } err)
+                {
+                    return "Failed decoding Elm package version identifer: " + err;
+                }
+            }
+
+            if (elmPackageVersionIdentiferResult.IsOkOrNull() is not { } elmPackageVersionIdentifer)
+            {
+                throw new System.NotImplementedException
+                    ("Unexpected result type: " + elmPackageVersionIdentiferResult.GetType());
+            }
+
+            if (tag.Arguments[1] is not ElmValue.ElmList modulePathList)
+            {
+                return
+                    "Unexpected tag argument type: " +
+                    tag.Arguments[1].GetType();
+            }
+
+            var modulePath = new string[modulePathList.Elements.Count];
+
+            for (var i = 0; i < modulePathList.Elements.Count; i++)
+            {
+                if (modulePathList.Elements[i] is not ElmValue.ElmString modulePathString)
+                {
+                    return
+                        "Unexpected tag argument type: " +
+                        modulePathList.Elements[i].GetType();
+                }
+                modulePath[i] = modulePathString.Value;
+            }
+
+            return new FileLocation.ElmPackageFileLocation(elmPackageVersionIdentifer, modulePath);
+        }
+
+        return "Unexpected tag name: " + tag.TagName;
+    }
+}
+
+public static class ElmPackageVersionIdentiferEncoding
+{
+    public static ElmValue Encode(ElmPackageVersion019Identifer elmPackageVersionIdentifer)
+    {
+        return ElmValue.TagInstance(
+            "ElmPackageVersion019Identifer",
+            [
+                new ElmValue.ElmString(elmPackageVersionIdentifer.PackageName),
+                new ElmValue.ElmString(elmPackageVersionIdentifer.VersionTag)
+            ]);
+    }
+
+    public static Result<string, ElmPackageVersion019Identifer> Decode(ElmValue elmValue)
+    {
+        if (elmValue is not ElmValue.ElmTag tag)
+        {
+            return "Expected Elm tag, got: " + elmValue.GetType();
+        }
+
+        if (tag.TagName is "ElmPackageVersion019Identifer")
+        {
+            if (tag.Arguments.Count is not 2)
+            {
+                return
+                    "Unexpected tag arguments count: " +
+                    tag.Arguments.Count;
+            }
+
+            if (tag.Arguments[0] is not ElmValue.ElmString packageNameString)
+            {
+                return
+                    "Unexpected tag argument type: " +
+                    tag.Arguments[0].GetType();
+            }
+
+            if (tag.Arguments[1] is not ElmValue.ElmString versionTagString)
+            {
+                return
+                    "Unexpected tag argument type: " +
+                    tag.Arguments[1].GetType();
+            }
+
+            return new ElmPackageVersion019Identifer(
+                PackageName: packageNameString.Value,
+                VersionTag: versionTagString.Value);
+        }
+
+        return "Unexpected tag name: " + tag.TagName;
+    }
+}
