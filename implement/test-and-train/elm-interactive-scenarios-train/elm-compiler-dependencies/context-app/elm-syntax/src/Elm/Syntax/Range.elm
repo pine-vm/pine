@@ -129,11 +129,36 @@ compare left right =
 -}
 compareLocations : Location -> Location -> Order
 compareLocations left right =
-    if left.row < right.row then
+    let
+        leftRow : Int
+        leftRow =
+            left.row
+
+        rightRow : Int
+        rightRow =
+            right.row
+    in
+    if leftRow == rightRow then
+        let
+            leftColumn : Int
+            leftColumn =
+                left.column
+
+            rightColumn : Int
+            rightColumn =
+                right.column
+        in
+        if leftColumn == rightColumn then
+            EQ
+
+        else if leftColumn <= rightColumn then
+            LT
+
+        else
+            GT
+
+    else if leftRow <= rightRow then
         LT
 
-    else if left.row > right.row then
-        GT
-
     else
-        Basics.compare left.column right.column
+        GT

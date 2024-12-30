@@ -1535,10 +1535,18 @@ inlineDeclBlockIfSimple blockDecls expression =
         refsBlockDeclMoreThanOnce =
             List.any
                 (\( declName, _ ) ->
-                    Common.listCount
-                        (\ref -> ref == declName)
-                        aggregateRefs
-                        > 1
+                    let
+                        declNameString : String
+                        declNameString =
+                            declName
+
+                        appearanceCount : Int
+                        appearanceCount =
+                            Common.listCount
+                                (\ref -> ref == declNameString)
+                                aggregateRefs
+                    in
+                    appearanceCount > 1
                 )
                 blockDecls
     in
@@ -2829,6 +2837,120 @@ searchCompileElmSyntaxOperatorOptimized stack operator leftExpr rightExpr =
                                         aggregateArguments
                                     )
                                 )
+
+        ">" ->
+            if exprProvenToBeInt stack.knownTypes leftExpr then
+                if exprProvenToBeInt stack.knownTypes rightExpr then
+                    case compileElmSyntaxExpression stack leftExpr of
+                        Err err ->
+                            Just (Err err)
+
+                        Ok leftExprCompiled ->
+                            case compileElmSyntaxExpression stack rightExpr of
+                                Err err ->
+                                    Just (Err err)
+
+                                Ok rightExprCompiled ->
+                                    Just
+                                        (Ok
+                                            (KernelApplicationExpression
+                                                "negate"
+                                                (KernelApplicationExpression
+                                                    "int_is_sorted_asc"
+                                                    (ListExpression [ leftExprCompiled, rightExprCompiled ])
+                                                )
+                                            )
+                                        )
+
+                else
+                    Nothing
+
+            else
+                Nothing
+
+        ">=" ->
+            if exprProvenToBeInt stack.knownTypes leftExpr then
+                if exprProvenToBeInt stack.knownTypes rightExpr then
+                    case compileElmSyntaxExpression stack leftExpr of
+                        Err err ->
+                            Just (Err err)
+
+                        Ok leftExprCompiled ->
+                            case compileElmSyntaxExpression stack rightExpr of
+                                Err err ->
+                                    Just (Err err)
+
+                                Ok rightExprCompiled ->
+                                    Just
+                                        (Ok
+                                            (KernelApplicationExpression
+                                                "int_is_sorted_asc"
+                                                (ListExpression [ rightExprCompiled, leftExprCompiled ])
+                                            )
+                                        )
+
+                else
+                    Nothing
+
+            else
+                Nothing
+
+        "<" ->
+            if exprProvenToBeInt stack.knownTypes leftExpr then
+                if exprProvenToBeInt stack.knownTypes rightExpr then
+                    case compileElmSyntaxExpression stack leftExpr of
+                        Err err ->
+                            Just (Err err)
+
+                        Ok leftExprCompiled ->
+                            case compileElmSyntaxExpression stack rightExpr of
+                                Err err ->
+                                    Just (Err err)
+
+                                Ok rightExprCompiled ->
+                                    Just
+                                        (Ok
+                                            (KernelApplicationExpression
+                                                "negate"
+                                                (KernelApplicationExpression
+                                                    "int_is_sorted_asc"
+                                                    (ListExpression [ rightExprCompiled, leftExprCompiled ])
+                                                )
+                                            )
+                                        )
+
+                else
+                    Nothing
+
+            else
+                Nothing
+
+        "<=" ->
+            if exprProvenToBeInt stack.knownTypes leftExpr then
+                if exprProvenToBeInt stack.knownTypes rightExpr then
+                    case compileElmSyntaxExpression stack leftExpr of
+                        Err err ->
+                            Just (Err err)
+
+                        Ok leftExprCompiled ->
+                            case compileElmSyntaxExpression stack rightExpr of
+                                Err err ->
+                                    Just (Err err)
+
+                                Ok rightExprCompiled ->
+                                    Just
+                                        (Ok
+                                            (KernelApplicationExpression
+                                                "int_is_sorted_asc"
+                                                (ListExpression [ leftExprCompiled, rightExprCompiled ])
+                                            )
+                                        )
+
+                else
+                    Nothing
+
+            else
+                Nothing
 
         _ ->
             Nothing

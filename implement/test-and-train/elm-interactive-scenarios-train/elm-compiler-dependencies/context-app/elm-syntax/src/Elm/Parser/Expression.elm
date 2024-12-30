@@ -1635,7 +1635,12 @@ infixLeft leftPrecedence symbol =
             Layout.maybeLayout
             (extendedSubExpressionOptimisticLayout
                 (\info ->
-                    if info.leftPrecedence > leftPrecedence then
+                    let
+                        infoLeftPrecedence : Int
+                        infoLeftPrecedence =
+                            info.leftPrecedence
+                    in
+                    if infoLeftPrecedence > leftPrecedence then
                         Ok info
 
                     else
@@ -1669,7 +1674,12 @@ infixNonAssociative leftPrecedence symbol =
             Layout.maybeLayout
             (extendedSubExpressionOptimisticLayout
                 (\info ->
-                    if info.leftPrecedence >= leftPrecedence then
+                    let
+                        infoLeftPrecedence : Int
+                        infoLeftPrecedence =
+                            info.leftPrecedence
+                    in
+                    if infoLeftPrecedence >= leftPrecedence then
                         Ok info
 
                     else
@@ -1717,7 +1727,12 @@ infixRight leftPrecedence symbol =
             Layout.maybeLayout
             (extendedSubExpressionOptimisticLayout
                 (\info ->
-                    if info.leftPrecedence >= leftPrecedence then
+                    let
+                        infoLeftPrecedence : Int
+                        infoLeftPrecedence =
+                            info.leftPrecedence
+                    in
+                    if infoLeftPrecedence >= leftPrecedence then
                         Ok info
 
                     else

@@ -101,8 +101,9 @@
           ]
         ],
         [
-          { "ListAsString": "Conditional" },
+          { "ListAsString": "KernelApplication" },
           [
+            { "ListAsString": "negate" },
             [
               { "ListAsString": "KernelApplication" },
               [
@@ -215,14 +216,6 @@
                   ]
                 ]
               ]
-            ],
-            [
-              { "ListAsString": "Literal" },
-              { "ListAsString": "\u0004" }
-            ],
-            [
-              { "ListAsString": "Literal" },
-              { "ListAsString": "\u0002" }
             ]
           ]
         ],
@@ -234,6 +227,6 @@
     ],
     3,
     [],
-    { "ListAsString": "{-" }
+    { "ListAsString": "-{" }
   ]
 ]

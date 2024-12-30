@@ -2547,16 +2547,12 @@ or 2-part UTF-16 characters.
 -}
 symbolFollowedBy : String -> Parser next -> Parser next
 symbolFollowedBy str (Parser parseNext) =
-    let
-        strLength : Int
-        strLength =
-            String.length str
-    in
     Parser
-        (\s ->
+        (\(PState sSrc sOffset sIndent sRow sCol) ->
             let
-                (PState sSrc sOffset sIndent sRow sCol) =
-                    s
+                strLength : Int
+                strLength =
+                    String.length str
 
                 newOffset : Int
                 newOffset =
@@ -2637,32 +2633,29 @@ This will help with the weird cases like
 -}
 keyword : String -> res -> Parser res
 keyword kwd res =
-    let
-        kwdLength : Int
-        kwdLength =
-            String.length kwd
-    in
     Parser
-        (\s ->
+        (\(PState sSrc sOffset sIndent sRow sCol) ->
             let
-                (PState sSrc sOffset sIndent sRow sCol) =
-                    s
+                kwdLength : Int
+                kwdLength =
+                    String.length kwd
 
                 newOffset : Int
                 newOffset =
                     sOffset + kwdLength
             in
-            if
-                (String.slice sOffset newOffset sSrc == kwd ++ "")
-                    && not (isSubCharAlphaNumOrUnderscore newOffset sSrc)
-            then
-                Good res
-                    (PState sSrc
-                        newOffset
-                        sIndent
-                        sRow
-                        (sCol + kwdLength)
-                    )
+            if String.slice sOffset newOffset sSrc == kwd ++ "" then
+                if isSubCharAlphaNumOrUnderscore newOffset sSrc then
+                    Bad False (ExpectingKeyword sRow sCol kwd)
+
+                else
+                    Good res
+                        (PState sSrc
+                            newOffset
+                            sIndent
+                            sRow
+                            (sCol + kwdLength)
+                        )
 
             else
                 Bad False (ExpectingKeyword sRow sCol kwd)
@@ -2681,33 +2674,30 @@ or 2-part UTF-16 characters.
 -}
 keywordFollowedBy : String -> Parser next -> Parser next
 keywordFollowedBy kwd (Parser parseNext) =
-    let
-        kwdLength : Int
-        kwdLength =
-            String.length kwd
-    in
     Parser
-        (\s ->
+        (\(PState sSrc sOffset sIndent sRow sCol) ->
             let
-                (PState sSrc sOffset sIndent sRow sCol) =
-                    s
+                kwdLength : Int
+                kwdLength =
+                    String.length kwd
 
                 newOffset : Int
                 newOffset =
                     sOffset + kwdLength
             in
-            if
-                (String.slice sOffset newOffset sSrc == kwd ++ "")
-                    && not (isSubCharAlphaNumOrUnderscore newOffset sSrc)
-            then
-                parseNext
-                    (PState sSrc
-                        newOffset
-                        sIndent
-                        sRow
-                        (sCol + kwdLength)
-                    )
-                    |> pStepCommit
+            if String.slice sOffset newOffset sSrc == kwd ++ "" then
+                if isSubCharAlphaNumOrUnderscore newOffset sSrc then
+                    Bad False (ExpectingKeyword sRow sCol kwd)
+
+                else
+                    parseNext
+                        (PState sSrc
+                            newOffset
+                            sIndent
+                            sRow
+                            (sCol + kwdLength)
+                        )
+                        |> pStepCommit
 
             else
                 Bad False (ExpectingKeyword sRow sCol kwd)
@@ -2872,11 +2862,8 @@ followedBySkipWhileWhitespace (Parser parseBefore) =
 skipWhileWhitespaceFollowedBy : Parser next -> Parser next
 skipWhileWhitespaceFollowedBy (Parser parseNext) =
     Parser
-        (\s0 ->
+        (\(PState s0Src s0Offset s0Indent s0Row s0Col) ->
             let
-                (PState s0Src s0Offset s0Indent s0Row s0Col) =
-                    s0
-
                 s1 : State
                 s1 =
                     skipWhileWhitespaceHelp s0Offset s0Row s0Col s0Src s0Indent
@@ -3297,8 +3284,8 @@ nestableMultiCommentMapWithRange rangeContentToRes ( openChar, openTail ) ( clos
             String.cons closeChar closeTail
 
         isNotRelevant : Char -> Bool
-        isNotRelevant char =
-            char /= openChar && char /= closeChar
+        isNotRelevant =
+            charDoesNotEqualAnyOfTwo closeChar openChar
     in
     map2WithRange
         (\range afterOpen contentAfterAfterOpen ->
@@ -3334,6 +3321,15 @@ nestableMultiCommentMapWithRange rangeContentToRes ( openChar, openTail ) ( clos
                 )
             )
         )
+
+
+charDoesNotEqualAnyOfTwo : Char -> Char -> Char -> Bool
+charDoesNotEqualAnyOfTwo a b char =
+    if char == a then
+        False
+
+    else
+        char /= b
 
 
 while : (Char -> Bool) -> Parser String

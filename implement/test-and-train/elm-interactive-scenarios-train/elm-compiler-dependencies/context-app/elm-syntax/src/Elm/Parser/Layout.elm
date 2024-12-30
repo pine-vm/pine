@@ -88,7 +88,18 @@ maybeLayout =
 endsPositivelyIndented : Parser a -> Parser a
 endsPositivelyIndented parser =
     ParserFast.validateEndColumnIndentation
-        (\column indent -> column > indent)
+        (\column indent ->
+            let
+                columnInt : Int
+                columnInt =
+                    column
+
+                indentInt : Int
+                indentInt =
+                    indent
+            in
+            columnInt > indentInt
+        )
         "must be positively indented"
         parser
 
@@ -100,7 +111,16 @@ positivelyIndentedPlusFollowedBy : Int -> Parser a -> Parser a
 positivelyIndentedPlusFollowedBy extraIndent nextParser =
     ParserFast.columnIndentAndThen
         (\column indent ->
-            if column > indent + extraIndent then
+            let
+                columnInt : Int
+                columnInt =
+                    column
+
+                indentInt : Int
+                indentInt =
+                    indent
+            in
+            if columnInt > indentInt + extraIndent then
                 nextParser
 
             else
@@ -112,7 +132,16 @@ positivelyIndentedFollowedBy : Parser a -> Parser a
 positivelyIndentedFollowedBy nextParser =
     ParserFast.columnIndentAndThen
         (\column indent ->
-            if column > indent then
+            let
+                columnInt : Int
+                columnInt =
+                    column
+
+                indentInt : Int
+                indentInt =
+                    indent
+            in
+            if columnInt > indentInt then
                 nextParser
 
             else
