@@ -1,0 +1,2 @@
+Ok (ProvideHoverResponse ["    type alias MaybeInt =
+        Maybe Int"])

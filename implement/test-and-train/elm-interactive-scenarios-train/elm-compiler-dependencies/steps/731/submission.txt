@@ -1,0 +1,260 @@
+moduleText =
+    String.trimLeft """
+module Namespace.Beta exposing (..)
+
+
+type alias MaybeInt =
+    Maybe Int
+
+
+type alias RecordType =
+    { alfa : MaybeInt
+    , beta : String
+    }
+
+
+type ChoiceType
+    = Choice_Alfa
+    | Choice_Beta Int
+
+
+type Expression
+    = LiteralExpression Value
+    | ListExpression (List Expression)
+    | ParseAndEvalExpression
+        -- Encoded
+        Expression
+        -- Environment
+        Expression
+    | KernelApplicationExpression String Expression
+    | ConditionalExpression
+        -- Condition
+        Expression
+        -- False Branch
+        Expression
+        -- True Branch
+        Expression
+    | EnvironmentExpression
+    | StringTagExpression String Expression
+
+
+type Value
+    = BlobValue (List Int)
+    | ListValue (List Value)
+
+
+type alias KernelFunction =
+    Value -> Value
+
+
+type EvalEnvironment
+    = EvalEnvironment Value
+
+
+type PathDescription a
+    = DescribePathNode a (PathDescription a)
+    | DescribePathEnd a
+
+
+environmentFromDeclarations : List ( String, Value ) -> Value
+environmentFromDeclarations declarations =
+    ListValue
+        (List.map valueFromContextExpansionWithName declarations)
+
+
+evalEnvironmentFromList : List Value -> EvalEnvironment
+evalEnvironmentFromList list =
+    EvalEnvironment (ListValue list)
+
+
+emptyEvalEnvironment : EvalEnvironment
+emptyEvalEnvironment =
+    EvalEnvironment listValue_Empty
+
+
+evaluateExpression : EvalEnvironment -> Expression -> Result (PathDescription String) Value
+evaluateExpression context expression =
+    case expression of
+        LiteralExpression value ->
+            Ok value
+
+        ListExpression listElements ->
+            evaluateListExpression [] context listElements
+
+        ParseAndEvalExpression encodedExpr envExpr ->
+            case evaluateParseAndEval context ( encodedExpr, envExpr ) of
+                Err error ->
+                    Err
+                        (DescribePathNode
+                            (\"Failed parse and evaluate of '\" ++ describeExpression 1 encodedExpr ++ \"'\")
+                            error
+                        )
+
+                Ok value ->
+                    Ok value
+
+        KernelApplicationExpression functionName inputExpr ->
+            case evaluateExpression context inputExpr of
+                Err error ->
+                    Err
+                        (DescribePathNode
+                            (\"Failed to evaluate argument for kernel function \" ++ functionName ++ \": \")
+                            error
+                        )
+
+                Ok input ->
+                    case parseKernelFunctionFromName functionName of
+                        Err error ->
+                            Err (DescribePathEnd error)
+
+                        Ok kernelFunction ->
+                            Ok (kernelFunction input)
+
+        ConditionalExpression condition falseBranch trueBranch ->
+            case evaluateExpression context condition of
+                Err error ->
+                    Err (DescribePathNode \"Failed to evaluate condition\" error)
+
+                Ok conditionValue ->
+                    case conditionValue of
+                        BlobValue [ 4 ] ->
+                            evaluateExpression context trueBranch
+
+                        _ ->
+                            evaluateExpression context falseBranch
+
+        EnvironmentExpression ->
+            let
+                (EvalEnvironment environmentValue) =
+                    context
+            in
+            Ok environmentValue
+
+        StringTagExpression tag tagged ->
+            let
+                log =
+                    Debug.log \"eval expression with tag\"
+                        tag
+            in
+            case evaluateExpression context tagged of
+                Err err ->
+                    Err
+                        (DescribePathNode
+                            (\"Failed to evaluate tagged expression '\" ++ tag ++ \"': \")
+                            err
+                        )
+
+                Ok ok ->
+                    Ok ok
+
+
+evaluateListExpression : List Value -> EvalEnvironment -> List Expression -> Result (PathDescription String) Value
+evaluateListExpression completedItems context remainingItems =
+    case remainingItems of
+        [] ->
+            Ok (ListValue (List.reverse completedItems))
+
+        currentItem :: followingItems ->
+            case evaluateExpression context currentItem of
+                Err err ->
+                    Err
+                        (DescribePathNode
+                            (\"Failed to evaluate list item \" ++ String.fromInt (List.length completedItems) ++ \": \")
+                            err
+                        )
+
+                Ok itemValue ->
+                    evaluateListExpression
+                        (itemValue :: completedItems)
+                        context
+                        followingItems
+
+
+valueFromContextExpansionWithName : ( String, Value ) -> Value
+valueFromContextExpansionWithName ( declName, declValue ) =
+    ListValue [ valueFromString declName, declValue ]
+
+
+greet : String -> String
+greet param_name =
+    \"Hello, \" ++ param_name ++ \" !\"
+
+
+fromIntAsList : Int -> List Char
+fromIntAsList int =
+    if Pine_kernel.int_is_sorted_asc [ 0, int ] then
+        fromUnsignedIntAsList int
+
+    else
+        Pine_kernel.concat [ [ '-' ], fromUnsignedIntAsList -int ]
+
+
+fromUnsignedIntAsList : Int -> List Char
+fromUnsignedIntAsList int =
+    fromUnsignedIntAsListHelper int []
+
+
+fromUnsignedIntAsListHelper : Int -> List Char -> List Char
+fromUnsignedIntAsListHelper int lowerDigits =
+    if Pine_kernel.int_is_sorted_asc [ int, 0 ] then
+        if lowerDigits == [] then
+            [ '0' ]
+
+        else
+            lowerDigits
+
+    else
+        let
+            upperDigitsValue : Int
+            upperDigitsValue =
+                int // 10
+
+            digitChar =
+                unsafeDigitCharacterFromValue
+                    (Pine_kernel.int_add
+                        [ int
+                        , Pine_kernel.int_mul [ upperDigitsValue, -10 ]
+                        ]
+                    )
+        in
+        fromUnsignedIntAsListHelper upperDigitsValue (digitChar :: lowerDigits)
+
+
+unsafeDigitCharacterFromValue : Int -> Char
+unsafeDigitCharacterFromValue digitValue =
+    case digitValue of
+        0 ->
+            '0'
+
+        1 ->
+            '1'
+
+        2 ->
+            '2'
+
+        3 ->
+            '3'
+
+        4 ->
+            '4'
+
+        5 ->
+            '5'
+
+        6 ->
+            '6'
+
+        7 ->
+            '7'
+
+        8 ->
+            '8'
+
+        9 ->
+            '9'
+
+        _ ->
+            unsafeDigitCharacterFromValue digitValue
+
+
+"""
