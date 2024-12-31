@@ -1,1 +1,1 @@
-ParserFast.run  Elm.Parser.Expression.expression  "if  alfa  beta  then  delta  else  gamma"
+ParserFast.run  Elm.Parser.Expression.expression  "func_name  arg_name"
