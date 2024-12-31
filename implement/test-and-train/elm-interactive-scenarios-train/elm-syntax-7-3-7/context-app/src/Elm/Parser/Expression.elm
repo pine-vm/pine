@@ -22,38 +22,38 @@ subExpression =
     --   we squeeze out a bit more speed by de-duplicating slices etc
     ParserFast.offsetSourceAndThen
         (\offset source ->
-            case String.slice offset (offset + 1) source of
-                "\"" ->
+            case List.take 1 (List.drop offset source) of
+                [ '"' ] ->
                     literalExpression
 
-                "(" ->
+                [ '(' ] ->
                     tupledExpressionIfNecessaryFollowedByRecordAccess
 
-                "[" ->
+                [ '[' ] ->
                     listOrGlslExpression
 
-                "{" ->
+                [ '{' ] ->
                     recordExpressionFollowedByRecordAccess
 
-                "c" ->
+                [ 'c' ] ->
                     caseOrUnqualifiedReferenceExpression
 
-                "\\" ->
+                [ '\\' ] ->
                     lambdaExpression
 
-                "l" ->
+                [ 'l' ] ->
                     letOrUnqualifiedReferenceExpression
 
-                "i" ->
+                [ 'i' ] ->
                     ifOrUnqualifiedReferenceExpression
 
-                "." ->
+                [ '.' ] ->
                     recordAccessFunctionExpression
 
-                "-" ->
+                [ '-' ] ->
                     negationOperation
 
-                "'" ->
+                [ '\'' ] ->
                     charLiteralExpression
 
                 _ ->
@@ -1060,23 +1060,23 @@ negationOperation =
     ParserFast.symbolBacktrackableFollowedBy "-"
         (ParserFast.offsetSourceAndThen
             (\offset source ->
-                case String.slice (offset - 2) (offset - 1) source of
-                    " " ->
+                case List.take 1 (List.drop (offset - 2) source) of
+                    [ ' ' ] ->
                         negationAfterMinus
 
                     -- not "\n" or "\r" since expressions are always indented
-                    "(" ->
+                    [ '(' ] ->
                         negationAfterMinus
 
-                    ")" ->
+                    [ ')' ] ->
                         negationAfterMinus
 
                     -- from the end of a multiline comment
-                    "}" ->
+                    [ '}' ] ->
                         negationAfterMinus
 
                     -- TODO only for tests
-                    "" ->
+                    [] ->
                         negationAfterMinus
 
                     _ ->

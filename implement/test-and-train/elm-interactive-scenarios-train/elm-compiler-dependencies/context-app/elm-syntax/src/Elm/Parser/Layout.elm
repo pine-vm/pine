@@ -27,12 +27,12 @@ whitespaceAndCommentsOrEmpty =
         -- but expensive to check for, we allow shortcutting
         (ParserFast.offsetSourceAndThenOrSucceed
             (\offset source ->
-                case source |> String.slice offset (offset + 2) of
-                    "--" ->
+                case List.take 2 (List.drop offset source) of
+                    [ '-', '-' ] ->
                         -- this will always succeed from here, so no need to fall back to Rope.empty
                         Just fromSingleLineCommentNode
 
-                    "{-" ->
+                    [ '{', '-' ] ->
                         Just fromMultilineCommentNodeOrEmptyOnProblem
 
                     _ ->

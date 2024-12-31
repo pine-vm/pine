@@ -163,9 +163,6 @@ public class Precompiled
 
         var stringSliceExpression = popularExpressionDictionary["String.slice"];
 
-        var stringAnySliceExpressionValue =
-            ExpressionEncoding.EncodeExpressionAsValue(stringSliceExpression);
-
         var stringSliceExposedValue = popularValueDictionary["String.slice.exposed"];
 
         var dictGetExpression = popularExpressionDictionary["dictGet"];
@@ -852,10 +849,10 @@ public class Precompiled
                 EnvConstraintId.Create(
                     [
                     new KeyValuePair<IReadOnlyList<int>, PineValue>(
-                        [0, 1],
-                        stringSliceExposedValue),
+                        [0, 0],
+                        adaptivePartialApplicationExpressionValue),
                     new KeyValuePair<IReadOnlyList<int>, PineValue>(
-                        [0, 2],
+                        [0, 1],
                         skipWhileWhitespaceHelpExpressionValue),
                     ]);
 
@@ -878,13 +875,12 @@ public class Precompiled
                 EnvConstraintId.Create(
                     [
                     new KeyValuePair<IReadOnlyList<int>, PineValue>(
-                        [0],
-                        PineValue.List(
-                            [
-                            stringAnyExposedValue,
-                            stringSliceExposedValue,
-                            skipWhileWithoutLinebreakHelpExpressionValue,
-                            ])),
+                        [0,0],
+                        adaptivePartialApplicationExpressionValue),
+
+                    new KeyValuePair<IReadOnlyList<int>, PineValue>(
+                        [0,1],
+                        skipWhileWithoutLinebreakHelpExpressionValue),
                     ]);
 
             EnvConstraintId envClassFromPredicate(PineValue predicateValue)
@@ -934,13 +930,12 @@ public class Precompiled
                 EnvConstraintId.Create(
                     [
                     new KeyValuePair<IReadOnlyList<int>, PineValue>(
-                        [0],
-                        PineValue.List(
-                            [
-                            stringAnyExposedValue,
-                            stringSliceExposedValue,
-                            skipWhileHelpExpressionValue,
-                            ])),
+                        [0,0],
+                        adaptivePartialApplicationExpressionValue),
+
+                    new KeyValuePair<IReadOnlyList<int>, PineValue>(
+                        [0,1],
+                        skipWhileHelpExpressionValue),
                     ]);
 
             EnvConstraintId envClassFromPredicate(PineValue predicateValue)
@@ -3701,21 +3696,22 @@ public class Precompiled
         PineVMParseCache parseCache)
     {
         /*
-        skipWhileWhitespaceHelp : Int -> Int -> Int -> String -> Int -> State
+        skipWhileWhitespaceHelp : Int -> Int -> Int -> List Char -> Int -> State
         skipWhileWhitespaceHelp offset row col src indent =
-            case String.slice offset (offset + 1) src of
-                " " ->
+            case List.take 1 (List.drop offset src) of
+                [ ' ' ] ->
                     skipWhileWhitespaceHelp (offset + 1) row (col + 1) src indent
 
-                "\n" ->
+                [ '\n' ] ->
                     skipWhileWhitespaceHelp (offset + 1) (row + 1) 1 src indent
 
-                "\u{000D}" ->
+                [ '\u{000D}' ] ->
                     skipWhileWhitespaceHelp (offset + 1) row (col + 1) src indent
 
                 -- empty or non-whitespace
                 _ ->
                     PState src offset indent row col
+
          * */
 
 
@@ -3728,11 +3724,8 @@ public class Precompiled
         var colValue =
             PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 2]);
 
-        var srcValue =
-            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 3]);
-
         var srcCharsValue =
-            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 3, 1, 0]);
+            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 3]);
 
         var indentValue =
             PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 4]);
@@ -3812,7 +3805,7 @@ public class Precompiled
                     Tag_PState_Name_Value,
                     PineValue.List(
                         [
-                        srcValue,
+                        srcCharsValue,
                         PineValueAsInteger.ValueFromSignedInteger(offset),
                         indentValue,
                         PineValueAsInteger.ValueFromSignedInteger(row),
@@ -3830,19 +3823,20 @@ public class Precompiled
         PineVMParseCache parseCache)
     {
         /*
-        skipWhileWithoutLinebreakHelp : (Char -> Bool) -> Int -> Int -> Int -> String -> Int -> State
+        skipWhileWithoutLinebreakHelp : (Char -> Bool) -> Int -> Int -> Int -> List Char -> Int -> State
         skipWhileWithoutLinebreakHelp isGood offset row col src indent =
-            let
-                actualChar : String
-                actualChar =
-                    String.slice offset (offset + 1) src
-            in
-            if String.any isGood actualChar then
-                skipWhileWithoutLinebreakHelp isGood (offset + 1) row (col + 1) src indent
+            case List.take 1 (List.drop offset src) of
+                actualChar :: _ ->
+                    if isGood actualChar then
+                        skipWhileWithoutLinebreakHelp isGood (offset + 1) row (col + 1) src indent
 
-            else
-                -- no match
-                PState src offset indent row col
+                    else
+                        -- no match
+                        PState src offset indent row col
+
+                [] ->
+                    -- no match
+                    PState src offset indent row col
          * */
 
         var isGoodFunctionValue =
@@ -3935,19 +3929,20 @@ public class Precompiled
         Func<PineValue, bool> charValuePredicate)
     {
         /*
-        skipWhileWithoutLinebreakHelp : (Char -> Bool) -> Int -> Int -> Int -> String -> Int -> State
+        skipWhileWithoutLinebreakHelp : (Char -> Bool) -> Int -> Int -> Int -> List Char -> Int -> State
         skipWhileWithoutLinebreakHelp isGood offset row col src indent =
-            let
-                actualChar : String
-                actualChar =
-                    String.slice offset (offset + 1) src
-            in
-            if String.any isGood actualChar then
-                skipWhileWithoutLinebreakHelp isGood (offset + 1) row (col + 1) src indent
+            case List.take 1 (List.drop offset src) of
+                actualChar :: _ ->
+                    if isGood actualChar then
+                        skipWhileWithoutLinebreakHelp isGood (offset + 1) row (col + 1) src indent
 
-            else
-                -- no match
-                PState src offset indent row col
+                    else
+                        -- no match
+                        PState src offset indent row col
+
+                [] ->
+                    -- no match
+                    PState src offset indent row col
          * */
 
         var offsetValue =
@@ -3959,11 +3954,8 @@ public class Precompiled
         var colValue =
             PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 3]);
 
-        var srcValue =
-            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 4]);
-
         var srcCharsValue =
-            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 4, 1, 0]);
+            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 4]);
 
         var indentValue =
             PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 5]);
@@ -4011,7 +4003,7 @@ public class Precompiled
                     Tag_PState_Name_Value,
                     PineValue.List(
                         [
-                        srcValue,
+                        srcCharsValue,
                         PineValueAsInteger.ValueFromSignedInteger(offset),
                         indentValue,
                         rowValue,
@@ -4046,25 +4038,25 @@ public class Precompiled
         Func<PineValue, bool> charValuePredicate)
     {
         /*
-        skipWhileHelp : (Char -> Bool) -> Int -> Int -> Int -> String -> Int -> State
+        skipWhileHelp : (Char -> Bool) -> Int -> Int -> Int -> List Char -> Int -> State
         skipWhileHelp isGood offset row col src indent =
-            let
-                actualChar : String
-                actualChar =
-                    String.slice offset (offset + 1) src
-            in
-            if String.any isGood actualChar then
-                case actualChar of
-                    "\n" ->
-                        skipWhileHelp isGood (offset + 1) (row + 1) 1 src indent
+            case List.take 1 (List.drop offset src) of
+                actualChar :: _ ->
+                    if isGood actualChar then
+                        case actualChar of
+                            '\n' ->
+                                skipWhileHelp isGood (offset + 1) (row + 1) 1 src indent
 
-                    _ ->
-                        skipWhileHelp isGood (offset + 1) row (col + 1) src indent
+                            _ ->
+                                skipWhileHelp isGood (offset + 1) row (col + 1) src indent
 
-            else
-                -- no match
-                PState src offset indent row col
+                    else
+                        -- no match
+                        PState src offset indent row col
 
+                [] ->
+                    -- no match
+                    PState src offset indent row col
          * 
          * */
 
@@ -4077,11 +4069,8 @@ public class Precompiled
         var colValue =
             PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 3]);
 
-        var srcValue =
-            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 4]);
-
         var srcCharsValue =
-            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 4, 1, 0]);
+            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 4]);
 
         var indentValue =
             PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 5]);
@@ -4146,7 +4135,7 @@ public class Precompiled
                 Tag_PState_Name_Value,
                 PineValue.List(
                     [
-                    srcValue,
+                    srcCharsValue,
                     PineValueAsInteger.ValueFromSignedInteger(offset),
                     indentValue,
                     PineValueAsInteger.ValueFromSignedInteger(row),

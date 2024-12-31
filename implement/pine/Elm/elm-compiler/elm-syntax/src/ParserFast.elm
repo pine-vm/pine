@@ -162,7 +162,7 @@ type PStep value
 
 
 type State
-    = PState String Int Int Int Int
+    = PState (List Char) Int Int Int Int
 
 
 {-| Try a parser. Here are some examples using the [`keyword`](#keyword)
@@ -186,9 +186,14 @@ to avoid breaking changes
 -}
 run : Parser a -> String -> Result (List Parser.DeadEnd) a
 run (Parser parse) src =
-    case parse (PState src 0 1 1 1) of
+    let
+        srcChars : List Char
+        srcChars =
+            String.toList src
+    in
+    case parse (PState srcChars 0 1 1 1) of
         Good value (PState finalSrc finalOffset _ finalRow finalCol) ->
-            if finalOffset - String.length finalSrc == 0 then
+            if finalOffset - List.length finalSrc == 0 then
                 Ok value
 
             else
@@ -377,7 +382,7 @@ character may take two slots. So in JavaScript, `'abc'.length === 3` but
 moves by those rules.
 
 -}
-offsetSourceAndThen : (Int -> String -> Parser a) -> Parser a
+offsetSourceAndThen : (Int -> List Char -> Parser a) -> Parser a
 offsetSourceAndThen callback =
     Parser
         (\s ->
@@ -392,7 +397,7 @@ offsetSourceAndThen callback =
         )
 
 
-offsetSourceAndThenOrSucceed : (Int -> String -> Maybe (Parser a)) -> a -> Parser a
+offsetSourceAndThenOrSucceed : (Int -> List Char -> Maybe (Parser a)) -> a -> Parser a
 offsetSourceAndThenOrSucceed callback fallback =
     Parser
         (\s ->
@@ -1909,10 +1914,11 @@ integerDecimalOrHexadecimalMapWithRange rangeAndIntDecimalToRes rangeAndIntHexad
 floatOrIntegerDecimalOrHexadecimalMapWithRange : (Range -> Float -> res) -> (Range -> Int -> res) -> (Range -> Int -> res) -> Parser res
 floatOrIntegerDecimalOrHexadecimalMapWithRange rangeAndFloatToRes rangeAndIntDecimalToRes rangeAndIntHexadecimalToRes =
     Parser
-        (\s0 ->
+        (\(PState s0Src s0Offset s0Indent s0Row s0Col) ->
             let
-                (PState s0Src s0Offset s0Indent s0Row s0Col) =
-                    s0
+                s0OffsetInt : Int
+                s0OffsetInt =
+                    s0Offset
 
                 s1 : { base : Base, offsetAndInt : { int : Int, offset : Int } }
                 s1 =
@@ -1931,7 +1937,7 @@ floatOrIntegerDecimalOrHexadecimalMapWithRange rangeAndFloatToRes rangeAndIntDec
                     let
                         newColumn : Int
                         newColumn =
-                            s0Col + (s1.offsetAndInt.offset - s0Offset)
+                            s0Col + (s1.offsetAndInt.offset - s0OffsetInt)
 
                         range : Range
                         range =
@@ -1956,12 +1962,19 @@ floatOrIntegerDecimalOrHexadecimalMapWithRange rangeAndFloatToRes rangeAndIntDec
                         )
 
                 else
-                    case String.toFloat (String.slice s0Offset offsetAfterFloat s0Src) of
+                    let
+                        slice : List Char
+                        slice =
+                            List.take
+                                (offsetAfterFloat - s0OffsetInt)
+                                (List.drop s0OffsetInt s0Src)
+                    in
+                    case String.toFloat (String.fromList slice) of
                         Just float ->
                             let
                                 newColumn : Int
                                 newColumn =
-                                    s0Col + (offsetAfterFloat - s0Offset)
+                                    s0Col + (offsetAfterFloat - s0OffsetInt)
                             in
                             Good
                                 (rangeAndFloatToRes
@@ -1983,10 +1996,10 @@ floatOrIntegerDecimalOrHexadecimalMapWithRange rangeAndFloatToRes rangeAndIntDec
         )
 
 
-skipFloatAfterIntegerDecimal : Int -> String -> Int
+skipFloatAfterIntegerDecimal : Int -> List Char -> Int
 skipFloatAfterIntegerDecimal offset src =
-    case String.slice offset (offset + 1) src of
-        "." ->
+    case List.take 1 (List.drop offset src) of
+        [ '.' ] ->
             let
                 offsetAfterDigits : Int
                 offsetAfterDigits =
@@ -1996,253 +2009,253 @@ skipFloatAfterIntegerDecimal offset src =
                 -1
 
             else
-                case String.slice offsetAfterDigits (offsetAfterDigits + 1) src of
-                    "e" ->
+                case List.take 1 (List.drop offsetAfterDigits src) of
+                    [ 'e' ] ->
                         skipAfterFloatExponentMark (offsetAfterDigits + 1) src
 
-                    "E" ->
+                    [ 'E' ] ->
                         skipAfterFloatExponentMark (offsetAfterDigits + 1) src
 
                     _ ->
                         offsetAfterDigits
 
-        "e" ->
+        [ 'e' ] ->
             skipAfterFloatExponentMark (offset + 1) src
 
-        "E" ->
+        [ 'E' ] ->
             skipAfterFloatExponentMark (offset + 1) src
 
         _ ->
             -1
 
 
-skipAfterFloatExponentMark : Int -> String -> Int
+skipAfterFloatExponentMark : Int -> List Char -> Int
 skipAfterFloatExponentMark offset src =
-    case String.slice offset (offset + 1) src of
-        "+" ->
+    case List.take 1 (List.drop offset src) of
+        [ '+' ] ->
             skip1OrMoreDigits0To9 (offset + 1) src
 
-        "-" ->
+        [ '-' ] ->
             skip1OrMoreDigits0To9 (offset + 1) src
 
         _ ->
             skip1OrMoreDigits0To9 offset src
 
 
-skip1OrMoreDigits0To9 : Int -> String -> Int
+skip1OrMoreDigits0To9 : Int -> List Char -> Int
 skip1OrMoreDigits0To9 offset src =
-    case String.slice offset (offset + 1) src of
-        "0" ->
+    case List.take 1 (List.drop offset src) of
+        [ '0' ] ->
             skip0OrMoreDigits0To9 (offset + 1) src
 
-        "1" ->
+        [ '1' ] ->
             skip0OrMoreDigits0To9 (offset + 1) src
 
-        "2" ->
+        [ '2' ] ->
             skip0OrMoreDigits0To9 (offset + 1) src
 
-        "3" ->
+        [ '3' ] ->
             skip0OrMoreDigits0To9 (offset + 1) src
 
-        "4" ->
+        [ '4' ] ->
             skip0OrMoreDigits0To9 (offset + 1) src
 
-        "5" ->
+        [ '5' ] ->
             skip0OrMoreDigits0To9 (offset + 1) src
 
-        "6" ->
+        [ '6' ] ->
             skip0OrMoreDigits0To9 (offset + 1) src
 
-        "7" ->
+        [ '7' ] ->
             skip0OrMoreDigits0To9 (offset + 1) src
 
-        "8" ->
+        [ '8' ] ->
             skip0OrMoreDigits0To9 (offset + 1) src
 
-        "9" ->
+        [ '9' ] ->
             skip0OrMoreDigits0To9 (offset + 1) src
 
         _ ->
             -1
 
 
-skip0OrMoreDigits0To9 : Int -> String -> Int
+skip0OrMoreDigits0To9 : Int -> List Char -> Int
 skip0OrMoreDigits0To9 offset src =
-    case String.slice offset (offset + 1) src of
-        "0" ->
+    case List.take 1 (List.drop offset src) of
+        [ '0' ] ->
             skip0OrMoreDigits0To9 (offset + 1) src
 
-        "1" ->
+        [ '1' ] ->
             skip0OrMoreDigits0To9 (offset + 1) src
 
-        "2" ->
+        [ '2' ] ->
             skip0OrMoreDigits0To9 (offset + 1) src
 
-        "3" ->
+        [ '3' ] ->
             skip0OrMoreDigits0To9 (offset + 1) src
 
-        "4" ->
+        [ '4' ] ->
             skip0OrMoreDigits0To9 (offset + 1) src
 
-        "5" ->
+        [ '5' ] ->
             skip0OrMoreDigits0To9 (offset + 1) src
 
-        "6" ->
+        [ '6' ] ->
             skip0OrMoreDigits0To9 (offset + 1) src
 
-        "7" ->
+        [ '7' ] ->
             skip0OrMoreDigits0To9 (offset + 1) src
 
-        "8" ->
+        [ '8' ] ->
             skip0OrMoreDigits0To9 (offset + 1) src
 
-        "9" ->
+        [ '9' ] ->
             skip0OrMoreDigits0To9 (offset + 1) src
 
         _ ->
             offset
 
 
-convert1OrMoreHexadecimal : Int -> String -> { int : Int, offset : Int }
+convert1OrMoreHexadecimal : Int -> List Char -> { int : Int, offset : Int }
 convert1OrMoreHexadecimal offset src =
-    case String.slice offset (offset + 1) src of
-        "0" ->
+    case List.take 1 (List.drop offset src) of
+        [ '0' ] ->
             convert0OrMoreHexadecimal 0 (offset + 1) src
 
-        "1" ->
+        [ '1' ] ->
             convert0OrMoreHexadecimal 1 (offset + 1) src
 
-        "2" ->
+        [ '2' ] ->
             convert0OrMoreHexadecimal 2 (offset + 1) src
 
-        "3" ->
+        [ '3' ] ->
             convert0OrMoreHexadecimal 3 (offset + 1) src
 
-        "4" ->
+        [ '4' ] ->
             convert0OrMoreHexadecimal 4 (offset + 1) src
 
-        "5" ->
+        [ '5' ] ->
             convert0OrMoreHexadecimal 5 (offset + 1) src
 
-        "6" ->
+        [ '6' ] ->
             convert0OrMoreHexadecimal 6 (offset + 1) src
 
-        "7" ->
+        [ '7' ] ->
             convert0OrMoreHexadecimal 7 (offset + 1) src
 
-        "8" ->
+        [ '8' ] ->
             convert0OrMoreHexadecimal 8 (offset + 1) src
 
-        "9" ->
+        [ '9' ] ->
             convert0OrMoreHexadecimal 9 (offset + 1) src
 
-        "a" ->
+        [ 'a' ] ->
             convert0OrMoreHexadecimal 10 (offset + 1) src
 
-        "A" ->
+        [ 'A' ] ->
             convert0OrMoreHexadecimal 10 (offset + 1) src
 
-        "b" ->
+        [ 'b' ] ->
             convert0OrMoreHexadecimal 11 (offset + 1) src
 
-        "B" ->
+        [ 'B' ] ->
             convert0OrMoreHexadecimal 11 (offset + 1) src
 
-        "c" ->
+        [ 'c' ] ->
             convert0OrMoreHexadecimal 12 (offset + 1) src
 
-        "C" ->
+        [ 'C' ] ->
             convert0OrMoreHexadecimal 12 (offset + 1) src
 
-        "d" ->
+        [ 'd' ] ->
             convert0OrMoreHexadecimal 13 (offset + 1) src
 
-        "D" ->
+        [ 'D' ] ->
             convert0OrMoreHexadecimal 13 (offset + 1) src
 
-        "e" ->
+        [ 'e' ] ->
             convert0OrMoreHexadecimal 14 (offset + 1) src
 
-        "E" ->
+        [ 'E' ] ->
             convert0OrMoreHexadecimal 14 (offset + 1) src
 
-        "f" ->
+        [ 'f' ] ->
             convert0OrMoreHexadecimal 15 (offset + 1) src
 
-        "F" ->
+        [ 'F' ] ->
             convert0OrMoreHexadecimal 15 (offset + 1) src
 
         _ ->
             { int = 0, offset = -1 }
 
 
-convert0OrMoreHexadecimal : Int -> Int -> String -> { int : Int, offset : Int }
+convert0OrMoreHexadecimal : Int -> Int -> List Char -> { int : Int, offset : Int }
 convert0OrMoreHexadecimal soFar offset src =
-    case String.slice offset (offset + 1) src of
-        "0" ->
+    case List.take 1 (List.drop offset src) of
+        [ '0' ] ->
             convert0OrMoreHexadecimal (soFar * 16) (offset + 1) src
 
-        "1" ->
+        [ '1' ] ->
             convert0OrMoreHexadecimal (soFar * 16 + 1) (offset + 1) src
 
-        "2" ->
+        [ '2' ] ->
             convert0OrMoreHexadecimal (soFar * 16 + 2) (offset + 1) src
 
-        "3" ->
+        [ '3' ] ->
             convert0OrMoreHexadecimal (soFar * 16 + 3) (offset + 1) src
 
-        "4" ->
+        [ '4' ] ->
             convert0OrMoreHexadecimal (soFar * 16 + 4) (offset + 1) src
 
-        "5" ->
+        [ '5' ] ->
             convert0OrMoreHexadecimal (soFar * 16 + 5) (offset + 1) src
 
-        "6" ->
+        [ '6' ] ->
             convert0OrMoreHexadecimal (soFar * 16 + 6) (offset + 1) src
 
-        "7" ->
+        [ '7' ] ->
             convert0OrMoreHexadecimal (soFar * 16 + 7) (offset + 1) src
 
-        "8" ->
+        [ '8' ] ->
             convert0OrMoreHexadecimal (soFar * 16 + 8) (offset + 1) src
 
-        "9" ->
+        [ '9' ] ->
             convert0OrMoreHexadecimal (soFar * 16 + 9) (offset + 1) src
 
-        "a" ->
+        [ 'a' ] ->
             convert0OrMoreHexadecimal (soFar * 16 + 10) (offset + 1) src
 
-        "A" ->
+        [ 'A' ] ->
             convert0OrMoreHexadecimal (soFar * 16 + 10) (offset + 1) src
 
-        "b" ->
+        [ 'b' ] ->
             convert0OrMoreHexadecimal (soFar * 16 + 11) (offset + 1) src
 
-        "B" ->
+        [ 'B' ] ->
             convert0OrMoreHexadecimal (soFar * 16 + 11) (offset + 1) src
 
-        "c" ->
+        [ 'c' ] ->
             convert0OrMoreHexadecimal (soFar * 16 + 12) (offset + 1) src
 
-        "C" ->
+        [ 'C' ] ->
             convert0OrMoreHexadecimal (soFar * 16 + 12) (offset + 1) src
 
-        "d" ->
+        [ 'd' ] ->
             convert0OrMoreHexadecimal (soFar * 16 + 13) (offset + 1) src
 
-        "D" ->
+        [ 'D' ] ->
             convert0OrMoreHexadecimal (soFar * 16 + 13) (offset + 1) src
 
-        "e" ->
+        [ 'e' ] ->
             convert0OrMoreHexadecimal (soFar * 16 + 14) (offset + 1) src
 
-        "E" ->
+        [ 'E' ] ->
             convert0OrMoreHexadecimal (soFar * 16 + 14) (offset + 1) src
 
-        "f" ->
+        [ 'f' ] ->
             convert0OrMoreHexadecimal (soFar * 16 + 15) (offset + 1) src
 
-        "F" ->
+        [ 'F' ] ->
             convert0OrMoreHexadecimal (soFar * 16 + 15) (offset + 1) src
 
         _ ->
@@ -2254,12 +2267,12 @@ type Base
     | Hexadecimal
 
 
-convertIntegerDecimalOrHexadecimal : Int -> String -> { base : Base, offsetAndInt : { int : Int, offset : Int } }
+convertIntegerDecimalOrHexadecimal : Int -> List Char -> { base : Base, offsetAndInt : { int : Int, offset : Int } }
 convertIntegerDecimalOrHexadecimal offset src =
-    case String.slice offset (offset + 1) src of
-        "0" ->
-            case String.slice (offset + 1) (offset + 2) src of
-                "x" ->
+    case List.take 1 (List.drop offset src) of
+        [ '0' ] ->
+            case List.take 1 (List.drop (offset + 1) src) of
+                [ 'x' ] ->
                     let
                         --_ = Debug.todo "not huh"
                         hex : { int : Int, offset : Int }
@@ -2271,31 +2284,31 @@ convertIntegerDecimalOrHexadecimal offset src =
                 _ ->
                     { base = Decimal, offsetAndInt = { int = 0, offset = offset + 1 } }
 
-        "1" ->
+        [ '1' ] ->
             { base = Decimal, offsetAndInt = convert0OrMore0To9s 1 (offset + 1) src }
 
-        "2" ->
+        [ '2' ] ->
             { base = Decimal, offsetAndInt = convert0OrMore0To9s 2 (offset + 1) src }
 
-        "3" ->
+        [ '3' ] ->
             { base = Decimal, offsetAndInt = convert0OrMore0To9s 3 (offset + 1) src }
 
-        "4" ->
+        [ '4' ] ->
             { base = Decimal, offsetAndInt = convert0OrMore0To9s 4 (offset + 1) src }
 
-        "5" ->
+        [ '5' ] ->
             { base = Decimal, offsetAndInt = convert0OrMore0To9s 5 (offset + 1) src }
 
-        "6" ->
+        [ '6' ] ->
             { base = Decimal, offsetAndInt = convert0OrMore0To9s 6 (offset + 1) src }
 
-        "7" ->
+        [ '7' ] ->
             { base = Decimal, offsetAndInt = convert0OrMore0To9s 7 (offset + 1) src }
 
-        "8" ->
+        [ '8' ] ->
             { base = Decimal, offsetAndInt = convert0OrMore0To9s 8 (offset + 1) src }
 
-        "9" ->
+        [ '9' ] ->
             { base = Decimal, offsetAndInt = convert0OrMore0To9s 9 (offset + 1) src }
 
         _ ->
@@ -2307,37 +2320,37 @@ errorAsBaseOffsetAndInt =
     { base = Decimal, offsetAndInt = { int = 0, offset = -1 } }
 
 
-convertIntegerDecimal : Int -> String -> { int : Int, offset : Int }
+convertIntegerDecimal : Int -> List Char -> { int : Int, offset : Int }
 convertIntegerDecimal offset src =
-    case String.slice offset (offset + 1) src of
-        "0" ->
+    case List.take 1 (List.drop offset src) of
+        [ '0' ] ->
             { int = 0, offset = offset + 1 }
 
-        "1" ->
+        [ '1' ] ->
             convert0OrMore0To9s 1 (offset + 1) src
 
-        "2" ->
+        [ '2' ] ->
             convert0OrMore0To9s 2 (offset + 1) src
 
-        "3" ->
+        [ '3' ] ->
             convert0OrMore0To9s 3 (offset + 1) src
 
-        "4" ->
+        [ '4' ] ->
             convert0OrMore0To9s 4 (offset + 1) src
 
-        "5" ->
+        [ '5' ] ->
             convert0OrMore0To9s 5 (offset + 1) src
 
-        "6" ->
+        [ '6' ] ->
             convert0OrMore0To9s 6 (offset + 1) src
 
-        "7" ->
+        [ '7' ] ->
             convert0OrMore0To9s 7 (offset + 1) src
 
-        "8" ->
+        [ '8' ] ->
             convert0OrMore0To9s 8 (offset + 1) src
 
-        "9" ->
+        [ '9' ] ->
             convert0OrMore0To9s 9 (offset + 1) src
 
         _ ->
@@ -2349,37 +2362,37 @@ errorAsOffsetAndInt =
     { int = 0, offset = -1 }
 
 
-convert0OrMore0To9s : Int -> Int -> String -> { int : Int, offset : Int }
+convert0OrMore0To9s : Int -> Int -> List Char -> { int : Int, offset : Int }
 convert0OrMore0To9s soFar offset src =
-    case String.slice offset (offset + 1) src of
-        "0" ->
+    case List.take 1 (List.drop offset src) of
+        [ '0' ] ->
             convert0OrMore0To9s (soFar * 10) (offset + 1) src
 
-        "1" ->
+        [ '1' ] ->
             convert0OrMore0To9s (soFar * 10 + 1) (offset + 1) src
 
-        "2" ->
+        [ '2' ] ->
             convert0OrMore0To9s (soFar * 10 + 2) (offset + 1) src
 
-        "3" ->
+        [ '3' ] ->
             convert0OrMore0To9s (soFar * 10 + 3) (offset + 1) src
 
-        "4" ->
+        [ '4' ] ->
             convert0OrMore0To9s (soFar * 10 + 4) (offset + 1) src
 
-        "5" ->
+        [ '5' ] ->
             convert0OrMore0To9s (soFar * 10 + 5) (offset + 1) src
 
-        "6" ->
+        [ '6' ] ->
             convert0OrMore0To9s (soFar * 10 + 6) (offset + 1) src
 
-        "7" ->
+        [ '7' ] ->
             convert0OrMore0To9s (soFar * 10 + 7) (offset + 1) src
 
-        "8" ->
+        [ '8' ] ->
             convert0OrMore0To9s (soFar * 10 + 8) (offset + 1) src
 
-        "9" ->
+        [ '9' ] ->
             convert0OrMore0To9s (soFar * 10 + 9) (offset + 1) src
 
         _ ->
@@ -2401,27 +2414,32 @@ yourself in weird situations. For example, is `3--4` a typo? Or is it `3 - -4`?
 symbol : String -> res -> Parser res
 symbol str res =
     let
+        strChars : List Char
+        strChars =
+            String.toList str
+
         strLength : Int
         strLength =
-            String.length str
+            List.length strChars
     in
     Parser
-        (\s ->
+        (\(PState sSrc sOffset sIndent sRow sCol) ->
             let
-                (PState sSrc sOffset sIndent sRow sCol) =
-                    s
+                sOffsetInt : Int
+                sOffsetInt =
+                    sOffset
 
-                newOffset : Int
-                newOffset =
-                    sOffset + strLength
+                sColInt : Int
+                sColInt =
+                    sCol
             in
-            if String.slice sOffset newOffset sSrc == str ++ "" then
+            if List.take strLength (List.drop sOffset sSrc) == strChars then
                 Good res
                     (PState sSrc
-                        newOffset
+                        (sOffsetInt + strLength)
                         sIndent
                         sRow
-                        (sCol + strLength)
+                        (sColInt + strLength)
                     )
 
             else
@@ -2432,30 +2450,35 @@ symbol str res =
 followedBySymbol : String -> Parser a -> Parser a
 followedBySymbol str (Parser parsePrevious) =
     let
+        strChars : List Char
+        strChars =
+            String.toList str
+
         strLength : Int
         strLength =
-            String.length str
+            List.length strChars
     in
     Parser
         (\s0 ->
             case parsePrevious s0 of
-                Good res s1 ->
+                Good res (PState s1Src s1Offset s1Indent s1Row s1Col) ->
                     let
-                        (PState s1Src s1Offset s1Indent s1Row s1Col) =
-                            s1
+                        s1OffsetInt : Int
+                        s1OffsetInt =
+                            s1Offset
 
-                        newOffset : Int
-                        newOffset =
-                            s1Offset + strLength
+                        s1ColInt : Int
+                        s1ColInt =
+                            s1Col
                     in
-                    if String.slice s1Offset newOffset s1Src == str ++ "" then
+                    if List.take strLength (List.drop s1OffsetInt s1Src) == strChars then
                         Good res
                             (PState
                                 s1Src
-                                newOffset
+                                (s1OffsetInt + strLength)
                                 s1Indent
                                 s1Row
-                                (s1Col + strLength)
+                                (s1ColInt + strLength)
                             )
 
                     else
@@ -2469,30 +2492,41 @@ followedBySymbol str (Parser parsePrevious) =
 symbolWithEndLocation : String -> (Location -> res) -> Parser res
 symbolWithEndLocation str endLocationToRes =
     let
+        strChars : List Char
+        strChars =
+            String.toList str
+
         strLength : Int
         strLength =
-            String.length str
+            List.length strChars
     in
     Parser
-        (\s ->
+        (\(PState sSrc sOffset sIndent sRow sCol) ->
             let
-                (PState sSrc sOffset sIndent sRow sCol) =
-                    s
+                sOffsetInt : Int
+                sOffsetInt =
+                    sOffset
 
-                newOffset : Int
-                newOffset =
-                    sOffset + strLength
+                sColInt : Int
+                sColInt =
+                    sCol
+
+                srcSlice : List Char
+                srcSlice =
+                    List.take
+                        strLength
+                        (List.drop sOffsetInt sSrc)
             in
-            if String.slice sOffset newOffset sSrc == str ++ "" then
+            if srcSlice == strChars then
                 let
                     newCol : Int
                     newCol =
-                        sCol + strLength
+                        sColInt + strLength
                 in
                 Good
                     (endLocationToRes { row = sRow, column = newCol })
                     (PState sSrc
-                        newOffset
+                        (sOffsetInt + strLength)
                         sIndent
                         sRow
                         newCol
@@ -2506,32 +2540,45 @@ symbolWithEndLocation str endLocationToRes =
 symbolWithRange : String -> (Range -> res) -> Parser res
 symbolWithRange str startAndEndLocationToRes =
     let
+        strChars : List Char
+        strChars =
+            String.toList str
+
         strLength : Int
         strLength =
-            String.length str
+            List.length strChars
     in
     Parser
-        (\s ->
+        (\(PState sSrc sOffset sIndent sRow sCol) ->
             let
-                (PState sSrc sOffset sIndent sRow sCol) =
-                    s
+                sOffsetInt : Int
+                sOffsetInt =
+                    sOffset
 
-                newOffset : Int
-                newOffset =
-                    sOffset + strLength
+                sColInt : Int
+                sColInt =
+                    sCol
+
+                srcSlice : List Char
+                srcSlice =
+                    List.take
+                        strLength
+                        (List.drop sOffsetInt sSrc)
             in
-            if String.slice sOffset newOffset sSrc == str ++ "" then
+            if srcSlice == strChars then
                 let
                     newCol : Int
                     newCol =
-                        sCol + strLength
+                        sColInt + strLength
                 in
                 Good
                     (startAndEndLocationToRes
-                        { start = { row = sRow, column = sCol }, end = { row = sRow, column = newCol } }
+                        { start = { row = sRow, column = sCol }
+                        , end = { row = sRow, column = newCol }
+                        }
                     )
                     (PState sSrc
-                        newOffset
+                        (sOffsetInt + strLength)
                         sIndent
                         sRow
                         newCol
@@ -2546,31 +2593,47 @@ symbolWithRange str startAndEndLocationToRes =
 or 2-part UTF-16 characters.
 -}
 symbolFollowedBy : String -> Parser next -> Parser next
-symbolFollowedBy str (Parser parseNext) =
+symbolFollowedBy str parseNext =
     Parser
-        (\(PState sSrc sOffset sIndent sRow sCol) ->
-            let
-                strLength : Int
-                strLength =
-                    String.length str
-
-                newOffset : Int
-                newOffset =
-                    sOffset + strLength
-            in
-            if String.slice sOffset newOffset sSrc == str ++ "" then
-                parseNext
-                    (PState sSrc
-                        newOffset
-                        sIndent
-                        sRow
-                        (sCol + strLength)
-                    )
-                    |> pStepCommit
-
-            else
-                Bad False (ExpectingSymbol sRow sCol str)
+        (symbolFollowedByParser
+            (String.toList str)
+            parseNext
         )
+
+
+symbolFollowedByParser : List Char -> Parser next -> State -> PStep next
+symbolFollowedByParser strChars (Parser parseNext) (PState sSrc sOffset sIndent sRow sCol) =
+    let
+        strLength : Int
+        strLength =
+            List.length strChars
+
+        sOffsetInt : Int
+        sOffsetInt =
+            sOffset
+
+        sColInt : Int
+        sColInt =
+            sCol
+
+        srcSlice : List Char
+        srcSlice =
+            List.take
+                strLength
+                (List.drop sOffsetInt sSrc)
+    in
+    if srcSlice == strChars then
+        parseNext
+            (PState sSrc
+                (sOffsetInt + strLength)
+                sIndent
+                sRow
+                (sColInt + strLength)
+            )
+            |> pStepCommit
+
+    else
+        Bad False (ExpectingSymbol sRow sCol (String.fromList strChars))
 
 
 {-| Make sure the given String isn't empty and does not contain \\n
@@ -2579,27 +2642,38 @@ or 2-part UTF-16 characters.
 symbolBacktrackableFollowedBy : String -> Parser next -> Parser next
 symbolBacktrackableFollowedBy str (Parser parseNext) =
     let
+        strChars : List Char
+        strChars =
+            String.toList str
+
         strLength : Int
         strLength =
-            String.length str
+            List.length strChars
     in
     Parser
-        (\s ->
+        (\(PState sSrc sOffset sIndent sRow sCol) ->
             let
-                (PState sSrc sOffset sIndent sRow sCol) =
-                    s
+                sOffsetInt : Int
+                sOffsetInt =
+                    sOffset
 
-                newOffset : Int
-                newOffset =
-                    sOffset + strLength
+                sColInt : Int
+                sColInt =
+                    sCol
+
+                srcSlice : List Char
+                srcSlice =
+                    List.take
+                        strLength
+                        (List.drop sOffsetInt sSrc)
             in
-            if String.slice sOffset newOffset sSrc == str ++ "" then
+            if srcSlice == strChars then
                 parseNext
                     (PState sSrc
-                        newOffset
+                        (sOffsetInt + strLength)
                         sIndent
                         sRow
-                        (sCol + strLength)
+                        (sColInt + strLength)
                     )
 
             else
@@ -2633,18 +2707,31 @@ This will help with the weird cases like
 -}
 keyword : String -> res -> Parser res
 keyword kwd res =
+    let
+        kwdChars : List Char
+        kwdChars =
+            String.toList kwd
+
+        kwdLength : Int
+        kwdLength =
+            List.length kwdChars
+    in
     Parser
         (\(PState sSrc sOffset sIndent sRow sCol) ->
             let
-                kwdLength : Int
-                kwdLength =
-                    String.length kwd
+                sOffsetInt : Int
+                sOffsetInt =
+                    sOffset
 
                 newOffset : Int
                 newOffset =
-                    sOffset + kwdLength
+                    sOffsetInt + kwdLength
+
+                sColInt : Int
+                sColInt =
+                    sCol
             in
-            if String.slice sOffset newOffset sSrc == kwd ++ "" then
+            if List.take kwdLength (List.drop sOffset sSrc) == kwdChars then
                 if isSubCharAlphaNumOrUnderscore newOffset sSrc then
                     Bad False (ExpectingKeyword sRow sCol kwd)
 
@@ -2654,7 +2741,7 @@ keyword kwd res =
                             newOffset
                             sIndent
                             sRow
-                            (sCol + kwdLength)
+                            (sColInt + kwdLength)
                         )
 
             else
@@ -2662,59 +2749,95 @@ keyword kwd res =
         )
 
 
-isSubCharAlphaNumOrUnderscore : Int -> String -> Bool
+isSubCharAlphaNumOrUnderscore : Int -> List Char -> Bool
 isSubCharAlphaNumOrUnderscore offset string =
-    -- String.any Char.Extra.isLatinAlphaNumOrUnderscoreFast
-    String.any (\c -> Char.isAlphaNum c || c == '_')
-        (String.slice offset (offset + 1) string)
+    case List.take 1 (List.drop offset string) of
+        [ '_' ] ->
+            True
+
+        [ c ] ->
+            Char.isAlphaNum c
+
+        _ ->
+            False
 
 
 {-| Make sure the given String isn't empty and does not contain \\n
 or 2-part UTF-16 characters.
 -}
 keywordFollowedBy : String -> Parser next -> Parser next
-keywordFollowedBy kwd (Parser parseNext) =
+keywordFollowedBy kwd parseNext =
     Parser
-        (\(PState sSrc sOffset sIndent sRow sCol) ->
-            let
-                kwdLength : Int
-                kwdLength =
-                    String.length kwd
-
-                newOffset : Int
-                newOffset =
-                    sOffset + kwdLength
-            in
-            if String.slice sOffset newOffset sSrc == kwd ++ "" then
-                if isSubCharAlphaNumOrUnderscore newOffset sSrc then
-                    Bad False (ExpectingKeyword sRow sCol kwd)
-
-                else
-                    parseNext
-                        (PState sSrc
-                            newOffset
-                            sIndent
-                            sRow
-                            (sCol + kwdLength)
-                        )
-                        |> pStepCommit
-
-            else
-                Bad False (ExpectingKeyword sRow sCol kwd)
+        (keywordFollowedByParser
+            (String.toList kwd)
+            parseNext
         )
+
+
+keywordFollowedByParser : List Char -> Parser next -> State -> PStep next
+keywordFollowedByParser kwdChars (Parser parseNext) (PState sSrc sOffset sIndent sRow sCol) =
+    let
+        kwdLength : Int
+        kwdLength =
+            List.length kwdChars
+
+        sOffsetInt : Int
+        sOffsetInt =
+            sOffset
+
+        sColInt : Int
+        sColInt =
+            sCol
+
+        srcSlice : List Char
+        srcSlice =
+            List.take
+                kwdLength
+                (List.drop sOffsetInt sSrc)
+
+        newOffset : Int
+        newOffset =
+            sOffsetInt + kwdLength
+    in
+    if srcSlice == kwdChars then
+        if isSubCharAlphaNumOrUnderscore newOffset sSrc then
+            Bad False (ExpectingKeyword sRow sCol (String.fromList kwdChars))
+
+        else
+            parseNext
+                (PState
+                    sSrc
+                    newOffset
+                    sIndent
+                    sRow
+                    (sColInt + kwdLength)
+                )
+                |> pStepCommit
+
+    else
+        Bad False (ExpectingKeyword sRow sCol (String.fromList kwdChars))
 
 
 anyChar : Parser Char
 anyChar =
     Parser
-        (\s ->
+        (\(PState sSrc sOffset sIndent sRow sCol) ->
             let
-                (PState sSrc sOffset sIndent sRow sCol) =
-                    s
+                sOffsetInt : Int
+                sOffsetInt =
+                    sOffset
 
                 newOffset : Int
                 newOffset =
-                    charOrEnd sOffset sSrc
+                    charOrEnd sOffsetInt sSrc
+
+                sColInt : Int
+                sColInt =
+                    sCol
+
+                sRowInt : Int
+                sRowInt =
+                    sRow
             in
             if newOffset == -1 then
                 -- end of source
@@ -2725,41 +2848,36 @@ anyChar =
                 Good '\n'
                     (PState
                         sSrc
-                        (sOffset + 1)
+                        (sOffsetInt + 1)
                         sIndent
-                        (sRow + 1)
+                        (sRowInt + 1)
                         1
                     )
 
             else
                 -- found
-                case String.toList (String.slice sOffset newOffset sSrc) of
+                case List.take 1 (List.drop sOffsetInt sSrc) of
                     [] ->
-                        Bad False (ExpectingAnyChar sRow sCol)
+                        Bad False (ExpectingAnyChar sRowInt sCol)
 
                     c :: _ ->
                         Good c
                             (PState sSrc
                                 newOffset
                                 sIndent
-                                sRow
-                                (sCol + 1)
+                                sRowInt
+                                (sColInt + 1)
                             )
         )
 
 
-charOrEnd : Int -> String -> Int
+charOrEnd : Int -> List Char -> Int
 charOrEnd offset string =
-    let
-        actualChar : String
-        actualChar =
-            String.slice offset (offset + 1) string
-    in
-    case actualChar of
-        "\n" ->
+    case List.take 1 (List.drop offset string) of
+        [ '\n' ] ->
             -2
 
-        "" ->
+        [] ->
             -1
 
         _ ->
@@ -2769,71 +2887,93 @@ charOrEnd offset string =
 whileMapWithRange : (Char -> Bool) -> (Range -> String -> res) -> Parser res
 whileMapWithRange isGood rangeAndConsumedStringToRes =
     Parser
-        (\s0 ->
+        (\(PState s0Src s0Offset s0Indent s0Row s0Col) ->
             let
-                (PState s0Src s0Offset s0Indent s0Row s0Col) =
-                    s0
+                s0OffsetInt : Int
+                s0OffsetInt =
+                    s0Offset
 
                 s1 : State
                 s1 =
                     skipWhileHelp isGood s0Offset s0Row s0Col s0Src s0Indent
 
-                (PState s1Src s1Offset s1Indent s1Row s1Col) =
+                (PState _ s1Offset _ s1Row s1Col) =
                     s1
+
+                s1OffsetInt : Int
+                s1OffsetInt =
+                    s1Offset
+
+                length : Int
+                length =
+                    s1OffsetInt - s0OffsetInt
+
+                slice : List Char
+                slice =
+                    List.take
+                        length
+                        (List.drop s0Offset s0Src)
             in
             Good
                 (rangeAndConsumedStringToRes
                     { start = { row = s0Row, column = s0Col }
                     , end = { row = s1Row, column = s1Col }
                     }
-                    (String.slice s0Offset s1Offset s0Src)
+                    (String.fromList slice)
                 )
                 s1
         )
 
 
-skipWhileHelp : (Char -> Bool) -> Int -> Int -> Int -> String -> Int -> State
+skipWhileHelp : (Char -> Bool) -> Int -> Int -> Int -> List Char -> Int -> State
 skipWhileHelp isGood offset row col src indent =
-    let
-        actualChar : String
-        actualChar =
-            String.slice offset (offset + 1) src
-    in
-    if String.any isGood actualChar then
-        case actualChar of
-            "\n" ->
-                skipWhileHelp isGood (offset + 1) (row + 1) 1 src indent
+    case List.take 1 (List.drop offset src) of
+        actualChar :: _ ->
+            if isGood actualChar then
+                case actualChar of
+                    '\n' ->
+                        skipWhileHelp isGood (offset + 1) (row + 1) 1 src indent
 
-            _ ->
-                skipWhileHelp isGood (offset + 1) row (col + 1) src indent
+                    _ ->
+                        skipWhileHelp isGood (offset + 1) row (col + 1) src indent
 
-    else
-        -- no match
-        PState src offset indent row col
+            else
+                -- no match
+                PState src offset indent row col
+
+        [] ->
+            -- no match
+            PState src offset indent row col
 
 
-skipWhileWithoutLinebreakHelp : (Char -> Bool) -> Int -> Int -> Int -> String -> Int -> State
+skipWhileWithoutLinebreakHelp : (Char -> Bool) -> Int -> Int -> Int -> List Char -> Int -> State
 skipWhileWithoutLinebreakHelp isGood offset row col src indent =
-    let
-        actualChar : String
-        actualChar =
-            String.slice offset (offset + 1) src
-    in
-    if String.any isGood actualChar then
-        skipWhileWithoutLinebreakHelp isGood (offset + 1) row (col + 1) src indent
+    case List.take 1 (List.drop offset src) of
+        actualChar :: _ ->
+            if isGood actualChar then
+                skipWhileWithoutLinebreakHelp isGood (offset + 1) row (col + 1) src indent
 
-    else
-        -- no match
-        PState src offset indent row col
+            else
+                -- no match
+                PState src offset indent row col
+
+        [] ->
+            -- no match
+            PState src offset indent row col
 
 
-skipWhileWithoutLinebreakAnd2PartUtf16Help : (Char -> Bool) -> Int -> String -> Int
+skipWhileWithoutLinebreakAnd2PartUtf16Help : (Char -> Bool) -> Int -> List Char -> Int
 skipWhileWithoutLinebreakAnd2PartUtf16Help isGood offset src =
-    if String.any isGood (String.slice offset (offset + 1) src) then
-        skipWhileWithoutLinebreakAnd2PartUtf16Help isGood (offset + 1) src
+    case List.take 1 (List.drop offset src) of
+        actualChar :: _ ->
+            if isGood actualChar then
+                skipWhileWithoutLinebreakAnd2PartUtf16Help isGood (offset + 1) src
 
-    else
-        offset
+            else
+                offset
+
+        [] ->
+            offset
 
 
 followedBySkipWhileWhitespace : Parser before -> Parser before
@@ -2872,16 +3012,16 @@ skipWhileWhitespaceFollowedBy (Parser parseNext) =
         )
 
 
-skipWhileWhitespaceHelp : Int -> Int -> Int -> String -> Int -> State
+skipWhileWhitespaceHelp : Int -> Int -> Int -> List Char -> Int -> State
 skipWhileWhitespaceHelp offset row col src indent =
-    case String.slice offset (offset + 1) src of
-        " " ->
+    case List.take 1 (List.drop offset src) of
+        [ ' ' ] ->
             skipWhileWhitespaceHelp (offset + 1) row (col + 1) src indent
 
-        "\n" ->
+        [ '\n' ] ->
             skipWhileWhitespaceHelp (offset + 1) (row + 1) 1 src indent
 
-        "\u{000D}" ->
+        [ '\u{000D}' ] ->
             skipWhileWhitespaceHelp (offset + 1) row (col + 1) src indent
 
         -- empty or non-whitespace
@@ -2902,7 +3042,7 @@ withIndentSetToColumn (Parser parse) =
     Parser
         (\s0 ->
             let
-                (PState s0Src s0Offset s0Indent s0Row s0Col) =
+                (PState _ _ s0Indent _ s0Col) =
                     s0
             in
             case parse (changeIndent s0Col s0) of
@@ -2919,7 +3059,7 @@ withIndentSetToColumnMinus columnToMoveIndentationBaseBackBy (Parser parse) =
     Parser
         (\s0 ->
             let
-                (PState s0Src s0Offset s0Indent s0Row s0Col) =
+                (PState _ _ s0Indent _ s0Col) =
                     s0
             in
             case parse (changeIndent (s0Col - columnToMoveIndentationBaseBackBy) s0) of
@@ -2941,10 +3081,10 @@ mapWithRange combineStartAndResult (Parser parse) =
             case parse s0 of
                 Good a s1 ->
                     let
-                        (PState s0Src s0Offset s0Indent s0Row s0Col) =
+                        (PState _ _ _ s0Row s0Col) =
                             s0
 
-                        (PState s1Src s1Offset s1Indent s1Row s1Col) =
+                        (PState _ _ _ s1Row s1Col) =
                             s1
                     in
                     Good
@@ -2988,46 +3128,87 @@ ifFollowedByWhileValidateWithoutLinebreak :
     -> Parser String
 ifFollowedByWhileValidateWithoutLinebreak firstIsOkay afterFirstIsOkay resultIsOkay =
     Parser
-        (\s ->
-            let
-                (PState sSrc sOffset sIndent sRow sCol) =
-                    s
+        (ifFollowedByWhileValidateWithoutLinebreakParser
+            firstIsOkay
+            afterFirstIsOkay
+            resultIsOkay
+        )
 
-                firstOffset : Int
-                firstOffset =
-                    isSubCharWithoutLinebreak firstIsOkay sOffset sSrc
-            in
-            if firstOffset == -1 then
-                Bad False (ExpectingCharSatisfyingPredicate sRow sCol)
 
-            else
+ifFollowedByWhileValidateWithoutLinebreakParser :
+    (Char -> Bool)
+    -> (Char -> Bool)
+    -> (String -> Bool)
+    -> State
+    -> PStep String
+ifFollowedByWhileValidateWithoutLinebreakParser firstIsOkay afterFirstIsOkay resultIsOkay (PState sSrc sOffset sIndent sRow sCol) =
+    let
+        sOffsetInt : Int
+        sOffsetInt =
+            sOffset
+
+        sColInt : Int
+        sColInt =
+            sCol
+    in
+    case List.take 1 (List.drop sOffset sSrc) of
+        [] ->
+            Bad False (ExpectingCharSatisfyingPredicate sRow sCol)
+
+        firstChar :: _ ->
+            if firstIsOkay firstChar then
                 let
                     s1 : State
                     s1 =
-                        skipWhileWithoutLinebreakHelp afterFirstIsOkay firstOffset sRow (sCol + 1) sSrc sIndent
+                        skipWhileWithoutLinebreakHelp
+                            afterFirstIsOkay
+                            (sOffsetInt + 1)
+                            sRow
+                            (sColInt + 1)
+                            sSrc
+                            sIndent
 
-                    (PState s1Src s1Offset _ _ _) =
+                    (PState _ s1Offset _ _ _) =
                         s1
+
+                    s1OffsetInt : Int
+                    s1OffsetInt =
+                        s1Offset
+
+                    nameChars : List Char
+                    nameChars =
+                        List.take
+                            (s1OffsetInt - sOffsetInt)
+                            (List.drop sOffsetInt sSrc)
 
                     name : String
                     name =
-                        String.slice sOffset s1Offset sSrc
+                        String.fromList nameChars
                 in
                 if resultIsOkay name then
                     Good name s1
 
                 else
-                    Bad False (ExpectingStringSatisfyingPredicate sRow (sCol + 1))
-        )
+                    Bad
+                        False
+                        (ExpectingStringSatisfyingPredicate sRow (sColInt + 1))
+
+            else
+                Bad False (ExpectingCharSatisfyingPredicate sRow sCol)
 
 
-whileWithoutLinebreakAnd2PartUtf16ToResultAndThen : (Char -> Bool) -> (String -> Result String intermediate) -> (intermediate -> Parser res) -> Parser res
+whileWithoutLinebreakAnd2PartUtf16ToResultAndThen :
+    (Char -> Bool)
+    -> (String -> Result String intermediate)
+    -> (intermediate -> Parser res)
+    -> Parser res
 whileWithoutLinebreakAnd2PartUtf16ToResultAndThen whileCharIsOkay consumedStringToIntermediateOrErr intermediateToFollowupParser =
     Parser
-        (\s0 ->
+        (\(PState s0Src s0Offset s0Indent s0Row s0Col) ->
             let
-                (PState s0Src s0Offset s0Indent s0Row s0Col) =
-                    s0
+                s0OffsetInt : Int
+                s0OffsetInt =
+                    s0Offset
 
                 s1Offset : Int
                 s1Offset =
@@ -3036,9 +3217,19 @@ whileWithoutLinebreakAnd2PartUtf16ToResultAndThen whileCharIsOkay consumedString
                         s0Offset
                         s0Src
 
+                whileContentLength : Int
+                whileContentLength =
+                    s1Offset - s0OffsetInt
+
+                whileContentSlice : List Char
+                whileContentSlice =
+                    List.take
+                        whileContentLength
+                        (List.drop s0Offset s0Src)
+
                 whileContent : String
                 whileContent =
-                    String.slice s0Offset s1Offset s0Src
+                    String.fromList whileContentSlice
             in
             case consumedStringToIntermediateOrErr whileContent of
                 Err problemMessage ->
@@ -3064,7 +3255,12 @@ whileWithoutLinebreakAnd2PartUtf16ToResultAndThen whileCharIsOkay consumedString
         )
 
 
-whileWithoutLinebreakAnd2PartUtf16ValidateMapWithRangeBacktrackableFollowedBySymbol : (Range -> String -> res) -> (Char -> Bool) -> (String -> Bool) -> String -> Parser res
+whileWithoutLinebreakAnd2PartUtf16ValidateMapWithRangeBacktrackableFollowedBySymbol :
+    (Range -> String -> res)
+    -> (Char -> Bool)
+    -> (String -> Bool)
+    -> String
+    -> Parser res
 whileWithoutLinebreakAnd2PartUtf16ValidateMapWithRangeBacktrackableFollowedBySymbol whileRangeAndContentToRes whileCharIsOkay whileResultIsOkay mandatoryFinalSymbol =
     let
         mandatoryFinalSymbolLength : Int
@@ -3072,10 +3268,15 @@ whileWithoutLinebreakAnd2PartUtf16ValidateMapWithRangeBacktrackableFollowedBySym
             String.length mandatoryFinalSymbol
     in
     Parser
-        (\s0 ->
+        (\(PState s0Src s0Offset s0Indent s0Row s0Col) ->
             let
-                (PState s0Src s0Offset s0Indent s0Row s0Col) =
-                    s0
+                s0OffsetInt : Int
+                s0OffsetInt =
+                    s0Offset
+
+                s0ColInt : Int
+                s0ColInt =
+                    s0Col
 
                 s1Offset : Int
                 s1Offset =
@@ -3084,20 +3285,38 @@ whileWithoutLinebreakAnd2PartUtf16ValidateMapWithRangeBacktrackableFollowedBySym
                         s0Offset
                         s0Src
 
+                whileContentLength : Int
+                whileContentLength =
+                    s1Offset - s0OffsetInt
+
+                whileContentSlice : List Char
+                whileContentSlice =
+                    List.take
+                        whileContentLength
+                        (List.drop s0Offset s0Src)
+
                 whileContent : String
                 whileContent =
-                    String.slice s0Offset s1Offset s0Src
+                    String.fromList whileContentSlice
+
+                finalSymbolSlice : List Char
+                finalSymbolSlice =
+                    List.take
+                        mandatoryFinalSymbolLength
+                        (List.drop s1Offset s0Src)
+
+                finalSymbolString : String
+                finalSymbolString =
+                    String.fromList finalSymbolSlice
             in
             if
-                (String.slice s1Offset (s1Offset + mandatoryFinalSymbolLength) s0Src
-                    == (mandatoryFinalSymbol ++ "")
-                )
+                (finalSymbolString == (mandatoryFinalSymbol ++ ""))
                     && whileResultIsOkay whileContent
             then
                 let
                     s1Column : Int
                     s1Column =
-                        s0Col + (s1Offset - s0Offset)
+                        s0ColInt + (s1Offset - s0OffsetInt)
                 in
                 Good
                     (whileRangeAndContentToRes
@@ -3114,7 +3333,7 @@ whileWithoutLinebreakAnd2PartUtf16ValidateMapWithRangeBacktrackableFollowedBySym
                     )
 
             else
-                Bad False (ExpectingStringSatisfyingPredicate s0Row (s0Col + 1))
+                Bad False (ExpectingStringSatisfyingPredicate s0Row (s0ColInt + 1))
         )
 
 
@@ -3126,10 +3345,15 @@ ifFollowedByWhileValidateMapWithRangeWithoutLinebreak :
     -> Parser res
 ifFollowedByWhileValidateMapWithRangeWithoutLinebreak toResult firstIsOkay afterFirstIsOkay resultIsOkay =
     Parser
-        (\s0 ->
+        (\(PState s0Src s0Offset s0Indent s0Row s0Col) ->
             let
-                (PState s0Src s0Offset s0Indent s0Row s0Col) =
-                    s0
+                s0OffsetInt : Int
+                s0OffsetInt =
+                    s0Offset
+
+                s0ColInt : Int
+                s0ColInt =
+                    s0Col
 
                 firstOffset : Int
                 firstOffset =
@@ -3142,14 +3366,26 @@ ifFollowedByWhileValidateMapWithRangeWithoutLinebreak toResult firstIsOkay after
                 let
                     s1 : State
                     s1 =
-                        skipWhileWithoutLinebreakHelp afterFirstIsOkay firstOffset s0Row (s0Col + 1) s0Src s0Indent
+                        skipWhileWithoutLinebreakHelp
+                            afterFirstIsOkay
+                            firstOffset
+                            s0Row
+                            (s0ColInt + 1)
+                            s0Src
+                            s0Indent
 
-                    (PState s1Src s1Offset _ s1Row s1Col) =
+                    (PState _ s1Offset _ s1Row s1Col) =
                         s1
+
+                    nameSlice : List Char
+                    nameSlice =
+                        List.take
+                            (s1Offset - s0OffsetInt)
+                            (List.drop s0OffsetInt s0Src)
 
                     name : String
                     name =
-                        String.slice s0Offset s1Offset s0Src
+                        String.fromList nameSlice
                 in
                 if resultIsOkay name then
                     Good
@@ -3162,7 +3398,7 @@ ifFollowedByWhileValidateMapWithRangeWithoutLinebreak toResult firstIsOkay after
                         s1
 
                 else
-                    Bad False (ExpectingStringSatisfyingPredicate s0Row (s0Col + 1))
+                    Bad False (ExpectingStringSatisfyingPredicate s0Row (s0ColInt + 1))
         )
 
 
@@ -3172,10 +3408,15 @@ ifFollowedByWhileWithoutLinebreak :
     -> Parser String
 ifFollowedByWhileWithoutLinebreak firstIsOkay afterFirstIsOkay =
     Parser
-        (\s ->
+        (\(PState sSrc sOffset sIndent sRow sCol) ->
             let
-                (PState sSrc sOffset sIndent sRow sCol) =
-                    s
+                sOffsetInt : Int
+                sOffsetInt =
+                    sOffset
+
+                sColInt : Int
+                sColInt =
+                    sCol
 
                 firstOffset : Int
                 firstOffset =
@@ -3188,12 +3429,24 @@ ifFollowedByWhileWithoutLinebreak firstIsOkay afterFirstIsOkay =
                 let
                     s1 : State
                     s1 =
-                        skipWhileWithoutLinebreakHelp afterFirstIsOkay firstOffset sRow (sCol + 1) sSrc sIndent
+                        skipWhileWithoutLinebreakHelp
+                            afterFirstIsOkay
+                            firstOffset
+                            sRow
+                            (sColInt + 1)
+                            sSrc
+                            sIndent
 
-                    (PState s1Src s1Offset _ _ _) =
+                    (PState _ s1Offset _ _ _) =
                         s1
+
+                    nameSlice : List Char
+                    nameSlice =
+                        List.take
+                            (s1Offset - sOffsetInt)
+                            (List.drop sOffsetInt sSrc)
                 in
-                Good (String.slice sOffset s1Offset sSrc) s1
+                Good (String.fromList nameSlice) s1
         )
 
 
@@ -3204,10 +3457,15 @@ ifFollowedByWhileMapWithRangeWithoutLinebreak :
     -> Parser res
 ifFollowedByWhileMapWithRangeWithoutLinebreak rangeAndConsumedStringToRes firstIsOkay afterFirstIsOkay =
     Parser
-        (\s0 ->
+        (\(PState s0Src s0Offset s0Indent s0Row s0Col) ->
             let
-                (PState s0Src s0Offset s0Indent s0Row s0Col) =
-                    s0
+                s0OffsetInt : Int
+                s0OffsetInt =
+                    s0Offset
+
+                s0ColInt : Int
+                s0ColInt =
+                    s0Col
 
                 firstOffset : Int
                 firstOffset =
@@ -3220,17 +3478,33 @@ ifFollowedByWhileMapWithRangeWithoutLinebreak rangeAndConsumedStringToRes firstI
                 let
                     s1 : State
                     s1 =
-                        skipWhileWithoutLinebreakHelp afterFirstIsOkay firstOffset s0Row (s0Col + 1) s0Src s0Indent
+                        skipWhileWithoutLinebreakHelp
+                            afterFirstIsOkay
+                            firstOffset
+                            s0Row
+                            (s0ColInt + 1)
+                            s0Src
+                            s0Indent
 
-                    (PState s1Src s1Offset _ s1Row s1Col) =
+                    (PState _ s1Offset _ s1Row s1Col) =
                         s1
+
+                    s1OffsetInt : Int
+                    s1OffsetInt =
+                        s1Offset
+
+                    consumedChars : List Char
+                    consumedChars =
+                        List.take
+                            (s1OffsetInt - s0OffsetInt)
+                            (List.drop s0OffsetInt s0Src)
                 in
                 Good
                     (rangeAndConsumedStringToRes
                         { start = { row = s0Row, column = s0Col }
                         , end = { row = s1Row, column = s1Col }
                         }
-                        (String.slice s0Offset s1Offset s0Src)
+                        (String.fromList consumedChars)
                     )
                     s1
         )
@@ -3243,10 +3517,15 @@ ifFollowedByWhileMapWithoutLinebreak :
     -> Parser res
 ifFollowedByWhileMapWithoutLinebreak consumedStringToRes firstIsOkay afterFirstIsOkay =
     Parser
-        (\s0 ->
+        (\(PState s0Src s0Offset s0Indent s0Row s0Col) ->
             let
-                (PState s0Src s0Offset s0Indent s0Row s0Col) =
-                    s0
+                s0OffsetInt : Int
+                s0OffsetInt =
+                    s0Offset
+
+                s0ColInt : Int
+                s0ColInt =
+                    s0Col
 
                 firstOffset : Int
                 firstOffset =
@@ -3259,13 +3538,33 @@ ifFollowedByWhileMapWithoutLinebreak consumedStringToRes firstIsOkay afterFirstI
                 let
                     s1 : State
                     s1 =
-                        skipWhileWithoutLinebreakHelp afterFirstIsOkay firstOffset s0Row (s0Col + 1) s0Src s0Indent
+                        skipWhileWithoutLinebreakHelp
+                            afterFirstIsOkay
+                            firstOffset
+                            s0Row
+                            (s0ColInt + 1)
+                            s0Src
+                            s0Indent
 
-                    (PState s1Src s1Offset _ _ _) =
+                    (PState _ s1Offset _ _ _) =
                         s1
+
+                    s1OffsetInt : Int
+                    s1OffsetInt =
+                        s1Offset
+
+                    consumedChars : List Char
+                    consumedChars =
+                        List.take
+                            (s1OffsetInt - s0OffsetInt)
+                            (List.drop s0OffsetInt s0Src)
+
+                    consumedString : String
+                    consumedString =
+                        String.fromList consumedChars
                 in
                 Good
-                    (consumedStringToRes (String.slice s0Offset s1Offset s0Src))
+                    (consumedStringToRes consumedString)
                     s1
         )
 
@@ -3335,20 +3634,31 @@ charDoesNotEqualAnyOfTwo a b char =
 while : (Char -> Bool) -> Parser String
 while isGood =
     Parser
-        (\s0 ->
+        (\(PState s0Src s0Offset s0Indent s0Row s0Col) ->
             let
-                (PState s0Src s0Offset s0Indent s0Row s0Col) =
-                    s0
+                s0OffsetInt : Int
+                s0OffsetInt =
+                    s0Offset
 
                 s1 : State
                 s1 =
                     skipWhileHelp isGood s0Offset s0Row s0Col s0Src s0Indent
 
-                (PState s1Src s1Offset _ _ _) =
+                (PState _ s1Offset _ _ _) =
                     s1
+
+                s1OffsetInt : Int
+                s1OffsetInt =
+                    s1Offset
+
+                slice : List Char
+                slice =
+                    List.take
+                        (s1OffsetInt - s0OffsetInt)
+                        (List.drop s0Offset s0Src)
             in
             Good
-                (String.slice s0Offset s1Offset s0Src)
+                (String.fromList slice)
                 s1
         )
 
@@ -3356,20 +3666,31 @@ while isGood =
 whileWithoutLinebreak : (Char -> Bool) -> Parser String
 whileWithoutLinebreak isGood =
     Parser
-        (\s0 ->
+        (\(PState s0Src s0Offset s0Indent s0Row s0Col) ->
             let
-                (PState s0Src s0Offset s0Indent s0Row s0Col) =
-                    s0
+                s0OffsetInt : Int
+                s0OffsetInt =
+                    s0Offset
 
                 s1 : State
                 s1 =
                     skipWhileWithoutLinebreakHelp isGood s0Offset s0Row s0Col s0Src s0Indent
 
-                (PState s1Src s1Offset _ _ _) =
+                (PState _ s1Offset _ _ _) =
                     s1
+
+                s1OffsetInt : Int
+                s1OffsetInt =
+                    s1Offset
+
+                slice : List Char
+                slice =
+                    List.take
+                        (s1OffsetInt - s0OffsetInt)
+                        (List.drop s0Offset s0Src)
             in
             Good
-                (String.slice s0Offset s1Offset s0Src)
+                (String.fromList slice)
                 s1
         )
 
@@ -3380,10 +3701,11 @@ anyCharFollowedByWhileMap :
     -> Parser res
 anyCharFollowedByWhileMap consumedStringToRes afterFirstIsOkay =
     Parser
-        (\s ->
+        (\(PState sSrc sOffset sIndent sRow sCol) ->
             let
-                (PState sSrc sOffset sIndent sRow sCol) =
-                    s
+                sOffsetInt : Int
+                sOffsetInt =
+                    sOffset
 
                 firstOffset : Int
                 firstOffset =
@@ -3398,15 +3720,25 @@ anyCharFollowedByWhileMap consumedStringToRes afterFirstIsOkay =
                     s1 : State
                     s1 =
                         if firstOffset == -2 then
-                            skipWhileHelp afterFirstIsOkay (sOffset + 1) (sRow + 1) 1 sSrc sIndent
+                            skipWhileHelp afterFirstIsOkay (sOffsetInt + 1) (sRow + 1) 1 sSrc sIndent
 
                         else
                             skipWhileHelp afterFirstIsOkay firstOffset sRow (sCol + 1) sSrc sIndent
 
-                    (PState s1Src s1Offset _ _ _) =
+                    (PState _ s1Offset _ _ _) =
                         s1
+
+                    s1OffsetInt : Int
+                    s1OffsetInt =
+                        s1Offset
+
+                    slice : List Char
+                    slice =
+                        List.take
+                            (s1OffsetInt - sOffsetInt)
+                            (List.drop sOffsetInt sSrc)
                 in
-                Good (consumedStringToRes (String.slice sOffset s1Offset sSrc)) s1
+                Good (consumedStringToRes (String.fromList slice)) s1
         )
 
 
@@ -3509,16 +3841,22 @@ The `newOffset` value can be a few different things:
     words wide.
 
 -}
-isSubCharWithoutLinebreak : (Char -> Bool) -> Int -> String -> Int
+isSubCharWithoutLinebreak : (Char -> Bool) -> Int -> List Char -> Int
 isSubCharWithoutLinebreak predicate offset string =
-    -- https://github.com/elm/parser/blob/1.1.0/src/Elm/Kernel/Parser.js#L37
-    let
-        actualChar : String
-        actualChar =
-            String.slice offset (offset + 1) string
-    in
-    if String.any predicate actualChar then
-        offset + 1
+    case List.take 1 (List.drop offset string) of
+        actualChar :: _ ->
+            if predicate actualChar then
+                offset + 1
 
-    else
-        -1
+            else
+                -1
+
+        [] ->
+            -1
+
+
+stringSlice : Int -> Int -> List Char -> List Char
+stringSlice start end list =
+    List.take
+        (end - start)
+        (List.drop start list)

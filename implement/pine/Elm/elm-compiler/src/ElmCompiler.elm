@@ -2356,72 +2356,151 @@ compileElmSyntaxPatternListOrTupleItems compilation listItems addLengthCondition
         [] ->
             compilePatternOnlyEqualsCondition (ListExpression [])
 
-        {-
-           TODO: Analogous to the case of an empty list:
-           Optimize other cases that constrain to a single value by emitting an equality check.
-        -}
         _ ->
-            case
-                Common.resultListIndexedMapCombine
-                    (\( argIndex, Elm.Syntax.Node.Node _ itemPattern ) ->
-                        conditionsAndDeclarationsFromItemPattern compilation argIndex itemPattern
-                    )
-                    listItems
-            of
-                Err err ->
-                    Err err
+            case elmSyntaxListPatternAsLiteral [] listItems of
+                Just literalValues ->
+                    compilePatternOnlyEqualsCondition
+                        (LiteralExpression (Pine.ListValue literalValues))
 
-                Ok itemsResults ->
-                    let
-                        conditionExpressions : Expression -> List Expression
-                        conditionExpressions =
-                            \deconstructedExpression ->
-                                let
-                                    matchesLengthConditions =
-                                        if addLengthCondition then
-                                            {-
-                                               In contrast to a tuple pattern, we also need to check the length of the list matches the pattern.
-                                               (For tuples, the length is always fixed.)
-                                            -}
-                                            let
-                                                expectedLength =
-                                                    List.length listItems
-                                            in
-                                            [ case deconstructedExpression of
-                                                ListExpression deconstructedList ->
-                                                    LiteralExpression
-                                                        (if List.length deconstructedList == expectedLength then
-                                                            Pine.trueValue
+                Nothing ->
+                    compileElmSyntaxPatternListOrTupleItemsGeneric
+                        compilation
+                        listItems
+                        addLengthCondition
 
-                                                         else
-                                                            Pine.falseValue
-                                                        )
 
-                                                _ ->
-                                                    equalCondition
-                                                        [ LiteralExpression (Pine.valueFromInt expectedLength)
-                                                        , countListElementsExpression deconstructedExpression
-                                                        ]
-                                            ]
+elmSyntaxListPatternAsLiteral :
+    List Pine.Value
+    -> List (Elm.Syntax.Node.Node Elm.Syntax.Pattern.Pattern)
+    -> Maybe (List Pine.Value)
+elmSyntaxListPatternAsLiteral processedItems listItems =
+    case listItems of
+        currentItemPatternNode :: followingItems ->
+            let
+                (Elm.Syntax.Node.Node _ currentItemPattern) =
+                    currentItemPatternNode
+            in
+            case currentItemPattern of
+                Elm.Syntax.Pattern.IntPattern int ->
+                    elmSyntaxListPatternAsLiteral
+                        (Pine.valueFromInt int :: processedItems)
+                        followingItems
 
-                                        else
-                                            []
-                                in
-                                List.concat
-                                    [ matchesLengthConditions
-                                    , List.concatMap
-                                        (\{ conditions } ->
-                                            conditions deconstructedExpression
-                                        )
-                                        itemsResults
+                Elm.Syntax.Pattern.HexPattern int ->
+                    elmSyntaxListPatternAsLiteral
+                        (Pine.valueFromInt int :: processedItems)
+                        followingItems
+
+                Elm.Syntax.Pattern.StringPattern string ->
+                    elmSyntaxListPatternAsLiteral
+                        (valueFromString string :: processedItems)
+                        followingItems
+
+                Elm.Syntax.Pattern.CharPattern char ->
+                    elmSyntaxListPatternAsLiteral
+                        (Pine.valueFromChar char :: processedItems)
+                        followingItems
+
+                Elm.Syntax.Pattern.ListPattern innerListItems ->
+                    case elmSyntaxListPatternAsLiteral [] innerListItems of
+                        Just innerLiteralValues ->
+                            elmSyntaxListPatternAsLiteral
+                                (Pine.ListValue innerLiteralValues :: processedItems)
+                                followingItems
+
+                        Nothing ->
+                            Nothing
+
+                Elm.Syntax.Pattern.TuplePattern innerTupleItems ->
+                    case elmSyntaxListPatternAsLiteral [] innerTupleItems of
+                        Just innerLiteralValues ->
+                            elmSyntaxListPatternAsLiteral
+                                (Pine.ListValue innerLiteralValues :: processedItems)
+                                followingItems
+
+                        Nothing ->
+                            Nothing
+
+                _ ->
+                    Nothing
+
+        [] ->
+            Just (List.reverse processedItems)
+
+
+compileElmSyntaxPatternListOrTupleItemsGeneric :
+    CompilationStack
+    -> List (Elm.Syntax.Node.Node Elm.Syntax.Pattern.Pattern)
+    -> Bool
+    ->
+        Result
+            String
+            { conditionExpressions : Expression -> List Expression
+            , cannotMatchEmpty : Bool
+            , declarations : List ( String, List Deconstruction )
+            }
+compileElmSyntaxPatternListOrTupleItemsGeneric compilation listItems addLengthCondition =
+    case
+        Common.resultListIndexedMapCombine
+            (\( argIndex, Elm.Syntax.Node.Node _ itemPattern ) ->
+                conditionsAndDeclarationsFromItemPattern compilation argIndex itemPattern
+            )
+            listItems
+    of
+        Err err ->
+            Err err
+
+        Ok itemsResults ->
+            let
+                conditionExpressions : Expression -> List Expression
+                conditionExpressions =
+                    \deconstructedExpression ->
+                        let
+                            matchesLengthConditions =
+                                if addLengthCondition then
+                                    {-
+                                       In contrast to a tuple pattern, we also need to check the length of the list matches the pattern.
+                                       (For tuples, the length is always fixed.)
+                                    -}
+                                    let
+                                        expectedLength =
+                                            List.length listItems
+                                    in
+                                    [ case deconstructedExpression of
+                                        ListExpression deconstructedList ->
+                                            LiteralExpression
+                                                (if List.length deconstructedList == expectedLength then
+                                                    Pine.trueValue
+
+                                                 else
+                                                    Pine.falseValue
+                                                )
+
+                                        _ ->
+                                            equalCondition
+                                                [ LiteralExpression (Pine.valueFromInt expectedLength)
+                                                , countListElementsExpression deconstructedExpression
+                                                ]
                                     ]
-                    in
-                    Ok
-                        { conditionExpressions = conditionExpressions
-                        , cannotMatchEmpty =
-                            List.any .cannotMatchEmpty itemsResults
-                        , declarations = List.concatMap .declarations itemsResults
-                        }
+
+                                else
+                                    []
+                        in
+                        List.concat
+                            [ matchesLengthConditions
+                            , List.concatMap
+                                (\{ conditions } ->
+                                    conditions deconstructedExpression
+                                )
+                                itemsResults
+                            ]
+            in
+            Ok
+                { conditionExpressions = conditionExpressions
+                , cannotMatchEmpty =
+                    List.any .cannotMatchEmpty itemsResults
+                , declarations = List.concatMap .declarations itemsResults
+                }
 
 
 conditionsAndDeclarationsFromItemPattern :
@@ -3033,14 +3112,35 @@ exprCannotContainSetOrDict knownTypes expr =
 nameCannotContainSetOrDict : List ( String, Elm.Syntax.TypeAnnotation.TypeAnnotation ) -> String -> Bool
 nameCannotContainSetOrDict knownTypes localName =
     case Common.assocListGet localName knownTypes of
-        Just (Elm.Syntax.TypeAnnotation.Typed (Elm.Syntax.Node.Node _ ( [], "Int" )) []) ->
-            True
+        Just knownType ->
+            typeCannotContainSetOrDict knownTypes knownType
 
-        Just (Elm.Syntax.TypeAnnotation.Typed (Elm.Syntax.Node.Node _ ( [], "String" )) []) ->
-            True
+        _ ->
+            False
 
-        Just (Elm.Syntax.TypeAnnotation.Typed (Elm.Syntax.Node.Node _ ( [], "Char" )) []) ->
-            True
+
+typeCannotContainSetOrDict :
+    List ( String, Elm.Syntax.TypeAnnotation.TypeAnnotation )
+    -> Elm.Syntax.TypeAnnotation.TypeAnnotation
+    -> Bool
+typeCannotContainSetOrDict knownTypes typeAnnotation =
+    case typeAnnotation of
+        Elm.Syntax.TypeAnnotation.Typed (Elm.Syntax.Node.Node _ ( [], typeName )) typeArgs ->
+            case ( typeName, typeArgs ) of
+                ( "Int", [] ) ->
+                    True
+
+                ( "String", [] ) ->
+                    True
+
+                ( "Char", [] ) ->
+                    True
+
+                ( "List", [ Elm.Syntax.Node.Node _ itemType ] ) ->
+                    typeCannotContainSetOrDict knownTypes itemType
+
+                _ ->
+                    True
 
         _ ->
             False

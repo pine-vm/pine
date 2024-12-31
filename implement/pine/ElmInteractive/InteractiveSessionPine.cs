@@ -192,7 +192,10 @@ public class InteractiveSessionPine : IInteractiveSession
         foreach (var compilationIncrement in orderedModules)
         {
             var parseResult =
-                CachedTryParseModuleText(compilationIncrement.sourceModule.ModuleText);
+                CachedTryParseModuleText(
+                    compilationIncrement.sourceModule.ModuleText,
+                    elmCompiler,
+                    pineVM);
 
             if (parseResult.IsErrOrNull() is { } parseErr)
             {
@@ -338,19 +341,31 @@ public class InteractiveSessionPine : IInteractiveSession
         }
     }
 
-    static Result<string, KeyValuePair<IReadOnlyList<string>, PineValue>> CachedTryParseModuleText(string moduleText) =>
+    static Result<string, KeyValuePair<IReadOnlyList<string>, PineValue>> CachedTryParseModuleText(
+        string moduleText,
+        ElmCompiler elmCompiler,
+        IPineVM pineVM) =>
         TryParseModuleTextCache
         .GetOrAdd(
             moduleText,
-            valueFactory: TryParseModuleText);
+            valueFactory:
+            moduleText => TryParseModuleText(moduleText, elmCompiler, pineVM));
 
-    static Result<string, KeyValuePair<IReadOnlyList<string>, PineValue>> TryParseModuleText(string moduleText)
+    static Result<string, KeyValuePair<IReadOnlyList<string>, PineValue>> TryParseModuleText(
+        string moduleText,
+        ElmCompiler elmCompiler,
+        IPineVM pineVM)
     {
         return
             ElmSyntax.ElmModule.ParseModuleName(moduleText)
             .MapError(err => "Failed parsing name for module " + moduleText.Split('\n', '\r').FirstOrDefault())
             .AndThen(moduleName =>
+            /*
+             * 2024-12-31: Remove dependency on JavaScript for parsing Elm module syntax.
+             * 
             ElmInteractive.ParseElmModuleTextToPineValue(moduleText, ParseSubmissionOrCompileDefaultJavaScriptEngine)
+            */
+            elmCompiler.ParseElmModuleText(moduleText, pineVM)
             .MapError(err => "Failed parsing module " + string.Join(".", moduleName) + ": " + err)
             .Map(parsedModule => new KeyValuePair<IReadOnlyList<string>, PineValue>(moduleName, parsedModule)));
     }

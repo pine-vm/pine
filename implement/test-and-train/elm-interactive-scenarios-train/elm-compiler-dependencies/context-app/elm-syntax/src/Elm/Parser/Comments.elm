@@ -27,8 +27,8 @@ multilineComment : ParserFast.Parser (Node String)
 multilineComment =
     ParserFast.offsetSourceAndThen
         (\offset source ->
-            case String.slice (offset + 2) (offset + 3) source of
-                "|" ->
+            case List.take 1 (List.drop (offset + 2) source) of
+                [ '|' ] ->
                     problemUnexpectedDocumentation
 
                 _ ->
