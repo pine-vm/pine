@@ -1359,22 +1359,6 @@ public class PineVM : IPineVM
 
         var skipCountValueExpr = skipListExpr.items[0];
 
-        if (Expression.EnumerateSelfAndDescendants(takeCountValueExpr)
-            .Any(desc =>
-            desc is Expression.ParseAndEval ||
-            desc is Expression.StackReferenceExpression))
-        {
-            return null;
-        }
-
-        if (Expression.EnumerateSelfAndDescendants(skipCountValueExpr)
-            .Any(desc =>
-            desc is Expression.ParseAndEval ||
-            desc is Expression.StackReferenceExpression))
-        {
-            return null;
-        }
-
         return
             new Expression.KernelApplications_Skip_Take(
                 SkipCount: skipListExpr.items[0],
