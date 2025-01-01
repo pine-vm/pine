@@ -24,8 +24,14 @@ public class AVH4ElmFormatBinaries
             ("364469d9b64866e0595c9c2837eb330eeb1c58269d31567085fa24886b5a46d7",
             @"https://github.com/avh4/elm-format/releases/download/0.8.7/elm-format-0.8.7-mac-x64.tgz"));
 
-    public static string RunElmFormat(string moduleTextBefore)
+    private readonly static Lazy<string> executableFilePathCached = new(() =>
     {
+        /*
+         * For now, we assume that the file stays the same for the lifetime of the current process.
+         * This approach will break if the persistent cache is cleared while the current process is running.
+         * We could make this more robust by checking if the file at the path still exists, and re-downloading if it doesn't.
+         * */
+
         var executableFile =
             BlobLibrary.LoadFileForCurrentOs(ExecutableFileByOs)
             ??
@@ -38,11 +44,18 @@ public class AVH4ElmFormatBinaries
                 ExecutableFile.UnixFileModeForExecutableFile);
         }
 
+        return executableFile.cacheFilePath;
+    });
+
+    public static string RunElmFormat(string moduleTextBefore)
+    {
+        var executableFilePath = executableFilePathCached.Value;
+
         var process = new Process
         {
             StartInfo = new ProcessStartInfo
             {
-                FileName = executableFile.cacheFilePath,
+                FileName = executableFilePath,
                 Arguments = "--stdin",
                 RedirectStandardInput = true,
                 RedirectStandardOutput = true,

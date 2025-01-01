@@ -1,3 +1,4 @@
+using System;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading.Tasks;
@@ -6,17 +7,18 @@ namespace Pine.Elm019;
 
 public static class ElmMakeRunner
 {
-    public static async Task<ExecutableFile.ProcessOutput> ElmMakeAsync(
-        string workingDirectoryAbsolute,
-        string pathToFileWithElmEntryPoint)
+    private readonly static Lazy<string> executableFilePathCached = new(() =>
     {
-        var arguments =
-            string.Join(" ", ["make", pathToFileWithElmEntryPoint, "--report=json  --output=/dev/null"]);
+        /*
+         * For now, we assume that the file stays the same for the lifetime of the current process.
+         * This approach will break if the persistent cache is cleared while the current process is running.
+         * We could make this more robust by checking if the file at the path still exists, and re-downloading if it doesn't.
+         * */
 
         var executableFile =
             BlobLibrary.LoadFileForCurrentOs(ElmTime.Elm019.Elm019Binaries.ElmExecutableFileByOs)
             ??
-            throw new System.Exception("Failed to load elm-format executable file");
+            throw new Exception("Failed to load elm executable file");
 
         if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
         {
@@ -25,12 +27,24 @@ public static class ElmMakeRunner
                 ExecutableFile.UnixFileModeForExecutableFile);
         }
 
+        return executableFile.cacheFilePath;
+    });
+
+    public static async Task<ExecutableFile.ProcessOutput> ElmMakeAsync(
+        string workingDirectoryAbsolute,
+        string pathToFileWithElmEntryPoint)
+    {
+        var arguments =
+            string.Join(" ", ["make", pathToFileWithElmEntryPoint, "--report=json  --output=/dev/null"]);
+
+        var executableFilePath = executableFilePathCached.Value;
+
         var process = new System.Diagnostics.Process
         {
             StartInfo = new System.Diagnostics.ProcessStartInfo
             {
                 WorkingDirectory = workingDirectoryAbsolute,
-                FileName = executableFile.cacheFilePath,
+                FileName = executableFilePath,
                 Arguments = arguments,
                 UseShellExecute = false,
                 RedirectStandardOutput = true,
@@ -104,7 +118,7 @@ public static class ElmMakeRunner
         // Start the process and begin asynchronous reads
         if (!process.Start())
         {
-            throw new System.Exception("Failed to start elm make process.");
+            throw new Exception("Failed to start elm make process.");
         }
 
         process.BeginOutputReadLine();
