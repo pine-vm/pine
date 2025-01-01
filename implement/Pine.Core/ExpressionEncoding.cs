@@ -41,7 +41,7 @@ public static class ExpressionEncoding
             Expression.StringTag stringTag =>
             EncodeChoiceTypeVariantAsPineValue(
                 "StringTag",
-                PineValue.List([PineValueAsString.ValueFromString(stringTag.tag), EncodeExpressionAsValue(stringTag.tagged)])),
+                PineValue.List([PineValueAsString.ValueFromString(stringTag.Tag), EncodeExpressionAsValue(stringTag.Tagged)])),
 
             _ =>
             throw new Exception("Unsupported expression type: " + expression.GetType().FullName)
@@ -180,8 +180,8 @@ public static class ExpressionEncoding
         EncodeChoiceTypeVariantAsPineValue("ParseAndEval",
             PineValue.List(
                 [
-                EncodeExpressionAsValue(parseAndEval.encoded),
-                EncodeExpressionAsValue(parseAndEval.environment)
+                EncodeExpressionAsValue(parseAndEval.Encoded),
+                EncodeExpressionAsValue(parseAndEval.Environment)
                 ]));
 
     public static Result<string, Expression.ParseAndEval> ParseParseAndEval(
@@ -202,8 +202,8 @@ public static class ExpressionEncoding
             "KernelApplication",
             PineValue.List(
                 [
-                PineValueAsString.ValueFromString(kernelApplicationExpression.function),
-                EncodeExpressionAsValue(kernelApplicationExpression.input)
+                PineValueAsString.ValueFromString(kernelApplicationExpression.Function),
+                EncodeExpressionAsValue(kernelApplicationExpression.Input)
                 ]));
 
     public static Result<string, Expression.KernelApplication> ParseKernelApplication(
@@ -226,9 +226,9 @@ public static class ExpressionEncoding
             "Conditional",
             PineValue.List(
                 [
-                EncodeExpressionAsValue(conditionalExpression.condition),
-                EncodeExpressionAsValue(conditionalExpression.falseBranch),
-                EncodeExpressionAsValue(conditionalExpression.trueBranch)
+                EncodeExpressionAsValue(conditionalExpression.Condition),
+                EncodeExpressionAsValue(conditionalExpression.FalseBranch),
+                EncodeExpressionAsValue(conditionalExpression.TrueBranch)
                 ]));
 
     public static Result<string, Expression.Conditional> ParseConditional(

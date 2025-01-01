@@ -27,10 +27,10 @@ public class ReducePineExpression
             TryEvaluateExpressionIndependent(list),
 
             Expression.KernelApplication kernelApplication =>
-            TryEvaluateExpressionIndependent(kernelApplication.input)
+            TryEvaluateExpressionIndependent(kernelApplication.Input)
             .MapError(err => "Failed to evaluate kernel application input independent: " + err)
             .Map(inputValue =>
-            PineVM.PineVM.EvaluateKernelApplicationGeneric(kernelApplication.function, inputValue)),
+            PineVM.PineVM.EvaluateKernelApplicationGeneric(kernelApplication.Function, inputValue)),
 
             Expression.ParseAndEval parseAndEvalExpr =>
             TryEvaluateExpressionIndependent(parseAndEvalExpr),
@@ -39,7 +39,7 @@ public class ReducePineExpression
             TryEvaluateExpressionIndependent(conditional),
 
             Expression.StringTag stringTag =>
-            TryEvaluateExpressionIndependent(stringTag.tagged),
+            TryEvaluateExpressionIndependent(stringTag.Tagged),
 
             _ =>
             "Unsupported expression type: " + expression.GetType().FullName
@@ -70,7 +70,7 @@ public class ReducePineExpression
     public static Result<string, PineValue> TryEvaluateExpressionIndependent(
         Expression.ParseAndEval parseAndEvalExpr)
     {
-        if (TryEvaluateExpressionIndependent(parseAndEvalExpr.environment).IsOkOrNull() is { } envOk)
+        if (TryEvaluateExpressionIndependent(parseAndEvalExpr.Environment).IsOkOrNull() is { } envOk)
         {
             try
             {
@@ -96,7 +96,7 @@ public class ReducePineExpression
         }
 
         return
-            TryEvaluateExpressionIndependent(parseAndEvalExpr.encoded)
+            TryEvaluateExpressionIndependent(parseAndEvalExpr.Encoded)
             .MapError(err => "Expression is not independent: " + err)
             .AndThen(compilerCache.ParseExpressionFromValue)
             .AndThen(innerExpr => TryEvaluateExpressionIndependent(innerExpr)
@@ -107,14 +107,14 @@ public class ReducePineExpression
         Expression.Conditional conditionalExpr)
     {
         return
-            TryEvaluateExpressionIndependent(conditionalExpr.condition)
+            TryEvaluateExpressionIndependent(conditionalExpr.Condition)
             .AndThen(conditionValue =>
             {
                 if (conditionValue == PineVMValues.FalseValue)
-                    return TryEvaluateExpressionIndependent(conditionalExpr.falseBranch);
+                    return TryEvaluateExpressionIndependent(conditionalExpr.FalseBranch);
 
                 if (conditionValue == PineVMValues.TrueValue)
-                    return TryEvaluateExpressionIndependent(conditionalExpr.trueBranch);
+                    return TryEvaluateExpressionIndependent(conditionalExpr.TrueBranch);
 
                 return PineValue.EmptyList;
             });
@@ -174,14 +174,14 @@ public class ReducePineExpression
 
                 Expression.KernelApplication continueWithReducedInput(Expression newInput) =>
                     new(
-                        function: rootKernelApp.function,
+                        function: rootKernelApp.Function,
                         input: newInput);
 
-                switch (rootKernelApp.function)
+                switch (rootKernelApp.Function)
                 {
                     case nameof(KernelFunction.equal):
                         {
-                            if (rootKernelApp.input is Expression.List inputList)
+                            if (rootKernelApp.Input is Expression.List inputList)
                             {
                                 if (envConstraintId is not null)
                                 {
@@ -245,14 +245,14 @@ public class ReducePineExpression
 
                     case "head":
                         {
-                            if (rootKernelApp.input is Expression.List inputList)
+                            if (rootKernelApp.Input is Expression.List inputList)
                             {
                                 return
                                     inputList.items.FirstOrDefault() ??
                                     Expression.LiteralInstance(PineValue.EmptyList);
                             }
 
-                            if (rootKernelApp.input is Expression.Literal literal)
+                            if (rootKernelApp.Input is Expression.Literal literal)
                                 return Expression.LiteralInstance(KernelFunction.head(literal.Value));
 
                             return AttemptReduceViaEval();
@@ -260,7 +260,7 @@ public class ReducePineExpression
 
                     case "skip":
                         {
-                            if (rootKernelApp.input is Expression.List inputList && inputList.items.Count is 2)
+                            if (rootKernelApp.Input is Expression.List inputList && inputList.items.Count is 2)
                             {
                                 if (TryEvaluateExpressionIndependent(inputList.items[0]) is Result<string, PineValue>.Ok okSkipCountValue)
                                 {
@@ -280,8 +280,8 @@ public class ReducePineExpression
 
                                         if (inputList.items[1] is Expression.KernelApplication innerKernelApp)
                                         {
-                                            if (innerKernelApp.function is "skip"
-                                                && innerKernelApp.input is Expression.List innerSkipInputList &&
+                                            if (innerKernelApp.Function is "skip"
+                                                && innerKernelApp.Input is Expression.List innerSkipInputList &&
                                                 innerSkipInputList.items.Count is 2)
                                             {
                                                 if (TryEvaluateExpressionIndependent(innerSkipInputList.items[0]) is Result<string, PineValue>.Ok okInnerSkipCountValue)
@@ -320,7 +320,7 @@ public class ReducePineExpression
 
                     case nameof(KernelFunction.concat):
                         {
-                            if (rootKernelApp.input is Expression.List inputList)
+                            if (rootKernelApp.Input is Expression.List inputList)
                             {
                                 if (inputList.items.Count is 0)
                                 {
@@ -405,17 +405,17 @@ public class ReducePineExpression
 
                     case nameof(KernelFunction.length):
                         {
-                            if (rootKernelApp.input is Expression.List inputList)
+                            if (rootKernelApp.Input is Expression.List inputList)
                             {
                                 return
                                     Expression.LiteralInstance(
                                         PineValueAsInteger.ValueFromSignedInteger(inputList.items.Count));
                             }
 
-                            if (rootKernelApp.input is Expression.KernelApplication lengthInputKernelApp)
+                            if (rootKernelApp.Input is Expression.KernelApplication lengthInputKernelApp)
                             {
-                                if (lengthInputKernelApp.function is nameof(KernelFunction.concat) &&
-                                    lengthInputKernelApp.input is Expression.List lengthConcatList)
+                                if (lengthInputKernelApp.Function is nameof(KernelFunction.concat) &&
+                                    lengthInputKernelApp.Input is Expression.List lengthConcatList)
                                 {
                                     int? aggregateLength = 0;
 
@@ -465,7 +465,7 @@ public class ReducePineExpression
                     var condition =
                         SearchForExpressionReductionRecursive(
                             maxDepth: 5,
-                            conditional.condition,
+                            conditional.Condition,
                             envConstraintId: envConstraintId);
 
                     if (!condition.ReferencesEnvironment)
@@ -479,18 +479,18 @@ public class ReducePineExpression
                                 fromOk: conditionValue =>
                                 conditionValue == PineVMValues.TrueValue
                                 ?
-                                conditional.trueBranch
+                                conditional.TrueBranch
                                 :
                                 conditionValue == PineVMValues.FalseValue
                                 ?
-                                conditional.falseBranch
+                                conditional.FalseBranch
                                 :
                                 Expression.LiteralInstance(PineValue.EmptyList));
                     }
 
-                    if (conditional.trueBranch == conditional.falseBranch)
+                    if (conditional.TrueBranch == conditional.FalseBranch)
                     {
-                        return conditional.trueBranch;
+                        return conditional.TrueBranch;
                     }
 
                     return AttemptReduceViaEval();
@@ -550,8 +550,8 @@ public class ReducePineExpression
 
         if (expression is Expression.KernelApplication kernelApp)
         {
-            if (kernelApp.function is "skip" &&
-                kernelApp.input is Expression.List skipInputList && skipInputList.items.Count is 2)
+            if (kernelApp.Function is "skip" &&
+                kernelApp.Input is Expression.List skipInputList && skipInputList.items.Count is 2)
             {
                 if (TryEvaluateExpressionIndependent(skipInputList.items[0]) is Result<string, PineValue>.Ok okSkipCountValue)
                 {
@@ -606,12 +606,12 @@ public class ReducePineExpression
                     var encodedTransform =
                         TransformPineExpressionWithOptionalReplacement(
                             findReplacement,
-                            parseAndEval.encoded);
+                            parseAndEval.Encoded);
 
                     var envTransform =
                         TransformPineExpressionWithOptionalReplacement(
                             findReplacement,
-                            parseAndEval.environment);
+                            parseAndEval.Environment);
 
                     return
                         (
@@ -628,12 +628,12 @@ public class ReducePineExpression
                     var argumentTransform =
                         TransformPineExpressionWithOptionalReplacement(
                             findReplacement,
-                            kernelApp.input);
+                            kernelApp.Input);
 
                     return
                         (
                         new Expression.KernelApplication(
-                            function: kernelApp.function,
+                            function: kernelApp.Function,
                             input: argumentTransform.expr),
                         argumentTransform.referencesOriginalEnv);
                 }
@@ -643,17 +643,17 @@ public class ReducePineExpression
                     var conditionTransform =
                         TransformPineExpressionWithOptionalReplacement(
                             findReplacement,
-                            conditional.condition);
+                            conditional.Condition);
 
                     var trueBranchTransform =
                         TransformPineExpressionWithOptionalReplacement(
                             findReplacement,
-                            conditional.trueBranch);
+                            conditional.TrueBranch);
 
                     var falseBranchTransform =
                         TransformPineExpressionWithOptionalReplacement(
                             findReplacement,
-                            conditional.falseBranch);
+                            conditional.FalseBranch);
 
                     return (
                         Expression.ConditionalInstance
@@ -675,12 +675,12 @@ public class ReducePineExpression
                     var taggedTransform =
                         TransformPineExpressionWithOptionalReplacement(
                             findReplacement,
-                            stringTagExpr.tagged);
+                            stringTagExpr.Tagged);
 
                     return
                         (new Expression.StringTag
                         (
-                            stringTagExpr.tag,
+                            stringTagExpr.Tag,
                             taggedTransform.expr
                         ),
                         taggedTransform.referencesOriginalEnv);
@@ -742,18 +742,18 @@ public class ReducePineExpression
                     var leftTransform =
                         TransformPineExpressionWithOptionalReplacement(
                             findReplacement,
-                            equalTwo.left);
+                            equalTwo.Left);
 
                     var rightTransform =
                         TransformPineExpressionWithOptionalReplacement(
                             findReplacement,
-                            equalTwo.right);
+                            equalTwo.Right);
 
                     return (
                         new Expression.KernelApplication_Equal_Two
                         (
-                            left: leftTransform.expr,
-                            right: rightTransform.expr
+                            Left: leftTransform.expr,
+                            Right: rightTransform.expr
                         ),
                         leftTransform.referencesOriginalEnv || rightTransform.referencesOriginalEnv);
                 }

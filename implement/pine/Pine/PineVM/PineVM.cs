@@ -507,7 +507,7 @@ public class PineVM : IPineVM
                         {
                             if (descendant is Expression.Environment)
                             {
-                                return parseAndEvalExpr.environment;
+                                return parseAndEvalExpr.Environment;
                             }
 
                             return null;
@@ -621,10 +621,10 @@ public class PineVM : IPineVM
                 return inlinedFinal;
             }
 
-            if (!parseAndEvalExpr.encoded.ReferencesEnvironment)
+            if (!parseAndEvalExpr.Encoded.ReferencesEnvironment)
             {
                 if (CompilePineToDotNet.ReducePineExpression.TryEvaluateExpressionIndependent(
-                    parseAndEvalExpr.encoded).IsOkOrNull() is
+                    parseAndEvalExpr.Encoded).IsOkOrNull() is
                     { } evalExprOk)
                 {
                     return ContinueReduceForKnownExprValue(evalExprOk);
@@ -662,17 +662,17 @@ public class PineVM : IPineVM
                     {
                         var conditionInlined =
                         InlineParseAndEvalRecursive(
-                            conditional.condition,
+                            conditional.Condition,
                             underConditional: underConditional);
 
                         var falseBranchInlined =
                         InlineParseAndEvalRecursive(
-                            conditional.falseBranch,
+                            conditional.FalseBranch,
                             underConditional: true);
 
                         var trueBranchInlined =
                         InlineParseAndEvalRecursive(
-                            conditional.trueBranch,
+                            conditional.TrueBranch,
                             underConditional: true);
 
                         return Expression.ConditionalInstance(
@@ -764,17 +764,17 @@ public class PineVM : IPineVM
         {
             var conditionNode =
                 NodeFromExpressionTransitive(
-                    conditionalToSplit.condition,
+                    conditionalToSplit.Condition,
                     conditionalsToSkip: []);
 
             var falseNode =
                 NodeFromExpressionTransitive(
-                    conditionalToSplit.falseBranch,
+                    conditionalToSplit.FalseBranch,
                     conditionalsToSkip: []);
 
             var trueNode =
                 NodeFromExpressionTransitive(
-                    conditionalToSplit.trueBranch,
+                    conditionalToSplit.TrueBranch,
                     conditionalsToSkip: []);
 
             var continuationNode =
@@ -1176,18 +1176,18 @@ public class PineVM : IPineVM
 
             if (expression is Expression.ParseAndEval parseAndEval)
             {
-                stack.Push(parseAndEval.encoded);
-                stack.Push(parseAndEval.environment);
+                stack.Push(parseAndEval.Encoded);
+                stack.Push(parseAndEval.Environment);
             }
 
             if (expression is Expression.KernelApplication kernelApp)
             {
-                stack.Push(kernelApp.input);
+                stack.Push(kernelApp.Input);
             }
 
             if (expression is Expression.Conditional conditional)
             {
-                stack.Push(conditional.condition);
+                stack.Push(conditional.Condition);
 
                 /*
                  *
@@ -1201,7 +1201,7 @@ public class PineVM : IPineVM
 
             if (expression is Expression.StringTag stringTag)
             {
-                stack.Push(stringTag.tagged);
+                stack.Push(stringTag.Tagged);
             }
 
             deepestDescendants.Push(expression);
@@ -1229,7 +1229,7 @@ public class PineVM : IPineVM
 
         if (expression is Expression.StringTag stringTag)
         {
-            return ExpressionLargeEnoughForCSE(stringTag.tagged);
+            return ExpressionLargeEnoughForCSE(stringTag.Tagged);
         }
 
         return 10 < expression.SubexpressionCount;
@@ -1261,18 +1261,18 @@ public class PineVM : IPineVM
         if (expression is not Expression.KernelApplication kernelApp)
             return null;
 
-        if (kernelApp.function is not nameof(KernelFunction.head))
+        if (kernelApp.Function is not nameof(KernelFunction.head))
             return null;
 
-        if (kernelApp.input is not Expression.KernelApplication innerKernelApp)
+        if (kernelApp.Input is not Expression.KernelApplication innerKernelApp)
         {
-            return continueWithSkipCount(skipCount: 0, kernelApp.input);
+            return continueWithSkipCount(skipCount: 0, kernelApp.Input);
         }
 
-        if (innerKernelApp.function is not nameof(KernelFunction.skip))
+        if (innerKernelApp.Function is not nameof(KernelFunction.skip))
             return null;
 
-        if (innerKernelApp.input is not Expression.List skipListExpr)
+        if (innerKernelApp.Input is not Expression.List skipListExpr)
             return null;
 
         if (skipListExpr.items.Count is not 2)
@@ -1334,10 +1334,10 @@ public class PineVM : IPineVM
         if (expression is not Expression.KernelApplication kernelApp)
             return null;
 
-        if (kernelApp.function is not nameof(KernelFunction.take))
+        if (kernelApp.Function is not nameof(KernelFunction.take))
             return null;
 
-        if (kernelApp.input is not Expression.List takeArgListExpr)
+        if (kernelApp.Input is not Expression.List takeArgListExpr)
             return null;
 
         if (takeArgListExpr.items.Count is not 2)
@@ -1346,10 +1346,10 @@ public class PineVM : IPineVM
         if (takeArgListExpr.items[1] is not Expression.KernelApplication innerKernelApp)
             return null;
 
-        if (innerKernelApp.function is not nameof(KernelFunction.skip))
+        if (innerKernelApp.Function is not nameof(KernelFunction.skip))
             return null;
 
-        if (innerKernelApp.input is not Expression.List skipListExpr)
+        if (innerKernelApp.Input is not Expression.List skipListExpr)
             return null;
 
         if (skipListExpr.items.Count is not 2)
@@ -1371,18 +1371,18 @@ public class PineVM : IPineVM
         if (expression is not Expression.KernelApplication kernelApp)
             return null;
 
-        if (kernelApp.function is not nameof(KernelFunction.equal))
+        if (kernelApp.Function is not nameof(KernelFunction.equal))
             return null;
 
-        if (kernelApp.input is not Expression.List listExpr)
+        if (kernelApp.Input is not Expression.List listExpr)
             return null;
 
         if (listExpr.items.Count is not 2)
             return null;
 
         return new Expression.KernelApplication_Equal_Two(
-            left: listExpr.items[0],
-            right: listExpr.items[1]);
+            Left: listExpr.items[0],
+            Right: listExpr.items[1]);
     }
 
     public record EvaluationConfig(
@@ -1716,13 +1716,13 @@ public class PineVM : IPineVM
 
                         var expressionValue =
                             EvaluateExpressionDefaultLessStack(
-                                parseAndEval.encoded,
+                                parseAndEval.Encoded,
                                 currentFrame.EnvironmentValue,
                                 stackPrevValues: stackPrevValues);
 
                         var environmentValue =
                             EvaluateExpressionDefaultLessStack(
-                                parseAndEval.environment,
+                                parseAndEval.Environment,
                                 currentFrame.EnvironmentValue,
                                 stackPrevValues: stackPrevValues);
 
@@ -1770,16 +1770,16 @@ public class PineVM : IPineVM
                     {
                         var conditionValue =
                             EvaluateExpressionDefaultLessStack(
-                                conditionalExpr.condition,
+                                conditionalExpr.Condition,
                                 currentFrame.EnvironmentValue,
                                 stackPrevValues: stackPrevValues);
 
                         var expressionToContinueWith =
                             conditionValue == PineVMValues.TrueValue
                             ?
-                            conditionalExpr.trueBranch
+                            conditionalExpr.TrueBranch
                             :
-                            conditionalExpr.falseBranch;
+                            conditionalExpr.FalseBranch;
 
                         if (ExpressionShouldGetNewStackFrame(expressionToContinueWith))
                         {
@@ -1895,15 +1895,15 @@ public class PineVM : IPineVM
 
         if (expression is Expression.KernelApplication kernelApp)
         {
-            return ExpressionShouldGetNewStackFrame(kernelApp.input);
+            return ExpressionShouldGetNewStackFrame(kernelApp.Input);
         }
 
         if (expression is Expression.Conditional conditional)
         {
             return
-                ExpressionShouldGetNewStackFrame(conditional.condition) ||
-                ExpressionShouldGetNewStackFrame(conditional.trueBranch) ||
-                ExpressionShouldGetNewStackFrame(conditional.falseBranch);
+                ExpressionShouldGetNewStackFrame(conditional.Condition) ||
+                ExpressionShouldGetNewStackFrame(conditional.TrueBranch) ||
+                ExpressionShouldGetNewStackFrame(conditional.FalseBranch);
         }
 
         if (expression is Expression.List list)
@@ -1920,7 +1920,7 @@ public class PineVM : IPineVM
         }
 
         if (expression is Expression.StringTag stringTag)
-            return ExpressionShouldGetNewStackFrame(stringTag.tagged);
+            return ExpressionShouldGetNewStackFrame(stringTag.Tagged);
 
         if (expression is Expression.StackReferenceExpression)
             return false;
@@ -1985,7 +1985,7 @@ public class PineVM : IPineVM
         if (expression is Expression.StringTag stringTagExpression)
         {
             return EvaluateExpressionDefaultLessStack(
-                stringTagExpression.tagged,
+                stringTagExpression.Tagged,
                 environment,
                 stackPrevValues: stackPrevValues);
         }
@@ -2040,12 +2040,12 @@ public class PineVM : IPineVM
         if (expression is Expression.KernelApplication_Equal_Two kernelApplicationEqualTwo)
         {
             var leftValue = EvaluateExpressionDefaultLessStack(
-                kernelApplicationEqualTwo.left,
+                kernelApplicationEqualTwo.Left,
                 environment,
                 stackPrevValues: stackPrevValues);
 
             var rightValue = EvaluateExpressionDefaultLessStack(
-                kernelApplicationEqualTwo.right,
+                kernelApplicationEqualTwo.Right,
                 environment,
                 stackPrevValues: stackPrevValues);
 
@@ -2084,13 +2084,13 @@ public class PineVM : IPineVM
     {
         var environmentValue =
             EvaluateExpressionDefaultLessStack(
-                parseAndEval.environment,
+                parseAndEval.Environment,
                 environment,
                 stackPrevValues: stackPrevValues);
 
         var expressionValue =
             EvaluateExpressionDefaultLessStack(
-                parseAndEval.encoded,
+                parseAndEval.Encoded,
                 environment,
                 stackPrevValues: stackPrevValues);
 
@@ -2173,11 +2173,11 @@ public class PineVM : IPineVM
         Expression.KernelApplication application,
         ReadOnlyMemory<PineValue> stackPrevValues)
     {
-        if (application.function is nameof(KernelFunction.head) &&
-            application.input is Expression.KernelApplication innerKernelApplication)
+        if (application.Function is nameof(KernelFunction.head) &&
+            application.Input is Expression.KernelApplication innerKernelApplication)
         {
-            if (innerKernelApplication.function is nameof(KernelFunction.skip) &&
-                innerKernelApplication.input is Expression.List skipListExpr &&
+            if (innerKernelApplication.Function is nameof(KernelFunction.skip) &&
+                innerKernelApplication.Input is Expression.List skipListExpr &&
                 skipListExpr.items.Count is 2)
             {
                 var skipValue =
@@ -2216,11 +2216,11 @@ public class PineVM : IPineVM
         Expression.KernelApplication application,
         ReadOnlyMemory<PineValue> stackPrevValues)
     {
-        var inputValue = EvaluateExpressionDefaultLessStack(application.input, environment, stackPrevValues);
+        var inputValue = EvaluateExpressionDefaultLessStack(application.Input, environment, stackPrevValues);
 
         return
             EvaluateKernelApplicationGeneric(
-                function: application.function,
+                function: application.Function,
                 inputValue: inputValue);
     }
 
@@ -2427,20 +2427,20 @@ public class PineVM : IPineVM
     {
         var conditionValue =
             EvaluateExpressionDefaultLessStack(
-                conditional.condition,
+                conditional.Condition,
                 environment,
                 stackPrevValues: stackPrevValues);
 
         if (conditionValue == PineVMValues.TrueValue)
         {
             return EvaluateExpressionDefaultLessStack(
-                conditional.trueBranch,
+                conditional.TrueBranch,
                 environment,
                 stackPrevValues: stackPrevValues);
         }
 
         return EvaluateExpressionDefaultLessStack(
-                conditional.falseBranch,
+                conditional.FalseBranch,
                 environment,
             stackPrevValues: stackPrevValues);
     }

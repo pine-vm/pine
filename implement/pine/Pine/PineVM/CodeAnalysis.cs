@@ -514,7 +514,7 @@ public class CodeAnalysis
             .OfType<Expression.ParseAndEval>()
             .Select(parseAndEvalExpr =>
             {
-                var encodedMapped = TryParseExpressionAsIndexPathFromEnv(parseAndEvalExpr.encoded);
+                var encodedMapped = TryParseExpressionAsIndexPathFromEnv(parseAndEvalExpr.Encoded);
 
                 var expressionValue =
                 encodedMapped switch
@@ -677,7 +677,7 @@ public class CodeAnalysis
                  * In this case, classify the environment as unconstrained.
                  * */
                 .EvaluateExpressionOnCustomStack(
-                    parseSubExpr.ParseAndEvalExpr.environment,
+                    parseSubExpr.ParseAndEvalExpr.Environment,
                     environment,
                     config: new PineVM.EvaluationConfig(ParseAndEvalCountLimit: 100))
                 .Unpack(
@@ -716,7 +716,7 @@ public class CodeAnalysis
                 return childEnvBeforeMapping;
             }
 
-            var childPathEnvMap = BuildPathMapFromChildToParentEnv(parseSubExpr.ParseAndEvalExpr.environment);
+            var childPathEnvMap = BuildPathMapFromChildToParentEnv(parseSubExpr.ParseAndEvalExpr.Environment);
 
             var parsedEnvItemsMapped =
                 childConstrainedEnv.ParsedEnvItems
@@ -959,18 +959,18 @@ public class CodeAnalysis
             return new ExprMappedToParentEnv.LiteralInParentEnv(literal.Value);
 
         if (pathExpression is Expression.StringTag stringTagExpr)
-            return TryParseExpressionAsIndexPath(stringTagExpr.tagged, rootExpression);
+            return TryParseExpressionAsIndexPath(stringTagExpr.Tagged, rootExpression);
 
         if (pathExpression is not Expression.KernelApplication kernelApplication)
             return null;
 
-        if (kernelApplication.function is not nameof(KernelFunction.head))
+        if (kernelApplication.Function is not nameof(KernelFunction.head))
             return null;
 
-        if (kernelApplication.input is Expression.KernelApplication inputKernelApplication &&
-            inputKernelApplication.function is nameof(KernelFunction.skip))
+        if (kernelApplication.Input is Expression.KernelApplication inputKernelApplication &&
+            inputKernelApplication.Function is nameof(KernelFunction.skip))
         {
-            if (inputKernelApplication.input is not Expression.List skipInputList)
+            if (inputKernelApplication.Input is not Expression.List skipInputList)
                 return null;
 
             if (skipInputList.items.Count is not 2)
@@ -991,7 +991,7 @@ public class CodeAnalysis
         }
 
         {
-            if (TryParseExpressionAsIndexPath(kernelApplication.input, rootExpression) is not ExprMappedToParentEnv.PathInParentEnv pathPrefix)
+            if (TryParseExpressionAsIndexPath(kernelApplication.Input, rootExpression) is not ExprMappedToParentEnv.PathInParentEnv pathPrefix)
                 return null;
 
             return new ExprMappedToParentEnv.PathInParentEnv([.. pathPrefix.Path, 0]);

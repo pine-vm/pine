@@ -393,9 +393,9 @@ public record ReusedInstances(
 
                         Expression.Conditional conditionalExpression =>
                         Expression.ConditionalInstance(
-                            condition: reuseInstance(conditionalExpression.condition),
-                            falseBranch: reuseInstance(conditionalExpression.falseBranch),
-                            trueBranch: reuseInstance(conditionalExpression.trueBranch)),
+                            condition: reuseInstance(conditionalExpression.Condition),
+                            falseBranch: reuseInstance(conditionalExpression.FalseBranch),
+                            trueBranch: reuseInstance(conditionalExpression.TrueBranch)),
 
                         _ =>
                         descendant
@@ -428,9 +428,9 @@ public record ReusedInstances(
                 .OfType<Expression.Conditional>()
                 .ToFrozenDictionary(
                     keySelector: conditional => new Expression.Conditional.ConditionalStruct(
-                        condition: conditional.condition,
-                        falseBranch: conditional.falseBranch,
-                        trueBranch: conditional.trueBranch),
+                        condition: conditional.Condition,
+                        falseBranch: conditional.FalseBranch,
+                        trueBranch: conditional.TrueBranch),
                     elementSelector: conditional => conditional);
         }
 
