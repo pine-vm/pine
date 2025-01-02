@@ -2403,21 +2403,22 @@ public class PineVM : IPineVM
         PineValue environment,
         ReadOnlySpan<int> path)
     {
-        if (path.Length is 0)
-            return environment;
+        var currentNode = environment;
 
-        if (environment is not PineValue.ListValue listValue)
-            return PineValue.EmptyList;
+        for (var i = 0; i < path.Length; i++)
+        {
+            if (currentNode is not PineValue.ListValue listValue)
+                return PineValue.EmptyList;
 
-        var skipCount = path[0];
+            var skipCount = path[i];
 
-        if (path[0] >= listValue.Elements.Count)
-            return PineValue.EmptyList;
+            if (skipCount >= listValue.Elements.Count)
+                return PineValue.EmptyList;
 
-        return
-            ValueFromPathInValueOrEmptyList(
-                listValue.Elements[skipCount < 0 ? 0 : skipCount],
-                path[1..]);
+            currentNode = listValue.Elements[skipCount < 0 ? 0 : skipCount];
+        }
+
+        return currentNode;
     }
 
     public PineValue EvaluateConditionalExpression(

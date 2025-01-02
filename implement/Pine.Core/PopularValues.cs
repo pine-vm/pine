@@ -468,6 +468,37 @@ public static class PopularValues
         "Leaf",
         "Branch2",
 
+        "module",
+        "exposing",
+        "import",
+        "as",
+        "if",
+        "then",
+        "else",
+        "let",
+        "in",
+        "case",
+        "of",
+        "type",
+        "alias",
+        "port",
+        "infix",
+        "infixl",
+        "infixr",
+        "where",
+
+        "Problem",
+        "ExpectingNumber",
+        "ExpectingSymbol",
+        "ExpectingAnyChar",
+        "ExpectingKeyword",
+        "ExpectingCharSatisfyingPredicate",
+        "ExpectingStringSatisfyingPredicate",
+        "ExpectingCustom",
+        "ExpectingOneOf",
+
+
+
         // module LanguageService
 
         "LanguageService",
