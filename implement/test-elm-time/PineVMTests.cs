@@ -246,8 +246,11 @@ public class PineVMTests
                 expected =
                 new PineVM.StackFrameInstructions(
                     [
-                        StackInstruction.Eval(new Expression.Literal(PineValue.EmptyBlob)),
-                        StackInstruction.Return
+                        new StackInstruction(
+                            StackInstructionKind.Push_Literal,
+                            Literal: PineValue.EmptyBlob),
+
+                        StackInstruction.Return,
                     ])
             },
 
@@ -263,12 +266,18 @@ public class PineVMTests
                 expected =
                 new PineVM.StackFrameInstructions(
                     [
-                        StackInstruction.Eval(
-                            Expression.ListInstance(
-                            [
-                                new Expression.Literal(PineValue.EmptyList),
-                                new Expression.Literal(PineValue.EmptyBlob),
-                            ])),
+                        new StackInstruction(
+                            StackInstructionKind.Push_Literal,
+                            Literal: PineValue.EmptyList),
+
+                        new StackInstruction(
+                            StackInstructionKind.Push_Literal,
+                            Literal: PineValue.EmptyBlob),
+
+                        new StackInstruction(
+                            StackInstructionKind.BuildList,
+                            TakeCount: 2),
+
                         StackInstruction.Return
                     ])
             },
@@ -306,24 +315,24 @@ public class PineVMTests
                 expected =
                 new PineVM.StackFrameInstructions(
                     [
-                        StackInstruction.Eval(
-                            new Expression.KernelApplication
-                            (
-                                function: "skip",
-                                input: Expression.ListInstance(
-                                    [
-                                    new Expression.Literal(PineValueAsInteger.ValueFromSignedInteger(1)),
-                                    Expression.EnvironmentInstance,
-                                    ])
-                            )),
-                        StackInstruction.Eval(
-                            Expression.ListInstance(
-                            [
-                                new Expression.Literal(PineValue.EmptyList),
-                                new Expression.StackReferenceExpression(offset: -1),
-                                new Expression.Literal(PineValue.EmptyBlob),
-                                new Expression.StackReferenceExpression(offset: -1),
-                            ])),
+                        StackInstruction.PushEnvironment,
+
+                        new StackInstruction(StackInstructionKind.Push_Literal, Literal: PineValueAsInteger.ValueFromSignedInteger(1)),
+
+                        new StackInstruction(StackInstructionKind.Skip_Binary),
+
+                        new StackInstruction(StackInstructionKind.Local_Set, LocalIndex: 3),
+
+                        new StackInstruction(StackInstructionKind.Push_Literal, Literal: PineValue.EmptyList),
+
+                        new StackInstruction(StackInstructionKind.Local_Get, LocalIndex: 3),
+
+                        new StackInstruction(StackInstructionKind.Push_Literal, Literal: PineValue.EmptyBlob),
+
+                        new StackInstruction(StackInstructionKind.Local_Get, LocalIndex: 3),
+
+                        new StackInstruction(StackInstructionKind.BuildList, TakeCount: 4),
+
                         StackInstruction.Return
                     ])
             },
@@ -376,30 +385,28 @@ public class PineVMTests
                 expected =
                 new PineVM.StackFrameInstructions(
                     [
-                        StackInstruction.Eval(
-                            new Expression.KernelApplication
-                            (
-                                function: "concat",
-                                input:
-                                new Expression.KernelApplication
-                                (
-                                    function: "skip",
-                                    input:
-                                    Expression.ListInstance(
-                                        [
-                                        new Expression.Literal(PineValueAsInteger.ValueFromSignedInteger(13)),
-                                        Expression.EnvironmentInstance,
-                                        ])
-                                )
-                            )),
-                        StackInstruction.Eval(
-                            Expression.ListInstance(
-                            [
-                                new Expression.Literal(PineValue.EmptyList),
-                                new Expression.StackReferenceExpression(offset: -1),
-                                new Expression.Literal(PineValue.EmptyBlob),
-                                new Expression.StackReferenceExpression(offset: -1),
-                            ])),
+                        StackInstruction.PushEnvironment,
+
+                        new StackInstruction(
+                            StackInstructionKind.Push_Literal,
+                            Literal: PineValueAsInteger.ValueFromSignedInteger(13)),
+
+                        new StackInstruction(StackInstructionKind.Skip_Binary),
+
+                        new StackInstruction(StackInstructionKind.Concat_List),
+
+                        new StackInstruction(StackInstructionKind.Local_Set, LocalIndex: 4),
+
+                        new StackInstruction(StackInstructionKind.Push_Literal, Literal: PineValue.EmptyList),
+
+                        new StackInstruction(StackInstructionKind.Local_Get, LocalIndex: 4),
+
+                        new StackInstruction(StackInstructionKind.Push_Literal, Literal: PineValue.EmptyBlob),
+
+                        new StackInstruction(StackInstructionKind.Local_Get, LocalIndex: 4),
+
+                        new StackInstruction(StackInstructionKind.BuildList, TakeCount: 4),
+
                         StackInstruction.Return
                     ])
             },
@@ -415,10 +422,12 @@ public class PineVMTests
                 expected =
                 new PineVM.StackFrameInstructions(
                     [
-                        StackInstruction.Eval(
-                            new Expression.ParseAndEval(
-                                encoded: Expression.EnvironmentInstance,
-                                environment: Expression.EnvironmentInstance)),
+                        StackInstruction.PushEnvironment,
+
+                        StackInstruction.PushEnvironment,
+
+                        new StackInstruction(StackInstructionKind.Parse_And_Eval),
+
                         StackInstruction.Return
                     ])
             },
@@ -438,16 +447,16 @@ public class PineVMTests
                 expected =
                 new PineVM.StackFrameInstructions(
                     [
-                        StackInstruction.Eval(
-                            new Expression.ParseAndEval(
-                                encoded: Expression.EnvironmentInstance,
-                                environment: Expression.EnvironmentInstance)),
-                        StackInstruction.Eval(
-                            Expression.ListInstance(
-                            [
-                                new Expression.StackReferenceExpression(offset: -1),
-                                new Expression.Literal(PineValue.EmptyBlob),
-                            ])),
+                        StackInstruction.PushEnvironment,
+
+                        StackInstruction.PushEnvironment,
+
+                        new StackInstruction(StackInstructionKind.Parse_And_Eval),
+
+                        new StackInstruction(StackInstructionKind.Push_Literal, Literal: PineValue.EmptyBlob),
+
+                        new StackInstruction(StackInstructionKind.BuildList, TakeCount: 2),
+
                         StackInstruction.Return
                     ])
             },
@@ -475,27 +484,32 @@ public class PineVMTests
                 expected =
                 new PineVM.StackFrameInstructions(
                     [
-                        StackInstruction.Eval(
-                            new Expression.ParseAndEval(
-                                encoded:
-                                new Expression.Literal(PineValueAsInteger.ValueFromSignedInteger(11)),
-                                environment:
-                                new Expression.Literal(PineValueAsInteger.ValueFromSignedInteger(13)))),
-                        StackInstruction.Eval(
-                            new Expression.ParseAndEval(
-                                encoded: Expression.EnvironmentInstance,
-                                environment:
-                                Expression.ListInstance(
-                                [
-                                    new Expression.StackReferenceExpression(offset: -1),
-                                    new Expression.Literal(PineValueAsInteger.ValueFromSignedInteger(17)),
-                                ]))),
-                        StackInstruction.Eval(
-                            Expression.ListInstance(
-                            [
-                                new Expression.StackReferenceExpression(offset: -1),
-                                new Expression.Literal(PineValue.EmptyBlob),
-                            ])),
+                        new StackInstruction(
+                            StackInstructionKind.Push_Literal,
+                            Literal: PineValueAsInteger.ValueFromSignedInteger(13)),
+
+                        new StackInstruction(
+                            StackInstructionKind.Push_Literal,
+                            Literal: PineValueAsInteger.ValueFromSignedInteger(11)),
+
+                        new StackInstruction(StackInstructionKind.Parse_And_Eval),
+
+                        new StackInstruction(
+                            StackInstructionKind.Push_Literal,
+                            Literal: PineValueAsInteger.ValueFromSignedInteger(17)),
+
+                        new StackInstruction(StackInstructionKind.BuildList, TakeCount: 2),
+
+                        StackInstruction.PushEnvironment,
+
+                        new StackInstruction(StackInstructionKind.Parse_And_Eval),
+
+                        new StackInstruction(
+                            StackInstructionKind.Push_Literal,
+                            Literal: PineValue.EmptyBlob),
+
+                        new StackInstruction(StackInstructionKind.BuildList, TakeCount: 2),
+
                         StackInstruction.Return
                     ])
             },
@@ -515,23 +529,27 @@ public class PineVMTests
                 expected =
                 new PineVM.StackFrameInstructions(
                     [
-                        StackInstruction.Eval(
-                            new Expression.Literal(PineValueAsInteger.ValueFromSignedInteger(11))),
+                        new StackInstruction(
+                            StackInstructionKind.Push_Literal,
+                            Literal: PineValueAsInteger.ValueFromSignedInteger(11)),
 
-                        new StackInstruction.ConditionalJumpInstruction(
-                            TrueBranchOffset: 2),
+                        StackInstruction.Jump_If_True(offset : 2),
 
-                        StackInstruction.Eval(
-                            new Expression.Literal(PineValueAsInteger.ValueFromSignedInteger(17))),
-                        StackInstruction.Jump(offset: 2),
+                        new StackInstruction(
+                            StackInstructionKind.Push_Literal,
+                            Literal: PineValueAsInteger.ValueFromSignedInteger(17)),
 
-                        StackInstruction.Eval(
-                            new Expression.Literal(PineValueAsInteger.ValueFromSignedInteger(13))),
-                        new StackInstruction.CopyLastAssignedInstruction(),
+                        StackInstruction.Jump_Unconditional(offset: 2),
 
-                        StackInstruction.Eval(new Expression.StackReferenceExpression(offset: -1)),
+                        new StackInstruction(
+                            StackInstructionKind.Push_Literal,
+                            Literal: PineValueAsInteger.ValueFromSignedInteger(13)),
 
-                        StackInstruction.Return,
+                        new StackInstruction(StackInstructionKind.Local_Set, LocalIndex: 3),
+
+                        new StackInstruction(StackInstructionKind.Local_Get, LocalIndex: 3),
+
+                        StackInstruction.Return
                     ])
             },
 
@@ -554,6 +572,7 @@ public class PineVMTests
                                     Expression.EnvironmentInstance,
                                     ])
                             ),
+                        environment:
                         Expression.EnvironmentInstance),
                     falseBranch:
                     new Expression.Literal(PineValueAsInteger.ValueFromSignedInteger(17))),
@@ -561,36 +580,37 @@ public class PineVMTests
                 expected =
                 new PineVM.StackFrameInstructions(
                     [
-                        StackInstruction.Eval(new Expression.Literal(PineValueAsInteger.ValueFromSignedInteger(11))),
+                        new StackInstruction(
+                            StackInstructionKind.Push_Literal,
+                            Literal: PineValueAsInteger.ValueFromSignedInteger(11)),
 
-                        new StackInstruction.ConditionalJumpInstruction(
-                            TrueBranchOffset:2),
+                        StackInstruction.Jump_If_True(offset : 2),
 
-                        StackInstruction.Eval(
-                            new Expression.Literal(PineValueAsInteger.ValueFromSignedInteger(17))),
-                        StackInstruction.Jump(offset: 2),
+                        new StackInstruction(
+                            StackInstructionKind.Push_Literal,
+                            Literal: PineValueAsInteger.ValueFromSignedInteger(17)),
 
-                        StackInstruction.Eval(
-                            new Expression.ParseAndEval(
-                            encoded:
-                            new Expression.KernelApplication
-                            (
-                                function: "skip",
-                                input: Expression.ListInstance(
-                                    [
-                                    new Expression.Literal(PineValueAsInteger.ValueFromSignedInteger(13)),
-                                    Expression.EnvironmentInstance,
-                                    ])
-                            ),
-                            Expression.EnvironmentInstance)),
+                        StackInstruction.Jump_Unconditional(6),
 
-                        new StackInstruction.CopyLastAssignedInstruction(),
+                        StackInstruction.PushEnvironment,
 
-                        StackInstruction.Eval(new Expression.StackReferenceExpression(offset: -1)),
-                        StackInstruction.Return,
+                        StackInstruction.PushEnvironment,
+
+                        new StackInstruction(
+                            StackInstructionKind.Push_Literal,
+                            Literal: PineValueAsInteger.ValueFromSignedInteger(13)),
+
+                        new StackInstruction(StackInstructionKind.Skip_Binary),
+
+                        new StackInstruction(StackInstructionKind.Parse_And_Eval),
+
+                        new StackInstruction(StackInstructionKind.Local_Set, LocalIndex: 3),
+
+                        new StackInstruction(StackInstructionKind.Local_Get, LocalIndex: 3),
+
+                        StackInstruction.Return
                     ])
             },
-
 
             new
             {
@@ -602,6 +622,7 @@ public class PineVMTests
                         Expression.ConditionalInstance(
                             condition:
                             new Expression.Literal(PineValueAsInteger.ValueFromSignedInteger(11)),
+
                             trueBranch:
                             new Expression.ParseAndEval(
                                 encoded:
@@ -614,7 +635,10 @@ public class PineVMTests
                                             Expression.EnvironmentInstance,
                                             ])
                                     ),
+
+                                environment:
                                 Expression.EnvironmentInstance),
+
                             falseBranch:
                             new Expression.Literal(PineValueAsInteger.ValueFromSignedInteger(17)))
                 ]),
@@ -622,36 +646,41 @@ public class PineVMTests
                 expected =
                 new PineVM.StackFrameInstructions(
                     [
-                        StackInstruction.Eval(new Expression.Literal(PineValueAsInteger.ValueFromSignedInteger(11))),
+                        new StackInstruction(
+                            StackInstructionKind.Push_Literal,
+                            Literal: PineValueAsInteger.ValueFromSignedInteger(11)),
 
-                        new StackInstruction.ConditionalJumpInstruction(
-                            TrueBranchOffset: 2),
+                        StackInstruction.Jump_If_True(offset : 2),
 
-                        StackInstruction.Eval(
-                            new Expression.Literal(PineValueAsInteger.ValueFromSignedInteger(17))),
-                        StackInstruction.Jump(offset: 2),
+                        new StackInstruction(
+                            StackInstructionKind.Push_Literal,
+                            Literal: PineValueAsInteger.ValueFromSignedInteger(17)),
 
-                        StackInstruction.Eval(
-                            new Expression.ParseAndEval(
-                            encoded:
-                            new Expression.KernelApplication
-                            (
-                                function: "skip",
-                                input: Expression.ListInstance(
-                                    [
-                                    new Expression.Literal(PineValueAsInteger.ValueFromSignedInteger(13)),
-                                    Expression.EnvironmentInstance,
-                                    ])
-                            ),
-                            Expression.EnvironmentInstance)),
+                        StackInstruction.Jump_Unconditional(6),
 
-                        new StackInstruction.CopyLastAssignedInstruction(),
-                        StackInstruction.Eval(Expression.ListInstance(
-                            [
-                                new Expression.Literal(PineValueAsInteger.ValueFromSignedInteger(47)),
-                                new Expression.StackReferenceExpression(offset: -1),
-                            ])),
-                        StackInstruction.Return,
+                        StackInstruction.PushEnvironment,
+
+                        StackInstruction.PushEnvironment,
+
+                        new StackInstruction(
+                            StackInstructionKind.Push_Literal,
+                            Literal: PineValueAsInteger.ValueFromSignedInteger(13)),
+
+                        new StackInstruction(StackInstructionKind.Skip_Binary),
+
+                        new StackInstruction(StackInstructionKind.Parse_And_Eval),
+
+                        new StackInstruction(StackInstructionKind.Local_Set, LocalIndex: 3),
+
+                        new StackInstruction(
+                            StackInstructionKind.Push_Literal,
+                            Literal: PineValueAsInteger.ValueFromSignedInteger(47)),
+
+                        new StackInstruction(StackInstructionKind.Local_Get, LocalIndex: 3),
+
+                        new StackInstruction(StackInstructionKind.BuildList, TakeCount: 2),
+
+                        StackInstruction.Return
                     ])
             },
 
@@ -678,45 +707,45 @@ public class PineVMTests
                 expected =
                 new PineVM.StackFrameInstructions(
                     [
-                        StackInstruction.Eval(new Expression.Literal(PineValueAsInteger.ValueFromSignedInteger(11))),
+                        new StackInstruction(
+                            StackInstructionKind.Push_Literal,
+                            Literal: PineValueAsInteger.ValueFromSignedInteger(11)),
 
-                        new StackInstruction.ConditionalJumpInstruction(
-                            TrueBranchOffset: 8),
+                        StackInstruction.Jump_If_True(offset : 10),
 
-                        // Outer if-false:
-                        StackInstruction.Eval(new Expression.Literal(PineValueAsInteger.ValueFromSignedInteger(13))),
+                        new StackInstruction(
+                            StackInstructionKind.Push_Literal,
+                            Literal: PineValueAsInteger.ValueFromSignedInteger(13)),
 
-                        new StackInstruction.ConditionalJumpInstruction(
-                            TrueBranchOffset: 2),
+                        StackInstruction.Jump_If_True(offset : 4),
 
-                        // Inner if-false:
-                        StackInstruction.Eval(
-                            new Expression.ParseAndEval(
-                            encoded: Expression.EnvironmentInstance,
-                            environment:Expression.EnvironmentInstance)),
-                        StackInstruction.Jump(offset: 2),
+                        StackInstruction.PushEnvironment,
 
-                        // Inner if-true
-                        StackInstruction.Eval(
-                            new Expression.Literal(PineValueAsInteger.ValueFromSignedInteger(21))),
+                        StackInstruction.PushEnvironment,
 
-                        // Copy from inner result to outer conditional
-                        new StackInstruction.CopyLastAssignedInstruction(),
+                        new StackInstruction(StackInstructionKind.Parse_And_Eval),
 
-                        StackInstruction.Eval(new Expression.StackReferenceExpression(offset: -1)),
+                        StackInstruction.Jump_Unconditional(2),
 
-                        // End outer if-false
-                        StackInstruction.Jump(offset: 2),
+                        new StackInstruction(
+                            StackInstructionKind.Push_Literal,
+                            Literal: PineValueAsInteger.ValueFromSignedInteger(21)),
 
-                        // Outer if-true
-                        StackInstruction.Eval(
-                            new Expression.Literal(PineValueAsInteger.ValueFromSignedInteger(23))),
+                        new StackInstruction(StackInstructionKind.Local_Set, LocalIndex: 7),
 
-                        new StackInstruction.CopyLastAssignedInstruction(),
+                        new StackInstruction(StackInstructionKind.Local_Get, LocalIndex: 7),
 
-                        StackInstruction.Eval(new Expression.StackReferenceExpression(offset: -1)),
+                        StackInstruction.Jump_Unconditional(2),
 
-                        StackInstruction.Return,
+                        new StackInstruction(
+                            StackInstructionKind.Push_Literal,
+                            Literal: PineValueAsInteger.ValueFromSignedInteger(23)),
+
+                        new StackInstruction(StackInstructionKind.Local_Set, LocalIndex: 11),
+
+                        new StackInstruction(StackInstructionKind.Local_Get, LocalIndex: 11),
+
+                        StackInstruction.Return
                     ])
             },
 
@@ -754,47 +783,57 @@ public class PineVMTests
                 expected =
                 new PineVM.StackFrameInstructions(
                     [
-                        StackInstruction.Eval(new Expression.Literal(PineValueAsInteger.ValueFromSignedInteger(11))),
+                        new StackInstruction(
+                            StackInstructionKind.Push_Literal,
+                            Literal: PineValueAsInteger.ValueFromSignedInteger(11)),
 
-                        new StackInstruction.ConditionalJumpInstruction(
-                            TrueBranchOffset: 2),
+                        StackInstruction.Jump_If_True(offset : 2),
 
-                        StackInstruction.Eval(
-                            new Expression.Literal(PineValueAsInteger.ValueFromSignedInteger(17))),
-                        StackInstruction.Jump(offset: 2),
+                        new StackInstruction(
+                            StackInstructionKind.Push_Literal,
+                            Literal: PineValueAsInteger.ValueFromSignedInteger(17)),
 
-                        StackInstruction.Eval(
-                            new Expression.ParseAndEval(
-                            encoded:
-                            new Expression.Literal(PineValueAsInteger.ValueFromSignedInteger(41)),
-                            Expression.EnvironmentInstance)),
+                        StackInstruction.Jump_Unconditional(4),
 
-                        new StackInstruction.CopyLastAssignedInstruction(),
+                        StackInstruction.PushEnvironment,
 
-                        StackInstruction.Eval(new Expression.Literal(PineValueAsInteger.ValueFromSignedInteger(13))),
+                        new StackInstruction(
+                            StackInstructionKind.Push_Literal,
+                            Literal: PineValueAsInteger.ValueFromSignedInteger(41)),
 
-                        new StackInstruction.ConditionalJumpInstruction(
-                            TrueBranchOffset: 2),
+                        new StackInstruction(StackInstructionKind.Parse_And_Eval),
 
-                        StackInstruction.Eval(
-                            new Expression.Literal(PineValueAsInteger.ValueFromSignedInteger(19))),
-                        StackInstruction.Jump(offset: 2),
+                        new StackInstruction(StackInstructionKind.Local_Set, LocalIndex: 3),
 
-                        StackInstruction.Eval(
-                            new Expression.ParseAndEval(
-                            encoded:
-                            new Expression.Literal(PineValueAsInteger.ValueFromSignedInteger(43)),
-                            Expression.EnvironmentInstance)),
+                        new StackInstruction(
+                            StackInstructionKind.Push_Literal,
+                            Literal: PineValueAsInteger.ValueFromSignedInteger(13)),
 
-                        new StackInstruction.CopyLastAssignedInstruction(),
+                        StackInstruction.Jump_If_True(offset: 2),
 
-                        StackInstruction.Eval(Expression.ListInstance(
-                            [
-                                new Expression.StackReferenceExpression(offset: -7),
-                                new Expression.StackReferenceExpression(offset: -1),
-                            ])),
+                        new StackInstruction(
+                            StackInstructionKind.Push_Literal,
+                            Literal: PineValueAsInteger.ValueFromSignedInteger(19)),
 
-                        StackInstruction.Return,
+                        StackInstruction.Jump_Unconditional(4),
+
+                        StackInstruction.PushEnvironment,
+
+                        new StackInstruction(
+                            StackInstructionKind.Push_Literal,
+                            Literal: PineValueAsInteger.ValueFromSignedInteger(43)),
+
+                        new StackInstruction(StackInstructionKind.Parse_And_Eval),
+
+                        new StackInstruction(StackInstructionKind.Local_Set, LocalIndex: 12),
+
+                        new StackInstruction(StackInstructionKind.Local_Get, LocalIndex: 3),
+
+                        new StackInstruction(StackInstructionKind.Local_Get, LocalIndex: 12),
+
+                        new StackInstruction(StackInstructionKind.BuildList, TakeCount: 2),
+
+                        StackInstruction.Return
                     ])
             },
 
@@ -819,37 +858,43 @@ public class PineVMTests
                 expected =
                 new PineVM.StackFrameInstructions(
                     [
-                        StackInstruction.Eval(
-                            new Expression.Literal(PineValueAsInteger.ValueFromSignedInteger(11))),
+                        new StackInstruction(
+                            StackInstructionKind.Push_Literal,
+                            Literal: PineValueAsInteger.ValueFromSignedInteger(11)),
 
-                        new StackInstruction.ConditionalJumpInstruction(
-                            TrueBranchOffset: 8),
+                        StackInstruction.Jump_If_True(offset : 8),
 
-                        StackInstruction.Eval(
-                            new Expression.Literal(PineValueAsInteger.ValueFromSignedInteger(21))),
+                        new StackInstruction(
+                            StackInstructionKind.Push_Literal,
+                            Literal: PineValueAsInteger.ValueFromSignedInteger(21)),
 
-                        new StackInstruction.ConditionalJumpInstruction(
-                            TrueBranchOffset: 2),
+                        StackInstruction.Jump_If_True(offset : 2),
 
-                        StackInstruction.Eval(
-                            new Expression.Literal(PineValueAsInteger.ValueFromSignedInteger(27))),
-                        StackInstruction.Jump(offset: 2),
+                        new StackInstruction(
+                            StackInstructionKind.Push_Literal,
+                            Literal: PineValueAsInteger.ValueFromSignedInteger(27)),
 
-                        StackInstruction.Eval(
-                            new Expression.Literal(PineValueAsInteger.ValueFromSignedInteger(23))),
+                        StackInstruction.Jump_Unconditional(2),
 
-                        new StackInstruction.CopyLastAssignedInstruction(),
-                        StackInstruction.Eval(new Expression.StackReferenceExpression(offset: -1)),
+                        new StackInstruction(
+                            StackInstructionKind.Push_Literal,
+                            Literal: PineValueAsInteger.ValueFromSignedInteger(23)),
 
-                        StackInstruction.Jump(offset: 2),
+                        new StackInstruction(StackInstructionKind.Local_Set, LocalIndex: 5),
 
-                        StackInstruction.Eval(
-                            new Expression.Literal(PineValueAsInteger.ValueFromSignedInteger(13))),
-                        new StackInstruction.CopyLastAssignedInstruction(),
+                        new StackInstruction(StackInstructionKind.Local_Get, LocalIndex: 5),
 
-                        StackInstruction.Eval(new Expression.StackReferenceExpression(offset: -1)),
+                        StackInstruction.Jump_Unconditional(2),
 
-                        StackInstruction.Return,
+                        new StackInstruction(
+                            StackInstructionKind.Push_Literal,
+                            Literal: PineValueAsInteger.ValueFromSignedInteger(13)),
+
+                        new StackInstruction(StackInstructionKind.Local_Set, LocalIndex: 9),
+
+                        new StackInstruction(StackInstructionKind.Local_Get, LocalIndex: 9),
+
+                        StackInstruction.Return
                     ])
             },
 
@@ -878,10 +923,12 @@ public class PineVMTests
                 expected =
                 new PineVM.StackFrameInstructions(
                     [
-                        StackInstruction.Eval(
-                            new Expression.KernelApplications_Skip_Head_Path(
-                                SkipCounts: (int[]) [17],
-                                Argument:Expression.EnvironmentInstance)),
+                        StackInstruction.PushEnvironment,
+
+                        new StackInstruction(
+                            StackInstructionKind.Skip_Head_Const,
+                            SkipCount: 17),
+
                         StackInstruction.Return
                     ])
             },
@@ -929,17 +976,24 @@ public class PineVMTests
                 expected =
                 new PineVM.StackFrameInstructions(
                     [
-                        StackInstruction.Eval(
-                            new Expression.KernelApplications_Skip_Head_Path(
-                                SkipCounts: (int[])[17],
-                                Argument:
-                                Expression.ListInstance(
-                                [
-                                    new Expression.Literal(PineValueAsInteger.ValueFromSignedInteger(21)),
-                                    new Expression.KernelApplications_Skip_Head_Path(
-                                        SkipCounts: (int[]) [23],
-                                        Argument: Expression.EnvironmentInstance)
-                                ]))),
+                        new StackInstruction(
+                            StackInstructionKind.Push_Literal,
+                            Literal: PineValueAsInteger.ValueFromSignedInteger(21)),
+
+                        StackInstruction.PushEnvironment,
+
+                        new StackInstruction(
+                            StackInstructionKind.Skip_Head_Const,
+                            SkipCount: 23),
+
+                        new StackInstruction(
+                            StackInstructionKind.BuildList,
+                            TakeCount: 2),
+
+                        new StackInstruction(
+                            StackInstructionKind.Skip_Head_Const,
+                            SkipCount: 17),
+
                         StackInstruction.Return
                     ])
             },
@@ -999,54 +1053,61 @@ public class PineVMTests
                 expected =
                 new PineVM.StackFrameInstructions(
                     [
-                        StackInstruction.Eval(
-                            new Expression.KernelApplication
-                            (
-                                function: nameof(KernelFunction.int_mul),
-                                input:
-                                Expression.ListInstance(
-                                    [
-                                        Expression.EnvironmentInstance,
-                                        Expression.EnvironmentInstance,
-                                        Expression.EnvironmentInstance,
-                                    ])
-                            )),
+                        StackInstruction.PushEnvironment,
 
-                        StackInstruction.Eval(
-                            Expression.ListInstance(
-                                [
-                                    new Expression.StackReferenceExpression(offset: -1),
-                                    new Expression.StackReferenceExpression(offset: -1),
-                                ])),
+                        StackInstruction.PushEnvironment,
 
-                        new StackInstruction.ConditionalJumpInstruction(
-                            TrueBranchOffset: 8),
+                        new StackInstruction(
+                            StackInstructionKind.Int_Mul_Binary),
 
-                        StackInstruction.Eval(
-                            new Expression.StackReferenceExpression(offset: -3)),
+                        StackInstruction.PushEnvironment,
 
-                        new StackInstruction.ConditionalJumpInstruction(
-                            TrueBranchOffset: 2),
+                        new StackInstruction(
+                            StackInstructionKind.Int_Mul_Binary),
 
-                        StackInstruction.Eval(
-                            new Expression.Literal(PineValueAsInteger.ValueFromSignedInteger(27))),
-                        StackInstruction.Jump(offset: 2),
+                        new StackInstruction(
+                            StackInstructionKind.Local_Set,
+                            LocalIndex: 5),
 
-                        StackInstruction.Eval(
-                            new Expression.Literal(PineValueAsInteger.ValueFromSignedInteger(23))),
+                        new StackInstruction(StackInstructionKind.Local_Get, LocalIndex: 5),
 
-                        new StackInstruction.CopyLastAssignedInstruction(),
-                        StackInstruction.Eval(new Expression.StackReferenceExpression(offset: -1)),
+                        new StackInstruction(StackInstructionKind.Local_Get, LocalIndex: 5),
 
-                        StackInstruction.Jump(offset: 2),
+                        new StackInstruction(
+                            StackInstructionKind.BuildList,
+                            TakeCount: 2),
 
-                        StackInstruction.Eval(
-                            new Expression.Literal(PineValueAsInteger.ValueFromSignedInteger(13))),
-                        new StackInstruction.CopyLastAssignedInstruction(),
+                        StackInstruction.Jump_If_True(offset: 8),
 
-                        StackInstruction.Eval(new Expression.StackReferenceExpression(offset: -1)),
+                        new StackInstruction(StackInstructionKind.Local_Get, LocalIndex: 5),
 
-                        StackInstruction.Return,
+                        StackInstruction.Jump_If_True(offset: 2),
+
+                        new StackInstruction(
+                            StackInstructionKind.Push_Literal,
+                            Literal: PineValueAsInteger.ValueFromSignedInteger(27)),
+
+                        StackInstruction.Jump_Unconditional(2),
+
+                        new StackInstruction(
+                            StackInstructionKind.Push_Literal,
+                            Literal: PineValueAsInteger.ValueFromSignedInteger(23)),
+
+                        new StackInstruction(StackInstructionKind.Local_Set, LocalIndex: 13),
+
+                        new StackInstruction(StackInstructionKind.Local_Get, LocalIndex: 13),
+
+                        StackInstruction.Jump_Unconditional(offset: 2),
+
+                        new StackInstruction(
+                            StackInstructionKind.Push_Literal,
+                            Literal: PineValueAsInteger.ValueFromSignedInteger(13)),
+
+                        new StackInstruction(StackInstructionKind.Local_Set, LocalIndex: 17),
+
+                        new StackInstruction(StackInstructionKind.Local_Get, LocalIndex: 17),
+
+                        StackInstruction.Return
                     ])
             },
         };
@@ -1055,12 +1116,13 @@ public class PineVMTests
 
         foreach (var testCase in testCases)
         {
-            var compiled = PineVM.CompileExpression(
-                testCase.expression,
-                specializations: [],
-                parseCache,
-                disableReduction: true,
-                skipInlining: (_, _) => false);
+            var compiled =
+                PineVM.CompileExpression(
+                    testCase.expression,
+                    specializations: [],
+                    parseCache,
+                    disableReduction: true,
+                    skipInlining: (_, _) => false);
 
             Assert.AreEqual(
                 testCase.expected.Instructions.Count,

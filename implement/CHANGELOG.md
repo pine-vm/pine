@@ -38,24 +38,27 @@ Expand the Elm compiler and core libraries to support `Float` literals and `Stri
 + Added a framework to integrate the various interfaces we want to use in command-line interface applications (`Platform.CommandLineApp`), including stdIn/stdOut/stdErr streams and environment variables.
 + Introduced the `pine  run` command as a common way to run an app.
 
-## 2024-10-26 - Added VSCode Extension and Language Server
+## 2024-10-26 - Added VS Code Extension and Language Server
 
-Published the first version of the Elm developer tools VSCode extension, with a command to format Elm modules.
+Published the first version of the Elm developer tools VS Code extension, with a command to format Elm modules.
 
-## 2024-12-08 - Expanded VSCode Extension and Language Server
+## 2024-12-08 - Expanded VS Code Extension and Language Server
 
 + Added feature: Completions: Shows completion suggestions matching the current context
 + Added feature: Hover tips: Shows type annotations and documentation for a type alias, module, custom type or function
 
-## 2024-12-15 - Expanded VSCode Extension and Language Server
+## 2024-12-15 - Expanded VS Code Extension and Language Server
 
 + Added feature: 'Go to Definition'
 
-## 2024-12-19 - Expanded VSCode Extension and Language Server
+## 2024-12-19 - Expanded VS Code Extension and Language Server
 
 + Added feature: 'Find All References'
 
-## 2024-12-22 - Expanded VSCode Extension and Language Server
+## 2024-12-22 - Expanded VS Code Extension and Language Server
 
 + Added feature: 'Rename Symbol'
 
+## 2025-01-03 - Introduced New Execution Engine And IR
+
++ Changed the internal intermediate representation used to run Pine programs, introducing a new compiler for that IR and a corresponding execution engine.

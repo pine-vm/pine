@@ -21,7 +21,7 @@ public class PineVM : IPineVM
 
     private IDictionary<EvalCacheEntryKey, PineValue>? EvalCache { init; get; }
 
-    private EvaluationConfig? evaluationConfigDefault;
+    private readonly EvaluationConfig? evaluationConfigDefault;
 
     private readonly Action<EvaluationReport>? reportFunctionApplication;
 
@@ -111,7 +111,8 @@ public class PineVM : IPineVM
         Expression Expression,
         StackFrameInstructions Instructions,
         PineValue EnvironmentValue,
-        Memory<PineValue> InstructionsResultValues,
+        Memory<PineValue> StackValues,
+        Memory<PineValue> LocalsValues,
         long BeginInstructionCount,
         long BeginParseAndEvalCount,
         long BeginStackFrameCount,
@@ -119,7 +120,9 @@ public class PineVM : IPineVM
     {
         public int InstructionPointer { get; set; } = 0;
 
-        public int LastEvalResultIndex { get; set; } = -1;
+        public int StackPointer { get; set; } = 0;
+
+        public long InstructionCount { get; set; } = 0;
 
         public void ReturnFromChildFrame(PineValue frameReturnValue)
         {
@@ -134,17 +137,48 @@ public class PineVM : IPineVM
 
         public void PushInstructionResult(PineValue value)
         {
-            InstructionsResultValues.Span[InstructionPointer] = value;
-            LastEvalResultIndex = InstructionPointer;
+            if (value is null)
+            {
+                throw new InvalidOperationException(
+                    "PushInstructionResult called with null value");
+            }
+
+            StackValues.Span[StackPointer] = value;
+            StackPointer++;
             ++InstructionPointer;
         }
 
-        public PineValue LastEvalResult()
+        public void LocalSet(int localIndex, PineValue value)
         {
-            if (LastEvalResultIndex < 0)
-                throw new InvalidOperationException("Reference to last eval result before first eval");
+            if (value is null)
+            {
+                throw new InvalidOperationException(
+                    "LocalSet called with null value");
+            }
 
-            return InstructionsResultValues.Span[LastEvalResultIndex];
+            LocalsValues.Span[localIndex] = value;
+        }
+
+        public PineValue LocalGet(int localIndex)
+        {
+            var value = LocalsValues.Span[localIndex];
+
+            if (value is null)
+            {
+                throw new InvalidOperationException(
+                    "LocalGet called with null value");
+            }
+
+            return value;
+        }
+
+        public PineValue PopTopmostFromStack()
+        {
+            if (StackPointer <= 0)
+                throw new InvalidOperationException("ConsumeSingleFromStack called with empty stack");
+
+            --StackPointer;
+            return StackValues.Span[StackPointer];
         }
     }
 
@@ -251,7 +285,8 @@ public class PineVM : IPineVM
             expression,
             instructions,
             EnvironmentValue: environment,
-            new PineValue[instructions.Instructions.Count],
+            StackValues: new PineValue[instructions.Instructions.Count],
+            LocalsValues: new PineValue[instructions.Instructions.Count],
             BeginInstructionCount: beginInstructionCount,
             BeginParseAndEvalCount: beginParseAndEvalCount,
             BeginStackFrameCount: beginStackFrameCount,
@@ -396,7 +431,9 @@ public class PineVM : IPineVM
                 skipInlining: skipInlining);
 
         IReadOnlyList<StackInstruction> allInstructions =
-            [.. InstructionsFromExpressionTransitive(reducedExpression).Append(StackInstruction.Return)];
+            [.. InstructionsFromExpressionTransitive(reducedExpression),
+            StackInstruction.Return
+            ];
 
         return allInstructions;
     }
@@ -740,14 +777,17 @@ public class PineVM : IPineVM
     public static IReadOnlyList<StackInstruction> InstructionsFromExpressionTransitive(
         Expression rootExpression)
     {
-        var node = NodeFromExpressionTransitive(
-            rootExpression,
-            conditionalsToSkip: []);
+        var node =
+            NodeFromExpressionTransitive(
+                rootExpression,
+                conditionalsToSkip: []);
 
-        return InstructionsFromNode(
-            node,
-            reusableExpressionResultOffset: _ => null,
-            shouldSeparate: _ => false);
+        return
+            InstructionsFromNode(
+                node,
+                instructionIndex: 0,
+                reusableExpressionResultOffset: _ => null,
+                makeReusable: _ => false).instructions;
     }
 
     public static ImperativeNode NodeFromExpressionTransitive(
@@ -794,25 +834,58 @@ public class PineVM : IPineVM
         return new ImperativeNode.LeafNode(rootExpression);
     }
 
-    public static IReadOnlyList<StackInstruction> InstructionsFromNode(
+    public static (IReadOnlyList<StackInstruction> instructions, IReadOnlyDictionary<Expression, int> localsSet)
+        InstructionsFromNode(
         ImperativeNode imperativeNode,
+        int instructionIndex,
         Func<Expression, int?> reusableExpressionResultOffset,
-        Func<Expression, bool> shouldSeparate)
+        Func<Expression, bool> makeReusable)
     {
         if (imperativeNode is ImperativeNode.LeafNode leaf)
         {
-            var instructionExprsFiltered =
-                ExpressionsToSeparateSkippingConditional(
+            var allSubexpressions = new HashSet<Expression>();
+
+            var subexpressionsToReuse = new HashSet<Expression>();
+
+            foreach (
+                var subexpression in
+                Expression.EnumerateSelfAndDescendants(
                     leaf.Expression,
-                    expressionAlreadyCovered: expr => reusableExpressionResultOffset(expr).HasValue,
-                    shouldSeparate: shouldSeparate)
-                .Append(leaf.Expression)
-                .Distinct()
-                .ToImmutableArray();
+                    skipDescendants:
+                    subexpression =>
+                    {
+                        if (reusableExpressionResultOffset(subexpression).HasValue)
+                        {
+                            return true;
+                        }
+
+                        if (!ExpressionLargeEnoughForCSE(subexpression))
+                        {
+                            return true;
+                        }
+
+                        if (makeReusable(subexpression))
+                        {
+                            subexpressionsToReuse.Add(subexpression);
+                        }
+
+                        if (allSubexpressions.Contains(subexpression))
+                        {
+                            subexpressionsToReuse.Add(subexpression);
+
+                            return true;
+                        }
+
+                        allSubexpressions.Add(subexpression);
+
+                        return false;
+                    }))
+            {
+            }
 
             var localInstructionIndexFromExpr = new Dictionary<Expression, int>();
 
-            int? reusableEvalResult(Expression expr)
+            int? reusableLocalIndex(Expression expr)
             {
                 {
                     if (reusableExpressionResultOffset.Invoke(expr) is { } reusableIndex)
@@ -831,27 +904,47 @@ public class PineVM : IPineVM
                 return null;
             }
 
-            var instructionsOptimized =
-                instructionExprsFiltered
-                .Select((expression, instructionIndex) =>
-                {
-                    if (reusableEvalResult(expression) is { } reusableIndex)
-                    {
-                        var offset = reusableIndex - instructionIndex;
+            var subexpressionsToReuseInstructions = new List<StackInstruction>();
 
-                        return new Expression.StackReferenceExpression(offset);
-                    }
-
-                    localInstructionIndexFromExpr.Add(expression, instructionIndex);
-
-                    return expression;
-                })
-                .Select((instruction, instructionIndex) =>
-                OptimizeExpressionTransitive(instruction, instructionIndex, reusableEvalResult))
-                .Select(StackInstruction.Eval)
+            var subexpressionsToReuseOrdered =
+                subexpressionsToReuse
+                .OrderBy(se => se.SubexpressionCount)
                 .ToImmutableArray();
 
-            return instructionsOptimized;
+            foreach (var subexpression in subexpressionsToReuseOrdered)
+            {
+                var subexpressionInstructions =
+                    PineIRCompiler.CompileExpressionTransitive(
+                        subexpression,
+                        localIndexFromExpr: reusableLocalIndex);
+
+                var localIndex =
+                    instructionIndex +
+                    subexpressionsToReuseInstructions.Count +
+                    subexpressionInstructions.Count;
+
+                subexpressionsToReuseInstructions.AddRange(
+                    [
+                    ..subexpressionInstructions,
+                    new StackInstruction(StackInstructionKind.Local_Set, LocalIndex: localIndex)
+                    ]);
+
+                localInstructionIndexFromExpr[subexpression] = localIndex;
+            }
+
+            var rootInstructions =
+                PineIRCompiler.CompileExpressionTransitive(
+                    leaf.Expression,
+                    reusableLocalIndex)
+                .ToImmutableArray();
+
+            IReadOnlyList<StackInstruction> instructionsOptimized =
+                [
+                ..subexpressionsToReuseInstructions,
+                ..rootInstructions
+                ];
+
+            return (instructionsOptimized, localInstructionIndexFromExpr);
         }
 
         if (imperativeNode is ImperativeNode.ConditionalNode conditional)
@@ -863,6 +956,12 @@ public class PineVM : IPineVM
                 .ToImmutableArray();
 
             var unconditionalExprUnderCondition = new HashSet<Expression>();
+
+
+            /*
+             * TODO: Change unconditionalExprUnderCondition
+             * General 'unconditional' is either in condition or in continuation.
+             * */
 
             foreach (var nodeUnderCondition in unconditionalNodesUnderCondition)
             {
@@ -896,7 +995,10 @@ public class PineVM : IPineVM
 
                 foreach (var otherExpr in Expression.EnumerateSelfAndDescendants(
                     otherLeafNode.Expression,
-                    skipDescendants: candidatesForCSE.Contains))
+                    skipDescendants:
+                    descendant =>
+                    candidatesForCSE.Contains(descendant) ||
+                    descendant == conditional.Origin))
                 {
                     if (!ExpressionLargeEnoughForCSE(otherExpr))
                         continue;
@@ -911,40 +1013,28 @@ public class PineVM : IPineVM
                 }
             }
 
-            var conditionInstructions =
+            var conditionResult =
                 InstructionsFromNode(
                     conditional.Condition,
+                    instructionIndex: instructionIndex,
                     reusableExpressionResultOffset,
-                    shouldSeparate: candidatesForCSE.Contains);
+                    makeReusable: candidatesForCSE.Contains);
 
-            var reusableFromCondition = new Dictionary<Expression, int>();
-
-            for (int i = 0; i < conditionInstructions.Count; i++)
-            {
-                var instruction = conditionInstructions[i];
-
-                if (instruction is not StackInstruction.EvalInstruction evalInstruction)
-                {
-                    // Only include the range of instructions that will be executed unconditionally.
-                    break;
-                }
-
-                reusableFromCondition[evalInstruction.Expression] = i;
-            }
+            var conditionInstructions = conditionResult.instructions;
 
             var instructionsBeforeBranchFalseCount =
                 conditionInstructions.Count + 1;
 
-            int? reusableResultOffsetForBranchFalse(Expression expression)
+            int? reusableResultOffsetForBranch(Expression expression)
             {
                 if (reusableExpressionResultOffset(expression) is { } earlierOffset)
                 {
-                    return earlierOffset - instructionsBeforeBranchFalseCount;
+                    return earlierOffset;
                 }
 
-                if (reusableFromCondition.TryGetValue(expression, out var offsetFromCondition))
+                if (conditionResult.localsSet.TryGetValue(expression, out var localIndex))
                 {
-                    return offsetFromCondition - instructionsBeforeBranchFalseCount;
+                    return localIndex;
                 }
 
                 return null;
@@ -953,50 +1043,60 @@ public class PineVM : IPineVM
             IReadOnlyList<StackInstruction> falseBranchInstructions =
                 [.. InstructionsFromNode(
                     conditional.FalseBranch,
-                    reusableResultOffsetForBranchFalse,
-                    shouldSeparate: _ => false)];
+                    instructionIndex: instructionIndex + instructionsBeforeBranchFalseCount,
+                    reusableResultOffsetForBranch,
+                    makeReusable: _ => false)
+                .instructions];
 
             IReadOnlyList<StackInstruction> trueBranchInstructions =
                 [.. InstructionsFromNode(
                     conditional.TrueBranch,
+                    instructionIndex: instructionIndex + instructionsBeforeBranchFalseCount + falseBranchInstructions.Count + 1,
                     reusableExpressionResultOffset:
-                    expr => reusableResultOffsetForBranchFalse(expr) - (falseBranchInstructions.Count + 1),
-                    shouldSeparate: _ => false)];
+                    reusableResultOffsetForBranch,
+                    makeReusable: _ => false)
+                .instructions];
 
             IReadOnlyList<StackInstruction> falseBranchInstructionsAndJump =
                 [.. falseBranchInstructions,
-                StackInstruction.Jump(trueBranchInstructions.Count + 1)
+                StackInstruction.Jump_Unconditional(trueBranchInstructions.Count + 1)
                 ];
 
             var branchInstruction =
-                new StackInstruction.ConditionalJumpInstruction(
-                    TrueBranchOffset: falseBranchInstructionsAndJump.Count);
+                StackInstruction.Jump_If_True(
+                    offset: falseBranchInstructionsAndJump.Count);
+
+            var conditionalResultLocalIndex =
+                instructionIndex + instructionsBeforeBranchFalseCount + falseBranchInstructions.Count;
 
             IReadOnlyList<StackInstruction> instructionsBeforeContinuation =
                 [..conditionInstructions,
                 branchInstruction,
                 ..falseBranchInstructionsAndJump,
                 ..trueBranchInstructions,
-                new StackInstruction.CopyLastAssignedInstruction()
+                new StackInstruction(
+                    StackInstructionKind.Local_Set,
+                    LocalIndex: conditionalResultLocalIndex)
                 ];
 
             int? reusableResultOffsetForContinuation(Expression expression)
             {
                 if (expression == conditional.Origin)
                 {
-                    return -1;
+                    return conditionalResultLocalIndex;
                 }
 
-                return
-                    reusableResultOffsetForBranchFalse(expression) -
-                    (instructionsBeforeContinuation.Count - instructionsBeforeBranchFalseCount);
+                return reusableResultOffsetForBranch(expression);
             }
 
             IReadOnlyList<StackInstruction> continuationInstructions =
-                [.. InstructionsFromNode(
+                [
+                .. InstructionsFromNode(
                     conditional.Continuation,
+                    instructionIndex: instructionIndex + instructionsBeforeContinuation.Count + 1,
                     reusableResultOffsetForContinuation,
-                    shouldSeparate: _ => false)
+                    makeReusable: _ => false)
+                .instructions
                 ];
 
             IReadOnlyList<StackInstruction> mergedInstructions =
@@ -1004,76 +1104,11 @@ public class PineVM : IPineVM
                 ..continuationInstructions
                 ];
 
-            return mergedInstructions;
+            return (mergedInstructions, conditionResult.localsSet);
         }
 
         throw new NotImplementedException(
             "Unexpected node type: " + imperativeNode.GetType().FullName);
-    }
-
-    static Expression OptimizeExpressionTransitive(
-        Expression expression,
-        int instructionIndex,
-        Func<Expression, int?> reusableEvalResultOffset)
-    {
-        return
-            CompilePineToDotNet.ReducePineExpression.TransformPineExpressionWithOptionalReplacement(
-                findReplacement:
-                expr => OptimizeExpressionStep(
-                    expr,
-                    instructionIndex,
-                    reusableEvalResultOffset),
-                expression).expr;
-    }
-
-    static Expression? OptimizeExpressionStep(
-        Expression expression,
-        int instructionIndex,
-        Func<Expression, int?> reusableEvalResultOffset)
-    {
-        if (expression is Expression.Environment)
-            return null;
-
-        if (reusableEvalResultOffset(expression) is { } reusableOffset)
-        {
-            var offset = reusableOffset - instructionIndex;
-
-            if (offset != 0)
-            {
-                if (offset >= 0)
-                {
-                    throw new Exception(
-                        "Found non-negative offset for stack ref expr: " + offset +
-                        " (selfIndex is " + instructionIndex + ")");
-                }
-
-                return new Expression.StackReferenceExpression(offset: offset);
-            }
-        }
-
-        {
-            /*
-             * Skip over all expressions that we do not descend into when enumerating the components.
-             * (EnumerateComponentsOrderedForCompilation)
-             * */
-
-            if (expression is Expression.Conditional)
-            {
-                // Return non-null value to stop descend.
-                return expression;
-            }
-        }
-
-        if (TryFuseStep(expression) is { } fused)
-        {
-            return
-                OptimizeExpressionTransitive(
-                    fused,
-                    instructionIndex,
-                    reusableEvalResultOffset: reusableEvalResultOffset);
-        }
-
-        return null;
     }
 
     static IReadOnlyList<Expression> ExpressionsToSeparateSkippingConditional(
@@ -1463,7 +1498,8 @@ public class PineVM : IPineVM
                                     Expression: expression,
                                     Instructions: null,
                                     EnvironmentValue: environmentValue,
-                                    InstructionsResultValues: null,
+                                    StackValues: null,
+                                    LocalsValues: null,
                                     BeginInstructionCount: instructionCount,
                                     BeginParseAndEvalCount: parseAndEvalCount,
                                     BeginStackFrameCount: stackFrameCount,
@@ -1522,11 +1558,13 @@ public class PineVM : IPineVM
 
             if (currentFrame.ExpressionValue is { } currentFrameExprValue)
             {
-                var frameInstructionCount = instructionCount - currentFrame.BeginInstructionCount;
+                var frameTotalInstructionCount =
+                    instructionCount - currentFrame.BeginInstructionCount;
+
                 var frameParseAndEvalCount = parseAndEvalCount - currentFrame.BeginParseAndEvalCount;
                 var frameStackFrameCount = stackFrameCount - currentFrame.BeginStackFrameCount;
 
-                if (frameInstructionCount + frameStackFrameCount * 100 > 700 && EvalCache is { } evalCache)
+                if (frameTotalInstructionCount + frameStackFrameCount * 100 > 700 && EvalCache is { } evalCache)
                 {
                     evalCache.TryAdd(
                         new EvalCacheEntryKey(currentFrameExprValue, currentFrame.EnvironmentValue),
@@ -1538,7 +1576,7 @@ public class PineVM : IPineVM
                         ExpressionValue: currentFrameExprValue,
                         currentFrame.Expression,
                         currentFrame.EnvironmentValue,
-                        InstructionCount: frameInstructionCount,
+                        InstructionCount: frameTotalInstructionCount,
                         ParseAndEvalCount: frameParseAndEvalCount,
                         ReturnValue: frameReturnValue,
                         StackTrace: CompileStackTrace(10)));
@@ -1603,6 +1641,8 @@ public class PineVM : IPineVM
 
             ++instructionCount;
 
+            ++currentFrame.InstructionCount;
+
             try
             {
                 if (currentFrame.Specialization is { } specializedFrame)
@@ -1625,8 +1665,8 @@ public class PineVM : IPineVM
                     if (stepResult is ApplyStepwise.StepResult.Continue cont)
                     {
                         if (invokePrecompiledOrBuildStackFrame(
-                                expressionValue: null,
-                                expression: cont.Expression,
+                            expressionValue: null,
+                            expression: cont.Expression,
                             environmentValue: cont.EnvironmentValue) is { } error)
                         {
                             return error;
@@ -1646,199 +1686,639 @@ public class PineVM : IPineVM
                         "Instruction pointer out of bounds. Missing explicit return instruction.";
                 }
 
-                ReadOnlyMemory<PineValue> stackPrevValues =
-                    currentFrame.InstructionsResultValues[..currentFrame.InstructionPointer];
+                var currentInstruction =
+                    currentFrame.Instructions.Instructions[currentFrame.InstructionPointer]
+                    ??
+                    throw new InvalidOperationException("currentInstruction is null");
 
-                var currentInstruction = currentFrame.Instructions.Instructions[currentFrame.InstructionPointer];
+                var instructionKind = currentInstruction.Kind;
 
-                if (currentInstruction is StackInstruction.ReturnInstruction)
+                switch (instructionKind)
                 {
-                    var lastAssignedIndex = currentFrame.LastEvalResultIndex;
-
-                    if (lastAssignedIndex < 0)
-                    {
-                        return "Return instruction before assignment";
-                    }
-
-                    var frameReturnValue =
-                        currentFrame.InstructionsResultValues.Span[lastAssignedIndex];
-
-                    var returnOverall =
-                        returnFromStackFrame(frameReturnValue);
-
-                    if (returnOverall is not null)
-                    {
-                        return returnOverall;
-                    }
-
-                    continue;
-                }
-
-                if (currentInstruction is StackInstruction.CopyLastAssignedInstruction)
-                {
-                    var lastAssignedIndex = currentFrame.LastEvalResultIndex;
-
-                    if (lastAssignedIndex < 0)
-                    {
-                        return "CopyLastAssignedInstruction before assignment";
-                    }
-
-                    var lastAssignedValue =
-                        currentFrame.InstructionsResultValues.Span[lastAssignedIndex];
-
-                    if (lastAssignedValue is null)
-                    {
-                        throw new InvalidIntermediateCodeException(
-                            "CopyLastAssignedInstruction referenced null",
-                            innerException: null,
-                            buildErrorReport(currentFrame));
-                    }
-
-                    currentFrame.PushInstructionResult(lastAssignedValue);
-
-                    continue;
-                }
-
-                if (currentInstruction is StackInstruction.EvalInstruction evalInstr)
-                {
-                    if (evalInstr.Expression is Expression.ParseAndEval parseAndEval)
-                    {
+                    case StackInstructionKind.Push_Literal:
                         {
-                            ++parseAndEvalCount;
+                            currentFrame.PushInstructionResult(
+                                currentInstruction.Literal
+                                ??
+                                throw new Exception("Invalid operation form: Missing literal value"));
 
-                            if (config.ParseAndEvalCountLimit is { } limit && parseAndEvalCount > limit)
-                            {
-                                return
-                                    "Parse and eval count limit exceeded: " +
-                                    CommandLineInterface.FormatIntegerForDisplay(limit);
-                            }
+                            continue;
                         }
 
-                        var expressionValue =
-                            EvaluateExpressionDefaultLessStack(
-                                parseAndEval.Encoded,
-                                currentFrame.EnvironmentValue,
-                                stackPrevValues: stackPrevValues);
-
-                        var environmentValue =
-                            EvaluateExpressionDefaultLessStack(
-                                parseAndEval.Environment,
-                                currentFrame.EnvironmentValue,
-                                stackPrevValues: stackPrevValues);
-
+                    case StackInstructionKind.Push_Environment:
                         {
-                            if (InvocationCachedResultOrOverride(
-                                expressionValue: expressionValue,
-                                environmentValue: environmentValue) is { } fromCacheOrDelegate)
+                            currentFrame.PushInstructionResult(currentFrame.EnvironmentValue);
+
+                            continue;
+                        }
+
+                    case StackInstructionKind.Equal_Binary:
+                        {
+                            var right = currentFrame.PopTopmostFromStack();
+                            var left = currentFrame.PopTopmostFromStack();
+
+                            var areEqual = left == right;
+
+                            currentFrame.PushInstructionResult(
+                                areEqual ? PineVMValues.TrueValue : PineVMValues.FalseValue);
+
+                            continue;
+                        }
+
+                    case StackInstructionKind.Not_Equal_Binary:
+                        {
+                            var right = currentFrame.PopTopmostFromStack();
+                            var left = currentFrame.PopTopmostFromStack();
+
+                            var areEqual = left == right;
+
+                            currentFrame.PushInstructionResult(
+                                areEqual ? PineVMValues.FalseValue : PineVMValues.TrueValue);
+
+                            continue;
+                        }
+
+                    case StackInstructionKind.Length:
+                        {
+                            var listValue = currentFrame.PopTopmostFromStack();
+
+                            var lengthValue = KernelFunction.length(listValue);
+
+                            currentFrame.PushInstructionResult(lengthValue);
+
+                            continue;
+                        }
+
+                    case StackInstructionKind.Skip_Head_Const:
+                        {
+                            var index =
+                                currentInstruction.SkipCount
+                                ??
+                                throw new Exception("Invalid operation form: Missing index value");
+
+                            var indexClamped =
+                                index < 0 ? 0 : index;
+
+                            var prevValue = currentFrame.PopTopmostFromStack();
+
+                            var fromIndexValue =
+                                prevValue switch
+                                {
+                                    PineValue.ListValue listValue =>
+                                    listValue.Elements.Count <= indexClamped
+                                    ?
+                                    PineValue.EmptyList
+                                    :
+                                    listValue.Elements[indexClamped],
+
+                                    _ =>
+                                    PineValue.EmptyList
+                                };
+
+                            currentFrame.PushInstructionResult(fromIndexValue);
+
+                            continue;
+                        }
+
+                    case StackInstructionKind.Skip_Head_Var:
+                        {
+                            var indexValue = currentFrame.PopTopmostFromStack();
+
+                            var prevValue = currentFrame.PopTopmostFromStack();
+
+                            PineValue resultValue = PineValue.EmptyList;
+
+                            if (KernelFunction.SignedIntegerFromValueRelaxed(indexValue) is { } skipCount)
                             {
-                                currentFrame.PushInstructionResult(fromCacheOrDelegate);
+                                var skipCountInt = (int)skipCount;
+
+                                var skipCountClamped =
+                                    skipCountInt < 0 ? 0 : skipCountInt;
+
+                                resultValue =
+                                    prevValue switch
+                                    {
+                                        PineValue.ListValue listValue =>
+                                        listValue.Elements.Count <= skipCountClamped
+                                        ?
+                                        PineValue.EmptyList
+                                        :
+                                        listValue.Elements[skipCountClamped],
+
+                                        _ =>
+                                        PineValue.EmptyList
+                                    };
+                            }
+
+                            currentFrame.PushInstructionResult(resultValue);
+
+                            continue;
+                        }
+
+                    case StackInstructionKind.Head_Generic:
+                        {
+                            var prevValue = currentFrame.PopTopmostFromStack();
+
+                            var headValue = KernelFunction.head(prevValue);
+
+                            currentFrame.PushInstructionResult(headValue);
+
+                            continue;
+                        }
+
+                    case StackInstructionKind.Skip_Binary:
+                        {
+                            var skipCountValue = currentFrame.PopTopmostFromStack();
+
+                            var prevValue = currentFrame.PopTopmostFromStack();
+
+                            PineValue resultValue = PineValue.EmptyList;
+
+                            if (KernelFunction.SignedIntegerFromValueRelaxed(skipCountValue) is { } skipCount)
+                            {
+                                resultValue = KernelFunction.skip(skipCount, prevValue);
+                            }
+
+                            currentFrame.PushInstructionResult(resultValue);
+
+                            continue;
+                        }
+
+                    case StackInstructionKind.Take_Binary:
+                        {
+                            var takeCountValue = currentFrame.PopTopmostFromStack();
+
+                            var prevValue = currentFrame.PopTopmostFromStack();
+
+                            PineValue resultValue = PineValue.EmptyList;
+
+                            if (KernelFunction.SignedIntegerFromValueRelaxed(takeCountValue) is { } takeCount)
+                            {
+                                resultValue = KernelFunction.take(takeCount, prevValue);
+                            }
+
+                            currentFrame.PushInstructionResult(resultValue);
+
+                            continue;
+                        }
+
+                    case StackInstructionKind.BuildList:
+                        {
+                            var itemsCount =
+                                currentInstruction.TakeCount
+                                ??
+                                throw new Exception("Invalid operation form: Missing take count");
+
+                            var items = new PineValue[itemsCount];
+
+                            for (int i = 0; i < itemsCount; ++i)
+                            {
+                                items[itemsCount - i - 1] = currentFrame.PopTopmostFromStack();
+                            }
+
+                            currentFrame.PushInstructionResult(PineValue.List(items));
+
+                            continue;
+                        }
+
+                    case StackInstructionKind.Concat_Binary:
+                        {
+                            var right = currentFrame.PopTopmostFromStack();
+                            var left = currentFrame.PopTopmostFromStack();
+
+                            currentFrame.PushInstructionResult(KernelFunction.concat([left, right]));
+
+                            continue;
+                        }
+
+                    case StackInstructionKind.Concat_List:
+                        {
+                            var listValue = currentFrame.PopTopmostFromStack();
+
+                            var concatenated = KernelFunction.concat(listValue);
+
+                            currentFrame.PushInstructionResult(concatenated);
+
+                            continue;
+                        }
+
+                    case StackInstructionKind.Slice_Skip_Var_Take_Var:
+                        {
+                            var takeCountValue = currentFrame.PopTopmostFromStack();
+                            var skipCountValue = currentFrame.PopTopmostFromStack();
+
+                            var prevValue = currentFrame.PopTopmostFromStack();
+
+                            PineValue resultValue = PineValue.EmptyList;
+
+                            if (KernelFunction.SignedIntegerFromValueRelaxed(takeCountValue) is { } takeCount &&
+                                KernelFunction.SignedIntegerFromValueRelaxed(skipCountValue) is { } skipCount)
+                            {
+                                resultValue =
+                                    FusedSkipAndTake(
+                                        prevValue,
+                                        skipCount: (int)skipCount,
+                                        takeCount: (int)takeCount);
+                            }
+
+                            currentFrame.PushInstructionResult(resultValue);
+
+                            continue;
+                        }
+
+                    case StackInstructionKind.Slice_Skip_Var_Take_Const:
+                        {
+                            var takeCount =
+                                currentInstruction.TakeCount
+                                ??
+                                throw new Exception("Invalid operation form: Missing take count");
+
+                            var skipCountValue = currentFrame.PopTopmostFromStack();
+
+                            var prevValue = currentFrame.PopTopmostFromStack();
+
+                            PineValue resultValue = PineValue.EmptyList;
+
+                            if (KernelFunction.SignedIntegerFromValueRelaxed(skipCountValue) is { } skipCount)
+                            {
+                                resultValue =
+                                    FusedSkipAndTake(
+                                        prevValue,
+                                        skipCount: (int)skipCount,
+                                        takeCount: takeCount);
+                            }
+
+                            currentFrame.PushInstructionResult(resultValue);
+
+                            continue;
+                        }
+
+                    case StackInstructionKind.Reverse:
+                        {
+                            var listValue = currentFrame.PopTopmostFromStack();
+
+                            var reversed = KernelFunction.reverse(listValue);
+
+                            currentFrame.PushInstructionResult(reversed);
+
+                            continue;
+                        }
+
+                    case StackInstructionKind.Local_Set:
+                        {
+                            var fromStack = currentFrame.PopTopmostFromStack();
+
+                            currentFrame.LocalSet(
+                                currentInstruction.LocalIndex
+                                ??
+                                throw new Exception("Invalid operation form: Missing local index"),
+                                fromStack);
+
+                            currentFrame.InstructionPointer++;
+
+                            continue;
+                        }
+
+                    case StackInstructionKind.Local_Get:
+                        {
+                            var value =
+                                currentFrame.LocalGet(
+                                    currentInstruction.LocalIndex
+                                    ??
+                                    throw new Exception("Invalid operation form: Missing local index"));
+
+                            currentFrame.PushInstructionResult(value);
+
+                            continue;
+                        }
+
+                    case StackInstructionKind.Int_Add_Binary:
+                        {
+                            var right = currentFrame.PopTopmostFromStack();
+                            var left = currentFrame.PopTopmostFromStack();
+
+                            var resultValue = KernelFunction.int_add(left, right);
+
+                            currentFrame.PushInstructionResult(resultValue);
+
+                            continue;
+                        }
+
+                    case StackInstructionKind.Int_Sub_Binary:
+                        {
+                            var right = currentFrame.PopTopmostFromStack();
+                            var left = currentFrame.PopTopmostFromStack();
+
+                            PineValue resultValue = PineValue.EmptyList;
+
+                            if (KernelFunction.SignedIntegerFromValueRelaxed(left) is { } leftInt &&
+                                KernelFunction.SignedIntegerFromValueRelaxed(right) is { } rightInt)
+                            {
+                                resultValue = PineValueAsInteger.ValueFromSignedInteger(leftInt - rightInt);
+                            }
+
+                            currentFrame.PushInstructionResult(resultValue);
+
+                            continue;
+                        }
+
+                    case StackInstructionKind.Int_Mul_Binary:
+                        {
+                            var right = currentFrame.PopTopmostFromStack();
+                            var left = currentFrame.PopTopmostFromStack();
+
+                            PineValue resultValue = PineValue.EmptyList;
+
+                            if (KernelFunction.SignedIntegerFromValueRelaxed(left) is { } leftInt &&
+                                KernelFunction.SignedIntegerFromValueRelaxed(right) is { } rightInt)
+                            {
+                                resultValue = PineValueAsInteger.ValueFromSignedInteger(leftInt * rightInt);
+                            }
+
+                            currentFrame.PushInstructionResult(resultValue);
+
+                            continue;
+                        }
+
+                    case StackInstructionKind.Int_Less_Than_Binary:
+                        {
+                            var right = currentFrame.PopTopmostFromStack();
+                            var left = currentFrame.PopTopmostFromStack();
+
+                            PineValue resultValue = PineValue.EmptyList;
+
+                            if (KernelFunction.SignedIntegerFromValueRelaxed(left) is { } leftInt &&
+                                KernelFunction.SignedIntegerFromValueRelaxed(right) is { } rightInt)
+                            {
+                                resultValue =
+                                    leftInt < rightInt ?
+                                    PineVMValues.TrueValue :
+                                    PineVMValues.FalseValue;
+                            }
+
+                            currentFrame.PushInstructionResult(resultValue);
+
+                            continue;
+                        }
+
+                    case StackInstructionKind.Int_Less_Than_Or_Equal_Binary:
+                        {
+                            var right = currentFrame.PopTopmostFromStack();
+                            var left = currentFrame.PopTopmostFromStack();
+
+                            PineValue resultValue = PineValue.EmptyList;
+
+                            if (KernelFunction.SignedIntegerFromValueRelaxed(left) is { } leftInt &&
+                                KernelFunction.SignedIntegerFromValueRelaxed(right) is { } rightInt)
+                            {
+                                resultValue =
+                                    leftInt <= rightInt ?
+                                    PineVMValues.TrueValue :
+                                    PineVMValues.FalseValue;
+                            }
+
+                            currentFrame.PushInstructionResult(resultValue);
+
+                            continue;
+                        }
+
+                    case StackInstructionKind.Negate:
+                        {
+                            var value = currentFrame.PopTopmostFromStack();
+
+                            var resultValue = KernelFunction.negate(value);
+
+                            currentFrame.PushInstructionResult(resultValue);
+
+                            continue;
+                        }
+
+                    case StackInstructionKind.Return:
+                        {
+                            var frameReturnValue =
+                                currentFrame.PopTopmostFromStack();
+
+                            var returnOverall =
+                                returnFromStackFrame(frameReturnValue);
+
+                            if (returnOverall is not null)
+                            {
+                                return returnOverall;
+                            }
+
+                            continue;
+                        }
+
+                    case StackInstructionKind.Skip_Generic:
+                        {
+                            var genericValue = currentFrame.PopTopmostFromStack();
+
+                            var resultValue = KernelFunction.skip(genericValue);
+
+                            currentFrame.PushInstructionResult(resultValue);
+
+                            continue;
+                        }
+
+                    case StackInstructionKind.Take_Generic:
+                        {
+                            var genericValue = currentFrame.PopTopmostFromStack();
+
+                            var resultValue = KernelFunction.take(genericValue);
+
+                            currentFrame.PushInstructionResult(resultValue);
+
+                            continue;
+                        }
+
+                    case StackInstructionKind.Int_Is_Sorted_Asc_List:
+                        {
+                            var listValue = currentFrame.PopTopmostFromStack();
+
+                            var isSorted = KernelFunction.int_is_sorted_asc(listValue);
+
+                            currentFrame.PushInstructionResult(isSorted);
+
+                            continue;
+                        }
+
+                    case StackInstructionKind.Parse_And_Eval:
+                        {
+                            {
+                                ++parseAndEvalCount;
+
+                                if (config.ParseAndEvalCountLimit is { } limit && parseAndEvalCount > limit)
+                                {
+                                    var stackTraceHashes =
+                                        CompileStackTrace(100)
+                                        .Select(expr => mutableCache.ComputeHash(ExpressionEncoding.EncodeExpressionAsValue(expr)))
+                                        .ToArray();
+
+                                    return
+                                        "Parse and eval count limit exceeded: " +
+                                        CommandLineInterface.FormatIntegerForDisplay(limit) +
+                                        "\nLast stack frames expressions:\n" +
+                                        string.Join("\n", stackTraceHashes.Select(hash => CommonConversion.StringBase16(hash)[..8]));
+                                }
+                            }
+
+                            var expressionValue = currentFrame.PopTopmostFromStack();
+
+                            var environmentValue = currentFrame.PopTopmostFromStack();
+
+                            {
+                                if (InvocationCachedResultOrOverride(
+                                    expressionValue: expressionValue,
+                                    environmentValue: environmentValue) is { } fromCacheOrDelegate)
+                                {
+                                    currentFrame.PushInstructionResult(fromCacheOrDelegate);
+
+                                    continue;
+                                }
+                            }
+
+                            var parseResult = parseCache.ParseExpression(expressionValue);
+
+                            if (parseResult.IsErrOrNull() is { } parseErr)
+                            {
+                                return
+                                    "Failed to parse expression from value: " + parseErr +
+                                    " - expressionValue is " + DescribeValueForErrorMessage(expressionValue) +
+                                    " - environmentValue is " + DescribeValueForErrorMessage(environmentValue);
+                            }
+
+                            if (parseResult.IsOkOrNull() is not { } parseOk)
+                            {
+                                throw new NotImplementedException(
+                                    "Unexpected result type: " + parseResult.GetType().FullName);
+                            }
+
+                            {
+                                if (invokePrecompiledOrBuildStackFrame(
+                                    expressionValue: expressionValue,
+                                    parseOk,
+                                    environmentValue) is { } error)
+                                {
+                                    return error;
+                                }
 
                                 continue;
                             }
                         }
 
-                        var parseResult = parseCache.ParseExpression(expressionValue);
-
-                        if (parseResult.IsErrOrNull() is { } parseErr)
+                    case StackInstructionKind.Jump_Const:
                         {
-                            return
-                                "Failed to parse expression from value: " + parseErr +
-                                " - expressionValue is " + DescribeValueForErrorMessage(expressionValue) +
-                                " - environmentValue is " + DescribeValueForErrorMessage(environmentValue);
+                            currentFrame.InstructionPointer += currentInstruction.JumpOffset!.Value;
+
+                            continue;
                         }
 
-                        if (parseResult.IsOkOrNull() is not { } parseOk)
+                    case StackInstructionKind.Jump_If_True_Const:
                         {
-                            throw new NotImplementedException(
-                                "Unexpected result type: " + parseResult.GetType().FullName);
-                        }
+                            var conditionValue = currentFrame.PopTopmostFromStack();
 
-                        {
-                            if (invokePrecompiledOrBuildStackFrame(
-                                expressionValue: expressionValue,
-                                parseOk,
-                                environmentValue) is { } error)
+                            if (conditionValue == PineVMValues.TrueValue)
                             {
-                                return error;
+                                currentFrame.InstructionPointer += 1 + currentInstruction.JumpOffset!.Value;
+                                continue;
                             }
 
+                            currentFrame.InstructionPointer++;
+
                             continue;
                         }
-                    }
 
-                    if (evalInstr.Expression is Expression.Conditional conditionalExpr)
-                    {
-                        var conditionValue =
-                            EvaluateExpressionDefaultLessStack(
-                                conditionalExpr.Condition,
-                                currentFrame.EnvironmentValue,
-                                stackPrevValues: stackPrevValues);
-
-                        var expressionToContinueWith =
-                            conditionValue == PineVMValues.TrueValue
-                            ?
-                            conditionalExpr.TrueBranch
-                            :
-                            conditionalExpr.FalseBranch;
-
-                        if (ExpressionShouldGetNewStackFrame(expressionToContinueWith))
+                    case StackInstructionKind.Bit_And_Binary:
                         {
-                            pushStackFrame(
-                                StackFrameFromExpression(
-                                    expressionValue: null,
-                                    expressionToContinueWith,
-                                    currentFrame.EnvironmentValue,
-                                    beginInstructionCount: instructionCount,
-                                    beginParseAndEvalCount: parseAndEvalCount,
-                                    beginStackFrameCount: stackFrameCount));
+                            var right = currentFrame.PopTopmostFromStack();
+                            var left = currentFrame.PopTopmostFromStack();
+
+                            PineValue resultValue = KernelFunction.bit_and(PineValue.List([left, right]));
+
+                            currentFrame.PushInstructionResult(resultValue);
 
                             continue;
                         }
 
-                        var evalBranchResult =
-                            EvaluateExpressionDefaultLessStack(
-                                expressionToContinueWith,
-                                currentFrame.EnvironmentValue,
-                                stackPrevValues: stackPrevValues);
+                    case StackInstructionKind.Bit_Or_Binary:
+                        {
+                            var right = currentFrame.PopTopmostFromStack();
+                            var left = currentFrame.PopTopmostFromStack();
 
-                        currentFrame.PushInstructionResult(evalBranchResult); ;
+                            PineValue resultValue = KernelFunction.bit_or(PineValue.List([left, right]));
 
-                        continue;
-                    }
+                            currentFrame.PushInstructionResult(resultValue);
 
-                    var evalResult =
-                        EvaluateExpressionDefaultLessStack(
-                            evalInstr.Expression,
-                            currentFrame.EnvironmentValue,
-                            stackPrevValues: stackPrevValues);
+                            continue;
+                        }
 
-                    currentFrame.PushInstructionResult(evalResult);
+                    case StackInstructionKind.Bit_Xor_Binary:
+                        {
+                            var right = currentFrame.PopTopmostFromStack();
+                            var left = currentFrame.PopTopmostFromStack();
 
-                    continue;
+                            PineValue resultValue = KernelFunction.bit_xor(PineValue.List([left, right]));
+
+                            currentFrame.PushInstructionResult(resultValue);
+
+                            continue;
+                        }
+
+                    case StackInstructionKind.Bit_Not:
+                        {
+                            var value = currentFrame.PopTopmostFromStack();
+
+                            PineValue resultValue = KernelFunction.bit_not(value);
+
+                            currentFrame.PushInstructionResult(resultValue);
+
+                            continue;
+                        }
+
+                    case StackInstructionKind.Bit_Shift_Left_Var:
+                        {
+                            var shiftValue = currentFrame.PopTopmostFromStack();
+                            var value = currentFrame.PopTopmostFromStack();
+
+                            PineValue resultValue = PineValue.EmptyList;
+
+                            if (value is PineValue.BlobValue blobValue)
+                            {
+                                if (KernelFunction.SignedIntegerFromValueRelaxed(shiftValue) is { } shiftCount)
+                                {
+                                    resultValue = KernelFunction.bit_shift_left(shiftCount, blobValue);
+                                }
+                            }
+
+                            currentFrame.PushInstructionResult(resultValue);
+
+                            continue;
+                        }
+
+                    case StackInstructionKind.Bit_Shift_Right_Var:
+                        {
+                            var shiftValue = currentFrame.PopTopmostFromStack();
+                            var value = currentFrame.PopTopmostFromStack();
+
+                            PineValue resultValue = PineValue.EmptyList;
+
+                            if (value is PineValue.BlobValue blobValue)
+                            {
+                                if (KernelFunction.SignedIntegerFromValueRelaxed(shiftValue) is { } shiftCount)
+                                {
+                                    resultValue = KernelFunction.bit_shift_right(shiftCount, blobValue);
+                                }
+                            }
+
+                            currentFrame.PushInstructionResult(resultValue);
+
+                            continue;
+                        }
+
+                    default:
+                        throw new NotImplementedException(
+                            "Unexpected instruction kind: " + instructionKind);
                 }
-
-                if (currentInstruction is StackInstruction.JumpInstruction jumpInstruction)
-                {
-                    currentFrame.InstructionPointer += jumpInstruction.Offset;
-                    continue;
-                }
-
-                if (currentInstruction is StackInstruction.ConditionalJumpInstruction conditionalStatement)
-                {
-                    var conditionValue = currentFrame.LastEvalResult();
-
-                    if (conditionValue == PineVMValues.TrueValue)
-                    {
-                        currentFrame.InstructionPointer += 1 + conditionalStatement.TrueBranchOffset;
-                        continue;
-                    }
-
-                    currentFrame.InstructionPointer++;
-                    continue;
-                }
-
-                throw new NotImplementedException(
-                    "Unexpected instruction type: " + currentInstruction.GetType().FullName);
             }
             catch (Exception e)
             {
@@ -2441,8 +2921,8 @@ public class PineVM : IPineVM
         }
 
         return EvaluateExpressionDefaultLessStack(
-                conditional.FalseBranch,
-                environment,
+            conditional.FalseBranch,
+            environment,
             stackPrevValues: stackPrevValues);
     }
 }

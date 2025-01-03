@@ -624,6 +624,13 @@ public static class KernelFunction
             return PineValue.EmptyList;
         }
 
+        return bit_shift_left(shiftCount, blobValue);
+    }
+
+    public static PineValue bit_shift_left(
+        BigInteger shiftCount,
+        PineValue.BlobValue blobValue)
+    {
         var offsetBytes = (int)(shiftCount / 8);
         var offsetBits = (int)(shiftCount % 8);
 
@@ -669,6 +676,13 @@ public static class KernelFunction
             return PineValue.EmptyList;
         }
 
+        return bit_shift_right(shiftCount, blobValue);
+    }
+
+    public static PineValue bit_shift_right(
+        BigInteger shiftCount,
+        PineValue.BlobValue blobValue)
+    {
         var offsetBytes = (int)(shiftCount / 8);
         var offsetBits = (int)(shiftCount % 8);
 

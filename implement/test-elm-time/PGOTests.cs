@@ -27,14 +27,14 @@ public class PGOTests
 
             usingRecordAccess record fieldId =
                 case fieldId of
-                0 ->
-                    record.alfa
+                    0 ->
+                        record.alfa
 
-                1 ->
-                    record.delta
+                    1 ->
+                        record.delta
 
-                _ ->
-                    record.other
+                    _ ->
+                        record.other
 
             """;
 
@@ -401,7 +401,7 @@ public class PGOTests
 
         Assert.IsTrue(2 <= speedupFactor);
 
-        Assert.IsTrue(optimizedAverageInstructionCount <= 30);
+        Assert.IsTrue(optimizedAverageInstructionCount <= 40);
     }
 
     [TestMethod]
@@ -413,14 +413,14 @@ public class PGOTests
 
             usingRecordUpdate record fieldId fieldValue =
                 case fieldId of
-                0 ->
-                    { record | alfa = fieldValue }
+                    0 ->
+                        { record | alfa = fieldValue }
 
-                1 ->
-                    { record | delta = fieldValue }
+                    1 ->
+                        { record | delta = fieldValue }
 
-                _ ->
-                    { record | other = fieldValue }
+                    _ ->
+                        { record | other = fieldValue }
 
             """;
 
@@ -1001,7 +1001,7 @@ public class PGOTests
 
         Assert.IsTrue(2 <= speedupFactor);
 
-        Assert.IsTrue(optimizedAverageInstructionCount <= 45);
+        Assert.IsTrue(optimizedAverageInstructionCount <= 130);
     }
 
     [TestMethod]
@@ -1015,14 +1015,14 @@ public class PGOTests
                 let
                     function =
                         case functionId of
-                        0 ->
-                            Tuple.first
+                            0 ->
+                                Tuple.first
 
-                        1 ->
-                            Tuple.first >> String.repeat 3
+                            1 ->
+                                Tuple.first >> String.repeat 3
             
-                        _ ->
-                            Tuple.first >> String.reverse
+                            _ ->
+                                Tuple.first >> String.reverse
                 in
                 listMap function list
 
@@ -1445,17 +1445,17 @@ public class PGOTests
 
             usingDictFold dict functionId =
                 case functionId of
-                0 ->
-                    Dict.foldl
-                        (\key value list -> ( value, key ) :: list)
-                        []
-                        dict
+                    0 ->
+                        Dict.foldl
+                            (\key value list -> ( value, key ) :: list)
+                            []
+                            dict
             
-                _ ->
-                    Dict.foldl
-                        (\key value list -> ( value, key ) :: list)
-                        []
-                        dict
+                    _ ->
+                        Dict.foldl
+                            (\key value list -> ( value, key ) :: list)
+                            []
+                            dict
                                     
             """;
 
