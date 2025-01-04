@@ -1110,6 +1110,129 @@ public class PineVMTests
                         StackInstruction.Return
                     ])
             },
+
+            new
+            {
+                expression =
+                (Expression)
+                new Expression.KernelApplication(
+                    function: "int_add",
+                    input:
+                    Expression.ListInstance(
+                        [
+                            new Expression.KernelApplication(
+                                function: "head",
+                                input:
+                                new Expression.KernelApplication(
+                                    function: "skip",
+                                    input:
+                                    Expression.ListInstance(
+                                        [
+                                            Expression.LiteralInstance(PineValueAsInteger.ValueFromSignedInteger(1)),
+                                            Expression.EnvironmentInstance,
+                                        ]))),
+
+                            new Expression.KernelApplication(
+                                function: "negate",
+                                input:
+                                new Expression.KernelApplication(
+                                    function: "head",
+                                    input:
+                                    new Expression.KernelApplication(
+                                        function: "skip",
+                                        input:
+                                        Expression.ListInstance(
+                                            [
+                                                Expression.LiteralInstance(PineValueAsInteger.ValueFromSignedInteger(2)),
+                                                Expression.EnvironmentInstance,
+                                            ])))),
+                        ])),
+
+                expected =
+                new PineVM.StackFrameInstructions(
+                    [
+                        StackInstruction.PushEnvironment,
+
+                        new StackInstruction(
+                            StackInstructionKind.Skip_Head_Const,
+                            SkipCount: 1),
+
+                        StackInstruction.PushEnvironment,
+
+                        new StackInstruction(
+                            StackInstructionKind.Skip_Head_Const,
+                            SkipCount: 2),
+
+                        new StackInstruction(
+                            StackInstructionKind.Int_Sub_Binary),
+
+                        StackInstruction.Return,
+                    ])
+            },
+
+            new
+            {
+                expression =
+                (Expression)
+                new Expression.KernelApplication(
+                    function: "int_add",
+                    input:
+                    Expression.ListInstance(
+                        [
+                            new Expression.KernelApplication(
+                                function: "head",
+                                input:
+                                new Expression.KernelApplication(
+                                    function: "skip",
+                                    input:
+                                    Expression.ListInstance(
+                                        [
+                                            Expression.LiteralInstance(PineValueAsInteger.ValueFromSignedInteger(1)),
+                                            Expression.EnvironmentInstance,
+                                        ]))),
+
+                            new Expression.KernelApplication(
+                                function: "int_mul",
+                                input:
+                                Expression.ListInstance(
+                                    [
+                                    Expression.LiteralInstance(PineValueAsInteger.ValueFromSignedInteger(-1)),
+
+                                    new Expression.KernelApplication(
+                                        function: "head",
+                                        input:
+                                        new Expression.KernelApplication(
+                                            function: "skip",
+                                            input:
+                                            Expression.ListInstance(
+                                                [
+                                                    Expression.LiteralInstance(PineValueAsInteger.ValueFromSignedInteger(2)),
+                                                    Expression.EnvironmentInstance,
+                                                ])))
+                                    ])),
+                        ])),
+
+                expected =
+                new PineVM.StackFrameInstructions(
+                    [
+                        StackInstruction.PushEnvironment,
+
+                        new StackInstruction(
+                            StackInstructionKind.Skip_Head_Const,
+                            SkipCount: 1),
+
+                        StackInstruction.PushEnvironment,
+
+                        new StackInstruction(
+                            StackInstructionKind.Skip_Head_Const,
+                            SkipCount: 2),
+
+                        new StackInstruction(
+                            StackInstructionKind.Int_Sub_Binary),
+
+                        StackInstruction.Return,
+                    ])
+            },
         };
 
         var parseCache = new PineVMParseCache();

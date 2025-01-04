@@ -481,7 +481,9 @@ public class PineIRCompiler
             {
                 return
                     [
-                    new StackInstruction(StackInstructionKind.Push_Literal, Literal: PineValueAsInteger.ValueFromSignedInteger(0))
+                    new StackInstruction(
+                        StackInstructionKind.Push_Literal,
+                        Literal: PineValueAsInteger.ValueFromSignedInteger(0))
                     ];
             }
 
@@ -491,16 +493,33 @@ public class PineIRCompiler
             {
                 var item = listExpr.items[i];
 
-                var itemOps =
-                    CompileExpressionTransitive(
-                        item,
-                        localIndexFromExpr);
-
-                addOps.AddRange(itemOps);
-
-                if (0 < i)
+                if (0 < i && TryParseExprAsIntNegation(item) is { } negatedItem)
                 {
-                    addOps.Add(new StackInstruction(StackInstructionKind.Int_Add_Binary));
+                    var itemOps =
+                        CompileExpressionTransitive(
+                            negatedItem,
+                            localIndexFromExpr);
+
+                    addOps.AddRange(itemOps);
+
+                    if (0 < i)
+                    {
+                        addOps.Add(new StackInstruction(StackInstructionKind.Int_Sub_Binary));
+                    }
+                }
+                else
+                {
+                    var itemOps =
+                        CompileExpressionTransitive(
+                            item,
+                            localIndexFromExpr);
+
+                    addOps.AddRange(itemOps);
+
+                    if (0 < i)
+                    {
+                        addOps.Add(new StackInstruction(StackInstructionKind.Int_Add_Binary));
+                    }
                 }
             }
 
@@ -809,5 +828,38 @@ public class PineIRCompiler
             .. CompileExpressionTransitive(input, localIndexFromExpr),
             new StackInstruction(StackInstructionKind.Bit_Shift_Right_List)
             ];
+    }
+
+    public static Expression? TryParseExprAsIntNegation(Expression expression)
+    {
+        if (expression is not Expression.KernelApplication kernelApp)
+        {
+            return null;
+        }
+
+        if (kernelApp.Function is "negate")
+        {
+            return kernelApp.Input;
+        }
+
+        if (kernelApp.Function is "int_mul" &&
+            kernelApp.Input is Expression.List mulList && mulList.items.Count is 2)
+        {
+            if (mulList.items[0] is Expression.Literal literalExpr &&
+                KernelFunction.SignedIntegerFromValueRelaxed(literalExpr.Value) is { } literalValue &&
+                literalValue == -1)
+            {
+                return mulList.items[1];
+            }
+
+            if (mulList.items[1] is Expression.Literal literalExpr2 &&
+                KernelFunction.SignedIntegerFromValueRelaxed(literalExpr2.Value) is { } literalValue2 &&
+                literalValue2 == -1)
+            {
+                return mulList.items[0];
+            }
+        }
+
+        return null;
     }
 }
