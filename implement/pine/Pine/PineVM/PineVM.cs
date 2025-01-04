@@ -82,6 +82,12 @@ public class PineVM : IPineVM
         IReadOnlyList<StackInstruction> Instructions,
         EnvConstraintId? TrackEnvConstraint = null)
     {
+        public int MaxLocalIndex { init; get; } =
+            Instructions
+            .Select(i => i.Kind is StackInstructionKind.Local_Set ? i.LocalIndex ?? 0 : 0)
+            .DefaultIfEmpty(-1)
+            .Max();
+
         public virtual bool Equals(StackFrameInstructions? other)
         {
             if (other is not { } notNull)
@@ -179,6 +185,14 @@ public class PineVM : IPineVM
 
             --StackPointer;
             return StackValues.Span[StackPointer];
+        }
+
+        public PineValue PeekTopmostFromStack()
+        {
+            if (StackPointer <= 0)
+                throw new InvalidOperationException("PeekTopmostFromStack called with empty stack");
+
+            return StackValues.Span[StackPointer - 1];
         }
     }
 
@@ -286,7 +300,7 @@ public class PineVM : IPineVM
             instructions,
             EnvironmentValue: environment,
             StackValues: new PineValue[instructions.Instructions.Count],
-            LocalsValues: new PineValue[instructions.Instructions.Count],
+            LocalsValues: new PineValue[instructions.MaxLocalIndex + 1],
             BeginInstructionCount: beginInstructionCount,
             BeginParseAndEvalCount: beginParseAndEvalCount,
             BeginStackFrameCount: beginStackFrameCount,
@@ -777,411 +791,12 @@ public class PineVM : IPineVM
     public static IReadOnlyList<StackInstruction> InstructionsFromExpressionTransitive(
         Expression rootExpression)
     {
-        var node =
-            NodeFromExpressionTransitive(
-                rootExpression,
-                conditionalsToSkip: []);
-
         return
-            InstructionsFromNode(
-                node,
-                instructionIndex: 0,
-                reusableExpressionResultOffset: _ => null,
-                makeReusable: _ => false).instructions;
-    }
-
-    public static ImperativeNode NodeFromExpressionTransitive(
-        Expression rootExpression,
-        ImmutableHashSet<Expression.Conditional> conditionalsToSkip)
-    {
-        var conditionalToSplit =
-            ListComponentsOrderedForCompilation(rootExpression, skipDescendants: null)
-            .OfType<Expression.Conditional>()
-            .Where(c => !conditionalsToSkip.Contains(c))
-            .FirstOrDefault();
-
-        if (conditionalToSplit is not null)
-        {
-            var conditionNode =
-                NodeFromExpressionTransitive(
-                    conditionalToSplit.Condition,
-                    conditionalsToSkip: []);
-
-            var falseNode =
-                NodeFromExpressionTransitive(
-                    conditionalToSplit.FalseBranch,
-                    conditionalsToSkip: []);
-
-            var trueNode =
-                NodeFromExpressionTransitive(
-                    conditionalToSplit.TrueBranch,
-                    conditionalsToSkip: []);
-
-            var continuationNode =
-                NodeFromExpressionTransitive(
-                    rootExpression,
-                    conditionalsToSkip: conditionalsToSkip.Add(conditionalToSplit));
-
-            return
-                new ImperativeNode.ConditionalNode(
-                    Origin: conditionalToSplit,
-                    Condition: conditionNode,
-                    FalseBranch: falseNode,
-                    TrueBranch: trueNode,
-                    Continuation: continuationNode);
-        }
-
-        return new ImperativeNode.LeafNode(rootExpression);
-    }
-
-    public static (IReadOnlyList<StackInstruction> instructions, IReadOnlyDictionary<Expression, int> localsSet)
-        InstructionsFromNode(
-        ImperativeNode imperativeNode,
-        int instructionIndex,
-        Func<Expression, int?> reusableExpressionResultOffset,
-        Func<Expression, bool> makeReusable)
-    {
-        if (imperativeNode is ImperativeNode.LeafNode leaf)
-        {
-            var allSubexpressions = new HashSet<Expression>();
-
-            var subexpressionsToReuse = new HashSet<Expression>();
-
-            foreach (
-                var subexpression in
-                Expression.EnumerateSelfAndDescendants(
-                    leaf.Expression,
-                    skipDescendants:
-                    subexpression =>
-                    {
-                        if (reusableExpressionResultOffset(subexpression).HasValue)
-                        {
-                            return true;
-                        }
-
-                        if (!ExpressionLargeEnoughForCSE(subexpression))
-                        {
-                            return true;
-                        }
-
-                        if (makeReusable(subexpression))
-                        {
-                            subexpressionsToReuse.Add(subexpression);
-                        }
-
-                        if (allSubexpressions.Contains(subexpression))
-                        {
-                            subexpressionsToReuse.Add(subexpression);
-
-                            return true;
-                        }
-
-                        allSubexpressions.Add(subexpression);
-
-                        return false;
-                    }))
-            {
-            }
-
-            var localInstructionIndexFromExpr = new Dictionary<Expression, int>();
-
-            int? reusableLocalIndex(Expression expr)
-            {
-                {
-                    if (reusableExpressionResultOffset.Invoke(expr) is { } reusableIndex)
-                    {
-                        return reusableIndex;
-                    }
-                }
-
-                {
-                    if (localInstructionIndexFromExpr.TryGetValue(expr, out var earlierIndex))
-                    {
-                        return earlierIndex;
-                    }
-                }
-
-                return null;
-            }
-
-            var subexpressionsToReuseInstructions = new List<StackInstruction>();
-
-            var subexpressionsToReuseOrdered =
-                subexpressionsToReuse
-                .OrderBy(se => se.SubexpressionCount)
-                .ToImmutableArray();
-
-            foreach (var subexpression in subexpressionsToReuseOrdered)
-            {
-                var subexpressionInstructions =
-                    PineIRCompiler.CompileExpressionTransitive(
-                        subexpression,
-                        localIndexFromExpr: reusableLocalIndex);
-
-                var localIndex =
-                    instructionIndex +
-                    subexpressionsToReuseInstructions.Count +
-                    subexpressionInstructions.Count;
-
-                subexpressionsToReuseInstructions.AddRange(
-                    [
-                    ..subexpressionInstructions,
-                    new StackInstruction(StackInstructionKind.Local_Set, LocalIndex: localIndex)
-                    ]);
-
-                localInstructionIndexFromExpr[subexpression] = localIndex;
-            }
-
-            var rootInstructions =
-                PineIRCompiler.CompileExpressionTransitive(
-                    leaf.Expression,
-                    reusableLocalIndex)
-                .ToImmutableArray();
-
-            IReadOnlyList<StackInstruction> instructionsOptimized =
-                [
-                ..subexpressionsToReuseInstructions,
-                ..rootInstructions
-                ];
-
-            return (instructionsOptimized, localInstructionIndexFromExpr);
-        }
-
-        if (imperativeNode is ImperativeNode.ConditionalNode conditional)
-        {
-            var unconditionalNodesUnderCondition =
-                ImperativeNode.EnumerateSelfAndDescendants(
-                    conditional.Condition,
-                    skipBranches: true)
-                .ToImmutableArray();
-
-            var unconditionalExprUnderCondition = new HashSet<Expression>();
-
-
-            /*
-             * TODO: Change unconditionalExprUnderCondition
-             * General 'unconditional' is either in condition or in continuation.
-             * */
-
-            foreach (var nodeUnderCondition in unconditionalNodesUnderCondition)
-            {
-                if (nodeUnderCondition is not ImperativeNode.LeafNode leafNode)
-                    continue;
-
-                foreach (var expression in
-                    Expression.EnumerateSelfAndDescendants(
-                        leafNode.Expression,
-                        skipDescendants:
-                        expr => reusableExpressionResultOffset(expr).HasValue))
-                {
-                    unconditionalExprUnderCondition.Add(expression);
-                }
-            }
-
-            var otherNodes =
-                new[] { conditional.FalseBranch, conditional.TrueBranch, conditional.Continuation }
-                .SelectMany(otherRoot =>
-                ImperativeNode.EnumerateSelfAndDescendants(
-                    otherRoot,
-                    skipBranches: false))
-                .ToImmutableArray();
-
-            var candidatesForCSE = new HashSet<Expression>();
-
-            foreach (var otherNode in otherNodes)
-            {
-                if (otherNode is not ImperativeNode.LeafNode otherLeafNode)
-                    continue;
-
-                foreach (var otherExpr in Expression.EnumerateSelfAndDescendants(
-                    otherLeafNode.Expression,
-                    skipDescendants:
-                    descendant =>
-                    candidatesForCSE.Contains(descendant) ||
-                    descendant == conditional.Origin))
-                {
-                    if (!ExpressionLargeEnoughForCSE(otherExpr))
-                        continue;
-
-                    if (reusableExpressionResultOffset(otherExpr).HasValue)
-                        continue;
-
-                    if (unconditionalExprUnderCondition.Contains(otherExpr))
-                    {
-                        candidatesForCSE.Add(otherExpr);
-                    }
-                }
-            }
-
-            var conditionResult =
-                InstructionsFromNode(
-                    conditional.Condition,
-                    instructionIndex: instructionIndex,
-                    reusableExpressionResultOffset,
-                    makeReusable: candidatesForCSE.Contains);
-
-            var conditionInstructions = conditionResult.instructions;
-
-            var instructionsBeforeBranchFalseCount =
-                conditionInstructions.Count + 1;
-
-            int? reusableResultOffsetForBranch(Expression expression)
-            {
-                if (reusableExpressionResultOffset(expression) is { } earlierOffset)
-                {
-                    return earlierOffset;
-                }
-
-                if (conditionResult.localsSet.TryGetValue(expression, out var localIndex))
-                {
-                    return localIndex;
-                }
-
-                return null;
-            }
-
-            IReadOnlyList<StackInstruction> falseBranchInstructions =
-                [.. InstructionsFromNode(
-                    conditional.FalseBranch,
-                    instructionIndex: instructionIndex + instructionsBeforeBranchFalseCount,
-                    reusableResultOffsetForBranch,
-                    makeReusable: _ => false)
-                .instructions];
-
-            IReadOnlyList<StackInstruction> trueBranchInstructions =
-                [.. InstructionsFromNode(
-                    conditional.TrueBranch,
-                    instructionIndex: instructionIndex + instructionsBeforeBranchFalseCount + falseBranchInstructions.Count + 1,
-                    reusableExpressionResultOffset:
-                    reusableResultOffsetForBranch,
-                    makeReusable: _ => false)
-                .instructions];
-
-            IReadOnlyList<StackInstruction> falseBranchInstructionsAndJump =
-                [.. falseBranchInstructions,
-                StackInstruction.Jump_Unconditional(trueBranchInstructions.Count + 1)
-                ];
-
-            var branchInstruction =
-                StackInstruction.Jump_If_True(
-                    offset: falseBranchInstructionsAndJump.Count);
-
-            var conditionalResultLocalIndex =
-                instructionIndex + instructionsBeforeBranchFalseCount + falseBranchInstructions.Count;
-
-            IReadOnlyList<StackInstruction> instructionsBeforeContinuation =
-                [..conditionInstructions,
-                branchInstruction,
-                ..falseBranchInstructionsAndJump,
-                ..trueBranchInstructions,
-                new StackInstruction(
-                    StackInstructionKind.Local_Set,
-                    LocalIndex: conditionalResultLocalIndex)
-                ];
-
-            int? reusableResultOffsetForContinuation(Expression expression)
-            {
-                if (expression == conditional.Origin)
-                {
-                    return conditionalResultLocalIndex;
-                }
-
-                return reusableResultOffsetForBranch(expression);
-            }
-
-            IReadOnlyList<StackInstruction> continuationInstructions =
-                [
-                .. InstructionsFromNode(
-                    conditional.Continuation,
-                    instructionIndex: instructionIndex + instructionsBeforeContinuation.Count + 1,
-                    reusableResultOffsetForContinuation,
-                    makeReusable: _ => false)
-                .instructions
-                ];
-
-            IReadOnlyList<StackInstruction> mergedInstructions =
-                [..instructionsBeforeContinuation,
-                ..continuationInstructions
-                ];
-
-            return (mergedInstructions, conditionResult.localsSet);
-        }
-
-        throw new NotImplementedException(
-            "Unexpected node type: " + imperativeNode.GetType().FullName);
-    }
-
-    static IReadOnlyList<Expression> ExpressionsToSeparateSkippingConditional(
-        Expression rootExpression,
-        Func<Expression, bool> expressionAlreadyCovered,
-        Func<Expression, bool> shouldSeparate)
-    {
-        var allExpressions =
-            ListComponentsOrderedForCompilation(
+            PineIRCompiler.CompileExpressionTransitive(
                 rootExpression,
-                skipDescendants: expressionAlreadyCovered)
-            .ToImmutableArray();
-
-        var allExpressionsCount = new Dictionary<Expression, int>();
-
-        foreach (var expression in allExpressions)
-        {
-            if (allExpressionsCount.TryGetValue(expression, out var count))
-            {
-                allExpressionsCount[expression] = count + 1;
-            }
-            else
-            {
-                allExpressionsCount[expression] = 1;
-            }
-        }
-
-        var allExpressionsExceptUnderDuplicate =
-            ListComponentsOrderedForCompilation(
-                rootExpression,
-                skipDescendants: node => 1 < allExpressionsCount[node] || expressionAlreadyCovered(node))
-            .ToImmutableArray();
-
-        var allExpressionsExceptUnderDuplicateCount = new Dictionary<Expression, int>();
-
-        foreach (var expression in allExpressionsExceptUnderDuplicate)
-        {
-            if (allExpressionsExceptUnderDuplicateCount.TryGetValue(expression, out var count))
-            {
-                allExpressionsExceptUnderDuplicateCount[expression] = count + 1;
-            }
-            else
-            {
-                allExpressionsExceptUnderDuplicateCount[expression] = 1;
-            }
-        }
-
-        var separatedInstructions =
-            allExpressions
-            .SelectMany(expression =>
-            {
-                if (expressionAlreadyCovered(expression))
-                    return [];
-
-                if (shouldSeparate(expression))
-                    return [expression];
-
-                if (expression is Expression.ParseAndEval parseAndEval)
-                {
-                    return (IReadOnlyList<Expression>)[expression];
-                }
-
-                if (ExpressionLargeEnoughForCSE(expression) &&
-                allExpressionsExceptUnderDuplicateCount.TryGetValue(expression, out var exprInstCount) && 1 < exprInstCount)
-                {
-                    return [expression];
-                }
-
-                return [];
-            })
-            .ToImmutableArray();
-
-        return separatedInstructions;
+                copyToLocal: ImmutableHashSet<Expression>.Empty,
+                localIndexFromExpr:
+                ImmutableDictionary<Expression, int>.Empty).Instructions;
     }
 
     public static IEnumerable<Expression> ListComponentsOrderedForCompilation(
@@ -1246,28 +861,6 @@ public class PineVM : IPineVM
         {
             yield return deepestDescendants.Pop();
         }
-    }
-
-    static bool ExpressionLargeEnoughForCSE(Expression expression)
-    {
-        if (expression is Expression.KernelApplication)
-            return true;
-
-        if (expression is Expression.List list)
-        {
-            for (int i = 0; i < list.items.Count; ++i)
-            {
-                if (ExpressionLargeEnoughForCSE(list.items[i]))
-                    return true;
-            }
-        }
-
-        if (expression is Expression.StringTag stringTag)
-        {
-            return ExpressionLargeEnoughForCSE(stringTag.Tagged);
-        }
-
-        return 10 < expression.SubexpressionCount;
     }
 
     public static Expression? TryFuseStep(Expression expression)
@@ -1966,7 +1559,7 @@ public class PineVM : IPineVM
 
                     case StackInstructionKind.Local_Set:
                         {
-                            var fromStack = currentFrame.PopTopmostFromStack();
+                            var fromStack = currentFrame.PeekTopmostFromStack();
 
                             currentFrame.LocalSet(
                                 currentInstruction.LocalIndex
@@ -2311,6 +1904,28 @@ public class PineVM : IPineVM
                             }
 
                             currentFrame.PushInstructionResult(resultValue);
+
+                            continue;
+                        }
+
+                    case StackInstructionKind.Int_Add_List:
+                        {
+                            var listValue = currentFrame.PopTopmostFromStack();
+
+                            var sumValue = KernelFunction.int_add(listValue);
+
+                            currentFrame.PushInstructionResult(sumValue);
+
+                            continue;
+                        }
+
+                    case StackInstructionKind.Int_Mul_List:
+                        {
+                            var listValue = currentFrame.PopTopmostFromStack();
+
+                            var productValue = KernelFunction.int_mul(listValue);
+
+                            currentFrame.PushInstructionResult(productValue);
 
                             continue;
                         }

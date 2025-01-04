@@ -1,42 +1,168 @@
 using Pine.Core;
-using System.Collections.Generic;
 using System;
+using System.Collections.Generic;
+using System.Collections.Immutable;
+using System.Linq;
 
 namespace Pine.PineVM;
 
 public class PineIRCompiler
 {
+    public record NodeCompilationResult(
+        ImmutableList<StackInstruction> Instructions,
+        ImmutableDictionary<Expression, int> LocalsSet)
+    {
+        public NodeCompilationResult ContinueWithExpression(
+            Expression expression,
+            IReadOnlySet<Expression> copyToLocal)
+        {
+            var exprResult = CompileExpressionTransitive(expression, copyToLocal, LocalsSet);
+
+            return new NodeCompilationResult(
+                Instructions.AddRange(exprResult.Instructions),
+                LocalsSet.AddRange(exprResult.LocalsSet));
+        }
+
+        public NodeCompilationResult AppendInstruction(StackInstruction instruction) =>
+            AppendInstructions([instruction]);
+
+        public NodeCompilationResult AppendInstructions(IEnumerable<StackInstruction> instructions) =>
+            this
+            with
+            {
+                Instructions = Instructions.AddRange(instructions)
+            };
+    }
 
     /// <summary>
-    /// Recursively compile an expression into a flat list of PineIROp instructions.
+    /// Recursively compile an expression into a flat list of instructions.
     /// </summary>
-    public static IReadOnlyList<StackInstruction> CompileExpressionTransitive(
-        Expression expr,
-        Func<Expression, int?> localIndexFromExpr)
+    public static NodeCompilationResult CompileExpressionTransitive(
+        Expression expression,
+        IReadOnlySet<Expression> copyToLocal,
+        ImmutableDictionary<Expression, int> localIndexFromExpr)
     {
-        if (localIndexFromExpr(expr) is { } localIndex)
+        return
+            CompileExpressionTransitive(
+                expression,
+                copyToLocal: copyToLocal,
+                new NodeCompilationResult(
+                    Instructions: [],
+                    localIndexFromExpr));
+    }
+
+    /// <summary>
+    /// Recursively compile an expression into a flat list of instructions.
+    /// </summary>
+    public static NodeCompilationResult CompileExpressionTransitive(
+        Expression expression,
+        IReadOnlySet<Expression> copyToLocal,
+        NodeCompilationResult prior)
+    {
+        var allSubexpressions = new HashSet<Expression>();
+
+        var subexpressionsToReuse = new HashSet<Expression>();
+
+        foreach (
+            var subexpression in
+            Expression.EnumerateSelfAndDescendants(
+                expression,
+                skipDescendants:
+                subexpression =>
+                {
+                    if (prior.LocalsSet.ContainsKey(subexpression))
+                    {
+                        return true;
+                    }
+
+                    if (copyToLocal.Contains(subexpression))
+                    {
+                        return false;
+                    }
+
+                    if (!ExpressionLargeEnoughForCSE(subexpression))
+                    {
+                        return true;
+                    }
+
+                    if (allSubexpressions.Contains(subexpression))
+                    {
+                        subexpressionsToReuse.Add(subexpression);
+
+                        return true;
+                    }
+
+                    allSubexpressions.Add(subexpression);
+
+                    return false;
+                }))
+        {
+        }
+
+        var copyToLocalNew =
+            copyToLocal.ToImmutableHashSet()
+            .Union(subexpressionsToReuse);
+
+        var lessCSE =
+            CompileExpressionTransitiveLessCSE(
+                expression,
+                copyToLocalNew,
+                prior);
+
+        if (!prior.LocalsSet.ContainsKey(expression) && copyToLocal.Contains(expression))
+        {
+            var newLocalIndex =
+                lessCSE.LocalsSet.IsEmpty
+                ?
+                0
+                :
+                lessCSE.LocalsSet.Values.Max() + 1;
+
+            return
+                lessCSE
+                .AppendInstruction(
+                    new StackInstruction(
+                        Kind: StackInstructionKind.Local_Set,
+                        LocalIndex: newLocalIndex))
+                with
+                {
+                    LocalsSet = lessCSE.LocalsSet.Add(expression, newLocalIndex)
+                };
+        }
+
+        return lessCSE;
+    }
+
+    public static NodeCompilationResult CompileExpressionTransitiveLessCSE(
+        Expression expr,
+        IReadOnlySet<Expression> copyToLocal,
+        NodeCompilationResult prior)
+    {
+        if (prior.LocalsSet.TryGetValue(expr, out var localIndex))
         {
             return
-                [new StackInstruction(
-                    Kind: StackInstructionKind.Local_Get,
-                    LocalIndex: localIndex)
-                ];
+                prior
+                .AppendInstruction(
+                    new StackInstruction(
+                        Kind: StackInstructionKind.Local_Get,
+                        LocalIndex: localIndex));
         }
 
         switch (expr)
         {
             case Expression.Literal literalExpr:
                 return
-                    [new StackInstruction(
-                    Kind: StackInstructionKind.Push_Literal,
-                    Literal: literalExpr.Value)
-                    ];
+                    prior
+                    .AppendInstruction(
+                        new StackInstruction(
+                            Kind: StackInstructionKind.Push_Literal,
+                            Literal: literalExpr.Value));
 
             case Expression.Environment:
                 return
-                    [
-                    StackInstruction.PushEnvironment
-                    ];
+                    prior
+                    .AppendInstruction(
+                        new StackInstruction(StackInstructionKind.Push_Environment));
 
             case Expression.List listExpr:
                 {
@@ -47,45 +173,47 @@ public class PineIRCompiler
                      * we don't use a non-consuming instruction but use local_get instead to copy it)
                      * */
 
-                    var itemsInstructions = new List<StackInstruction>();
+                    var lastItemResult = prior;
 
                     for (var i = 0; i < listExpr.items.Count; ++i)
                     {
                         var itemExpr = listExpr.items[i];
 
-                        var itemInstructions =
+                        lastItemResult =
                             CompileExpressionTransitive(
                                 itemExpr,
-                                localIndexFromExpr);
-
-                        itemsInstructions.AddRange(itemInstructions);
+                                copyToLocal,
+                                lastItemResult);
                     }
 
                     return
-                        [
-                        ..itemsInstructions,
-                        new StackInstruction(
-                            StackInstructionKind.BuildList,
-                            TakeCount: listExpr.items.Count)
-                        ];
+                        lastItemResult
+                        .AppendInstruction(
+                            new StackInstruction(
+                                StackInstructionKind.BuildList,
+                                TakeCount: listExpr.items.Count));
                 }
 
-            case Expression.Conditional:
-
-                throw new InvalidOperationException(
-                    "Conditional should be filtered out earlier");
+            case Expression.Conditional conditional:
+                return
+                    CompileConditional(
+                        conditional,
+                        copyToLocal,
+                        prior);
 
             case Expression.ParseAndEval pae:
                 return
                     CompileParseAndEval(
                         pae,
-                        localIndexFromExpr);
+                        copyToLocal,
+                        prior);
 
             case Expression.KernelApplication kernelApp:
                 return
                     CompileKernelApplication(
                         kernelApp,
-                        localIndexFromExpr);
+                        copyToLocal,
+                        prior);
 
             default:
                 throw new NotImplementedException(
@@ -93,125 +221,186 @@ public class PineIRCompiler
         }
     }
 
-    public static IReadOnlyList<StackInstruction> CompileParseAndEval(
-        Expression.ParseAndEval parseAndEvalExpr,
-        Func<Expression, int?> localIndexFromExpr)
+    public static NodeCompilationResult CompileConditional(
+        Expression.Conditional conditional,
+        IReadOnlySet<Expression> copyToLocal,
+        NodeCompilationResult prior)
     {
-        var environmentOps =
+        var afterCondition =
             CompileExpressionTransitive(
-                parseAndEvalExpr.Environment,
-                localIndexFromExpr);
+                conditional.Condition,
+                copyToLocal,
+                prior);
 
-        var encodedOps =
+        var falseBranchInstructions =
             CompileExpressionTransitive(
-                parseAndEvalExpr.Encoded,
-                localIndexFromExpr);
+                conditional.FalseBranch,
+                copyToLocal,
+                new NodeCompilationResult(
+                    Instructions: [],
+                    LocalsSet: afterCondition.LocalsSet))
+            .Instructions;
+
+        var trueBranchInstructions =
+            CompileExpressionTransitive(
+                conditional.TrueBranch,
+                copyToLocal,
+                new NodeCompilationResult(
+                    Instructions: [],
+                    LocalsSet: afterCondition.LocalsSet))
+            .Instructions;
+
+        IReadOnlyList<StackInstruction> falseBranchInstructionsAndJump =
+            [.. falseBranchInstructions,
+                StackInstruction.Jump_Unconditional(trueBranchInstructions.Count + 1)
+            ];
+
+        var branchInstruction =
+            StackInstruction.Jump_If_True(
+                offset: falseBranchInstructionsAndJump.Count);
+
+        var afterConditionAndJump =
+            afterCondition
+            .AppendInstruction(branchInstruction);
 
         return
-            [
-            .. environmentOps,
-            .. encodedOps,
-            new StackInstruction(StackInstructionKind.Parse_And_Eval)
-            ];
+            afterConditionAndJump
+            .AppendInstructions(falseBranchInstructionsAndJump)
+            .AppendInstructions(trueBranchInstructions);
     }
 
-    public static IReadOnlyList<StackInstruction> CompileKernelApplication(
+    public static NodeCompilationResult CompileParseAndEval(
+        Expression.ParseAndEval parseAndEvalExpr,
+        IReadOnlySet<Expression> copyToLocal,
+        NodeCompilationResult prior)
+    {
+        var afterEnvironment =
+            prior.ContinueWithExpression(
+                parseAndEvalExpr.Environment,
+                copyToLocal);
+
+        var afterExpr =
+            afterEnvironment.ContinueWithExpression(
+                parseAndEvalExpr.Encoded,
+                copyToLocal);
+
+        return
+            afterExpr
+            .AppendInstruction(
+                new StackInstruction(StackInstructionKind.Parse_And_Eval));
+    }
+
+    public static NodeCompilationResult CompileKernelApplication(
         Expression.KernelApplication kernelApplication,
-        Func<Expression, int?> localIndexFromExpr)
+        IReadOnlySet<Expression> copyToLocal,
+        NodeCompilationResult prior)
     {
         return
             kernelApplication.Function switch
             {
                 nameof(KernelFunction.length) =>
-                [
-                    .. CompileExpressionTransitive(
-                        kernelApplication.Input,
-                        localIndexFromExpr),
-                    new StackInstruction(StackInstructionKind.Length)
-                ],
+                CompileExpressionTransitive(
+                    kernelApplication.Input,
+                    copyToLocal,
+                    prior)
+                .AppendInstruction(new StackInstruction(StackInstructionKind.Length)),
 
                 nameof(KernelFunction.negate) =>
-                [
-                    .. CompileExpressionTransitive(
-                        kernelApplication.Input,
-                        localIndexFromExpr),
-                    new StackInstruction(StackInstructionKind.Negate)
-                ],
+                CompileExpressionTransitive(
+                    kernelApplication.Input,
+                    copyToLocal,
+                    prior)
+                .AppendInstruction(new StackInstruction(StackInstructionKind.Negate)),
 
                 nameof(KernelFunction.equal) =>
                 CompileKernelApplication_Equal(
                     kernelApplication.Input,
-                    localIndexFromExpr),
+                    copyToLocal,
+                    prior),
 
                 nameof(KernelFunction.head) =>
                 CompileKernelApplication_Head(
                     kernelApplication.Input,
-                    localIndexFromExpr),
+                    copyToLocal,
+                    prior),
 
                 nameof(KernelFunction.skip) =>
                 CompileKernelApplication_Skip(
                     kernelApplication.Input,
-                    localIndexFromExpr),
+                    copyToLocal,
+                    prior),
 
                 nameof(KernelFunction.take) =>
                 CompileKernelApplication_Take(
                     kernelApplication.Input,
-                    localIndexFromExpr),
+                    copyToLocal,
+                    prior),
 
                 nameof(KernelFunction.concat) =>
                 CompileKernelApplication_Concat(
                     kernelApplication.Input,
-                    localIndexFromExpr),
+                    copyToLocal,
+                    prior),
 
                 nameof(KernelFunction.reverse) =>
                 CompileKernelApplication_Reverse(
                     kernelApplication.Input,
-                    localIndexFromExpr),
+                    copyToLocal,
+                    prior),
 
                 nameof(KernelFunction.int_add) =>
                 CompileKernelApplication_Int_Add(
                     kernelApplication.Input,
-                    localIndexFromExpr),
+                    copyToLocal,
+                    prior),
 
                 nameof(KernelFunction.int_mul) =>
                 CompileKernelApplication_Int_Mul(
                     kernelApplication.Input,
-                    localIndexFromExpr),
+                    copyToLocal,
+                    prior),
 
                 nameof(KernelFunction.int_is_sorted_asc) =>
                 CompileKernelApplication_Int_Is_Sorted_Asc(
                     kernelApplication.Input,
-                    localIndexFromExpr),
+                    copyToLocal,
+                    prior),
 
                 nameof(KernelFunction.bit_and) =>
                 CompileKernelApplication_Bit_And(
                     kernelApplication.Input,
-                    localIndexFromExpr),
+                    copyToLocal,
+                    prior),
 
                 nameof(KernelFunction.bit_or) =>
                 CompileKernelApplication_Bit_Or(
                     kernelApplication.Input,
-                    localIndexFromExpr),
+                    copyToLocal,
+                    prior),
 
                 nameof(KernelFunction.bit_xor) =>
                 CompileKernelApplication_Bit_Xor(
                     kernelApplication.Input,
-                    localIndexFromExpr),
+                    copyToLocal,
+                    prior),
 
                 nameof(KernelFunction.bit_not) =>
                 CompileKernelApplication_Bit_Not(
                     kernelApplication.Input,
-                    localIndexFromExpr),
+                    copyToLocal,
+                    prior),
 
                 nameof(KernelFunction.bit_shift_left) =>
                 CompileKernelApplication_Bit_Shift_Left(
                     kernelApplication.Input,
-                    localIndexFromExpr),
+                    copyToLocal,
+                    prior),
 
                 nameof(KernelFunction.bit_shift_right) =>
                 CompileKernelApplication_Bit_Shift_Right(
                     kernelApplication.Input,
-                    localIndexFromExpr),
+                    copyToLocal,
+                    prior),
 
                 _ =>
                 throw new NotImplementedException(
@@ -219,152 +408,140 @@ public class PineIRCompiler
             };
     }
 
-    public static IReadOnlyList<StackInstruction> CompileKernelApplication_Equal(
+    public static NodeCompilationResult CompileKernelApplication_Equal(
         Expression input,
-        Func<Expression, int?> localIndexFromExpr)
+        IReadOnlySet<Expression> copyToLocal,
+        NodeCompilationResult prior)
     {
         if (input is Expression.List listExpr)
         {
             if (listExpr.items.Count is 2)
             {
-                var leftOps =
+                var afterLeft =
                     CompileExpressionTransitive(
                         listExpr.items[0],
-                        localIndexFromExpr);
+                        copyToLocal,
+                        prior);
 
-                var rightOps =
+                var afterRight =
                     CompileExpressionTransitive(
                         listExpr.items[1],
-                        localIndexFromExpr);
+                        copyToLocal,
+                        afterLeft);
 
                 return
-                    [
-                    .. rightOps,
-                    .. leftOps,
-                    new StackInstruction(StackInstructionKind.Equal_Binary)
-                    ];
+                    afterRight
+                    .AppendInstruction(new StackInstruction(StackInstructionKind.Equal_Binary));
             }
         }
 
         return
-            [
-            .. CompileExpressionTransitive(input, localIndexFromExpr),
-            new StackInstruction(StackInstructionKind.Equal_List)
-            ];
+            CompileExpressionTransitive(
+                input,
+                copyToLocal,
+                prior)
+            .AppendInstruction(new StackInstruction(StackInstructionKind.Equal_List));
     }
 
-    public static IReadOnlyList<StackInstruction> CompileKernelApplication_Head(
+    public static NodeCompilationResult CompileKernelApplication_Head(
         Expression input,
-        Func<Expression, int?> localIndexFromExpr)
+        IReadOnlySet<Expression> copyToLocal,
+        NodeCompilationResult prior)
     {
         if (input is Expression.KernelApplication innerKernelApp && innerKernelApp.Function is "skip")
         {
             if (innerKernelApp.Input is Expression.List skipList && skipList.items.Count is 2)
             {
-                var sourceOps =
+                var afterSource =
                     CompileExpressionTransitive(
                         skipList.items[1],
-                        localIndexFromExpr);
+                        copyToLocal,
+                        prior);
 
                 if (skipList.items[0] is Expression.Literal literalExpr)
                 {
                     if (PineValueAsInteger.SignedIntegerFromValueRelaxed(literalExpr.Value).IsOkOrNullable() is { } skipCount)
                     {
                         return
-                            [
-                            .. sourceOps,
-                            new StackInstruction(StackInstructionKind.Skip_Head_Const, SkipCount: (int)skipCount)
-                            ];
+                            afterSource
+                            .AppendInstruction(
+                                new StackInstruction(
+                                    StackInstructionKind.Skip_Head_Const,
+                                    SkipCount: (int)skipCount));
                     }
                 }
 
-                var skipCountOps =
+                var afterSkipCount =
                     CompileExpressionTransitive(
                         skipList.items[0],
-                        localIndexFromExpr);
+                        copyToLocal,
+                        afterSource);
 
                 return
-                    [
-                    .. sourceOps,
-                    .. skipCountOps,
-                    new StackInstruction(StackInstructionKind.Skip_Head_Var)
-                    ];
+                    afterSkipCount
+                    .AppendInstruction(new StackInstruction(StackInstructionKind.Skip_Head_Var));
             }
         }
 
-        var inputOps =
+        return
             CompileExpressionTransitive(
                 input,
-                localIndexFromExpr);
-
-        return
-            [.. inputOps,
-            new StackInstruction(StackInstructionKind.Head_Generic)
-            ];
+                copyToLocal,
+                prior)
+            .AppendInstruction(new StackInstruction(StackInstructionKind.Head_Generic));
     }
 
-    public static IReadOnlyList<StackInstruction> CompileKernelApplication_Skip(
-        Expression input,
-        Func<Expression, int?> localIndexFromExpr)
+    public static NodeCompilationResult CompileKernelApplication_Skip(
+       Expression input,
+       IReadOnlySet<Expression> copyToLocal,
+       NodeCompilationResult prior)
     {
         if (input is Expression.List listExpr && listExpr.items.Count is 2)
         {
-            var skipCountOps =
-                CompileExpressionTransitive(
-                    listExpr.items[0],
-                    localIndexFromExpr);
-
-            var sourceOps =
+            var afterSource =
                 CompileExpressionTransitive(
                     listExpr.items[1],
-                    localIndexFromExpr);
+                    copyToLocal,
+                    prior);
+
+            var afterSkipCount =
+                CompileExpressionTransitive(
+                    listExpr.items[0],
+                    copyToLocal,
+                    afterSource);
 
             return
-                [
-                .. sourceOps,
-                .. skipCountOps,
-                new StackInstruction(StackInstructionKind.Skip_Binary)
-                ];
+                afterSkipCount
+                .AppendInstruction(new StackInstruction(StackInstructionKind.Skip_Binary));
         }
 
-        var inputOps =
+        return
             CompileExpressionTransitive(
                 input,
-                localIndexFromExpr);
-
-        return
-            [.. inputOps,
-            new StackInstruction(StackInstructionKind.Skip_Generic)
-            ];
+                copyToLocal,
+                prior)
+            .AppendInstruction(new StackInstruction(StackInstructionKind.Skip_Generic));
     }
 
-    public static IReadOnlyList<StackInstruction> CompileKernelApplication_Take(
+    public static NodeCompilationResult CompileKernelApplication_Take(
         Expression input,
-        Func<Expression, int?> localIndexFromExpr)
+        IReadOnlySet<Expression> copyToLocal,
+        NodeCompilationResult prior)
     {
         if (input is Expression.List listExpr && listExpr.items.Count is 2)
         {
             var takeCountValueExpr = listExpr.items[0];
-
-            var takeCountOps =
-                CompileExpressionTransitive(
-                    takeCountValueExpr,
-                    localIndexFromExpr);
 
             if (listExpr.items[1] is Expression.KernelApplication sourceKernelApp &&
                 sourceKernelApp.Function is "skip")
             {
                 if (sourceKernelApp.Input is Expression.List skipList && skipList.items.Count is 2)
                 {
-                    var skipCountOps =
-                        CompileExpressionTransitive(
-                            skipList.items[0],
-                            localIndexFromExpr);
-
-                    var sourceOps =
+                    var afterSource =
                         CompileExpressionTransitive(
                             skipList.items[1],
-                            localIndexFromExpr);
+                            copyToLocal,
+                            prior);
 
                     /*
                      * Earlier reduction pass should already have reduced the contents in take to
@@ -374,61 +551,78 @@ public class PineIRCompiler
                     {
                         if (KernelFunction.SignedIntegerFromValueRelaxed(takeCountLiteral.Value) is { } takeCount)
                         {
+                            var afterSkipCount =
+                                CompileExpressionTransitive(
+                                    skipList.items[0],
+                                    copyToLocal,
+                                    afterSource);
+
                             return
-                                [
-                                .. sourceOps,
-                                .. skipCountOps,
-                                new StackInstruction(
-                                    StackInstructionKind.Slice_Skip_Var_Take_Const,
-                                    TakeCount: (int)takeCount)
-                                ];
+                                afterSkipCount
+                                .AppendInstruction(
+                                    new StackInstruction(
+                                        StackInstructionKind.Slice_Skip_Var_Take_Const,
+                                        TakeCount: (int)takeCount));
                         }
                     }
 
-                    return
-                        [
-                        .. sourceOps,
-                        .. skipCountOps,
-                        .. takeCountOps,
-                        new StackInstruction(StackInstructionKind.Slice_Skip_Var_Take_Var)
-                        ];
+                    {
+                        var afterSkipCount =
+                            CompileExpressionTransitive(
+                                skipList.items[0],
+                                copyToLocal,
+                                afterSource);
+
+                        var afterTakeCount =
+                            CompileExpressionTransitive(
+                                takeCountValueExpr,
+                                copyToLocal,
+                                afterSkipCount);
+
+                        return
+                            afterTakeCount
+                            .AppendInstruction(
+                                new StackInstruction(
+                                    StackInstructionKind.Slice_Skip_Var_Take_Var));
+                    }
                 }
             }
 
             {
-                var sourceOps =
+                var afterSource =
                     CompileExpressionTransitive(
                         listExpr.items[1],
-                        localIndexFromExpr);
+                        copyToLocal,
+                        prior);
+
+                var afterTakeCount =
+                    CompileExpressionTransitive(
+                        takeCountValueExpr,
+                        copyToLocal,
+                        afterSource);
 
                 return
-                    [
-                    .. sourceOps,
-                    .. takeCountOps,
-                    new StackInstruction(StackInstructionKind.Take_Binary)
-                    ];
+                    afterTakeCount
+                    .AppendInstruction(new StackInstruction(StackInstructionKind.Take_Binary));
             }
         }
 
-        var inputOps =
+        return
             CompileExpressionTransitive(
                 input,
-                localIndexFromExpr);
-
-        return
-            [
-            .. inputOps,
-            new StackInstruction(StackInstructionKind.Take_Generic)
-            ];
+                copyToLocal,
+                prior)
+            .AppendInstruction(new StackInstruction(StackInstructionKind.Take_Generic));
     }
 
-    public static IReadOnlyList<StackInstruction> CompileKernelApplication_Concat(
+    public static NodeCompilationResult CompileKernelApplication_Concat(
         Expression input,
-        Func<Expression, int?> localIndexFromExpr)
+        IReadOnlySet<Expression> copyToLocal,
+        NodeCompilationResult prior)
     {
         if (input is Expression.List listExpr)
         {
-            var concatOps = new List<StackInstruction>();
+            var concatOps = prior;
 
             for (var i = 0; i < listExpr.items.Count; ++i)
             {
@@ -437,13 +631,16 @@ public class PineIRCompiler
                 var itemOps =
                     CompileExpressionTransitive(
                         item,
-                        localIndexFromExpr);
+                        copyToLocal,
+                        concatOps);
 
-                concatOps.AddRange(itemOps);
+                concatOps = itemOps;
 
                 if (0 < i)
                 {
-                    concatOps.Add(new StackInstruction(StackInstructionKind.Concat_Binary));
+                    concatOps =
+                        concatOps.AppendInstruction(
+                            new StackInstruction(StackInstructionKind.Concat_Binary));
                 }
             }
 
@@ -452,73 +649,82 @@ public class PineIRCompiler
         else
         {
             return
-                [
-                .. CompileExpressionTransitive(input, localIndexFromExpr),
-                new StackInstruction(StackInstructionKind.Concat_List)
-                ];
+                CompileExpressionTransitive(
+                    input,
+                    copyToLocal,
+                    prior)
+                .AppendInstruction(new StackInstruction(StackInstructionKind.Concat_List));
         }
     }
 
-    public static IReadOnlyList<StackInstruction> CompileKernelApplication_Reverse(
+    public static NodeCompilationResult CompileKernelApplication_Reverse(
         Expression input,
-        Func<Expression, int?> localIndexFromExpr)
+        IReadOnlySet<Expression> copyToLocal,
+        NodeCompilationResult prior)
     {
-
         return
-            [
-            .. CompileExpressionTransitive(input, localIndexFromExpr),
-            new StackInstruction(StackInstructionKind.Reverse)
-            ];
+            CompileExpressionTransitive(
+                input,
+                copyToLocal,
+                prior)
+            .AppendInstruction(new StackInstruction(StackInstructionKind.Reverse));
     }
 
-    public static IReadOnlyList<StackInstruction> CompileKernelApplication_Int_Add(
+    public static NodeCompilationResult CompileKernelApplication_Int_Add(
         Expression input,
-        Func<Expression, int?> localIndexFromExpr)
+        IReadOnlySet<Expression> copyToLocal,
+        NodeCompilationResult prior)
     {
         if (input is Expression.List listExpr)
         {
             if (listExpr.items.Count is 0)
             {
                 return
-                    [
-                    new StackInstruction(
-                        StackInstructionKind.Push_Literal,
-                        Literal: PineValueAsInteger.ValueFromSignedInteger(0))
-                    ];
+                    prior
+                    .AppendInstruction(
+                        new StackInstruction(
+                            StackInstructionKind.Push_Literal,
+                            Literal: PineValueAsInteger.ValueFromSignedInteger(0)));
             }
 
-            var addOps = new List<StackInstruction>();
+            var addOps = prior;
 
             for (var i = 0; i < listExpr.items.Count; ++i)
             {
-                var item = listExpr.items[i];
+                var itemExpr = listExpr.items[i];
 
-                if (0 < i && TryParseExprAsIntNegation(item) is { } negatedItem)
+                if (0 < i && TryParseExprAsIntNegation(itemExpr) is { } negatedItemExpr)
                 {
                     var itemOps =
                         CompileExpressionTransitive(
-                            negatedItem,
-                            localIndexFromExpr);
+                            negatedItemExpr,
+                            copyToLocal,
+                            addOps);
 
-                    addOps.AddRange(itemOps);
+                    addOps = itemOps;
 
                     if (0 < i)
                     {
-                        addOps.Add(new StackInstruction(StackInstructionKind.Int_Sub_Binary));
+                        addOps =
+                            addOps.AppendInstruction(
+                                new StackInstruction(StackInstructionKind.Int_Sub_Binary));
                     }
                 }
                 else
                 {
                     var itemOps =
                         CompileExpressionTransitive(
-                            item,
-                            localIndexFromExpr);
+                            itemExpr,
+                            copyToLocal,
+                            addOps);
 
-                    addOps.AddRange(itemOps);
+                    addOps = itemOps;
 
                     if (0 < i)
                     {
-                        addOps.Add(new StackInstruction(StackInstructionKind.Int_Add_Binary));
+                        addOps =
+                            addOps.AppendInstruction(
+                                new StackInstruction(StackInstructionKind.Int_Add_Binary));
                     }
                 }
             }
@@ -528,43 +734,50 @@ public class PineIRCompiler
         else
         {
             return
-                [
-                .. CompileExpressionTransitive(input, localIndexFromExpr),
-                new StackInstruction(StackInstructionKind.Int_Add_List)
-                ];
+                CompileExpressionTransitive(
+                    input,
+                    copyToLocal,
+                    prior)
+                .AppendInstruction(new StackInstruction(StackInstructionKind.Int_Add_List));
         }
     }
 
-    public static IReadOnlyList<StackInstruction> CompileKernelApplication_Int_Mul(
+    public static NodeCompilationResult CompileKernelApplication_Int_Mul(
         Expression input,
-        Func<Expression, int?> localIndexFromExpr)
+        IReadOnlySet<Expression> copyToLocal,
+        NodeCompilationResult prior)
     {
         if (input is Expression.List listExpr)
         {
             if (listExpr.items.Count is 0)
             {
                 return
-                    [
-                    new StackInstruction(StackInstructionKind.Push_Literal, Literal: PineValueAsInteger.ValueFromSignedInteger(1))
-                    ];
+                    prior
+                    .AppendInstruction(
+                        new StackInstruction(
+                            StackInstructionKind.Push_Literal,
+                            Literal: PineValueAsInteger.ValueFromSignedInteger(1)));
             }
 
-            var mulOps = new List<StackInstruction>();
+            var mulOps = prior;
 
             for (var i = 0; i < listExpr.items.Count; ++i)
             {
-                var item = listExpr.items[i];
+                var itemExpr = listExpr.items[i];
 
                 var itemOps =
                     CompileExpressionTransitive(
-                        item,
-                        localIndexFromExpr);
+                        itemExpr,
+                        copyToLocal,
+                        mulOps);
 
-                mulOps.AddRange(itemOps);
+                mulOps = itemOps;
 
                 if (0 < i)
                 {
-                    mulOps.Add(new StackInstruction(StackInstructionKind.Int_Mul_Binary));
+                    mulOps =
+                        mulOps.AppendInstruction(
+                            new StackInstruction(StackInstructionKind.Int_Mul_Binary));
                 }
             }
 
@@ -573,85 +786,95 @@ public class PineIRCompiler
         else
         {
             return
-                [
-                .. CompileExpressionTransitive(input, localIndexFromExpr),
-                new StackInstruction(StackInstructionKind.Int_Mul_List)
-                ];
+                CompileExpressionTransitive(
+                    input,
+                    copyToLocal,
+                    prior)
+                .AppendInstruction(new StackInstruction(StackInstructionKind.Int_Mul_List));
         }
     }
 
-    public static IReadOnlyList<StackInstruction> CompileKernelApplication_Int_Is_Sorted_Asc(
+    public static NodeCompilationResult CompileKernelApplication_Int_Is_Sorted_Asc(
         Expression input,
-        Func<Expression, int?> localIndexFromExpr)
+        IReadOnlySet<Expression> copyToLocal,
+        NodeCompilationResult prior)
     {
         if (input is Expression.List listExpr)
         {
             if (listExpr.items.Count is 0 || listExpr.items.Count is 1)
             {
                 return
-                    [
-                    new StackInstruction(StackInstructionKind.Push_Literal, Literal: PineVMValues.TrueValue)
-                    ];
+                    prior
+                    .AppendInstruction(
+                        new StackInstruction(
+                            StackInstructionKind.Push_Literal,
+                            Literal: PineVMValues.TrueValue));
             }
 
             if (listExpr.items.Count is 2)
             {
-                var leftOps =
+                var afterLeft =
                     CompileExpressionTransitive(
                         listExpr.items[0],
-                        localIndexFromExpr);
+                        copyToLocal,
+                        prior);
 
-                var rightOps =
+                var afterRight =
                     CompileExpressionTransitive(
                         listExpr.items[1],
-                        localIndexFromExpr);
+                        copyToLocal,
+                        afterLeft);
 
                 return
-                    [
-                    .. leftOps,
-                    .. rightOps,
-                    new StackInstruction(StackInstructionKind.Int_Less_Than_Or_Equal_Binary)
-                    ];
+                    afterRight
+                    .AppendInstruction(new StackInstruction(StackInstructionKind.Int_Less_Than_Or_Equal_Binary));
             }
         }
 
         return
-            [
-            .. CompileExpressionTransitive(input, localIndexFromExpr),
-            new StackInstruction(StackInstructionKind.Int_Is_Sorted_Asc_List)
-            ];
+            CompileExpressionTransitive(
+                input,
+                copyToLocal,
+                prior)
+            .AppendInstruction(new StackInstruction(StackInstructionKind.Int_Is_Sorted_Asc_List));
     }
 
-    public static IReadOnlyList<StackInstruction> CompileKernelApplication_Bit_And(
+    public static NodeCompilationResult CompileKernelApplication_Bit_And(
         Expression input,
-        Func<Expression, int?> localIndexFromExpr)
+        IReadOnlySet<Expression> copyToLocal,
+        NodeCompilationResult prior)
     {
         if (input is Expression.List listExpr)
         {
             if (listExpr.items.Count is 0)
             {
                 return
-                    [
-                    new StackInstruction(StackInstructionKind.Push_Literal, Literal: PineValue.EmptyBlob)
-                    ];
+                    prior
+                    .AppendInstruction(
+                        new StackInstruction(
+                            StackInstructionKind.Push_Literal,
+                            Literal: PineValue.EmptyBlob));
             }
 
-            var andOps = new List<StackInstruction>();
+            var andOps = prior;
 
             for (var i = 0; i < listExpr.items.Count; ++i)
             {
-                var item = listExpr.items[i];
+                var itemExpr = listExpr.items[i];
 
                 var itemOps =
                     CompileExpressionTransitive(
-                        item,
-                        localIndexFromExpr);
+                        itemExpr,
+                        copyToLocal,
+                        andOps);
 
-                andOps.AddRange(itemOps);
+                andOps = itemOps;
 
                 if (0 < i)
                 {
-                    andOps.Add(new StackInstruction(StackInstructionKind.Bit_And_Binary));
+                    andOps =
+                        andOps.AppendInstruction(
+                            new StackInstruction(StackInstructionKind.Bit_And_Binary));
                 }
             }
 
@@ -660,43 +883,50 @@ public class PineIRCompiler
         else
         {
             return
-                [
-                .. CompileExpressionTransitive(input, localIndexFromExpr),
-                new StackInstruction(StackInstructionKind.Bit_And_List)
-                ];
+                CompileExpressionTransitive(
+                    input,
+                    copyToLocal,
+                    prior)
+                .AppendInstruction(new StackInstruction(StackInstructionKind.Bit_And_List));
         }
     }
 
-    public static IReadOnlyList<StackInstruction> CompileKernelApplication_Bit_Or(
+    public static NodeCompilationResult CompileKernelApplication_Bit_Or(
         Expression input,
-        Func<Expression, int?> localIndexFromExpr)
+        IReadOnlySet<Expression> copyToLocal,
+        NodeCompilationResult prior)
     {
         if (input is Expression.List listExpr)
         {
             if (listExpr.items.Count is 0)
             {
                 return
-                    [
-                    new StackInstruction(StackInstructionKind.Push_Literal, Literal: PineValue.EmptyBlob)
-                    ];
+                    prior
+                    .AppendInstruction(
+                        new StackInstruction(
+                            StackInstructionKind.Push_Literal,
+                            Literal: PineValue.EmptyBlob));
             }
 
-            var orOps = new List<StackInstruction>();
+            var orOps = prior;
 
             for (var i = 0; i < listExpr.items.Count; ++i)
             {
-                var item = listExpr.items[i];
+                var itemExpr = listExpr.items[i];
 
                 var itemOps =
                     CompileExpressionTransitive(
-                        item,
-                        localIndexFromExpr);
+                        itemExpr,
+                        copyToLocal,
+                        orOps);
 
-                orOps.AddRange(itemOps);
+                orOps = itemOps;
 
                 if (0 < i)
                 {
-                    orOps.Add(new StackInstruction(StackInstructionKind.Bit_Or_Binary));
+                    orOps =
+                        orOps.AppendInstruction(
+                            new StackInstruction(StackInstructionKind.Bit_Or_Binary));
                 }
             }
 
@@ -705,43 +935,50 @@ public class PineIRCompiler
         else
         {
             return
-                [
-                .. CompileExpressionTransitive(input, localIndexFromExpr),
-                new StackInstruction(StackInstructionKind.Bit_Or_List)
-                ];
+                CompileExpressionTransitive(
+                    input,
+                    copyToLocal,
+                    prior)
+                .AppendInstruction(new StackInstruction(StackInstructionKind.Bit_Or_List));
         }
     }
 
-    public static IReadOnlyList<StackInstruction> CompileKernelApplication_Bit_Xor(
+    public static NodeCompilationResult CompileKernelApplication_Bit_Xor(
         Expression input,
-        Func<Expression, int?> localIndexFromExpr)
+        IReadOnlySet<Expression> copyToLocal,
+        NodeCompilationResult prior)
     {
         if (input is Expression.List listExpr)
         {
             if (listExpr.items.Count is 0)
             {
                 return
-                    [
-                    new StackInstruction(StackInstructionKind.Push_Literal, Literal: PineValue.EmptyBlob)
-                    ];
+                    prior
+                    .AppendInstruction(
+                        new StackInstruction(
+                            StackInstructionKind.Push_Literal,
+                            Literal: PineValue.EmptyBlob));
             }
 
-            var xorOps = new List<StackInstruction>();
+            var xorOps = prior;
 
             for (var i = 0; i < listExpr.items.Count; ++i)
             {
-                var item = listExpr.items[i];
+                var itemExpr = listExpr.items[i];
 
                 var itemOps =
                     CompileExpressionTransitive(
-                        item,
-                        localIndexFromExpr);
+                        itemExpr,
+                        copyToLocal,
+                        xorOps);
 
-                xorOps.AddRange(itemOps);
+                xorOps = itemOps;
 
                 if (0 < i)
                 {
-                    xorOps.Add(new StackInstruction(StackInstructionKind.Bit_Xor_Binary));
+                    xorOps =
+                        xorOps.AppendInstruction(
+                            new StackInstruction(StackInstructionKind.Bit_Xor_Binary));
                 }
             }
 
@@ -750,84 +987,87 @@ public class PineIRCompiler
         else
         {
             return
-                [
-                .. CompileExpressionTransitive(input, localIndexFromExpr),
-                new StackInstruction(StackInstructionKind.Bit_Xor_List)
-                ];
+                CompileExpressionTransitive(
+                    input,
+                    copyToLocal,
+                    prior)
+                .AppendInstruction(new StackInstruction(StackInstructionKind.Bit_Xor_List));
         }
     }
 
-    public static IReadOnlyList<StackInstruction> CompileKernelApplication_Bit_Not(
+    public static NodeCompilationResult CompileKernelApplication_Bit_Not(
         Expression input,
-        Func<Expression, int?> localIndexFromExpr)
+        IReadOnlySet<Expression> copyToLocal,
+        NodeCompilationResult prior)
     {
         return
-            [
-            .. CompileExpressionTransitive(input, localIndexFromExpr),
-            new StackInstruction(StackInstructionKind.Bit_Not)
-            ];
+            CompileExpressionTransitive(
+                input,
+                copyToLocal,
+                prior)
+            .AppendInstruction(new StackInstruction(StackInstructionKind.Bit_Not));
     }
 
-    public static IReadOnlyList<StackInstruction> CompileKernelApplication_Bit_Shift_Left(
+    public static NodeCompilationResult CompileKernelApplication_Bit_Shift_Left(
         Expression input,
-        Func<Expression, int?> localIndexFromExpr)
-    {
-        if (input is Expression.List listExpr && listExpr.items.Count is 2)
-        {
-            var shiftCountOps =
-                CompileExpressionTransitive(
-                    listExpr.items[0],
-                    localIndexFromExpr);
-
-            var sourceOps =
-                CompileExpressionTransitive(
-                    listExpr.items[1],
-                    localIndexFromExpr);
-
-            return
-                [
-                .. sourceOps,
-                .. shiftCountOps,
-                new StackInstruction(StackInstructionKind.Bit_Shift_Left_Var)
-                ];
-        }
-
-        return
-            [
-            .. CompileExpressionTransitive(input, localIndexFromExpr),
-            new StackInstruction(StackInstructionKind.Bit_Shift_Left_List)
-            ];
-    }
-
-    public static IReadOnlyList<StackInstruction> CompileKernelApplication_Bit_Shift_Right(
-        Expression input,
-        Func<Expression, int?> localIndexFromExpr)
+        IReadOnlySet<Expression> copyToLocal,
+        NodeCompilationResult prior)
     {
         if (input is Expression.List listExpr && listExpr.items.Count is 2)
         {
-            var shiftCountOps =
-                CompileExpressionTransitive(
-                    listExpr.items[0],
-                    localIndexFromExpr);
-
             var sourceOps =
                 CompileExpressionTransitive(
                     listExpr.items[1],
-                    localIndexFromExpr);
+                    copyToLocal,
+                    prior);
+
+            var shiftCountOps =
+                CompileExpressionTransitive(
+                    listExpr.items[0],
+                    copyToLocal,
+                    sourceOps);
 
             return
-                [
-                .. sourceOps,
-                .. shiftCountOps,
-                new StackInstruction(StackInstructionKind.Bit_Shift_Right_Var)
-                ];
+                shiftCountOps
+                .AppendInstruction(new StackInstruction(StackInstructionKind.Bit_Shift_Left_Var));
         }
-
         return
-            [
-            .. CompileExpressionTransitive(input, localIndexFromExpr),
-            new StackInstruction(StackInstructionKind.Bit_Shift_Right_List)
-            ];
+            CompileExpressionTransitive(
+                input,
+                copyToLocal,
+                prior)
+            .AppendInstruction(new StackInstruction(StackInstructionKind.Bit_Shift_Left_List));
+    }
+
+    public static NodeCompilationResult CompileKernelApplication_Bit_Shift_Right(
+        Expression input,
+        IReadOnlySet<Expression> copyToLocal,
+        NodeCompilationResult prior)
+    {
+        if (input is Expression.List listExpr && listExpr.items.Count is 2)
+        {
+            var sourceOps =
+                CompileExpressionTransitive(
+                    listExpr.items[1],
+                    copyToLocal,
+                    prior);
+
+            var shiftCountOps =
+                CompileExpressionTransitive(
+                    listExpr.items[0],
+                    copyToLocal,
+                    sourceOps);
+
+            return
+                shiftCountOps
+                .AppendInstruction(new StackInstruction(StackInstructionKind.Bit_Shift_Right_Var));
+        }
+        return
+            CompileExpressionTransitive(
+                input,
+                copyToLocal,
+                prior)
+            .AppendInstruction(new StackInstruction(StackInstructionKind.Bit_Shift_Right_List));
     }
 
     public static Expression? TryParseExprAsIntNegation(Expression expression)
@@ -861,5 +1101,27 @@ public class PineIRCompiler
         }
 
         return null;
+    }
+
+    public static bool ExpressionLargeEnoughForCSE(Expression expression)
+    {
+        if (expression is Expression.KernelApplication)
+            return true;
+
+        if (expression is Expression.List list)
+        {
+            for (int i = 0; i < list.items.Count; ++i)
+            {
+                if (ExpressionLargeEnoughForCSE(list.items[i]))
+                    return true;
+            }
+        }
+
+        if (expression is Expression.StringTag stringTag)
+        {
+            return ExpressionLargeEnoughForCSE(stringTag.Tagged);
+        }
+
+        return 10 < expression.SubexpressionCount;
     }
 }

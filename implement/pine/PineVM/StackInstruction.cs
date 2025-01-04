@@ -24,7 +24,7 @@ public enum StackInstructionKind
     Push_Environment,
 
     /// <summary>
-    /// Pop the top value from the stack and store it in the local at index <see cref="StackInstruction.LocalIndex"/>.
+    /// Copy the top value from the stack into the local at index <see cref="StackInstruction.LocalIndex"/>.
     /// </summary>
     Local_Set,
 
