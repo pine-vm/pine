@@ -14,7 +14,7 @@ public class PineIRCompiler
     {
         public NodeCompilationResult ContinueWithExpression(
             Expression expression,
-            IReadOnlySet<Expression> copyToLocal)
+            ImmutableHashSet<Expression> copyToLocal)
         {
             var exprResult = CompileExpressionTransitive(expression, copyToLocal, LocalsSet);
 
@@ -39,7 +39,7 @@ public class PineIRCompiler
     /// </summary>
     public static NodeCompilationResult CompileExpressionTransitive(
         Expression expression,
-        IReadOnlySet<Expression> copyToLocal,
+        ImmutableHashSet<Expression> copyToLocal,
         ImmutableDictionary<Expression, int> localIndexFromExpr)
     {
         return
@@ -56,52 +56,99 @@ public class PineIRCompiler
     /// </summary>
     public static NodeCompilationResult CompileExpressionTransitive(
         Expression expression,
-        IReadOnlySet<Expression> copyToLocal,
+        ImmutableHashSet<Expression> copyToLocal,
         NodeCompilationResult prior)
     {
-        var allSubexpressions = new HashSet<Expression>();
+        var subexprAppearingMultipleTimesIncludingConditional = new HashSet<Expression>();
 
-        var subexpressionsToReuse = new HashSet<Expression>();
-
-        foreach (
-            var subexpression in
-            Expression.EnumerateSelfAndDescendants(
-                expression,
-                skipDescendants:
-                subexpression =>
-                {
-                    if (prior.LocalsSet.ContainsKey(subexpression))
-                    {
-                        return true;
-                    }
-
-                    if (copyToLocal.Contains(subexpression))
-                    {
-                        return false;
-                    }
-
-                    if (!ExpressionLargeEnoughForCSE(subexpression))
-                    {
-                        return true;
-                    }
-
-                    if (allSubexpressions.Contains(subexpression))
-                    {
-                        subexpressionsToReuse.Add(subexpression);
-
-                        return true;
-                    }
-
-                    allSubexpressions.Add(subexpression);
-
-                    return false;
-                }))
         {
+            var allSubexpressions = new HashSet<Expression>();
+
+            foreach (
+                var subexpression in
+                Expression.EnumerateSelfAndDescendants(
+                    expression,
+                    skipDescendants:
+                    subexpression =>
+                    {
+                        if (!ExpressionLargeEnoughForCSE(subexpression))
+                        {
+                            return true;
+                        }
+
+                        if (prior.LocalsSet.ContainsKey(subexpression))
+                        {
+                            return true;
+                        }
+
+                        if (subexprAppearingMultipleTimesIncludingConditional.Contains(subexpression))
+                        {
+                            return true;
+                        }
+
+                        if (allSubexpressions.Contains(subexpression))
+                        {
+                            subexprAppearingMultipleTimesIncludingConditional.Add(subexpression);
+
+                            return true;
+                        }
+
+                        allSubexpressions.Add(subexpression);
+
+                        return false;
+                    },
+                    skipConditionalBranches: false))
+            {
+            }
+        }
+
+        var allSubexpressionsUnconditional = new HashSet<Expression>();
+
+        var subexprAppearingMultipleTimesUnconditional = new HashSet<Expression>();
+
+        {
+            foreach (
+                var subexpression in
+                Expression.EnumerateSelfAndDescendants(
+                    expression,
+                    skipDescendants:
+                    subexpression =>
+                    {
+                        if (!ExpressionLargeEnoughForCSE(subexpression))
+                        {
+                            return true;
+                        }
+
+                        if (prior.LocalsSet.ContainsKey(subexpression))
+                        {
+                            return true;
+                        }
+
+                        if (subexprAppearingMultipleTimesUnconditional.Contains(subexpression))
+                        {
+                            return true;
+                        }
+
+                        if (allSubexpressionsUnconditional.Contains(subexpression))
+                        {
+                            subexprAppearingMultipleTimesUnconditional.Add(subexpression);
+
+                            return true;
+                        }
+
+                        allSubexpressionsUnconditional.Add(subexpression);
+
+                        return false;
+                    },
+                    skipConditionalBranches: true))
+            {
+            }
         }
 
         var copyToLocalNew =
-            copyToLocal.ToImmutableHashSet()
-            .Union(subexpressionsToReuse);
+            copyToLocal
+            .Union(subexprAppearingMultipleTimesUnconditional)
+            .Union(subexprAppearingMultipleTimesIncludingConditional.Intersect(allSubexpressionsUnconditional));
 
         var lessCSE =
             CompileExpressionTransitiveLessCSE(
@@ -135,7 +182,7 @@ public class PineIRCompiler
 
     public static NodeCompilationResult CompileExpressionTransitiveLessCSE(
         Expression expr,
-        IReadOnlySet<Expression> copyToLocal,
+        ImmutableHashSet<Expression> copyToLocal,
         NodeCompilationResult prior)
     {
         if (prior.LocalsSet.TryGetValue(expr, out var localIndex))
@@ -223,7 +270,7 @@ public class PineIRCompiler
 
     public static NodeCompilationResult CompileConditional(
         Expression.Conditional conditional,
-        IReadOnlySet<Expression> copyToLocal,
+        ImmutableHashSet<Expression> copyToLocal,
         NodeCompilationResult prior)
     {
         var afterCondition =
@@ -271,7 +318,7 @@ public class PineIRCompiler
 
     public static NodeCompilationResult CompileParseAndEval(
         Expression.ParseAndEval parseAndEvalExpr,
-        IReadOnlySet<Expression> copyToLocal,
+        ImmutableHashSet<Expression> copyToLocal,
         NodeCompilationResult prior)
     {
         var afterEnvironment =
@@ -292,7 +339,7 @@ public class PineIRCompiler
 
     public static NodeCompilationResult CompileKernelApplication(
         Expression.KernelApplication kernelApplication,
-        IReadOnlySet<Expression> copyToLocal,
+        ImmutableHashSet<Expression> copyToLocal,
         NodeCompilationResult prior)
     {
         return
@@ -410,7 +457,7 @@ public class PineIRCompiler
 
     public static NodeCompilationResult CompileKernelApplication_Equal(
         Expression input,
-        IReadOnlySet<Expression> copyToLocal,
+        ImmutableHashSet<Expression> copyToLocal,
         NodeCompilationResult prior)
     {
         if (input is Expression.List listExpr)
@@ -445,7 +492,7 @@ public class PineIRCompiler
 
     public static NodeCompilationResult CompileKernelApplication_Head(
         Expression input,
-        IReadOnlySet<Expression> copyToLocal,
+        ImmutableHashSet<Expression> copyToLocal,
         NodeCompilationResult prior)
     {
         if (input is Expression.KernelApplication innerKernelApp && innerKernelApp.Function is "skip")
@@ -493,7 +540,7 @@ public class PineIRCompiler
 
     public static NodeCompilationResult CompileKernelApplication_Skip(
        Expression input,
-       IReadOnlySet<Expression> copyToLocal,
+       ImmutableHashSet<Expression> copyToLocal,
        NodeCompilationResult prior)
     {
         if (input is Expression.List listExpr && listExpr.items.Count is 2)
@@ -525,7 +572,7 @@ public class PineIRCompiler
 
     public static NodeCompilationResult CompileKernelApplication_Take(
         Expression input,
-        IReadOnlySet<Expression> copyToLocal,
+        ImmutableHashSet<Expression> copyToLocal,
         NodeCompilationResult prior)
     {
         if (input is Expression.List listExpr && listExpr.items.Count is 2)
@@ -617,7 +664,7 @@ public class PineIRCompiler
 
     public static NodeCompilationResult CompileKernelApplication_Concat(
         Expression input,
-        IReadOnlySet<Expression> copyToLocal,
+        ImmutableHashSet<Expression> copyToLocal,
         NodeCompilationResult prior)
     {
         if (input is Expression.List listExpr)
@@ -659,7 +706,7 @@ public class PineIRCompiler
 
     public static NodeCompilationResult CompileKernelApplication_Reverse(
         Expression input,
-        IReadOnlySet<Expression> copyToLocal,
+        ImmutableHashSet<Expression> copyToLocal,
         NodeCompilationResult prior)
     {
         return
@@ -672,7 +719,7 @@ public class PineIRCompiler
 
     public static NodeCompilationResult CompileKernelApplication_Int_Add(
         Expression input,
-        IReadOnlySet<Expression> copyToLocal,
+        ImmutableHashSet<Expression> copyToLocal,
         NodeCompilationResult prior)
     {
         if (input is Expression.List listExpr)
@@ -744,7 +791,7 @@ public class PineIRCompiler
 
     public static NodeCompilationResult CompileKernelApplication_Int_Mul(
         Expression input,
-        IReadOnlySet<Expression> copyToLocal,
+        ImmutableHashSet<Expression> copyToLocal,
         NodeCompilationResult prior)
     {
         if (input is Expression.List listExpr)
@@ -796,7 +843,7 @@ public class PineIRCompiler
 
     public static NodeCompilationResult CompileKernelApplication_Int_Is_Sorted_Asc(
         Expression input,
-        IReadOnlySet<Expression> copyToLocal,
+        ImmutableHashSet<Expression> copyToLocal,
         NodeCompilationResult prior)
     {
         if (input is Expression.List listExpr)
@@ -841,7 +888,7 @@ public class PineIRCompiler
 
     public static NodeCompilationResult CompileKernelApplication_Bit_And(
         Expression input,
-        IReadOnlySet<Expression> copyToLocal,
+        ImmutableHashSet<Expression> copyToLocal,
         NodeCompilationResult prior)
     {
         if (input is Expression.List listExpr)
@@ -893,7 +940,7 @@ public class PineIRCompiler
 
     public static NodeCompilationResult CompileKernelApplication_Bit_Or(
         Expression input,
-        IReadOnlySet<Expression> copyToLocal,
+        ImmutableHashSet<Expression> copyToLocal,
         NodeCompilationResult prior)
     {
         if (input is Expression.List listExpr)
@@ -945,7 +992,7 @@ public class PineIRCompiler
 
     public static NodeCompilationResult CompileKernelApplication_Bit_Xor(
         Expression input,
-        IReadOnlySet<Expression> copyToLocal,
+        ImmutableHashSet<Expression> copyToLocal,
         NodeCompilationResult prior)
     {
         if (input is Expression.List listExpr)
@@ -997,7 +1044,7 @@ public class PineIRCompiler
 
     public static NodeCompilationResult CompileKernelApplication_Bit_Not(
         Expression input,
-        IReadOnlySet<Expression> copyToLocal,
+        ImmutableHashSet<Expression> copyToLocal,
         NodeCompilationResult prior)
     {
         return
@@ -1010,7 +1057,7 @@ public class PineIRCompiler
 
     public static NodeCompilationResult CompileKernelApplication_Bit_Shift_Left(
         Expression input,
-        IReadOnlySet<Expression> copyToLocal,
+        ImmutableHashSet<Expression> copyToLocal,
         NodeCompilationResult prior)
     {
         if (input is Expression.List listExpr && listExpr.items.Count is 2)
@@ -1041,7 +1088,7 @@ public class PineIRCompiler
 
     public static NodeCompilationResult CompileKernelApplication_Bit_Shift_Right(
         Expression input,
-        IReadOnlySet<Expression> copyToLocal,
+        ImmutableHashSet<Expression> copyToLocal,
         NodeCompilationResult prior)
     {
         if (input is Expression.List listExpr && listExpr.items.Count is 2)
@@ -1105,7 +1152,13 @@ public class PineIRCompiler
 
     public static bool ExpressionLargeEnoughForCSE(Expression expression)
     {
+        if (expression is Expression.Literal || expression is Expression.Environment)
+            return false;
+
         if (expression is Expression.KernelApplication)
+            return true;
+
+        if (expression is Expression.ParseAndEval)
             return true;
 
         if (expression is Expression.List list)
@@ -1122,6 +1175,6 @@ public class PineIRCompiler
             return ExpressionLargeEnoughForCSE(stringTag.Tagged);
         }
 
-        return 10 < expression.SubexpressionCount;
+        return 3 < expression.SubexpressionCount;
     }
 }

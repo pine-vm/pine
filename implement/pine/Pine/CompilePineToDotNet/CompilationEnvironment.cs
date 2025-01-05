@@ -40,6 +40,7 @@ public record FunctionCompilationEnv(
         var subExpressionsExceptUnderPaths =
             Expression.EnumerateSelfAndDescendants(
                 expression,
+                skipConditionalBranches: false,
                 skipDescendants: subExpr => allPaths.Any(path => path.subExpr == subExpr))
             .ToImmutableArray();
 
@@ -158,6 +159,7 @@ public record ExprFunctionCompilationInterface(
         var subExpressionsExceptUnderPaths =
             Expression.EnumerateSelfAndDescendants(
                 expression,
+                skipConditionalBranches: false,
                 skipDescendants: subExpr => allPaths.Any(path => path.subExpr == subExpr))
             .ToImmutableArray();
 

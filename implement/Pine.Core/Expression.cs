@@ -713,14 +713,18 @@ public abstract record Expression
     /// </summary>
     public static IEnumerable<Expression> EnumerateSelfAndDescendants(
         Expression expression) =>
-        EnumerateSelfAndDescendants(expression, skipDescendants: null);
+        EnumerateSelfAndDescendants(
+            expression,
+            skipDescendants: null,
+            skipConditionalBranches: false);
 
     /// <summary>
     /// Enumerates the given expression and all its descendants.
     /// </summary>
     public static IEnumerable<Expression> EnumerateSelfAndDescendants(
         Expression rootExpression,
-        Func<Expression, bool>? skipDescendants)
+        Func<Expression, bool>? skipDescendants,
+        bool skipConditionalBranches)
     {
         var stack = new Stack<Expression>([rootExpression]);
 
@@ -760,8 +764,12 @@ public abstract record Expression
                 case Conditional conditional:
 
                     stack.Push(conditional.Condition);
-                    stack.Push(conditional.FalseBranch);
-                    stack.Push(conditional.TrueBranch);
+
+                    if (!skipConditionalBranches)
+                    {
+                        stack.Push(conditional.FalseBranch);
+                        stack.Push(conditional.TrueBranch);
+                    }
 
                     break;
 
