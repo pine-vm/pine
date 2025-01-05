@@ -794,7 +794,7 @@ public class PineVM : IPineVM
         return
             PineIRCompiler.CompileExpressionTransitive(
                 rootExpression,
-                copyToLocal: ImmutableHashSet<Expression>.Empty,
+                copyToLocal: [],
                 localIndexFromExpr:
                 ImmutableDictionary<Expression, int>.Empty).Instructions;
     }
@@ -1305,7 +1305,7 @@ public class PineVM : IPineVM
                             continue;
                         }
 
-                    case StackInstructionKind.Equal_Binary:
+                    case StackInstructionKind.Equal_Binary_Var:
                         {
                             var right = currentFrame.PopTopmostFromStack();
                             var left = currentFrame.PopTopmostFromStack();
@@ -1318,7 +1318,23 @@ public class PineVM : IPineVM
                             continue;
                         }
 
-                    case StackInstructionKind.Not_Equal_Binary:
+                    case StackInstructionKind.Equal_Binary_Const:
+                        {
+                            var right = currentInstruction.Literal
+                                ??
+                                throw new Exception("Invalid operation form: Missing literal value");
+
+                            var left = currentFrame.PopTopmostFromStack();
+
+                            var areEqual = left == right;
+
+                            currentFrame.PushInstructionResult(
+                                areEqual ? PineVMValues.TrueValue : PineVMValues.FalseValue);
+
+                            continue;
+                        }
+
+                    case StackInstructionKind.Not_Equal_Binary_Var:
                         {
                             var right = currentFrame.PopTopmostFromStack();
                             var left = currentFrame.PopTopmostFromStack();
@@ -1328,6 +1344,22 @@ public class PineVM : IPineVM
                             currentFrame.PushInstructionResult(
                                 areEqual ? PineVMValues.FalseValue : PineVMValues.TrueValue);
 
+                            continue;
+                        }
+
+                    case StackInstructionKind.Not_Equal_Binary_Const:
+                        {
+                            var right = currentInstruction.Literal
+                                ??
+                                throw new Exception("Invalid operation form: Missing literal value");
+                         
+                            var left = currentFrame.PopTopmostFromStack();
+                            
+                            var areEqual = left == right;
+                            
+                            currentFrame.PushInstructionResult(
+                                areEqual ? PineVMValues.FalseValue : PineVMValues.TrueValue);
+                            
                             continue;
                         }
 

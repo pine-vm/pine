@@ -1243,6 +1243,248 @@ public class PineVMTests
                         StackInstruction.Return,
                     ])
             },
+
+            new
+            {
+                expression =
+                (Expression)
+                new Expression.KernelApplication(
+                    function: "equal",
+                    input:
+                    Expression.ListInstance(
+                        [
+                        new Expression.KernelApplication(
+                            function: "head",
+                            input: Expression.EnvironmentInstance),
+
+                        Expression.LiteralInstance(PineValueAsInteger.ValueFromSignedInteger(13)),
+                        ])),
+
+                expected =
+                new PineVM.StackFrameInstructions(
+                    [
+                        new StackInstruction(StackInstructionKind.Push_Environment),
+
+                        new StackInstruction(StackInstructionKind.Head_Generic),
+
+                        new StackInstruction(
+                            StackInstructionKind.Equal_Binary_Const,
+                            Literal: PineValueAsInteger.ValueFromSignedInteger(13)),
+
+                        StackInstruction.Return,
+                    ])
+            },
+
+            new
+            {
+                expression =
+                (Expression)
+                new Expression.KernelApplication(
+                    function: "equal",
+                    input:
+                    Expression.ListInstance(
+                        [
+                        Expression.LiteralInstance(PineValueAsInteger.ValueFromSignedInteger(17)),
+
+                        new Expression.KernelApplication(
+                            function: "head",
+                            input: Expression.EnvironmentInstance),
+                        ])),
+
+                expected =
+                new PineVM.StackFrameInstructions(
+                    [
+                        new StackInstruction(StackInstructionKind.Push_Environment),
+
+                        new StackInstruction(StackInstructionKind.Head_Generic),
+
+                        new StackInstruction(
+                            StackInstructionKind.Equal_Binary_Const,
+                            Literal: PineValueAsInteger.ValueFromSignedInteger(17)),
+
+                        StackInstruction.Return,
+                    ])
+            },
+
+            new
+            {
+                expression =
+                (Expression)
+                new Expression.KernelApplication(
+                    function: "negate",
+                    input:
+                    new Expression.KernelApplication(
+                        function: "equal",
+                        input:
+                        Expression.ListInstance(
+                            [
+                            new Expression.KernelApplication(
+                                function: "head",
+                                input:
+                                new Expression.KernelApplication(
+                                    function: "skip",
+                                    input:
+                                    Expression.ListInstance(
+                                        [
+                                        Expression.LiteralInstance(PineValueAsInteger.ValueFromSignedInteger(11)),
+                                        Expression.EnvironmentInstance,
+                                        ])
+                                )),
+
+                            new Expression.KernelApplication(
+                                function: "head",
+                                input:
+                                new Expression.KernelApplication(
+                                    function: "skip",
+                                    input:
+                                    Expression.ListInstance(
+                                        [
+                                        Expression.LiteralInstance(PineValueAsInteger.ValueFromSignedInteger(13)),
+                                        Expression.EnvironmentInstance,
+                                        ])
+                                )),
+                            ]))),
+
+                expected =
+                new PineVM.StackFrameInstructions(
+                    [
+                        new StackInstruction(StackInstructionKind.Push_Environment),
+
+                        new StackInstruction(
+                            StackInstructionKind.Skip_Head_Const,
+                            SkipCount: 11),
+
+                        StackInstruction.PushEnvironment,
+
+                        new StackInstruction(
+                            StackInstructionKind.Skip_Head_Const,
+                            SkipCount: 13),
+
+                        new StackInstruction(
+                            StackInstructionKind.Not_Equal_Binary_Var),
+
+                        StackInstruction.Return,
+                    ])
+            },
+
+            new
+            {
+                expression =
+                (Expression)
+                new Expression.KernelApplication(
+                    function: "int_is_sorted_asc",
+                    input:
+                    Expression.ListInstance(
+                        [
+                        new Expression.KernelApplication(
+                            function: "head",
+                            input:
+                            new Expression.KernelApplication(
+                                function: "skip",
+                                input:
+                                Expression.ListInstance(
+                                    [
+                                    Expression.LiteralInstance(PineValueAsInteger.ValueFromSignedInteger(17)),
+                                    Expression.EnvironmentInstance,
+                                    ])
+                            )),
+
+                        new Expression.KernelApplication(
+                            function: "head",
+                            input:
+                            new Expression.KernelApplication(
+                                function: "skip",
+                                input:
+                                Expression.ListInstance(
+                                    [
+                                    Expression.LiteralInstance(PineValueAsInteger.ValueFromSignedInteger(19)),
+                                    Expression.EnvironmentInstance,
+                                    ])
+                            )),
+                        ])),
+
+                expected =
+                new PineVM.StackFrameInstructions(
+                    [
+                        new StackInstruction(StackInstructionKind.Push_Environment),
+
+                        new StackInstruction(
+                            StackInstructionKind.Skip_Head_Const,
+                            SkipCount: 17),
+
+                        StackInstruction.PushEnvironment,
+
+                        new StackInstruction(
+                            StackInstructionKind.Skip_Head_Const,
+                            SkipCount: 19),
+
+                        new StackInstruction(
+                            StackInstructionKind.Int_Less_Than_Or_Equal_Binary),
+
+                        StackInstruction.Return,
+                    ])
+            },
+
+            new
+            {
+                expression =
+                (Expression)
+                new Expression.KernelApplication(
+                    function: "negate",
+                    input:
+                    new Expression.KernelApplication(
+                        function: "int_is_sorted_asc",
+                        input:
+                        Expression.ListInstance(
+                            [
+                            new Expression.KernelApplication(
+                                function: "head",
+                                input:
+                                new Expression.KernelApplication(
+                                    function: "skip",
+                                    input:
+                                    Expression.ListInstance(
+                                        [
+                                        Expression.LiteralInstance(PineValueAsInteger.ValueFromSignedInteger(11)),
+                                        Expression.EnvironmentInstance,
+                                        ])
+                                )),
+
+                            new Expression.KernelApplication(
+                                function: "head",
+                                input:
+                                new Expression.KernelApplication(
+                                    function: "skip",
+                                    input:
+                                    Expression.ListInstance(
+                                        [
+                                        Expression.LiteralInstance(PineValueAsInteger.ValueFromSignedInteger(13)),
+                                        Expression.EnvironmentInstance,
+                                        ])
+                                )),
+                            ]))),
+
+                expected =
+                new PineVM.StackFrameInstructions(
+                    [
+                        new StackInstruction(StackInstructionKind.Push_Environment),
+
+                        new StackInstruction(
+                            StackInstructionKind.Skip_Head_Const,
+                            SkipCount: 13),
+
+                        StackInstruction.PushEnvironment,
+
+                        new StackInstruction(
+                            StackInstructionKind.Skip_Head_Const,
+                            SkipCount: 11),
+
+                        new StackInstruction(
+                            StackInstructionKind.Int_Less_Than_Binary),
+
+                        StackInstruction.Return,
+                    ])
+            },
         };
 
         var parseCache = new PineVMParseCache();

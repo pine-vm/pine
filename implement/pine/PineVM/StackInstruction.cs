@@ -97,9 +97,16 @@ public enum StackInstructionKind
     /// <summary>
     /// Check if the top two values on the stack are equal.
     /// </summary>
-    Equal_Binary,
+    Equal_Binary_Var,
 
-    Not_Equal_Binary,
+    Not_Equal_Binary_Var,
+
+    /// <summary>
+    /// Check if the top value on the stack is equal to the literal from <see cref="StackInstruction.Literal"/>.
+    /// </summary>
+    Equal_Binary_Const,
+
+    Not_Equal_Binary_Const,
 
     /// <summary>
     /// Check if all items in the list from the top value on the stack are equal.

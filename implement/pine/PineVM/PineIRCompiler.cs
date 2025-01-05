@@ -213,6 +213,16 @@ public class PineIRCompiler
 
             case Expression.List listExpr:
                 {
+                    if (listExpr.items.Count is 0)
+                    {
+                        return
+                            prior
+                            .AppendInstruction(
+                                new StackInstruction(
+                                    StackInstructionKind.Push_Literal,
+                                    Literal: PineValue.EmptyList));
+                    }
+
                     /*
                      * Assume that the subsequence for each item only leaves one value on the stack.
                      * 
@@ -353,11 +363,10 @@ public class PineIRCompiler
                 .AppendInstruction(new StackInstruction(StackInstructionKind.Length)),
 
                 nameof(KernelFunction.negate) =>
-                CompileExpressionTransitive(
+                CompileKernelApplication_Negate(
                     kernelApplication.Input,
                     copyToLocal,
-                    prior)
-                .AppendInstruction(new StackInstruction(StackInstructionKind.Negate)),
+                    prior),
 
                 nameof(KernelFunction.equal) =>
                 CompileKernelApplication_Equal(
@@ -464,21 +473,55 @@ public class PineIRCompiler
         {
             if (listExpr.items.Count is 2)
             {
-                var afterLeft =
-                    CompileExpressionTransitive(
-                        listExpr.items[0],
-                        copyToLocal,
-                        prior);
+                if (listExpr.items[0] is Expression.Literal leftLiteralExpr)
+                {
+                    var afterRight =
+                        CompileExpressionTransitive(
+                            listExpr.items[1],
+                            copyToLocal,
+                            prior);
 
-                var afterRight =
-                    CompileExpressionTransitive(
-                        listExpr.items[1],
-                        copyToLocal,
-                        afterLeft);
+                    return
+                        afterRight
+                        .AppendInstruction(
+                            new StackInstruction(
+                                StackInstructionKind.Equal_Binary_Const,
+                                Literal: leftLiteralExpr.Value));
+                }
 
-                return
-                    afterRight
-                    .AppendInstruction(new StackInstruction(StackInstructionKind.Equal_Binary));
+                if (listExpr.items[1] is Expression.Literal rightLiteralExpr)
+                {
+                    var afterLeft =
+                        CompileExpressionTransitive(
+                            listExpr.items[0],
+                            copyToLocal,
+                            prior);
+
+                    return
+                        afterLeft
+                        .AppendInstruction(
+                            new StackInstruction(
+                                StackInstructionKind.Equal_Binary_Const,
+                                Literal: rightLiteralExpr.Value));
+                }
+
+                {
+                    var afterLeft =
+                        CompileExpressionTransitive(
+                            listExpr.items[0],
+                            copyToLocal,
+                            prior);
+
+                    var afterRight =
+                        CompileExpressionTransitive(
+                            listExpr.items[1],
+                            copyToLocal,
+                            afterLeft);
+
+                    return
+                        afterRight
+                        .AppendInstruction(new StackInstruction(StackInstructionKind.Equal_Binary_Var));
+                }
             }
         }
 
@@ -715,6 +758,98 @@ public class PineIRCompiler
                 copyToLocal,
                 prior)
             .AppendInstruction(new StackInstruction(StackInstructionKind.Reverse));
+    }
+
+    public static NodeCompilationResult CompileKernelApplication_Negate(
+        Expression input,
+        ImmutableHashSet<Expression> copyToLocal,
+        NodeCompilationResult prior)
+    {
+        if (input is Expression.KernelApplication innerKernelApp)
+        {
+            if (innerKernelApp.Function is "equal" &&
+                innerKernelApp.Input is Expression.List equalList && equalList.items.Count is 2)
+            {
+                if (equalList.items[0] is Expression.Literal leftLiteralExpr)
+                {
+                    var afterRight =
+                        CompileExpressionTransitive(
+                            equalList.items[1],
+                            copyToLocal,
+                            prior);
+                    return
+                        afterRight
+                        .AppendInstruction(
+                            new StackInstruction(
+                                StackInstructionKind.Not_Equal_Binary_Const,
+                                Literal: leftLiteralExpr.Value));
+                }
+
+                if (equalList.items[1] is Expression.Literal rightLiteralExpr)
+                {
+                    var afterLeft =
+                        CompileExpressionTransitive(
+                            equalList.items[0],
+                            copyToLocal,
+                            prior);
+                    return
+                        afterLeft
+                        .AppendInstruction(
+                            new StackInstruction(
+                                StackInstructionKind.Not_Equal_Binary_Const,
+                                Literal: rightLiteralExpr.Value));
+                }
+
+                {
+                    var afterLeft =
+                        CompileExpressionTransitive(
+                            equalList.items[0],
+                            copyToLocal,
+                            prior);
+
+                    var afterRight =
+                        CompileExpressionTransitive(
+                            equalList.items[1],
+                            copyToLocal,
+                            afterLeft);
+
+                    return
+                        afterRight
+                        .AppendInstruction(new StackInstruction(StackInstructionKind.Not_Equal_Binary_Var));
+                }
+            }
+
+            if (innerKernelApp.Function is "int_is_sorted_asc" &&
+                innerKernelApp.Input is Expression.List isSortedAscList && isSortedAscList.items.Count is 2)
+            {
+                /*
+                 * not (int_is_sorted_asc [a, b]) = b <= a
+                 * */
+
+                var afterLeft =
+                    CompileExpressionTransitive(
+                        isSortedAscList.items[1],
+                        copyToLocal,
+                        prior);
+
+                var afterRight =
+                    CompileExpressionTransitive(
+                        isSortedAscList.items[0],
+                        copyToLocal,
+                        afterLeft);
+
+                return
+                    afterRight
+                    .AppendInstruction(new StackInstruction(StackInstructionKind.Int_Less_Than_Binary));
+            }
+        }
+
+        return
+            CompileExpressionTransitive(
+                input,
+                copyToLocal,
+                prior)
+            .AppendInstruction(new StackInstruction(StackInstructionKind.Negate));
     }
 
     public static NodeCompilationResult CompileKernelApplication_Int_Add(
