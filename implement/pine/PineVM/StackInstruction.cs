@@ -26,6 +26,7 @@ public enum StackInstructionKind
 
     /// <summary>
     /// Copy the top value from the stack into the local at index <see cref="StackInstruction.LocalIndex"/>.
+    /// The value is not popped from the stack.
     /// </summary>
     Local_Set,
 
@@ -47,7 +48,7 @@ public enum StackInstructionKind
     /// <summary>
     /// Concatenates the items in the list from the top value on the stack.
     /// </summary>
-    Concat_List,
+    Concat_Generic,
 
     /// <summary>
     /// Concatenates the top value from the stack and the second value from the stack.
@@ -112,7 +113,7 @@ public enum StackInstructionKind
     /// <summary>
     /// Check if all items in the list from the top value on the stack are equal.
     /// </summary>
-    Equal_List,
+    Equal_Generic,
 
     /// <summary>
     /// Negate the top value on the stack, works for both integers and booleans.
@@ -123,11 +124,15 @@ public enum StackInstructionKind
     /// Corresponding to the kernel function 'int_is_sorted_asc' of the Pine language,
     /// where we cannot proof a more specific representation is possible at compile time.
     /// </summary>
-    Int_Is_Sorted_Asc_List,
+    Int_Is_Sorted_Asc_Generic,
 
     Int_Less_Than_Binary,
 
     Int_Less_Than_Or_Equal_Binary,
+
+    Int_Less_Than_Const,
+
+    Int_Less_Than_Or_Equal_Const,
 
     /// <summary>
     /// Jump to the offset from <see cref="StackInstruction.JumpOffset"/> if the top value on the stack is true.
@@ -163,7 +168,7 @@ public enum StackInstructionKind
     /// <summary>
     /// Add all items in the list from the top value from the stack.
     /// </summary>
-    Int_Add_List,
+    Int_Add_Generic,
 
     /// <summary>
     /// Subtract the top value from the second value on the stack.
@@ -183,17 +188,21 @@ public enum StackInstructionKind
     /// <summary>
     /// Multiply all items in the list from the top value from the stack.
     /// </summary>
-    Int_Mul_List,
+    Int_Mul_Generic,
 
-    Bit_And_List,
+    Bit_And_Generic,
 
     Bit_And_Binary,
 
-    Bit_Or_List,
+    Bit_And_Const,
+
+    Bit_Or_Generic,
 
     Bit_Or_Binary,
 
-    Bit_Xor_List,
+    Bit_Or_Const,
+
+    Bit_Xor_Generic,
 
     Bit_Xor_Binary,
 
@@ -203,13 +212,13 @@ public enum StackInstructionKind
 
     Bit_Shift_Left_Const,
 
-    Bit_Shift_Left_List,
+    Bit_Shift_Left_Generic,
 
     Bit_Shift_Right_Var,
 
     Bit_Shift_Right_Const,
 
-    Bit_Shift_Right_List,
+    Bit_Shift_Right_Generic,
 }
 
 /// <summary>
@@ -258,6 +267,96 @@ public record StackInstruction(
     /// </summary>
     public static StackInstruction Jump_If_True(int offset) =>
         new(StackInstructionKind.Jump_If_True_Const, JumpOffset: offset);
+
+    public static (int popCount, int pushCount) GetPopCountAndPushCount(StackInstruction instruction) =>
+        instruction.Kind switch
+        {
+            StackInstructionKind.Push_Literal => (0, 1),
+            StackInstructionKind.Push_Environment => (0, 1),
+
+            StackInstructionKind.Local_Set => (0, 0),
+            StackInstructionKind.Local_Get => (0, 1),
+            
+            StackInstructionKind.Pop => (1, 0),
+
+            StackInstructionKind.Length => (1, 1),
+            
+            StackInstructionKind.Concat_Generic => (1, 1),
+            StackInstructionKind.Concat_Binary => (2, 1),
+            
+            StackInstructionKind.Slice_Skip_Var_Take_Var => (3, 1),
+            StackInstructionKind.Slice_Skip_Var_Take_Const => (2, 1),
+            
+            StackInstructionKind.Skip_Generic => (1, 1),
+            StackInstructionKind.Skip_Binary => (2, 1),
+            
+            StackInstructionKind.Take_Generic => (1, 1),
+            StackInstructionKind.Take_Binary => (2, 1),
+            
+            StackInstructionKind.Skip_Head_Var => (2, 1),
+            StackInstructionKind.Skip_Head_Const => (1, 1),
+            
+            StackInstructionKind.Head_Generic => (1, 1),
+
+            StackInstructionKind.Reverse => (1, 1),
+            
+            StackInstructionKind.BuildList =>
+            (instruction.TakeCount
+            ?? throw new System.Exception(
+                "Missing TakeCount for BuildList instruction"),
+            1),
+
+            StackInstructionKind.Equal_Binary_Var => (2, 1),
+            StackInstructionKind.Not_Equal_Binary_Var => (2, 1),
+            StackInstructionKind.Equal_Binary_Const => (1, 1),
+            StackInstructionKind.Not_Equal_Binary_Const => (1, 1),
+            StackInstructionKind.Equal_Generic => (1, 1),
+            StackInstructionKind.Negate => (1, 1),
+
+            StackInstructionKind.Int_Is_Sorted_Asc_Generic => (1, 1),
+            StackInstructionKind.Int_Less_Than_Binary => (2, 1),
+            StackInstructionKind.Int_Less_Than_Or_Equal_Binary => (2, 1),
+            StackInstructionKind.Int_Less_Than_Const => (1, 1),
+            StackInstructionKind.Int_Less_Than_Or_Equal_Const => (1, 1),
+
+            StackInstructionKind.Jump_If_True_Const => (1, 0),
+            StackInstructionKind.Jump_Const => (0, 0),
+            StackInstructionKind.Return => (1, 0),
+            StackInstructionKind.Parse_And_Eval => (2, 1),
+
+            StackInstructionKind.Int_Add_Binary => (2, 1),
+            StackInstructionKind.Int_Add_Const => (1, 1),
+            StackInstructionKind.Int_Add_Generic => (1, 1),
+            StackInstructionKind.Int_Sub_Binary => (2, 1),
+            StackInstructionKind.Int_Mul_Binary => (2, 1),
+            StackInstructionKind.Int_Mul_Const => (1, 1),
+            StackInstructionKind.Int_Mul_Generic => (1, 1),
+
+            StackInstructionKind.Bit_And_Generic => (1, 1),
+            StackInstructionKind.Bit_And_Binary => (2, 1),
+            StackInstructionKind.Bit_And_Const => (1, 1),
+
+            StackInstructionKind.Bit_Or_Generic => (1, 1),
+            StackInstructionKind.Bit_Or_Binary => (2, 1),
+            StackInstructionKind.Bit_Or_Const => (1, 1),
+            
+            StackInstructionKind.Bit_Xor_Generic => (1, 1),
+            StackInstructionKind.Bit_Xor_Binary => (2, 1),
+            
+            StackInstructionKind.Bit_Not => (1, 1),
+            
+            StackInstructionKind.Bit_Shift_Left_Var => (2, 1),
+            StackInstructionKind.Bit_Shift_Left_Const => (1, 1),
+            StackInstructionKind.Bit_Shift_Left_Generic => (1, 1),
+            
+            StackInstructionKind.Bit_Shift_Right_Var => (2, 1),
+            StackInstructionKind.Bit_Shift_Right_Const => (1, 1),
+            StackInstructionKind.Bit_Shift_Right_Generic => (1, 1),
+
+            var otherKind =>
+            throw new System.NotImplementedException(
+                "Unknown StackInstructionKind: " + otherKind)
+        };
 }
 
 

@@ -401,7 +401,7 @@ public class PineVMTests
 
                         new StackInstruction(StackInstructionKind.Skip_Binary),
 
-                        new StackInstruction(StackInstructionKind.Concat_List),
+                        new StackInstruction(StackInstructionKind.Concat_Generic),
 
                         new StackInstruction(StackInstructionKind.Local_Set, LocalIndex: 0),
 

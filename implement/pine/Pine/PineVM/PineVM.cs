@@ -88,6 +88,40 @@ public class PineVM : IPineVM
             .DefaultIfEmpty(-1)
             .Max();
 
+        public int MaxStackUsage { init; get; } = ComputeMaxStackUsage(Instructions);
+
+        public static int ComputeMaxStackUsage(
+            IReadOnlyList<StackInstruction> Instructions)
+        {
+            int currentDepth = 0;
+            int maxDepth = 0;
+
+            for (int i = 0; i < Instructions.Count; i++)
+            {
+                var instr = Instructions[i];
+
+                var (popCount, pushCount) =
+                    StackInstruction.GetPopCountAndPushCount(instr);
+
+                currentDepth = currentDepth - popCount + pushCount;
+
+                if (currentDepth < 0)
+                {
+                    throw new InvalidOperationException(
+                        "Instruction sequence pops more items than available.");
+                }
+
+                maxDepth =
+                    maxDepth < currentDepth
+                    ?
+                    currentDepth
+                    :
+                    maxDepth;
+            }
+
+            return maxDepth;
+        }
+
         public virtual bool Equals(StackFrameInstructions? other)
         {
             if (other is not { } notNull)
@@ -299,7 +333,7 @@ public class PineVM : IPineVM
             expression,
             instructions,
             EnvironmentValue: environment,
-            StackValues: new PineValue[instructions.Instructions.Count],
+            StackValues: new PineValue[instructions.MaxStackUsage],
             LocalsValues: new PineValue[instructions.MaxLocalIndex + 1],
             BeginInstructionCount: beginInstructionCount,
             BeginParseAndEvalCount: beginParseAndEvalCount,
@@ -1516,7 +1550,7 @@ public class PineVM : IPineVM
                             continue;
                         }
 
-                    case StackInstructionKind.Concat_List:
+                    case StackInstructionKind.Concat_Generic:
                         {
                             var listValue = currentFrame.PopTopmostFromStack();
 
@@ -1797,7 +1831,7 @@ public class PineVM : IPineVM
                             continue;
                         }
 
-                    case StackInstructionKind.Int_Is_Sorted_Asc_List:
+                    case StackInstructionKind.Int_Is_Sorted_Asc_Generic:
                         {
                             var listValue = currentFrame.PopTopmostFromStack();
 
@@ -1981,7 +2015,7 @@ public class PineVM : IPineVM
                             continue;
                         }
 
-                    case StackInstructionKind.Int_Add_List:
+                    case StackInstructionKind.Int_Add_Generic:
                         {
                             var listValue = currentFrame.PopTopmostFromStack();
 
@@ -1992,7 +2026,7 @@ public class PineVM : IPineVM
                             continue;
                         }
 
-                    case StackInstructionKind.Int_Mul_List:
+                    case StackInstructionKind.Int_Mul_Generic:
                         {
                             var listValue = currentFrame.PopTopmostFromStack();
 

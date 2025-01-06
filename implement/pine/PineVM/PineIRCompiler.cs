@@ -530,7 +530,7 @@ public class PineIRCompiler
                 input,
                 copyToLocal,
                 prior)
-            .AppendInstruction(new StackInstruction(StackInstructionKind.Equal_List));
+            .AppendInstruction(new StackInstruction(StackInstructionKind.Equal_Generic));
     }
 
     public static NodeCompilationResult CompileKernelApplication_Head(
@@ -743,7 +743,7 @@ public class PineIRCompiler
                     input,
                     copyToLocal,
                     prior)
-                .AppendInstruction(new StackInstruction(StackInstructionKind.Concat_List));
+                .AppendInstruction(new StackInstruction(StackInstructionKind.Concat_Generic));
         }
     }
 
@@ -956,7 +956,7 @@ public class PineIRCompiler
                     input,
                     copyToLocal,
                     prior)
-                .AppendInstruction(new StackInstruction(StackInstructionKind.Int_Add_List));
+                .AppendInstruction(new StackInstruction(StackInstructionKind.Int_Add_Generic));
         }
     }
 
@@ -1045,7 +1045,7 @@ public class PineIRCompiler
                     input,
                     copyToLocal,
                     prior)
-                .AppendInstruction(new StackInstruction(StackInstructionKind.Int_Mul_List));
+                .AppendInstruction(new StackInstruction(StackInstructionKind.Int_Mul_Generic));
         }
     }
 
@@ -1091,7 +1091,7 @@ public class PineIRCompiler
                 input,
                 copyToLocal,
                 prior)
-            .AppendInstruction(new StackInstruction(StackInstructionKind.Int_Is_Sorted_Asc_List));
+            .AppendInstruction(new StackInstruction(StackInstructionKind.Int_Is_Sorted_Asc_Generic));
     }
 
     public static NodeCompilationResult CompileKernelApplication_Bit_And(
@@ -1142,7 +1142,7 @@ public class PineIRCompiler
                     input,
                     copyToLocal,
                     prior)
-                .AppendInstruction(new StackInstruction(StackInstructionKind.Bit_And_List));
+                .AppendInstruction(new StackInstruction(StackInstructionKind.Bit_And_Generic));
         }
     }
 
@@ -1194,7 +1194,7 @@ public class PineIRCompiler
                     input,
                     copyToLocal,
                     prior)
-                .AppendInstruction(new StackInstruction(StackInstructionKind.Bit_Or_List));
+                .AppendInstruction(new StackInstruction(StackInstructionKind.Bit_Or_Generic));
         }
     }
 
@@ -1246,7 +1246,7 @@ public class PineIRCompiler
                     input,
                     copyToLocal,
                     prior)
-                .AppendInstruction(new StackInstruction(StackInstructionKind.Bit_Xor_List));
+                .AppendInstruction(new StackInstruction(StackInstructionKind.Bit_Xor_Generic));
         }
     }
 
@@ -1291,7 +1291,7 @@ public class PineIRCompiler
                 input,
                 copyToLocal,
                 prior)
-            .AppendInstruction(new StackInstruction(StackInstructionKind.Bit_Shift_Left_List));
+            .AppendInstruction(new StackInstruction(StackInstructionKind.Bit_Shift_Left_Generic));
     }
 
     public static NodeCompilationResult CompileKernelApplication_Bit_Shift_Right(
@@ -1322,7 +1322,7 @@ public class PineIRCompiler
                 input,
                 copyToLocal,
                 prior)
-            .AppendInstruction(new StackInstruction(StackInstructionKind.Bit_Shift_Right_List));
+            .AppendInstruction(new StackInstruction(StackInstructionKind.Bit_Shift_Right_Generic));
     }
 
     public static Expression? TryParseExprAsIntNegation(Expression expression)
