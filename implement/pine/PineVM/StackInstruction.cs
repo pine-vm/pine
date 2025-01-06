@@ -1,4 +1,5 @@
 using Pine.Core;
+using System.Numerics;
 
 namespace Pine.PineVM;
 
@@ -155,6 +156,11 @@ public enum StackInstructionKind
     Int_Add_Binary,
 
     /// <summary>
+    /// Add the integer literal from <see cref="StackInstruction.IntegerLiteral"/>.
+    /// </summary>
+    Int_Add_Const,
+
+    /// <summary>
     /// Add all items in the list from the top value from the stack.
     /// </summary>
     Int_Add_List,
@@ -168,6 +174,11 @@ public enum StackInstructionKind
     /// Multiply the top two values on the stack.
     /// </summary>
     Int_Mul_Binary,
+
+    /// <summary>
+    /// Multiply the top value on the stack with the integer literal from <see cref="StackInstruction.IntegerLiteral"/>.
+    /// </summary>
+    Int_Mul_Const,
 
     /// <summary>
     /// Multiply all items in the list from the top value from the stack.
@@ -226,6 +237,7 @@ public enum StackInstructionKind
 public record StackInstruction(
     StackInstructionKind Kind,
     PineValue? Literal = null,
+    BigInteger? IntegerLiteral = null,
     int? LocalIndex = null,
     int? SkipCount = null,
     int? TakeCount = null,

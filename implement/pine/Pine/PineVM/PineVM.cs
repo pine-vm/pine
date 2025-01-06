@@ -1352,14 +1352,14 @@ public class PineVM : IPineVM
                             var right = currentInstruction.Literal
                                 ??
                                 throw new Exception("Invalid operation form: Missing literal value");
-                         
+
                             var left = currentFrame.PopTopmostFromStack();
-                            
+
                             var areEqual = left == right;
-                            
+
                             currentFrame.PushInstructionResult(
                                 areEqual ? PineVMValues.FalseValue : PineVMValues.TrueValue);
-                            
+
                             continue;
                         }
 
@@ -1629,6 +1629,27 @@ public class PineVM : IPineVM
                             continue;
                         }
 
+                    case StackInstructionKind.Int_Add_Const:
+                        {
+                            var rightInt =
+                                currentInstruction.IntegerLiteral
+                                ??
+                                throw new Exception("Invalid operation form: Missing literal value");
+
+                            var leftValue = currentFrame.PopTopmostFromStack();
+
+                            PineValue resultValue = PineValue.EmptyList;
+
+                            if (KernelFunction.SignedIntegerFromValueRelaxed(leftValue) is { } leftInt)
+                            {
+                                resultValue = PineValueAsInteger.ValueFromSignedInteger(leftInt + rightInt);
+                            }
+
+                            currentFrame.PushInstructionResult(resultValue);
+
+                            continue;
+                        }
+
                     case StackInstructionKind.Int_Sub_Binary:
                         {
                             var right = currentFrame.PopTopmostFromStack();
@@ -1658,6 +1679,26 @@ public class PineVM : IPineVM
                                 KernelFunction.SignedIntegerFromValueRelaxed(right) is { } rightInt)
                             {
                                 resultValue = PineValueAsInteger.ValueFromSignedInteger(leftInt * rightInt);
+                            }
+
+                            currentFrame.PushInstructionResult(resultValue);
+
+                            continue;
+                        }
+
+                    case StackInstructionKind.Int_Mul_Const:
+                        {
+                            var right = currentInstruction.IntegerLiteral
+                                ??
+                                throw new Exception("Invalid operation form: Missing literal value");
+
+                            var left = currentFrame.PopTopmostFromStack();
+
+                            PineValue resultValue = PineValue.EmptyList;
+
+                            if (KernelFunction.SignedIntegerFromValueRelaxed(left) is { } leftInt)
+                            {
+                                resultValue = PineValueAsInteger.ValueFromSignedInteger(leftInt * right);
                             }
 
                             currentFrame.PushInstructionResult(resultValue);

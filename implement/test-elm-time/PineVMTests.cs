@@ -1485,6 +1485,69 @@ public class PineVMTests
                         StackInstruction.Return,
                     ])
             },
+
+            new
+            {
+                expression =
+                (Expression)
+                new Expression.KernelApplication(
+                    function: "int_add",
+                    input:
+                    Expression.ListInstance(
+                        [
+                        new Expression.KernelApplication(
+                            function: "head",
+                            input: Expression.EnvironmentInstance),
+
+                        Expression.LiteralInstance(PineValueAsInteger.ValueFromSignedInteger(13)),
+                        ])),
+
+                expected =
+                new PineVM.StackFrameInstructions(
+                    [
+                        new StackInstruction(StackInstructionKind.Push_Environment),
+
+                        new StackInstruction(StackInstructionKind.Head_Generic),
+
+                        new StackInstruction(
+                            StackInstructionKind.Int_Add_Const,
+                            IntegerLiteral: 13),
+
+                        StackInstruction.Return,
+                    ])
+            },
+
+            new
+            {
+                expression =
+                (Expression)
+                new Expression.KernelApplication(
+                    function: "int_mul",
+                    input:
+                    Expression.ListInstance(
+                        [
+                        new Expression.KernelApplication(
+                            function: "head",
+                            input: Expression.EnvironmentInstance),
+
+                        Expression.LiteralInstance(PineValueAsInteger.ValueFromSignedInteger(17)),
+                        ])),
+
+                expected =
+                new PineVM.StackFrameInstructions(
+                    [
+                        new StackInstruction(StackInstructionKind.Push_Environment),
+
+                        new StackInstruction(StackInstructionKind.Head_Generic),
+
+                        new StackInstruction(
+                            StackInstructionKind.Int_Mul_Const,
+                            IntegerLiteral: 17),
+
+                        StackInstruction.Return,
+                    ])
+            },
+
         };
 
         var parseCache = new PineVMParseCache();

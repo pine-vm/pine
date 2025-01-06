@@ -869,6 +869,42 @@ public class PineIRCompiler
                             Literal: PineValueAsInteger.ValueFromSignedInteger(0)));
             }
 
+            if (listExpr.items.Count is 2)
+            {
+                if (listExpr.items[0] is Expression.Literal leftLiteralExpr &&
+                    KernelFunction.SignedIntegerFromValueRelaxed(leftLiteralExpr.Value) is { } leftInt)
+                {
+                    var afterRight =
+                        CompileExpressionTransitive(
+                            listExpr.items[1],
+                            copyToLocal,
+                            prior);
+
+                    return
+                        afterRight
+                        .AppendInstruction(
+                            new StackInstruction(
+                                StackInstructionKind.Int_Add_Const,
+                                IntegerLiteral: leftInt));
+                }
+
+                if (listExpr.items[1] is Expression.Literal rightLiteralExpr &&
+                    KernelFunction.SignedIntegerFromValueRelaxed(rightLiteralExpr.Value) is { } rightInt)
+                {
+                    var afterLeft =
+                        CompileExpressionTransitive(
+                            listExpr.items[0],
+                            copyToLocal,
+                            prior);
+                    return
+                        afterLeft
+                        .AppendInstruction(
+                            new StackInstruction(
+                                StackInstructionKind.Int_Add_Const,
+                                IntegerLiteral: rightInt));
+                }
+            }
+
             var addOps = prior;
 
             for (var i = 0; i < listExpr.items.Count; ++i)
@@ -939,6 +975,43 @@ public class PineIRCompiler
                         new StackInstruction(
                             StackInstructionKind.Push_Literal,
                             Literal: PineValueAsInteger.ValueFromSignedInteger(1)));
+            }
+
+            if (listExpr.items.Count is 2)
+            {
+                if (listExpr.items[0] is Expression.Literal leftLiteralExpr &&
+                    KernelFunction.SignedIntegerFromValueRelaxed(leftLiteralExpr.Value) is { } leftInt)
+                {
+                    var afterRight =
+                        CompileExpressionTransitive(
+                            listExpr.items[1],
+                            copyToLocal,
+                            prior);
+
+                    return
+                        afterRight
+                        .AppendInstruction(
+                            new StackInstruction(
+                                StackInstructionKind.Int_Mul_Const,
+                                IntegerLiteral: leftInt));
+                }
+
+                if (listExpr.items[1] is Expression.Literal rightLiteralExpr &&
+                    KernelFunction.SignedIntegerFromValueRelaxed(rightLiteralExpr.Value) is { } rightInt)
+                {
+                    var afterLeft =
+                        CompileExpressionTransitive(
+                            listExpr.items[0],
+                            copyToLocal,
+                            prior);
+
+                    return
+                        afterLeft
+                        .AppendInstruction(
+                            new StackInstruction(
+                                StackInstructionKind.Int_Mul_Const,
+                                IntegerLiteral: rightInt));
+                }
             }
 
             var mulOps = prior;
