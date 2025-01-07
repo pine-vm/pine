@@ -4027,20 +4027,24 @@ findFileTreeNodeWithPathMatchingRepresentationInFunctionName sourceDirs sourceFi
         nodesWithRepresentations =
             sourceDirectoryPaths
                 |> List.concatMap
-                    (\elmJsonDirectoryPath ->
-                        FileTree.getNodeAtPathFromFileTree elmJsonDirectoryPath fileTree
-                            |> Maybe.withDefault (FileTree.TreeNode [])
-                            |> FileTree.listNodesWithPath
-                            |> List.map
-                                (\( nodePathRelative, node ) ->
-                                    ( filePathRepresentationInFunctionName nodePathRelative
-                                    , ( { relativePath = nodePathRelative
-                                        , absolutePath = elmJsonDirectoryPath ++ nodePathRelative
-                                        }
-                                      , node
-                                      )
-                                    )
-                                )
+                    (\sourceDirPath ->
+                        case FileTree.getNodeAtPathFromFileTree sourceDirPath fileTree of
+                            Nothing ->
+                                []
+
+                            Just sourceDirNode ->
+                                sourceDirNode
+                                    |> FileTree.listNodesWithPath
+                                    |> List.map
+                                        (\( nodePathRelative, node ) ->
+                                            ( filePathRepresentationInFunctionName nodePathRelative
+                                            , ( { relativePath = nodePathRelative
+                                                , absolutePath = List.concat [ sourceDirPath, nodePathRelative ]
+                                                }
+                                              , node
+                                              )
+                                            )
+                                        )
                     )
 
         nodesGroupedByRepresentation : Dict.Dict String (List ( DeclarationFileMatch, FileTree.FileTreeNode Bytes.Bytes ))
@@ -4782,18 +4786,16 @@ enumerateLeavesFromRecordTree node =
 
 
 filePathRepresentationInFunctionName : List String -> String
-filePathRepresentationInFunctionName =
-    String.join "/"
-        >> String.toList
-        >> List.map
-            (\char ->
-                if Char.isAlphaNum char then
-                    char
+filePathRepresentationInFunctionName pathItems =
+    String.map
+        (\char ->
+            if Char.isAlphaNum char then
+                char
 
-                else
-                    '_'
-            )
-        >> String.fromList
+            else
+                '_'
+        )
+        (String.join "_" pathItems)
 
 
 addModulesFromTextToAppFiles : SourceDirectories -> List String -> AppFiles -> AppFiles

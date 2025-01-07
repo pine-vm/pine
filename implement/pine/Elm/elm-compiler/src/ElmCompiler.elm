@@ -1423,20 +1423,23 @@ compileElmSyntaxLetBlock stackBefore letBlock =
                                     Err err ->
                                         Err err
 
-                                    Ok compiledPattern ->
+                                    Ok (CompiledElmSyntaxPattern _ _ patternDecls) ->
                                         Ok
                                             (List.map
                                                 (\( declName, deconsExpr ) ->
                                                     ( declName
                                                     , ( Just
                                                             (applicableDeclarationFromConstructorExpression
-                                                                (expressionForDeconstructions deconsExpr destructuredExpression)
+                                                                (expressionForDeconstructions
+                                                                    deconsExpr
+                                                                    destructuredExpression
+                                                                )
                                                             )
                                                       , Nothing
                                                       )
                                                     )
                                                 )
-                                                compiledPattern.declarations
+                                                patternDecls
                                             )
             )
             letBlock.declarations
@@ -1589,7 +1592,7 @@ compileElmSyntaxLetDeclaration stack declaration =
                         Err err ->
                             Err ("Failed destructuring in let block: " ++ err)
 
-                        Ok pattern ->
+                        Ok (CompiledElmSyntaxPattern _ _ patternDecls) ->
                             Ok
                                 (List.map
                                     (\( declName, deconsExpr ) ->
@@ -1597,7 +1600,7 @@ compileElmSyntaxLetDeclaration stack declaration =
                                         , expressionForDeconstructions deconsExpr compiledExpression
                                         )
                                     )
-                                    pattern.declarations
+                                    patternDecls
                                 )
 
 
@@ -1704,8 +1707,8 @@ compileElmSyntaxFunctionWithoutName stackBefore function =
                     Err err ->
                         Err err
 
-                    Ok compiledPattern ->
-                        Ok compiledPattern.declarations
+                    Ok (CompiledElmSyntaxPattern _ _ patternDecls) ->
+                        Ok patternDecls
             )
             function.arguments
     of
@@ -1983,7 +1986,7 @@ compileElmSyntaxCaseBlockCase stackBefore caseBlockValueExpression ( Elm.Syntax.
         Err error ->
             Err error
 
-        Ok deconstruction ->
+        Ok (CompiledElmSyntaxPattern deconsConditions deconsCannotMatchEmpty deconsDecls) ->
             let
                 deconstructionDeclarations : List ( String, Expression )
                 deconstructionDeclarations =
@@ -1995,7 +1998,7 @@ compileElmSyntaxCaseBlockCase stackBefore caseBlockValueExpression ( Elm.Syntax.
                                 :: aggregate
                         )
                         []
-                        deconstruction.declarations
+                        deconsDecls
 
                 inlineableDeclarations : List ( String, List Expression -> Expression )
                 inlineableDeclarations =
@@ -2022,9 +2025,9 @@ compileElmSyntaxCaseBlockCase stackBefore caseBlockValueExpression ( Elm.Syntax.
                 Ok expression ->
                     Ok
                         { conditionExpressions =
-                            deconstruction.conditionExpressions caseBlockValueExpression
+                            deconsConditions caseBlockValueExpression
                         , thenExpression =
-                            case deconstruction.declarations of
+                            case deconsDecls of
                                 [] ->
                                     expression
 
@@ -2035,30 +2038,41 @@ compileElmSyntaxCaseBlockCase stackBefore caseBlockValueExpression ( Elm.Syntax.
                         }
 
 
+type CompiledElmSyntaxPattern
+    = CompiledElmSyntaxPattern
+        -- Condition expressions
+        (Expression -> List Expression)
+        -- Cannot match empty
+        Bool
+        -- Declarations
+        (List ( String, List Deconstruction ))
+
+
 compileElmSyntaxPattern :
     CompilationStack
     -> Elm.Syntax.Pattern.Pattern
-    ->
-        Result
-            String
-            { conditionExpressions : Expression -> List Expression
-            , cannotMatchEmpty : Bool
-            , declarations : List ( String, List Deconstruction )
-            }
+    -> Result String CompiledElmSyntaxPattern
 compileElmSyntaxPattern compilation elmPattern =
     case elmPattern of
         Elm.Syntax.Pattern.AllPattern ->
             Ok
-                { conditionExpressions = always []
-                , cannotMatchEmpty = False
-                , declarations = []
-                }
+                (CompiledElmSyntaxPattern
+                    (always [])
+                    False
+                    []
+                )
 
         Elm.Syntax.Pattern.ListPattern listElements ->
-            compileElmSyntaxPatternListOrTupleItems compilation listElements True
+            compileElmSyntaxPatternListOrTupleItems
+                compilation
+                listElements
+                True
 
         Elm.Syntax.Pattern.TuplePattern tupleElements ->
-            compileElmSyntaxPatternListOrTupleItems compilation tupleElements False
+            compileElmSyntaxPatternListOrTupleItems
+                compilation
+                tupleElements
+                False
 
         Elm.Syntax.Pattern.UnConsPattern (Elm.Syntax.Node.Node _ unconsLeft) (Elm.Syntax.Node.Node _ unconsRight) ->
             {-
@@ -2068,63 +2082,65 @@ compileElmSyntaxPattern compilation elmPattern =
                 Err err ->
                     Err err
 
-                Ok leftSide ->
+                Ok (CompiledElmSyntaxPattern leftSideConditions leftSideCannotMatchEmpty leftSideDecls) ->
                     case compileElmSyntaxPattern compilation unconsRight of
                         Err err ->
                             Err err
 
-                        Ok rightSide ->
+                        Ok (CompiledElmSyntaxPattern rightSideConditions rightSideCannotMatchEmpty rightSideDecls) ->
                             let
-                                conditionExpressions =
-                                    \deconstructedExpression ->
-                                        let
-                                            explicitLengthConditions : List Expression
-                                            explicitLengthConditions =
-                                                if leftSide.cannotMatchEmpty then
-                                                    []
+                                conditionExpressions : Expression -> List Expression
+                                conditionExpressions deconstructedExpression =
+                                    let
+                                        explicitLengthConditions : List Expression
+                                        explicitLengthConditions =
+                                            if leftSideCannotMatchEmpty then
+                                                []
 
-                                                else if rightSide.cannotMatchEmpty then
-                                                    []
+                                            else if rightSideCannotMatchEmpty then
+                                                []
 
-                                                else
-                                                    [ KernelApplicationExpression
-                                                        "negate"
-                                                        (equalCondition
-                                                            [ KernelApplicationExpression
-                                                                "length"
-                                                                deconstructedExpression
-                                                            , LiteralExpression (Pine.valueFromInt 0)
-                                                            ]
-                                                        )
-                                                    ]
-                                        in
-                                        List.concat
-                                            [ explicitLengthConditions
-                                            , leftSide.conditionExpressions
-                                                (listItemFromIndexExpression 0 deconstructedExpression)
-                                            , rightSide.conditionExpressions
-                                                (listSkipExpression 1 deconstructedExpression)
-                                            ]
+                                            else
+                                                [ KernelApplicationExpression
+                                                    "negate"
+                                                    (equalCondition
+                                                        [ KernelApplicationExpression
+                                                            "length"
+                                                            deconstructedExpression
+                                                        , LiteralExpression (Pine.valueFromInt 0)
+                                                        ]
+                                                    )
+                                                ]
+                                    in
+                                    List.concat
+                                        [ explicitLengthConditions
+                                        , leftSideConditions
+                                            (listItemFromIndexExpression 0 deconstructedExpression)
+                                        , rightSideConditions
+                                            (listSkipExpression 1 deconstructedExpression)
+                                        ]
 
+                                declarations : List ( String, List Deconstruction )
                                 declarations =
                                     List.concat
                                         [ List.map
                                             (\( declName, deconstruction ) ->
                                                 ( declName, ListItemDeconstruction 0 :: deconstruction )
                                             )
-                                            leftSide.declarations
+                                            leftSideDecls
                                         , List.map
                                             (\( declName, deconstruction ) ->
                                                 ( declName, SkipItemsDeconstruction 1 :: deconstruction )
                                             )
-                                            rightSide.declarations
+                                            rightSideDecls
                                         ]
                             in
                             Ok
-                                { conditionExpressions = conditionExpressions
-                                , cannotMatchEmpty = True
-                                , declarations = declarations
-                                }
+                                (CompiledElmSyntaxPattern
+                                    conditionExpressions
+                                    True
+                                    declarations
+                                )
 
         Elm.Syntax.Pattern.NamedPattern qualifiedName choiceTypeArgumentPatterns ->
             case sourceModuleNameFromImports ( qualifiedName.moduleName, qualifiedName.name ) compilation of
@@ -2135,7 +2151,7 @@ compileElmSyntaxPattern compilation elmPattern =
                     case
                         Common.resultListIndexedMapCombine
                             (\( argIndex, Elm.Syntax.Node.Node _ argPattern ) ->
-                                case conditionsAndDeclarationsFromItemPattern compilation argIndex argPattern of
+                                case compileItemPatternForIndex compilation argIndex argPattern of
                                     Err err ->
                                         Err
                                             ("Failed for named pattern argument "
@@ -2210,41 +2226,41 @@ compileElmSyntaxPattern compilation elmPattern =
                                                     False
 
                                 conditionExpressions : Expression -> List Expression
-                                conditionExpressions =
-                                    \deconstructedExpression ->
-                                        let
-                                            matchingTagConditions =
-                                                if tagIsOnlyPossible then
-                                                    []
+                                conditionExpressions deconstructedExpression =
+                                    let
+                                        matchingTagConditions =
+                                            if tagIsOnlyPossible then
+                                                []
 
-                                                else
-                                                    [ case Common.assocListGet qualifiedName.name elmDeclarationsOverridesExpressions of
-                                                        Just tagNameExpressionFromOverrides ->
-                                                            equalCondition
-                                                                [ tagNameExpressionFromOverrides
-                                                                , deconstructedExpression
-                                                                ]
+                                            else
+                                                [ case Common.assocListGet qualifiedName.name elmDeclarationsOverridesExpressions of
+                                                    Just tagNameExpressionFromOverrides ->
+                                                        equalCondition
+                                                            [ tagNameExpressionFromOverrides
+                                                            , deconstructedExpression
+                                                            ]
 
-                                                        Nothing ->
-                                                            equalCondition
-                                                                [ LiteralExpression (Pine.valueFromString qualifiedName.name)
-                                                                , pineKernel_Head deconstructedExpression
-                                                                ]
-                                                    ]
+                                                    Nothing ->
+                                                        equalCondition
+                                                            [ LiteralExpression (Pine.valueFromString qualifiedName.name)
+                                                            , pineKernel_Head deconstructedExpression
+                                                            ]
+                                                ]
 
-                                            argumentsConditions =
-                                                List.concatMap
-                                                    (\{ conditions } ->
-                                                        conditions (listItemFromIndexExpression 1 deconstructedExpression)
-                                                    )
-                                                    itemsResults
-                                        in
-                                        List.concat [ matchingTagConditions, argumentsConditions ]
+                                        argumentsConditions =
+                                            List.concatMap
+                                                (\(CompiledElmSyntaxPattern conditions _ _) ->
+                                                    conditions
+                                                        (listItemFromIndexExpression 1 deconstructedExpression)
+                                                )
+                                                itemsResults
+                                    in
+                                    List.concat [ matchingTagConditions, argumentsConditions ]
 
                                 mergedDeclarations : List ( String, List Deconstruction )
                                 mergedDeclarations =
                                     List.concatMap
-                                        (\{ declarations } ->
+                                        (\(CompiledElmSyntaxPattern _ _ declarations) ->
                                             List.map
                                                 (\( declName, deconstruction ) ->
                                                     ( declName, ListItemDeconstruction 1 :: deconstruction )
@@ -2256,16 +2272,21 @@ compileElmSyntaxPattern compilation elmPattern =
                                 cannotMatchEmpty : Bool
                                 cannotMatchEmpty =
                                     if tagIsOnlyPossible then
-                                        List.any .cannotMatchEmpty itemsResults
+                                        List.any
+                                            (\(CompiledElmSyntaxPattern _ itemCannotMatchEmpty _) ->
+                                                itemCannotMatchEmpty
+                                            )
+                                            itemsResults
 
                                     else
                                         True
                             in
                             Ok
-                                { conditionExpressions = conditionExpressions
-                                , cannotMatchEmpty = cannotMatchEmpty
-                                , declarations = mergedDeclarations
-                                }
+                                (CompiledElmSyntaxPattern
+                                    conditionExpressions
+                                    cannotMatchEmpty
+                                    mergedDeclarations
+                                )
 
         Elm.Syntax.Pattern.CharPattern char ->
             compilePatternOnlyEqualsCondition (LiteralExpression (Pine.valueFromChar char))
@@ -2281,23 +2302,22 @@ compileElmSyntaxPattern compilation elmPattern =
 
         Elm.Syntax.Pattern.VarPattern name ->
             Ok
-                { conditionExpressions = always []
-                , cannotMatchEmpty = False
-                , declarations =
+                (CompiledElmSyntaxPattern
+                    (always [])
+                    False
                     [ ( name
                       , []
                       )
                     ]
-                }
+                )
 
         Elm.Syntax.Pattern.RecordPattern fieldsElements ->
             Ok
-                { conditionExpressions = always []
-
-                -- Elm records are internally represented as tagged values.
-                , cannotMatchEmpty = True
-                , declarations =
-                    List.map
+                (CompiledElmSyntaxPattern
+                    (always [])
+                    -- Elm records are internally represented as tagged values.
+                    True
+                    (List.map
                         (\(Elm.Syntax.Node.Node _ fieldName) ->
                             ( fieldName
                             , [ PineFunctionApplicationDeconstruction
@@ -2313,28 +2333,32 @@ compileElmSyntaxPattern compilation elmPattern =
                             )
                         )
                         fieldsElements
-                }
+                    )
+                )
 
         Elm.Syntax.Pattern.AsPattern (Elm.Syntax.Node.Node _ aliasedPattern) (Elm.Syntax.Node.Node _ alias) ->
             case compileElmSyntaxPattern compilation aliasedPattern of
                 Err err ->
                     Err err
 
-                Ok aliasedResult ->
+                Ok (CompiledElmSyntaxPattern asCompiledConditions asCompiledCannotMatchEmpty asCompiledDecls) ->
                     Ok
-                        { aliasedResult
-                            | declarations = ( alias, [] ) :: aliasedResult.declarations
-                        }
+                        (CompiledElmSyntaxPattern
+                            asCompiledConditions
+                            asCompiledCannotMatchEmpty
+                            (( alias, [] ) :: asCompiledDecls)
+                        )
 
         Elm.Syntax.Pattern.ParenthesizedPattern (Elm.Syntax.Node.Node _ parenthesized) ->
             compileElmSyntaxPattern compilation parenthesized
 
         Elm.Syntax.Pattern.UnitPattern ->
             Ok
-                { conditionExpressions = always []
-                , cannotMatchEmpty = False
-                , declarations = []
-                }
+                (CompiledElmSyntaxPattern
+                    (always [])
+                    False
+                    []
+                )
 
         Elm.Syntax.Pattern.FloatPattern _ ->
             Err "Unsupported type of pattern: FloatPattern"
@@ -2344,13 +2368,7 @@ compileElmSyntaxPatternListOrTupleItems :
     CompilationStack
     -> List (Elm.Syntax.Node.Node Elm.Syntax.Pattern.Pattern)
     -> Bool
-    ->
-        Result
-            String
-            { conditionExpressions : Expression -> List Expression
-            , cannotMatchEmpty : Bool
-            , declarations : List ( String, List Deconstruction )
-            }
+    -> Result String CompiledElmSyntaxPattern
 compileElmSyntaxPatternListOrTupleItems compilation listItems addLengthCondition =
     case listItems of
         [] ->
@@ -2432,18 +2450,12 @@ compileElmSyntaxPatternListOrTupleItemsGeneric :
     CompilationStack
     -> List (Elm.Syntax.Node.Node Elm.Syntax.Pattern.Pattern)
     -> Bool
-    ->
-        Result
-            String
-            { conditionExpressions : Expression -> List Expression
-            , cannotMatchEmpty : Bool
-            , declarations : List ( String, List Deconstruction )
-            }
+    -> Result String CompiledElmSyntaxPattern
 compileElmSyntaxPatternListOrTupleItemsGeneric compilation listItems addLengthCondition =
     case
         Common.resultListIndexedMapCombine
             (\( argIndex, Elm.Syntax.Node.Node _ itemPattern ) ->
-                conditionsAndDeclarationsFromItemPattern compilation argIndex itemPattern
+                compileItemPatternForIndex compilation argIndex itemPattern
             )
             listItems
     of
@@ -2453,109 +2465,114 @@ compileElmSyntaxPatternListOrTupleItemsGeneric compilation listItems addLengthCo
         Ok itemsResults ->
             let
                 conditionExpressions : Expression -> List Expression
-                conditionExpressions =
-                    \deconstructedExpression ->
-                        let
-                            matchesLengthConditions =
-                                if addLengthCondition then
-                                    {-
-                                       In contrast to a tuple pattern, we also need to check the length of the list matches the pattern.
-                                       (For tuples, the length is always fixed.)
-                                    -}
-                                    let
-                                        expectedLength =
-                                            List.length listItems
-                                    in
-                                    [ case deconstructedExpression of
-                                        ListExpression deconstructedList ->
-                                            LiteralExpression
-                                                (if List.length deconstructedList == expectedLength then
-                                                    Pine.trueValue
+                conditionExpressions deconstructedExpression =
+                    let
+                        matchesLengthConditions =
+                            if addLengthCondition then
+                                {-
+                                   In contrast to a tuple pattern, we also need to check the length of the list matches the pattern.
+                                   (For tuples, the length is always fixed.)
+                                -}
+                                let
+                                    expectedLength =
+                                        List.length listItems
+                                in
+                                [ case deconstructedExpression of
+                                    ListExpression deconstructedList ->
+                                        LiteralExpression
+                                            (if List.length deconstructedList == expectedLength then
+                                                Pine.trueValue
 
-                                                 else
-                                                    Pine.falseValue
-                                                )
+                                             else
+                                                Pine.falseValue
+                                            )
 
-                                        _ ->
-                                            equalCondition
-                                                [ LiteralExpression (Pine.valueFromInt expectedLength)
-                                                , countListElementsExpression deconstructedExpression
-                                                ]
-                                    ]
+                                    _ ->
+                                        equalCondition
+                                            [ LiteralExpression (Pine.valueFromInt expectedLength)
+                                            , countListElementsExpression deconstructedExpression
+                                            ]
+                                ]
 
-                                else
-                                    []
-                        in
-                        List.concat
-                            [ matchesLengthConditions
-                            , List.concatMap
-                                (\{ conditions } ->
-                                    conditions deconstructedExpression
-                                )
-                                itemsResults
-                            ]
+                            else
+                                []
+                    in
+                    List.concat
+                        [ matchesLengthConditions
+                        , List.concatMap
+                            (\(CompiledElmSyntaxPattern conditions _ _) ->
+                                conditions deconstructedExpression
+                            )
+                            itemsResults
+                        ]
+
+                aggregateCannotMatchEmpty : Bool
+                aggregateCannotMatchEmpty =
+                    List.any
+                        (\(CompiledElmSyntaxPattern _ itemCannotMatchEmpty _) ->
+                            itemCannotMatchEmpty
+                        )
+                        itemsResults
+
+                aggregateDeclarations : List ( String, List Deconstruction )
+                aggregateDeclarations =
+                    List.concatMap
+                        (\(CompiledElmSyntaxPattern _ _ declarations) ->
+                            declarations
+                        )
+                        itemsResults
             in
             Ok
-                { conditionExpressions = conditionExpressions
-                , cannotMatchEmpty =
-                    List.any .cannotMatchEmpty itemsResults
-                , declarations = List.concatMap .declarations itemsResults
-                }
+                (CompiledElmSyntaxPattern
+                    conditionExpressions
+                    aggregateCannotMatchEmpty
+                    aggregateDeclarations
+                )
 
 
-conditionsAndDeclarationsFromItemPattern :
+compileItemPatternForIndex :
     CompilationStack
     -> Int
     -> Elm.Syntax.Pattern.Pattern
-    ->
-        Result
-            String
-            { conditions : Expression -> List Expression
-            , cannotMatchEmpty : Bool
-            , declarations : List ( String, List Deconstruction )
-            }
-conditionsAndDeclarationsFromItemPattern compilation itemIndex itemPattern =
+    -> Result String CompiledElmSyntaxPattern
+compileItemPatternForIndex compilation itemIndex itemPattern =
     case compileElmSyntaxPattern compilation itemPattern of
         Err err ->
             Err err
 
-        Ok listElementResult ->
+        Ok (CompiledElmSyntaxPattern itemConditions itemCannotMatchEmpty itemDecls) ->
             Ok
-                { conditions =
-                    \mapped ->
-                        listElementResult.conditionExpressions
+                (CompiledElmSyntaxPattern
+                    (\mapped ->
+                        itemConditions
                             (listItemFromIndexExpression itemIndex mapped)
-                , cannotMatchEmpty = listElementResult.cannotMatchEmpty
-                , declarations =
-                    List.map
+                    )
+                    itemCannotMatchEmpty
+                    (List.map
                         (\( declName, deconsExpr ) ->
                             ( declName
                             , ListItemDeconstruction itemIndex :: deconsExpr
                             )
                         )
-                        listElementResult.declarations
-                }
+                        itemDecls
+                    )
+                )
 
 
 compilePatternOnlyEqualsCondition :
     Expression
-    ->
-        Result
-            error
-            { conditionExpressions : Expression -> List Expression
-            , cannotMatchEmpty : Bool
-            , declarations : List a
-            }
+    -> Result error CompiledElmSyntaxPattern
 compilePatternOnlyEqualsCondition valueToCompare =
     Ok
-        { conditionExpressions =
-            \deconstructedExpression ->
+        (CompiledElmSyntaxPattern
+            (\deconstructedExpression ->
                 [ equalCondition [ deconstructedExpression, valueToCompare ] ]
-        , cannotMatchEmpty =
-            (valueToCompare /= ListExpression [])
+            )
+            ((valueToCompare /= ListExpression [])
                 && (valueToCompare /= LiteralExpression Pine.listValue_Empty)
-        , declarations = []
-        }
+            )
+            []
+        )
 
 
 {-| Uses simple type inference to search for optimized compilation of operator application.
@@ -2807,13 +2824,35 @@ searchCompileElmSyntaxOperatorOptimized stack operator leftExpr rightExpr =
                 anyItemIsString : Bool
                 anyItemIsString =
                     List.any
-                        (\item -> exprProvenToBeString stack.knownTypes item)
+                        (exprProvenToBeString stack.knownTypes)
+                        items
+
+                anyItemIsList : Bool
+                anyItemIsList =
+                    List.any
+                        (exprProvenToBeList stack.knownTypes)
                         items
             in
-            if not anyItemIsString then
-                Nothing
+            if anyItemIsList then
+                case compileElmSyntaxExpression stack leftExpr of
+                    Err err ->
+                        Just (Err err)
 
-            else
+                    Ok leftExprCompiled ->
+                        case compileElmSyntaxExpression stack rightExpr of
+                            Err err ->
+                                Just (Err err)
+
+                            Ok rightExprCompiled ->
+                                Just
+                                    (Ok
+                                        (KernelApplicationExpression
+                                            "concat"
+                                            (ListExpression [ leftExprCompiled, rightExprCompiled ])
+                                        )
+                                    )
+
+            else if anyItemIsString then
                 case Common.resultListMapCombine (compileElmSyntaxExpression stack) items of
                     Err err ->
                         Just (Err err)
@@ -2859,6 +2898,9 @@ searchCompileElmSyntaxOperatorOptimized stack operator leftExpr rightExpr =
                                     ]
                                 )
                             )
+
+            else
+                Nothing
 
         "::" ->
             {-
@@ -3208,6 +3250,27 @@ exprProvenToBeInt knownTypes expr =
                         False
 
                 "//" ->
+                    True
+
+                _ ->
+                    False
+
+        _ ->
+            False
+
+
+exprProvenToBeList :
+    List ( String, Elm.Syntax.TypeAnnotation.TypeAnnotation )
+    -> Elm.Syntax.Expression.Expression
+    -> Bool
+exprProvenToBeList knownTypes expr =
+    case expr of
+        Elm.Syntax.Expression.ListExpr _ ->
+            True
+
+        Elm.Syntax.Expression.FunctionOrValue [] localName ->
+            case Common.assocListGet localName knownTypes of
+                Just (Elm.Syntax.TypeAnnotation.Typed (Elm.Syntax.Node.Node _ ( [], "List" )) [ Elm.Syntax.Node.Node _ _ ]) ->
                     True
 
                 _ ->

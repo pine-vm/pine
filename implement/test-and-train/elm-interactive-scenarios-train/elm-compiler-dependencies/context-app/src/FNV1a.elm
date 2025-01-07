@@ -6,7 +6,7 @@ module FNV1a exposing (hash, hashWithSeed, initialSeed)
 
 -}
 
-import Bitwise as Bit
+import Bitwise
 
 
 {-| The initial seed represents the starting point of a hash.
@@ -40,13 +40,14 @@ This allows you to hash two, or more, strings in sequence without concatenating 
 -}
 hashWithSeed : String -> Int -> Int
 hashWithSeed str seed =
-    Bit.shiftRightZfBy 0 (String.foldl utf32ToUtf8 seed str)
+    Bitwise.shiftRightZfBy 0 (String.foldl utf32ToUtf8 seed str)
 
 
 utf32ToUtf8 : Char -> Int -> Int
 utf32ToUtf8 char acc =
     {- Implementation copied from: https://github.com/zwilias/elm-utf-tools/tree/2.0.1 -}
     let
+        byte : Int
         byte =
             Char.toCode char
     in
@@ -55,33 +56,34 @@ utf32ToUtf8 char acc =
 
     else if byte < 0x0800 then
         acc
-            |> hasher (Bit.or 0xC0 <| Bit.shiftRightZfBy 6 byte)
-            |> hasher (Bit.or 0x80 <| Bit.and 0x3F byte)
+            |> hasher (Bitwise.or 0xC0 <| Bitwise.shiftRightZfBy 6 byte)
+            |> hasher (Bitwise.or 0x80 <| Bitwise.and 0x3F byte)
 
     else if byte < 0x00010000 then
         acc
-            |> hasher (Bit.or 0xE0 <| Bit.shiftRightZfBy 12 byte)
-            |> hasher (Bit.or 0x80 <| Bit.and 0x3F <| Bit.shiftRightZfBy 6 byte)
-            |> hasher (Bit.or 0x80 <| Bit.and 0x3F byte)
+            |> hasher (Bitwise.or 0xE0 <| Bitwise.shiftRightZfBy 12 byte)
+            |> hasher (Bitwise.or 0x80 <| Bitwise.and 0x3F <| Bitwise.shiftRightZfBy 6 byte)
+            |> hasher (Bitwise.or 0x80 <| Bitwise.and 0x3F byte)
 
     else
         acc
-            |> hasher (Bit.or 0xF0 <| Bit.shiftRightZfBy 18 byte)
-            |> hasher (Bit.or 0x80 <| Bit.and 0x3F <| Bit.shiftRightZfBy 12 byte)
-            |> hasher (Bit.or 0x80 <| Bit.and 0x3F <| Bit.shiftRightZfBy 6 byte)
-            |> hasher (Bit.or 0x80 <| Bit.and 0x3F byte)
+            |> hasher (Bitwise.or 0xF0 <| Bitwise.shiftRightZfBy 18 byte)
+            |> hasher (Bitwise.or 0x80 <| Bitwise.and 0x3F <| Bitwise.shiftRightZfBy 12 byte)
+            |> hasher (Bitwise.or 0x80 <| Bitwise.and 0x3F <| Bitwise.shiftRightZfBy 6 byte)
+            |> hasher (Bitwise.or 0x80 <| Bitwise.and 0x3F byte)
 
 
 hasher : Int -> Int -> Int
 hasher byte hashValue =
     {- Implementation ported from: https://gist.github.com/vaiorabbit/5657561 -}
     let
+        mixed : Int
         mixed =
-            Bit.xor byte hashValue
+            Bitwise.xor byte hashValue
     in
     mixed
-        + Bit.shiftLeftBy 1 mixed
-        + Bit.shiftLeftBy 4 mixed
-        + Bit.shiftLeftBy 7 mixed
-        + Bit.shiftLeftBy 8 mixed
-        + Bit.shiftLeftBy 24 mixed
+        + Bitwise.shiftLeftBy 1 mixed
+        + Bitwise.shiftLeftBy 4 mixed
+        + Bitwise.shiftLeftBy 7 mixed
+        + Bitwise.shiftLeftBy 8 mixed
+        + Bitwise.shiftLeftBy 24 mixed

@@ -55,7 +55,11 @@ getNodeAtPathFromFileTree path treeNode =
                     Nothing
 
                 TreeNode treeElements ->
-                    case treeElements |> List.filter (Tuple.first >> (==) pathFirstElement) |> List.head of
+                    case
+                        Common.listFind
+                            (\( entryName, _ ) -> entryName == pathFirstElement)
+                            treeElements
+                    of
                         Nothing ->
                             Nothing
 
@@ -76,7 +80,10 @@ listNodesWithPath node =
                         |> List.concatMap
                             (\( entryName, childNode ) ->
                                 listNodesWithPath childNode
-                                    |> List.map (Tuple.mapFirst ((::) entryName))
+                                    |> List.map
+                                        (\( path, descendantNode ) ->
+                                            ( entryName :: path, descendantNode )
+                                        )
                             )
     in
     ( [], node ) :: childNodes
