@@ -121,7 +121,7 @@ migrate state =
 
 We don't have to return the same value here. We can also use the migration to make a custom atomic update to our back-end apps state.
 
-Here is another example, almost as simple, with the back-end state just a primitive type, migrating from an `Int` to a `String`: <https://github.com/pine-vm/pine/blob/e38b093b5f61d7d55c5a3b5c760a58e99c854136/implement/test-elm-time/test-elm-apps/migrate-from-int-to-string-builder-web-app/src/Backend/MigrateState.elm>
+Here is another example, almost as simple, with the back-end state just a primitive type, migrating from an `Int` to a `String`: <https://github.com/pine-vm/pine/blob/ba36482db83001b3ede203a92e56d31a30356b16/implement/test-elm-time/test-elm-apps/migrate-from-int-to-string-builder-web-app/src/Backend/MigrateState.elm>
 
 ### `web-service.json`
 
