@@ -31,7 +31,7 @@ function buildServerOptions(context: ExtensionContext): ServerOptions {
 
     const customPath =
         sanitizePathFromSettings(
-            config.get<string>('pathToPineBinary')?.trim() || '');
+            config.get<string>('pathToPineExecutableFile')?.trim() || '');
 
     const langServerExecutablePath =
         customPath !== ''

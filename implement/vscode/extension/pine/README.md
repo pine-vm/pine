@@ -19,6 +19,6 @@ Elm developer tools packaged as [Visual Studio Code](https://code.visualstudio.c
 
 Visual Studio Code is available for Mac, Windows, and Linux.
 
-1. Install VSCode from <https://code.visualstudio.com/>
-2. Follow [this link](https://marketplace.visualstudio.com/items?itemName=Pine.pine) to install the VSCode extension
+1. Install VS Code from <https://code.visualstudio.com/>
+2. Follow [this link](https://marketplace.visualstudio.com/items?itemName=Pine.pine) to install the VS Code extension
 3. Make sure you have Pine installed: <https://pine-vm.org/download>
