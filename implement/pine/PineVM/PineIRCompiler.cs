@@ -168,9 +168,7 @@ public class PineIRCompiler
             return
                 lessCSE
                 .AppendInstruction(
-                    new StackInstruction(
-                        Kind: StackInstructionKind.Local_Set,
-                        LocalIndex: newLocalIndex))
+                    StackInstruction.Local_Set(newLocalIndex))
                 with
                 {
                     LocalsSet = lessCSE.LocalsSet.Add(expression, newLocalIndex)
@@ -190,9 +188,7 @@ public class PineIRCompiler
             return
                 prior
                 .AppendInstruction(
-                    new StackInstruction(
-                        Kind: StackInstructionKind.Local_Get,
-                        LocalIndex: localIndex));
+                    StackInstruction.Local_Get(localIndex));
         }
 
         switch (expr)
@@ -201,15 +197,13 @@ public class PineIRCompiler
                 return
                     prior
                     .AppendInstruction(
-                        new StackInstruction(
-                            Kind: StackInstructionKind.Push_Literal,
-                            Literal: literalExpr.Value));
+                        StackInstruction.Push_Literal(literalExpr.Value));
 
             case Expression.Environment:
                 return
                     prior
                     .AppendInstruction(
-                        new StackInstruction(StackInstructionKind.Push_Environment));
+                        StackInstruction.Push_Environment);
 
             case Expression.List listExpr:
                 {
@@ -218,9 +212,7 @@ public class PineIRCompiler
                         return
                             prior
                             .AppendInstruction(
-                                new StackInstruction(
-                                    StackInstructionKind.Push_Literal,
-                                    Literal: PineValue.EmptyList));
+                                StackInstruction.Push_Literal(PineValue.EmptyList));
                     }
 
                     /*
@@ -246,9 +238,7 @@ public class PineIRCompiler
                     return
                         lastItemResult
                         .AppendInstruction(
-                            new StackInstruction(
-                                StackInstructionKind.BuildList,
-                                TakeCount: listExpr.items.Count));
+                            StackInstruction.Build_List(listExpr.items.Count));
                 }
 
             case Expression.Conditional conditional:
@@ -344,7 +334,7 @@ public class PineIRCompiler
         return
             afterExpr
             .AppendInstruction(
-                new StackInstruction(StackInstructionKind.Parse_And_Eval));
+                StackInstruction.Parse_And_Eval_Binary);
     }
 
     public static NodeCompilationResult CompileKernelApplication(
@@ -360,7 +350,7 @@ public class PineIRCompiler
                     kernelApplication.Input,
                     copyToLocal,
                     prior)
-                .AppendInstruction(new StackInstruction(StackInstructionKind.Length)),
+                .AppendInstruction(StackInstruction.Length),
 
                 nameof(KernelFunction.negate) =>
                 CompileKernelApplication_Negate(
@@ -484,9 +474,7 @@ public class PineIRCompiler
                     return
                         afterRight
                         .AppendInstruction(
-                            new StackInstruction(
-                                StackInstructionKind.Equal_Binary_Const,
-                                Literal: leftLiteralExpr.Value));
+                            StackInstruction.Equal_Binary_Const(leftLiteralExpr.Value));
                 }
 
                 if (listExpr.items[1] is Expression.Literal rightLiteralExpr)
@@ -500,9 +488,7 @@ public class PineIRCompiler
                     return
                         afterLeft
                         .AppendInstruction(
-                            new StackInstruction(
-                                StackInstructionKind.Equal_Binary_Const,
-                                Literal: rightLiteralExpr.Value));
+                            StackInstruction.Equal_Binary_Const(rightLiteralExpr.Value));
                 }
 
                 {
@@ -520,7 +506,7 @@ public class PineIRCompiler
 
                     return
                         afterRight
-                        .AppendInstruction(new StackInstruction(StackInstructionKind.Equal_Binary_Var));
+                        .AppendInstruction(StackInstruction.Equal_Binary);
                 }
             }
         }
@@ -530,7 +516,7 @@ public class PineIRCompiler
                 input,
                 copyToLocal,
                 prior)
-            .AppendInstruction(new StackInstruction(StackInstructionKind.Equal_Generic));
+            .AppendInstruction(StackInstruction.Equal_Generic);
     }
 
     public static NodeCompilationResult CompileKernelApplication_Head(
@@ -555,9 +541,7 @@ public class PineIRCompiler
                         return
                             afterSource
                             .AppendInstruction(
-                                new StackInstruction(
-                                    StackInstructionKind.Skip_Head_Const,
-                                    SkipCount: (int)skipCount));
+                                StackInstruction.Skip_Head_Const((int)skipCount));
                     }
                 }
 
@@ -569,7 +553,7 @@ public class PineIRCompiler
 
                 return
                     afterSkipCount
-                    .AppendInstruction(new StackInstruction(StackInstructionKind.Skip_Head_Var));
+                    .AppendInstruction(StackInstruction.Skip_Head_Binary);
             }
         }
 
@@ -578,7 +562,7 @@ public class PineIRCompiler
                 input,
                 copyToLocal,
                 prior)
-            .AppendInstruction(new StackInstruction(StackInstructionKind.Head_Generic));
+            .AppendInstruction(StackInstruction.Head_Generic);
     }
 
     public static NodeCompilationResult CompileKernelApplication_Skip(
@@ -602,7 +586,7 @@ public class PineIRCompiler
 
             return
                 afterSkipCount
-                .AppendInstruction(new StackInstruction(StackInstructionKind.Skip_Binary));
+                .AppendInstruction(StackInstruction.Skip_Binary);
         }
 
         return
@@ -610,7 +594,7 @@ public class PineIRCompiler
                 input,
                 copyToLocal,
                 prior)
-            .AppendInstruction(new StackInstruction(StackInstructionKind.Skip_Generic));
+            .AppendInstruction(StackInstruction.Skip_Generic);
     }
 
     public static NodeCompilationResult CompileKernelApplication_Take(
@@ -623,7 +607,7 @@ public class PineIRCompiler
             var takeCountValueExpr = listExpr.items[0];
 
             if (listExpr.items[1] is Expression.KernelApplication sourceKernelApp &&
-                sourceKernelApp.Function is "skip")
+                sourceKernelApp.Function is nameof(KernelFunction.skip))
             {
                 if (sourceKernelApp.Input is Expression.List skipList && skipList.items.Count is 2)
                 {
@@ -650,9 +634,7 @@ public class PineIRCompiler
                             return
                                 afterSkipCount
                                 .AppendInstruction(
-                                    new StackInstruction(
-                                        StackInstructionKind.Slice_Skip_Var_Take_Const,
-                                        TakeCount: (int)takeCount));
+                                    StackInstruction.Slice_Skip_Var_Take_Const((int)takeCount));
                         }
                     }
 
@@ -693,7 +675,7 @@ public class PineIRCompiler
 
                 return
                     afterTakeCount
-                    .AppendInstruction(new StackInstruction(StackInstructionKind.Take_Binary));
+                    .AppendInstruction(StackInstruction.Take_Binary);
             }
         }
 
@@ -702,7 +684,7 @@ public class PineIRCompiler
                 input,
                 copyToLocal,
                 prior)
-            .AppendInstruction(new StackInstruction(StackInstructionKind.Take_Generic));
+            .AppendInstruction(StackInstruction.Take_Generic);
     }
 
     public static NodeCompilationResult CompileKernelApplication_Concat(
@@ -730,7 +712,7 @@ public class PineIRCompiler
                 {
                     concatOps =
                         concatOps.AppendInstruction(
-                            new StackInstruction(StackInstructionKind.Concat_Binary));
+                            StackInstruction.Concat_Binary);
                 }
             }
 
@@ -743,7 +725,7 @@ public class PineIRCompiler
                     input,
                     copyToLocal,
                     prior)
-                .AppendInstruction(new StackInstruction(StackInstructionKind.Concat_Generic));
+                .AppendInstruction(StackInstruction.Concat_Generic);
         }
     }
 
@@ -757,7 +739,7 @@ public class PineIRCompiler
                 input,
                 copyToLocal,
                 prior)
-            .AppendInstruction(new StackInstruction(StackInstructionKind.Reverse));
+            .AppendInstruction(StackInstruction.Reverse);
     }
 
     public static NodeCompilationResult CompileKernelApplication_Negate(
@@ -767,7 +749,7 @@ public class PineIRCompiler
     {
         if (input is Expression.KernelApplication innerKernelApp)
         {
-            if (innerKernelApp.Function is "equal" &&
+            if (innerKernelApp.Function is nameof(KernelFunction.equal) &&
                 innerKernelApp.Input is Expression.List equalList && equalList.items.Count is 2)
             {
                 if (equalList.items[0] is Expression.Literal leftLiteralExpr)
@@ -780,9 +762,7 @@ public class PineIRCompiler
                     return
                         afterRight
                         .AppendInstruction(
-                            new StackInstruction(
-                                StackInstructionKind.Not_Equal_Binary_Const,
-                                Literal: leftLiteralExpr.Value));
+                            StackInstruction.Not_Equal_Binary_Const(leftLiteralExpr.Value));
                 }
 
                 if (equalList.items[1] is Expression.Literal rightLiteralExpr)
@@ -795,9 +775,7 @@ public class PineIRCompiler
                     return
                         afterLeft
                         .AppendInstruction(
-                            new StackInstruction(
-                                StackInstructionKind.Not_Equal_Binary_Const,
-                                Literal: rightLiteralExpr.Value));
+                            StackInstruction.Not_Equal_Binary_Const(rightLiteralExpr.Value));
                 }
 
                 {
@@ -815,7 +793,7 @@ public class PineIRCompiler
 
                     return
                         afterRight
-                        .AppendInstruction(new StackInstruction(StackInstructionKind.Not_Equal_Binary_Var));
+                        .AppendInstruction(new StackInstruction(StackInstructionKind.Not_Equal_Binary));
                 }
             }
 
@@ -1284,7 +1262,7 @@ public class PineIRCompiler
 
             return
                 shiftCountOps
-                .AppendInstruction(new StackInstruction(StackInstructionKind.Bit_Shift_Left_Var));
+                .AppendInstruction(new StackInstruction(StackInstructionKind.Bit_Shift_Left_Binary));
         }
         return
             CompileExpressionTransitive(
@@ -1315,7 +1293,7 @@ public class PineIRCompiler
 
             return
                 shiftCountOps
-                .AppendInstruction(new StackInstruction(StackInstructionKind.Bit_Shift_Right_Var));
+                .AppendInstruction(new StackInstruction(StackInstructionKind.Bit_Shift_Right_Binary));
         }
         return
             CompileExpressionTransitive(

@@ -14,7 +14,8 @@ public class PineVMTests
         {
             new
             {
-                expression = (Expression)new Expression.Literal(PineValue.Blob([1, 4, 7])),
+                expression = (Expression)
+                Expression.LiteralInstance(PineValue.Blob([1, 4, 7])),
                 environment = PineValue.EmptyList,
 
                 expected = Result<string, PineValue>.ok(
@@ -49,7 +50,7 @@ public class PineVMTests
                         [
                             Expression.ListInstance(
                                 [
-                                    new Expression.Literal(
+                                    Expression.LiteralInstance(
                                         PineValueAsInteger.ValueFromSignedInteger(1)),
                                 ]),
 
@@ -61,7 +62,7 @@ public class PineVMTests
 
                             new Expression.ParseAndEval(
                                 encoded:
-                                new Expression.Literal(
+                                Expression.LiteralInstance(
                                     ExpressionEncoding.EncodeExpressionAsValue(
                                         new Expression.KernelApplication
                                         (
@@ -74,7 +75,9 @@ public class PineVMTests
                                     function: "skip",
                                     input: Expression.ListInstance(
                                         [
-                                        new Expression.Literal(PineValueAsInteger.ValueFromSignedInteger(1)),
+                                        Expression.LiteralInstance(
+                                            PineValueAsInteger.ValueFromSignedInteger(1)),
+
                                         Expression.EnvironmentInstance,
                                         ])
                                 ))
@@ -101,14 +104,16 @@ public class PineVMTests
                 expression =
                 (Expression)
                 Expression.ConditionalInstance(
-                    condition: new Expression.Literal(PineValue.Blob([4])),
+                    condition:
+                    Expression.LiteralInstance(PineValue.Blob([4])),
                     falseBranch:
-                    new Expression.Literal(PineValueAsInteger.ValueFromSignedInteger(17)),
+                    Expression.LiteralInstance(PineValueAsInteger.ValueFromSignedInteger(17)),
                     trueBranch:
-                    new Expression.Literal(PineValueAsInteger.ValueFromSignedInteger(13))),
+                    Expression.LiteralInstance(PineValueAsInteger.ValueFromSignedInteger(13))),
                 environment = PineValue.EmptyList,
 
-                expected = Result<string, PineValue>.ok(PineValueAsInteger.ValueFromSignedInteger(13))
+                expected = Result<string, PineValue>.ok(
+                    PineValueAsInteger.ValueFromSignedInteger(13))
             },
 
             new
@@ -117,7 +122,7 @@ public class PineVMTests
                 (Expression)
                 Expression.ConditionalInstance(
                     condition:
-                    new Expression.Literal(PineValue.Blob([2])),
+                    Expression.LiteralInstance(PineValue.Blob([2])),
                     falseBranch:
                     new Expression.ParseAndEval(
                         encoded:
@@ -130,14 +135,17 @@ public class PineVMTests
                                     function: "skip",
                                     input: Expression.ListInstance(
                                         [
-                                        new Expression.Literal(PineValueAsInteger.ValueFromSignedInteger(1)),
+                                        Expression.LiteralInstance(
+                                            PineValueAsInteger.ValueFromSignedInteger(1)),
+
                                         Expression.EnvironmentInstance,
                                         ])
                                 )
                             ),
                         Expression.EnvironmentInstance),
                     trueBranch:
-                    new Expression.Literal(PineValueAsInteger.ValueFromSignedInteger(17))),
+                    Expression.LiteralInstance(
+                        PineValueAsInteger.ValueFromSignedInteger(17))),
 
                 environment =
                 PineValue.List(
@@ -151,7 +159,8 @@ public class PineVMTests
                             ))
                     ]),
 
-                expected = Result<string, PineValue>.ok(PineValueAsInteger.ValueFromSignedInteger(43))
+                expected = Result<string, PineValue>.ok(
+                    PineValueAsInteger.ValueFromSignedInteger(43))
             },
 
             new
@@ -160,7 +169,7 @@ public class PineVMTests
                 (Expression)
                 Expression.ConditionalInstance(
                     condition:
-                    new Expression.Literal(PineValue.Blob([4])),
+                    Expression.LiteralInstance(PineValue.Blob([4])),
                     falseBranch:
                     new Expression.ParseAndEval(
                         encoded:
@@ -171,11 +180,12 @@ public class PineVMTests
                             ),
                         Expression.EnvironmentInstance),
                     trueBranch:
-                    new Expression.Literal(PineValueAsInteger.ValueFromSignedInteger(17))),
+                    Expression.LiteralInstance(PineValueAsInteger.ValueFromSignedInteger(17))),
 
                 environment = PineValue.EmptyList,
 
-                expected = Result<string, PineValue>.ok(PineValueAsInteger.ValueFromSignedInteger(17))
+                expected = Result<string, PineValue>.ok(
+                    PineValueAsInteger.ValueFromSignedInteger(17))
             },
 
             new
@@ -184,9 +194,9 @@ public class PineVMTests
                 (Expression)
                 Expression.ConditionalInstance(
                     condition:
-                    new Expression.Literal(PineValue.Blob([4])),
+                    Expression.LiteralInstance(PineValue.Blob([4])),
                     falseBranch:
-                    new Expression.Literal(PineValueAsInteger.ValueFromSignedInteger(17)),
+                    Expression.LiteralInstance(PineValueAsInteger.ValueFromSignedInteger(17)),
                     trueBranch:
                     new Expression.ParseAndEval(
                         encoded:
@@ -199,7 +209,9 @@ public class PineVMTests
                                     function: "skip",
                                     input: Expression.ListInstance(
                                         [
-                                        new Expression.Literal(PineValueAsInteger.ValueFromSignedInteger(1)),
+                                        Expression.LiteralInstance(
+                                            PineValueAsInteger.ValueFromSignedInteger(1)),
+
                                         Expression.EnvironmentInstance,
                                         ])
                                 )
@@ -209,6 +221,7 @@ public class PineVMTests
                 PineValue.List(
                     [
                         PineValueAsInteger.ValueFromSignedInteger(41),
+
                         ExpressionEncoding.EncodeExpressionAsValue(
                             new Expression.KernelApplication
                             (
@@ -217,7 +230,8 @@ public class PineVMTests
                             ))
                     ]),
 
-                expected = Result<string, PineValue>.ok(PineValueAsInteger.ValueFromSignedInteger(41))
+                expected =
+                Result<string, PineValue>.ok(PineValueAsInteger.ValueFromSignedInteger(41))
             },
         };
 
@@ -241,7 +255,7 @@ public class PineVMTests
             new
             {
                 expression =
-                (Expression)new Expression.Literal(PineValue.EmptyBlob),
+                (Expression)Expression.LiteralInstance(PineValue.EmptyBlob),
 
                 expected =
                 new PineVM.StackFrameInstructions(
@@ -259,24 +273,19 @@ public class PineVMTests
                 expression =
                 (Expression)Expression.ListInstance(
                     [
-                        new Expression.Literal(PineValue.EmptyList),
-                        new Expression.Literal(PineValue.EmptyBlob),
+                        Expression.LiteralInstance(PineValue.EmptyList),
+
+                        Expression.LiteralInstance(PineValue.EmptyBlob),
                     ]),
 
                 expected =
                 new PineVM.StackFrameInstructions(
                     [
-                        new StackInstruction(
-                            StackInstructionKind.Push_Literal,
-                            Literal: PineValue.EmptyList),
+                        StackInstruction.Push_Literal(PineValue.EmptyList),
 
-                        new StackInstruction(
-                            StackInstructionKind.Push_Literal,
-                            Literal: PineValue.EmptyBlob),
+                        StackInstruction.Push_Literal(PineValue.EmptyBlob),
 
-                        new StackInstruction(
-                            StackInstructionKind.BuildList,
-                            TakeCount: 2),
+                        StackInstruction.Build_List(2),
 
                         StackInstruction.Return
                     ])
@@ -287,23 +296,30 @@ public class PineVMTests
                 expression =
                 (Expression)Expression.ListInstance(
                     [
-                        new Expression.Literal(PineValue.EmptyList),
+                        Expression.LiteralInstance(PineValue.EmptyList),
+
                         new Expression.KernelApplication
                         (
                             function: "skip",
                             input: Expression.ListInstance(
                                 [
-                                new Expression.Literal(PineValueAsInteger.ValueFromSignedInteger(1)),
+                                Expression.LiteralInstance(
+                                    PineValueAsInteger.ValueFromSignedInteger(1)),
+
                                 Expression.EnvironmentInstance,
                                 ])
                         ),
-                        new Expression.Literal(PineValue.EmptyBlob),
+
+                        Expression.LiteralInstance(PineValue.EmptyBlob),
+
                         new Expression.KernelApplication
                         (
                             function: "skip",
                             input: Expression.ListInstance(
                                 [
-                                new Expression.Literal(PineValueAsInteger.ValueFromSignedInteger(1)),
+                                Expression.LiteralInstance(
+                                    PineValueAsInteger.ValueFromSignedInteger(1)),
+
                                 Expression.EnvironmentInstance,
                                 ])
                         ),
@@ -315,29 +331,24 @@ public class PineVMTests
                 expected =
                 new PineVM.StackFrameInstructions(
                     [
-                        new StackInstruction(
-                            StackInstructionKind.Push_Literal,
-                            Literal: PineValue.EmptyList),
+                    StackInstruction.Push_Literal(PineValue.EmptyList),
 
-                        StackInstruction.PushEnvironment,
+                    StackInstruction.Push_Environment,
 
-                        new StackInstruction(
-                            StackInstructionKind.Push_Literal,
-                            Literal: PineValueAsInteger.ValueFromSignedInteger(1)),
+                    StackInstruction.Push_Literal(
+                        PineValueAsInteger.ValueFromSignedInteger(1)),
 
-                        new StackInstruction(StackInstructionKind.Skip_Binary),
+                    StackInstruction.Skip_Binary,
 
-                        new StackInstruction(StackInstructionKind.Local_Set, LocalIndex: 0),
+                    StackInstruction.Local_Set(0),
 
-                        new StackInstruction(
-                            StackInstructionKind.Push_Literal,
-                            Literal: PineValue.EmptyBlob),
+                    StackInstruction.Push_Literal(PineValue.EmptyBlob),
 
-                        new StackInstruction(StackInstructionKind.Local_Get, LocalIndex: 0),
+                    StackInstruction.Local_Get(0),
 
-                        new StackInstruction(StackInstructionKind.BuildList, TakeCount: 4),
+                    StackInstruction.Build_List(4),
 
-                        StackInstruction.Return
+                    StackInstruction.Return
                     ])
             },
 
@@ -347,7 +358,7 @@ public class PineVMTests
                 (Expression)
                 Expression.ListInstance(
                     [
-                        new Expression.Literal(PineValue.EmptyList),
+                        Expression.LiteralInstance(PineValue.EmptyList),
                         new Expression.KernelApplication
                         (
                             function: "concat",
@@ -358,13 +369,15 @@ public class PineVMTests
                                 input:
                                 Expression.ListInstance(
                                     [
-                                    new Expression.Literal(PineValueAsInteger.ValueFromSignedInteger(13)),
+                                    Expression.LiteralInstance(
+                                        PineValueAsInteger.ValueFromSignedInteger(13)),
+
                                     Expression.EnvironmentInstance,
                                     ])
                             )
                         ),
 
-                        new Expression.Literal(PineValue.EmptyBlob),
+                        Expression.LiteralInstance(PineValue.EmptyBlob),
 
                         new Expression.KernelApplication
                         (
@@ -376,7 +389,9 @@ public class PineVMTests
                                 input:
                                 Expression.ListInstance(
                                     [
-                                    new Expression.Literal(PineValueAsInteger.ValueFromSignedInteger(13)),
+                                    Expression.LiteralInstance(
+                                        PineValueAsInteger.ValueFromSignedInteger(13)),
+
                                     Expression.EnvironmentInstance,
                                     ])
                             )
@@ -389,31 +404,26 @@ public class PineVMTests
                 expected =
                 new PineVM.StackFrameInstructions(
                     [
-                        new StackInstruction(
-                            StackInstructionKind.Push_Literal,
-                            Literal: PineValue.EmptyList),
+                    StackInstruction.Push_Literal(PineValue.EmptyList),
 
-                        StackInstruction.PushEnvironment,
+                    StackInstruction.Push_Environment,
 
-                        new StackInstruction(
-                            StackInstructionKind.Push_Literal,
-                            Literal: PineValueAsInteger.ValueFromSignedInteger(13)),
+                    StackInstruction.Push_Literal(
+                        PineValueAsInteger.ValueFromSignedInteger(13)),
 
-                        new StackInstruction(StackInstructionKind.Skip_Binary),
+                    StackInstruction.Skip_Binary,
 
-                        new StackInstruction(StackInstructionKind.Concat_Generic),
+                    StackInstruction.Concat_Generic,
 
-                        new StackInstruction(StackInstructionKind.Local_Set, LocalIndex: 0),
+                    StackInstruction.Local_Set(0),
 
-                        new StackInstruction(
-                            StackInstructionKind.Push_Literal,
-                            Literal: PineValue.EmptyBlob),
+                    StackInstruction.Push_Literal(PineValue.EmptyBlob),
 
-                        new StackInstruction(StackInstructionKind.Local_Get, LocalIndex: 0),
+                    StackInstruction.Local_Get(0),
 
-                        new StackInstruction(StackInstructionKind.BuildList, TakeCount: 4),
+                    StackInstruction.Build_List(4),
 
-                        StackInstruction.Return
+                    StackInstruction.Return
                     ])
             },
 
@@ -428,11 +438,11 @@ public class PineVMTests
                 expected =
                 new PineVM.StackFrameInstructions(
                     [
-                        StackInstruction.PushEnvironment,
+                        StackInstruction.Push_Environment,
 
-                        StackInstruction.PushEnvironment,
+                        StackInstruction.Push_Environment,
 
-                        new StackInstruction(StackInstructionKind.Parse_And_Eval),
+                        StackInstruction.Parse_And_Eval_Binary,
 
                         StackInstruction.Return
                     ])
@@ -447,21 +457,22 @@ public class PineVMTests
                         new Expression.ParseAndEval(
                             encoded: Expression.EnvironmentInstance,
                             environment: Expression.EnvironmentInstance),
-                        new Expression.Literal(PineValue.EmptyBlob),
+
+                        Expression.LiteralInstance(PineValue.EmptyBlob),
                     ]),
 
                 expected =
                 new PineVM.StackFrameInstructions(
                     [
-                        StackInstruction.PushEnvironment,
+                        StackInstruction.Push_Environment,
 
-                        StackInstruction.PushEnvironment,
+                        StackInstruction.Push_Environment,
 
-                        new StackInstruction(StackInstructionKind.Parse_And_Eval),
+                        StackInstruction.Parse_And_Eval_Binary,
 
-                        new StackInstruction(StackInstructionKind.Push_Literal, Literal: PineValue.EmptyBlob),
+                        StackInstruction.Push_Literal(PineValue.EmptyBlob),
 
-                        new StackInstruction(StackInstructionKind.BuildList, TakeCount: 2),
+                        StackInstruction.Build_List(2),
 
                         StackInstruction.Return
                     ])
@@ -479,44 +490,39 @@ public class PineVMTests
                             [
                                 new Expression.ParseAndEval(
                                     encoded:
-                                    new Expression.Literal(PineValueAsInteger.ValueFromSignedInteger(11)),
+                                    Expression.LiteralInstance(PineValueAsInteger.ValueFromSignedInteger(11)),
                                     environment:
-                                    new Expression.Literal(PineValueAsInteger.ValueFromSignedInteger(13))),
-                                new Expression.Literal(PineValueAsInteger.ValueFromSignedInteger(17)),
+                                    Expression.LiteralInstance(PineValueAsInteger.ValueFromSignedInteger(13))),
+                                Expression.LiteralInstance(PineValueAsInteger.ValueFromSignedInteger(17)),
                             ])),
-                        new Expression.Literal(PineValue.EmptyBlob),
+                        Expression.LiteralInstance(PineValue.EmptyBlob),
                     ]),
 
                 expected =
                 new PineVM.StackFrameInstructions(
                     [
-                        new StackInstruction(
-                            StackInstructionKind.Push_Literal,
-                            Literal: PineValueAsInteger.ValueFromSignedInteger(13)),
+                    StackInstruction.Push_Literal(
+                        PineValueAsInteger.ValueFromSignedInteger(13)),
 
-                        new StackInstruction(
-                            StackInstructionKind.Push_Literal,
-                            Literal: PineValueAsInteger.ValueFromSignedInteger(11)),
+                    StackInstruction.Push_Literal(
+                        PineValueAsInteger.ValueFromSignedInteger(11)),
 
-                        new StackInstruction(StackInstructionKind.Parse_And_Eval),
+                    StackInstruction.Parse_And_Eval_Binary,
 
-                        new StackInstruction(
-                            StackInstructionKind.Push_Literal,
-                            Literal: PineValueAsInteger.ValueFromSignedInteger(17)),
+                    StackInstruction.Push_Literal(
+                        PineValueAsInteger.ValueFromSignedInteger(17)),
 
-                        new StackInstruction(StackInstructionKind.BuildList, TakeCount: 2),
+                    StackInstruction.Build_List(2),
 
-                        StackInstruction.PushEnvironment,
+                    StackInstruction.Push_Environment,
 
-                        new StackInstruction(StackInstructionKind.Parse_And_Eval),
+                    StackInstruction.Parse_And_Eval_Binary,
 
-                        new StackInstruction(
-                            StackInstructionKind.Push_Literal,
-                            Literal: PineValue.EmptyBlob),
+                    StackInstruction.Push_Literal(PineValue.EmptyBlob),
 
-                        new StackInstruction(StackInstructionKind.BuildList, TakeCount: 2),
+                    StackInstruction.Build_List(2),
 
-                        StackInstruction.Return
+                    StackInstruction.Return
                     ])
             },
 
@@ -525,48 +531,48 @@ public class PineVMTests
                 expression =
                 (Expression)Expression.ListInstance(
                     [
-                        new Expression.Literal(PineValueAsInteger.ValueFromSignedInteger(17)),
+                        Expression.LiteralInstance(
+                            PineValueAsInteger.ValueFromSignedInteger(17)),
+
                         Expression.ConditionalInstance(
                             condition:
                             Expression.EnvironmentInstance,
                             trueBranch:
-                            new Expression.Literal(PineValueAsInteger.ValueFromSignedInteger(21)),
+                            Expression.LiteralInstance(
+                                PineValueAsInteger.ValueFromSignedInteger(21)),
                             falseBranch:
-                            new Expression.Literal(PineValueAsInteger.ValueFromSignedInteger(23))
+                            Expression.LiteralInstance(
+                                PineValueAsInteger.ValueFromSignedInteger(23))
                         ),
-                        new Expression.Literal(PineValueAsInteger.ValueFromSignedInteger(27)),
+
+                        Expression.LiteralInstance(
+                            PineValueAsInteger.ValueFromSignedInteger(27)),
                     ]),
 
                 expected =
                 new PineVM.StackFrameInstructions(
                     [
-                        new StackInstruction(
-                            StackInstructionKind.Push_Literal,
-                            Literal: PineValueAsInteger.ValueFromSignedInteger(17)),
+                    StackInstruction.Push_Literal(
+                        PineValueAsInteger.ValueFromSignedInteger(17)),
 
-                        new StackInstruction(StackInstructionKind.Push_Environment),
+                    StackInstruction.Push_Environment,
 
-                        StackInstruction.Jump_If_True(offset : 2),
+                    StackInstruction.Jump_If_True(2),
 
-                        new StackInstruction(
-                            StackInstructionKind.Push_Literal,
-                            Literal: PineValueAsInteger.ValueFromSignedInteger(23)),
+                    StackInstruction.Push_Literal(
+                        PineValueAsInteger.ValueFromSignedInteger(23)),
 
-                        StackInstruction.Jump_Unconditional(offset: 2),
+                    StackInstruction.Jump_Unconditional(2),
 
-                        new StackInstruction(
-                            StackInstructionKind.Push_Literal,
-                            Literal: PineValueAsInteger.ValueFromSignedInteger(21)),
+                    StackInstruction.Push_Literal(
+                        PineValueAsInteger.ValueFromSignedInteger(21)),
 
-                        new StackInstruction(
-                            StackInstructionKind.Push_Literal,
-                            Literal: PineValueAsInteger.ValueFromSignedInteger(27)),
+                    StackInstruction.Push_Literal(
+                        PineValueAsInteger.ValueFromSignedInteger(27)),
 
-                        new StackInstruction(
-                            StackInstructionKind.BuildList,
-                            TakeCount: 3),
+                    StackInstruction.Build_List(3),
 
-                        StackInstruction.Return,
+                    StackInstruction.Return
                     ])
             },
 
@@ -576,32 +582,29 @@ public class PineVMTests
                 (Expression)
                 Expression.ConditionalInstance(
                     condition:
-                    new Expression.Literal(PineValueAsInteger.ValueFromSignedInteger(11)),
+                    Expression.LiteralInstance(PineValueAsInteger.ValueFromSignedInteger(11)),
                     trueBranch:
-                    new Expression.Literal(PineValueAsInteger.ValueFromSignedInteger(13)),
+                    Expression.LiteralInstance(PineValueAsInteger.ValueFromSignedInteger(13)),
                     falseBranch:
-                    new Expression.Literal(PineValueAsInteger.ValueFromSignedInteger(17))),
+                    Expression.LiteralInstance(PineValueAsInteger.ValueFromSignedInteger(17))),
 
                 expected =
                 new PineVM.StackFrameInstructions(
                     [
-                        new StackInstruction(
-                            StackInstructionKind.Push_Literal,
-                            Literal: PineValueAsInteger.ValueFromSignedInteger(11)),
+                    StackInstruction.Push_Literal(
+                        PineValueAsInteger.ValueFromSignedInteger(11)),
 
-                        StackInstruction.Jump_If_True(offset : 2),
+                    StackInstruction.Jump_If_True(2),
 
-                        new StackInstruction(
-                            StackInstructionKind.Push_Literal,
-                            Literal: PineValueAsInteger.ValueFromSignedInteger(17)),
+                    StackInstruction.Push_Literal(
+                        PineValueAsInteger.ValueFromSignedInteger(17)),
 
-                        StackInstruction.Jump_Unconditional(offset: 2),
+                    StackInstruction.Jump_Unconditional(2),
 
-                        new StackInstruction(
-                            StackInstructionKind.Push_Literal,
-                            Literal: PineValueAsInteger.ValueFromSignedInteger(13)),
+                    StackInstruction.Push_Literal(
+                        PineValueAsInteger.ValueFromSignedInteger(13)),
 
-                        StackInstruction.Return
+                    StackInstruction.Return
                     ])
             },
 
@@ -611,7 +614,8 @@ public class PineVMTests
                 (Expression)
                 Expression.ConditionalInstance(
                     condition:
-                    new Expression.Literal(PineValueAsInteger.ValueFromSignedInteger(11)),
+                    Expression.LiteralInstance(
+                        PineValueAsInteger.ValueFromSignedInteger(11)),
                     trueBranch:
                     new Expression.ParseAndEval(
                         encoded:
@@ -620,43 +624,42 @@ public class PineVMTests
                                 function: "skip",
                                 input: Expression.ListInstance(
                                     [
-                                    new Expression.Literal(PineValueAsInteger.ValueFromSignedInteger(13)),
+                                    Expression.LiteralInstance(
+                                        PineValueAsInteger.ValueFromSignedInteger(13)),
+
                                     Expression.EnvironmentInstance,
                                     ])
                             ),
                         environment:
                         Expression.EnvironmentInstance),
                     falseBranch:
-                    new Expression.Literal(PineValueAsInteger.ValueFromSignedInteger(17))),
+                    Expression.LiteralInstance(PineValueAsInteger.ValueFromSignedInteger(17))),
 
                 expected =
                 new PineVM.StackFrameInstructions(
                     [
-                        new StackInstruction(
-                            StackInstructionKind.Push_Literal,
-                            Literal: PineValueAsInteger.ValueFromSignedInteger(11)),
+                    StackInstruction.Push_Literal(
+                        PineValueAsInteger.ValueFromSignedInteger(11)),
 
-                        StackInstruction.Jump_If_True(offset : 2),
+                    StackInstruction.Jump_If_True(2),
 
-                        new StackInstruction(
-                            StackInstructionKind.Push_Literal,
-                            Literal: PineValueAsInteger.ValueFromSignedInteger(17)),
+                    StackInstruction.Push_Literal(
+                        PineValueAsInteger.ValueFromSignedInteger(17)),
 
-                        StackInstruction.Jump_Unconditional(6),
+                    StackInstruction.Jump_Unconditional(6),
 
-                        StackInstruction.PushEnvironment,
+                    StackInstruction.Push_Environment,
 
-                        StackInstruction.PushEnvironment,
+                    StackInstruction.Push_Environment,
 
-                        new StackInstruction(
-                            StackInstructionKind.Push_Literal,
-                            Literal: PineValueAsInteger.ValueFromSignedInteger(13)),
+                    StackInstruction.Push_Literal(
+                        PineValueAsInteger.ValueFromSignedInteger(13)),
 
-                        new StackInstruction(StackInstructionKind.Skip_Binary),
+                    StackInstruction.Skip_Binary,
 
-                        new StackInstruction(StackInstructionKind.Parse_And_Eval),
+                    StackInstruction.Parse_And_Eval_Binary,
 
-                        StackInstruction.Return
+                    StackInstruction.Return
                     ])
             },
 
@@ -666,10 +669,12 @@ public class PineVMTests
                 (Expression)
                 Expression.ListInstance(
                     [
-                        new Expression.Literal(PineValueAsInteger.ValueFromSignedInteger(47)),
+                        Expression.LiteralInstance(
+                            PineValueAsInteger.ValueFromSignedInteger(47)),
+
                         Expression.ConditionalInstance(
                             condition:
-                            new Expression.Literal(PineValueAsInteger.ValueFromSignedInteger(11)),
+                            Expression.LiteralInstance(PineValueAsInteger.ValueFromSignedInteger(11)),
 
                             trueBranch:
                             new Expression.ParseAndEval(
@@ -679,7 +684,9 @@ public class PineVMTests
                                         function: "skip",
                                         input: Expression.ListInstance(
                                             [
-                                            new Expression.Literal(PineValueAsInteger.ValueFromSignedInteger(13)),
+                                            Expression.LiteralInstance(
+                                                PineValueAsInteger.ValueFromSignedInteger(13)),
+
                                             Expression.EnvironmentInstance,
                                             ])
                                     ),
@@ -688,43 +695,39 @@ public class PineVMTests
                                 Expression.EnvironmentInstance),
 
                             falseBranch:
-                            new Expression.Literal(PineValueAsInteger.ValueFromSignedInteger(17)))
+                            Expression.LiteralInstance(PineValueAsInteger.ValueFromSignedInteger(17)))
                 ]),
 
                 expected =
                 new PineVM.StackFrameInstructions(
                     [
-                        new StackInstruction(
-                            StackInstructionKind.Push_Literal,
-                            Literal: PineValueAsInteger.ValueFromSignedInteger(47)),
+                    StackInstruction.Push_Literal(
+                        PineValueAsInteger.ValueFromSignedInteger(47)),
 
-                        new StackInstruction(
-                            StackInstructionKind.Push_Literal,
-                            Literal: PineValueAsInteger.ValueFromSignedInteger(11)),
+                    StackInstruction.Push_Literal(
+                        PineValueAsInteger.ValueFromSignedInteger(11)),
 
-                        StackInstruction.Jump_If_True(offset : 2),
+                    StackInstruction.Jump_If_True(2),
 
-                        new StackInstruction(
-                            StackInstructionKind.Push_Literal,
-                            Literal: PineValueAsInteger.ValueFromSignedInteger(17)),
+                    StackInstruction.Push_Literal(
+                        PineValueAsInteger.ValueFromSignedInteger(17)),
 
-                        StackInstruction.Jump_Unconditional(6),
+                    StackInstruction.Jump_Unconditional(6),
 
-                        StackInstruction.PushEnvironment,
+                    StackInstruction.Push_Environment,
 
-                        StackInstruction.PushEnvironment,
+                    StackInstruction.Push_Environment,
 
-                        new StackInstruction(
-                            StackInstructionKind.Push_Literal,
-                            Literal: PineValueAsInteger.ValueFromSignedInteger(13)),
+                    StackInstruction.Push_Literal(
+                        PineValueAsInteger.ValueFromSignedInteger(13)),
 
-                        new StackInstruction(StackInstructionKind.Skip_Binary),
+                    StackInstruction.Skip_Binary,
 
-                        new StackInstruction(StackInstructionKind.Parse_And_Eval),
+                    StackInstruction.Parse_And_Eval_Binary,
 
-                        new StackInstruction(StackInstructionKind.BuildList, TakeCount: 2),
+                    StackInstruction.Build_List(2),
 
-                        StackInstruction.Return
+                    StackInstruction.Return
                     ])
             },
 
@@ -734,54 +737,50 @@ public class PineVMTests
                 (Expression)
                 Expression.ConditionalInstance(
                     condition:
-                    new Expression.Literal(PineValueAsInteger.ValueFromSignedInteger(11)),
+                    Expression.LiteralInstance(PineValueAsInteger.ValueFromSignedInteger(11)),
                     falseBranch:
                     Expression.ConditionalInstance(
                         condition:
-                        new Expression.Literal(PineValueAsInteger.ValueFromSignedInteger(13)),
+                        Expression.LiteralInstance(PineValueAsInteger.ValueFromSignedInteger(13)),
                         falseBranch:
                         new Expression.ParseAndEval(
                             encoded: Expression.EnvironmentInstance,
                             environment:Expression.EnvironmentInstance),
                         trueBranch:
-                        new Expression.Literal(PineValueAsInteger.ValueFromSignedInteger(21))),
+                        Expression.LiteralInstance(PineValueAsInteger.ValueFromSignedInteger(21))),
                     trueBranch:
-                    new Expression.Literal(PineValueAsInteger.ValueFromSignedInteger(23))),
+                    Expression.LiteralInstance(PineValueAsInteger.ValueFromSignedInteger(23))),
 
                 expected =
                 new PineVM.StackFrameInstructions(
                     [
-                        new StackInstruction(
-                            StackInstructionKind.Push_Literal,
-                            Literal: PineValueAsInteger.ValueFromSignedInteger(11)),
+                    StackInstruction.Push_Literal(
+                        PineValueAsInteger.ValueFromSignedInteger(11)),
 
-                        StackInstruction.Jump_If_True(offset : 8),
+                    StackInstruction.Jump_If_True(8),
 
-                        new StackInstruction(
-                            StackInstructionKind.Push_Literal,
-                            Literal: PineValueAsInteger.ValueFromSignedInteger(13)),
+                    StackInstruction.Push_Literal(
+                        PineValueAsInteger.ValueFromSignedInteger(13)),
 
-                        StackInstruction.Jump_If_True(offset : 4),
+                    StackInstruction.Jump_If_True(4),
 
-                        StackInstruction.PushEnvironment,
+                    StackInstruction.Push_Environment,
 
-                        StackInstruction.PushEnvironment,
+                    StackInstruction.Push_Environment,
 
-                        new StackInstruction(StackInstructionKind.Parse_And_Eval),
+                    StackInstruction.Parse_And_Eval_Binary,
 
-                        StackInstruction.Jump_Unconditional(2),
+                    StackInstruction.Jump_Unconditional(2),
 
-                        new StackInstruction(
-                            StackInstructionKind.Push_Literal,
-                            Literal: PineValueAsInteger.ValueFromSignedInteger(21)),
+                    StackInstruction.Push_Literal(
+                        PineValueAsInteger.ValueFromSignedInteger(21)),
 
-                        StackInstruction.Jump_Unconditional(2),
+                    StackInstruction.Jump_Unconditional(2),
 
-                        new StackInstruction(
-                            StackInstructionKind.Push_Literal,
-                            Literal: PineValueAsInteger.ValueFromSignedInteger(23)),
+                    StackInstruction.Push_Literal(
+                        PineValueAsInteger.ValueFromSignedInteger(23)),
 
-                        StackInstruction.Return
+                    StackInstruction.Return
                     ])
             },
 
@@ -793,75 +792,69 @@ public class PineVMTests
                     [
                         Expression.ConditionalInstance(
                             condition:
-                            new Expression.Literal(PineValueAsInteger.ValueFromSignedInteger(11)),
+                            Expression.LiteralInstance(PineValueAsInteger.ValueFromSignedInteger(11)),
                             trueBranch:
                             new Expression.ParseAndEval(
                                 encoded:
-                                new Expression.Literal(PineValueAsInteger.ValueFromSignedInteger(41)),
+                                Expression.LiteralInstance(PineValueAsInteger.ValueFromSignedInteger(41)),
                                 environment:
                                 Expression.EnvironmentInstance),
                             falseBranch:
-                            new Expression.Literal(PineValueAsInteger.ValueFromSignedInteger(17))),
+                            Expression.LiteralInstance(PineValueAsInteger.ValueFromSignedInteger(17))),
 
                         Expression.ConditionalInstance(
                             condition:
-                            new Expression.Literal(PineValueAsInteger.ValueFromSignedInteger(13)),
+                            Expression.LiteralInstance(PineValueAsInteger.ValueFromSignedInteger(13)),
                             trueBranch:
                             new Expression.ParseAndEval(
                                 encoded:
-                                new Expression.Literal(PineValueAsInteger.ValueFromSignedInteger(43)),
+                                Expression.LiteralInstance(PineValueAsInteger.ValueFromSignedInteger(43)),
                                 environment:
                                 Expression.EnvironmentInstance),
                             falseBranch:
-                            new Expression.Literal(PineValueAsInteger.ValueFromSignedInteger(19))),
+                            Expression.LiteralInstance(PineValueAsInteger.ValueFromSignedInteger(19))),
                 ]),
 
                 expected =
                 new PineVM.StackFrameInstructions(
                     [
-                        new StackInstruction(
-                            StackInstructionKind.Push_Literal,
-                            Literal: PineValueAsInteger.ValueFromSignedInteger(11)),
+                    StackInstruction.Push_Literal(
+                        PineValueAsInteger.ValueFromSignedInteger(11)),
 
-                        StackInstruction.Jump_If_True(offset : 2),
+                    StackInstruction.Jump_If_True(2),
 
-                        new StackInstruction(
-                            StackInstructionKind.Push_Literal,
-                            Literal: PineValueAsInteger.ValueFromSignedInteger(17)),
+                    StackInstruction.Push_Literal(
+                        PineValueAsInteger.ValueFromSignedInteger(17)),
 
-                        StackInstruction.Jump_Unconditional(4),
+                    StackInstruction.Jump_Unconditional(4),
 
-                        StackInstruction.PushEnvironment,
+                    StackInstruction.Push_Environment,
 
-                        new StackInstruction(
-                            StackInstructionKind.Push_Literal,
-                            Literal: PineValueAsInteger.ValueFromSignedInteger(41)),
+                    StackInstruction.Push_Literal(
+                        PineValueAsInteger.ValueFromSignedInteger(41)),
 
-                        new StackInstruction(StackInstructionKind.Parse_And_Eval),
+                    StackInstruction.Parse_And_Eval_Binary,
 
-                        new StackInstruction(
-                            StackInstructionKind.Push_Literal,
-                            Literal: PineValueAsInteger.ValueFromSignedInteger(13)),
+                    StackInstruction.Push_Literal(
+                        PineValueAsInteger.ValueFromSignedInteger(13)),
 
-                        StackInstruction.Jump_If_True(offset: 2),
+                    StackInstruction.Jump_If_True(2),
 
-                        new StackInstruction(
-                            StackInstructionKind.Push_Literal,
-                            Literal: PineValueAsInteger.ValueFromSignedInteger(19)),
+                    StackInstruction.Push_Literal(
+                        PineValueAsInteger.ValueFromSignedInteger(19)),
 
-                        StackInstruction.Jump_Unconditional(4),
+                    StackInstruction.Jump_Unconditional(4),
 
-                        StackInstruction.PushEnvironment,
+                    StackInstruction.Push_Environment,
 
-                        new StackInstruction(
-                            StackInstructionKind.Push_Literal,
-                            Literal: PineValueAsInteger.ValueFromSignedInteger(43)),
+                    StackInstruction.Push_Literal(
+                        PineValueAsInteger.ValueFromSignedInteger(43)),
 
-                        new StackInstruction(StackInstructionKind.Parse_And_Eval),
+                    StackInstruction.Parse_And_Eval_Binary,
 
-                        new StackInstruction(StackInstructionKind.BuildList, TakeCount: 2),
+                    StackInstruction.Build_List(2),
 
-                        StackInstruction.Return
+                    StackInstruction.Return
                     ])
             },
 
@@ -871,50 +864,45 @@ public class PineVMTests
                 (Expression)
                 Expression.ConditionalInstance(
                     condition:
-                    new Expression.Literal(PineValueAsInteger.ValueFromSignedInteger(11)),
+                    Expression.LiteralInstance(PineValueAsInteger.ValueFromSignedInteger(11)),
                     trueBranch:
-                    new Expression.Literal(PineValueAsInteger.ValueFromSignedInteger(13)),
+                    Expression.LiteralInstance(PineValueAsInteger.ValueFromSignedInteger(13)),
                     falseBranch:
                     Expression.ConditionalInstance(
                         condition:
-                        new Expression.Literal(PineValueAsInteger.ValueFromSignedInteger(21)),
+                        Expression.LiteralInstance(PineValueAsInteger.ValueFromSignedInteger(21)),
                         trueBranch:
-                        new Expression.Literal(PineValueAsInteger.ValueFromSignedInteger(23)),
+                        Expression.LiteralInstance(PineValueAsInteger.ValueFromSignedInteger(23)),
                         falseBranch:
-                        new Expression.Literal(PineValueAsInteger.ValueFromSignedInteger(27)))),
+                        Expression.LiteralInstance(PineValueAsInteger.ValueFromSignedInteger(27)))),
 
                 expected =
                 new PineVM.StackFrameInstructions(
                     [
-                        new StackInstruction(
-                            StackInstructionKind.Push_Literal,
-                            Literal: PineValueAsInteger.ValueFromSignedInteger(11)),
+                    StackInstruction.Push_Literal(
+                        PineValueAsInteger.ValueFromSignedInteger(11)),
 
-                        StackInstruction.Jump_If_True(offset : 6),
+                    StackInstruction.Jump_If_True(6),
 
-                        new StackInstruction(
-                            StackInstructionKind.Push_Literal,
-                            Literal: PineValueAsInteger.ValueFromSignedInteger(21)),
+                    StackInstruction.Push_Literal(
+                        PineValueAsInteger.ValueFromSignedInteger(21)),
 
-                        StackInstruction.Jump_If_True(offset : 2),
+                    StackInstruction.Jump_If_True(2),
 
-                        new StackInstruction(
-                            StackInstructionKind.Push_Literal,
-                            Literal: PineValueAsInteger.ValueFromSignedInteger(27)),
+                    StackInstruction.Push_Literal(
+                        PineValueAsInteger.ValueFromSignedInteger(27)),
 
-                        StackInstruction.Jump_Unconditional(2),
+                    StackInstruction.Jump_Unconditional(2),
 
-                        new StackInstruction(
-                            StackInstructionKind.Push_Literal,
-                            Literal: PineValueAsInteger.ValueFromSignedInteger(23)),
+                    StackInstruction.Push_Literal(
+                        PineValueAsInteger.ValueFromSignedInteger(23)),
 
-                        StackInstruction.Jump_Unconditional(2),
+                    StackInstruction.Jump_Unconditional(2),
 
-                        new StackInstruction(
-                            StackInstructionKind.Push_Literal,
-                            Literal: PineValueAsInteger.ValueFromSignedInteger(13)),
+                    StackInstruction.Push_Literal(
+                        PineValueAsInteger.ValueFromSignedInteger(13)),
 
-                        StackInstruction.Return
+                    StackInstruction.Return
                     ])
             },
 
@@ -934,7 +922,8 @@ public class PineVMTests
                         function: "skip",
                         input: Expression.ListInstance(
                             [
-                            new Expression.Literal(PineValueAsInteger.ValueFromSignedInteger(17)),
+                            Expression.LiteralInstance(PineValueAsInteger.ValueFromSignedInteger(17)),
+
                             Expression.EnvironmentInstance,
                             ])
                     )
@@ -943,13 +932,11 @@ public class PineVMTests
                 expected =
                 new PineVM.StackFrameInstructions(
                     [
-                        StackInstruction.PushEnvironment,
+                    StackInstruction.Push_Environment,
 
-                        new StackInstruction(
-                            StackInstructionKind.Skip_Head_Const,
-                            SkipCount: 17),
+                    StackInstruction.Skip_Head_Const(17),
 
-                        StackInstruction.Return
+                    StackInstruction.Return
                     ])
             },
 
@@ -970,10 +957,14 @@ public class PineVMTests
                         function: "skip",
                         input: Expression.ListInstance(
                             [
-                            new Expression.Literal(PineValueAsInteger.ValueFromSignedInteger(17)),
+                            Expression.LiteralInstance(
+                                PineValueAsInteger.ValueFromSignedInteger(17)),
+
                             Expression.ListInstance(
                                 [
-                                new Expression.Literal(PineValueAsInteger.ValueFromSignedInteger(21)),
+                                Expression.LiteralInstance(
+                                    PineValueAsInteger.ValueFromSignedInteger(21)),
+
                                 new Expression.KernelApplication
                                 (
                                     function: nameof(KernelFunction.head),
@@ -983,7 +974,9 @@ public class PineVMTests
                                         function: "skip",
                                         input: Expression.ListInstance(
                                             [
-                                            new Expression.Literal(PineValueAsInteger.ValueFromSignedInteger(23)),
+                                            Expression.LiteralInstance(
+                                                PineValueAsInteger.ValueFromSignedInteger(23)),
+
                                             Expression.EnvironmentInstance,
                                             ])
                                     )
@@ -996,25 +989,18 @@ public class PineVMTests
                 expected =
                 new PineVM.StackFrameInstructions(
                     [
-                        new StackInstruction(
-                            StackInstructionKind.Push_Literal,
-                            Literal: PineValueAsInteger.ValueFromSignedInteger(21)),
+                    StackInstruction.Push_Literal(
+                        PineValueAsInteger.ValueFromSignedInteger(21)),
 
-                        StackInstruction.PushEnvironment,
+                    StackInstruction.Push_Environment,
 
-                        new StackInstruction(
-                            StackInstructionKind.Skip_Head_Const,
-                            SkipCount: 23),
+                    StackInstruction.Skip_Head_Const(23),
 
-                        new StackInstruction(
-                            StackInstructionKind.BuildList,
-                            TakeCount: 2),
+                    StackInstruction.Build_List(2),
 
-                        new StackInstruction(
-                            StackInstructionKind.Skip_Head_Const,
-                            SkipCount: 17),
+                    StackInstruction.Skip_Head_Const(17),
 
-                        StackInstruction.Return
+                    StackInstruction.Return
                     ])
             },
 
@@ -1050,7 +1036,7 @@ public class PineVMTests
                             ),
                         ]),
                     trueBranch:
-                    new Expression.Literal(PineValueAsInteger.ValueFromSignedInteger(13)),
+                    Expression.LiteralInstance(PineValueAsInteger.ValueFromSignedInteger(13)),
                     falseBranch:
                     Expression.ConditionalInstance(
                         condition:
@@ -1066,58 +1052,49 @@ public class PineVMTests
                                 ])
                         ),
                         trueBranch:
-                        new Expression.Literal(PineValueAsInteger.ValueFromSignedInteger(23)),
+                        Expression.LiteralInstance(PineValueAsInteger.ValueFromSignedInteger(23)),
                         falseBranch:
-                        new Expression.Literal(PineValueAsInteger.ValueFromSignedInteger(27)))),
+                        Expression.LiteralInstance(PineValueAsInteger.ValueFromSignedInteger(27)))),
 
                 expected =
                 new PineVM.StackFrameInstructions(
                     [
-                        StackInstruction.PushEnvironment,
+                    StackInstruction.Push_Environment,
 
-                        StackInstruction.PushEnvironment,
+                    StackInstruction.Push_Environment,
 
-                        new StackInstruction(
-                            StackInstructionKind.Int_Mul_Binary),
+                    StackInstruction.Int_Mul_Binary,
 
-                        StackInstruction.PushEnvironment,
+                    StackInstruction.Push_Environment,
 
-                        new StackInstruction(
-                            StackInstructionKind.Int_Mul_Binary),
+                    StackInstruction.Int_Mul_Binary,
 
-                        new StackInstruction(
-                            StackInstructionKind.Local_Set,
-                            LocalIndex: 0),
+                    StackInstruction.Local_Set(0),
 
-                        new StackInstruction(StackInstructionKind.Local_Get, LocalIndex: 0),
+                    StackInstruction.Local_Get(0),
 
-                        new StackInstruction(
-                            StackInstructionKind.BuildList,
-                            TakeCount: 2),
+                    StackInstruction.Build_List(2),
 
-                        StackInstruction.Jump_If_True(offset: 6),
+                    StackInstruction.Jump_If_True(6),
 
-                        new StackInstruction(StackInstructionKind.Local_Get, LocalIndex: 0),
+                    StackInstruction.Local_Get(0),
 
-                        StackInstruction.Jump_If_True(offset: 2),
+                    StackInstruction.Jump_If_True(2),
 
-                        new StackInstruction(
-                            StackInstructionKind.Push_Literal,
-                            Literal: PineValueAsInteger.ValueFromSignedInteger(27)),
+                    StackInstruction.Push_Literal(
+                        PineValueAsInteger.ValueFromSignedInteger(27)),
 
-                        StackInstruction.Jump_Unconditional(2),
+                    StackInstruction.Jump_Unconditional(2),
 
-                        new StackInstruction(
-                            StackInstructionKind.Push_Literal,
-                            Literal: PineValueAsInteger.ValueFromSignedInteger(23)),
+                    StackInstruction.Push_Literal(
+                        PineValueAsInteger.ValueFromSignedInteger(23)),
 
-                        StackInstruction.Jump_Unconditional(offset: 2),
+                    StackInstruction.Jump_Unconditional(2),
 
-                        new StackInstruction(
-                            StackInstructionKind.Push_Literal,
-                            Literal: PineValueAsInteger.ValueFromSignedInteger(13)),
+                    StackInstruction.Push_Literal(
+                        PineValueAsInteger.ValueFromSignedInteger(13)),
 
-                        StackInstruction.Return
+                    StackInstruction.Return
                     ])
             },
 
@@ -1161,22 +1138,17 @@ public class PineVMTests
                 expected =
                 new PineVM.StackFrameInstructions(
                     [
-                        StackInstruction.PushEnvironment,
+                    StackInstruction.Push_Environment,
 
-                        new StackInstruction(
-                            StackInstructionKind.Skip_Head_Const,
-                            SkipCount: 1),
+                    StackInstruction.Skip_Head_Const(1),
 
-                        StackInstruction.PushEnvironment,
+                    StackInstruction.Push_Environment,
 
-                        new StackInstruction(
-                            StackInstructionKind.Skip_Head_Const,
-                            SkipCount: 2),
+                    StackInstruction.Skip_Head_Const(2),
 
-                        new StackInstruction(
-                            StackInstructionKind.Int_Sub_Binary),
+                    StackInstruction.Int_Sub_Binary,
 
-                        StackInstruction.Return,
+                    StackInstruction.Return,
                     ])
             },
 
@@ -1185,7 +1157,7 @@ public class PineVMTests
                 expression =
                 (Expression)
                 new Expression.KernelApplication(
-                    function: "int_add",
+                    function: nameof(KernelFunction.int_add),
                     input:
                     Expression.ListInstance(
                         [
@@ -1197,7 +1169,9 @@ public class PineVMTests
                                     input:
                                     Expression.ListInstance(
                                         [
-                                            Expression.LiteralInstance(PineValueAsInteger.ValueFromSignedInteger(1)),
+                                            Expression.LiteralInstance(
+                                                PineValueAsInteger.ValueFromSignedInteger(1)),
+
                                             Expression.EnvironmentInstance,
                                         ]))),
 
@@ -1206,7 +1180,8 @@ public class PineVMTests
                                 input:
                                 Expression.ListInstance(
                                     [
-                                    Expression.LiteralInstance(PineValueAsInteger.ValueFromSignedInteger(-1)),
+                                    Expression.LiteralInstance(
+                                        PineValueAsInteger.ValueFromSignedInteger(-1)),
 
                                     new Expression.KernelApplication(
                                         function: "head",
@@ -1216,7 +1191,9 @@ public class PineVMTests
                                             input:
                                             Expression.ListInstance(
                                                 [
-                                                    Expression.LiteralInstance(PineValueAsInteger.ValueFromSignedInteger(2)),
+                                                    Expression.LiteralInstance(
+                                                        PineValueAsInteger.ValueFromSignedInteger(2)),
+
                                                     Expression.EnvironmentInstance,
                                                 ])))
                                     ])),
@@ -1225,22 +1202,17 @@ public class PineVMTests
                 expected =
                 new PineVM.StackFrameInstructions(
                     [
-                        StackInstruction.PushEnvironment,
+                    StackInstruction.Push_Environment,
 
-                        new StackInstruction(
-                            StackInstructionKind.Skip_Head_Const,
-                            SkipCount: 1),
+                    StackInstruction.Skip_Head_Const(1),
 
-                        StackInstruction.PushEnvironment,
+                    StackInstruction.Push_Environment,
 
-                        new StackInstruction(
-                            StackInstructionKind.Skip_Head_Const,
-                            SkipCount: 2),
+                    StackInstruction.Skip_Head_Const(2),
 
-                        new StackInstruction(
-                            StackInstructionKind.Int_Sub_Binary),
+                    StackInstruction.Int_Sub_Binary,
 
-                        StackInstruction.Return,
+                    StackInstruction.Return,
                     ])
             },
 
@@ -1263,15 +1235,14 @@ public class PineVMTests
                 expected =
                 new PineVM.StackFrameInstructions(
                     [
-                        new StackInstruction(StackInstructionKind.Push_Environment),
+                    StackInstruction.Push_Environment,
 
-                        new StackInstruction(StackInstructionKind.Head_Generic),
+                    StackInstruction.Head_Generic,
 
-                        new StackInstruction(
-                            StackInstructionKind.Equal_Binary_Const,
-                            Literal: PineValueAsInteger.ValueFromSignedInteger(13)),
+                    StackInstruction.Equal_Binary_Const(
+                        PineValueAsInteger.ValueFromSignedInteger(13)),
 
-                        StackInstruction.Return,
+                    StackInstruction.Return,
                     ])
             },
 
@@ -1294,15 +1265,14 @@ public class PineVMTests
                 expected =
                 new PineVM.StackFrameInstructions(
                     [
-                        new StackInstruction(StackInstructionKind.Push_Environment),
+                    StackInstruction.Push_Environment,
 
-                        new StackInstruction(StackInstructionKind.Head_Generic),
+                    StackInstruction.Head_Generic,
 
-                        new StackInstruction(
-                            StackInstructionKind.Equal_Binary_Const,
-                            Literal: PineValueAsInteger.ValueFromSignedInteger(17)),
+                    StackInstruction.Equal_Binary_Const(
+                        PineValueAsInteger.ValueFromSignedInteger(17)),
 
-                        StackInstruction.Return,
+                    StackInstruction.Return,
                     ])
             },
 
@@ -1348,22 +1318,17 @@ public class PineVMTests
                 expected =
                 new PineVM.StackFrameInstructions(
                     [
-                        new StackInstruction(StackInstructionKind.Push_Environment),
+                    StackInstruction.Push_Environment,
 
-                        new StackInstruction(
-                            StackInstructionKind.Skip_Head_Const,
-                            SkipCount: 11),
+                    StackInstruction.Skip_Head_Const(11),
 
-                        StackInstruction.PushEnvironment,
+                    StackInstruction.Push_Environment,
 
-                        new StackInstruction(
-                            StackInstructionKind.Skip_Head_Const,
-                            SkipCount: 13),
+                    StackInstruction.Skip_Head_Const(13),
 
-                        new StackInstruction(
-                            StackInstructionKind.Not_Equal_Binary_Var),
+                    StackInstruction.Not_Equal_Binary,
 
-                        StackInstruction.Return,
+                    StackInstruction.Return,
                     ])
             },
 
@@ -1412,7 +1377,7 @@ public class PineVMTests
                             StackInstructionKind.Skip_Head_Const,
                             SkipCount: 17),
 
-                        StackInstruction.PushEnvironment,
+                        StackInstruction.Push_Environment,
 
                         new StackInstruction(
                             StackInstructionKind.Skip_Head_Const,
@@ -1467,22 +1432,17 @@ public class PineVMTests
                 expected =
                 new PineVM.StackFrameInstructions(
                     [
-                        new StackInstruction(StackInstructionKind.Push_Environment),
+                    StackInstruction.Push_Environment,
 
-                        new StackInstruction(
-                            StackInstructionKind.Skip_Head_Const,
-                            SkipCount: 13),
+                    StackInstruction.Skip_Head_Const(13),
 
-                        StackInstruction.PushEnvironment,
+                    StackInstruction.Push_Environment,
 
-                        new StackInstruction(
-                            StackInstructionKind.Skip_Head_Const,
-                            SkipCount: 11),
+                    StackInstruction.Skip_Head_Const(11),
 
-                        new StackInstruction(
-                            StackInstructionKind.Int_Less_Than_Binary),
+                    StackInstruction.Int_Less_Than_Binary,
 
-                        StackInstruction.Return,
+                    StackInstruction.Return,
                     ])
             },
 
@@ -1505,15 +1465,13 @@ public class PineVMTests
                 expected =
                 new PineVM.StackFrameInstructions(
                     [
-                        new StackInstruction(StackInstructionKind.Push_Environment),
+                    StackInstruction.Push_Environment,
 
-                        new StackInstruction(StackInstructionKind.Head_Generic),
+                    StackInstruction.Head_Generic,
 
-                        new StackInstruction(
-                            StackInstructionKind.Int_Add_Const,
-                            IntegerLiteral: 13),
+                    StackInstruction.Int_Add_Const(13),
 
-                        StackInstruction.Return,
+                    StackInstruction.Return,
                     ])
             },
 
@@ -1536,15 +1494,13 @@ public class PineVMTests
                 expected =
                 new PineVM.StackFrameInstructions(
                     [
-                        new StackInstruction(StackInstructionKind.Push_Environment),
+                    StackInstruction.Push_Environment,
 
-                        new StackInstruction(StackInstructionKind.Head_Generic),
+                    StackInstruction.Head_Generic,
 
-                        new StackInstruction(
-                            StackInstructionKind.Int_Mul_Const,
-                            IntegerLiteral: 17),
+                    StackInstruction.Int_Mul_Const(17),
 
-                        StackInstruction.Return,
+                    StackInstruction.Return,
                     ])
             },
 

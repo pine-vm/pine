@@ -88,7 +88,8 @@ public class PineVM : IPineVM
             .DefaultIfEmpty(-1)
             .Max();
 
-        public int MaxStackUsage { init; get; } = ComputeMaxStackUsage(Instructions);
+        public int MaxStackUsage { init; get; } =
+            ComputeMaxStackUsage(Instructions);
 
         public static int ComputeMaxStackUsage(
             IReadOnlyList<StackInstruction> Instructions)
@@ -100,10 +101,11 @@ public class PineVM : IPineVM
             {
                 var instr = Instructions[i];
 
-                var (popCount, pushCount) =
-                    StackInstruction.GetPopCountAndPushCount(instr);
+                var instructionDetails =
+                    StackInstruction.GetDetails(instr);
 
-                currentDepth = currentDepth - popCount + pushCount;
+                currentDepth =
+                    currentDepth - instructionDetails.PopCount + instructionDetails.PushCount;
 
                 if (currentDepth < 0)
                 {
@@ -1339,7 +1341,7 @@ public class PineVM : IPineVM
                             continue;
                         }
 
-                    case StackInstructionKind.Equal_Binary_Var:
+                    case StackInstructionKind.Equal_Binary:
                         {
                             var right = currentFrame.PopTopmostFromStack();
                             var left = currentFrame.PopTopmostFromStack();
@@ -1368,7 +1370,7 @@ public class PineVM : IPineVM
                             continue;
                         }
 
-                    case StackInstructionKind.Not_Equal_Binary_Var:
+                    case StackInstructionKind.Not_Equal_Binary:
                         {
                             var right = currentFrame.PopTopmostFromStack();
                             var left = currentFrame.PopTopmostFromStack();
@@ -1439,7 +1441,7 @@ public class PineVM : IPineVM
                             continue;
                         }
 
-                    case StackInstructionKind.Skip_Head_Var:
+                    case StackInstructionKind.Skip_Head_Binary:
                         {
                             var indexValue = currentFrame.PopTopmostFromStack();
 
@@ -1521,7 +1523,7 @@ public class PineVM : IPineVM
                             continue;
                         }
 
-                    case StackInstructionKind.BuildList:
+                    case StackInstructionKind.Build_List:
                         {
                             var itemsCount =
                                 currentInstruction.TakeCount
@@ -1842,7 +1844,7 @@ public class PineVM : IPineVM
                             continue;
                         }
 
-                    case StackInstructionKind.Parse_And_Eval:
+                    case StackInstructionKind.Parse_And_Eval_Binary:
                         {
                             {
                                 ++parseAndEvalCount;
@@ -1975,7 +1977,7 @@ public class PineVM : IPineVM
                             continue;
                         }
 
-                    case StackInstructionKind.Bit_Shift_Left_Var:
+                    case StackInstructionKind.Bit_Shift_Left_Binary:
                         {
                             var shiftValue = currentFrame.PopTopmostFromStack();
                             var value = currentFrame.PopTopmostFromStack();
@@ -1995,7 +1997,7 @@ public class PineVM : IPineVM
                             continue;
                         }
 
-                    case StackInstructionKind.Bit_Shift_Right_Var:
+                    case StackInstructionKind.Bit_Shift_Right_Binary:
                         {
                             var shiftValue = currentFrame.PopTopmostFromStack();
                             var value = currentFrame.PopTopmostFromStack();
