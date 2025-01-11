@@ -1518,7 +1518,8 @@ public class PineVMTests
                     specializations: [],
                     parseCache,
                     disableReduction: true,
-                    skipInlining: (_, _) => false);
+                    skipInlining: (_, _) => false,
+                    enableTailRecursionOptimization: false);
 
             try
             {

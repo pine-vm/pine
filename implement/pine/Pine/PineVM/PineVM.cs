@@ -31,6 +31,8 @@ public class PineVM : IPineVM
 
     private readonly bool disablePrecompiled;
 
+    private readonly bool enableTailRecursionOptimization;
+
     public readonly PineVMParseCache parseCache = new();
 
     private readonly IReadOnlyDictionary<PineValue, Func<EvalExprDelegate, PineValue, Result<string, PineValue>>>? overrideInvocations;
@@ -40,7 +42,8 @@ public class PineVM : IPineVM
         Expression Expression,
         PineValue Environment,
         long InstructionCount,
-        long ParseAndEvalCount,
+        long InvocationCount,
+        long LoopIterationCount,
         PineValue ReturnValue,
         IReadOnlyList<Expression> StackTrace);
 
@@ -51,6 +54,7 @@ public class PineVM : IPineVM
         IReadOnlyDictionary<Expression, IReadOnlyList<EnvConstraintId>>? compilationEnvClasses = null,
         bool disableReductionInCompilation = false,
         bool disablePrecompiled = false,
+        bool enableTailRecursionOptimization = false,
         IReadOnlyDictionary<PineValue, Func<EvalExprDelegate, PineValue, Result<string, PineValue>>>? overrideInvocations = null,
         IReadOnlyDictionary<PineValue, IReadOnlyList<string>>? expressionsDisplayNames = null)
     {
@@ -64,6 +68,7 @@ public class PineVM : IPineVM
 
         this.disableReductionInCompilation = disableReductionInCompilation;
         this.disablePrecompiled = disablePrecompiled;
+        this.enableTailRecursionOptimization = enableTailRecursionOptimization;
 
         this.overrideInvocations = overrideInvocations;
     }
@@ -109,8 +114,14 @@ public class PineVM : IPineVM
 
                 if (currentDepth < 0)
                 {
+                    var instructionSequenceString =
+                        string.Join(
+                            "\n",
+                            Instructions
+                            .Select((instr, index) => "[" + index + "] " + instr));
+
                     throw new InvalidOperationException(
-                        "Instruction sequence pops more items than available.");
+                        "Instruction sequence pops more items than available:\n" + instructionSequenceString);
                 }
 
                 maxDepth =
@@ -163,6 +174,8 @@ public class PineVM : IPineVM
         public int InstructionPointer { get; set; } = 0;
 
         public int StackPointer { get; set; } = 0;
+
+        public long LoopIterationCount { get; set; } = 0;
 
         public long InstructionCount { get; set; } = 0;
 
@@ -385,7 +398,8 @@ public class PineVM : IPineVM
             specializations ?? [],
             parseCache: parseCache,
             disableReduction: disableReductionInCompilation,
-            skipInlining: skipInlining);
+            skipInlining: skipInlining,
+            enableTailRecursionOptimization: enableTailRecursionOptimization);
     }
 
     public static ExpressionCompilation CompileExpression(
@@ -393,6 +407,7 @@ public class PineVM : IPineVM
         IReadOnlyList<EnvConstraintId> specializations,
         PineVMParseCache parseCache,
         bool disableReduction,
+        bool enableTailRecursionOptimization,
         Func<Expression, EnvConstraintId?, bool> skipInlining)
     {
         var generic =
@@ -402,7 +417,8 @@ public class PineVM : IPineVM
                     envConstraintId: null,
                     parseCache: parseCache,
                     disableReduction: disableReduction,
-                    skipInlining: skipInlining),
+                    skipInlining: skipInlining,
+                    enableTailRecursionOptimization: enableTailRecursionOptimization),
                 TrackEnvConstraint: null);
 
         var specialized =
@@ -420,6 +436,7 @@ public class PineVM : IPineVM
                         envConstraintId: specialization,
                         parseCache: parseCache,
                         disableReduction: disableReduction,
+                        enableTailRecursionOptimization: enableTailRecursionOptimization,
                         skipInlining: skipInlining),
                     TrackEnvConstraint: specialization)))
             .ToImmutableArray();
@@ -451,10 +468,12 @@ public class PineVM : IPineVM
         EnvConstraintId? envConstraintId,
         PineVMParseCache parseCache,
         bool disableReduction,
+        bool enableTailRecursionOptimization,
         Func<Expression, EnvConstraintId?, bool> skipInlining)
     {
         var expressionWithEnvConstraint =
-            envConstraintId is null ?
+            envConstraintId is null || enableTailRecursionOptimization
+            ?
             rootExpression
             :
             SubstituteSubexpressionsForEnvironmentConstraint(
@@ -477,11 +496,16 @@ public class PineVM : IPineVM
                 maxSubexpressionCount: 4_000,
                 parseCache: parseCache,
                 envConstraintId: envConstraintId,
+                rootExprForms: [rootExpression],
                 disableRecurseAfterInline: false,
                 skipInlining: skipInlining);
 
         IReadOnlyList<StackInstruction> allInstructions =
-            [.. InstructionsFromExpressionTransitive(reducedExpression),
+            [.. InstructionsFromExpression(
+                rootExpression: reducedExpression,
+                rootExprAlternativeForms: [rootExpression],
+                envClass: enableTailRecursionOptimization ? envConstraintId : null,
+                parseCache),
             StackInstruction.Return
             ];
 
@@ -490,6 +514,7 @@ public class PineVM : IPineVM
 
     public static Expression ReduceExpressionAndInlineRecursive(
         Expression rootExpression,
+        ImmutableHashSet<Expression> rootExprAlternativeForms,
         EnvConstraintId? envConstraintId,
         int maxDepth,
         int maxSubexpressionCount,
@@ -500,6 +525,7 @@ public class PineVM : IPineVM
             currentExpression: rootExpression,
             inlinedParents: [],
             envConstraintId: envConstraintId,
+            rootExprForms: rootExprAlternativeForms.Add(rootExpression),
             maxDepth: maxDepth,
             maxSubexpressionCount: maxSubexpressionCount,
             parseCache: parseCache,
@@ -510,6 +536,7 @@ public class PineVM : IPineVM
         Expression currentExpression,
         ImmutableStack<Expression> inlinedParents,
         EnvConstraintId? envConstraintId,
+        ImmutableHashSet<Expression> rootExprForms,
         int maxDepth,
         int maxSubexpressionCount,
         PineVMParseCache parseCache,
@@ -661,6 +688,7 @@ public class PineVM : IPineVM
                         // currentExpression: inlinedExpr,
                         currentExpression: inlinedExprReduced,
                         inlinedParents: inlinedParents.Push(parseOk),
+                        rootExprForms: rootExprForms,
                         envConstraintId: envConstraintId,
                         maxDepth: maxDepth - 1,
                         maxSubexpressionCount: maxSubexpressionCount,
@@ -824,15 +852,19 @@ public class PineVM : IPineVM
                 originalExpression).expr;
     }
 
-    public static IReadOnlyList<StackInstruction> InstructionsFromExpressionTransitive(
-        Expression rootExpression)
+    public static IReadOnlyList<StackInstruction> InstructionsFromExpression(
+        Expression rootExpression,
+        ImmutableHashSet<Expression> rootExprAlternativeForms,
+        EnvConstraintId? envClass,
+        PineVMParseCache parseCache)
     {
         return
-            PineIRCompiler.CompileExpressionTransitive(
+            PineIRCompiler.CompileExpression(
                 rootExpression,
-                copyToLocal: [],
-                localIndexFromExpr:
-                ImmutableDictionary<Expression, int>.Empty).Instructions;
+                rootExprAlternativeForms: rootExprAlternativeForms,
+                envClass,
+                parseCache)
+            .Instructions;
     }
 
     public static IEnumerable<Expression> ListComponentsOrderedForCompilation(
@@ -1058,6 +1090,7 @@ public class PineVM : IPineVM
         EvaluationConfig config)
     {
         long instructionCount = 0;
+        long loopIterationCount = 0;
         long parseAndEvalCount = 0;
         long stackFrameCount = 0;
 
@@ -1082,6 +1115,17 @@ public class PineVM : IPineVM
                         stackFrameCount += finalValue.StackFrameCount;
 
                         currentFrame.PushInstructionResult(finalValue.Value);
+
+                        reportFunctionApplication?.Invoke(
+                            new EvaluationReport(
+                                ExpressionValue: expressionValue,
+                                expression,
+                                environmentValue,
+                                InstructionCount: 0,
+                                LoopIterationCount: 0,
+                                InvocationCount: finalValue.StackFrameCount,
+                                ReturnValue: finalValue.Value,
+                                StackTrace: CompileStackTrace(10)));
 
                         return null;
 
@@ -1206,7 +1250,8 @@ public class PineVM : IPineVM
                         currentFrame.Expression,
                         currentFrame.EnvironmentValue,
                         InstructionCount: frameTotalInstructionCount,
-                        ParseAndEvalCount: frameParseAndEvalCount,
+                        LoopIterationCount: currentFrame.LoopIterationCount,
+                        InvocationCount: frameParseAndEvalCount,
                         ReturnValue: frameReturnValue,
                         StackTrace: CompileStackTrace(10)));
             }
@@ -1223,7 +1268,8 @@ public class PineVM : IPineVM
                     Expression: rootExpression,
                     Environment: rootEnvironment,
                     InstructionCount: instructionCount,
-                    ParseAndEvalCount: parseAndEvalCount,
+                    LoopIterationCount: loopIterationCount,
+                    InvocationCount: parseAndEvalCount,
                     ReturnValue: frameReturnValue,
                     StackTrace: []);
             }
@@ -1910,7 +1956,18 @@ public class PineVM : IPineVM
 
                     case StackInstructionKind.Jump_Const:
                         {
-                            currentFrame.InstructionPointer += currentInstruction.JumpOffset!.Value;
+                            var jumpOffset =
+                                currentInstruction.JumpOffset
+                                ??
+                                throw new Exception("Invalid operation form: Missing jump offset");
+
+                            currentFrame.InstructionPointer += jumpOffset;
+
+                            if (jumpOffset < 0)
+                            {
+                                loopIterationCount++;
+                                currentFrame.LoopIterationCount++;
+                            }
 
                             continue;
                         }
@@ -1921,7 +1978,19 @@ public class PineVM : IPineVM
 
                             if (conditionValue == PineVMValues.TrueValue)
                             {
-                                currentFrame.InstructionPointer += 1 + currentInstruction.JumpOffset!.Value;
+                                var jumpOffset =
+                                    currentInstruction.JumpOffset
+                                    ??
+                                    throw new Exception("Invalid operation form: Missing jump offset");
+
+                                currentFrame.InstructionPointer += 1 + jumpOffset;
+
+                                if (jumpOffset < 0)
+                                {
+                                    loopIterationCount++;
+                                    currentFrame.LoopIterationCount++;
+                                }
+
                                 continue;
                             }
 
@@ -2035,6 +2104,15 @@ public class PineVM : IPineVM
                             var productValue = KernelFunction.int_mul(listValue);
 
                             currentFrame.PushInstructionResult(productValue);
+
+                            continue;
+                        }
+
+                    case StackInstructionKind.Pop:
+                        {
+                            currentFrame.PopTopmostFromStack();
+
+                            currentFrame.InstructionPointer++;
 
                             continue;
                         }

@@ -405,7 +405,14 @@ public record StackInstruction(
             PineValue.BlobValue blob =>
             "Blob [" +
             CommandLineInterface.FormatIntegerForDisplay(blob.Bytes.Length) +
-            "]",
+            "] ("
+            +
+            (PineValueAsInteger.SignedIntegerFromBlobValueRelaxed(blob.Bytes.Span).IsOkOrNullable() is { } asInt ?
+            "int " + asInt
+            :
+            "0x" + CommonConversion.StringBase16(blob.Bytes))
+            +
+            ")",
 
             PineValue.ListValue list =>
             "List [" +

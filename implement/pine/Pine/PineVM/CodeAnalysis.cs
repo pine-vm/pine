@@ -1213,6 +1213,7 @@ public class CodeAnalysis
             currentExpression =
                 PineVM.ReduceExpressionAndInlineRecursive(
                     currentExpression: currentExpression,
+                    rootExprForms: [currentExpression],
                     inlinedParents: [],
                     envConstraintId: envClass,
                     maxDepth: 2,
@@ -1300,6 +1301,7 @@ public class CodeAnalysis
             Expression projectCompilation(EnvConstraintId envClass) =>
                 PineVM.ReduceExpressionAndInlineRecursive(
                     rootExpression: expression,
+                    rootExprAlternativeForms: [],
                     envConstraintId: envClass,
                     maxDepth: 7,
                     maxSubexpressionCount: 4_000,

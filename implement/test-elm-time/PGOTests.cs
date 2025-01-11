@@ -278,7 +278,7 @@ public class PGOTests
 
                     Console.WriteLine(
                         "Completed scenario using " + evalReport.InstructionCount +
-                        " instructions and " + evalReport.ParseAndEvalCount + " invocations");
+                        " instructions and " + evalReport.InvocationCount + " invocations");
 
                     return evalReport;
                 }))
@@ -881,7 +881,7 @@ public class PGOTests
 
                     Console.WriteLine(
                         "Completed scenario using " + evalReport.InstructionCount +
-                        " instructions and " + evalReport.ParseAndEvalCount + " invocations");
+                        " instructions and " + evalReport.InvocationCount + " invocations");
 
                     return evalReport;
                 }))
@@ -1251,7 +1251,7 @@ public class PGOTests
         };
 
         static long ReportsAverageInvocationCount(IReadOnlyList<PineVM.EvaluationReport> reports) =>
-            reports.Sum(report => report.ParseAndEvalCount) / reports.Count;
+            reports.Sum(report => report.InvocationCount) / reports.Count;
 
         PineVM.EvaluationReport RunScenario(
             ElmValue.ElmList scenarioList,
@@ -1278,7 +1278,7 @@ public class PGOTests
 
                     Console.WriteLine(
                         "Completed scenario using " + evalReport.InstructionCount +
-                        " instructions and " + evalReport.ParseAndEvalCount + " invocations");
+                        " instructions and " + evalReport.InvocationCount + " invocations");
 
                     return evalReport;
                 }))
@@ -1428,7 +1428,7 @@ public class PGOTests
              * Therefore, the test expects only one invocation per item of the input list.
              * */
 
-            Assert.IsTrue(scenarioReport.ParseAndEvalCount < largerListInput.Length + 30, "Total invocation count");
+            Assert.IsTrue(scenarioReport.InvocationCount < largerListInput.Length + 30, "Total invocation count");
         }
     }
 
@@ -1615,7 +1615,7 @@ public class PGOTests
             .Extract(err => throw new Exception(err));
 
         static long ReportsAverageInvocationCount(IReadOnlyList<PineVM.EvaluationReport> reports) =>
-            reports.Sum(report => report.ParseAndEvalCount) / reports.Count;
+            reports.Sum(report => report.InvocationCount) / reports.Count;
 
         PineVM.EvaluationReport RunScenario(
             PineValue scenarioDict,
@@ -1645,7 +1645,7 @@ public class PGOTests
 
                     Console.WriteLine(
                         "Completed scenario using " + evalReport.InstructionCount +
-                        " instructions and " + evalReport.ParseAndEvalCount + " invocations");
+                        " instructions and " + evalReport.InvocationCount + " invocations");
 
                     return evalReport;
                 }))
@@ -1817,52 +1817,52 @@ public class PGOTests
              * Therefore, the test expects at most two invocations per dictionary item.
              * */
 
-            Assert.IsTrue(scenarioReport.ParseAndEvalCount < largerListInput.Length * 2 + 30, "Total invocation count");
+            Assert.IsTrue(scenarioReport.InvocationCount < largerListInput.Length * 2 + 30, "Total invocation count");
         }
     }
 
     public static TreeNodeWithStringPath AppCodeTreeForElmModules(
-        IReadOnlyList<string> elmModuleTexts)
+    IReadOnlyList<string> elmModuleTexts)
     {
         var compilerProgram = ElmCompiler.CompilerSourceFilesDefault.Value;
 
         var elmJson =
-            """
-            {
-                "type": "application",
-                "source-directories": [
-                    "src"
-                ],
-                "elm-version": "0.19.1",
-                "dependencies": {
-                    "direct": {
-                        "elm/core": "1.0.5"
-                    },
-                    "indirect": {
-                    }
-                },
-                "test-dependencies": {
-                    "direct": {},
-                    "indirect": {}
-                }
-            }
-            
-            """;
+        """
+{
+    "type": "application",
+    "source-directories": [
+        "src"
+    ],
+    "elm-version": "0.19.1",
+    "dependencies": {
+        "direct": {
+            "elm/core": "1.0.5"
+        },
+        "indirect": {
+        }
+    },
+    "test-dependencies": {
+        "direct": {},
+        "indirect": {}
+    }
+}
+
+""";
 
         var elmModulesFiles =
-            elmModuleTexts
-            .Select(moduleText =>
-            ("src/" +
-            string.Join('/', ElmModule.ParseModuleName(moduleText).Extract(err => throw new Exception(err))) + ".elm",
-            Encoding.UTF8.GetBytes(moduleText)))
-            .ToImmutableArray();
+        elmModuleTexts
+        .Select(moduleText =>
+        ("src/" +
+        string.Join('/', ElmModule.ParseModuleName(moduleText).Extract(err => throw new Exception(err))) + ".elm",
+        Encoding.UTF8.GetBytes(moduleText)))
+        .ToImmutableArray();
 
         var appCodeTree =
-            PineValueComposition.SortedTreeFromSetOfBlobsWithCommonFilePath(
-                [
-                ("elm.json", Encoding.UTF8.GetBytes(elmJson)),
-                ..elmModulesFiles
-                ]);
+        PineValueComposition.SortedTreeFromSetOfBlobsWithCommonFilePath(
+            [
+            ("elm.json", Encoding.UTF8.GetBytes(elmJson)),
+    ..elmModulesFiles
+            ]);
 
         return appCodeTree;
     }

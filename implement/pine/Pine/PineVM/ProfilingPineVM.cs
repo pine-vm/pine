@@ -122,9 +122,9 @@ public class ProfilingPineVM
                                 {
                                     computeExpressionUsageTimes.Enqueue(
                                         System.Diagnostics.Stopwatch.GetElapsedTime(startingTimestamp: analysisOuterStartTime));
+                                    }
                                 }
                             }
-                        }
 
                         var exprUsageAlreadyInDict =
                         expressionUsages.TryGetValue(
@@ -147,7 +147,7 @@ public class ProfilingPineVM
 
                         envContainer.ParseAndEvalCountMax = System.Math.Max(
                             envContainer.ParseAndEvalCountMax,
-                            funcApplReport.ParseAndEvalCount);
+                            funcApplReport.InvocationCount);
 
                         if (!envUsageAlreadyInDict)
                         {

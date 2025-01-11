@@ -14,9 +14,13 @@ public class PineIRCompiler
     {
         public NodeCompilationResult ContinueWithExpression(
             Expression expression,
-            ImmutableHashSet<Expression> copyToLocal)
+            CompilationContext context)
         {
-            var exprResult = CompileExpressionTransitive(expression, copyToLocal, LocalsSet);
+            var exprResult =
+                CompileExpressionTransitive(
+                    expression,
+                    context,
+                    LocalsSet);
 
             return new NodeCompilationResult(
                 Instructions.AddRange(exprResult.Instructions),
@@ -34,18 +38,180 @@ public class PineIRCompiler
             };
     }
 
+    public record CompilationContext(
+        ImmutableHashSet<Expression> CopyToLocal,
+        IReadOnlyDictionary<Expression.ParseAndEval, JumpToLoop> TailCallElimination,
+        int InstructionOffset)
+    {
+        public static CompilationContext Init(
+            IReadOnlyDictionary<Expression.ParseAndEval, JumpToLoop> tailCallElimination) =>
+            new(
+                CopyToLocal: [],
+                TailCallElimination: tailCallElimination,
+                InstructionOffset: 0);
+
+        public CompilationContext AddInstructionOffset(int offset) =>
+            this
+            with
+            {
+                InstructionOffset = InstructionOffset + offset
+            };
+    }
+
+    public record JumpToLoop(
+        int DestinationInstructionIndex,
+        int EnvironmentLocalIndex);
+
+
+    /// <summary>
+    /// Recursively compile an expression into a flat list of instructions.
+    /// </summary>
+    public static NodeCompilationResult CompileExpression(
+        Expression rootExpression,
+        ImmutableHashSet<Expression> rootExprAlternativeForms,
+        EnvConstraintId? envClass,
+        PineVMParseCache parseCache)
+    {
+        /*
+         * Tail calls are invocations that are either the root expression of the root of a branch of a conditional that is the root.
+         * Since an unconditional invocation makes no sense in practice, we can focus on the invocations in conditional branches.
+         * */
+
+        var allTailCalls =
+            EnumerateTailCalls(rootExpression)
+            .ToImmutableArray();
+
+        /*
+         * At the moment, we only optimize cases with direct recursion, not mutual recursion.
+         * */
+
+        JumpToLoop? TailCallElimination(Expression.ParseAndEval parseAndEval)
+        {
+            if (envClass is null)
+                return null;
+
+            if (!IsRecursiveCall(
+                parseAndEval,
+                envClass,
+                rootExprForms: rootExprAlternativeForms.Add(rootExpression),
+                parseCache))
+            {
+                return null;
+            }
+
+            return new JumpToLoop(
+                DestinationInstructionIndex: 3,
+                EnvironmentLocalIndex: 0);
+        }
+
+        var tailCallEliminationDict =
+            allTailCalls
+            .SelectWhere(callExpr =>
+            Maybe.NothingFromNull(TailCallElimination(callExpr))
+            .Map(jump => new KeyValuePair<Expression.ParseAndEval, JumpToLoop>(callExpr, jump)))
+            .ToImmutableDictionary();
+
+        var prior =
+            tailCallEliminationDict.IsEmpty
+            ?
+            new NodeCompilationResult(
+                Instructions: [],
+                ImmutableDictionary<Expression, int>.Empty)
+            :
+            new NodeCompilationResult(
+                Instructions:
+                [
+                    StackInstruction.Push_Environment,
+
+                    // Use a form storing the environment in a local, so stack depth is zero when we loop:
+                    StackInstruction.Local_Set(0),
+
+                    StackInstruction.Pop,
+                ],
+                ImmutableDictionary<Expression, int>.Empty
+                .SetItem(Expression.EnvironmentInstance, 0));
+
+        return
+            CompileExpressionTransitive(
+                rootExpression,
+                context:
+                CompilationContext.Init(tailCallEliminationDict),
+                prior: prior);
+    }
+
+    public static bool IsRecursiveCall(
+        Expression.ParseAndEval parseAndEval,
+        EnvConstraintId envClass,
+        ImmutableHashSet<Expression> rootExprForms,
+        PineVMParseCache parseCache)
+    {
+        if (CodeAnalysis.TryParseExpressionAsIndexPathFromEnv(parseAndEval.Encoded) is not
+            ExprMappedToParentEnv.PathInParentEnv encodedPath)
+        {
+            return false;
+        }
+
+        var childPathEnvMap = CodeAnalysis.BuildPathMapFromChildToParentEnv(parseAndEval.Environment);
+
+        if (childPathEnvMap(encodedPath.Path) is not { } encodedPathMapped)
+        {
+            return false;
+        }
+
+        if (!encodedPathMapped.Equals(encodedPath))
+        {
+            return false;
+        }
+
+        if (envClass.TryGetValue(encodedPath.Path) is not { } envClassValueAtPath)
+        {
+            return false;
+        }
+
+        if (parseCache.ParseExpression(envClassValueAtPath).IsOkOrNull() is not { } parsedExpr)
+        {
+            return false;
+        }
+
+        if (rootExprForms.Contains(parsedExpr))
+        {
+            return true;
+        }
+
+        return false;
+    }
+
+    public static IEnumerable<Expression.ParseAndEval> EnumerateTailCalls(Expression expression)
+    {
+        if (expression is Expression.ParseAndEval parseAndEval)
+        {
+            yield return parseAndEval;
+        }
+
+        if (expression is Expression.Conditional conditional)
+        {
+            foreach (var branch in new[] { conditional.Condition, conditional.TrueBranch, conditional.FalseBranch })
+            {
+                foreach (var tailCall in EnumerateTailCalls(branch))
+                {
+                    yield return tailCall;
+                }
+            }
+        }
+    }
+
     /// <summary>
     /// Recursively compile an expression into a flat list of instructions.
     /// </summary>
     public static NodeCompilationResult CompileExpressionTransitive(
         Expression expression,
-        ImmutableHashSet<Expression> copyToLocal,
+        CompilationContext context,
         ImmutableDictionary<Expression, int> localIndexFromExpr)
     {
         return
             CompileExpressionTransitive(
                 expression,
-                copyToLocal: copyToLocal,
+                context: context,
                 new NodeCompilationResult(
                     Instructions: [],
                     localIndexFromExpr));
@@ -56,7 +222,7 @@ public class PineIRCompiler
     /// </summary>
     public static NodeCompilationResult CompileExpressionTransitive(
         Expression expression,
-        ImmutableHashSet<Expression> copyToLocal,
+        CompilationContext context,
         NodeCompilationResult prior)
     {
         var subexprAppearingMultipleTimesIncludingConditional = new HashSet<Expression>();
@@ -146,17 +312,21 @@ public class PineIRCompiler
         }
 
         var copyToLocalNew =
-            copyToLocal
+            context.CopyToLocal
             .Union(subexprAppearingMultipleTimesUnconditional)
             .Union(subexprAppearingMultipleTimesIncludingConditional.Intersect(allSubexpressionsUnconditional));
 
         var lessCSE =
             CompileExpressionTransitiveLessCSE(
                 expression,
-                copyToLocalNew,
+                context
+                with
+                {
+                    CopyToLocal = copyToLocalNew
+                },
                 prior);
 
-        if (!prior.LocalsSet.ContainsKey(expression) && copyToLocal.Contains(expression))
+        if (!prior.LocalsSet.ContainsKey(expression) && context.CopyToLocal.Contains(expression))
         {
             var newLocalIndex =
                 lessCSE.LocalsSet.IsEmpty
@@ -180,7 +350,7 @@ public class PineIRCompiler
 
     public static NodeCompilationResult CompileExpressionTransitiveLessCSE(
         Expression expr,
-        ImmutableHashSet<Expression> copyToLocal,
+        CompilationContext context,
         NodeCompilationResult prior)
     {
         if (prior.LocalsSet.TryGetValue(expr, out var localIndex))
@@ -231,7 +401,7 @@ public class PineIRCompiler
                         lastItemResult =
                             CompileExpressionTransitive(
                                 itemExpr,
-                                copyToLocal,
+                                context,
                                 lastItemResult);
                     }
 
@@ -245,21 +415,21 @@ public class PineIRCompiler
                 return
                     CompileConditional(
                         conditional,
-                        copyToLocal,
+                        context,
                         prior);
 
             case Expression.ParseAndEval pae:
                 return
                     CompileParseAndEval(
                         pae,
-                        copyToLocal,
+                        context,
                         prior);
 
             case Expression.KernelApplication kernelApp:
                 return
                     CompileKernelApplication(
                         kernelApp,
-                        copyToLocal,
+                        context,
                         prior);
 
             default:
@@ -270,19 +440,20 @@ public class PineIRCompiler
 
     public static NodeCompilationResult CompileConditional(
         Expression.Conditional conditional,
-        ImmutableHashSet<Expression> copyToLocal,
+        CompilationContext context,
         NodeCompilationResult prior)
     {
         var afterCondition =
             CompileExpressionTransitive(
                 conditional.Condition,
-                copyToLocal,
+                context,
                 prior);
 
         var falseBranchInstructions =
             CompileExpressionTransitive(
                 conditional.FalseBranch,
-                copyToLocal,
+                context
+                .AddInstructionOffset(afterCondition.Instructions.Count + 1),
                 new NodeCompilationResult(
                     Instructions: [],
                     LocalsSet: afterCondition.LocalsSet))
@@ -291,7 +462,9 @@ public class PineIRCompiler
         var trueBranchInstructions =
             CompileExpressionTransitive(
                 conditional.TrueBranch,
-                copyToLocal,
+                context
+                .AddInstructionOffset(afterCondition.Instructions.Count + 1)
+                .AddInstructionOffset(falseBranchInstructions.Count + 1),
                 new NodeCompilationResult(
                     Instructions: [],
                     LocalsSet: afterCondition.LocalsSet))
@@ -318,28 +491,53 @@ public class PineIRCompiler
 
     public static NodeCompilationResult CompileParseAndEval(
         Expression.ParseAndEval parseAndEvalExpr,
-        ImmutableHashSet<Expression> copyToLocal,
+        CompilationContext context,
         NodeCompilationResult prior)
     {
-        var afterEnvironment =
-            prior.ContinueWithExpression(
-                parseAndEvalExpr.Environment,
-                copyToLocal);
+        if (context.TailCallElimination.TryGetValue(parseAndEvalExpr, out var jumpToLoop))
+        {
+            var afterEnvironment =
+                prior.ContinueWithExpression(
+                    parseAndEvalExpr.Environment,
+                    context);
 
-        var afterExpr =
-            afterEnvironment.ContinueWithExpression(
-                parseAndEvalExpr.Encoded,
-                copyToLocal);
+            var jumpOffset =
+                jumpToLoop.DestinationInstructionIndex - afterEnvironment.Instructions.Count -
+                context.InstructionOffset - 2;
 
-        return
-            afterExpr
-            .AppendInstruction(
-                StackInstruction.Parse_And_Eval_Binary);
+            return
+                afterEnvironment
+                .AppendInstructions(
+                    [
+                    StackInstruction.Local_Set(jumpToLoop.EnvironmentLocalIndex),
+
+                    StackInstruction.Pop,
+
+                    StackInstruction.Jump_Unconditional(jumpOffset)
+                    ]);
+        }
+
+        {
+            var afterEnvironment =
+                prior.ContinueWithExpression(
+                    parseAndEvalExpr.Environment,
+                    context);
+
+            var afterExpr =
+                afterEnvironment.ContinueWithExpression(
+                    parseAndEvalExpr.Encoded,
+                    context);
+
+            return
+                afterExpr
+                .AppendInstruction(
+                    StackInstruction.Parse_And_Eval_Binary);
+        }
     }
 
     public static NodeCompilationResult CompileKernelApplication(
         Expression.KernelApplication kernelApplication,
-        ImmutableHashSet<Expression> copyToLocal,
+        CompilationContext context,
         NodeCompilationResult prior)
     {
         return
@@ -348,104 +546,104 @@ public class PineIRCompiler
                 nameof(KernelFunction.length) =>
                 CompileExpressionTransitive(
                     kernelApplication.Input,
-                    copyToLocal,
+                    context,
                     prior)
                 .AppendInstruction(StackInstruction.Length),
 
                 nameof(KernelFunction.negate) =>
                 CompileKernelApplication_Negate(
                     kernelApplication.Input,
-                    copyToLocal,
+                    context,
                     prior),
 
                 nameof(KernelFunction.equal) =>
                 CompileKernelApplication_Equal(
                     kernelApplication.Input,
-                    copyToLocal,
+                    context,
                     prior),
 
                 nameof(KernelFunction.head) =>
                 CompileKernelApplication_Head(
                     kernelApplication.Input,
-                    copyToLocal,
+                    context,
                     prior),
 
                 nameof(KernelFunction.skip) =>
                 CompileKernelApplication_Skip(
                     kernelApplication.Input,
-                    copyToLocal,
+                    context,
                     prior),
 
                 nameof(KernelFunction.take) =>
                 CompileKernelApplication_Take(
                     kernelApplication.Input,
-                    copyToLocal,
+                    context,
                     prior),
 
                 nameof(KernelFunction.concat) =>
                 CompileKernelApplication_Concat(
                     kernelApplication.Input,
-                    copyToLocal,
+                    context,
                     prior),
 
                 nameof(KernelFunction.reverse) =>
                 CompileKernelApplication_Reverse(
                     kernelApplication.Input,
-                    copyToLocal,
+                    context,
                     prior),
 
                 nameof(KernelFunction.int_add) =>
                 CompileKernelApplication_Int_Add(
                     kernelApplication.Input,
-                    copyToLocal,
+                    context,
                     prior),
 
                 nameof(KernelFunction.int_mul) =>
                 CompileKernelApplication_Int_Mul(
                     kernelApplication.Input,
-                    copyToLocal,
+                    context,
                     prior),
 
                 nameof(KernelFunction.int_is_sorted_asc) =>
                 CompileKernelApplication_Int_Is_Sorted_Asc(
                     kernelApplication.Input,
-                    copyToLocal,
+                    context,
                     prior),
 
                 nameof(KernelFunction.bit_and) =>
                 CompileKernelApplication_Bit_And(
                     kernelApplication.Input,
-                    copyToLocal,
+                    context,
                     prior),
 
                 nameof(KernelFunction.bit_or) =>
                 CompileKernelApplication_Bit_Or(
                     kernelApplication.Input,
-                    copyToLocal,
+                    context,
                     prior),
 
                 nameof(KernelFunction.bit_xor) =>
                 CompileKernelApplication_Bit_Xor(
                     kernelApplication.Input,
-                    copyToLocal,
+                    context,
                     prior),
 
                 nameof(KernelFunction.bit_not) =>
                 CompileKernelApplication_Bit_Not(
                     kernelApplication.Input,
-                    copyToLocal,
+                    context,
                     prior),
 
                 nameof(KernelFunction.bit_shift_left) =>
                 CompileKernelApplication_Bit_Shift_Left(
                     kernelApplication.Input,
-                    copyToLocal,
+                    context,
                     prior),
 
                 nameof(KernelFunction.bit_shift_right) =>
                 CompileKernelApplication_Bit_Shift_Right(
                     kernelApplication.Input,
-                    copyToLocal,
+                    context,
                     prior),
 
                 _ =>
@@ -456,7 +654,7 @@ public class PineIRCompiler
 
     public static NodeCompilationResult CompileKernelApplication_Equal(
         Expression input,
-        ImmutableHashSet<Expression> copyToLocal,
+        CompilationContext context,
         NodeCompilationResult prior)
     {
         if (input is Expression.List listExpr)
@@ -468,7 +666,7 @@ public class PineIRCompiler
                     var afterRight =
                         CompileExpressionTransitive(
                             listExpr.items[1],
-                            copyToLocal,
+                            context,
                             prior);
 
                     return
@@ -482,7 +680,7 @@ public class PineIRCompiler
                     var afterLeft =
                         CompileExpressionTransitive(
                             listExpr.items[0],
-                            copyToLocal,
+                            context,
                             prior);
 
                     return
@@ -495,13 +693,13 @@ public class PineIRCompiler
                     var afterLeft =
                         CompileExpressionTransitive(
                             listExpr.items[0],
-                            copyToLocal,
+                            context,
                             prior);
 
                     var afterRight =
                         CompileExpressionTransitive(
                             listExpr.items[1],
-                            copyToLocal,
+                            context,
                             afterLeft);
 
                     return
@@ -514,14 +712,14 @@ public class PineIRCompiler
         return
             CompileExpressionTransitive(
                 input,
-                copyToLocal,
+                context,
                 prior)
             .AppendInstruction(StackInstruction.Equal_Generic);
     }
 
     public static NodeCompilationResult CompileKernelApplication_Head(
         Expression input,
-        ImmutableHashSet<Expression> copyToLocal,
+        CompilationContext context,
         NodeCompilationResult prior)
     {
         if (input is Expression.KernelApplication innerKernelApp && innerKernelApp.Function is "skip")
@@ -531,7 +729,7 @@ public class PineIRCompiler
                 var afterSource =
                     CompileExpressionTransitive(
                         skipList.items[1],
-                        copyToLocal,
+                        context,
                         prior);
 
                 if (skipList.items[0] is Expression.Literal literalExpr)
@@ -548,7 +746,7 @@ public class PineIRCompiler
                 var afterSkipCount =
                     CompileExpressionTransitive(
                         skipList.items[0],
-                        copyToLocal,
+                        context,
                         afterSource);
 
                 return
@@ -560,14 +758,14 @@ public class PineIRCompiler
         return
             CompileExpressionTransitive(
                 input,
-                copyToLocal,
+                context,
                 prior)
             .AppendInstruction(StackInstruction.Head_Generic);
     }
 
     public static NodeCompilationResult CompileKernelApplication_Skip(
        Expression input,
-       ImmutableHashSet<Expression> copyToLocal,
+       CompilationContext context,
        NodeCompilationResult prior)
     {
         if (input is Expression.List listExpr && listExpr.items.Count is 2)
@@ -575,13 +773,13 @@ public class PineIRCompiler
             var afterSource =
                 CompileExpressionTransitive(
                     listExpr.items[1],
-                    copyToLocal,
+                    context,
                     prior);
 
             var afterSkipCount =
                 CompileExpressionTransitive(
                     listExpr.items[0],
-                    copyToLocal,
+                    context,
                     afterSource);
 
             return
@@ -592,14 +790,14 @@ public class PineIRCompiler
         return
             CompileExpressionTransitive(
                 input,
-                copyToLocal,
+                context,
                 prior)
             .AppendInstruction(StackInstruction.Skip_Generic);
     }
 
     public static NodeCompilationResult CompileKernelApplication_Take(
         Expression input,
-        ImmutableHashSet<Expression> copyToLocal,
+        CompilationContext context,
         NodeCompilationResult prior)
     {
         if (input is Expression.List listExpr && listExpr.items.Count is 2)
@@ -614,7 +812,7 @@ public class PineIRCompiler
                     var afterSource =
                         CompileExpressionTransitive(
                             skipList.items[1],
-                            copyToLocal,
+                            context,
                             prior);
 
                     /*
@@ -628,7 +826,7 @@ public class PineIRCompiler
                             var afterSkipCount =
                                 CompileExpressionTransitive(
                                     skipList.items[0],
-                                    copyToLocal,
+                                    context,
                                     afterSource);
 
                             return
@@ -642,13 +840,13 @@ public class PineIRCompiler
                         var afterSkipCount =
                             CompileExpressionTransitive(
                                 skipList.items[0],
-                                copyToLocal,
+                                context,
                                 afterSource);
 
                         var afterTakeCount =
                             CompileExpressionTransitive(
                                 takeCountValueExpr,
-                                copyToLocal,
+                                context,
                                 afterSkipCount);
 
                         return
@@ -664,13 +862,13 @@ public class PineIRCompiler
                 var afterSource =
                     CompileExpressionTransitive(
                         listExpr.items[1],
-                        copyToLocal,
+                        context,
                         prior);
 
                 var afterTakeCount =
                     CompileExpressionTransitive(
                         takeCountValueExpr,
-                        copyToLocal,
+                        context,
                         afterSource);
 
                 return
@@ -682,14 +880,14 @@ public class PineIRCompiler
         return
             CompileExpressionTransitive(
                 input,
-                copyToLocal,
+                context,
                 prior)
             .AppendInstruction(StackInstruction.Take_Generic);
     }
 
     public static NodeCompilationResult CompileKernelApplication_Concat(
         Expression input,
-        ImmutableHashSet<Expression> copyToLocal,
+        CompilationContext context,
         NodeCompilationResult prior)
     {
         if (input is Expression.List listExpr)
@@ -703,7 +901,7 @@ public class PineIRCompiler
                 var itemOps =
                     CompileExpressionTransitive(
                         item,
-                        copyToLocal,
+                        context,
                         concatOps);
 
                 concatOps = itemOps;
@@ -723,7 +921,7 @@ public class PineIRCompiler
             return
                 CompileExpressionTransitive(
                     input,
-                    copyToLocal,
+                    context,
                     prior)
                 .AppendInstruction(StackInstruction.Concat_Generic);
         }
@@ -731,20 +929,20 @@ public class PineIRCompiler
 
     public static NodeCompilationResult CompileKernelApplication_Reverse(
         Expression input,
-        ImmutableHashSet<Expression> copyToLocal,
+        CompilationContext context,
         NodeCompilationResult prior)
     {
         return
             CompileExpressionTransitive(
                 input,
-                copyToLocal,
+                context,
                 prior)
             .AppendInstruction(StackInstruction.Reverse);
     }
 
     public static NodeCompilationResult CompileKernelApplication_Negate(
         Expression input,
-        ImmutableHashSet<Expression> copyToLocal,
+        CompilationContext context,
         NodeCompilationResult prior)
     {
         if (input is Expression.KernelApplication innerKernelApp)
@@ -757,7 +955,7 @@ public class PineIRCompiler
                     var afterRight =
                         CompileExpressionTransitive(
                             equalList.items[1],
-                            copyToLocal,
+                            context,
                             prior);
                     return
                         afterRight
@@ -770,7 +968,7 @@ public class PineIRCompiler
                     var afterLeft =
                         CompileExpressionTransitive(
                             equalList.items[0],
-                            copyToLocal,
+                            context,
                             prior);
                     return
                         afterLeft
@@ -782,13 +980,13 @@ public class PineIRCompiler
                     var afterLeft =
                         CompileExpressionTransitive(
                             equalList.items[0],
-                            copyToLocal,
+                            context,
                             prior);
 
                     var afterRight =
                         CompileExpressionTransitive(
                             equalList.items[1],
-                            copyToLocal,
+                            context,
                             afterLeft);
 
                     return
@@ -807,13 +1005,13 @@ public class PineIRCompiler
                 var afterLeft =
                     CompileExpressionTransitive(
                         isSortedAscList.items[1],
-                        copyToLocal,
+                        context,
                         prior);
 
                 var afterRight =
                     CompileExpressionTransitive(
                         isSortedAscList.items[0],
-                        copyToLocal,
+                        context,
                         afterLeft);
 
                 return
@@ -825,14 +1023,14 @@ public class PineIRCompiler
         return
             CompileExpressionTransitive(
                 input,
-                copyToLocal,
+                context,
                 prior)
             .AppendInstruction(new StackInstruction(StackInstructionKind.Negate));
     }
 
     public static NodeCompilationResult CompileKernelApplication_Int_Add(
         Expression input,
-        ImmutableHashSet<Expression> copyToLocal,
+        CompilationContext context,
         NodeCompilationResult prior)
     {
         if (input is Expression.List listExpr)
@@ -855,7 +1053,7 @@ public class PineIRCompiler
                     var afterRight =
                         CompileExpressionTransitive(
                             listExpr.items[1],
-                            copyToLocal,
+                            context,
                             prior);
 
                     return
@@ -872,7 +1070,7 @@ public class PineIRCompiler
                     var afterLeft =
                         CompileExpressionTransitive(
                             listExpr.items[0],
-                            copyToLocal,
+                            context,
                             prior);
                     return
                         afterLeft
@@ -894,7 +1092,7 @@ public class PineIRCompiler
                     var itemOps =
                         CompileExpressionTransitive(
                             negatedItemExpr,
-                            copyToLocal,
+                            context,
                             addOps);
 
                     addOps = itemOps;
@@ -911,7 +1109,7 @@ public class PineIRCompiler
                     var itemOps =
                         CompileExpressionTransitive(
                             itemExpr,
-                            copyToLocal,
+                            context,
                             addOps);
 
                     addOps = itemOps;
@@ -932,7 +1130,7 @@ public class PineIRCompiler
             return
                 CompileExpressionTransitive(
                     input,
-                    copyToLocal,
+                    context,
                     prior)
                 .AppendInstruction(new StackInstruction(StackInstructionKind.Int_Add_Generic));
         }
@@ -940,7 +1138,7 @@ public class PineIRCompiler
 
     public static NodeCompilationResult CompileKernelApplication_Int_Mul(
         Expression input,
-        ImmutableHashSet<Expression> copyToLocal,
+        CompilationContext context,
         NodeCompilationResult prior)
     {
         if (input is Expression.List listExpr)
@@ -963,7 +1161,7 @@ public class PineIRCompiler
                     var afterRight =
                         CompileExpressionTransitive(
                             listExpr.items[1],
-                            copyToLocal,
+                            context,
                             prior);
 
                     return
@@ -980,7 +1178,7 @@ public class PineIRCompiler
                     var afterLeft =
                         CompileExpressionTransitive(
                             listExpr.items[0],
-                            copyToLocal,
+                            context,
                             prior);
 
                     return
@@ -1001,7 +1199,7 @@ public class PineIRCompiler
                 var itemOps =
                     CompileExpressionTransitive(
                         itemExpr,
-                        copyToLocal,
+                        context,
                         mulOps);
 
                 mulOps = itemOps;
@@ -1021,7 +1219,7 @@ public class PineIRCompiler
             return
                 CompileExpressionTransitive(
                     input,
-                    copyToLocal,
+                    context,
                     prior)
                 .AppendInstruction(new StackInstruction(StackInstructionKind.Int_Mul_Generic));
         }
@@ -1029,7 +1227,7 @@ public class PineIRCompiler
 
     public static NodeCompilationResult CompileKernelApplication_Int_Is_Sorted_Asc(
         Expression input,
-        ImmutableHashSet<Expression> copyToLocal,
+        CompilationContext context,
         NodeCompilationResult prior)
     {
         if (input is Expression.List listExpr)
@@ -1049,13 +1247,13 @@ public class PineIRCompiler
                 var afterLeft =
                     CompileExpressionTransitive(
                         listExpr.items[0],
-                        copyToLocal,
+                        context,
                         prior);
 
                 var afterRight =
                     CompileExpressionTransitive(
                         listExpr.items[1],
-                        copyToLocal,
+                        context,
                         afterLeft);
 
                 return
@@ -1067,14 +1265,14 @@ public class PineIRCompiler
         return
             CompileExpressionTransitive(
                 input,
-                copyToLocal,
+                context,
                 prior)
             .AppendInstruction(new StackInstruction(StackInstructionKind.Int_Is_Sorted_Asc_Generic));
     }
 
     public static NodeCompilationResult CompileKernelApplication_Bit_And(
         Expression input,
-        ImmutableHashSet<Expression> copyToLocal,
+        CompilationContext context,
         NodeCompilationResult prior)
     {
         if (input is Expression.List listExpr)
@@ -1098,7 +1296,7 @@ public class PineIRCompiler
                 var itemOps =
                     CompileExpressionTransitive(
                         itemExpr,
-                        copyToLocal,
+                        context,
                         andOps);
 
                 andOps = itemOps;
@@ -1118,7 +1316,7 @@ public class PineIRCompiler
             return
                 CompileExpressionTransitive(
                     input,
-                    copyToLocal,
+                    context,
                     prior)
                 .AppendInstruction(new StackInstruction(StackInstructionKind.Bit_And_Generic));
         }
@@ -1126,7 +1324,7 @@ public class PineIRCompiler
 
     public static NodeCompilationResult CompileKernelApplication_Bit_Or(
         Expression input,
-        ImmutableHashSet<Expression> copyToLocal,
+        CompilationContext context,
         NodeCompilationResult prior)
     {
         if (input is Expression.List listExpr)
@@ -1150,7 +1348,7 @@ public class PineIRCompiler
                 var itemOps =
                     CompileExpressionTransitive(
                         itemExpr,
-                        copyToLocal,
+                        context,
                         orOps);
 
                 orOps = itemOps;
@@ -1170,7 +1368,7 @@ public class PineIRCompiler
             return
                 CompileExpressionTransitive(
                     input,
-                    copyToLocal,
+                    context,
                     prior)
                 .AppendInstruction(new StackInstruction(StackInstructionKind.Bit_Or_Generic));
         }
@@ -1178,7 +1376,7 @@ public class PineIRCompiler
 
     public static NodeCompilationResult CompileKernelApplication_Bit_Xor(
         Expression input,
-        ImmutableHashSet<Expression> copyToLocal,
+        CompilationContext context,
         NodeCompilationResult prior)
     {
         if (input is Expression.List listExpr)
@@ -1202,7 +1400,7 @@ public class PineIRCompiler
                 var itemOps =
                     CompileExpressionTransitive(
                         itemExpr,
-                        copyToLocal,
+                        context,
                         xorOps);
 
                 xorOps = itemOps;
@@ -1222,7 +1420,7 @@ public class PineIRCompiler
             return
                 CompileExpressionTransitive(
                     input,
-                    copyToLocal,
+                    context,
                     prior)
                 .AppendInstruction(new StackInstruction(StackInstructionKind.Bit_Xor_Generic));
         }
@@ -1230,20 +1428,20 @@ public class PineIRCompiler
 
     public static NodeCompilationResult CompileKernelApplication_Bit_Not(
         Expression input,
-        ImmutableHashSet<Expression> copyToLocal,
+        CompilationContext context,
         NodeCompilationResult prior)
     {
         return
             CompileExpressionTransitive(
                 input,
-                copyToLocal,
+                context,
                 prior)
             .AppendInstruction(new StackInstruction(StackInstructionKind.Bit_Not));
     }
 
     public static NodeCompilationResult CompileKernelApplication_Bit_Shift_Left(
         Expression input,
-        ImmutableHashSet<Expression> copyToLocal,
+        CompilationContext context,
         NodeCompilationResult prior)
     {
         if (input is Expression.List listExpr && listExpr.items.Count is 2)
@@ -1251,13 +1449,13 @@ public class PineIRCompiler
             var sourceOps =
                 CompileExpressionTransitive(
                     listExpr.items[1],
-                    copyToLocal,
+                    context,
                     prior);
 
             var shiftCountOps =
                 CompileExpressionTransitive(
                     listExpr.items[0],
-                    copyToLocal,
+                    context,
                     sourceOps);
 
             return
@@ -1267,14 +1465,14 @@ public class PineIRCompiler
         return
             CompileExpressionTransitive(
                 input,
-                copyToLocal,
+                context,
                 prior)
             .AppendInstruction(new StackInstruction(StackInstructionKind.Bit_Shift_Left_Generic));
     }
 
     public static NodeCompilationResult CompileKernelApplication_Bit_Shift_Right(
         Expression input,
-        ImmutableHashSet<Expression> copyToLocal,
+        CompilationContext context,
         NodeCompilationResult prior)
     {
         if (input is Expression.List listExpr && listExpr.items.Count is 2)
@@ -1282,13 +1480,13 @@ public class PineIRCompiler
             var sourceOps =
                 CompileExpressionTransitive(
                     listExpr.items[1],
-                    copyToLocal,
+                    context,
                     prior);
 
             var shiftCountOps =
                 CompileExpressionTransitive(
                     listExpr.items[0],
-                    copyToLocal,
+                    context,
                     sourceOps);
 
             return
@@ -1298,7 +1496,7 @@ public class PineIRCompiler
         return
             CompileExpressionTransitive(
                 input,
-                copyToLocal,
+                context,
                 prior)
             .AppendInstruction(new StackInstruction(StackInstructionKind.Bit_Shift_Right_Generic));
     }
