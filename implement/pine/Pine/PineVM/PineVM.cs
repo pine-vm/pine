@@ -427,24 +427,24 @@ public class PineVM : IPineVM
             .OrderDescending(EnvironmentClassSpecificityComparer.Instance)
             .Select(
                 specialization =>
-                ((IReadOnlyList<EnvConstraintItem>)
-                [..specialization.ParsedEnvItems
-                .Select(envItem => new EnvConstraintItem(envItem.Key.ToArray(), envItem.Value))],
-                new StackFrameInstructions(
-                    InstructionsFromExpressionTransitive(
-                        rootExpression,
-                        envConstraintId: specialization,
-                        parseCache: parseCache,
-                        disableReduction: disableReduction,
+                            ((IReadOnlyList<EnvConstraintItem>)
+                            [..specialization.ParsedEnvItems
+                        .Select(envItem => new EnvConstraintItem(envItem.Key.ToArray(), envItem.Value))],
+                            new StackFrameInstructions(
+                                InstructionsFromExpressionTransitive(
+                                    rootExpression,
+                                    envConstraintId: specialization,
+                                    parseCache: parseCache,
+                                    disableReduction: disableReduction,
                         enableTailRecursionOptimization: enableTailRecursionOptimization,
                         skipInlining: skipInlining),
                     TrackEnvConstraint: specialization)))
-            .ToImmutableArray();
+                    .ToImmutableArray();
 
         return new ExpressionCompilation(
             Generic: generic,
             Specialized: specialized);
-    }
+                }
 
     /*
      * 
@@ -548,13 +548,12 @@ public class PineVM : IPineVM
             ?
             currentExpression
             :
-            SubstituteSubexpressionsForEnvironmentConstraint(currentExpression, envConstraintId);
+            SubstituteSubexpressionsForEnvironmentConstraint(
+                currentExpression,
+                envConstraintId);
 
         var expressionReduced =
-            CompilePineToDotNet.ReducePineExpression.SearchForExpressionReductionRecursive(
-                maxDepth: 10,
-                expressionSubstituted,
-                envConstraintId: envConstraintId);
+            CompilePineToDotNet.ReducePineExpression.ReduceExpressionBottomUp(expressionSubstituted);
 
         if (maxDepth <= 0)
         {
@@ -641,10 +640,7 @@ public class PineVM : IPineVM
                     SubstituteSubexpressionsForEnvironmentConstraint(inlinedExpr, envConstraintId);
 
                 var inlinedExprReduced =
-                    CompilePineToDotNet.ReducePineExpression.SearchForExpressionReductionRecursive(
-                        maxDepth: 10,
-                        inlinedExprSubstituted,
-                        envConstraintId: envConstraintId);
+                    CompilePineToDotNet.ReducePineExpression.ReduceExpressionBottomUp(inlinedExprSubstituted);
 
                 {
                     if (500 < inlinedExprReduced.SubexpressionCount)
@@ -815,9 +811,7 @@ public class PineVM : IPineVM
                 underConditional: false);
 
         var expressionInlinedReduced =
-            CompilePineToDotNet.ReducePineExpression.SearchForExpressionReductionRecursive(
-                maxDepth: 10,
-                expressionInlined);
+            CompilePineToDotNet.ReducePineExpression.ReduceExpressionBottomUp(expressionInlined);
 
         return expressionInlinedReduced;
     }

@@ -4,7 +4,6 @@ using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
-using System.Numerics;
 
 namespace Pine.CompilePineToDotNet;
 
@@ -27,10 +26,7 @@ public class ReducePineExpression
             TryEvaluateExpressionIndependent(list),
 
             Expression.KernelApplication kernelApplication =>
-            TryEvaluateExpressionIndependent(kernelApplication.Input)
-            .MapError(err => "Failed to evaluate kernel application input independent: " + err)
-            .Map(inputValue =>
-            PineVM.PineVM.EvaluateKernelApplicationGeneric(kernelApplication.Function, inputValue)),
+            TryEvaluateExpressionIndependent(kernelApplication),
 
             Expression.ParseAndEval parseAndEvalExpr =>
             TryEvaluateExpressionIndependent(parseAndEvalExpr),
@@ -54,9 +50,9 @@ public class ReducePineExpression
         {
             var itemResult = TryEvaluateExpressionIndependent(listExpr.items[i]);
 
-            if (itemResult is Result<string, PineValue>.Ok itemValue)
+            if (itemResult.IsOkOrNull() is { } itemValue)
             {
-                itemsValues[i] = itemValue.Value;
+                itemsValues[i] = itemValue;
             }
             else
             {
@@ -70,54 +66,127 @@ public class ReducePineExpression
     public static Result<string, PineValue> TryEvaluateExpressionIndependent(
         Expression.ParseAndEval parseAndEvalExpr)
     {
-        if (TryEvaluateExpressionIndependent(parseAndEvalExpr.Environment).IsOkOrNull() is { } envOk)
+        if (false)
         {
-            try
+            if (TryEvaluateExpressionIndependent(parseAndEvalExpr.Environment).IsOkOrNull() is { } envOk)
             {
-                /*
-                 * 2024-10-25: Disabled this approach after observing Stack overflow here.
-                 * 
-                return
-                    new PineVM.PineVM()
-                    .EvaluateExpressionDefaultLessStack(
-                        parseAndEvalExpr,
-                        PineValue.EmptyList,
-                        stackPrevValues: ReadOnlyMemory<PineValue>.Empty);
-                */
-            }
-            catch (ParseExpressionException)
-            {
-                /*
-                * A branch of a conditional expression might always fail to parse.
-                * This does not mean that the code would crash at runtime, since it is conditional.
-                * (The Elm compiler uses constructs like this to encode crashing branches with a custom error message.)
-                * */
+                try
+                {
+                    /*
+                     * 2024-10-25: Disabled this approach after observing Stack overflow here.
+                     * 
+                    return
+                        new PineVM.PineVM()
+                        .EvaluateExpressionDefaultLessStack(
+                            parseAndEvalExpr,
+                            PineValue.EmptyList,
+                            stackPrevValues: ReadOnlyMemory<PineValue>.Empty);
+                    */
+                }
+                catch (ParseExpressionException)
+                {
+                    /*
+                    * A branch of a conditional expression might always fail to parse.
+                    * This does not mean that the code would crash at runtime, since it is conditional.
+                    * (The Elm compiler uses constructs like this to encode crashing branches with a custom error message.)
+                    * */
+                }
             }
         }
 
-        return
-            TryEvaluateExpressionIndependent(parseAndEvalExpr.Encoded)
-            .MapError(err => "Expression is not independent: " + err)
-            .AndThen(compilerCache.ParseExpressionFromValue)
-            .AndThen(innerExpr => TryEvaluateExpressionIndependent(innerExpr)
-            .MapError(err => "Inner expression is not independent: " + err));
+        var evalEncodedExprResult =
+            TryEvaluateExpressionIndependent(parseAndEvalExpr.Encoded);
+
+        if (evalEncodedExprResult.IsErrOrNull() is { } encodedErr)
+        {
+            return
+                "Failed to evaluate encoded expression: " + encodedErr;
+        }
+
+        if (evalEncodedExprResult.IsOkOrNull() is not { } encodedOk)
+        {
+            throw new NotImplementedException(
+                "Unexpected result type from evaluating encoded expression: " + evalEncodedExprResult);
+        }
+
+        var parseResult =
+            compilerCache.ParseExpressionFromValue(encodedOk);
+
+        if (parseResult.IsErrOrNull() is { } parseErr)
+        {
+            return
+                "Failed to parse encoded expression: " + parseErr;
+        }
+
+        if (parseResult.IsOkOrNull() is not { } parseOk)
+        {
+            throw new NotImplementedException(
+                "Unexpected result type from parsing encoded expression: " + parseResult);
+        }
+
+        var evalInnerExprResult =
+            TryEvaluateExpressionIndependent(parseOk);
+
+        if (evalInnerExprResult.IsErrOrNull() is { } innerErr)
+        {
+            return
+                "Failed to evaluate inner expression: " + innerErr;
+        }
+
+        if (evalInnerExprResult.IsOkOrNull() is not { } innerOk)
+        {
+            throw new NotImplementedException(
+                "Unexpected result type from evaluating inner expression: " + evalInnerExprResult);
+        }
+
+        return innerOk;
     }
 
     public static Result<string, PineValue> TryEvaluateExpressionIndependent(
         Expression.Conditional conditionalExpr)
     {
-        return
-            TryEvaluateExpressionIndependent(conditionalExpr.Condition)
-            .AndThen(conditionValue =>
-            {
-                if (conditionValue == PineVMValues.FalseValue)
-                    return TryEvaluateExpressionIndependent(conditionalExpr.FalseBranch);
+        var evalConditionResult =
+            TryEvaluateExpressionIndependent(conditionalExpr.Condition);
 
-                if (conditionValue == PineVMValues.TrueValue)
-                    return TryEvaluateExpressionIndependent(conditionalExpr.TrueBranch);
+        if (evalConditionResult.IsErrOrNull() is { } conditionErr)
+        {
+            return
+                "Failed to evaluate condition: " + conditionErr;
+        }
 
-                return PineValue.EmptyList;
-            });
+        if (evalConditionResult.IsOkOrNull() is not { } conditionOk)
+        {
+            throw new NotImplementedException(
+                "Unexpected result type from evaluating condition: " + evalConditionResult);
+        }
+
+        if (conditionOk == PineVMValues.TrueValue)
+        {
+            return TryEvaluateExpressionIndependent(conditionalExpr.TrueBranch);
+        }
+
+        return TryEvaluateExpressionIndependent(conditionalExpr.FalseBranch);
+    }
+
+    public static Result<string, PineValue> TryEvaluateExpressionIndependent(
+        Expression.KernelApplication kernelApplication)
+    {
+        var evalInputResult =
+            TryEvaluateExpressionIndependent(kernelApplication.Input);
+
+        if (evalInputResult.IsErrOrNull() is { } inputErr)
+        {
+            return
+                "Failed to evaluate kernel application input: " + inputErr;
+        }
+
+        if (evalInputResult.IsOkOrNull() is not { } inputOk)
+        {
+            throw new NotImplementedException(
+                "Unexpected result type from evaluating kernel application input: " + evalInputResult);
+        }
+
+        return PineVM.PineVM.EvaluateKernelApplicationGeneric(kernelApplication.Function, inputOk);
     }
 
     public static Expression? SearchForExpressionReduction(
@@ -145,24 +214,25 @@ public class ReducePineExpression
 
         Expression? AttemptReduceViaEval()
         {
-            if (!expression.ReferencesEnvironment)
+            if (expression.ReferencesEnvironment)
             {
-                try
+                return null;
+            }
+
+            try
+            {
+                if (TryEvaluateExpressionIndependent(expression).IsOkOrNull() is { } okValue)
                 {
-                    return
-                        TryEvaluateExpressionIndependent(expression)
-                        .Unpack(
-                            fromErr: _ => null,
-                            fromOk: Expression.LiteralInstance);
+                    return Expression.LiteralInstance(okValue);
                 }
-                catch (ParseExpressionException)
-                {
-                    /*
-                     * A branch of a conditional expression might always fail to parse.
-                     * This does not mean that the code would crash at runtime, since it is conditional.
-                     * (The Elm compiler uses constructs like this to encoding crashing branches with a custom error message.)
-                     * */
-                }
+            }
+            catch (ParseExpressionException)
+            {
+                /*
+                 * A branch of a conditional expression might always fail to parse.
+                 * This does not mean that the code would crash at runtime, since it is conditional.
+                 * (The Elm compiler uses constructs like this to encode crashing branches with a custom error message.)
+                 * */
             }
 
             return null;
@@ -195,10 +265,28 @@ public class ReducePineExpression
 
                                     var listLengthLowerBounds = new List<int>();
 
+                                    var listConcreteValues = new List<PineValue>();
+
                                     foreach (var item in reducedArgumentsList)
                                     {
                                         listLengthLowerBounds.AddRange(
                                             TryInferListLengthLowerBounds(item, envConstraintId));
+
+                                        if (item is Expression.Literal literal)
+                                        {
+                                            listConcreteValues.Add(literal.Value);
+                                        }
+                                    }
+
+                                    if (1 < listConcreteValues.Count)
+                                    {
+                                        for (var i = 1; i < listConcreteValues.Count; i++)
+                                        {
+                                            if (listConcreteValues[i] != listConcreteValues[0])
+                                            {
+                                                return Expression.LiteralInstance(PineVMValues.FalseValue);
+                                            }
+                                        }
                                     }
 
                                     var listLengthLowerBound =
@@ -243,56 +331,97 @@ public class ReducePineExpression
                             return AttemptReduceViaEval();
                         }
 
-                    case "head":
+                    case nameof(KernelFunction.head):
                         {
                             if (rootKernelApp.Input is Expression.List inputList)
                             {
-                                return
-                                    inputList.items.FirstOrDefault() ??
-                                    Expression.LiteralInstance(PineValue.EmptyList);
+                                if (inputList.items.Count is 0)
+                                {
+                                    return Expression.LiteralInstance(PineValue.EmptyList);
+                                }
+
+                                return inputList.items[0];
                             }
 
                             if (rootKernelApp.Input is Expression.Literal literal)
+                            {
                                 return Expression.LiteralInstance(KernelFunction.head(literal.Value));
+                            }
+
+                            if (rootKernelApp.Input is Expression.KernelApplication headInputKernelApp)
+                            {
+                                if (headInputKernelApp.Function is nameof(KernelFunction.skip))
+                                {
+                                    if (headInputKernelApp.Input is Expression.List headSkipInputList &&
+                                        headSkipInputList.items.Count is 2)
+                                    {
+                                        if (TryEvaluateExpressionIndependent(headSkipInputList.items[0]).IsOkOrNull() is { } okSkipCountValue)
+                                        {
+                                            if (KernelFunction.SignedIntegerFromValueRelaxed(okSkipCountValue) is { } okSkipCount)
+                                            {
+                                                var skipCountClamped =
+                                                    (int)(okSkipCount < 0 ? 0 : okSkipCount);
+
+                                                if (headSkipInputList.items[1] is Expression.List headSkipList)
+                                                {
+                                                    if (skipCountClamped < headSkipList.items.Count)
+                                                    {
+                                                        return headSkipList.items[skipCountClamped];
+                                                    }
+
+                                                    return Expression.LiteralInstance(PineValue.EmptyList);
+                                                }
+
+                                                if (headSkipInputList.items[1] is Expression.Literal headSkipLiteral)
+                                                {
+                                                    return Expression.LiteralInstance(
+                                                        KernelFunction.head(
+                                                            KernelFunction.skip(skipCountClamped, headSkipLiteral.Value)));
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
 
                             return AttemptReduceViaEval();
                         }
 
-                    case "skip":
+                    case nameof(KernelFunction.skip):
                         {
                             if (rootKernelApp.Input is Expression.List inputList && inputList.items.Count is 2)
                             {
-                                if (TryEvaluateExpressionIndependent(inputList.items[0]) is Result<string, PineValue>.Ok okSkipCountValue)
+                                if (TryEvaluateExpressionIndependent(inputList.items[0]).IsOkOrNull() is { } okSkipCountValue)
                                 {
-                                    if (PineValueAsInteger.SignedIntegerFromValueRelaxed(okSkipCountValue.Value) is Result<string, BigInteger>.Ok okSkipCount)
+                                    if (KernelFunction.SignedIntegerFromValueRelaxed(okSkipCountValue) is { } okSkipCount)
                                     {
                                         if (inputList.items[1] is Expression.List partiallySkippedList)
                                         {
                                             return Expression.ListInstance(
-                                                [.. partiallySkippedList.items.Skip((int)okSkipCount.Value)]);
+                                                [.. partiallySkippedList.items.Skip((int)okSkipCount)]);
                                         }
 
                                         if (inputList.items[1] is Expression.Literal literal)
                                         {
                                             return Expression.LiteralInstance(
-                                                KernelFunction.skip((int)okSkipCount.Value, literal.Value));
+                                                KernelFunction.skip((int)okSkipCount, literal.Value));
                                         }
 
                                         if (inputList.items[1] is Expression.KernelApplication innerKernelApp)
                                         {
-                                            if (innerKernelApp.Function is "skip"
+                                            if (innerKernelApp.Function is nameof(KernelFunction.skip)
                                                 && innerKernelApp.Input is Expression.List innerSkipInputList &&
                                                 innerSkipInputList.items.Count is 2)
                                             {
-                                                if (TryEvaluateExpressionIndependent(innerSkipInputList.items[0]) is Result<string, PineValue>.Ok okInnerSkipCountValue)
+                                                if (TryEvaluateExpressionIndependent(innerSkipInputList.items[0]).IsOkOrNull() is { } okInnerSkipCountValue)
                                                 {
-                                                    if (PineValueAsInteger.SignedIntegerFromValueRelaxed(okInnerSkipCountValue.Value) is Result<string, BigInteger>.Ok okInnerSkipCount)
+                                                    if (KernelFunction.SignedIntegerFromValueRelaxed(okInnerSkipCountValue) is { } okInnerSkipCount)
                                                     {
                                                         var outerSkipCountClamped =
-                                                            okSkipCount.Value < 0 ? 0 : okSkipCount.Value;
+                                                            okSkipCount < 0 ? 0 : okSkipCount;
 
                                                         var innerSkipCountClamped =
-                                                            okInnerSkipCount.Value < 0 ? 0 : okInnerSkipCount.Value;
+                                                            okInnerSkipCount < 0 ? 0 : okInnerSkipCount;
 
                                                         var aggregateSkipCount = outerSkipCountClamped + innerSkipCountClamped;
 
@@ -462,30 +591,17 @@ public class ReducePineExpression
 
             case Expression.Conditional conditional:
                 {
-                    var condition =
-                        SearchForExpressionReductionRecursive(
-                            maxDepth: 5,
-                            conditional.Condition,
-                            envConstraintId: envConstraintId);
-
-                    if (!condition.ReferencesEnvironment)
+                    if (!conditional.Condition.ReferencesEnvironment)
                     {
-                        return
-                            TryEvaluateExpressionIndependent(condition)
-                            .Unpack(
-                                fromErr: _ =>
-                                AttemptReduceViaEval(),
-
-                                fromOk: conditionValue =>
+                        if (TryEvaluateExpressionIndependent(conditional.Condition).IsOkOrNull() is { } conditionValue)
+                        {
+                            return
                                 conditionValue == PineVMValues.TrueValue
                                 ?
                                 conditional.TrueBranch
                                 :
-                                conditionValue == PineVMValues.FalseValue
-                                ?
-                                conditional.FalseBranch
-                                :
-                                Expression.LiteralInstance(PineValue.EmptyList));
+                                conditional.FalseBranch;
+                        }
                     }
 
                     if (conditional.TrueBranch == conditional.FalseBranch)
@@ -550,14 +666,15 @@ public class ReducePineExpression
 
         if (expression is Expression.KernelApplication kernelApp)
         {
-            if (kernelApp.Function is "skip" &&
+            if (kernelApp.Function is nameof(KernelFunction.skip) &&
                 kernelApp.Input is Expression.List skipInputList && skipInputList.items.Count is 2)
             {
-                if (TryEvaluateExpressionIndependent(skipInputList.items[0]) is Result<string, PineValue>.Ok okSkipCountValue)
+                if (TryEvaluateExpressionIndependent(skipInputList.items[0]).IsOkOrNull() is { } okSkipCountValue)
                 {
-                    if (PineValueAsInteger.SignedIntegerFromValueRelaxed(okSkipCountValue.Value) is Result<string, BigInteger>.Ok okSkipCount)
+                    if (PineValueAsInteger.SignedIntegerFromValueRelaxed(okSkipCountValue).IsOkOrNullable() is { } okSkipCount)
                     {
-                        var skipCountClamped = (int)(okSkipCount.Value < 0 ? 0 : okSkipCount.Value);
+                        var skipCountClamped =
+                            (int)(okSkipCount < 0 ? 0 : okSkipCount);
 
                         foreach (var offsetBound in TryInferListLengthLowerBounds(skipInputList.items[1], envConstraintId))
                         {
@@ -791,6 +908,177 @@ public class ReducePineExpression
                 transformed,
                 envConstraintId: envConstraintId,
                 dontReduceExpression);
+    }
+
+    /// <summary>
+    /// Performs a single bottom-up reduction pass:
+    ///   1. Recursively reduces children first.
+    ///   2. Attempts to reduce the resulting node via <see cref="SearchForExpressionReduction"/>.
+    /// </summary>
+    public static Expression ReduceExpressionBottomUp(
+        Expression expression,
+        Func<Expression, bool>? dontReduceExpression = null)
+    {
+        // First, reduce the sub-expressions.
+        var expressionWithReducedChildren =
+            expression switch
+            {
+                Expression.Literal => expression,
+
+                Expression.List listExpr =>
+                    ReduceListExpression(listExpr, dontReduceExpression),
+
+                Expression.KernelApplication kernelApp =>
+                    ReduceKernelApplication(kernelApp, dontReduceExpression),
+
+                Expression.ParseAndEval parseAndEval =>
+                    ReduceParseAndEval(parseAndEval, dontReduceExpression),
+
+                Expression.Conditional conditional =>
+                    ReduceConditional(conditional, dontReduceExpression),
+
+                Expression.StringTag stringTag =>
+                    ReduceStringTag(stringTag, dontReduceExpression),
+
+                // These are direct references to the environment or stack.
+                // No further children to reduce.
+                Expression.Environment => expression,
+                Expression.StackReferenceExpression => expression,
+
+                // KernelApplications_Skip_Head_Path, KernelApplications_Skip_Take, KernelApplication_Equal_Two
+                // etc. can be handled in the same pattern:
+                Expression.KernelApplications_Skip_Head_Path skipListHead =>
+                    skipListHead with
+                    {
+                        Argument = ReduceExpressionBottomUp(skipListHead.Argument, dontReduceExpression)
+                    },
+
+                Expression.KernelApplications_Skip_Take skipTake =>
+                    skipTake with
+                    {
+                        Argument = ReduceExpressionBottomUp(skipTake.Argument, dontReduceExpression),
+                        SkipCount = ReduceExpressionBottomUp(skipTake.SkipCount, dontReduceExpression),
+                        TakeCount = ReduceExpressionBottomUp(skipTake.TakeCount, dontReduceExpression)
+                    },
+
+                Expression.KernelApplication_Equal_Two equalTwo =>
+                    new Expression.KernelApplication_Equal_Two(
+                        Left: ReduceExpressionBottomUp(equalTwo.Left, dontReduceExpression),
+                        Right: ReduceExpressionBottomUp(equalTwo.Right, dontReduceExpression)),
+
+                _ =>
+                throw new NotImplementedException(
+                    $"Expression type not implemented: {expression.GetType().FullName}")
+            };
+
+        // Next, try to reduce this node itself�unless the caller forbids it.
+        if (!(dontReduceExpression?.Invoke(expressionWithReducedChildren) ?? false))
+        {
+            // If we can reduce further, return the reduced expression:
+            var reduced = SearchForExpressionReduction(expressionWithReducedChildren, envConstraintId: null);
+
+            if (reduced is not null)
+                return reduced;
+        }
+
+        // If no further reduction, just return our (possibly child-reduced) node.
+        return expressionWithReducedChildren;
+    }
+
+    public static Expression ReduceListExpression(
+        Expression.List listExpr,
+        Func<Expression, bool>? dontReduceExpression)
+    {
+        var items = listExpr.items;
+        var changed = false;
+        var newItems = new Expression[items.Count];
+
+        for (int i = 0; i < items.Count; i++)
+        {
+            var reducedChild = ReduceExpressionBottomUp(items[i], dontReduceExpression);
+
+            newItems[i] = reducedChild;
+
+            changed =
+                changed || reducedChild != items[i];
+        }
+
+        // If none of the subexpressions changed, return the original; else build a new list.
+        return
+            changed
+            ? Expression.ListInstance(newItems)
+            : listExpr;
+    }
+
+    public static Expression ReduceKernelApplication(
+        Expression.KernelApplication kernelApp,
+        Func<Expression, bool>? dontReduceExpression)
+    {
+        var reducedArg =
+            ReduceExpressionBottomUp(kernelApp.Input, dontReduceExpression);
+
+        if (reducedArg == kernelApp.Input)
+            return kernelApp;
+
+        return new Expression.KernelApplication(kernelApp.Function, reducedArg);
+    }
+
+    public static Expression ReduceParseAndEval(
+        Expression.ParseAndEval parseAndEval,
+        Func<Expression, bool>? dontReduceExpression)
+    {
+        var reducedEncoded =
+            ReduceExpressionBottomUp(parseAndEval.Encoded, dontReduceExpression);
+
+        var reducedEnv =
+            ReduceExpressionBottomUp(parseAndEval.Environment, dontReduceExpression);
+
+        if (reducedEncoded == parseAndEval.Encoded &&
+            reducedEnv == parseAndEval.Environment)
+        {
+            return parseAndEval;
+        }
+
+        return new Expression.ParseAndEval(reducedEncoded, reducedEnv);
+    }
+
+    public static Expression ReduceConditional(
+        Expression.Conditional conditional,
+        Func<Expression, bool>? dontReduceExpression)
+    {
+        var reducedCondition =
+            ReduceExpressionBottomUp(conditional.Condition, dontReduceExpression);
+
+        var reducedTrue =
+            ReduceExpressionBottomUp(conditional.TrueBranch, dontReduceExpression);
+
+        var reducedFalse =
+            ReduceExpressionBottomUp(conditional.FalseBranch, dontReduceExpression);
+
+        if (reducedCondition == conditional.Condition &&
+            reducedTrue == conditional.TrueBranch &&
+            reducedFalse == conditional.FalseBranch)
+        {
+            return conditional;
+        }
+
+        return Expression.ConditionalInstance(
+            condition: reducedCondition,
+            falseBranch: reducedFalse,
+            trueBranch: reducedTrue);
+    }
+
+    public static Expression ReduceStringTag(
+        Expression.StringTag stringTag,
+        Func<Expression, bool>? dontReduceExpression)
+    {
+        var reducedTagged =
+            ReduceExpressionBottomUp(stringTag.Tagged, dontReduceExpression);
+
+        if (reducedTagged == stringTag.Tagged)
+            return stringTag;
+
+        return new Expression.StringTag(stringTag.Tag, reducedTagged);
     }
 }
 

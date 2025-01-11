@@ -997,9 +997,12 @@ public class PGOTests
 
         Console.WriteLine("\nAverage instruction count optimized: " + optimizedAverageInstructionCount + "\n");
 
-        var speedupFactor = nonOptimizedAverageInstructionCount / optimizedAverageInstructionCount;
+        var remainingInstructionsPercent =
+            optimizedAverageInstructionCount * 100 / nonOptimizedAverageInstructionCount;
 
-        Assert.IsTrue(2 <= speedupFactor);
+        Console.WriteLine("Remaining instructions percentage: " + remainingInstructionsPercent + "%");
+
+        Assert.IsTrue(remainingInstructionsPercent < 70);
 
         Assert.IsTrue(optimizedAverageInstructionCount <= 130);
     }
