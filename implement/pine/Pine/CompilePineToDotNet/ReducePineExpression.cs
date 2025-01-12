@@ -802,78 +802,6 @@ public class ReducePineExpression
                         ),
                         taggedTransform.referencesOriginalEnv);
                 }
-
-            case Expression.StackReferenceExpression:
-                return (expression, true);
-
-            case Expression.KernelApplications_Skip_Head_Path skipListHead:
-                {
-                    var argumentTransform =
-                        TransformPineExpressionWithOptionalReplacement(
-                            findReplacement,
-                            skipListHead.Argument);
-
-                    return
-                        (
-                        skipListHead
-                        with
-                        {
-                            Argument = argumentTransform.expr
-                        },
-                        argumentTransform.referencesOriginalEnv);
-                }
-
-            case Expression.KernelApplications_Skip_Take skipTake:
-                {
-                    var argumentTransform =
-                        TransformPineExpressionWithOptionalReplacement(
-                            findReplacement,
-                            skipTake.Argument);
-
-                    var skipCountTransform =
-                        TransformPineExpressionWithOptionalReplacement(
-                            findReplacement,
-                            skipTake.SkipCount);
-
-                    var takeCountTransform =
-                        TransformPineExpressionWithOptionalReplacement(
-                            findReplacement,
-                            skipTake.TakeCount);
-
-                    return
-                        (
-                        skipTake
-                        with
-                        {
-                            Argument = argumentTransform.expr,
-                            SkipCount = skipCountTransform.expr,
-                            TakeCount = takeCountTransform.expr
-                        },
-                        argumentTransform.referencesOriginalEnv ||
-                        skipCountTransform.referencesOriginalEnv ||
-                        takeCountTransform.referencesOriginalEnv);
-                }
-
-            case Expression.KernelApplication_Equal_Two equalTwo:
-                {
-                    var leftTransform =
-                        TransformPineExpressionWithOptionalReplacement(
-                            findReplacement,
-                            equalTwo.Left);
-
-                    var rightTransform =
-                        TransformPineExpressionWithOptionalReplacement(
-                            findReplacement,
-                            equalTwo.Right);
-
-                    return (
-                        new Expression.KernelApplication_Equal_Two
-                        (
-                            Left: leftTransform.expr,
-                            Right: rightTransform.expr
-                        ),
-                        leftTransform.referencesOriginalEnv || rightTransform.referencesOriginalEnv);
-                }
         }
 
         throw new NotImplementedException(
@@ -943,28 +871,6 @@ public class ReducePineExpression
                 // These are direct references to the environment or stack.
                 // No further children to reduce.
                 Expression.Environment => expression,
-                Expression.StackReferenceExpression => expression,
-
-                // KernelApplications_Skip_Head_Path, KernelApplications_Skip_Take, KernelApplication_Equal_Two
-                // etc. can be handled in the same pattern:
-                Expression.KernelApplications_Skip_Head_Path skipListHead =>
-                    skipListHead with
-                    {
-                        Argument = ReduceExpressionBottomUp(skipListHead.Argument, dontReduceExpression)
-                    },
-
-                Expression.KernelApplications_Skip_Take skipTake =>
-                    skipTake with
-                    {
-                        Argument = ReduceExpressionBottomUp(skipTake.Argument, dontReduceExpression),
-                        SkipCount = ReduceExpressionBottomUp(skipTake.SkipCount, dontReduceExpression),
-                        TakeCount = ReduceExpressionBottomUp(skipTake.TakeCount, dontReduceExpression)
-                    },
-
-                Expression.KernelApplication_Equal_Two equalTwo =>
-                    new Expression.KernelApplication_Equal_Two(
-                        Left: ReduceExpressionBottomUp(equalTwo.Left, dontReduceExpression),
-                        Right: ReduceExpressionBottomUp(equalTwo.Right, dontReduceExpression)),
 
                 _ =>
                 throw new NotImplementedException(

@@ -533,120 +533,6 @@ public abstract record Expression
     }
 
     /// <summary>
-    /// A reference to a value on the stack by its offset relative to the current stack pointer.
-    /// </summary>
-    public record StackReferenceExpression(int offset)
-        : Expression
-    {
-        /// <inheritdoc/>
-        public override int SubexpressionCount { get; } = 0;
-
-        /// <inheritdoc/>
-        public override bool ReferencesEnvironment { get; } = false;
-    }
-
-    /// <summary>
-    /// Fusion of the two applications of the kernel functions 'skip' and 'head',
-    /// as an implementation detail of the interpreter.
-    /// </summary>
-    public record KernelApplications_Skip_Head_Path(
-        ReadOnlyMemory<int> SkipCounts,
-        Expression Argument)
-    : Expression
-    {
-        /// <inheritdoc/>
-        public override int SubexpressionCount { get; } =
-            Argument.SubexpressionCount + 1;
-
-        /// <inheritdoc/>
-        public override bool ReferencesEnvironment { get; } =
-            Argument.ReferencesEnvironment;
-
-        /// <inheritdoc/>
-        public virtual bool Equals(KernelApplications_Skip_Head_Path? other)
-        {
-            if (other is null)
-                return false;
-
-            return
-                other.SkipCounts.Span.SequenceEqual(SkipCounts.Span) &&
-                Argument.Equals(Argument);
-        }
-
-        /// <inheritdoc/>
-        public override int GetHashCode()
-        {
-            var hashCode = Argument.GetHashCode();
-
-            for (int i = 0; i < SkipCounts.Length; ++i)
-            {
-                hashCode = HashCode.Combine(SkipCounts.Span[i], hashCode);
-            }
-
-            return hashCode;
-        }
-    }
-
-    /// <summary>
-    /// Fusion of the two applications of the kernel functions 'skip' and 'take',
-    /// as an implementation detail of the interpreter.
-    /// </summary>
-    public record KernelApplications_Skip_Take(
-        Expression SkipCount,
-        Expression TakeCount,
-        Expression Argument)
-    : Expression
-    {
-        /// <inheritdoc/>
-        public override int SubexpressionCount { get; } =
-            Argument.SubexpressionCount +
-            TakeCount.SubexpressionCount +
-            SkipCount.SubexpressionCount + 3;
-
-        /// <inheritdoc/>
-        public override bool ReferencesEnvironment { get; } =
-            Argument.ReferencesEnvironment ||
-            TakeCount.ReferencesEnvironment ||
-            SkipCount.ReferencesEnvironment;
-
-        /// <inheritdoc/>
-        public virtual bool Equals(KernelApplications_Skip_Take? other)
-        {
-            if (other is null)
-                return false;
-
-            return
-                other.SkipCount.Equals(SkipCount) &&
-                other.TakeCount.Equals(TakeCount) &&
-                other.Argument.Equals(Argument);
-        }
-
-        /// <inheritdoc/>
-        public override int GetHashCode()
-        {
-            return HashCode.Combine(SkipCount.GetHashCode(), TakeCount.GetHashCode(), Argument.GetHashCode());
-        }
-    }
-
-    /// <summary>
-    /// Fusion of the special case of an application of the kernel function 'equal',
-    /// with a list expression of length two as the argument.
-    /// </summary>
-    public record KernelApplication_Equal_Two(
-        Expression Left,
-        Expression Right)
-        : Expression
-    {
-        /// <inheritdoc/>
-        public override int SubexpressionCount { get; } =
-            Left.SubexpressionCount + Right.SubexpressionCount + 2;
-
-        /// <inheritdoc/>
-        public override bool ReferencesEnvironment { get; } =
-            Left.ReferencesEnvironment || Right.ReferencesEnvironment;
-    }
-
-    /// <summary>
     /// Collects all unique expressions contained in the given roots and their descendants.
     /// </summary>
     public static IReadOnlySet<Expression> CollectAllComponentsFromRoots(
@@ -689,9 +575,6 @@ public abstract record Expression
                     [],
 
                     Environment =>
-                    [],
-
-                    StackReferenceExpression =>
                     [],
 
                     _ =>
@@ -776,30 +659,6 @@ public abstract record Expression
                 case StringTag stringTag:
 
                     stack.Push(stringTag.Tagged);
-
-                    break;
-
-                case StackReferenceExpression:
-                    break;
-
-                case KernelApplication_Equal_Two equalTwo:
-
-                    stack.Push(equalTwo.Left);
-                    stack.Push(equalTwo.Right);
-
-                    break;
-
-                case KernelApplications_Skip_Head_Path skipHead:
-
-                    stack.Push(skipHead.Argument);
-
-                    break;
-
-                case KernelApplications_Skip_Take skipTake:
-
-                    stack.Push(skipTake.Argument);
-                    stack.Push(skipTake.SkipCount);
-                    stack.Push(skipTake.TakeCount);
 
                     break;
 
