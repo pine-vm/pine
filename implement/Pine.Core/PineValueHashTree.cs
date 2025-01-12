@@ -19,9 +19,10 @@ public static class PineValueHashTree
         PineValue pineValue,
         Func<PineValue, ReadOnlyMemory<byte>?>? delegateGetHashOfComponent = null)
     {
-        var (serialRepresentation, dependencies) = ComputeHashTreeNodeSerialRepresentation(pineValue, delegateGetHashOfComponent);
+        var (serialRepresentation, dependencies) =
+            ComputeHashTreeNodeSerialRepresentation(pineValue, delegateGetHashOfComponent);
 
-        return (hash: CommonConversion.HashSHA256(serialRepresentation), dependencies);
+        return (hash: SHA256.HashData(serialRepresentation.Span), dependencies);
     }
 
     public static (ReadOnlyMemory<byte> serialRepresentation, IReadOnlyCollection<PineValue> dependencies)
@@ -33,31 +34,57 @@ public static class PineValueHashTree
         {
             case PineValue.BlobValue blobValue:
                 {
-                    var prefix = System.Text.Encoding.ASCII.GetBytes("blob " + blobValue.Bytes.Length + "\0");
+                    ReadOnlySpan<byte> blobPrefix = "blob "u8;
 
-                    var serialRepresentation = CommonConversion.Concat(prefix.AsSpan(), blobValue.Bytes.Span);
+                    var countEncoded = CountEncoding((uint)blobValue.Bytes.Length);
+
+                    var serialRepresentationLength =
+                        blobPrefix.Length + countEncoded.Length + 1 + blobValue.Bytes.Length;
+
+                    var serialRepresentation = new byte[serialRepresentationLength];
+
+                    blobPrefix.CopyTo(serialRepresentation);
+                    countEncoded.CopyTo(serialRepresentation.AsMemory()[blobPrefix.Length..]);
+
+                    serialRepresentation[blobPrefix.Length + countEncoded.Length] = 0;
+
+                    blobValue.Bytes.CopyTo(
+                        serialRepresentation.AsMemory()[(blobPrefix.Length + countEncoded.Length + 1)..]);
 
                     return (serialRepresentation, []);
                 }
 
             case PineValue.ListValue listValue:
                 {
-                    var elementsHashes =
-                        listValue.Elements
-                        .Select(i => delegateGetHashOfComponent?.Invoke(i) ?? ComputeHash(i, delegateGetHashOfComponent))
-                        .ToList();
+                    var elementsSpan = listValue.Elements.Span;
 
-                    var prefix = System.Text.Encoding.ASCII.GetBytes("list " + elementsHashes.Count + "\0");
+                    var elementsHashes = new ReadOnlyMemory<byte>[elementsSpan.Length];
+
+                    for (var i = 0; i < elementsSpan.Length; i++)
+                    {
+                        var element = elementsSpan[i];
+
+                        var elementHash =
+                            delegateGetHashOfComponent?.Invoke(element) ??
+                            ComputeHash(element, delegateGetHashOfComponent);
+
+                        elementsHashes[i] = elementHash;
+                    }
+
+                    var prefix = System.Text.Encoding.ASCII.GetBytes("list " + elementsHashes.Length + "\0");
 
                     return
                         (serialRepresentation: CommonConversion.Concat([(ReadOnlyMemory<byte>)prefix, .. elementsHashes]),
-                            dependencies: listValue.Elements);
+                            dependencies: listValue.Elements.ToArray());
                 }
 
             default:
                 throw new NotImplementedException("Not implemented for value type: " + pineValue.GetType().FullName);
         }
     }
+
+    private static ReadOnlyMemory<byte> CountEncoding(uint count) =>
+        System.Text.Encoding.ASCII.GetBytes(count.ToString());
 
     public static Result<string, PineValue> DeserializeFromHashTree(
         ReadOnlyMemory<byte> serializedValue,
@@ -74,7 +101,7 @@ public static class PineValueHashTree
         var asciiStringUpToFirstSpace =
             asciiStringUpToNull.Split(' ').First();
 
-        if (asciiStringUpToFirstSpace == "blob")
+        if (asciiStringUpToFirstSpace is "blob")
         {
             var beginningToRemoveLength = asciiStringUpToNull.Length + 1;
 
@@ -125,26 +152,28 @@ public static class PineValueHashTree
                 return DeserializeFromHashTree(loadedElementSerialRepresentation.Value, loadSerializedValueByHash);
             }
 
-            var loadElementsResults =
-                elementsHashes
-                    .Select(elementHash => (elementHash, loadResult: TryLoadElementForHash(elementHash)))
-                    .ToImmutableList();
+            var loadElementsResults = new PineValue[elementsHashes.Count];
 
-            var firstFailed =
-                loadElementsResults
-                    .FirstOrDefault(elementResult => elementResult.loadResult is Result<string, PineValue>.Err err);
+            for (var i = 0; i < elementsHashes.Count; i++)
+            {
+                var elementHash = elementsHashes[i];
 
-            if (firstFailed.loadResult != null)
-                return
-                    "Failed to load element " +
-                    CommonConversion.StringBase16(firstFailed.elementHash) + ": " +
-                    (firstFailed.loadResult as Result<string, PineValue>.Err)!.Value;
+                var loadResult = TryLoadElementForHash(elementHash);
 
-            return
-                PineValue.List(
-                    loadElementsResults
-                        .Select(elementResult => elementResult.loadResult.Extract(error => throw new Exception(error)))
-                        .ToImmutableList());
+                if (loadResult.IsErrOrNull() is { } err)
+                {
+                    return
+                        "Failed to load element " +
+                        CommonConversion.StringBase16(elementHash) + ": " + err;
+                }
+
+                if (loadResult.IsOkOrNull() is not { } ok)
+                    throw new Exception("Unexpected result: " + loadResult);
+
+                loadElementsResults[i] = ok;
+            }
+
+            return PineValue.List(loadElementsResults);
         }
 
         return "Invalid prefix: '" + asciiStringUpToFirstSpace + "'.";
@@ -164,9 +193,16 @@ public static class PineValueHashTree
         if (pineValue is not PineValue.ListValue listValue)
             return null;
 
-        return
-            listValue.Elements
-            .Select(item => FindNodeByHash(item, hash))
-            .FirstOrDefault(matchInItem => matchInItem is not null);
+        var itemsSpan = listValue.Elements.Span;
+
+        for (var i = 0; i < itemsSpan.Length; i++)
+        {
+            var matchInItem = FindNodeByHash(itemsSpan[i], hash);
+
+            if (matchInItem is not null)
+                return matchInItem;
+        }
+
+        return null;
     }
 }

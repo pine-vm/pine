@@ -87,14 +87,15 @@ public record EnvConstraintId
     public static EnvConstraintId Create(
         IReadOnlyList<KeyValuePair<IReadOnlyList<int>, PineValue>> parsedEnvItems)
     {
-        var parsedEnvItemsPineValues =
+        PineValue[] parsedEnvItemsPineValues =
             parsedEnvItems
             .OrderBy(kv => kv.Key, IntPathComparer.Instance)
             .Select(envItem =>
+            (PineValue)
             PineValue.List(
                 [PineValue.List([.. envItem.Key.Select(pathItem => PineValueAsInteger.ValueFromSignedInteger(pathItem))]),
                 envItem.Value]))
-            .ToImmutableArray();
+            .ToArray();
 
         var hashBase16 =
             CommonConversion.StringBase16(compilerCache.ComputeHash(PineValue.List(parsedEnvItemsPineValues)));
@@ -208,15 +209,15 @@ public record EnvConstraintId
         }
 
         var commonLength =
-            listA.Elements.Count < listB.Elements.Count ?
-            listA.Elements.Count :
-            listB.Elements.Count;
+            listA.Elements.Length < listB.Elements.Length ?
+            listA.Elements.Length :
+            listB.Elements.Length;
 
         var children = new List<(int, IntersectionNode)>();
 
         for (var i = 0; i < commonLength; ++i)
         {
-            var childNode = IntersectionTree(listA.Elements[i], listB.Elements[i], depthLimit - 1);
+            var childNode = IntersectionTree(listA.Elements.Span[i], listB.Elements.Span[i], depthLimit - 1);
 
             if (childNode is IntersectionNode.IntersectionBranch branch && branch.Children.Count is 0)
                 continue;
@@ -250,10 +251,10 @@ public record EnvConstraintId
                 continue;
             }
 
-            for (var i = 0; i < constraintItemList.Elements.Count && i < valueItemList.Elements.Count; ++i)
+            for (var i = 0; i < constraintItemList.Elements.Length && i < valueItemList.Elements.Length; ++i)
             {
-                var constraintChildEnvItem = constraintItemList.Elements[i];
-                var foundChildEnvItem = valueItemList.Elements[i];
+                var constraintChildEnvItem = constraintItemList.Elements.Span[i];
+                var foundChildEnvItem = valueItemList.Elements.Span[i];
 
                 var childConstraint = CreateEquals(constraintChildEnvItem);
 
@@ -931,10 +932,10 @@ public class CodeAnalysis
         if (path[0] < 0)
             return null;
 
-        if (path[0] >= listValue.Elements.Count)
+        if (path[0] >= listValue.Elements.Length)
             return null;
 
-        return ValueFromPathInValue(listValue.Elements[path[0]], path[1..]);
+        return ValueFromPathInValue(listValue.Elements.Span[path[0]], path[1..]);
     }
 
     /// <summary>

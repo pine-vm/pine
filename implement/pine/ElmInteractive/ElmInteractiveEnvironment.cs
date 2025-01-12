@@ -1,5 +1,6 @@
 using Pine.Core;
 using Pine.PineVM;
+using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
@@ -31,14 +32,16 @@ public static class ElmInteractiveEnvironment
                 {
                     var combinedArguments =
                         functionValueAndRecord.functionRecord.argumentsAlreadyCollected
+                        .ToArray()
                         .Concat(arguments)
-                        .ToImmutableList();
+                        .ToArray();
 
-                    if (combinedArguments.Count != functionValueAndRecord.functionRecord.functionParameterCount)
+                    if (combinedArguments.Length != functionValueAndRecord.functionRecord.functionParameterCount)
                     {
-                        return (Result<string, PineValue>)
+                        return
+                        (Result<string, PineValue>)
                             ("Partial application not implemented yet. Got " +
-                            combinedArguments.Count +
+                            combinedArguments.Length +
                             " arguments, expected " +
                             functionValueAndRecord.functionRecord.functionParameterCount);
                     }
@@ -117,14 +120,15 @@ public static class ElmInteractiveEnvironment
     {
         var combinedArguments =
             functionRecord.argumentsAlreadyCollected
+            .ToArray()
             .Concat(arguments)
-            .ToImmutableList();
+            .ToArray();
 
-        if (combinedArguments.Count != functionRecord.functionParameterCount)
+        if (combinedArguments.Length != functionRecord.functionParameterCount)
         {
             return
                 "Partial application not implemented yet. Got " +
-                combinedArguments.Count +
+                combinedArguments.Length +
                 " arguments, expected " +
                 functionRecord.functionParameterCount;
         }
@@ -146,8 +150,8 @@ public static class ElmInteractiveEnvironment
     public record FunctionRecord(
         Expression innerFunction,
         int functionParameterCount,
-        IReadOnlyList<PineValue> envFunctions,
-        IReadOnlyList<PineValue> argumentsAlreadyCollected);
+        ReadOnlyMemory<PineValue> envFunctions,
+        ReadOnlyMemory<PineValue> argumentsAlreadyCollected);
 
     /// <summary>
     /// Analog to the 'parseFunctionRecordFromValueTagged' function in FirCompiler.elm
@@ -171,8 +175,8 @@ public static class ElmInteractiveEnvironment
             new FunctionRecord(
                 innerFunction: Expression.LiteralInstance(pineValue),
                 functionParameterCount: 0,
-                envFunctions: [],
-                argumentsAlreadyCollected: [])
+                envFunctions: ReadOnlyMemory<PineValue>.Empty,
+                argumentsAlreadyCollected: ReadOnlyMemory<PineValue>.Empty)
             );
     }
 
@@ -187,34 +191,34 @@ public static class ElmInteractiveEnvironment
             pineValue switch
             {
                 PineValue.ListValue functionRecordListItems =>
-                functionRecordListItems.Elements.Count is 4
+                functionRecordListItems.Elements.Length is 4
                 ?
-                parseCache.ParseExpression(functionRecordListItems.Elements[0])
+                parseCache.ParseExpression(functionRecordListItems.Elements.Span[0])
                 .AndThen(innerFunction =>
-                PineValueAsInteger.SignedIntegerFromValueStrict(functionRecordListItems.Elements[1])
+                PineValueAsInteger.SignedIntegerFromValueStrict(functionRecordListItems.Elements.Span[1])
                 .MapError(err => "Failed to decode function parameter count: " + err)
                 .AndThen(functionParameterCount =>
                 {
                     return
-                    (functionRecordListItems.Elements[2] switch
+                    (functionRecordListItems.Elements.Span[2] switch
                     {
                         PineValue.ListValue listValue =>
-                        Result<string, IReadOnlyList<PineValue>>.ok(listValue.Elements),
+                        Result<string, ReadOnlyMemory<PineValue>>.ok(listValue.Elements),
 
                         _ =>
-                        (Result<string, IReadOnlyList<PineValue>>)
+                        (Result<string, ReadOnlyMemory<PineValue>>)
                         "envFunctionsValue is not a list"
                     })
                     .AndThen(envFunctions =>
                     {
                         return
-                        (functionRecordListItems.Elements[3] switch
+                        (functionRecordListItems.Elements.Span[3] switch
                         {
                             PineValue.ListValue listValue =>
-                            Result<string, IReadOnlyList<PineValue>>.ok(listValue.Elements),
+                            Result<string, ReadOnlyMemory<PineValue>>.ok(listValue.Elements),
 
                             _ =>
-                            (Result<string, IReadOnlyList<PineValue>>)
+                            (Result<string, ReadOnlyMemory<PineValue>>)
                             "argumentsAlreadyCollectedValue is not a list"
                         })
                         .AndThen(argumentsAlreadyCollected =>
@@ -224,14 +228,14 @@ public static class ElmInteractiveEnvironment
                                 new FunctionRecord(
                                     innerFunction: innerFunction,
                                     functionParameterCount: (int)functionParameterCount,
-                                    envFunctions: envFunctions,
-                                    argumentsAlreadyCollected: argumentsAlreadyCollected));
+                                    envFunctions: envFunctions.ToArray(),
+                                    argumentsAlreadyCollected: argumentsAlreadyCollected.ToArray()));
                         });
                     });
                 }
                 ))
                 :
-                "List does not have the expected number of items: " + functionRecordListItems.Elements.Count,
+                "List does not have the expected number of items: " + functionRecordListItems.Elements.Length,
 
                 _ =>
                 "Is not a list but a blob"
@@ -246,6 +250,7 @@ public static class ElmInteractiveEnvironment
             {
                 PineValue.ListValue listValue =>
                 listValue.Elements
+                .ToArray()
                 .Select(ParseNamedElmModule)
                 .ListCombine()
                 .Map(modules => new ParsedInteractiveEnvironment(Modules: modules)),
@@ -263,6 +268,7 @@ public static class ElmInteractiveEnvironment
                 PineValue.ListValue listValue =>
                 PineValue.List(
                     [..listValue.Elements
+                    .ToArray()
                     .Where(envItem => !EnvItemLooksLikeInteractiveDecl(envItem))]),
 
                 _ =>
@@ -275,10 +281,10 @@ public static class ElmInteractiveEnvironment
         if (envItemValue is not PineValue.ListValue listValue)
             return false;
 
-        if (listValue.Elements.Count is not 2)
+        if (listValue.Elements.Length is not 2)
             return false;
 
-        if (PineValueAsString.StringFromValue(listValue.Elements[0]).IsOkOrNull() is not { } name)
+        if (PineValueAsString.StringFromValue(listValue.Elements.Span[0]).IsOkOrNull() is not { } name)
             return false;
 
         if (name.Length < 1)
@@ -311,6 +317,7 @@ public static class ElmInteractiveEnvironment
             {
                 PineValue.ListValue listValue =>
                 listValue.Elements
+                .ToArray()
                 .Select(ParseTagged)
                 .ListCombine(),
 
@@ -348,12 +355,12 @@ public static class ElmInteractiveEnvironment
         pineValue switch
         {
             PineValue.ListValue listValue =>
-            listValue.Elements.Count is 2
+            listValue.Elements.Length is 2
             ?
-            PineValueAsString.StringFromValue(listValue.Elements[0])
-            .Map(tag => (tag, listValue.Elements[1]))
+            PineValueAsString.StringFromValue(listValue.Elements.Span[0])
+            .Map(tag => (tag, listValue.Elements.Span[1]))
             :
-            "Unexpected list length: " + listValue.Elements.Count,
+            "Unexpected list length: " + listValue.Elements.Length,
 
             _ =>
             "Expected list"

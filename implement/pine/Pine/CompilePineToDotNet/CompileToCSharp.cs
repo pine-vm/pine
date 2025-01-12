@@ -286,8 +286,8 @@ public partial class CompileToCSharp
                     if (pineValue is not PineValue.ListValue list)
                         return;
 
-                    foreach (var i in list.Elements)
-                        registerValueUsagesRecursive(i);
+                    for (var i = 0; i < list.Elements.Length; i++)
+                        registerValueUsagesRecursive(list.Elements.Span[i]);
                 }
 
                 foreach (var item in aggregateValueDependencies)
@@ -878,7 +878,7 @@ public partial class CompileToCSharp
         ExpressionCompilationEnvironment environment)
     {
         var staticallyKnownArgumentsList =
-            ParseKernelApplicationArgumentAsList(kernelApplicationArgumentExpression, environment)
+            ParseKernelApplicationInputAsList(kernelApplicationArgumentExpression, environment)
             ?.Unpack(fromErr: err =>
             {
                 Console.WriteLine("Failed to parse argument list: " + err);
@@ -1576,11 +1576,12 @@ public partial class CompileToCSharp
         {
             var asIntegers =
                 list.Elements
+                .ToArray()
                 .Select(attemptMapToSignedInteger)
                 .WhereHasValue()
                 .ToImmutableArray();
 
-            if (asIntegers.Length == list.Elements.Count)
+            if (asIntegers.Length == list.Elements.Length)
             {
                 return
                     (SyntaxFactory.InvocationExpression(
@@ -1650,10 +1651,12 @@ public partial class CompileToCSharp
                                 ))));
         }
 
-        ExpressionSyntax defaultRepresentationOfList(IReadOnlyList<PineValue> list)
+        ExpressionSyntax defaultRepresentationOfList(ReadOnlyMemory<PineValue> list)
         {
             var itemSyntaxes =
-                list.Select(item => continueCompile(item).Item1).ToImmutableList();
+                list
+                .ToArray()
+                .Select(item => continueCompile(item).Item1).ToImmutableList();
 
             return
                 SyntaxFactory.InvocationExpression(

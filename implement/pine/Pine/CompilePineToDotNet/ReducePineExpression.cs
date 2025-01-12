@@ -305,7 +305,7 @@ public class ReducePineExpression
                                         {
                                             if (equalArgLiteral.Value is PineValue.ListValue equalArgLiteralList)
                                             {
-                                                itemFixedLength = equalArgLiteralList.Elements.Count;
+                                                itemFixedLength = equalArgLiteralList.Elements.Length;
                                             }
                                         }
 
@@ -479,7 +479,7 @@ public class ReducePineExpression
 
                                         if (argItem is Expression.Literal argLiteral)
                                         {
-                                            if (argLiteral.Value is PineValue.ListValue listValue && listValue.Elements.Count is 0)
+                                            if (argLiteral.Value is PineValue.ListValue listValue && listValue.Elements.Length is 0)
                                                 continue;
                                         }
 
@@ -512,9 +512,9 @@ public class ReducePineExpression
                                         if (argument is Expression.Literal subLiteral &&
                                             subLiteral.Value is PineValue.ListValue subLiteralList)
                                         {
-                                            foreach (var literalItem in subLiteralList.Elements)
+                                            for (int i = 0; i < subLiteralList.Elements.Length; i++)
                                             {
-                                                items.Add(Expression.LiteralInstance(literalItem));
+                                                items.Add(Expression.LiteralInstance(subLiteralList.Elements.Span[i]));
                                             }
 
                                             continue;
@@ -556,7 +556,7 @@ public class ReducePineExpression
                                             if (lengthConcatListItem is Expression.Literal lengthConcatListItemLiteral &&
                                                 lengthConcatListItemLiteral.Value is PineValue.ListValue lengthConcatListItemList)
                                             {
-                                                aggregateLength += lengthConcatListItemList.Elements.Count;
+                                                aggregateLength += lengthConcatListItemList.Elements.Length;
                                                 continue;
                                             }
                                         }
@@ -625,7 +625,7 @@ public class ReducePineExpression
         {
             if (literalExpr.Value is PineValue.ListValue literalList)
             {
-                yield return literalList.Elements.Count;
+                yield return literalList.Elements.Length;
             }
         }
 
@@ -646,7 +646,7 @@ public class ReducePineExpression
                 {
                     if (itemConstraintItem.Value is PineValue.ListValue itemListValue)
                     {
-                        yield return itemListValue.Elements.Count;
+                        yield return itemListValue.Elements.Length;
                     }
                 }
                 else
@@ -660,7 +660,7 @@ public class ReducePineExpression
         {
             if (literal.Value is PineValue.ListValue literalList)
             {
-                yield return literalList.Elements.Count;
+                yield return literalList.Elements.Length;
             }
         }
 

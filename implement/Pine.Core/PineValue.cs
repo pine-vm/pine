@@ -56,9 +56,9 @@ public abstract record PineValue : IEquatable<PineValue>
     /// <summary>
     /// Construct a list value from a sequence of other values.
     /// </summary>
-    public static ListValue List(IReadOnlyList<PineValue> elements)
+    public static ListValue List(ReadOnlyMemory<PineValue> elements)
     {
-        if (elements.Count is 0)
+        if (elements.Length is 0)
             return EmptyList;
 
         var asStruct = new ListValue.ListValueStruct(elements);
@@ -74,10 +74,13 @@ public abstract record PineValue : IEquatable<PineValue>
         return new ListValue(asStruct);
     }
 
+    public static ListValue List(params PineValue[] elements) =>
+        List(elements.AsMemory());
+
     /// <summary>
     /// List value containing zero elements.
     /// </summary>
-    public static readonly ListValue EmptyList = new([]);
+    public static readonly ListValue EmptyList = new(ReadOnlyMemory<PineValue>.Empty);
 
     /// <summary>
     /// Blob value containing zero bytes.
@@ -125,7 +128,7 @@ public abstract record PineValue : IEquatable<PineValue>
     {
         private readonly int slimHashCode;
 
-        public IReadOnlyList<PineValue> Elements { get; }
+        public ReadOnlyMemory<PineValue> Elements { get; }
 
         public readonly long NodesCount;
 
@@ -134,7 +137,7 @@ public abstract record PineValue : IEquatable<PineValue>
         /// <summary>
         /// Construct a list value from a sequence of other values.
         /// </summary>
-        public ListValue(IReadOnlyList<PineValue> elements)
+        public ListValue(ReadOnlyMemory<PineValue> elements)
             : this(new ListValueStruct(elements))
         {
         }
@@ -146,9 +149,11 @@ public abstract record PineValue : IEquatable<PineValue>
             NodesCount = 0;
             BlobsBytesCount = 0;
 
-            for (int i = 0; i < Elements.Count; i++)
+            var elementsSpan = Elements.Span;
+
+            for (int i = 0; i < elementsSpan.Length; i++)
             {
-                var element = Elements[i];
+                var element = elementsSpan[i];
 
                 switch (element)
                 {
@@ -163,23 +168,24 @@ public abstract record PineValue : IEquatable<PineValue>
                 }
             }
 
-            NodesCount += Elements.Count;
+            NodesCount += Elements.Length;
 
             slimHashCode = listValueStruct.slimHashCode;
         }
 
-        private static int ComputeSlimHashCode(IReadOnlyList<PineValue> elements)
+        private static int ComputeSlimHashCode(ReadOnlySpan<PineValue> elements)
         {
             var hash = new HashCode();
 
-            for (var i = 0; i < elements.Count; ++i)
+            for (var i = 0; i < elements.Length; ++i)
             {
                 hash.Add(elements[i].GetHashCode());
             }
 
             return hash.ToHashCode();
         }
-
+        
+        /// <inheritdoc/>
         public virtual bool Equals(ListValue? other)
         {
             if (other is null)
@@ -189,14 +195,17 @@ public abstract record PineValue : IEquatable<PineValue>
                 return true;
 
             if (slimHashCode != other.slimHashCode ||
-                Elements.Count != other.Elements.Count ||
+                Elements.Length != other.Elements.Length ||
                 NodesCount != other.NodesCount)
                 return false;
 
-            for (int i = 0; i < Elements.Count; i++)
+            var selfSpan = Elements.Span;
+            var otherSpan = other.Elements.Span;
+
+            for (int i = 0; i < selfSpan.Length; i++)
             {
-                var selfElement = Elements[i];
-                var otherElement = other.Elements[i];
+                var selfElement = selfSpan[i];
+                var otherElement = otherSpan[i];
 
                 if (selfElement is ListValue selfList && otherElement is ListValue otherList)
                 {
@@ -213,6 +222,7 @@ public abstract record PineValue : IEquatable<PineValue>
             return true;
         }
 
+        /// <inheritdoc/>
         public override int GetHashCode() =>
             slimHashCode;
 
@@ -223,14 +233,14 @@ public abstract record PineValue : IEquatable<PineValue>
         {
             internal readonly int slimHashCode;
 
-            public IReadOnlyList<PineValue> Elements { get; }
+            public ReadOnlyMemory<PineValue> Elements { get; }
 
             /// <summary>
             /// Construct a list value from a sequence of other values.
             /// </summary>
-            public ListValueStruct(IReadOnlyList<PineValue> elements)
+            public ListValueStruct(ReadOnlyMemory<PineValue> elements)
                 :
-                this(elements, ComputeSlimHashCode(elements))
+                this(elements, ComputeSlimHashCode(elements.Span))
             {
             }
 
@@ -241,7 +251,7 @@ public abstract record PineValue : IEquatable<PineValue>
             }
 
             private ListValueStruct(
-                IReadOnlyList<PineValue> elements,
+                ReadOnlyMemory<PineValue> elements,
                 int slimHashCode)
             {
                 Elements = elements;
@@ -249,15 +259,19 @@ public abstract record PineValue : IEquatable<PineValue>
                 this.slimHashCode = slimHashCode;
             }
 
+            /// <inheritdoc/>
             public bool Equals(ListValueStruct other)
             {
-                if (slimHashCode != other.slimHashCode || Elements.Count != other.Elements.Count)
+                if (slimHashCode != other.slimHashCode || Elements.Length != other.Elements.Length)
                     return false;
 
-                for (int i = 0; i < Elements.Count; i++)
+                var selfSpan = Elements.Span;
+                var otherSpan = other.Elements.Span;
+
+                for (int i = 0; i < selfSpan.Length; i++)
                 {
-                    var selfElement = Elements[i];
-                    var otherElement = other.Elements[i];
+                    var selfElement = selfSpan[i];
+                    var otherElement = otherSpan[i];
 
                     if (selfElement is ListValue selfList && otherElement is ListValue otherList)
                     {
@@ -274,6 +288,7 @@ public abstract record PineValue : IEquatable<PineValue>
                 return true;
             }
 
+            /// <inheritdoc/>
             public override int GetHashCode() => slimHashCode;
         }
     }
@@ -298,17 +313,21 @@ public abstract record PineValue : IEquatable<PineValue>
             slimHashCode = hash.ToHashCode();
         }
 
+        /// <inheritdoc/>
         public virtual bool Equals(BlobValue? other)
         {
             if (other is null)
                 return false;
 
-            return ReferenceEquals(this, other)
-                ||
+            if (ReferenceEquals(this, other))
+                return true;
+
+            return
                 slimHashCode == other.slimHashCode &&
                 Bytes.Span.SequenceEqual(other.Bytes.Span);
         }
 
+        /// <inheritdoc/>
         public override int GetHashCode() => slimHashCode;
     }
 
@@ -320,18 +339,27 @@ public abstract record PineValue : IEquatable<PineValue>
     /// Returns true if the provided PineValue is found within the nested ListValue, including in any sublists;
     /// returns false if the current instance is a BlobValue, as it does not contain any elements.
     /// </returns>
-    public bool ContainsInListTransitive(PineValue pineValue) =>
-        this switch
+    public bool ContainsInListTransitive(PineValue pineValue)
+    {
+        if (this is not ListValue list)
         {
-            BlobValue => false,
+            return false;
+        }
 
-            ListValue list =>
-            list.Elements.Any(e => e.Equals(pineValue) || e.ContainsInListTransitive(pineValue)),
+        var elements = list.Elements.Span;
 
-            _ =>
-            throw new NotImplementedException()
-        };
+        for (var i = 0; i < elements.Length; i++)
+        {
+            var element = elements[i];
 
+            if (element.Equals(pineValue) || element.ContainsInListTransitive(pineValue))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
 
     public static (IReadOnlySet<ListValue>, IReadOnlySet<BlobValue>) CollectAllComponentsFromRoots(
         IEnumerable<PineValue> roots)
@@ -348,12 +376,14 @@ public abstract record PineValue : IEquatable<PineValue>
 
             collectedLists.Add(listValue);
 
-            for (var i = 0; i < listValue.Elements.Count; i++)
+            var elements = listValue.Elements.Span;
+
+            for (var i = 0; i < elements.Length; i++)
             {
-                if (listValue.Elements[i] is ListValue childList)
+                if (elements[i] is ListValue childList)
                     stack.Push(childList);
 
-                if (listValue.Elements[i] is BlobValue childBlob)
+                if (elements[i] is BlobValue childBlob)
                     collectedBlobs.Add(childBlob);
             }
         }

@@ -45,7 +45,7 @@ public class GitPartialForCommitServer
 
             var bodyString = bodyReader.ReadToEndAsync().Result;
 
-            var cloneUrls = bodyString.Split(new[] { '\n', '\r' }, System.StringSplitOptions.RemoveEmptyEntries);
+            var cloneUrls = bodyString.Split(['\n', '\r'], System.StringSplitOptions.RemoveEmptyEntries);
 
             var supportedCloneUrls =
                 cloneUrls

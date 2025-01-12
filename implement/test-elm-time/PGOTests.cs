@@ -1111,13 +1111,14 @@ public class PGOTests
 
                 var envFunctionsHashes =
                     functionRecord.envFunctions
+                    .ToArray()
                     .Select(envFunction => PineValueHashTree.ComputeHash(envFunction))
                     .ToArray();
 
                 Console.WriteLine(
                     "\nFunction " + functionToInspect.moduleName + "." + functionToInspect.declarationName + " has hash " +
                     CommonConversion.StringBase16(functionValueHash)[..8] + " and " +
-                    functionRecord.envFunctions.Count + " env functions:\n" +
+                    functionRecord.envFunctions.Length + " env functions:\n" +
                     string.Join("\n", envFunctionsHashes.Select(envFunctionHash => CommonConversion.StringBase16(envFunctionHash)[..8])));
             }
         }
@@ -1542,13 +1543,14 @@ public class PGOTests
 
                 var envFunctionsHashes =
                     functionRecord.envFunctions
+                    .ToArray()
                     .Select(envFunction => PineValueHashTree.ComputeHash(envFunction))
                     .ToArray();
 
                 Console.WriteLine(
                     "\nFunction " + functionToInspect.moduleName + "." + functionToInspect.declarationName + " has hash " +
                     CommonConversion.StringBase16(functionValueHash)[..8] + " and " +
-                    functionRecord.envFunctions.Count + " env functions:\n" +
+                    functionRecord.envFunctions.Length + " env functions:\n" +
                     string.Join("\n", envFunctionsHashes.Select(envFunctionHash => CommonConversion.StringBase16(envFunctionHash)[..8])));
             }
         }

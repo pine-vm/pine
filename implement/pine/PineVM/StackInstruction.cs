@@ -424,7 +424,7 @@ public record StackInstruction(
 
             PineValue.ListValue list =>
             "List [" +
-            CommandLineInterface.FormatIntegerForDisplay(list.Elements.Count) +
+            CommandLineInterface.FormatIntegerForDisplay(list.Elements.Length) +
             "] (" +
             CommandLineInterface.FormatIntegerForDisplay(list.NodesCount) +
             ")",

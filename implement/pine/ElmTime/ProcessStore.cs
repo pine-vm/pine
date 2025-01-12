@@ -102,7 +102,7 @@ public class ProcessStoreReaderInFileStore(IFileStore fileStore)
 
                 return
                     Encoding.UTF8.GetString(fileContent.Value.Span)
-                    .Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries).Reverse()
+                    .Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries).Reverse()
                     .Select(compositionRecord => Encoding.UTF8.GetBytes(compositionRecord));
             });
 

@@ -36,7 +36,7 @@ public class JsonConverterForPineValue : JsonConverter<PineValue>
 
             reader.Read();
 
-            return PineValue.List(elements);
+            return PineValue.List([.. elements]);
         }
 
         if (reader.TokenType == JsonTokenType.StartObject)
@@ -101,7 +101,7 @@ public class JsonConverterForPineValue : JsonConverter<PineValue>
 
         if (value is PineValue.ListValue listValue)
         {
-            if (0 < listValue.Elements.Count)
+            if (0 < listValue.Elements.Length)
             {
                 if (PineValueAsString.StringFromValue(value) is Result<string, string>.Ok asString && 0 < asString.Value.Length)
                 {
@@ -128,9 +128,9 @@ public class JsonConverterForPineValue : JsonConverter<PineValue>
         {
             writer.WriteStartArray();
 
-            foreach (var item in list.Elements)
+            for (int i = 0; i < list.Elements.Length; i++)
             {
-                Write(writer, item, options);
+                Write(writer, list.Elements.Span[i], options);
             }
 
             writer.WriteEndArray();

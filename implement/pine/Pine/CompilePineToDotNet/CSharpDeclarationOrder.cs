@@ -125,15 +125,15 @@ public class CSharpDeclarationOrder
                     if (xSize > ySize)
                         return 1;
 
-                    if (xList.Elements.Count < yList.Elements.Count)
+                    if (xList.Elements.Length < yList.Elements.Length)
                         return -1;
 
-                    if (yList.Elements.Count < xList.Elements.Count)
+                    if (yList.Elements.Length < xList.Elements.Length)
                         return 1;
 
-                    for (var i = 0; i < xList.Elements.Count; i++)
+                    for (var i = 0; i < xList.Elements.Length; i++)
                     {
-                        var itemComparison = Compare(xList.Elements[i], yList.Elements[i]);
+                        var itemComparison = Compare(xList.Elements.Span[i], yList.Elements.Span[i]);
 
                         if (itemComparison != 0)
                             return itemComparison;
@@ -223,16 +223,18 @@ public class CSharpDeclarationOrder
         return ordered;
     }
 
-    private static int AggregateSizeIncludingDescendants(PineValue value) =>
+    private static long AggregateSizeIncludingDescendants(PineValue value) =>
         value switch
         {
             PineValue.BlobValue blobValue =>
             blobValue.Bytes.Length,
 
             PineValue.ListValue listValue =>
-            listValue.Elements.Count + listValue.Elements.Sum(AggregateSizeIncludingDescendants),
+            listValue.NodesCount + listValue.BlobsBytesCount + 1,
 
-            _ => throw new Exception("Unknown value type: " + value.GetType().FullName)
+            _ =>
+            throw new NotImplementedException(
+                "Unknown value type: " + value.GetType().FullName)
         };
 
     private static IEnumerable<PineValue.ListValue> EnumerateDescendantListsBreadthFirst(IEnumerable<PineValue.ListValue> roots)
@@ -241,12 +243,22 @@ public class CSharpDeclarationOrder
 
         while (queue.Any())
         {
-            foreach (var item in queue.Dequeue().Elements.OfType<PineValue.ListValue>())
-            {
-                yield return item;
+            var current = queue.Dequeue();
 
-                if (!queue.Contains(item))
-                    queue.Enqueue(item);
+            if (current is PineValue.ListValue listValue)
+            {
+                for (var i = 0; i < listValue.Elements.Length; i++)
+                {
+                    var item = listValue.Elements.Span[i];
+
+                    if (item is PineValue.ListValue listItem)
+                    {
+                        yield return listItem;
+
+                        if (!queue.Contains(listItem))
+                            queue.Enqueue(listItem);
+                    }
+                }
             }
         }
     }

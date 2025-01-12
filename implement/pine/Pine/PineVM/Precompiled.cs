@@ -1315,7 +1315,7 @@ public class Precompiled
             return acc;
         }
 
-        if (charsList.Elements.Count is 0)
+        if (charsList.Elements.Length is 0)
         {
             return acc;
         }
@@ -1323,15 +1323,15 @@ public class Precompiled
         var accBlob =
             acc as PineValue.BlobValue ?? PineValue.EmptyBlob;
 
-        var buffer = new byte[accBlob.Bytes.Length + charsList.Elements.Count * 4];
+        var buffer = new byte[accBlob.Bytes.Length + charsList.Elements.Length * 4];
 
         accBlob.Bytes.CopyTo(buffer);
 
         int bytesWritten = accBlob.Bytes.Length;
 
-        for (var i = 0; i < charsList.Elements.Count; ++i)
+        for (var i = 0; i < charsList.Elements.Length; ++i)
         {
-            var charValue = charsList.Elements[i];
+            var charValue = charsList.Elements.Span[i];
 
             if (charValue is not PineValue.BlobValue charBlob)
             {
@@ -1510,24 +1510,24 @@ public class Precompiled
             return Tag_LT_Value;
         }
 
-        if (a is PineValue.ListValue listA && 0 < listA.Elements.Count)
+        if (a is PineValue.ListValue listA && 0 < listA.Elements.Length)
         {
             if (b == PineValue.EmptyList)
             {
                 return Tag_GT_Value;
             }
 
-            if (b is PineValue.ListValue listB && 0 < listB.Elements.Count)
+            if (b is PineValue.ListValue listB && 0 < listB.Elements.Length)
             {
                 var commonLength =
-                    listA.Elements.Count < listB.Elements.Count ?
-                    listA.Elements.Count :
-                    listB.Elements.Count;
+                    listA.Elements.Length < listB.Elements.Length ?
+                    listA.Elements.Length :
+                    listB.Elements.Length;
 
                 for (var i = 0; i < commonLength; ++i)
                 {
-                    var itemA = listA.Elements[i];
-                    var itemB = listB.Elements[i];
+                    var itemA = listA.Elements.Span[i];
+                    var itemB = listB.Elements.Span[i];
 
                     var itemOrder = BasicsCompare(itemA, itemB);
 
@@ -1537,12 +1537,12 @@ public class Precompiled
                     }
                 }
 
-                if (listA.Elements.Count < listB.Elements.Count)
+                if (listA.Elements.Length < listB.Elements.Length)
                 {
                     return Tag_LT_Value;
                 }
 
-                if (listA.Elements.Count > listB.Elements.Count)
+                if (listA.Elements.Length > listB.Elements.Length)
                 {
                     return Tag_GT_Value;
                 }
@@ -1561,14 +1561,14 @@ public class Precompiled
         if (stringA is PineValue.ListValue listA && stringB is PineValue.ListValue listB)
         {
             var commonLength =
-                listA.Elements.Count < listB.Elements.Count ?
-                listA.Elements.Count :
-                listB.Elements.Count;
+                listA.Elements.Length < listB.Elements.Length ?
+                listA.Elements.Length :
+                listB.Elements.Length;
 
             for (var i = 0; i < commonLength; ++i)
             {
-                var itemA = listA.Elements[i];
-                var itemB = listB.Elements[i];
+                var itemA = listA.Elements.Span[i];
+                var itemB = listB.Elements.Span[i];
 
                 if (itemA is not PineValue.BlobValue blobA)
                 {
@@ -1594,12 +1594,12 @@ public class Precompiled
                 }
             }
 
-            if (listA.Elements.Count < listB.Elements.Count)
+            if (listA.Elements.Length < listB.Elements.Length)
             {
                 return Tag_LT_Value;
             }
 
-            if (listA.Elements.Count > listB.Elements.Count)
+            if (listA.Elements.Length > listB.Elements.Length)
             {
                 return Tag_GT_Value;
             }
@@ -1643,19 +1643,19 @@ public class Precompiled
         var bTagArgs = PineVM.ValueFromPathInValueOrEmptyList(b, [1]);
 
         if (aTag == ElmValue.ElmFloatTypeTagNameAsValue &&
-            aTagArgs is PineValue.ListValue argsList && argsList.Elements.Count is 2)
+            aTagArgs is PineValue.ListValue argsList && argsList.Elements.Length is 2)
         {
-            var numAValue = argsList.Elements[0];
-            var denAValue = argsList.Elements[1];
+            var numAValue = argsList.Elements.Span[0];
+            var denAValue = argsList.Elements.Span[1];
 
             return (numAValue == b && denAValue == IntegerOneValue, 0);
         }
 
         if (bTag == ElmValue.ElmFloatTypeTagNameAsValue &&
-            bTagArgs is PineValue.ListValue argsListB && argsListB.Elements.Count is 2)
+            bTagArgs is PineValue.ListValue argsListB && argsListB.Elements.Length is 2)
         {
-            var numBValue = argsListB.Elements[0];
-            var denBValue = argsListB.Elements[1];
+            var numBValue = argsListB.Elements.Span[0];
+            var denBValue = argsListB.Elements.Span[1];
 
             return (a == numBValue && IntegerOneValue == denBValue, 0);
         }
@@ -1668,7 +1668,7 @@ public class Precompiled
         {
             if (a is PineValue.ListValue listA && b is PineValue.ListValue listB)
             {
-                if (listA.Elements.Count != listB.Elements.Count)
+                if (listA.Elements.Length != listB.Elements.Length)
                 {
                     return (false, 0);
                 }
@@ -1684,7 +1684,7 @@ public class Precompiled
                     var dictBList = DictToListRecursive(b);
 
                     return
-                        (PineValue.List(dictAList) == PineValue.List(dictBList), dictAList.Count + dictBList.Count);
+                        (PineValue.List(dictAList) == PineValue.List(dictBList), dictAList.Length + dictBList.Length);
                 }
 
                 if (aTag == ElmValue.ElmSetTypeTagNameAsValue)
@@ -1696,7 +1696,7 @@ public class Precompiled
                     var dictBKeys = DictKeysRecursive(dictB);
 
                     return
-                        (PineValue.List(dictAKeys) == PineValue.List(dictBKeys), dictAKeys.Count + dictBKeys.Count);
+                        (PineValue.List(dictAKeys) == PineValue.List(dictBKeys), dictAKeys.Length + dictBKeys.Length);
                 }
 
                 return ListsEqualRecursive(listA.Elements, listB.Elements);
@@ -1706,13 +1706,13 @@ public class Precompiled
         throw new ParseExpressionException("Error in case-of block: No matching branch.");
     }
 
-    static IReadOnlyList<PineValue> DictToListRecursive(PineValue dict)
+    static ReadOnlyMemory<PineValue> DictToListRecursive(PineValue dict)
     {
         var tag = PineVM.ValueFromPathInValueOrEmptyList(dict, [0]);
 
         if (tag == ElmValue.ElmDictEmptyTagNameAsValue)
         {
-            return [];
+            return ReadOnlyMemory<PineValue>.Empty;
         }
 
         if (tag == ElmValue.ElmDictNotEmptyTagNameAsValue)
@@ -1724,24 +1724,30 @@ public class Precompiled
             var argLeft = PineVM.ValueFromPathInValueOrEmptyList(dictNotEmptyArgs, [3]);
             var argRight = PineVM.ValueFromPathInValueOrEmptyList(dictNotEmptyArgs, [4]);
 
-            return
-                [
-                ..DictToListRecursive(argLeft),
-                PineValue.List([argKey, argValue]),
-                ..DictToListRecursive(argRight)
-                ];
+            var fromLeft = DictToListRecursive(argLeft);
+            var fromRight = DictToListRecursive(argRight);
+
+            var result = new PineValue[fromLeft.Length + fromRight.Length + 1];
+
+            fromLeft.Span.CopyTo(result);
+
+            result[fromLeft.Length] = PineValue.List([argKey, argValue]);
+
+            fromRight.Span.CopyTo(result.AsSpan(fromLeft.Length + 1));
+
+            return result;
         }
 
         throw new ParseExpressionException("Error in case-of block: No matching branch.");
     }
 
-    static IReadOnlyList<PineValue> DictKeysRecursive(PineValue dict)
+    static ReadOnlyMemory<PineValue> DictKeysRecursive(PineValue dict)
     {
         var tag = PineVM.ValueFromPathInValueOrEmptyList(dict, [0]);
 
         if (tag == ElmValue.ElmDictEmptyTagNameAsValue)
         {
-            return [];
+            return ReadOnlyMemory<PineValue>.Empty;
         }
 
         if (tag == ElmValue.ElmDictNotEmptyTagNameAsValue)
@@ -1753,26 +1759,32 @@ public class Precompiled
             var argLeft = PineVM.ValueFromPathInValueOrEmptyList(dictNotEmptyArgs, [3]);
             var argRight = PineVM.ValueFromPathInValueOrEmptyList(dictNotEmptyArgs, [4]);
 
-            return
-                [
-                ..DictKeysRecursive(argLeft),
-                argKey,
-                ..DictKeysRecursive(argRight)
-                ];
+            var fromLeft = DictKeysRecursive(argLeft);
+            var fromRight = DictKeysRecursive(argRight);
+
+            var result = new PineValue[fromLeft.Length + fromRight.Length + 1];
+
+            fromLeft.Span.CopyTo(result);
+
+            result[fromLeft.Length] = argKey;
+
+            fromRight.Span.CopyTo(result.AsSpan(fromLeft.Length + 1));
+
+            return result;
         }
 
         throw new ParseExpressionException("Error in case-of block: No matching branch.");
     }
 
     static (bool, int) ListsEqualRecursive(
-        IReadOnlyList<PineValue> listA,
-        IReadOnlyList<PineValue> listB)
+        ReadOnlyMemory<PineValue> listA,
+        ReadOnlyMemory<PineValue> listB)
     {
         int totalCount = 0;
 
-        for (int i = 0; i < listA.Count; i++)
+        for (int i = 0; i < listA.Length; i++)
         {
-            var (itemEq, itemCount) = BasicsEqRecursive(listA[i], listB[i]);
+            var (itemEq, itemCount) = BasicsEqRecursive(listA.Span[i], listB.Span[i]);
 
             if (!itemEq)
             {
@@ -1807,13 +1819,13 @@ public class Precompiled
             StackFrameCount: 0);
     }
 
-    static PrecompiledResult.FinalValue ListMember(PineValue item, IReadOnlyList<PineValue> list)
+    static PrecompiledResult.FinalValue ListMember(PineValue item, ReadOnlyMemory<PineValue> list)
     {
         int totalCount = 0;
 
-        for (var i = 0; i < list.Count; ++i)
+        for (var i = 0; i < list.Length; ++i)
         {
-            var (itemEq, itemEqStackFrameCount) = BasicsEqRecursive(item, list[i]);
+            var (itemEq, itemEqStackFrameCount) = BasicsEqRecursive(item, list.Span[i]);
 
             totalCount += itemEqStackFrameCount;
 
@@ -1848,18 +1860,19 @@ public class Precompiled
         {
             int totalCount = 0;
 
-            for (var i = 0; i < listValue.Elements.Count; ++i)
+            for (var i = 0; i < listValue.Elements.Length; ++i)
             {
-                if (listValue.Elements[i] is PineValue.ListValue itemList && 1 < itemList.Elements.Count)
+                if (listValue.Elements.Span[i] is PineValue.ListValue itemList && 1 < itemList.Elements.Length)
                 {
-                    var (itemEq, itemEqStackFrameCount) = BasicsEqRecursive(key, itemList.Elements[0]);
+                    var (itemEq, itemEqStackFrameCount) =
+                        BasicsEqRecursive(key, itemList.Elements.Span[0]);
 
                     totalCount += itemEqStackFrameCount;
 
                     if (itemEq)
                     {
                         return new PrecompiledResult.FinalValue(
-                            Tag_Just_Value(itemList.Elements[1]),
+                            Tag_Just_Value(itemList.Elements.Span[1]),
                             StackFrameCount: totalCount);
                     }
                 }
@@ -1891,16 +1904,16 @@ public class Precompiled
                 StackFrameCount: 0);
         }
 
-        for (var i = 0; i < listValue.Elements.Count; ++i)
+        for (var i = 0; i < listValue.Elements.Length; ++i)
         {
-            if (listValue.Elements[i] is PineValue.ListValue itemList)
+            if (listValue.Elements.Span[i] is PineValue.ListValue itemList)
             {
                 var candidateKey =
-                    itemList.Elements.Count < 1
+                    itemList.Elements.Length < 1
                     ?
                     PineValue.EmptyList
                     :
-                    itemList.Elements[0];
+                    itemList.Elements.Span[0];
 
                 var (itemEq, itemEqStackFrameCount) =
                     BasicsEqRecursive(key, candidateKey);
@@ -1908,11 +1921,11 @@ public class Precompiled
                 if (itemEq)
                 {
                     var itemListValue =
-                        itemList.Elements.Count < 2
+                        itemList.Elements.Length < 2
                         ?
                         PineValue.EmptyList
                         :
-                        itemList.Elements[1];
+                        itemList.Elements.Span[1];
 
                     return
                         new PrecompiledResult.FinalValue(
@@ -1958,13 +1971,13 @@ public class Precompiled
                 StackFrameCount: 0);
         }
 
-        var newUnique = new List<PineValue>(accumulatorList.Elements);
+        var newUnique = new List<PineValue>(accumulatorList.Elements.ToArray());
 
-        for (var i = 0; i < remainingList.Elements.Count; ++i)
+        for (var i = 0; i < remainingList.Elements.Length; ++i)
         {
-            var item = remainingList.Elements[i];
+            var item = remainingList.Elements.Span[i];
 
-            var (isMember, _) = ListMember(item, newUnique);
+            var (isMember, _) = ListMember(item, newUnique.ToArray());
 
             if (isMember != PineVMValues.TrueValue)
             {
@@ -1973,7 +1986,7 @@ public class Precompiled
         }
 
         return new PrecompiledResult.FinalValue(
-            PineValue.List([.. accumulatorList.Elements, .. newUnique]),
+            PineValue.List([.. accumulatorList.Elements.ToArray(), .. newUnique]),
             StackFrameCount: 0);
     }
 
@@ -2074,17 +2087,17 @@ public class Precompiled
 
         if (remainingFieldsValue is PineValue.ListValue remainingFields)
         {
-            for (var i = 0; i < remainingFields.Elements.Count; ++i)
+            for (var i = 0; i < remainingFields.Elements.Length; ++i)
             {
-                var field = remainingFields.Elements[i];
+                var field = remainingFields.Elements.Span[i];
 
-                if (field is PineValue.ListValue fieldList && 0 < fieldList.Elements.Count)
+                if (field is PineValue.ListValue fieldList && 0 < fieldList.Elements.Length)
                 {
-                    if (fieldList.Elements[0] == fieldNameValue)
+                    if (fieldList.Elements.Span[0] == fieldNameValue)
                     {
-                        if (1 < fieldList.Elements.Count)
+                        if (1 < fieldList.Elements.Length)
                         {
-                            return fieldList.Elements[1];
+                            return fieldList.Elements.Span[1];
                         }
 
                         return PineValue.EmptyList;
@@ -2138,33 +2151,33 @@ public class Precompiled
             throw new ParseExpressionException("Error in case-of block: No matching branch.");
         }
 
-        if (listValue.Elements.Count is not 2)
+        if (listValue.Elements.Length is not 2)
         {
             throw new ParseExpressionException("Error in case-of block: No matching branch.");
         }
 
-        if (listValue.Elements[1] is not PineValue.ListValue tagArgumentsList)
+        if (listValue.Elements.Span[1] is not PineValue.ListValue tagArgumentsList)
         {
             throw new ParseExpressionException("Error in case-of block: No matching branch.");
         }
 
-        if (tagArgumentsList.Elements.Count is not 1)
+        if (tagArgumentsList.Elements.Length is not 1)
         {
             throw new ParseExpressionException("Error in case-of block: No matching branch.");
         }
 
-        var tagArgument = tagArgumentsList.Elements[0];
+        var tagArgument = tagArgumentsList.Elements.Span[0];
 
-        if (listValue.Elements[0] == Tag_ListValue_Value &&
+        if (listValue.Elements.Span[0] == Tag_ListValue_Value &&
             tagArgument is PineValue.ListValue listValueListList)
         {
             long nodeCount = 0;
             long byteCount = 0;
 
-            for (var i = 0; i < listValueListList.Elements.Count; ++i)
+            for (var i = 0; i < listValueListList.Elements.Length; ++i)
             {
                 var (itemNodeCount, itemByteCount) =
-                    CountEncodedPineValueContentRecursive(listValueListList.Elements[i]);
+                    CountEncodedPineValueContentRecursive(listValueListList.Elements.Span[i]);
 
                 nodeCount += itemNodeCount + 1;
                 byteCount += itemByteCount;
@@ -2173,10 +2186,10 @@ public class Precompiled
             return (nodeCount, byteCount);
         }
 
-        if (listValue.Elements[0] == Tag_BlobValue_Value &&
+        if (listValue.Elements.Span[0] == Tag_BlobValue_Value &&
             tagArgument is PineValue.ListValue blobValueList)
         {
-            return (0, blobValueList.Elements.Count);
+            return (0, blobValueList.Elements.Length);
         }
 
         throw new ParseExpressionException("Error in case-of block: No matching branch.");
@@ -2217,16 +2230,16 @@ public class Precompiled
         }
 
         var mappedValues =
-            new PineValue[mappedCharsList.Elements.Count + stringCharsList.Elements.Count];
+            new PineValue[mappedCharsList.Elements.Length + stringCharsList.Elements.Length];
 
-        for (var i = 0; i < mappedCharsList.Elements.Count; ++i)
+        for (var i = 0; i < mappedCharsList.Elements.Length; ++i)
         {
-            mappedValues[i] = mappedCharsList.Elements[i];
+            mappedValues[i] = mappedCharsList.Elements.Span[i];
         }
 
-        for (var i = 0; i < stringCharsList.Elements.Count; ++i)
+        for (var i = 0; i < stringCharsList.Elements.Length; ++i)
         {
-            if (stringCharsList.Elements[i] is not PineValue.BlobValue charBlobValue)
+            if (stringCharsList.Elements.Span[i] is not PineValue.BlobValue charBlobValue)
             {
                 return null;
             }
@@ -2245,7 +2258,7 @@ public class Precompiled
                     PineValue.List([PineValue.List(blobValueIntegers)])
                     ]);
 
-            mappedValues[mappedCharsList.Elements.Count + i] = blobValue;
+            mappedValues[mappedCharsList.Elements.Length + i] = blobValue;
         }
 
         var finalValue =
@@ -2294,14 +2307,14 @@ public class Precompiled
             return null;
         }
 
-        if (offset < 0 || offset >= charsList.Elements.Count || end > charsList.Elements.Count)
+        if (offset < 0 || offset >= charsList.Elements.Length || end > charsList.Elements.Length)
         {
             return null;
         }
 
         for (var i = (int)offset; i < end; ++i)
         {
-            if (charsList.Elements[i] == Character_ASCII_Newline_Value)
+            if (charsList.Elements.Span[i] == Character_ASCII_Newline_Value)
             {
                 ++newlines;
                 col = 0;
@@ -2321,7 +2334,7 @@ public class Precompiled
         return
             new PrecompiledResult.FinalValue(
                 finalValue,
-                StackFrameCount: 1 + charsList.Elements.Count);
+                StackFrameCount: 1 + charsList.Elements.Length);
     }
 
     /*
@@ -2418,9 +2431,9 @@ public class Precompiled
 
         int newOffset = (int)offset;
 
-        for (; newOffset < bigCharsList.Elements.Count; ++newOffset)
+        for (; newOffset < bigCharsList.Elements.Length; ++newOffset)
         {
-            if (bigCharsList.Elements.Count <= newOffset + patternList.Elements.Count)
+            if (bigCharsList.Elements.Length <= newOffset + patternList.Elements.Length)
             {
                 newOffset = -1;
                 break;
@@ -2428,9 +2441,9 @@ public class Precompiled
 
             bool found = true;
 
-            for (var j = 0; j < patternList.Elements.Count; ++j)
+            for (var j = 0; j < patternList.Elements.Length; ++j)
             {
-                if (patternList.Elements[j] != bigCharsList.Elements[newOffset + j])
+                if (patternList.Elements.Span[j] != bigCharsList.Elements.Span[newOffset + j])
                 {
                     found = false;
                     break;
@@ -2450,7 +2463,7 @@ public class Precompiled
 
         for (var i = (int)offset; i < offset + consumedLength; ++i)
         {
-            if (bigCharsList.Elements[i] == Character_ASCII_Newline_Value)
+            if (bigCharsList.Elements.Span[i] == Character_ASCII_Newline_Value)
             {
                 ++newRow;
                 newCol = 1;
@@ -2646,12 +2659,12 @@ public class Precompiled
 
         while (true)
         {
-            if (srcCharsList.Elements.Count <= offset)
+            if (srcCharsList.Elements.Length <= offset)
             {
                 break;
             }
 
-            var currentChar = srcCharsList.Elements[offset];
+            var currentChar = srcCharsList.Elements.Span[offset];
 
             if (!charValuePredicate(currentChar))
             {
@@ -2711,7 +2724,7 @@ public class Precompiled
             return null;
         }
 
-        if (remainingItemsListValue.Elements.Count < 1)
+        if (remainingItemsListValue.Elements.Length < 1)
         {
             return () => new PrecompiledResult.FinalValue(mappedReversed, StackFrameCount: 0);
         }
@@ -2724,7 +2737,7 @@ public class Precompiled
 
         var functionRecordRemainingParamCount =
             functionRecordOk.Value.functionParameterCount -
-            functionRecordOk.Value.argumentsAlreadyCollected.Count;
+            functionRecordOk.Value.argumentsAlreadyCollected.Length;
 
         if (functionRecordRemainingParamCount is not 1)
         {
@@ -2736,14 +2749,19 @@ public class Precompiled
 
         PineValue environmentForItem(PineValue itemValue)
         {
-            var argumentsList =
-                PineValue.List([.. functionRecordOk.Value.argumentsAlreadyCollected, itemValue]);
+            var argumentsItems = new PineValue[functionRecordOk.Value.argumentsAlreadyCollected.Length + 1];
+
+            functionRecordOk.Value.argumentsAlreadyCollected.CopyTo(argumentsItems);
+
+            argumentsItems[^1] = itemValue;
+
+            var argumentsList = PineValue.List(argumentsItems);
 
             return
                 PineValue.List([environmentFunctionsEntry, argumentsList]);
         }
 
-        var itemsResults = new PineValue[remainingItemsListValue.Elements.Count];
+        var itemsResults = new PineValue[remainingItemsListValue.Elements.Length];
         var itemIndex = 0;
 
         PineVM.ApplyStepwise.StepResult step(PineValue itemResultValue)
@@ -2752,12 +2770,12 @@ public class Precompiled
 
             ++itemIndex;
 
-            if (itemIndex < remainingItemsListValue.Elements.Count)
+            if (itemIndex < remainingItemsListValue.Elements.Length)
             {
                 return
                     new PineVM.ApplyStepwise.StepResult.Continue(
                         Expression: functionRecordOk.Value.innerFunction,
-                        EnvironmentValue: environmentForItem(remainingItemsListValue.Elements[itemIndex]),
+                        EnvironmentValue: environmentForItem(remainingItemsListValue.Elements.Span[itemIndex]),
                         Callback: step);
             }
 
@@ -2773,7 +2791,7 @@ public class Precompiled
                     start:
                     new PineVM.ApplyStepwise.StepResult.Continue(
                         Expression: functionRecordOk.Value.innerFunction,
-                        EnvironmentValue: environmentForItem(remainingItemsListValue.Elements[itemIndex]),
+                        EnvironmentValue: environmentForItem(remainingItemsListValue.Elements.Span[itemIndex]),
                         Callback: step)));
     }
 
@@ -2792,7 +2810,7 @@ public class Precompiled
             return null;
         }
 
-        if (itemsListValue.Elements.Count < 1)
+        if (itemsListValue.Elements.Length < 1)
         {
             return () => new PrecompiledResult.FinalValue(PineValue.EmptyList, StackFrameCount: 0);
         }
@@ -2808,7 +2826,7 @@ public class Precompiled
             return null;
         }
 
-        if (functionRecordOk.Value.argumentsAlreadyCollected.Count is not 0)
+        if (functionRecordOk.Value.argumentsAlreadyCollected.Length is not 0)
         {
             return null;
         }
@@ -2824,7 +2842,7 @@ public class Precompiled
                 PineValue.List([environmentFunctionsEntry, argumentsList]);
         }
 
-        var itemsResults = new PineValue[itemsListValue.Elements.Count];
+        var itemsResults = new PineValue[itemsListValue.Elements.Length];
         var itemIndex = 0;
 
         PineVM.ApplyStepwise.StepResult step(PineValue itemResultValue)
@@ -2833,12 +2851,12 @@ public class Precompiled
 
             ++itemIndex;
 
-            if (itemIndex < itemsListValue.Elements.Count)
+            if (itemIndex < itemsListValue.Elements.Length)
             {
                 return
                     new PineVM.ApplyStepwise.StepResult.Continue(
                         Expression: functionRecordOk.Value.innerFunction,
-                        EnvironmentValue: environmentForItem(itemsListValue.Elements[itemIndex]),
+                        EnvironmentValue: environmentForItem(itemsListValue.Elements.Span[itemIndex]),
                         Callback: step);
             }
 
@@ -2853,7 +2871,7 @@ public class Precompiled
                     start:
                     new PineVM.ApplyStepwise.StepResult.Continue(
                         Expression: functionRecordOk.Value.innerFunction,
-                        EnvironmentValue: environmentForItem(itemsListValue.Elements[itemIndex]),
+                        EnvironmentValue: environmentForItem(itemsListValue.Elements.Span[itemIndex]),
                         Callback: step)));
     }
 
@@ -2875,7 +2893,7 @@ public class Precompiled
             return null;
         }
 
-        if (itemsListValue.Elements.Count < 1)
+        if (itemsListValue.Elements.Length < 1)
         {
             return () => new PrecompiledResult.FinalValue(argumentAggregate, StackFrameCount: 0);
         }
@@ -2888,7 +2906,7 @@ public class Precompiled
 
         var functionRecordRemainingParamCount =
             functionRecordOk.Value.functionParameterCount -
-            functionRecordOk.Value.argumentsAlreadyCollected.Count;
+            functionRecordOk.Value.argumentsAlreadyCollected.Length;
 
         if (functionRecordRemainingParamCount is not 2)
         {
@@ -2900,8 +2918,15 @@ public class Precompiled
 
         PineValue environmentForItem(PineValue aggregate, PineValue itemValue)
         {
-            var argumentsList =
-                PineValue.List([.. functionRecordOk.Value.argumentsAlreadyCollected, itemValue, aggregate]);
+            var argumentsItems = new PineValue[functionRecordOk.Value.argumentsAlreadyCollected.Length + 2];
+
+            functionRecordOk.Value.argumentsAlreadyCollected.CopyTo(argumentsItems);
+
+            argumentsItems[^2] = itemValue;
+
+            argumentsItems[^1] = aggregate;
+
+            var argumentsList = PineValue.List(argumentsItems);
 
             return
                 PineValue.List([environmentFunctionsEntry, argumentsList]);
@@ -2916,12 +2941,12 @@ public class Precompiled
 
             ++itemIndex;
 
-            if (itemIndex < itemsListValue.Elements.Count)
+            if (itemIndex < itemsListValue.Elements.Length)
             {
                 return
                     new PineVM.ApplyStepwise.StepResult.Continue(
                         Expression: functionRecordOk.Value.innerFunction,
-                        EnvironmentValue: environmentForItem(mutatedAggregate, itemsListValue.Elements[itemIndex]),
+                        EnvironmentValue: environmentForItem(mutatedAggregate, itemsListValue.Elements.Span[itemIndex]),
                         Callback: step);
             }
 
@@ -2951,7 +2976,7 @@ public class Precompiled
                     start:
                     new PineVM.ApplyStepwise.StepResult.Continue(
                         Expression: functionRecordOk.Value.innerFunction,
-                        EnvironmentValue: environmentForItem(mutatedAggregate, itemsListValue.Elements[itemIndex]),
+                        EnvironmentValue: environmentForItem(mutatedAggregate, itemsListValue.Elements.Span[itemIndex]),
                         Callback: step)));
     }
 
@@ -2976,7 +3001,7 @@ public class Precompiled
         var accumulatedReversed =
             KernelFunction.reverse(argumentAccumulated);
 
-        if (itemsList.Elements.Count < 1)
+        if (itemsList.Elements.Length < 1)
         {
             return () => new PrecompiledResult.FinalValue(accumulatedReversed, StackFrameCount: 0);
         }
@@ -2989,7 +3014,7 @@ public class Precompiled
 
         var functionRecordRemainingParamCount =
             functionRecordOk.Value.functionParameterCount -
-            functionRecordOk.Value.argumentsAlreadyCollected.Count;
+            functionRecordOk.Value.argumentsAlreadyCollected.Length;
 
         if (functionRecordRemainingParamCount is not 1)
         {
@@ -3001,14 +3026,19 @@ public class Precompiled
 
         PineValue environmentForItem(PineValue itemValue)
         {
-            var argumentsList =
-                PineValue.List([.. functionRecordOk.Value.argumentsAlreadyCollected, itemValue]);
+            var argumentsItems = new PineValue[functionRecordOk.Value.argumentsAlreadyCollected.Length + 1];
+
+            functionRecordOk.Value.argumentsAlreadyCollected.CopyTo(argumentsItems);
+
+            argumentsItems[^1] = itemValue;
+
+            var argumentsList = PineValue.List(argumentsItems);
 
             return
                 PineValue.List([environmentFunctionsEntry, argumentsList]);
         }
 
-        var includedItems = new PineValue[itemsList.Elements.Count];
+        var includedItems = new PineValue[itemsList.Elements.Length];
         var itemIndex = 0;
         var includedItemCount = 0;
 
@@ -3016,19 +3046,19 @@ public class Precompiled
         {
             if (itemResultValue == PineVMValues.TrueValue)
             {
-                includedItems[includedItemCount] = itemsList.Elements[itemIndex];
+                includedItems[includedItemCount] = itemsList.Elements.Span[itemIndex];
 
                 ++includedItemCount;
             }
 
             ++itemIndex;
 
-            if (itemIndex < itemsList.Elements.Count)
+            if (itemIndex < itemsList.Elements.Length)
             {
                 return
                     new PineVM.ApplyStepwise.StepResult.Continue(
                         Expression: functionRecordOk.Value.innerFunction,
-                        EnvironmentValue: environmentForItem(itemsList.Elements[itemIndex]),
+                        EnvironmentValue: environmentForItem(itemsList.Elements.Span[itemIndex]),
                         Callback: step);
             }
 
@@ -3046,7 +3076,7 @@ public class Precompiled
                     start:
                     new PineVM.ApplyStepwise.StepResult.Continue(
                         Expression: functionRecordOk.Value.innerFunction,
-                        EnvironmentValue: environmentForItem(itemsList.Elements[itemIndex]),
+                        EnvironmentValue: environmentForItem(itemsList.Elements.Span[itemIndex]),
                         Callback: step)));
     }
 
@@ -3088,7 +3118,7 @@ public class Precompiled
         var accumulatedReversed =
             KernelFunction.reverse(argumentAccumulated);
 
-        if (itemsList.Elements.Count < 1)
+        if (itemsList.Elements.Length < 1)
         {
             return () => new PrecompiledResult.FinalValue(accumulatedReversed, StackFrameCount: 0);
         }
@@ -3101,7 +3131,7 @@ public class Precompiled
 
         var functionRecordRemainingParamCount =
             functionRecordOk.Value.functionParameterCount -
-            functionRecordOk.Value.argumentsAlreadyCollected.Count;
+            functionRecordOk.Value.argumentsAlreadyCollected.Length;
 
         if (functionRecordRemainingParamCount is not 1)
         {
@@ -3113,14 +3143,19 @@ public class Precompiled
 
         PineValue environmentForItem(PineValue itemValue)
         {
-            var argumentsList =
-                PineValue.List([.. functionRecordOk.Value.argumentsAlreadyCollected, itemValue]);
+            var argumentsItems = new PineValue[functionRecordOk.Value.argumentsAlreadyCollected.Length + 1];
+
+            functionRecordOk.Value.argumentsAlreadyCollected.CopyTo(argumentsItems);
+
+            argumentsItems[^1] = itemValue;
+
+            var argumentsList = PineValue.List(argumentsItems);
 
             return
                 PineValue.List([environmentFunctionsEntry, argumentsList]);
         }
 
-        var includedItems = new PineValue[itemsList.Elements.Count];
+        var includedItems = new PineValue[itemsList.Elements.Length];
 
         var itemIndex = 0;
 
@@ -3148,12 +3183,12 @@ public class Precompiled
 
             ++itemIndex;
 
-            if (itemIndex < itemsList.Elements.Count)
+            if (itemIndex < itemsList.Elements.Length)
             {
                 return
                     new PineVM.ApplyStepwise.StepResult.Continue(
                         Expression: functionRecordOk.Value.innerFunction,
-                        EnvironmentValue: environmentForItem(itemsList.Elements[itemIndex]),
+                        EnvironmentValue: environmentForItem(itemsList.Elements.Span[itemIndex]),
                         Callback: step);
             }
 
@@ -3171,7 +3206,7 @@ public class Precompiled
                     start:
                     new PineVM.ApplyStepwise.StepResult.Continue(
                         Expression: functionRecordOk.Value.innerFunction,
-                        EnvironmentValue: environmentForItem(itemsList.Elements[itemIndex]),
+                        EnvironmentValue: environmentForItem(itemsList.Elements.Span[itemIndex]),
                         Callback: step)));
     }
 
@@ -3190,7 +3225,7 @@ public class Precompiled
             return null;
         }
 
-        if (itemsListValue.Elements.Count < 1)
+        if (itemsListValue.Elements.Length < 1)
         {
             return () => new PrecompiledResult.FinalValue(PineVMValues.TrueValue, StackFrameCount: 0);
         }
@@ -3203,7 +3238,7 @@ public class Precompiled
 
         var functionRecordRemainingParamCount =
             functionRecordOk.Value.functionParameterCount -
-            functionRecordOk.Value.argumentsAlreadyCollected.Count;
+            functionRecordOk.Value.argumentsAlreadyCollected.Length;
 
         if (functionRecordRemainingParamCount is not 1)
         {
@@ -3215,8 +3250,13 @@ public class Precompiled
 
         PineValue environmentForItem(PineValue itemValue)
         {
-            var argumentsList =
-                PineValue.List([.. functionRecordOk.Value.argumentsAlreadyCollected, itemValue]);
+            var argumentsItems = new PineValue[functionRecordOk.Value.argumentsAlreadyCollected.Length + 1];
+
+            functionRecordOk.Value.argumentsAlreadyCollected.CopyTo(argumentsItems);
+
+            argumentsItems[^1] = itemValue;
+
+            var argumentsList = PineValue.List(argumentsItems);
 
             return
                 PineValue.List([environmentFunctionsEntry, argumentsList]);
@@ -3233,12 +3273,12 @@ public class Precompiled
 
             ++itemIndex;
 
-            if (itemIndex < itemsListValue.Elements.Count)
+            if (itemIndex < itemsListValue.Elements.Length)
             {
                 return
                     new PineVM.ApplyStepwise.StepResult.Continue(
                         Expression: functionRecordOk.Value.innerFunction,
-                        EnvironmentValue: environmentForItem(itemsListValue.Elements[itemIndex]),
+                        EnvironmentValue: environmentForItem(itemsListValue.Elements.Span[itemIndex]),
                         Callback: step);
             }
 
@@ -3252,7 +3292,7 @@ public class Precompiled
                     start:
                     new PineVM.ApplyStepwise.StepResult.Continue(
                         Expression: functionRecordOk.Value.innerFunction,
-                        EnvironmentValue: environmentForItem(itemsListValue.Elements[itemIndex]),
+                        EnvironmentValue: environmentForItem(itemsListValue.Elements.Span[itemIndex]),
                         Callback: step)));
     }
 
@@ -3271,7 +3311,7 @@ public class Precompiled
             return null;
         }
 
-        if (itemsListValue.Elements.Count < 1)
+        if (itemsListValue.Elements.Length < 1)
         {
             return () => new PrecompiledResult.FinalValue(PineVMValues.FalseValue, StackFrameCount: 0);
         }
@@ -3284,7 +3324,7 @@ public class Precompiled
 
         var functionRecordRemainingParamCount =
             functionRecordOk.Value.functionParameterCount -
-            functionRecordOk.Value.argumentsAlreadyCollected.Count;
+            functionRecordOk.Value.argumentsAlreadyCollected.Length;
 
         if (functionRecordRemainingParamCount is not 1)
         {
@@ -3296,8 +3336,13 @@ public class Precompiled
 
         PineValue environmentForItem(PineValue itemValue)
         {
-            var argumentsList =
-                PineValue.List([.. functionRecordOk.Value.argumentsAlreadyCollected, itemValue]);
+            var argumentsItems = new PineValue[functionRecordOk.Value.argumentsAlreadyCollected.Length + 1];
+
+            functionRecordOk.Value.argumentsAlreadyCollected.CopyTo(argumentsItems);
+
+            argumentsItems[^1] = itemValue;
+
+            var argumentsList = PineValue.List(argumentsItems);
 
             return
                 PineValue.List([environmentFunctionsEntry, argumentsList]);
@@ -3314,12 +3359,12 @@ public class Precompiled
 
             ++itemIndex;
 
-            if (itemIndex < itemsListValue.Elements.Count)
+            if (itemIndex < itemsListValue.Elements.Length)
             {
                 return
                     new PineVM.ApplyStepwise.StepResult.Continue(
                         Expression: functionRecordOk.Value.innerFunction,
-                        EnvironmentValue: environmentForItem(itemsListValue.Elements[itemIndex]),
+                        EnvironmentValue: environmentForItem(itemsListValue.Elements.Span[itemIndex]),
                         Callback: step);
             }
 
@@ -3333,7 +3378,7 @@ public class Precompiled
                     start:
                     new PineVM.ApplyStepwise.StepResult.Continue(
                         Expression: functionRecordOk.Value.innerFunction,
-                        EnvironmentValue: environmentForItem(itemsListValue.Elements[itemIndex]),
+                        EnvironmentValue: environmentForItem(itemsListValue.Elements.Span[itemIndex]),
                         Callback: step)));
     }
 
@@ -3408,7 +3453,7 @@ public class Precompiled
         {
             if (relativeIndex < 0)
             {
-                return relativeIndex + charsList.Elements.Count;
+                return relativeIndex + charsList.Elements.Length;
             }
 
             return relativeIndex;
@@ -3419,7 +3464,7 @@ public class Precompiled
         var sliceLength = absoluteIndex((int)end) - absoluteStart;
 
         var sliceChars =
-            charsList.Elements.Count <= absoluteStart
+            charsList.Elements.Length <= absoluteStart
             ?
             PineValue.EmptyList
             :
@@ -3588,14 +3633,14 @@ public class Precompiled
         while (true)
         {
             var remainingCharsCount =
-                charsList.Elements.Count - offsetInt;
+                charsList.Elements.Length - offsetInt;
 
             if (remainingCharsCount < 1)
             {
                 break;
             }
 
-            var nextChar = charsList.Elements[offsetInt];
+            var nextChar = charsList.Elements.Span[offsetInt];
 
             if (nextChar is not PineValue.BlobValue nextCharBlob)
             {
@@ -3613,7 +3658,7 @@ public class Precompiled
 
             if (1 < remainingCharsCount)
             {
-                var nextNextChar = charsList.Elements[offsetInt + 1];
+                var nextNextChar = charsList.Elements.Span[offsetInt + 1];
 
                 if (nextNextChar is PineValue.BlobValue nextNextCharBlob &&
                     nextNextCharBlob.Bytes.Length is 1)
@@ -3686,7 +3731,7 @@ public class Precompiled
         }
 
         var finalValue =
-            KernelFunction.concat([currentLinesValue, PineValue.List(linesValues)]);
+            KernelFunction.concat([currentLinesValue, PineValue.List([.. linesValues])]);
 
         return () => new PrecompiledResult.FinalValue(finalValue, StackFrameCount: 0);
     }
@@ -3754,12 +3799,12 @@ public class Precompiled
 
         while (true)
         {
-            if (srcCharsList.Elements.Count <= offset)
+            if (srcCharsList.Elements.Length <= offset)
             {
                 break;
             }
 
-            var currentChar = srcCharsList.Elements[offset];
+            var currentChar = srcCharsList.Elements.Span[offset];
 
             if (currentChar is not PineValue.BlobValue currentCharBlob)
             {
@@ -3828,15 +3873,15 @@ public class Precompiled
             case List.take 1 (List.drop offset src) of
                 actualChar :: _ ->
                     if isGood actualChar then
-                        skipWhileWithoutLinebreakHelp isGood (offset + 1) row (col + 1) src indent
+                skipWhileWithoutLinebreakHelp isGood (offset + 1) row (col + 1) src indent
 
-                    else
+            else
                         -- no match
                         PState src offset indent row col
 
                 [] ->
-                    -- no match
-                    PState src offset indent row col
+                -- no match
+                PState src offset indent row col
          * */
 
         var isGoodFunctionValue =
@@ -3979,12 +4024,12 @@ public class Precompiled
 
         while (true)
         {
-            if (srcCharsList.Elements.Count <= offset)
+            if (srcCharsList.Elements.Length <= offset)
             {
                 break;
             }
 
-            var currentChar = srcCharsList.Elements[offset];
+            var currentChar = srcCharsList.Elements.Span[offset];
 
             if (charValuePredicate(currentChar))
             {
@@ -4104,12 +4149,12 @@ public class Precompiled
 
         while (true)
         {
-            if (srcCharsList.Elements.Count <= offset)
+            if (srcCharsList.Elements.Length <= offset)
             {
                 break;
             }
 
-            var currentChar = srcCharsList.Elements[offset];
+            var currentChar = srcCharsList.Elements.Span[offset];
 
             if (!charValuePredicate(currentChar))
             {
@@ -4198,21 +4243,21 @@ public class Precompiled
         if (environment is not PineValue.ListValue envList)
             return null;
 
-        if (envList.Elements.Count < 2)
+        if (envList.Elements.Length < 2)
             return null;
 
-        if (envList.Elements[1] is not PineValue.ListValue taggedFunctionRecordList)
+        if (envList.Elements.Span[1] is not PineValue.ListValue taggedFunctionRecordList)
             return null;
 
-        if (envList.Elements[2] is not PineValue.ListValue newArgumentsList)
+        if (envList.Elements.Span[2] is not PineValue.ListValue newArgumentsList)
             return null;
 
-        if (newArgumentsList.Elements.Count is 0)
+        if (newArgumentsList.Elements.Length is 0)
         {
             return () => new PrecompiledResult.FinalValue(taggedFunctionRecordList, StackFrameCount: 0);
         }
 
-        if (taggedFunctionRecordList.Elements.Count < 2)
+        if (taggedFunctionRecordList.Elements.Length < 2)
             return null;
 
         /*
@@ -4222,16 +4267,16 @@ public class Precompiled
             return null;
         */
 
-        if (taggedFunctionRecordList.Elements[1] is not PineValue.ListValue functionRecord)
+        if (taggedFunctionRecordList.Elements.Span[1] is not PineValue.ListValue functionRecord)
             return null;
 
-        if (functionRecord.Elements.Count < 4)
+        if (functionRecord.Elements.Length < 4)
             return null;
 
-        if (functionRecord.Elements[3] is not PineValue.ListValue argsCollectedPreviouslyList)
+        if (functionRecord.Elements.Span[3] is not PineValue.ListValue argsCollectedPreviouslyList)
             return null;
 
-        if (functionRecord.Elements[1] is not PineValue.BlobValue paramCountBlob)
+        if (functionRecord.Elements.Span[1] is not PineValue.BlobValue paramCountBlob)
             return null;
 
         if (paramCountBlob.Bytes.Length is not 2)
@@ -4242,29 +4287,30 @@ public class Precompiled
 
         var paramCount = paramCountBlob.Bytes.Span[1];
 
-        var envFunctions = functionRecord.Elements[2];
+        var envFunctions = functionRecord.Elements.Span[2];
 
-        if (paramCount != argsCollectedPreviouslyList.Elements.Count + newArgumentsList.Elements.Count)
+        if (paramCount != argsCollectedPreviouslyList.Elements.Length + newArgumentsList.Elements.Length)
             return null;
 
         PineValue? combinedArgumentsValue = null;
 
-        if (argsCollectedPreviouslyList.Elements.Count is 0)
+        if (argsCollectedPreviouslyList.Elements.Length is 0)
         {
             combinedArgumentsValue = newArgumentsList;
         }
         else
         {
-            var combinedArgsArray = new PineValue[argsCollectedPreviouslyList.Elements.Count + newArgumentsList.Elements.Count];
+            var combinedArgsArray =
+                new PineValue[argsCollectedPreviouslyList.Elements.Length + newArgumentsList.Elements.Length];
 
-            for (var i = 0; i < argsCollectedPreviouslyList.Elements.Count; ++i)
+            for (var i = 0; i < argsCollectedPreviouslyList.Elements.Length; ++i)
             {
-                combinedArgsArray[i] = argsCollectedPreviouslyList.Elements[i];
+                combinedArgsArray[i] = argsCollectedPreviouslyList.Elements.Span[i];
             }
 
-            for (var i = 0; i < newArgumentsList.Elements.Count; ++i)
+            for (var i = 0; i < newArgumentsList.Elements.Length; ++i)
             {
-                combinedArgsArray[i + argsCollectedPreviouslyList.Elements.Count] = newArgumentsList.Elements[i];
+                combinedArgsArray[i + argsCollectedPreviouslyList.Elements.Length] = newArgumentsList.Elements.Span[i];
             }
 
             combinedArgumentsValue = PineValue.List(combinedArgsArray);
@@ -4280,7 +4326,7 @@ public class Precompiled
         return
             () => new PrecompiledResult.ContinueParseAndEval(
                 EnvironmentValue: newEnvironment,
-                ExpressionValue: functionRecord.Elements[0]);
+                ExpressionValue: functionRecord.Elements.Span[0]);
     }
 
     private static readonly PineValue IntegerOneValue =

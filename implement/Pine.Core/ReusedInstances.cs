@@ -108,7 +108,10 @@ public record ReusedInstances(
             new PineValueCompactBuild.ListEntry(
                 Key: expectedInCompilerKey,
                 Value: entryValueFromListItems(
-                    [.. source.ValuesExpectedInCompilerBlobs.Cast<PineValue>().Concat(source.ValuesExpectedInCompilerLists)]));
+                    source.ValuesExpectedInCompilerBlobs
+                    .Cast<PineValue>()
+                    .Concat(source.ValuesExpectedInCompilerLists)
+                    .ToArray()));
 
         return [.. basicItems, ventry];
     }
@@ -186,13 +189,23 @@ public record ReusedInstances(
                 "Did not find container with key " + expectedInCompilerKey);
         }
 
-        var listValuesExpectedInCompiler =
-            valuesExpectedInCompilerList.Elements.OfType<PineValue.ListValue>()
-            .ToHashSet();
+        var listValuesExpectedInCompiler = new HashSet<PineValue.ListValue>();
 
-        var blobValuesExpectedInCompiler =
-            valuesExpectedInCompilerList.Elements.OfType<PineValue.BlobValue>()
-            .ToHashSet();
+        var blobValuesExpectedInCompiler = new HashSet<PineValue.BlobValue>();
+
+        for (int i = 0; i < valuesExpectedInCompilerList.Elements.Length; ++i)
+        {
+            var item = valuesExpectedInCompilerList.Elements.Span[i];
+
+            if (item is PineValue.ListValue listValue)
+            {
+                listValuesExpectedInCompiler.Add(listValue);
+            }
+            else if (item is PineValue.BlobValue blobValue)
+            {
+                blobValuesExpectedInCompiler.Add(blobValue);
+            }
+        }
 
         var valueListsDict = new Dictionary<PineValue.ListValue.ListValueStruct, PineValue.ListValue>();
 

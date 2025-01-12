@@ -95,7 +95,7 @@ public static class ElmValueEncoding
         {
             if (PineValueAsInteger.UnsignedIntegerFromValue(blobValue).IsOkOrNullable() is { } asBigInt)
             {
-                if(UnicodeUtility.IsValidUnicodeScalar(asBigInt))
+                if (UnicodeUtility.IsValidUnicodeScalar(asBigInt))
                 {
                     return ElmValue.CharInstance((int)asBigInt);
                 }
@@ -110,7 +110,7 @@ public static class ElmValueEncoding
         IReadOnlyDictionary<PineValue, ElmValue>? additionalReusableDecodings,
         Action<PineValue, ElmValue>? reportNewDecoding)
     {
-        if (listValue.Elements.Count is 0)
+        if (listValue.Elements.Length is 0)
             return EmptyList;
 
         if (ReusedInstances.Instance.ElmValueDecoding?.TryGetValue(listValue, out var reused) ?? false)
@@ -119,22 +119,22 @@ public static class ElmValueEncoding
         Result<string, ElmValue> decodeWithoutReport()
         {
             {
-                if (listValue.Elements.Count is 2)
+                if (listValue.Elements.Length is 2)
                 {
                     {
                         // Optimize, especially for the case of an Elm String.
 
-                        if (listValue.Elements[0] == ElmValue.ElmStringTypeTagNameAsValue)
+                        if (listValue.Elements.Span[0] == ElmValue.ElmStringTypeTagNameAsValue)
                         {
-                            var tagArgumentList = listValue.Elements[1];
+                            var tagArgumentList = listValue.Elements.Span[1];
 
                             if (tagArgumentList is not PineValue.ListValue tagArgumentsList)
                                 return "Failed to convert value under String tag: Expected a list of tag arguments";
 
-                            if (tagArgumentsList.Elements.Count is not 1)
+                            if (tagArgumentsList.Elements.Length is not 1)
                                 return "Failed to convert value under String tag: Expected a list of tag arguments with one element";
 
-                            var charsList = tagArgumentsList.Elements[0];
+                            var charsList = tagArgumentsList.Elements.Span[0];
 
                             var mapToStringResult = PineValueAsString.StringFromValue(charsList);
 
@@ -151,17 +151,17 @@ public static class ElmValueEncoding
                     {
                         // Optimize, especially for the case of an Elm Record.
 
-                        if (listValue.Elements[0] == ElmValue.ElmRecordTypeTagNameAsValue)
+                        if (listValue.Elements.Span[0] == ElmValue.ElmRecordTypeTagNameAsValue)
                         {
-                            var tagArgumentList = listValue.Elements[1];
+                            var tagArgumentList = listValue.Elements.Span[1];
 
                             if (tagArgumentList is not PineValue.ListValue tagArgumentsList)
                                 return "Failed to convert value under Record tag: Expected a list of tag arguments";
 
-                            if (tagArgumentsList.Elements.Count is not 1)
+                            if (tagArgumentsList.Elements.Length is not 1)
                                 return "Failed to convert value under Record tag: Expected a list of tag arguments with one element";
 
-                            var recordValue = tagArgumentsList.Elements[0];
+                            var recordValue = tagArgumentsList.Elements.Span[0];
 
                             var asRecordResult =
                                 PineValueAsElmRecord(
@@ -183,17 +183,17 @@ public static class ElmValueEncoding
                     {
                         // case of Bytes.Bytes
 
-                        if (listValue.Elements[0] == ElmValue.ElmBytesTypeTagNameAsValue)
+                        if (listValue.Elements.Span[0] == ElmValue.ElmBytesTypeTagNameAsValue)
                         {
-                            var tagArgumentsValue = listValue.Elements[1];
+                            var tagArgumentsValue = listValue.Elements.Span[1];
 
                             if (tagArgumentsValue is not PineValue.ListValue tagArgumentsList)
                                 return "Failed to convert value under Bytes tag: Expected a list of tag arguments";
 
-                            if (tagArgumentsList.Elements.Count is not 1)
+                            if (tagArgumentsList.Elements.Length is not 1)
                                 return "Failed to convert value under Bytes tag: Expected a list of tag arguments with single item";
 
-                            if (tagArgumentsList.Elements[0] is not PineValue.BlobValue blobValue)
+                            if (tagArgumentsList.Elements.Span[0] is not PineValue.BlobValue blobValue)
                                 return "Failed to convert value under Bytes tag: Expected blob value in tag argument";
 
                             return new ElmValue.ElmBytes(blobValue.Bytes);
@@ -203,19 +203,19 @@ public static class ElmValueEncoding
                     {
                         // Optimize for the case of an Elm Float.
 
-                        if (listValue.Elements[0] == ElmValue.ElmFloatTypeTagNameAsValue)
+                        if (listValue.Elements.Span[0] == ElmValue.ElmFloatTypeTagNameAsValue)
                         {
-                            var tagArgumentList = listValue.Elements[1];
+                            var tagArgumentList = listValue.Elements.Span[1];
 
                             if (tagArgumentList is not PineValue.ListValue tagArgumentsList)
                                 return "Failed to convert value under Float tag: Expected a list of tag arguments";
 
-                            if (tagArgumentsList.Elements.Count is not 2)
+                            if (tagArgumentsList.Elements.Length is not 2)
                                 return "Failed to convert value under Float tag: Expected a list of tag arguments with two elements";
 
-                            var numeratorValue = tagArgumentsList.Elements[0];
+                            var numeratorValue = tagArgumentsList.Elements.Span[0];
 
-                            var denominatorValue = tagArgumentsList.Elements[1];
+                            var denominatorValue = tagArgumentsList.Elements.Span[1];
 
                             if (PineValueAsInteger.SignedIntegerFromValueStrict(numeratorValue).IsOkOrNullable() is not { } numeratorOk)
                                 return "Failed to parse numerator under Float tag";
@@ -230,16 +230,16 @@ public static class ElmValueEncoding
                     {
                         // Optimize, especially for the case of an Elm Tag.
 
-                        if (listValue.Elements[0] is PineValue.ListValue tagNameValue &&
-                            listValue.Elements[1] is PineValue.ListValue tagArgumentsList)
+                        if (listValue.Elements.Span[0] is PineValue.ListValue tagNameValue &&
+                            listValue.Elements.Span[1] is PineValue.ListValue tagArgumentsList)
                         {
                             // Rule out any characters that might encode an integer.
 
                             bool tagNameItemMightBeInteger = false;
 
-                            for (var i = 0; i < tagNameValue.Elements.Count; i++)
+                            for (var i = 0; i < tagNameValue.Elements.Length; i++)
                             {
-                                var tagNameChar = tagNameValue.Elements[i];
+                                var tagNameChar = tagNameValue.Elements.Span[i];
 
                                 if (tagNameChar is not PineValue.BlobValue blobValue ||
                                     (blobValue.Bytes.Length is > 1 &&
@@ -273,13 +273,13 @@ public static class ElmValueEncoding
 
                                         if (!tagNameContainsInvalidChar)
                                         {
-                                            var tagArgumentsListResults = new ElmValue[tagArgumentsList.Elements.Count];
+                                            var tagArgumentsListResults = new ElmValue[tagArgumentsList.Elements.Length];
 
                                             bool failedTagArguments = false;
 
-                                            for (var argIndex = 0; argIndex < tagArgumentsList.Elements.Count; argIndex++)
+                                            for (var argIndex = 0; argIndex < tagArgumentsList.Elements.Length; argIndex++)
                                             {
-                                                var tagArgument = tagArgumentsList.Elements[argIndex];
+                                                var tagArgument = tagArgumentsList.Elements.Span[argIndex];
 
                                                 var tagArgumentAsElmValueResult =
                                                     PineValueAsElmValue(
@@ -310,11 +310,11 @@ public static class ElmValueEncoding
                 }
             }
 
-            var itemsAsElmValues = new ElmValue[listValue.Elements.Count];
+            var itemsAsElmValues = new ElmValue[listValue.Elements.Length];
 
-            for (var i = 0; i < listValue.Elements.Count; i++)
+            for (var i = 0; i < listValue.Elements.Length; i++)
             {
-                var item = listValue.Elements[i];
+                var item = listValue.Elements.Span[i];
 
                 var itemAsElmValueResult =
                     PineValueAsElmValue(
@@ -351,16 +351,16 @@ public static class ElmValueEncoding
         return decodeResult;
     }
 
-    public static Result<string, (string tagName, IReadOnlyList<PineValue> tagArguments)> ParseAsTag(
+    public static Result<string, (string tagName, ReadOnlyMemory<PineValue> tagArguments)> ParseAsTag(
         PineValue pineValue)
     {
         if (pineValue is not PineValue.ListValue list)
             return "Value is not a list.";
 
-        if (list.Elements.Count is not 2)
+        if (list.Elements.Length is not 2)
             return "List does not have 2 elements.";
 
-        var tagNameValue = list.Elements[0];
+        var tagNameValue = list.Elements.Span[0];
 
         var parseTagNameResult = PineValueAsString.StringFromValue(tagNameValue);
 
@@ -371,7 +371,7 @@ public static class ElmValueEncoding
             throw new NotImplementedException(
                 "Unexpected result type: " + parseTagNameResult.GetType().FullName);
 
-        var tagArgumentsValue = list.Elements[1];
+        var tagArgumentsValue = list.Elements.Span[1];
 
         if (tagArgumentsValue is not PineValue.ListValue tagArgumentsList)
             return "Second element is not a list.";
@@ -388,20 +388,22 @@ public static class ElmValueEncoding
         if (pineValue is not PineValue.ListValue list)
             return "Value is not a list.";
 
-        var recordFields = new (string fieldName, ElmValue fieldValue)[list.Elements.Count];
+        var recordFields = new (string fieldName, ElmValue fieldValue)[list.Elements.Length];
 
-        for (var i = 0; i < list.Elements.Count; i++)
+        for (var i = 0; i < list.Elements.Length; i++)
         {
-            var element = list.Elements[i];
+            var element = list.Elements.Span[i];
 
             if (element is not PineValue.ListValue fieldList)
                 return "Field is not a list.";
 
-            if (fieldList.Elements.Count is not 2)
+            var fieldListElements = fieldList.Elements.Span;
+
+            if (fieldListElements.Length is not 2)
                 return "Field list does not have 2 elements.";
 
-            var fieldNameValue = fieldList.Elements[0];
-            var fieldValue = fieldList.Elements[1];
+            var fieldNameValue = fieldListElements[0];
+            var fieldValue = fieldListElements[1];
 
             var fieldNameResult = PineValueAsString.StringFromValue(fieldNameValue);
 
@@ -438,23 +440,25 @@ public static class ElmValueEncoding
         if (pineValue is not PineValue.ListValue taggedRecordList)
             return "Value is not a list.";
 
-        if (taggedRecordList.Elements.Count is not 2)
+        var taggedRecordListElements = taggedRecordList.Elements.Span;
+
+        if (taggedRecordListElements.Length is not 2)
             return "List does not have 2 elements.";
 
-        var tagNameValue = taggedRecordList.Elements[0];
+        var tagNameValue = taggedRecordListElements[0];
 
         if (tagNameValue != ElmValue.ElmRecordTypeTagNameAsValue)
             return "First element is not the record tag name.";
 
-        var recordFieldsListList = taggedRecordList.Elements[1];
+        var recordFieldsListList = taggedRecordListElements[1];
 
         if (recordFieldsListList is not PineValue.ListValue recordFieldsList)
             return "Second element is not a list.";
 
-        if (recordFieldsList.Elements.Count is not 1)
+        if (recordFieldsList.Elements.Length is not 1)
             return "Record fields list does not have 1 element.";
 
-        return ParsePineValueAsRecord(recordFieldsList.Elements[0]);
+        return ParsePineValueAsRecord(recordFieldsList.Elements.Span[0]);
     }
 
     public static Result<string, IReadOnlyList<(string fieldName, PineValue fieldValue)>> ParsePineValueAsRecord(
@@ -463,20 +467,22 @@ public static class ElmValueEncoding
         if (pineValue is not PineValue.ListValue recordFieldsList)
             return "Value is not a list.";
 
-        var recordFields = new (string fieldName, PineValue fieldValue)[recordFieldsList.Elements.Count];
+        var recordFieldsListSpan = recordFieldsList.Elements.Span;
 
-        for (var i = 0; i < recordFieldsList.Elements.Count; i++)
+        var recordFields = new (string fieldName, PineValue fieldValue)[recordFieldsListSpan.Length];
+
+        for (var i = 0; i < recordFieldsListSpan.Length; i++)
         {
-            var element = recordFieldsList.Elements[i];
+            var element = recordFieldsListSpan[i];
 
             if (element is not PineValue.ListValue fieldList)
                 return "Field is not a list.";
 
-            if (fieldList.Elements.Count is not 2)
+            if (fieldList.Elements.Length is not 2)
                 return "Field list does not have 2 elements.";
 
-            var fieldNameValue = fieldList.Elements[0];
-            var fieldValue = fieldList.Elements[1];
+            var fieldNameValue = fieldList.Elements.Span[0];
+            var fieldValue = fieldList.Elements.Span[1];
 
             var fieldNameResult = PineValueAsString.StringFromValue(fieldNameValue);
 
@@ -576,14 +582,16 @@ public static class ElmValueEncoding
                 [PineValue.List(
                     [.. fields.Select(field =>
                     PineValue.List(
-                        [PineValueAsString.ValueFromString(field.FieldName),
-                        field.FieldValue]))])])]);
+                        [
+                            PineValueAsString.ValueFromString(field.FieldName),
+                            field.FieldValue
+                        ]))])])]);
 
     public static PineValue TagAsPineValue(string tagName, IReadOnlyList<PineValue> tagArguments) =>
         PineValue.List(
             [
-            PineValueAsString.ValueFromString(tagName),
-            PineValue.List(tagArguments)
+                PineValueAsString.ValueFromString(tagName),
+                PineValue.List([..tagArguments])
             ]);
 
     public static PineValue StringAsPineValue(string elmString) =>

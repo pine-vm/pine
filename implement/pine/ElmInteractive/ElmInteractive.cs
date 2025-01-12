@@ -321,7 +321,7 @@ public class ElmInteractive
             var lastIncrementModulesBlobs =
                 lastIncrementModulesTexts.Select(Encoding.UTF8.GetBytes).ToArray();
 
-            var selfValue = PineValue.List(lastIncrementModulesBlobs.Select(PineValue.Blob).ToImmutableList());
+            var selfValue = PineValue.List(lastIncrementModulesBlobs.Select(PineValue.Blob).ToArray());
 
             var selfHash = PineValueHashTree.ComputeHash(selfValue);
 
@@ -580,7 +580,7 @@ public class ElmInteractive
         {
             if (pineValue is PineValue.ListValue listComponent)
             {
-                if (0 < listComponent.Elements.Count)
+                if (0 < listComponent.Elements.Length)
                 {
                     if (PineValueAsString.StringFromValue(pineValue) is Result<string, string>.Ok asString)
                         return new PineValueMappedForTransport(
@@ -593,7 +593,7 @@ public class ElmInteractive
                 return new PineValueMappedForTransport(
                     ListAsString: null,
                     BlobAsInt: null,
-                    List: listComponent.Elements.Select(item => FromPineValue(item, cache)).ToList(),
+                    List: listComponent.Elements.ToArray().Select(item => FromPineValue(item, cache)).ToList(),
                     Origin: pineValue);
             }
 
@@ -674,7 +674,7 @@ public class ElmInteractive
                         return;
 
                 if (mappedForTransport.Origin is PineValue.ListValue list)
-                    if (list.Elements.Count < 1)
+                    if (list.Elements.Length < 1)
                         return;
             }
 

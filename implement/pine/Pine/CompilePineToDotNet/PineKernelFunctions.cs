@@ -36,8 +36,8 @@ public partial class CompileToCSharp
         Integer = 10,
     }
 
-    public static Result<string, IReadOnlyList<ParsedKernelApplicationArgumentExpression>>? ParseKernelApplicationArgumentAsList(
-        Expression kernelApplicationArgumentExpression,
+    public static Result<string, IReadOnlyList<ParsedKernelApplicationArgumentExpression>>? ParseKernelApplicationInputAsList(
+        Expression kernelAppInputExpr,
         ExpressionCompilationEnvironment environment)
     {
         Result<string, IReadOnlyList<ParsedKernelApplicationArgumentExpression>> continueWithList(IEnumerable<Expression> list) =>
@@ -46,7 +46,7 @@ public partial class CompileToCSharp
             .ListCombine();
 
         return
-            kernelApplicationArgumentExpression switch
+            kernelAppInputExpr switch
             {
                 Expression.List listExpressionArgument =>
                     continueWithList(listExpressionArgument.items),
@@ -56,7 +56,7 @@ public partial class CompileToCSharp
                     {
                         PineValue.ListValue literalList =>
                             continueWithList(
-                                literalList.Elements.Select(Expression.LiteralInstance)),
+                                literalList.Elements.ToArray().Select(Expression.LiteralInstance)),
 
                         _ => null
                     },

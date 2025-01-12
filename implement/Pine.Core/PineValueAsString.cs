@@ -33,7 +33,7 @@ public static class PineValueAsString
         return PineValue.List(ListValueFromString(str));
     }
 
-    public static IReadOnlyList<PineValue> ListValueFromString(string str)
+    public static ReadOnlyMemory<PineValue> ListValueFromString(string str)
     {
         var codePoints = ToCodePoints(str);
 
@@ -73,18 +73,21 @@ public static class PineValueAsString
 
     public static Result<string, string> StringFromListValue(PineValue.ListValue list)
     {
-        if (list.Elements.Count is 0)
+        if (list.Elements.Length is 0)
             return emptyStringOk;
 
         if (CommonStringsDecoded.TryGetValue(list, out var commonString))
             return Result<string, string>.ok(commonString);
 
-        var stringBuilder = new System.Text.StringBuilder(capacity: list.Elements.Count * 2);
+        var stringBuilder = new System.Text.StringBuilder(capacity: list.Elements.Length * 2);
 
-        for (var index = 0; index < list.Elements.Count; index++)
+        for (var index = 0; index < list.Elements.Length; index++)
         {
-            if (list.Elements[index] is not PineValue.BlobValue blobValue)
-                return Result<string, string>.err("failed decoding char as integer at [" + index + "]: Not a blob");
+            if (list.Elements.Span[index] is not PineValue.BlobValue blobValue)
+            {
+                return Result<string, string>.err(
+                    "failed decoding char as integer at [" + index + "]: Not a blob");
+            }
 
             var charInteger = PineValueAsInteger.UnsignedIntegerFromBlobValue(blobValue.Bytes.Span);
 

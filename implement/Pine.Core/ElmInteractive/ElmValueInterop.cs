@@ -48,29 +48,52 @@ public class ElmValueInterop
             }
         }
 
-        var encoded =
-            pineValue switch
-            {
-                PineValue.BlobValue blobValue =>
-                ElmValue.TagInstance(
-                    "BlobValue",
-                    [new ElmValue.ElmList([.. blobValue.Bytes.ToArray().Select(byteInt => ElmValue.Integer(byteInt))])]),
+        switch (pineValue)
+        {
+            case PineValue.BlobValue blobValue:
+                {
+                    var byteItems =
+                        new ElmValue.ElmList(
+                            blobValue.Bytes.ToArray().Select(byteInt => ElmValue.Integer(byteInt)).ToArray());
 
-                PineValue.ListValue listValue =>
-                ElmValue.TagInstance(
-                    "ListValue",
-                    [new ElmValue.ElmList(
-                        [.. listValue.Elements
-                        .Select(item => PineValueEncodedAsInElmCompiler(item, additionalReusableEncodings, reportNewEncoding))])]),
+                    var encoded =
+                        ElmValue.TagInstance("BlobValue", [byteItems]);
 
-                _ =>
+                    reportNewEncoding?.Invoke(pineValue, encoded);
+
+                    return encoded;
+                }
+            case PineValue.ListValue listValue:
+                {
+                    var elementsSpan = listValue.Elements.Span;
+
+                    var items = new ElmValue[elementsSpan.Length];
+
+                    for (var i = 0; i < elementsSpan.Length; i++)
+                    {
+                        var item = elementsSpan[i];
+
+                        var itemEncoded =
+                            PineValueEncodedAsInElmCompiler(
+                                item,
+                                additionalReusableEncodings,
+                                reportNewEncoding);
+
+                        items[i] = itemEncoded;
+                    }
+
+                    var encoded =
+                        ElmValue.TagInstance("ListValue", [ElmValue.ListInstance(items)]);
+
+                    reportNewEncoding?.Invoke(pineValue, encoded);
+
+                    return encoded;
+                }
+
+            default:
                 throw new NotImplementedException(
-                    "Unsupported PineValue: " + pineValue.GetType().FullName)
-            };
-
-        reportNewEncoding?.Invoke(pineValue, encoded);
-
-        return encoded;
+                    "Unsupported PineValue: " + pineValue.GetType().FullName);
+        }
     }
 
     public static Result<string, PineValue> ElmValueDecodedAsInElmCompiler(
@@ -511,12 +534,12 @@ public class ElmValueInterop
             return invalid("Root is not a list");
         }
 
-        if (listValue.Elements.Count is not 2)
+        if (listValue.Elements.Length is not 2)
         {
             return invalid("Root list does not have 2 elements");
         }
 
-        var tagValue = listValue.Elements[0];
+        var tagValue = listValue.Elements.Span[0];
 
         if (tagValue == String_Nothing_Value)
         {
@@ -525,19 +548,19 @@ public class ElmValueInterop
 
         if (tagValue == String_Just_Value)
         {
-            var tagArgumentsValue = listValue.Elements[1];
+            var tagArgumentsValue = listValue.Elements.Span[1];
 
             if (tagArgumentsValue is not PineValue.ListValue tagArgumentsListValue)
             {
                 return invalid("Just tag arguments is not a list");
             }
 
-            if (tagArgumentsListValue.Elements.Count is not 1)
+            if (tagArgumentsListValue.Elements.Length is not 1)
             {
                 return invalid("Just tag arguments does not have 1 element");
             }
 
-            return just(tagArgumentsListValue.Elements[0]);
+            return just(tagArgumentsListValue.Elements.Span[0]);
         }
 
         return invalid("Not tagged with Nothing or Just");
@@ -554,49 +577,49 @@ public class ElmValueInterop
             return invalid("Root is not a list");
         }
 
-        if (listValue.Elements.Count is not 2)
+        if (listValue.Elements.Length is not 2)
         {
             return invalid("Root list does not have 2 elements");
         }
 
-        var tagValue = listValue.Elements[0];
+        var tagValue = listValue.Elements.Span[0];
 
         if (tagValue == String_Err_Value)
         {
-            var tagArgumentsValue = listValue.Elements[1];
+            var tagArgumentsValue = listValue.Elements.Span[1];
 
             if (tagArgumentsValue is not PineValue.ListValue tagArgumentsListValue)
             {
                 return invalid("Tag 'Err' arguments is not a list");
             }
 
-            if (tagArgumentsListValue.Elements.Count is not 1)
+            if (tagArgumentsListValue.Elements.Length is not 1)
             {
                 return invalid(
                     "Tag 'Err' arguments does not have 1 item, but " +
-                    tagArgumentsListValue.Elements.Count);
+                    tagArgumentsListValue.Elements.Length);
             }
 
-            return err(tagArgumentsListValue.Elements[0]);
+            return err(tagArgumentsListValue.Elements.Span[0]);
         }
 
         if (tagValue == String_Ok_Value)
         {
-            var tagArgumentsValue = listValue.Elements[1];
+            var tagArgumentsValue = listValue.Elements.Span[1];
 
             if (tagArgumentsValue is not PineValue.ListValue tagArgumentsListValue)
             {
                 return invalid("Tag 'Ok' arguments is not a list");
             }
 
-            if (tagArgumentsListValue.Elements.Count is not 1)
+            if (tagArgumentsListValue.Elements.Length is not 1)
             {
                 return invalid(
                     "Tag 'Ok' arguments does not have 1 item, but " +
-                    tagArgumentsListValue.Elements.Count);
+                    tagArgumentsListValue.Elements.Length);
             }
 
-            return ok(tagArgumentsListValue.Elements[0]);
+            return ok(tagArgumentsListValue.Elements.Span[0]);
         }
 
         return invalid("Not tagged with Err or Ok");

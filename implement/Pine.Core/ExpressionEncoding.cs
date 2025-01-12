@@ -68,41 +68,41 @@ public static class ExpressionEncoding
         value switch
         {
             PineValue.ListValue rootList =>
-            rootList.Elements.Count is not 2
+            rootList.Elements.Length is not 2
             ?
-            "Unexpected number of items in list: Not 2 but " + rootList.Elements.Count
+            "Unexpected number of items in list: Not 2 but " + rootList.Elements.Length
             :
-            PineValueAsString.StringFromValue(rootList.Elements[0]) switch
+            PineValueAsString.StringFromValue(rootList.Elements.Span[0]) switch
             {
                 Result<string, string>.Err err =>
                 err.Value,
 
                 Result<string, string>.Ok tag =>
-                rootList.Elements[1] is not PineValue.ListValue tagArguments
+                rootList.Elements.Span[1] is not PineValue.ListValue tagArguments
                 ?
                 "Unexpected shape of tag argument value: Not a list"
                 :
                 tag.Value switch
                 {
                     "Literal" =>
-                    tagArguments.Elements.Count < 1
+                    tagArguments.Elements.Length < 1
                     ?
                     "Expected one argument for literal but got zero"
                     :
-                    Expression.LiteralInstance(tagArguments.Elements[0]),
+                    Expression.LiteralInstance(tagArguments.Elements.Span[0]),
 
                     "List" =>
-                    tagArguments.Elements.Count < 1
+                    tagArguments.Elements.Length < 1
                     ?
                     "Expected one argument for list but got zero"
                     :
-                    ParsePineListValue(tagArguments.Elements[0]) switch
+                    ParsePineListValue(tagArguments.Elements.Span[0]) switch
                     {
-                        Result<string, IReadOnlyList<PineValue>>.Err err =>
+                        Result<string, ReadOnlyMemory<PineValue>>.Err err =>
                         (Result<string, Expression>)err.Value,
 
-                        Result<string, IReadOnlyList<PineValue>>.Ok list =>
-                        ResultListMapCombine(list.Value, generalParser) switch
+                        Result<string, ReadOnlyMemory<PineValue>>.Ok list =>
+                        ResultListMapCombine(list.Value.ToArray(), generalParser) switch
                         {
                             Result<string, IReadOnlyList<Expression>>.Err err =>
                             (Result<string, Expression>)err.Value,
@@ -186,14 +186,14 @@ public static class ExpressionEncoding
 
     public static Result<string, Expression.ParseAndEval> ParseParseAndEval(
         Func<PineValue, Result<string, Expression>> generalParser,
-        IReadOnlyList<PineValue> arguments) =>
-        arguments.Count < 2
+        ReadOnlyMemory<PineValue> arguments) =>
+        arguments.Length < 2
         ?
-        "Expected two arguments under parse and eval, but got " + arguments.Count
+        "Expected two arguments under parse and eval, but got " + arguments.Length
         :
-        generalParser(arguments[0])
+        generalParser(arguments.Span[0])
         .AndThen(encoded =>
-        generalParser(arguments[1])
+        generalParser(arguments.Span[1])
         .Map(environment => new Expression.ParseAndEval(encoded: encoded, environment: environment)));
 
     public static PineValue.ListValue EncodeKernelApplication(
@@ -208,14 +208,14 @@ public static class ExpressionEncoding
 
     public static Result<string, Expression.KernelApplication> ParseKernelApplication(
         Func<PineValue, Result<string, Expression>> generalParser,
-        IReadOnlyList<PineValue> arguments) =>
-        arguments.Count < 2
+        ReadOnlyMemory<PineValue> arguments) =>
+        arguments.Length < 2
         ?
-        "Expected two arguments under kernel application, but got " + arguments.Count
+        "Expected two arguments under kernel application, but got " + arguments.Length
         :
-        PineValueAsString.StringFromValue(arguments[0])
+        PineValueAsString.StringFromValue(arguments.Span[0])
         .AndThen(function =>
-        generalParser(arguments[1])
+        generalParser(arguments.Span[1])
         .Map(input => new Expression.KernelApplication(
             function: function,
             input: input)));
@@ -233,16 +233,16 @@ public static class ExpressionEncoding
 
     public static Result<string, Expression.Conditional> ParseConditional(
         Func<PineValue, Result<string, Expression>> generalParser,
-        IReadOnlyList<PineValue> arguments) =>
-        arguments.Count < 3
+        ReadOnlyMemory<PineValue> arguments) =>
+        arguments.Length < 3
         ?
-        "Expected 3 arguments under conditional, but got " + arguments.Count
+        "Expected 3 arguments under conditional, but got " + arguments.Length
         :
-        generalParser(arguments[0])
+        generalParser(arguments.Span[0])
         .AndThen(condition =>
-        generalParser(arguments[1])
+        generalParser(arguments.Span[1])
         .AndThen(falseBranch =>
-        generalParser(arguments[2])
+        generalParser(arguments.Span[2])
         .Map(trueBranch =>
             Expression.ConditionalInstance(
                 condition: condition,
@@ -251,18 +251,18 @@ public static class ExpressionEncoding
 
     public static Result<string, Expression.StringTag> ParseStringTag(
         Func<PineValue, Result<string, Expression>> generalParser,
-        IReadOnlyList<PineValue> arguments) =>
-        arguments.Count < 2
+        ReadOnlyMemory<PineValue> arguments) =>
+        arguments.Length < 2
         ?
-        "Expected 2 arguments under string tag, but got " + arguments.Count
+        "Expected 2 arguments under string tag, but got " + arguments.Length
         :
-        PineValueAsString.StringFromValue(arguments[0]) switch
+        PineValueAsString.StringFromValue(arguments.Span[0]) switch
         {
             Result<string, string>.Err err =>
             err.Value,
 
             Result<string, string>.Ok tag =>
-            generalParser(arguments[1]) switch
+            generalParser(arguments.Span[1]) switch
             {
                 Result<string, Expression>.Err err =>
                 err.Value,
@@ -415,14 +415,16 @@ public static class ExpressionEncoding
 
     public static Result<string, IReadOnlyDictionary<string, PineValue>> ParseRecordFromPineValue(PineValue value)
     {
-        if (ParsePineListValue(value) is not Result<string, IReadOnlyList<PineValue>>.Ok listResult)
+        if (ParsePineListValue(value) is not Result<string, ReadOnlyMemory<PineValue>>.Ok listResult)
             return "Failed to parse as list";
 
-        var recordFields = new Dictionary<string, PineValue>(listResult.Value.Count);
+        var recordFields = new Dictionary<string, PineValue>(listResult.Value.Length);
 
-        foreach (var listElement in listResult.Value)
+        for (var i = 0; i < listResult.Value.Length; ++i)
         {
-            if (ParsePineListValue(listElement).IsOkOrNull() is not { } listElementResult)
+            var listElement = listResult.Value.Span[i];
+
+            if (ParsePineListValue(listElement).IsOkOrNullable() is not { } listElementResult)
                 return "Failed to parse list element as list";
 
             if (ParseListWithExactlyTwoElements(listElementResult).IsOkOrNullable() is not { } fieldNameValueAndValue)
@@ -450,10 +452,10 @@ public static class ExpressionEncoding
         PineValue value) =>
         ParsePineListValue(value) switch
         {
-            Result<string, IReadOnlyList<PineValue>>.Err err =>
+            Result<string, ReadOnlyMemory<PineValue>>.Err err =>
             err.Value,
 
-            Result<string, IReadOnlyList<PineValue>>.Ok list =>
+            Result<string, ReadOnlyMemory<PineValue>>.Ok list =>
             ParseListWithExactlyTwoElements(list.Value) switch
             {
                 Result<string, (PineValue, PineValue)>.Err err =>
@@ -487,20 +489,20 @@ public static class ExpressionEncoding
             throw new NotImplementedException("Unexpected result type: " + other.GetType().FullName)
         };
 
-    public static Result<string, IReadOnlyList<PineValue>> ParsePineListValue(PineValue value)
+    public static Result<string, ReadOnlyMemory<PineValue>> ParsePineListValue(PineValue value)
     {
         if (value is not PineValue.ListValue listValue)
             return "Not a list";
 
         return
-            Result<string, IReadOnlyList<PineValue>>.ok(listValue.Elements);
+            Result<string, ReadOnlyMemory<PineValue>>.ok(listValue.Elements);
     }
 
-    public static Result<string, (T, T)> ParseListWithExactlyTwoElements<T>(IReadOnlyList<T> list)
+    public static Result<string, (T, T)> ParseListWithExactlyTwoElements<T>(ReadOnlyMemory<T> list)
     {
-        if (list.Count is not 2)
-            return "Unexpected number of items in list: Not 2 but " + list.Count;
+        if (list.Length is not 2)
+            return "Unexpected number of items in list: Not 2 but " + list.Length;
 
-        return (list[0], list[1]);
+        return (list.Span[0], list.Span[1]);
     }
 }

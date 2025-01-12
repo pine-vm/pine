@@ -149,7 +149,7 @@ public record CommandLineAppConfig(
             throw new Exception("Expected init to be a list.");
         }
 
-        if (initList.Elements.Count is not 2)
+        if (initList.Elements.Length is not 2)
         {
             throw new Exception("Expected init list to have two elements.");
         }
@@ -213,16 +213,16 @@ public record CommandLineAppConfig(
                 "Unexpected return type from init function: " + initFunctionReturnValue.ToString());
         }
 
-        if (initList.Elements.Count is not 2)
+        if (initList.Elements.Length is not 2)
         {
             throw new Exception(
-                "Unexpected number of elements in init function return value: " + initList.Elements.Count);
+                "Unexpected number of elements in init function return value: " + initList.Elements.Length);
         }
 
         var responseRecord =
-            ParseEventResponse(initList.Elements[1]);
+            ParseEventResponse(initList.Elements.Span[1]);
 
-        return (initList.Elements[0], responseRecord);
+        return (initList.Elements.Span[0], responseRecord);
     }
 
     public static (PineValue, CommandLineAppEventResponse)?
@@ -285,15 +285,15 @@ public record CommandLineAppConfig(
             throw new Exception("Expected response from stdIn to be a list.");
         }
 
-        if (responseList.Elements.Count is not 2)
+        if (responseList.Elements.Length is not 2)
         {
             throw new Exception("Expected response from stdIn to have two elements.");
         }
 
         var responseRecord =
-            ParseEventResponse(responseList.Elements[1]);
+            ParseEventResponse(responseList.Elements.Span[1]);
 
-        return (responseList.Elements[0], responseRecord);
+        return (responseList.Elements.Span[0], responseRecord);
     }
 
     public static CommandLineAppEventResponse ParseEventResponse(PineValue responseValue)
@@ -317,11 +317,12 @@ public record CommandLineAppConfig(
             throw new Exception("Expected commands to be a list value.");
         }
 
-        var commands =
-            commandsListValue
-            .Elements
-            .Select(ParseCommand)
-            .ToImmutableArray();
+        var commands = new CommandLineAppCommand[commandsListValue.Elements.Length];
+
+        for (var i = 0; i < commands.Length; ++i)
+        {
+            commands[i] = ParseCommand(commandsListValue.Elements.Span[i]);
+        }
 
         var maybeExitCode =
             ElmValueInterop.ParseElmMaybeValue<int?>(

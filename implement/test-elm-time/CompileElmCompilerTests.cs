@@ -561,11 +561,11 @@ public class CompileElmCompilerTests
                 compilerResponseValue switch
                 {
                     PineValue.ListValue listValue =>
-                    listValue.Elements.Count < 1
+                    listValue.Elements.Length < 1
                     ?
                     null
                     :
-                    PineValueAsString.StringFromValue(listValue.Elements[0]),
+                    PineValueAsString.StringFromValue(listValue.Elements.Span[0]),
 
                     _ =>
                     null
@@ -612,10 +612,10 @@ public class CompileElmCompilerTests
 
             var parseAsTagResult = ElmValueEncoding.ParseAsTag(applyFunctionOk.Value);
 
-            if (parseAsTagResult is Result<string, (string, IReadOnlyList<PineValue>)>.Err parseAsTagErr)
+            if (parseAsTagResult is Result<string, (string, ReadOnlyMemory<PineValue>)>.Err parseAsTagErr)
                 return "Failed to parse result as tag: " + parseAsTagErr.Value;
 
-            if (parseAsTagResult is not Result<string, (string, IReadOnlyList<PineValue>)>.Ok parseAsTagOk)
+            if (parseAsTagResult is not Result<string, (string, ReadOnlyMemory<PineValue>)>.Ok parseAsTagOk)
                 throw new Exception("Unexpected result type: " + parseAsTagResult.GetType().FullName);
 
             if (parseAsTagOk.Value.Item1 is not "Ok")
@@ -626,10 +626,10 @@ public class CompileElmCompilerTests
                         fromErr: err => "Failed to parse as Elm value: " + err,
                         fromOk: elmValue => ElmValue.RenderAsElmExpression(elmValue).expressionString);
 
-            if (parseAsTagOk.Value.Item2.Count is not 1)
-                return "Failed to extract environment: Expected one element in the list, got " + parseAsTagOk.Value.Item2.Count;
+            if (parseAsTagOk.Value.Item2.Length is not 1)
+                return "Failed to extract environment: Expected one element in the list, got " + parseAsTagOk.Value.Item2.Length;
 
-            var parseAsRecordResult = ElmValueEncoding.ParsePineValueAsRecordTagged(parseAsTagOk.Value.Item2[0]);
+            var parseAsRecordResult = ElmValueEncoding.ParsePineValueAsRecordTagged(parseAsTagOk.Value.Item2.Span[0]);
 
             if (parseAsRecordResult is Result<string, IReadOnlyList<(string fieldName, PineValue fieldValue)>>.Err parseAsRecordErr)
                 return "Failed to parse as record: " + parseAsRecordErr.Value;
@@ -874,10 +874,10 @@ public class CompileElmCompilerTests
         }
         */
 
-        /*
-         * Begin a dedicated training phase, compiling a small Elm module and then doing code-analysis
-         * and PGO for the entirety based on that simple scenario.
-         * */
+            /*
+             * Begin a dedicated training phase, compiling a small Elm module and then doing code-analysis
+             * and PGO for the entirety based on that simple scenario.
+             * */
 
         /*
 
@@ -1272,7 +1272,7 @@ public class CompileElmCompilerTests
                     compiledNewEnvValue switch
                     {
                         PineValue.ListValue listValue =>
-                        "List with " + listValue.Elements.Count + " elements",
+                        "List with " + listValue.Elements.Length + " elements",
 
                         _ =>
                         "not a list"
@@ -1310,10 +1310,10 @@ public class CompileElmCompilerTests
         if (parseAsTagOk.tagName is not "ListValue")
             return "Unexpected tag name: " + parseAsTagOk.tagName;
 
-        if (parseAsTagOk.tagArguments.Count is not 1)
-            return "Unexpected number of tag arguments: " + parseAsTagOk.tagArguments.Count;
+        if (parseAsTagOk.tagArguments.Length is not 1)
+            return "Unexpected number of tag arguments: " + parseAsTagOk.tagArguments.Length;
 
-        if (parseAsTagOk.tagArguments[0] is not PineValue.ListValue environmentList)
+        if (parseAsTagOk.tagArguments.Span[0] is not PineValue.ListValue environmentList)
             return "interactive environment not a list";
 
         Result<string, (string moduleName, PineValue moduleValue, ElmInteractiveEnvironment.ElmModule moduleContent)> ParseModuleEncodedInCompiler(
@@ -1330,6 +1330,7 @@ public class CompileElmCompilerTests
         return
         Result<string, IReadOnlyList<Func<Result<string, (string moduleName, PineValue moduleValue, ElmInteractiveEnvironment.ElmModule moduleContent)>>>>.ok(
             [..environmentList.Elements
+            .ToArray()
                 .Select(envItem =>
                 new Func<Result<string, (string moduleName, PineValue moduleValue, ElmInteractiveEnvironment.ElmModule moduleContent)>>(
                     () => ParseModuleEncodedInCompiler(envItem)))]);
@@ -1398,8 +1399,8 @@ public class CompileElmCompilerTests
                 actualEnvParsed.Modules.Single(m => m.moduleName == moduleName);
 
             foreach (var comparisonReport in CompareCompiledModules(expectedModule, actualModule))
-            {
-                yield return comparisonReport;
+        {
+            yield return comparisonReport;
             }
         }
 

@@ -239,7 +239,7 @@ public class PineKernelFunctionsInline
         ExpressionCompilationEnvironment compilationEnv)
     {
         var staticallyKnownArgumentsList =
-            CompileToCSharp.ParseKernelApplicationArgumentAsList(argumentExpression, compilationEnv)
+            CompileToCSharp.ParseKernelApplicationInputAsList(argumentExpression, compilationEnv)
             ?.Unpack(fromErr: err =>
             {
                 Console.WriteLine("Failed to parse argument list: " + err);

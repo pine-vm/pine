@@ -15,15 +15,16 @@ public static class PineValueComposition
         {
             var compositionResults =
                 compositionAsList.Elements
+                .ToArray()
                     .Select((element, elementIndex) =>
                     {
-                        if (element is not PineValue.ListValue elementAsList || elementAsList.Elements.Count != 2)
+                        if (element is not PineValue.ListValue elementAsList || elementAsList.Elements.Length != 2)
                         {
                             return Result<IReadOnlyList<(int index, string name)>, (string name, TreeNodeWithStringPath
                                 element)>.err([]);
                         }
 
-                        if (PineValueAsString.StringFromValue(elementAsList.Elements.ElementAt(0)) is not
+                        if (PineValueAsString.StringFromValue(elementAsList.Elements.Span[0]) is not
                             Result<string, string>.Ok nameOk)
                         {
                             return Result<IReadOnlyList<(int index, string name)>, (string name, TreeNodeWithStringPath
@@ -34,7 +35,7 @@ public static class PineValueComposition
                             (index: elementIndex, name: nameOk.Value);
 
                         return
-                            ParseAsTreeWithStringPath(elementAsList.Elements.ElementAt(1)) switch
+                            ParseAsTreeWithStringPath(elementAsList.Elements.Span[1]) switch
                             {
                                 Result<IReadOnlyList<(int index, string name)>, TreeNodeWithStringPath>.Err err =>
                                     Result<IReadOnlyList<(int index, string name)>, (string name,
@@ -74,11 +75,12 @@ public static class PineValueComposition
     public static PineValue FromTreeWithStringPath(TreeNodeWithStringPath node) =>
         node switch
         {
-            TreeNodeWithStringPath.BlobNode blob => PineValue.Blob(blob.Bytes),
+            TreeNodeWithStringPath.BlobNode blob =>
+            PineValue.Blob(blob.Bytes),
 
             TreeNodeWithStringPath.TreeNode tree =>
                 PineValue.List(
-                    tree.Elements
+                    [..tree.Elements
                         .Select(treeElement =>
                             PineValue.List(
                                 [
@@ -86,9 +88,10 @@ public static class PineValueComposition
                                     FromTreeWithStringPath(treeElement.component)
                                 ]
                             ))
-                        .ToImmutableList()),
+                    ]),
 
-            _ => throw new NotImplementedException("Incomplete match on sum type.")
+            _ =>
+            throw new NotImplementedException("Unexpected node type: " + node.GetType())
         };
 
     public static TreeNodeWithStringPath SortedTreeFromSetOfBlobsWithCommonFilePath(

@@ -278,17 +278,17 @@ public class LanguageServiceState(
                     "Unexpected handle request result type: " + handleRequestOk.GetType());
             }
 
-            if (handleRequestOkList.Elements.Count is not 2)
+            if (handleRequestOkList.Elements.Length is not 2)
             {
                 throw new System.NotImplementedException(
-                    "Unexpected handle request result length: " + handleRequestOkList.Elements.Count);
+                    "Unexpected handle request result length: " + handleRequestOkList.Elements.Length);
             }
 
             var requestResponseResultValue =
-                handleRequestOkList.Elements[0];
+                handleRequestOkList.Elements.Span[0];
 
             var langServiceStateValue =
-                handleRequestOkList.Elements[1];
+                handleRequestOkList.Elements.Span[1];
 
             state = langServiceStateValue;
 

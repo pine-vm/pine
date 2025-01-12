@@ -57,13 +57,13 @@ public class PineValueCompactBuild
     }
 
     public static (IReadOnlyList<ListEntry> listEntries,
-        System.Func<IReadOnlyList<PineValue>, ListEntryValue> entryListFromItems)
+        System.Func<System.ReadOnlyMemory<PineValue>, ListEntryValue> entryListFromItems)
         PrebuildListEntriesAllFromRoot(PineValue root) =>
         PrebuildListEntriesAllFromRoots(new HashSet<PineValue> { root });
 
     public static
         (IReadOnlyList<ListEntry> listEntries,
-        System.Func<IReadOnlyList<PineValue>, ListEntryValue> entryValueFromListItems)
+        System.Func<System.ReadOnlyMemory<PineValue>, ListEntryValue> entryValueFromListItems)
         PrebuildListEntriesAllFromRoots(IReadOnlySet<PineValue> roots)
     {
         var (allLists, allBlobs) = PineValue.CollectAllComponentsFromRoots(roots);
@@ -73,7 +73,7 @@ public class PineValueCompactBuild
 
     public static
         (IReadOnlyList<ListEntry> listEntries,
-        System.Func<IReadOnlyList<PineValue>, ListEntryValue> entryValueFromListItems)
+        System.Func<System.ReadOnlyMemory<PineValue>, ListEntryValue> entryValueFromListItems)
         PrebuildListEntries(
         IReadOnlySet<PineValue.BlobValue> blobValues,
         IReadOnlySet<PineValue.ListValue> listValues)
@@ -118,9 +118,14 @@ public class PineValueCompactBuild
         }
 
         ListEntryValue entryValueFromListItems(
-            IReadOnlyList<PineValue> itemValues)
+            System.ReadOnlyMemory<PineValue> itemValues)
         {
-            var itemsIds = itemValues.Select(itemId).ToArray();
+            var itemsIds = new string[itemValues.Length];
+
+            for (int i = 0; i < itemValues.Length; ++i)
+            {
+                itemsIds[i] = itemId(itemValues.Span[i]);
+            }
 
             return new ListEntryValue(
                 BlobBytesBase64: null,

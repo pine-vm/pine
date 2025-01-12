@@ -412,10 +412,11 @@ public class InteractiveSessionPine : IInteractiveSession
                     fromOk: elmValue => ElmValue.RenderAsElmExpression(elmValue).expressionString);
         }
 
-        if (parseAsTagOk.tagArguments.Count is not 1)
-            return "Failed to extract environment: Expected one element in the list, got " + parseAsTagOk.tagArguments.Count;
+        if (parseAsTagOk.tagArguments.Length is not 1)
+            return "Failed to extract environment: Expected one element in the list, got " + parseAsTagOk.tagArguments.Length;
 
-        var parseAsRecordResult = ElmValueEncoding.ParsePineValueAsRecordTagged(parseAsTagOk.tagArguments[0]);
+        var parseAsRecordResult =
+            ElmValueEncoding.ParsePineValueAsRecordTagged(parseAsTagOk.tagArguments.Span[0]);
 
         if (parseAsRecordResult.IsErrOrNull() is { } parseAsRecordError)
             return "Failed to parse as record: " + parseAsRecordError;
@@ -588,22 +589,22 @@ public class InteractiveSessionPine : IInteractiveSession
                                         "Type mismatch: Pine expression evaluated to a blob";
                                     }
 
-                                    if (evalResultListComponent.Elements.Count is not 2)
+                                    if (evalResultListComponent.Elements.Length is not 2)
                                     {
                                         return
                                         "Type mismatch: Pine expression evaluated to a list with unexpected number of elements: " +
-                                        evalResultListComponent.Elements.Count +
+                                        evalResultListComponent.Elements.Length +
                                         " instead of 2";
                                     }
 
                                     buildPineEvalContextTask = System.Threading.Tasks.Task.FromResult(
-                                        Result<string, PineValue>.ok(evalResultListComponent.Elements[0]));
+                                        Result<string, PineValue>.ok(evalResultListComponent.Elements.Span[0]));
 
                                     clock.Restart();
 
                                     var parseSubmissionResponseResult =
                                         ElmInteractive.SubmissionResponseFromResponsePineValue(
-                                            response: evalResultListComponent.Elements[1]);
+                                            response: evalResultListComponent.Elements.Span[1]);
 
                                     logDuration("parse-result");
 
