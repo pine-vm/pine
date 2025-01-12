@@ -471,13 +471,27 @@ public class PineVM : IPineVM
         bool enableTailRecursionOptimization,
         Func<Expression, EnvConstraintId?, bool> skipInlining)
     {
-        var expressionWithEnvConstraint =
-            envConstraintId is null || enableTailRecursionOptimization
+        var inlinedStaticInvocations =
+            disableReduction || enableTailRecursionOptimization
             ?
             rootExpression
             :
-            SubstituteSubexpressionsForEnvironmentConstraint(
+            InlineStaticInvocationsAndReduceRecursive(
                 rootExpression,
+                inlinedParents: [],
+                maxDepth: 6,
+                maxSubexpressionCount: 4_000,
+                parseCache,
+                disableRecurseAfterInline: false,
+                skipInlining: e => skipInlining(e, null));
+
+        var expressionWithEnvConstraint =
+            envConstraintId is null || enableTailRecursionOptimization
+            ?
+            inlinedStaticInvocations
+            :
+            SubstituteSubexpressionsForEnvironmentConstraint(
+                inlinedStaticInvocations,
                 envConstraintId: envConstraintId);
 
         /*
@@ -510,6 +524,170 @@ public class PineVM : IPineVM
             ];
 
         return allInstructions;
+    }
+
+
+    public static Expression InlineStaticInvocationsAndReduceRecursive(
+        Expression currentExpression,
+        ImmutableStack<Expression> inlinedParents,
+        int maxDepth,
+        int maxSubexpressionCount,
+        PineVMParseCache parseCache,
+        bool disableRecurseAfterInline,
+        Func<Expression, bool> skipInlining)
+    {
+        var expressionReduced =
+            CompilePineToDotNet.ReducePineExpression.ReduceExpressionBottomUp(
+                currentExpression);
+
+        if (maxDepth <= 0)
+        {
+            return expressionReduced;
+        }
+
+        if (maxSubexpressionCount < expressionReduced.SubexpressionCount)
+        {
+            return expressionReduced;
+        }
+
+        Expression? TryInlineParseAndEval(
+            Expression.ParseAndEval parseAndEvalExpr)
+        {
+            if (parseAndEvalExpr.Encoded.ReferencesEnvironment)
+            {
+                return null;
+            }
+
+            if (CompilePineToDotNet.ReducePineExpression.TryEvaluateExpressionIndependent(
+                parseAndEvalExpr.Encoded).IsOkOrNull() is not { } exprValue)
+            {
+                return null;
+            }
+
+            if (parseCache.ParseExpression(exprValue).IsOkOrNull() is not { } parseOk)
+            {
+                return null;
+            }
+
+            if (skipInlining(parseOk))
+            {
+                return null;
+            }
+
+            if (inlinedParents.Contains(parseOk))
+            {
+                return null;
+            }
+
+            /*
+             * For inlining, translate instances of EnvironmentExpression to the parent environment.
+             * */
+
+            var inlinedExpr =
+                CompilePineToDotNet.ReducePineExpression.TransformPineExpressionWithOptionalReplacement(
+                    findReplacement:
+                    descendant =>
+                    {
+                        if (descendant is Expression.Environment)
+                        {
+                            return parseAndEvalExpr.Environment;
+                        }
+
+                        return null;
+                    },
+                    parseOk).expr;
+
+            if (disableRecurseAfterInline)
+            {
+                return inlinedExpr;
+            }
+
+            var inlinedExprReduced =
+                CompilePineToDotNet.ReducePineExpression.ReduceExpressionBottomUp(
+                    inlinedExpr);
+
+            var inlinedFinal =
+                InlineStaticInvocationsAndReduceRecursive(
+                    currentExpression: inlinedExprReduced,
+                    inlinedParents: inlinedParents.Push(parseOk),
+                    maxDepth: maxDepth - 1,
+                    maxSubexpressionCount: maxSubexpressionCount,
+                    parseCache: parseCache,
+                    skipInlining: skipInlining,
+                    disableRecurseAfterInline: disableRecurseAfterInline);
+
+            return inlinedFinal;
+        }
+
+        Expression InlineParseAndEvalRecursive(
+            Expression expression,
+            bool underConditional)
+        {
+            return
+                CompilePineToDotNet.ReducePineExpression.TransformPineExpressionWithOptionalReplacement(
+                findReplacement: expr =>
+                {
+                    /*
+                     * Do not inline invocations that are still conditional after substituting for the environment constraint.
+                     * Inlining these cases can lead to suboptimal overall performance for various reasons.
+                     * One reason is that inlining in a generic wrapper causes us to miss an opportunity to select
+                     * a more specialized implementation because this selection only happens on invocation.
+                     * */
+
+                    /*
+                     * 2024-07-20 Adaptation, for cases like specializations of `List.map`:
+                     * When optimizing `List.map` (or its recursive helper function) (or `List.foldx` for example),
+                     * better also inline the application of the generic partial application used with the function parameter.
+                     * That application is conditional (list empty?), but we want to inline that to eliminate the generic wrapper for
+                     * the function application and inline the parameter function directly.
+                     * Thus, the new rule also enables inlining under conditional expressions unless it is recursive.
+                     * */
+
+                    if (expr is Expression.Conditional conditional)
+                    {
+                        var conditionInlined =
+                        InlineParseAndEvalRecursive(
+                            conditional.Condition,
+                            underConditional: underConditional);
+
+                        var falseBranchInlined =
+                        InlineParseAndEvalRecursive(
+                            conditional.FalseBranch,
+                            underConditional: true);
+
+                        var trueBranchInlined =
+                        InlineParseAndEvalRecursive(
+                            conditional.TrueBranch,
+                            underConditional: true);
+
+                        return Expression.ConditionalInstance(
+                            condition: conditionInlined,
+                            falseBranch: falseBranchInlined,
+                            trueBranch: trueBranchInlined);
+                    }
+
+                    if (expr is Expression.ParseAndEval parseAndEval)
+                    {
+                        if (TryInlineParseAndEval(parseAndEval) is { } inlined)
+                        {
+                            return inlined;
+                        }
+                    }
+
+                    return null;
+                },
+                expression).expr;
+        }
+
+        var expressionInlined =
+            InlineParseAndEvalRecursive(
+                expressionReduced,
+                underConditional: false);
+
+        var expressionInlinedReduced =
+            CompilePineToDotNet.ReducePineExpression.ReduceExpressionBottomUp(expressionInlined);
+
+        return expressionInlinedReduced;
     }
 
     public static Expression ReduceExpressionAndInlineRecursive(

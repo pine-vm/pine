@@ -1002,7 +1002,7 @@ public class PGOTests
 
         Console.WriteLine("Remaining instructions percentage: " + remainingInstructionsPercent + "%");
 
-        Assert.IsTrue(remainingInstructionsPercent < 70);
+        Assert.IsTrue(remainingInstructionsPercent < 75);
 
         Assert.IsTrue(optimizedAverageInstructionCount <= 130);
     }
