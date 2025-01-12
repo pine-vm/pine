@@ -59,6 +59,11 @@ public enum StackInstructionKind
     Concat_Binary,
 
     /// <summary>
+    /// Prepends the top value from the stack to the list from the second value on the stack.
+    /// </summary>
+    Prepend_List_Item_Binary,
+
+    /// <summary>
     /// Slice the third value from the stack,
     /// using the second value as the start index and the top value as the length.
     /// </summary>
@@ -358,6 +363,9 @@ public record StackInstruction(
     public static readonly StackInstruction Concat_Binary =
         new(StackInstructionKind.Concat_Binary);
 
+    public static readonly StackInstruction Prepend_List_Item_Binary =
+        new(StackInstructionKind.Prepend_List_Item_Binary);
+
     public static readonly StackInstruction Equal_Binary =
         new(StackInstructionKind.Equal_Binary);
 
@@ -491,6 +499,12 @@ public record StackInstruction(
                     []),
 
             StackInstructionKind.Concat_Binary =>
+                new InstructionDetails(
+                    PopCount: 2,
+                    PushCount: 1,
+                    []),
+
+            StackInstructionKind.Prepend_List_Item_Binary =>
                 new InstructionDetails(
                     PopCount: 2,
                     PushCount: 1,

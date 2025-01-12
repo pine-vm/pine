@@ -892,6 +892,28 @@ public class PineIRCompiler
     {
         if (input is Expression.List listExpr)
         {
+            if (listExpr.items.Count is 2)
+            {
+                if (listExpr.items[0] is Expression.List leftListExpr && leftListExpr.items.Count is 1)
+                {
+                    var afterLeft =
+                        CompileExpressionTransitive(
+                            leftListExpr.items[0],
+                            context,
+                            prior);
+
+                    var afterRight =
+                        CompileExpressionTransitive(
+                            listExpr.items[1],
+                            context,
+                            afterLeft);
+
+                    return
+                        afterRight
+                        .AppendInstruction(StackInstruction.Prepend_List_Item_Binary);
+                }
+            }
+
             var concatOps = prior;
 
             for (var i = 0; i < listExpr.items.Count; ++i)

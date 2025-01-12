@@ -437,14 +437,14 @@ public class PineVM : IPineVM
                                     parseCache: parseCache,
                                     disableReduction: disableReduction,
                         enableTailRecursionOptimization: enableTailRecursionOptimization,
-                        skipInlining: skipInlining),
+                                    skipInlining: skipInlining),
                     TrackEnvConstraint: specialization)))
-                    .ToImmutableArray();
+            .ToImmutableArray();
 
         return new ExpressionCompilation(
             Generic: generic,
             Specialized: specialized);
-                }
+    }
 
     /*
      * 
@@ -591,7 +591,7 @@ public class PineVM : IPineVM
                         if (descendant is Expression.Environment)
                         {
                             return parseAndEvalExpr.Environment;
-                        }
+            }
 
                         return null;
                     },
@@ -622,8 +622,8 @@ public class PineVM : IPineVM
         Expression InlineParseAndEvalRecursive(
             Expression expression,
             bool underConditional)
-        {
-            return
+                    {
+                        return
                 CompilePineToDotNet.ReducePineExpression.TransformPineExpressionWithOptionalReplacement(
                 findReplacement: expr =>
                 {
@@ -1615,7 +1615,33 @@ public class PineVM : IPineVM
                             var right = currentFrame.PopTopmostFromStack();
                             var left = currentFrame.PopTopmostFromStack();
 
-                            currentFrame.PushInstructionResult(KernelFunction.concat([left, right]));
+                            currentFrame.PushInstructionResult(KernelFunction.concat(left, right));
+
+                            continue;
+                        }
+
+                    case StackInstructionKind.Prepend_List_Item_Binary:
+                        {
+                            var right = currentFrame.PopTopmostFromStack();
+                            var left = currentFrame.PopTopmostFromStack();
+
+                            var resultValue = PineValue.EmptyList;
+
+                            if (right is PineValue.ListValue rightList)
+                            {
+                                var elements = new PineValue[rightList.Elements.Count + 1];
+
+                                elements[0] = left;
+
+                                for (int i = 0; i < rightList.Elements.Count; ++i)
+                                {
+                                    elements[i + 1] = rightList.Elements[i];
+                                }
+
+                                resultValue = PineValue.List(elements);
+                            }
+
+                            currentFrame.PushInstructionResult(resultValue);
 
                             continue;
                         }

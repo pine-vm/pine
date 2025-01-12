@@ -257,13 +257,28 @@ public static class KernelFunction
 
         if (head is PineValue.ListValue)
         {
-            var aggregated = new List<PineValue>(capacity: 40);
+            var aggregateCount = 0;
 
             for (var i = 0; i < list.Count; ++i)
             {
                 if (list[i] is PineValue.ListValue listValueElement)
                 {
-                    aggregated.AddRange(listValueElement.Elements);
+                    aggregateCount += listValueElement.Elements.Count;
+                }
+            }
+
+            var aggregated = new PineValue[aggregateCount];
+
+            var destItemIndex = 0;
+
+            for (var i = 0; i < list.Count; ++i)
+            {
+                if (list[i] is PineValue.ListValue listValueElement)
+                {
+                    for (var j = 0; j < listValueElement.Elements.Count; ++j)
+                    {
+                        aggregated[destItemIndex++] = listValueElement.Elements[j];
+                    }
                 }
             }
 
@@ -287,6 +302,46 @@ public static class KernelFunction
 
         throw new NotImplementedException(
             "Unexpected value type: " + head.GetType().FullName);
+    }
+
+    public static PineValue concat(PineValue valueA, PineValue valueB)
+    {
+        if (valueA is PineValue.ListValue listA)
+        {
+            if (valueB is not PineValue.ListValue listB)
+            {
+                return valueA;
+            }
+
+            var listACount = listA.Elements.Count;
+
+            var concatenated = new PineValue[listACount + listB.Elements.Count];
+
+            for (var i = 0; i < listA.Elements.Count; ++i)
+            {
+                concatenated[i] = listA.Elements[i];
+            }
+
+            for (var i = 0; i < listB.Elements.Count; ++i)
+            {
+                concatenated[i + listACount] = listB.Elements[i];
+            }
+
+            return PineValue.List(concatenated);
+        }
+
+        if (valueA is PineValue.BlobValue blobA)
+        {
+            if (valueB is not PineValue.BlobValue blobB)
+            {
+                return valueA;
+            }
+
+            return PineValue.Blob(CommonConversion.Concat(blobA.Bytes.Span, blobB.Bytes.Span));
+        }
+
+        throw new NotImplementedException(
+            "Unexpected value type: " + valueA.GetType().FullName);
     }
 
     public static PineValue head(PineValue value) =>
