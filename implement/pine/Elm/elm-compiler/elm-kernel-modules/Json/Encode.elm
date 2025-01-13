@@ -73,31 +73,31 @@ encodeField indent ( key, value ) =
 
 escapeString : String -> String
 escapeString stringVal =
-    String.join "" (List.map escapeChar (String.toList stringVal))
+    String.concat (List.map escapeChar (String.toList stringVal))
 
 
 escapeChar : Char -> String
 escapeChar char =
-    case Char.toCode char of
-        8 ->
+    case char of
+        '\u{0008}' ->
             "\\b"
 
-        9 ->
+        '\t' ->
             "\\t"
 
-        10 ->
+        '\n' ->
             "\\n"
 
-        12 ->
+        '\u{000C}' ->
             "\\f"
 
-        13 ->
+        '\u{000D}' ->
             "\\r"
 
-        34 ->
+        '"' ->
             "\\\""
 
-        92 ->
+        '\\' ->
             "\\\\"
 
         _ ->

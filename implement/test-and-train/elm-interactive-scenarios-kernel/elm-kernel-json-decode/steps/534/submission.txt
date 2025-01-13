@@ -1,0 +1,19 @@
+Json.Decode.decodeString
+    Json.Decode.value
+    (String.fromList
+        [ '\"'
+        , '\\'
+        , 'u'
+        , 'D'
+        , '8'
+        , '3'
+        , 'C'
+        , '\\'
+        , 'u'
+        , 'D'
+        , 'F'
+        , '3'
+        , '2'
+        , '\"'
+        ]
+    )

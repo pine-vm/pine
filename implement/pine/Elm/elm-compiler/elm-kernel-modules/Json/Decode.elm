@@ -512,7 +512,7 @@ fails for some reason.
 -}
 decodeString : Decoder a -> String -> Result Error a
 decodeString decoder jsonString =
-    case parseJsonString jsonString of
+    case parseJsonStringToValue jsonString of
         Err parseErr ->
             Err (Failure ("Bad JSON: " ++ parseErr) NullValue)
 
@@ -520,8 +520,8 @@ decodeString decoder jsonString =
             decodeValue decoder jsonValue
 
 
-parseJsonString : String -> Result String Value
-parseJsonString jsonString =
+parseJsonStringToValue : String -> Result String Value
+parseJsonStringToValue jsonString =
     case parseValue (String.toList (String.trim jsonString)) of
         ( Ok ok, consumed ) ->
             if consumed < String.length jsonString then
@@ -574,19 +574,16 @@ parseValue str =
 
 parseString : Parser (List Char)
 parseString str =
-    case str of
-        [] ->
-            ( Err "Unexpected end of input while parsing string", 0 )
+    -- We call parseJsonString with initial index = 0, collecting chars in [].
+    case parseJsonString str 0 [] of
+        Err msg ->
+            -- If parseJsonString fails, match the old return shape: (Err msg, 0)
+            ( Err msg, 0 )
 
-        nextChar :: following ->
-            case nextChar of
-                '"' ->
-                    ( Ok [], 1 )
-
-                _ ->
-                    parseString following
-                        |> Tuple.mapFirst (Result.map ((::) nextChar))
-                        |> Tuple.mapSecond ((+) 1)
+        Ok ( parsedString, usedCount ) ->
+            -- If it succeeds, we convert the parsedString into a list of chars
+            -- and return the number of characters used up.
+            ( Ok (String.toList parsedString), usedCount )
 
 
 parseInt : Parser Int
@@ -930,5 +927,337 @@ errorToString err =
             "One of the following errors occurred:\n\n"
                 ++ String.join "\n\n" (List.map errorToString errors)
 
-        Failure message value ->
-            message ++ "\n\n" ++ Json.Encode.encode 4 value
+        Failure message failValue ->
+            message ++ "\n\n" ++ Json.Encode.encode 4 failValue
+
+
+{-| Parse a JSON string from a `List Char`, starting at a given `index`,
+accumulating into `soFar`. Returns either:
+
+  - `Ok (parsedString, newIndex)`
+  - `Err message`
+
+Example usage:
+
+    parseJsonString (String.toList "\"hello\\nworld\" trailing stuff") 0 []
+    --> Ok ("hello\nworld", 13)
+
+-}
+parseJsonString : List Char -> Int -> List Char -> Result String ( String, Int )
+parseJsonString source index soFar =
+    case List.take 1 (List.drop index source) of
+        [ c ] ->
+            case c of
+                -- End of the JSON string if we encounter "
+                '"' ->
+                    -- Convert collected chars in `soFar` to a String
+                    Ok ( String.fromList soFar, index + 1 )
+
+                -- Check for backslash escape
+                '\\' ->
+                    parseEscape source index soFar
+
+                -- Otherwise, accumulate this character and keep going
+                _ ->
+                    parseJsonString source (index + 1) (List.concat [ soFar, [ c ] ])
+
+        _ ->
+            -- We ran out of characters before finding a closing quote
+            Err "Unexpected end of input while reading JSON string"
+
+
+
+-- HELPERS
+
+
+{-| Handle a backslash-escape character.
+We consume the `\` at position `index`, so we look at `(index + 1)` for the next char.
+-}
+parseEscape : List Char -> Int -> List Char -> Result String ( String, Int )
+parseEscape source index soFar =
+    -- We already know source !! index == '\\'
+    case List.take 1 (List.drop (index + 1) source) of
+        [ e ] ->
+            case e of
+                -- Standard JSON escapes
+                'n' ->
+                    -- Append newline and continue
+                    parseJsonString source (index + 2) (soFar ++ [ '\n' ])
+
+                'r' ->
+                    parseJsonString source (index + 2) (soFar ++ [ '\u{000D}' ])
+
+                't' ->
+                    parseJsonString source (index + 2) (soFar ++ [ '\t' ])
+
+                '"' ->
+                    parseJsonString source (index + 2) (soFar ++ [ '"' ])
+
+                '\\' ->
+                    parseJsonString source (index + 2) (soFar ++ [ '\\' ])
+
+                '/' ->
+                    parseJsonString source (index + 2) (soFar ++ [ '/' ])
+
+                'b' ->
+                    -- Typically backspace is ASCII 8, but some folks map it differently.
+                    -- For now, let's do ASCII 8 (BS).
+                    parseJsonString source (index + 2) (soFar ++ [ Char.fromCode 8 ])
+
+                'f' ->
+                    -- Typically form feed is ASCII 12.
+                    parseJsonString source (index + 2) (soFar ++ [ Char.fromCode 12 ])
+
+                'u' ->
+                    -- JSON allows \uXXXX (4 hex digits)
+                    parseUnicodeEscape source (index + 2) soFar
+
+                -- Unrecognized escape
+                _ ->
+                    Err ("Unrecognized escape sequence: \\" ++ String.fromChar e)
+
+        _ ->
+            -- No character after the backslash
+            Err "Unexpected end of input after backslash in string escape"
+
+
+{-| Parse a JSON Unicode escape of the form "\\uXXXX" where XXXX are 4 hex digits.
+If it is a high surrogate in [0xD800..0xDBFF], look for a following "\\uXXXX"
+as a low surrogate in [0xDC00..0xDFFF]. If both are found, combine them into
+a single codepoint (e.g. "\\uD83C\\uDF32" --> 🌲).
+-}
+parseUnicodeEscape : List Char -> Int -> List Char -> Result String ( String, Int )
+parseUnicodeEscape source index soFar =
+    let
+        -- First, parse the 4 hex digits after the "\u"
+        fourHexChars : List Char
+        fourHexChars =
+            List.take 4 (List.drop index source)
+
+        parseHexResult =
+            convert1OrMoreHexadecimal 0 fourHexChars
+
+        hi : Int
+        hi =
+            parseHexResult.int
+
+        offset : Int
+        offset =
+            parseHexResult.offset
+    in
+    if offset /= 4 then
+        -- We did not get 4 valid hex digits
+        Err "Unexpected end of input in \\u escape (need 4 hex digits)"
+
+    else
+    -- We have a potential code unit, see if it's a high surrogate
+    if
+        0xD800 <= hi && hi <= 0xDBFF
+    then
+        -- Possibly part of a surrogate pair; check the next 2 chars for "\u"
+        case List.take 2 (List.drop (index + 4) source) of
+            [ '\\', 'u' ] ->
+                -- Parse the next 4 hex digits (the low surrogate)
+                let
+                    fourHexChars2 : List Char
+                    fourHexChars2 =
+                        List.take 4 (List.drop (index + 4 + 2) source)
+
+                    parseHexResult2 =
+                        convert1OrMoreHexadecimal 0 fourHexChars2
+
+                    lo : Int
+                    lo =
+                        parseHexResult2.int
+
+                    offset2 : Int
+                    offset2 =
+                        parseHexResult2.offset
+                in
+                if offset2 /= 4 then
+                    -- The next \u did not have 4 valid hex digits
+                    Err "Unexpected end of input in second \\u of a surrogate pair"
+
+                else if 0xDC00 <= lo && lo <= 0xDFFF then
+                    -- Combine into a single code point
+                    let
+                        fullCodePoint =
+                            0x00010000
+                                + ((hi - 0xD800) * 0x0400)
+                                + (lo - 0xDC00)
+                    in
+                    parseJsonString
+                        source
+                        -- We used 4 hex digits + 2 extra chars "\u" + 4 more digits
+                        (index + 4 + 2 + 4)
+                        (soFar ++ [ Char.fromCode fullCodePoint ])
+
+                else
+                    -- We found "\u" but it’s not in the low surrogate range.
+                    -- Option A: treat `hi` as a normal code unit; ignore the extra "\u"
+                    -- Option B: throw an error.
+                    -- This example will just treat the high code as a normal char:
+                    parseJsonString
+                        source
+                        (index + 4)
+                        (soFar ++ [ Char.fromCode hi ])
+
+            _ ->
+                -- No second "\u"—so decode `hi` as-is.
+                parseJsonString
+                    source
+                    (index + 4)
+                    (soFar ++ [ Char.fromCode hi ])
+
+    else
+        -- Not a high surrogate, just parse `\uXXXX` as a single character
+        parseJsonString
+            source
+            (index + 4)
+            (soFar ++ [ Char.fromCode hi ])
+
+
+convert1OrMoreHexadecimal : Int -> List Char -> { int : Int, offset : Int }
+convert1OrMoreHexadecimal offset src =
+    case List.take 1 (List.drop offset src) of
+        [ '0' ] ->
+            convert0OrMoreHexadecimal 0 (offset + 1) src
+
+        [ '1' ] ->
+            convert0OrMoreHexadecimal 1 (offset + 1) src
+
+        [ '2' ] ->
+            convert0OrMoreHexadecimal 2 (offset + 1) src
+
+        [ '3' ] ->
+            convert0OrMoreHexadecimal 3 (offset + 1) src
+
+        [ '4' ] ->
+            convert0OrMoreHexadecimal 4 (offset + 1) src
+
+        [ '5' ] ->
+            convert0OrMoreHexadecimal 5 (offset + 1) src
+
+        [ '6' ] ->
+            convert0OrMoreHexadecimal 6 (offset + 1) src
+
+        [ '7' ] ->
+            convert0OrMoreHexadecimal 7 (offset + 1) src
+
+        [ '8' ] ->
+            convert0OrMoreHexadecimal 8 (offset + 1) src
+
+        [ '9' ] ->
+            convert0OrMoreHexadecimal 9 (offset + 1) src
+
+        [ 'a' ] ->
+            convert0OrMoreHexadecimal 10 (offset + 1) src
+
+        [ 'A' ] ->
+            convert0OrMoreHexadecimal 10 (offset + 1) src
+
+        [ 'b' ] ->
+            convert0OrMoreHexadecimal 11 (offset + 1) src
+
+        [ 'B' ] ->
+            convert0OrMoreHexadecimal 11 (offset + 1) src
+
+        [ 'c' ] ->
+            convert0OrMoreHexadecimal 12 (offset + 1) src
+
+        [ 'C' ] ->
+            convert0OrMoreHexadecimal 12 (offset + 1) src
+
+        [ 'd' ] ->
+            convert0OrMoreHexadecimal 13 (offset + 1) src
+
+        [ 'D' ] ->
+            convert0OrMoreHexadecimal 13 (offset + 1) src
+
+        [ 'e' ] ->
+            convert0OrMoreHexadecimal 14 (offset + 1) src
+
+        [ 'E' ] ->
+            convert0OrMoreHexadecimal 14 (offset + 1) src
+
+        [ 'f' ] ->
+            convert0OrMoreHexadecimal 15 (offset + 1) src
+
+        [ 'F' ] ->
+            convert0OrMoreHexadecimal 15 (offset + 1) src
+
+        _ ->
+            { int = 0, offset = -1 }
+
+
+convert0OrMoreHexadecimal : Int -> Int -> List Char -> { int : Int, offset : Int }
+convert0OrMoreHexadecimal soFar offset src =
+    case List.take 1 (List.drop offset src) of
+        [ '0' ] ->
+            convert0OrMoreHexadecimal (soFar * 16) (offset + 1) src
+
+        [ '1' ] ->
+            convert0OrMoreHexadecimal (soFar * 16 + 1) (offset + 1) src
+
+        [ '2' ] ->
+            convert0OrMoreHexadecimal (soFar * 16 + 2) (offset + 1) src
+
+        [ '3' ] ->
+            convert0OrMoreHexadecimal (soFar * 16 + 3) (offset + 1) src
+
+        [ '4' ] ->
+            convert0OrMoreHexadecimal (soFar * 16 + 4) (offset + 1) src
+
+        [ '5' ] ->
+            convert0OrMoreHexadecimal (soFar * 16 + 5) (offset + 1) src
+
+        [ '6' ] ->
+            convert0OrMoreHexadecimal (soFar * 16 + 6) (offset + 1) src
+
+        [ '7' ] ->
+            convert0OrMoreHexadecimal (soFar * 16 + 7) (offset + 1) src
+
+        [ '8' ] ->
+            convert0OrMoreHexadecimal (soFar * 16 + 8) (offset + 1) src
+
+        [ '9' ] ->
+            convert0OrMoreHexadecimal (soFar * 16 + 9) (offset + 1) src
+
+        [ 'a' ] ->
+            convert0OrMoreHexadecimal (soFar * 16 + 10) (offset + 1) src
+
+        [ 'A' ] ->
+            convert0OrMoreHexadecimal (soFar * 16 + 10) (offset + 1) src
+
+        [ 'b' ] ->
+            convert0OrMoreHexadecimal (soFar * 16 + 11) (offset + 1) src
+
+        [ 'B' ] ->
+            convert0OrMoreHexadecimal (soFar * 16 + 11) (offset + 1) src
+
+        [ 'c' ] ->
+            convert0OrMoreHexadecimal (soFar * 16 + 12) (offset + 1) src
+
+        [ 'C' ] ->
+            convert0OrMoreHexadecimal (soFar * 16 + 12) (offset + 1) src
+
+        [ 'd' ] ->
+            convert0OrMoreHexadecimal (soFar * 16 + 13) (offset + 1) src
+
+        [ 'D' ] ->
+            convert0OrMoreHexadecimal (soFar * 16 + 13) (offset + 1) src
+
+        [ 'e' ] ->
+            convert0OrMoreHexadecimal (soFar * 16 + 14) (offset + 1) src
+
+        [ 'E' ] ->
+            convert0OrMoreHexadecimal (soFar * 16 + 14) (offset + 1) src
+
+        [ 'f' ] ->
+            convert0OrMoreHexadecimal (soFar * 16 + 15) (offset + 1) src
+
+        [ 'F' ] ->
+            convert0OrMoreHexadecimal (soFar * 16 + 15) (offset + 1) src
+
+        _ ->
+            { int = soFar, offset = offset }
