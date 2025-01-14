@@ -38,7 +38,7 @@ public class BundledElmEnvironments
     public const string EmbeddedResourceFilePath = "prebuilt-artifact/compiled-elm-environments.json.gzip";
 
     private static readonly System.Text.RegularExpressions.Regex compiledEnvKeyRegex =
-        new System.Text.RegularExpressions.Regex("^" + CompiledEnvDictionaryKeyPrefix + "([\\d\\w]+)$");
+        new("^" + CompiledEnvDictionaryKeyPrefix + "([\\d\\w]+)$");
 
     const string CompiledEnvDictionaryKeyPrefix = "compiled-env-";
 
@@ -81,7 +81,14 @@ public class BundledElmEnvironments
 
         using var readStream = embeddedFileInfo.CreateReadStream();
 
-        return LoadBundledCompiledEnvironments(readStream, gzipDecompress: true);
+        try
+        {
+            return LoadBundledCompiledEnvironments(readStream, gzipDecompress: true);
+        }
+        catch (System.Exception e)
+        {
+            return "Failed to load bundled Elm environments from embedded resource: " + e.Message;
+        }
     }
 
     public static Result<string, IReadOnlyDictionary<string, PineValue>> LoadBundledCompiledEnvironments(

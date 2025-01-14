@@ -1078,7 +1078,8 @@ public class Program
 
                     Console.WriteLine(
                         "Saved compact build with " +
-                        allListEntries.Count + " list entries in " +
+                        CommandLineInterface.FormatIntegerForDisplay(allListEntries.Count) +
+                        " list entries in " +
                         CommandLineInterface.FormatIntegerForDisplay(fileContent.Length) +
                         " bytes to " + destFilePath);
                 }
