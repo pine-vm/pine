@@ -1,0 +1,1 @@
+String.map (\c -> if c == '/' then '.' else c) "a/b/c"

@@ -1497,6 +1497,11 @@ foldr func acc (String chars) =
     foldlChars func acc (Pine_kernel.reverse chars)
 
 
+map : (Char -> Char) -> String -> String
+map func (String chars) =
+    String (List.map func chars)
+
+
 repeat : Int -> String -> String
 repeat n (String chars) =
     String (Pine_kernel.concat (List.repeat n chars))
