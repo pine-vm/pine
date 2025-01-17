@@ -142,7 +142,7 @@ public class Program
     public static Result<string, PineValue> BuildElmCompilerFirstIteration(
         TreeNodeWithStringPath elmCompilerSource)
     {
-        if (false)
+        if (true)
         {
             var previousCompiler = LoadPreviousCompiler();
 

@@ -269,6 +269,40 @@ public class InteractiveSessionPine : IInteractiveSession
         TreeNodeWithStringPath appCodeTree,
         TreeNodeWithStringPath elmCoreAndKernelModuleFilesDefault)
     {
+        static IReadOnlyList<string>? moduleNameFromFileContent(ReadOnlySpan<byte> fileContent)
+        {
+            var blobChars = new char[fileContent.Length];
+
+            if (!System.Text.Encoding.UTF8.TryGetChars(fileContent, blobChars, out var charsWritten))
+                return [];
+
+            if (ElmSyntax.ElmModule.ParseModuleName(
+                new string(blobChars.AsSpan()[..charsWritten])).IsOkOrNull() is not { } moduleName)
+            {
+                return [];
+            }
+
+            return moduleName;
+        }
+
+        var appCodeTreeModuleNames =
+            appCodeTree.EnumerateBlobsTransitive()
+            .SelectMany((blob) =>
+            {
+                var fileName = blob.path.Last();
+
+                if (!fileName.EndsWith(".elm", StringComparison.OrdinalIgnoreCase))
+                    return (IEnumerable<IReadOnlyList<string>>)[];
+
+                if (moduleNameFromFileContent(blob.blobContent.Span) is not { } moduleName)
+                {
+                    return [];
+                }
+
+                return [moduleName];
+            })
+            .ToImmutableHashSet(EnumerableExtension.EqualityComparer<IReadOnlyList<string>>());
+
         return
             elmCoreAndKernelModuleFilesDefault
             .EnumerateBlobsTransitive()
@@ -278,11 +312,21 @@ public class InteractiveSessionPine : IInteractiveSession
 
                 func:
                 (aggregate, nextBlob) =>
-                aggregate.GetNodeAtPath(nextBlob.path) is { } existingNode
-                ?
-                aggregate
-                :
-                aggregate.SetNodeAtPathSorted(nextBlob.path, TreeNodeWithStringPath.Blob(nextBlob.blobContent)));
+                {
+                    if (aggregate.GetNodeAtPath(nextBlob.path) is not null)
+                        return aggregate;
+
+                    if (moduleNameFromFileContent(nextBlob.blobContent.Span) is { } moduleName)
+                    {
+                        if (appCodeTreeModuleNames.Contains(moduleName))
+                            return aggregate;
+                    }
+
+                    return
+                    aggregate.SetNodeAtPathSorted(
+                        nextBlob.path,
+                        TreeNodeWithStringPath.Blob(nextBlob.blobContent));
+                });
     }
 
     public record ParsedModule(
