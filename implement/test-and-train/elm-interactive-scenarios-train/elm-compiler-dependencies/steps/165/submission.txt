@@ -1,0 +1,17 @@
+case
+    Base64.toBytes "SGV4YWRlY2ltYWwgdG8gb2N0YWwgdHJhbnNmb3JtYXRpb24gaXMgdXNlZnVsIHRvIGNvbnZlcnQgYmV0d2VlbiBiaW5hcnkgYW5kIEJhc2U2NC4gU3VjaCBjb252ZXJzaW9uIGlzIGF2YWlsYWJsZSBmb3IgYm90aCBhZHZhbmNlZCBjYWxjdWxhdG9ycyBhbmQgcHJvZ3JhbW1pbmcgbGFuZ3VhZ2VzLiBGb3IgZXhhbXBsZSwgdGhlIGhleGFkZWNpbWFsIHJlcHJlc2VudGF0aW9uIG9mIHRoZSAyNCBiaXRzIGFib3ZlIGlzIDRENjE2RS4gVGhlIG9jdGFsIHJlcHJlc2VudGF0aW9uIGlzIDIzMjYwNTU2LiBUaG9zZSA4IG9jdGFsIGRpZ2l0cyBjYW4gYmUgc3BsaXQgaW50byBwYWlycyAoMjMgMjYgMDUgNTYpLCBhbmQgZWFjaCBwYWlyIGlzIGNvbnZlcnRlZCB0byBkZWNpbWFsIHRvIHlpZWxkIDE5IDIyIDA1IDQ2LiBVc2luZyB0aG9zZSBmb3VyIGRlY2ltYWwgbnVtYmVycyBhcyBpbmRpY2VzIGZvciB0aGUgQmFzZTY0IGFscGhhYmV0LCB0aGUgY29ycmVzcG9uZGluZyBBU0NJSSBjaGFyYWN0ZXJzIGFyZSBUV0Z1LgoKSWYgdGhlcmUgYXJlIG9ubHkgdHdvIHNpZ25pZmljYW50IGlucHV0IG9jdGV0cyAoZS5nLiwgJ01hJyksIG9yIHdoZW4gdGhlIGxhc3QgaW5wdXQgZ3JvdXAgY29udGFpbnMgb25seSB0d28gb2N0ZXRzLCBhbGwgMTYgYml0cyB3aWxsIGJlIGNhcHR1cmVkIGluIHRoZSBmaXJzdCB0aHJlZSBCYXNlNjQgZGlnaXRzICgxOCBiaXRzKTsgdGhlIHR3byBsZWFzdCBzaWduaWZpY2FudCBiaXRzIG9mIHRoZSBsYXN0IGNvbnRlbnQtYmVhcmluZyA2LWJpdCBibG9jayB3aWxsIHR1cm4gb3V0IHRvIGJlIHplcm8sIGFuZCBkaXNjYXJkZWQgb24gZGVjb2RpbmcgKGFsb25nIHdpdGggdGhlIHN1Y2NlZWRpbmcgPSBwYWRkaW5nIGNoYXJhY3Rlcik6"
+of
+    Nothing ->
+        [ -11 ]
+
+    Just bytes ->
+        case
+            Bytes.Decode.decode
+                (DecodeExtra.list 879 Bytes.Decode.unsignedInt8)
+                bytes
+        of
+            Nothing ->
+                [ -13 ]
+
+            Just bytes_list ->
+                bytes_list

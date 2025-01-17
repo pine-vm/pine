@@ -1,0 +1,11 @@
+Bytes.Decode.decode
+    (DecodeExtra.list  986  Bytes.Decode.unsignedInt8)
+    (Bytes.Encode.encode
+        (Bytes.Encode.string
+                """
+UTF-8 is a character encoding standard used for electronic communication. Defined by the Unicode Standard, the name is derived from Unicode Transformation Format – 8-bit. Almost every webpage is stored in UTF-8.
+
+UTF-8 is capable of encoding all 1,112,064 valid Unicode scalar values using a variable-width encoding of one to four one-byte (8-bit) code units.
+
+Code points with lower numerical values, which tend to occur more frequently, are encoded using fewer bytes. It was designed for backward compatibility with ASCII: the first 128 characters of Unicode, which correspond one-to-one with ASCII, are encoded using a single byte with the same binary value as ASCII, so that a UTF-8-encoded file using only those characters is identical to an ASCII file. Most software designed for any extended ASCII can read and write UTF-8 (including on Microsoft Windows) and this results in fewer internationalization issues than any alternative text encoding.[3][4]
+        """))
