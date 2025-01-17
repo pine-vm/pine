@@ -258,7 +258,7 @@ decodeBlobAsCharsRec offset blob chars =
                 decodeUtf8Char blob offset
         in
         decodeBlobAsCharsRec
-            (offset + bytesConsumed)
+            (Pine_kernel.int_add [ offset, bytesConsumed ])
             blob
             (char :: chars)
 

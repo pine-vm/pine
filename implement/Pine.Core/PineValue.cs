@@ -37,7 +37,7 @@ public abstract record PineValue : IEquatable<PineValue>
         :
         bytes.Length is 1
         ?
-        ReusedBlobSingle[bytes.Span[0]]
+        BlobSingleByte(bytes.Span[0])
         :
         bytes.Length is 2
         ?
@@ -52,6 +52,12 @@ public abstract record PineValue : IEquatable<PineValue>
         ReusedBlobInteger3BytePositive[bytes.Span[1] * 256 + bytes.Span[2]]
         :
         new BlobValue(bytes);
+
+    /// <summary>
+    /// Blob value for a single byte.
+    /// </summary>
+    public static PineValue BlobSingleByte(byte value) =>
+        ReusedBlobSingle[value];
 
     /// <summary>
     /// Construct a list value from a sequence of other values.
@@ -184,7 +190,7 @@ public abstract record PineValue : IEquatable<PineValue>
 
             return hash.ToHashCode();
         }
-        
+
         /// <inheritdoc/>
         public virtual bool Equals(ListValue? other)
         {

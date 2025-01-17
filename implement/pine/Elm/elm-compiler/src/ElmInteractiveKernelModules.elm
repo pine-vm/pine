@@ -368,8 +368,8 @@ emptyBlob =
     , """
 module Bytes.Decode exposing (..)
 
-
 import Bytes
+
 
 
 -- PARSER
@@ -407,9 +407,9 @@ decode (Decoder decoder) bytes =
         blobLength =
             Pine_kernel.length blob
     in
-    if Pine_kernel.int_is_sorted_asc [ 0, offset, blobLength ]
-    then
+    if Pine_kernel.int_is_sorted_asc [ 0, offset, blobLength ] then
         Just result
+
     else
         Nothing
 
@@ -576,7 +576,7 @@ signedInt32 endianness =
                     if
                         Pine_kernel.equal
                             [ Pine_kernel.bit_and [ bytesOrdered, 0x80000000 ]
-                            , Pine_kernel.skip [ 2, 0x000100000000 ]
+                            , Pine_kernel.skip [ 2, 0x0000000100000000 ]
                             ]
                     then
                         Pine_kernel.concat [ Pine_kernel.take [ 1, 0 ], bytesOrdered ]
@@ -617,16 +617,16 @@ decodeBlobAsChars blob =
 
 decodeBlobAsCharsRec : Int -> Int -> List Char -> String
 decodeBlobAsCharsRec offset blob chars =
-    if Pine_kernel.int_is_sorted_asc [ Pine_kernel.length blob, offset ]
-    then
+    if Pine_kernel.int_is_sorted_asc [ Pine_kernel.length blob, offset ] then
         String.fromList (List.reverse chars)
+
     else
         let
             ( char, bytesConsumed ) =
                 decodeUtf8Char blob offset
         in
         decodeBlobAsCharsRec
-            (offset + bytesConsumed)
+            (Pine_kernel.int_add [ offset, bytesConsumed ])
             blob
             (char :: chars)
 
@@ -640,7 +640,7 @@ decodeUtf8Char blob offset =
         firstByteInt =
             Pine_kernel.concat [ Pine_kernel.take [ 1, 0 ], firstByte ]
     in
-    if Pine_kernel.int_is_sorted_asc [ firstByteInt, 0x7f ] then
+    if Pine_kernel.int_is_sorted_asc [ firstByteInt, 0x7F ] then
         -- 1-byte character (ASCII)
         ( firstByte, 1 )
 
@@ -694,7 +694,7 @@ decodeUtf8Char blob offset =
             charCode =
                 Pine_kernel.int_add
                     [ Pine_kernel.int_mul [ firstFourBits, 4096 ] -- Multiply by 2^12
-                    , Pine_kernel.int_mul [ secondSixBits, 64 ]    -- Multiply by 2^6
+                    , Pine_kernel.int_mul [ secondSixBits, 64 ] -- Multiply by 2^6
                     , thirdSixBits
                     ]
         in
@@ -736,8 +736,8 @@ decodeUtf8Char blob offset =
             charCode =
                 Pine_kernel.int_add
                     [ Pine_kernel.int_mul [ firstThreeBits, 262144 ] -- Multiply by 2^18
-                    , Pine_kernel.int_mul [ secondSixBits, 4096 ]    -- Multiply by 2^12
-                    , Pine_kernel.int_mul [ thirdSixBits, 64 ]       -- Multiply by 2^6
+                    , Pine_kernel.int_mul [ secondSixBits, 4096 ] -- Multiply by 2^12
+                    , Pine_kernel.int_mul [ thirdSixBits, 64 ] -- Multiply by 2^6
                     , fourthSixBits
                     ]
         in

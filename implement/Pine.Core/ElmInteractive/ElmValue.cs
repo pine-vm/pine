@@ -29,10 +29,17 @@ public abstract record ElmValue
 
     abstract public int ContainedNodesCount { get; }
 
+    /// <summary>
+    /// Corresponding to the Elm expression 'True'.
+    /// </summary>
     public static readonly ElmValue TrueValue = TagInstance("True", []);
 
+    /// <summary>
+    /// Corresponding to the Elm expression 'False'.
+    /// </summary>
     public static readonly ElmValue FalseValue = TagInstance("False", []);
 
+    /// <inheritdoc/>
     override public string ToString() =>
         GetType().Name + " : " + RenderAsElmExpression(this).expressionString;
 

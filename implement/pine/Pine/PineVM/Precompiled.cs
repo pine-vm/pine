@@ -7,6 +7,7 @@ using System.Collections.Frozen;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
+using System.Text;
 
 namespace Pine.PineVM;
 
@@ -1067,6 +1068,84 @@ public class Precompiled
                         envClass,
                         BytesEncode_encodeCharsAsBlobHelp)]);
         }
+
+        {
+            var decodeBlobAsCharsRecExpression =
+                popularExpressionDictionary["Bytes.Decode.decodeBlobAsCharsRec"];
+
+            var decodeBlobAsCharsRecExpressionValue =
+                ExpressionEncoding.EncodeExpressionAsValue(decodeBlobAsCharsRecExpression);
+
+            var decodeUtf8CharExpression =
+                popularExpressionDictionary["Bytes.Decode.decodeUtf8Char"];
+
+            var decodeUtf8CharExpressionValue =
+                ExpressionEncoding.EncodeExpressionAsValue(decodeUtf8CharExpression);
+
+            var envClass =
+                EnvConstraintId.Create(
+                    [
+                    new KeyValuePair<IReadOnlyList<int>, PineValue>(
+                    [0, 0],
+                    decodeUtf8CharExpressionValue),
+                    new KeyValuePair<IReadOnlyList<int>, PineValue>(
+                    [0, 1],
+                    decodeBlobAsCharsRecExpressionValue),
+                    ]);
+
+            yield return
+                new KeyValuePair<Expression, IReadOnlyList<PrecompiledEntry>>(
+                    decodeBlobAsCharsRecExpression,
+                    [new PrecompiledEntry(
+                        envClass,
+                        BytesDecode_decodeBlobAsCharsRec)]);
+        }
+
+        {
+            var encodeToBytesBodyExpression =
+                popularExpressionDictionary["danfishgold.Base64.Encode.toBytes.body"];
+
+            var aggregateEnvFuncValue =
+                popularValueDictionary["danfishgold.Base64.Encode.toBytes.aggregate-env-funcs"];
+
+            var envClass =
+                EnvConstraintId.Create(
+                    [
+                    new KeyValuePair<IReadOnlyList<int>, PineValue>(
+                    [0],
+                    aggregateEnvFuncValue)
+                    ]);
+
+            yield return
+                new KeyValuePair<Expression, IReadOnlyList<PrecompiledEntry>>(
+                    encodeToBytesBodyExpression,
+                    [new PrecompiledEntry(
+                        envClass,
+                        Danfishgold_Base64_Encode_toBytes)]);
+        }
+
+        {
+            var decodeFromBytesBodyExpression =
+                popularExpressionDictionary["danfishgold.Base64.Decode.fromBytes.body"];
+
+            var aggregateEnvFuncValue =
+                popularValueDictionary["danfishgold.Base64.Decode.fromBytes.aggregate-env-funcs"];
+
+            var envClass =
+                EnvConstraintId.Create(
+                    [
+                    new KeyValuePair<IReadOnlyList<int>, PineValue>(
+                    [0],
+                    aggregateEnvFuncValue)
+                    ]);
+
+            yield return
+                new KeyValuePair<Expression, IReadOnlyList<PrecompiledEntry>>(
+                    decodeFromBytesBodyExpression,
+                    [new PrecompiledEntry(
+                        envClass,
+                        Danfishgold_Base64_Decode_fromBytes)]);
+        }
     }
 
     static PineValue RopePrependTo(
@@ -1384,6 +1463,349 @@ public class Precompiled
         }
 
         return PineValue.Blob(buffer.AsMemory(0, bytesWritten));
+    }
+
+    static PrecompiledResult.FinalValue? BytesDecode_decodeBlobAsCharsRec(
+        PineValue environment,
+        PineVMParseCache parseCache)
+    {
+        /*
+        decodeBlobAsCharsRec : Int -> Int -> List Char -> String
+        decodeBlobAsCharsRec offset blob chars =
+            if Pine_kernel.int_is_sorted_asc [ Pine_kernel.length blob, offset ] then
+                String.fromList (List.reverse chars)
+
+            else
+                let
+                    ( char, bytesConsumed ) =
+                        decodeUtf8Char blob offset
+                in
+                decodeBlobAsCharsRec
+                    (Pine_kernel.int_add [ offset, bytesConsumed ])
+                    blob
+                    (char :: chars)
+
+
+        decodeUtf8Char : Int -> Int -> ( Int, Int )
+        decodeUtf8Char blob offset =
+            let
+                firstByte =
+                    Pine_kernel.take [ 1, Pine_kernel.skip [ offset, blob ] ]
+
+                firstByteInt =
+                    Pine_kernel.concat [ Pine_kernel.take [ 1, 0 ], firstByte ]
+            in
+            if Pine_kernel.int_is_sorted_asc [ firstByteInt, 0x7F ] then
+                -- 1-byte character (ASCII)
+                ( firstByte, 1 )
+
+            else if Pine_kernel.equal [ Pine_kernel.bit_and [ firstByteInt, 0xE0 ], 0xC0 ] then
+                -- 2-byte character
+                let
+                    byte2 =
+                        Pine_kernel.take [ 1, Pine_kernel.skip [ Pine_kernel.int_add [ offset, 1 ], blob ] ]
+
+                    byte2Int =
+                        Pine_kernel.concat [ Pine_kernel.take [ 1, 0 ], byte2 ]
+
+                    firstFiveBits =
+                        Pine_kernel.bit_and [ firstByteInt, 0x1F ]
+
+                    secondSixBits =
+                        Pine_kernel.bit_and [ byte2Int, 0x3F ]
+
+                    charCode =
+                        Pine_kernel.int_add
+                            [ Pine_kernel.int_mul [ firstFiveBits, 64 ] -- Multiply by 2^6
+                            , secondSixBits
+                            ]
+                in
+                ( Pine_kernel.skip [ 1, charCode ], 2 )
+
+            else if Pine_kernel.equal [ Pine_kernel.bit_and [ firstByteInt, 0xF0 ], 0xE0 ] then
+                -- 3-byte character
+                let
+                    byte2 =
+                        Pine_kernel.take [ 1, Pine_kernel.skip [ Pine_kernel.int_add [ offset, 1 ], blob ] ]
+
+                    byte2Int =
+                        Pine_kernel.concat [ Pine_kernel.take [ 1, 0 ], byte2 ]
+
+                    byte3 =
+                        Pine_kernel.take [ 1, Pine_kernel.skip [ Pine_kernel.int_add [ offset, 2 ], blob ] ]
+
+                    byte3Int =
+                        Pine_kernel.concat [ Pine_kernel.take [ 1, 0 ], byte3 ]
+
+                    firstFourBits =
+                        Pine_kernel.bit_and [ firstByteInt, 0x0F ]
+
+                    secondSixBits =
+                        Pine_kernel.bit_and [ byte2Int, 0x3F ]
+
+                    thirdSixBits =
+                        Pine_kernel.bit_and [ byte3Int, 0x3F ]
+
+                    charCode =
+                        Pine_kernel.int_add
+                            [ Pine_kernel.int_mul [ firstFourBits, 4096 ] -- Multiply by 2^12
+                            , Pine_kernel.int_mul [ secondSixBits, 64 ] -- Multiply by 2^6
+                            , thirdSixBits
+                            ]
+                in
+                ( Pine_kernel.skip [ 1, charCode ], 3 )
+
+            else if Pine_kernel.equal [ Pine_kernel.bit_and [ firstByteInt, 0xF8 ], 0xF0 ] then
+                -- 4-byte character
+                let
+                    byte2 =
+                        Pine_kernel.take [ 1, Pine_kernel.skip [ Pine_kernel.int_add [ offset, 1 ], blob ] ]
+
+                    byte2Int =
+                        Pine_kernel.concat [ Pine_kernel.take [ 1, 0 ], byte2 ]
+
+                    byte3 =
+                        Pine_kernel.take [ 1, Pine_kernel.skip [ Pine_kernel.int_add [ offset, 2 ], blob ] ]
+
+                    byte3Int =
+                        Pine_kernel.concat [ Pine_kernel.take [ 1, 0 ], byte3 ]
+
+                    byte4 =
+                        Pine_kernel.take [ 1, Pine_kernel.skip [ Pine_kernel.int_add [ offset, 3 ], blob ] ]
+
+                    byte4Int =
+                        Pine_kernel.concat [ Pine_kernel.take [ 1, 0 ], byte4 ]
+
+                    firstThreeBits =
+                        Pine_kernel.bit_and [ firstByteInt, 0x07 ]
+
+                    secondSixBits =
+                        Pine_kernel.bit_and [ byte2Int, 0x3F ]
+
+                    thirdSixBits =
+                        Pine_kernel.bit_and [ byte3Int, 0x3F ]
+
+                    fourthSixBits =
+                        Pine_kernel.bit_and [ byte4Int, 0x3F ]
+
+                    charCode =
+                        Pine_kernel.int_add
+                            [ Pine_kernel.int_mul [ firstThreeBits, 262144 ] -- Multiply by 2^18
+                            , Pine_kernel.int_mul [ secondSixBits, 4096 ] -- Multiply by 2^12
+                            , Pine_kernel.int_mul [ thirdSixBits, 64 ] -- Multiply by 2^6
+                            , fourthSixBits
+                            ]
+                in
+                ( Pine_kernel.skip [ 1, charCode ], 4 )
+
+            else
+                -- Invalid UTF-8 sequence; use replacement character
+                ( Pine_kernel.skip [ 1, 0xFFFD ], 1 )
+
+         * */
+
+        var argOffsetValue =
+            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 0]);
+
+        var blobValue =
+            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 1]);
+
+        var charsValue =
+            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 2]);
+
+        if (KernelFunction.SignedIntegerFromValueRelaxed(argOffsetValue) is not { } argOffset)
+        {
+            return null;
+        }
+
+        if (blobValue is not PineValue.BlobValue blob)
+        {
+            return null;
+        }
+
+        if (charsValue is not PineValue.ListValue charsList)
+        {
+            return null;
+        }
+
+        var argOffsetInt = (int)argOffset;
+
+        var newCharsBuffer = new char[blob.Bytes.Length - argOffsetInt];
+
+        if (!Encoding.UTF8.TryGetChars(blob.Bytes[argOffsetInt..].Span, newCharsBuffer, out var charsWritten))
+        {
+            return null;
+        }
+
+        var newCharsValues =
+            PineValueAsString.ListValueFromString(new string(newCharsBuffer.AsMemory().Span[..charsWritten]));
+
+        var concatenatedCharsValues =
+            new PineValue[charsList.Elements.Length + newCharsValues.Length];
+
+        for (var i = 0; i < charsList.Elements.Length; ++i)
+        {
+            concatenatedCharsValues[i] =
+                charsList.Elements.Span[charsList.Elements.Length - i - 1];
+        }
+
+        newCharsValues.Span.CopyTo(concatenatedCharsValues.AsSpan(start: charsList.Elements.Length));
+
+        var elmStringValue =
+            PineValue.List(
+                [
+                ElmValue.ElmStringTypeTagNameAsValue,
+                PineValue.List([PineValue.List(concatenatedCharsValues)])
+                ]);
+
+        return new PrecompiledResult.FinalValue(elmStringValue, 0);
+    }
+
+    private static PrecompiledResult.FinalValue? Danfishgold_Base64_Encode_toBytes(
+        PineValue environment,
+        PineVMParseCache parseCache)
+    {
+        /*
+         * 
+         * 
+            toBytes : String -> Maybe Bytes
+            toBytes string =
+                Maybe.map Encode.encode (encoder string)
+         * */
+
+        var stringArg =
+            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 0]);
+
+        if (stringArg is not PineValue.ListValue stringList)
+        {
+            return null;
+        }
+
+        if (stringList.Elements.Length is not 2)
+        {
+            return null;
+        }
+
+        var stringTagName = stringList.Elements.Span[0];
+
+        if (stringTagName != ElmValue.ElmStringTypeTagNameAsValue)
+        {
+            return null;
+        }
+
+        if (stringList.Elements.Span[1] is not PineValue.ListValue stringTagArguments)
+        {
+            return null;
+        }
+
+        if (stringTagArguments.Elements.Length is not 1)
+        {
+            return null;
+        }
+
+        if (stringTagArguments.Elements.Span[0] is not PineValue.ListValue stringCharsList)
+        {
+            return null;
+        }
+
+        var asStringResult = PineValueAsString.StringFromListValue(stringCharsList);
+
+        if (asStringResult.IsOkOrNull() is not { } dotnetString)
+        {
+            return null;
+        }
+
+        var dotnetBytesBuffer = new byte[dotnetString.Length];
+
+        if (!Convert.TryFromBase64String(dotnetString, dotnetBytesBuffer, out var bytesWritten))
+        {
+            // Case of an invalid base64 string
+
+            return new PrecompiledResult.FinalValue(Tag_Nothing_Value, 0);
+        }
+
+        var bytesValue =
+            PineValue.List(
+            [
+                ElmValue.ElmBytesTypeTagNameAsValue,
+                PineValue.List([PineValue.Blob(dotnetBytesBuffer.AsMemory(start:0, length: bytesWritten))])
+            ]);
+
+        var maybeBytesValue =
+            PineValue.List(
+                [
+                    Tag_Just_Name_Value,
+                    PineValue.List([bytesValue])
+                ]);
+
+        return new PrecompiledResult.FinalValue(maybeBytesValue, 0);
+    }
+
+
+    private static PrecompiledResult.FinalValue? Danfishgold_Base64_Decode_fromBytes(
+        PineValue environment,
+        PineVMParseCache parseCache)
+    {
+        /*
+         * 
+        fromBytes : Bytes -> Maybe String
+        fromBytes bytes =
+            Decode.decode (decoder (Bytes.width bytes)) bytes
+
+
+        decoder : Int -> Decode.Decoder String
+        decoder width =
+            Decode.loop { remaining = width, string = "" } loopHelp
+
+         * */
+
+
+        var argBytes =
+            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 0]);
+
+        if (argBytes is not PineValue.ListValue argBytesList)
+        {
+            return null;
+        }
+
+        if (argBytesList.Elements.Length is not 2)
+        {
+            return null;
+        }
+
+        if (argBytesList.Elements.Span[0] != ElmValue.ElmBytesTypeTagNameAsValue)
+        {
+            return null;
+        }
+
+        if (argBytesList.Elements.Span[1] is not PineValue.ListValue argBytesTagArguments)
+        {
+            return null;
+        }
+
+        if (argBytesTagArguments.Elements.Length is not 1)
+        {
+            return null;
+        }
+
+        if (argBytesTagArguments.Elements.Span[0] is not PineValue.BlobValue argBytesBlobValue)
+        {
+            return null;
+        }
+
+        var dotnetString = Convert.ToBase64String(argBytesBlobValue.Bytes.Span);
+
+        var stringValue =
+            ElmValueEncoding.StringAsPineValue(dotnetString);
+
+        var maybeStringValue =
+            PineValue.List(
+                [
+                    Tag_Just_Name_Value,
+                    PineValue.List([stringValue])
+                ]);
+
+        return new PrecompiledResult.FinalValue(maybeStringValue, 0);
     }
 
     static PineValue BasicsCompare(
