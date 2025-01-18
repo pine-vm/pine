@@ -89,10 +89,18 @@ public class TestSetup
         GetElmAppFromDirectoryPath(FilePathStringFromPath(directoryPath));
 
     public static IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> GetElmAppFromDirectoryPath(
-        string directoryPath) =>
-            PineValueComposition.ToFlatDictionaryWithPathComparer(
-                Filesystem.GetAllFilesFromDirectory(directoryPath)
-                .OrderBy(file => string.Join('/', file.path)));
+        string directoryPath)
+    {
+        var files = Filesystem.GetAllFilesFromDirectory(directoryPath);
+
+        var filesFiltered =
+            LoadFromLocalFilesystem.RemoveNoiseFromTree(
+                PineValueComposition.SortedTreeFromSetOfBlobsWithStringPath(files),
+                discardGitDirectory: true);
+
+        return
+            PineValueComposition.TreeToFlatDictionaryWithPathComparer(filesFiltered);
+    }
 
     public static IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> AsLoweredElmApp(
         IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> originalAppFiles,
