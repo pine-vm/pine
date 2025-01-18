@@ -1,17 +1,17 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
+    <TargetFramework>net9.0</TargetFramework>
     <Nullable>enable</Nullable>
-    <AssemblyVersion>0.3.32</AssemblyVersion>
-    <FileVersion>0.3.32</FileVersion>
+    <AssemblyVersion>0.3.33</AssemblyVersion>
+    <FileVersion>0.3.33</FileVersion>
     <GenerateEmbeddedFilesManifest>true</GenerateEmbeddedFilesManifest>
   </PropertyGroup>
 
   <PropertyGroup>
     <PackageId>Pine.Core</PackageId>
-    <Version>0.3.32</Version>
-    <Description>The cross-platform Elm runtime environment</Description>
+    <Version>0.3.33</Version>
+    <Description>Elm DevTools and runtime</Description>
     <PackageTags>Functional;Elm;Runtime;Compiler;VM;DBMS</PackageTags>
     <RepositoryUrl>https://github.com/pine-vm/pine.git</RepositoryUrl>
     <PackageProjectUrl>https://pine-vm.org</PackageProjectUrl>
@@ -41,7 +41,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.Extensions.FileProviders.Embedded" Version="9.0.0" />
+    <PackageReference Include="Microsoft.Extensions.FileProviders.Embedded" Version="9.0.1" />
   </ItemGroup>
 
 </Project>

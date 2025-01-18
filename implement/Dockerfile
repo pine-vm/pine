@@ -1,5 +1,5 @@
 # Build dotnet build image
-FROM mcr.microsoft.com/dotnet/sdk:8.0.404 AS build-env
+FROM mcr.microsoft.com/dotnet/sdk:9.0.102 AS build-env
 WORKDIR /app
 
 # Copy everything and build
@@ -12,7 +12,7 @@ WORKDIR /app/pine
 RUN dotnet  publish  -o out
 
 # Build runtime image
-FROM mcr.microsoft.com/dotnet/aspnet:8.0.11 AS binaries
+FROM mcr.microsoft.com/dotnet/aspnet:9.0.1 AS binaries
 
 COPY --from=build-env /app/pine/out /pine/dotnet/
 
