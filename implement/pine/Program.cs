@@ -43,7 +43,7 @@ public class Program
         var app = new CommandLineApplication
         {
             Name = "pine",
-            Description = "Pine - runtime environment for Elm.\nTo get help or report an issue, see https://github.com/pine-vm/pine/discussions",
+            Description = "Pine: Elm DevTools and runtime\nTo get help or report an issue, see https://github.com/pine-vm/pine/discussions",
             HelpTextGenerator =
             new McMaster.Extensions.CommandLineUtils.HelpText.DefaultHelpTextGenerator { SortCommandsByName = false }
         };
