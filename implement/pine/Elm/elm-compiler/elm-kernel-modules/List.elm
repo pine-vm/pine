@@ -280,19 +280,25 @@ concatMap f list =
 
 intersperse : a -> List a -> List a
 intersperse sep xs =
-    case xs of
-        [] ->
-            []
+    intersperseHelp
+        (Pine_kernel.take [ 1, xs ])
+        1
+        sep
+        xs
 
-        hd :: tl ->
-            let
-                step x rest =
-                    cons sep (cons x rest)
 
-                spersed =
-                    foldr step [] tl
-            in
-            cons hd spersed
+intersperseHelp : List a -> Int -> a -> List a -> List a
+intersperseHelp acc offset sep xs =
+    case Pine_kernel.take [ 1, Pine_kernel.skip [ offset, xs ] ] of
+        [ x ] ->
+            intersperseHelp
+                (Pine_kernel.concat [ acc, [ sep, x ] ])
+                (offset + 1)
+                sep
+                xs
+
+        _ ->
+            acc
 
 
 map2 : (a -> b -> result) -> List a -> List b -> List result

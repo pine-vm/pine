@@ -798,14 +798,44 @@ andThen callback maybeValue =
     , -- https://github.com/elm/core/blob/84f38891468e8e153fc85a9b63bdafd81b24664e/src/List.elm
       """
 module List exposing
-  ( singleton, repeat, range, (::)
-  , map, indexedMap, foldl, foldr, filter, filterMap
-  , length, reverse, member, all, any, maximum, minimum, sum, product
-  , append, concat, concatMap, intersperse, map2, map3, map4, map5
-  , sort, sortBy, sortWith
-  , isEmpty, head, tail, take, drop, partition, unzip
-  )
-
+    ( (::)
+    , all
+    , any
+    , append
+    , concat
+    , concatMap
+    , drop
+    , filter
+    , filterMap
+    , foldl
+    , foldr
+    , head
+    , indexedMap
+    , intersperse
+    , isEmpty
+    , length
+    , map
+    , map2
+    , map3
+    , map4
+    , map5
+    , maximum
+    , member
+    , minimum
+    , partition
+    , product
+    , range
+    , repeat
+    , reverse
+    , singleton
+    , sort
+    , sortBy
+    , sortWith
+    , sum
+    , tail
+    , take
+    , unzip
+    )
 
 import Basics
 import Maybe exposing (Maybe(..))
@@ -816,7 +846,7 @@ infix right 5 (::) = cons
 
 singleton : a -> List a
 singleton value =
-    [value]
+    [ value ]
 
 
 repeat : Int -> a -> List a
@@ -828,6 +858,7 @@ repeatHelp : List a -> Int -> a -> List a
 repeatHelp result n value =
     if Pine_kernel.int_is_sorted_asc [ n, 0 ] then
         result
+
     else
         repeatHelp (cons value result) (n - 1) value
 
@@ -841,6 +872,7 @@ rangeHelp : Int -> Int -> List Int -> List Int
 rangeHelp lo hi list =
     if Pine_kernel.int_is_sorted_asc [ lo, hi ] then
         rangeHelp lo (hi - 1) (cons hi list)
+
     else
         list
 
@@ -1047,19 +1079,25 @@ concatMap f list =
 
 intersperse : a -> List a -> List a
 intersperse sep xs =
-    case xs of
-        [] ->
-            []
+    intersperseHelp
+        (Pine_kernel.take [ 1, xs ])
+        1
+        sep
+        xs
 
-        hd :: tl ->
-            let
-                step x rest =
-                    cons sep (cons x rest)
 
-                spersed =
-                    foldr step [] tl
-            in
-            cons hd spersed
+intersperseHelp : List a -> Int -> a -> List a -> List a
+intersperseHelp acc offset sep xs =
+    case Pine_kernel.take [ 1, Pine_kernel.skip [ offset, xs ] ] of
+        [ x ] ->
+            intersperseHelp
+                (Pine_kernel.concat [ acc, [ sep, x ] ])
+                (offset + 1)
+                sep
+                xs
+
+        _ ->
+            acc
 
 
 map2 : (a -> b -> result) -> List a -> List b -> List result
@@ -1181,7 +1219,8 @@ sortWith compareFunc list =
 sortWithSplit : List a -> ( List a, List a )
 sortWithSplit list =
     let
-        middleIndex = (Pine_kernel.length list) // 2
+        middleIndex =
+            Pine_kernel.length list // 2
     in
     ( Pine_kernel.take [ middleIndex, list ]
     , Pine_kernel.skip [ middleIndex, list ]
@@ -1519,7 +1558,11 @@ append (String a) (String b) =
 
 concat : List String -> String
 concat strings =
-    join "" strings
+    let
+        charsLists =
+            List.map toList strings
+    in
+    String (Pine_kernel.concat charsLists)
 
 
 split : String -> String -> List String
@@ -1583,21 +1626,13 @@ splitHelperOnList offset collected lastStart sep string =
 
 join : String -> List String -> String
 join (String sepList) chunks =
-    String (joinOnList sepList chunks)
-
-
-joinOnList : List Char -> List String -> List Char
-joinOnList sep chunks =
-    case chunks of
-        [] ->
-            []
-
-        (String nextChunk) :: remaining ->
-            if remaining == [] then
-                nextChunk
-
-            else
-                Pine_kernel.concat [ nextChunk, sep, joinOnList sep remaining ]
+    let
+        charsLists =
+            List.intersperse
+                sepList
+                (List.map toList chunks)
+    in
+    String (Pine_kernel.concat charsLists)
 
 
 slice : Int -> Int -> String -> String
@@ -1915,7 +1950,7 @@ isCharRemovedOnTrim char =
     else if Pine_kernel.equal [ char, '\\n' ] then
         True
 
-    else if Pine_kernel.equal [ char, '\u{000D}' ] then
+    else if Pine_kernel.equal [ char, '\\u{000D}' ] then
         True
 
     else

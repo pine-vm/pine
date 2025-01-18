@@ -40,7 +40,12 @@ This allows you to hash two, or more, strings in sequence without concatenating 
 -}
 hashWithSeed : String -> Int -> Int
 hashWithSeed str seed =
-    Bitwise.shiftRightZfBy 0 (String.foldl utf32ToUtf8 seed str)
+    let
+        chars : List Char
+        chars =
+            String.toList str
+    in
+    Bitwise.shiftRightZfBy 0 (List.foldl utf32ToUtf8 seed chars)
 
 
 utf32ToUtf8 : Char -> Int -> Int

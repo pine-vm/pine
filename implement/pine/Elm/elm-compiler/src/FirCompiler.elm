@@ -1199,7 +1199,7 @@ emitReferenceExpression ( moduleName, declName ) compilation =
             of
                 Nothing ->
                     Err
-                        (String.join ""
+                        (String.concat
                             [ "Failed referencing '"
                             , String.join "." (List.concat [ moduleName, [ declName ] ])
                             , "'. "

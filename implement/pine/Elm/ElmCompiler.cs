@@ -157,6 +157,7 @@ public class ElmCompiler
         ["elm-syntax", "src", "Elm", "Parser.elm"],
         ["src", "ElmInteractiveSubmissionParser.elm"],
         ["src", "LanguageService.elm"],
+        ["src", "CompileElmAppMain.elm"],
         ];
 
     public static TreeNodeWithStringPath ElmCompilerFileTreeFromBundledFileTree(

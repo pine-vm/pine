@@ -4,6 +4,7 @@ import Base64
 import Bytes
 import CompileBackendApp
 import CompileElmApp exposing (CompilationArguments, ElmMakeEntryPointKind(..), EntryPointClass)
+import CompileElmAppMain
 import Dict
 import Elm.Syntax.Range
 import Json.Decode
@@ -26,8 +27,7 @@ lowerSerialized argumentsJson =
 
 defaultEntryPoints : List EntryPointClass
 defaultEntryPoints =
-    CompileElmApp.defaultEntryPoints
-        ++ CompileBackendApp.entryPoints
+    CompileElmAppMain.defaultEntryPoints
 
 
 jsonEncodeLowerForSourceFilesResponse : CompilationResponse -> Json.Encode.Value

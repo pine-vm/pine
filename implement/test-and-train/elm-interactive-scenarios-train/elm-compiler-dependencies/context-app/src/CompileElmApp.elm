@@ -457,7 +457,11 @@ findSourceDirectories arguments =
                             Err "Failed to decode file content as string"
 
                         Just elmJsonString ->
-                            case Json.Decode.decodeString decodeElmJson elmJsonString of
+                            case
+                                Json.Decode.decodeString
+                                    decodeElmJson
+                                    (String.trim elmJsonString)
+                            of
                                 Err err ->
                                     Err ("Failed to decode elm.json: " ++ Json.Decode.errorToString err)
 
@@ -953,24 +957,22 @@ mapAppFilesToSupportJsonConverters { generatedModuleNamePrefix, sourceDirs } typ
                 |> List.map String.trim
                 |> String.join "\n\n\n"
 
-        generatedModuleHash : String
-        generatedModuleHash =
-            generatedModuleTextWithoutModuleDeclaration
-                |> FNV1a.hash
-                |> String.fromInt
-
+        generatedModuleName : List String
         generatedModuleName =
-            generatedModuleNamePrefix ++ [ "Generated_" ++ String.left 8 generatedModuleHash ]
+            generatedModuleNamePrefix ++ [ "Generated_JsonConverters" ]
 
+        generatedModulePath : List String
         generatedModulePath =
             filePathFromElmModuleName sourceDirs generatedModuleName
 
+        generatedModuleText : String
         generatedModuleText =
             [ "module " ++ String.join "." generatedModuleName ++ " exposing (..)"
             , generatedModuleTextWithoutModuleDeclaration
             ]
                 |> String.join "\n\n"
 
+        appFiles : AppFiles
         appFiles =
             appFilesAfterExposingChoiceTypesInModules
                 |> updateFileContentAtPath
@@ -1306,27 +1308,29 @@ type FileTreeNode blobStructure
                                 generatedModuleDeclarations =
                                     Set.fromList generatedModuleDeclarationsBeforeRemovingDuplicates
 
+                                generatedModuleTextWithoutModuleDeclaration : String
                                 generatedModuleTextWithoutModuleDeclaration =
                                     String.join "\n\n" (Set.toList generatedModuleDeclarations)
 
-                                generatedModuleHash : String
-                                generatedModuleHash =
-                                    generatedModuleTextWithoutModuleDeclaration
-                                        |> FNV1a.hash
-                                        |> String.fromInt
-
+                                generatedModuleName : Elm.Syntax.ModuleName.ModuleName
                                 generatedModuleName =
-                                    interfaceModuleName ++ [ "Generated_" ++ String.left 8 generatedModuleHash ]
+                                    List.concat
+                                        [ interfaceModuleName
+                                        , [ "Generated_SourceFiles" ]
+                                        ]
 
+                                generatedModulePath : List String
                                 generatedModulePath =
                                     filePathFromElmModuleName sourceDirs generatedModuleName
 
+                                generatedModuleText : String
                                 generatedModuleText =
                                     [ "module " ++ String.join "." generatedModuleName ++ " exposing (..)"
                                     , generatedModuleTextWithoutModuleDeclaration
                                     ]
                                         |> String.join "\n\n"
 
+                                appFiles : AppFiles
                                 appFiles =
                                     sourceFiles
                                         |> updateFileContentAtPath
@@ -1419,8 +1423,10 @@ mapElmMakeModuleText sourceDirs dependencies ( sourceFiles, moduleFilePath, modu
                     |> Result.andThen
                         (\functionsToReplaceFunction ->
                             let
+                                interfaceModuleName : Elm.Syntax.ModuleName.ModuleName
                                 interfaceModuleName =
-                                    Elm.Syntax.Module.moduleName (Elm.Syntax.Node.value parsedModule.moduleDefinition)
+                                    Elm.Syntax.Module.moduleName
+                                        (Elm.Syntax.Node.value parsedModule.moduleDefinition)
 
                                 generatedModuleTextWithoutModuleDeclaration =
                                     functionsToReplaceFunction
@@ -1429,24 +1435,22 @@ mapElmMakeModuleText sourceDirs dependencies ( sourceFiles, moduleFilePath, modu
                                         |> Set.toList
                                         |> String.join "\n\n"
 
-                                generatedModuleHash : String
-                                generatedModuleHash =
-                                    generatedModuleTextWithoutModuleDeclaration
-                                        |> FNV1a.hash
-                                        |> String.fromInt
-
+                                generatedModuleName : Elm.Syntax.ModuleName.ModuleName
                                 generatedModuleName =
-                                    interfaceModuleName ++ [ "Generated_" ++ String.left 8 generatedModuleHash ]
+                                    interfaceModuleName ++ [ "Generated_ElmMake" ]
 
+                                generatedModulePath : List String
                                 generatedModulePath =
                                     filePathFromElmModuleName sourceDirs generatedModuleName
 
+                                generatedModuleText : String
                                 generatedModuleText =
                                     [ "module " ++ String.join "." generatedModuleName ++ " exposing (..)"
                                     , generatedModuleTextWithoutModuleDeclaration
                                     ]
                                         |> String.join "\n\n"
 
+                                appFiles : AppFiles
                                 appFiles =
                                     sourceFiles
                                         |> updateFileContentAtPath
@@ -1474,10 +1478,12 @@ mapElmMakeModuleText sourceDirs dependencies ( sourceFiles, moduleFilePath, modu
 
 
 locatedInSourceFilesFromRange : List String -> Elm.Syntax.Node.Node a -> LocatedInSourceFiles a
-locatedInSourceFilesFromRange filePath node =
-    case node of
-        Elm.Syntax.Node.Node range a ->
-            LocatedInSourceFiles { filePath = filePath, locationInModuleText = range } a
+locatedInSourceFilesFromRange filePath (Elm.Syntax.Node.Node range a) =
+    LocatedInSourceFiles
+        { filePath = filePath
+        , locationInModuleText = range
+        }
+        a
 
 
 exposeAllInElmModuleInAppFiles : SourceDirectories -> List String -> AppFiles -> AppFiles
@@ -3819,7 +3825,7 @@ buildBase64ElmExpression bytes =
             Err "Error encoding to base64"
 
         Just asBase64 ->
-            Ok (stringExpressionFromString asBase64)
+            Ok ("\"" ++ asBase64 ++ "\"")
 
 
 buildUtf8ElmExpression : Bytes.Bytes -> Result String String
@@ -3914,14 +3920,39 @@ bytes_decode_withOffset offset decoder =
 
 stringExpressionFromString : String -> String
 stringExpressionFromString string =
-    "\""
-        ++ (string
-                |> String.replace "\\" "\\\\"
-                |> String.replace "\n" "\\n"
-                |> String.replace "\u{000D}" "\\r"
-                |> String.replace "\"" "\\\""
-           )
-        ++ "\""
+    let
+        escapedChars : List (List Char)
+        escapedChars =
+            List.map
+                escapeCharForStringLiteral
+                (String.toList string)
+    in
+    String.fromList
+        (List.concat
+            [ [ '"' ]
+            , List.concat escapedChars
+            , [ '"' ]
+            ]
+        )
+
+
+escapeCharForStringLiteral : Char -> List Char
+escapeCharForStringLiteral char =
+    case char of
+        '\\' ->
+            [ '\\', '\\' ]
+
+        '\n' ->
+            [ '\\', 'n' ]
+
+        '\u{000D}' ->
+            [ '\\', 'r' ]
+
+        '"' ->
+            [ '\\', '"' ]
+
+        _ ->
+            [ char ]
 
 
 includeFilePathInElmMakeRequest : List String -> Bool
@@ -4027,20 +4058,24 @@ findFileTreeNodeWithPathMatchingRepresentationInFunctionName sourceDirs sourceFi
         nodesWithRepresentations =
             sourceDirectoryPaths
                 |> List.concatMap
-                    (\elmJsonDirectoryPath ->
-                        FileTree.getNodeAtPathFromFileTree elmJsonDirectoryPath fileTree
-                            |> Maybe.withDefault (FileTree.TreeNode [])
-                            |> FileTree.listNodesWithPath
-                            |> List.map
-                                (\( nodePathRelative, node ) ->
-                                    ( filePathRepresentationInFunctionName nodePathRelative
-                                    , ( { relativePath = nodePathRelative
-                                        , absolutePath = elmJsonDirectoryPath ++ nodePathRelative
-                                        }
-                                      , node
-                                      )
-                                    )
-                                )
+                    (\sourceDirPath ->
+                        case FileTree.getNodeAtPathFromFileTree sourceDirPath fileTree of
+                            Nothing ->
+                                []
+
+                            Just sourceDirNode ->
+                                sourceDirNode
+                                    |> FileTree.listNodesWithPath
+                                    |> List.map
+                                        (\( nodePathRelative, node ) ->
+                                            ( filePathRepresentationInFunctionName nodePathRelative
+                                            , ( { relativePath = nodePathRelative
+                                                , absolutePath = List.concat [ sourceDirPath, nodePathRelative ]
+                                                }
+                                              , node
+                                              )
+                                            )
+                                        )
                     )
 
         nodesGroupedByRepresentation : Dict.Dict String (List ( DeclarationFileMatch, FileTree.FileTreeNode Bytes.Bytes ))
@@ -4066,20 +4101,24 @@ findFileTreeNodeWithPathMatchingRepresentationInFunctionName sourceDirs sourceFi
 
         [] ->
             let
+                examplesListItems : List String
                 examplesListItems =
                     Dict.keys nodesGroupedByRepresentation
 
+                examplesListItemsForDisplay : List String
                 examplesListItemsForDisplay =
                     List.take 8 examplesListItems
 
+                examplesListItemsDisplayItems : List String
                 examplesListItemsDisplayItems =
-                    examplesListItemsForDisplay
-                        ++ (if examplesListItemsForDisplay == examplesListItems then
-                                []
+                    List.concat
+                        [ examplesListItemsForDisplay
+                        , if examplesListItemsForDisplay == examplesListItems then
+                            []
 
-                            else
-                                [ "..." ]
-                           )
+                          else
+                            [ "..." ]
+                        ]
             in
             [ [ "Did not find any file or directory with a path matching the representation '"
                     ++ pathPattern
@@ -4113,30 +4152,29 @@ addOrUpdateFunctionInElmModuleText { functionName, mapFunctionLines } moduleText
             (\parsedModule ->
                 case
                     parsedModule.declarations
-                        |> List.filter
-                            (\declaration ->
-                                case Elm.Syntax.Node.value declaration of
+                        |> Common.listFind
+                            (\(Elm.Syntax.Node.Node _ declaration) ->
+                                case declaration of
                                     Elm.Syntax.Declaration.FunctionDeclaration functionDeclaration ->
                                         let
-                                            candidateFunctionName =
-                                                Elm.Syntax.Node.value
-                                                    (Elm.Syntax.Node.value functionDeclaration.declaration).name
+                                            (Elm.Syntax.Node.Node _ functionDeclarationValue) =
+                                                functionDeclaration.declaration
+
+                                            (Elm.Syntax.Node.Node _ candidateFunctionName) =
+                                                functionDeclarationValue.name
                                         in
                                         functionName == candidateFunctionName
 
                                     _ ->
                                         False
                             )
-                        |> List.head
                 of
                     Nothing ->
                         Ok (String.join "\n\n\n" [ moduleText, String.join "\n" (mapFunctionLines Nothing) ])
 
-                    Just declaration ->
+                    Just (Elm.Syntax.Node.Node declarationRange _) ->
                         let
-                            declarationRange =
-                                Elm.Syntax.Node.range declaration
-
+                            originalFunctionLines : List String
                             originalFunctionLines =
                                 getTextLinesFromRange declarationRange moduleText
                         in
@@ -4782,18 +4820,16 @@ enumerateLeavesFromRecordTree node =
 
 
 filePathRepresentationInFunctionName : List String -> String
-filePathRepresentationInFunctionName =
-    String.join "/"
-        >> String.toList
-        >> List.map
-            (\char ->
-                if Char.isAlphaNum char then
-                    char
+filePathRepresentationInFunctionName pathItems =
+    String.map
+        (\char ->
+            if Char.isAlphaNum char then
+                char
 
-                else
-                    '_'
-            )
-        >> String.fromList
+            else
+                '_'
+        )
+        (String.join "_" pathItems)
 
 
 addModulesFromTextToAppFiles : SourceDirectories -> List String -> AppFiles -> AppFiles

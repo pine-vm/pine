@@ -33,7 +33,7 @@ public interface IInteractiveSession : IDisposable
             new InteractiveSessionPine(
                 compilerSourceFiles: compilerSourceFiles,
                 appCodeTree: appCodeTree,
-                overrideSkipLowering: false,
+                overrideSkipLowering: null,
                 caching: pineConfig.Caching,
                 autoPGO: pineConfig.DynamicPGOShare),
 

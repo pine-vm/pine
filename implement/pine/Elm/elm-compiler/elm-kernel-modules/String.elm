@@ -153,7 +153,11 @@ append (String a) (String b) =
 
 concat : List String -> String
 concat strings =
-    join "" strings
+    let
+        charsLists =
+            List.map toList strings
+    in
+    String (Pine_kernel.concat charsLists)
 
 
 split : String -> String -> List String
@@ -217,21 +221,13 @@ splitHelperOnList offset collected lastStart sep string =
 
 join : String -> List String -> String
 join (String sepList) chunks =
-    String (joinOnList sepList chunks)
-
-
-joinOnList : List Char -> List String -> List Char
-joinOnList sep chunks =
-    case chunks of
-        [] ->
-            []
-
-        (String nextChunk) :: remaining ->
-            if remaining == [] then
-                nextChunk
-
-            else
-                Pine_kernel.concat [ nextChunk, sep, joinOnList sep remaining ]
+    let
+        charsLists =
+            List.intersperse
+                sepList
+                (List.map toList chunks)
+    in
+    String (Pine_kernel.concat charsLists)
 
 
 slice : Int -> Int -> String -> String

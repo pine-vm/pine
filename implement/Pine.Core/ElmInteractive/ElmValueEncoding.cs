@@ -600,4 +600,15 @@ public static class ElmValueEncoding
             ElmValue.ElmStringTypeTagNameAsValue,
             PineValue.List([PineValueAsString.ValueFromString(elmString)])
             ]);
+
+    /// <summary>
+    /// Converts a sequence of bytes from .NET to the corresponding
+    /// Elm `<see href="https://package.elm-lang.org/packages/elm/bytes/1.0.8/Bytes#Bytes">Bytes.Bytes</see>` value.
+    /// </summary>
+    public static PineValue AsElmBytesBytes(ReadOnlyMemory<byte> bytes) =>
+        PineValue.List(
+            [
+                ElmValue.ElmBytesTypeTagNameAsValue,
+                PineValue.List([PineValue.Blob(bytes)])
+            ]);
 }
