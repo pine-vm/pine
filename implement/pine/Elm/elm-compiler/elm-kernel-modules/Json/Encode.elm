@@ -8,6 +8,7 @@ type Value
     | StringValue String
     | ArrayValue (List Value)
     | ObjectValue (List ( String, Value ))
+    | FloatValue String
 
 
 null : Value
@@ -64,6 +65,9 @@ encode indent value =
 
         ObjectValue fields ->
             "{" ++ String.join "," (List.map (encodeField indent) fields) ++ "}"
+
+        FloatValue asString ->
+            asString
 
 
 encodeField : Int -> ( String, Value ) -> String

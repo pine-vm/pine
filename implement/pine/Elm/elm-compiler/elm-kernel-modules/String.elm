@@ -340,7 +340,7 @@ endsWith pattern string =
 
 toInt : String -> Maybe Int
 toInt (String chars) =
-    toIntFromList chars
+    parseInt chars 0
 
 
 fromInt : Int -> String
@@ -348,95 +348,108 @@ fromInt int =
     String (fromIntAsList int)
 
 
-toIntFromList : List Char -> Maybe Int
-toIntFromList stringAsList =
+parseInt : List Char -> Int -> Maybe Int
+parseInt src offset0 =
     let
-        firstChar =
-            Pine_kernel.head stringAsList
+        nextChar =
+            List.take 1 (List.drop offset0 src)
     in
-    if Pine_kernel.equal [ firstChar, [] ] then
-        Nothing
-
-    else
-        let
-            ( valueString, signMultiplier ) =
-                case firstChar of
-                    '-' ->
-                        ( Pine_kernel.skip [ 1, stringAsList ], -1 )
-
-                    '+' ->
-                        ( Pine_kernel.skip [ 1, stringAsList ], 1 )
-
-                    _ ->
-                        ( stringAsList, 1 )
-        in
-        if Pine_kernel.equal [ valueString, [] ] then
-            Nothing
-
-        else
-            case toUnsignedIntFromList 0 valueString of
-                Just unsigned ->
-                    Just (Pine_kernel.int_mul [ signMultiplier, unsigned ])
+    case nextChar of
+        [ '-' ] ->
+            case parseUnsignedInt src (offset0 + 1) of
+                Just unsignedVal ->
+                    Just -unsignedVal
 
                 Nothing ->
                     Nothing
 
+        [ '+' ] ->
+            parseUnsignedInt src (offset0 + 1)
 
-toUnsignedIntFromList : Int -> List Char -> Maybe Int
-toUnsignedIntFromList upper chars =
-    let
-        char =
-            Pine_kernel.head chars
-    in
-    if Pine_kernel.equal [ char, [] ] then
-        Just upper
+        _ ->
+            -- If no minus sign, parse the rest as an unsigned integer
+            parseUnsignedInt src offset0
 
-    else
-        case digitValueFromChar char of
-            Nothing ->
+
+parseUnsignedInt : List Char -> Int -> Maybe Int
+parseUnsignedInt src offset0 =
+    case List.take 1 (List.drop offset0 src) of
+        [ '0' ] ->
+            if Pine_kernel.equal [ Pine_kernel.length src, offset0 + 1 ] then
+                Just 0
+
+            else
                 Nothing
 
-            Just digitValue ->
-                toUnsignedIntFromList
-                    (Pine_kernel.int_add [ digitValue, Pine_kernel.int_mul [ upper, 10 ] ])
-                    (Pine_kernel.skip [ 1, chars ])
+        [ '1' ] ->
+            parseUnsignedIntRec 1 src (offset0 + 1)
 
+        [ '2' ] ->
+            parseUnsignedIntRec 2 src (offset0 + 1)
 
-digitValueFromChar : Char -> Maybe Int
-digitValueFromChar char =
-    case char of
-        '0' ->
-            Just 0
+        [ '3' ] ->
+            parseUnsignedIntRec 3 src (offset0 + 1)
 
-        '1' ->
-            Just 1
+        [ '4' ] ->
+            parseUnsignedIntRec 4 src (offset0 + 1)
 
-        '2' ->
-            Just 2
+        [ '5' ] ->
+            parseUnsignedIntRec 5 src (offset0 + 1)
 
-        '3' ->
-            Just 3
+        [ '6' ] ->
+            parseUnsignedIntRec 6 src (offset0 + 1)
 
-        '4' ->
-            Just 4
+        [ '7' ] ->
+            parseUnsignedIntRec 7 src (offset0 + 1)
 
-        '5' ->
-            Just 5
+        [ '8' ] ->
+            parseUnsignedIntRec 8 src (offset0 + 1)
 
-        '6' ->
-            Just 6
-
-        '7' ->
-            Just 7
-
-        '8' ->
-            Just 8
-
-        '9' ->
-            Just 9
+        [ '9' ] ->
+            parseUnsignedIntRec 9 src (offset0 + 1)
 
         _ ->
             Nothing
+
+
+parseUnsignedIntRec : Int -> List Char -> Int -> Maybe Int
+parseUnsignedIntRec upper src offset0 =
+    case List.take 1 (List.drop offset0 src) of
+        [ '0' ] ->
+            parseUnsignedIntRec (upper * 10) src (offset0 + 1)
+
+        [ '1' ] ->
+            parseUnsignedIntRec (upper * 10 + 1) src (offset0 + 1)
+
+        [ '2' ] ->
+            parseUnsignedIntRec (upper * 10 + 2) src (offset0 + 1)
+
+        [ '3' ] ->
+            parseUnsignedIntRec (upper * 10 + 3) src (offset0 + 1)
+
+        [ '4' ] ->
+            parseUnsignedIntRec (upper * 10 + 4) src (offset0 + 1)
+
+        [ '5' ] ->
+            parseUnsignedIntRec (upper * 10 + 5) src (offset0 + 1)
+
+        [ '6' ] ->
+            parseUnsignedIntRec (upper * 10 + 6) src (offset0 + 1)
+
+        [ '7' ] ->
+            parseUnsignedIntRec (upper * 10 + 7) src (offset0 + 1)
+
+        [ '8' ] ->
+            parseUnsignedIntRec (upper * 10 + 8) src (offset0 + 1)
+
+        [ '9' ] ->
+            parseUnsignedIntRec (upper * 10 + 9) src (offset0 + 1)
+
+        [ _ ] ->
+            Nothing
+
+        _ ->
+            Just upper
 
 
 fromIntAsList : Int -> List Char
@@ -804,7 +817,7 @@ toRationalComponentsLessSign chars =
             Nothing
 
         [ String whole ] ->
-            case toUnsignedIntFromList 0 whole of
+            case parseUnsignedInt whole 0 of
                 Nothing ->
                     Nothing
 
@@ -817,7 +830,7 @@ toRationalComponentsLessSign chars =
                     Nothing
 
                 else
-                    case toUnsignedIntFromList 0 beforeSep of
+                    case parseUnsignedIntRec 0 beforeSep 0 of
                         Nothing ->
                             Nothing
 
@@ -825,12 +838,12 @@ toRationalComponentsLessSign chars =
                             Just (Elm_Float beforeSepInt 1)
 
             else
-                case toUnsignedIntFromList 0 beforeSep of
+                case parseUnsignedIntRec 0 beforeSep 0 of
                     Nothing ->
                         Nothing
 
                     Just beforeSepInt ->
-                        case toUnsignedIntFromList 0 afterSep of
+                        case parseUnsignedIntRec 0 afterSep 0 of
                             Nothing ->
                                 Nothing
 

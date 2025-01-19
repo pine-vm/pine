@@ -1,0 +1,1 @@
+Ok (FloatValue "5.71")

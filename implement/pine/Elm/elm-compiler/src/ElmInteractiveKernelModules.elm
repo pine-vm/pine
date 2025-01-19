@@ -913,6 +913,7 @@ type Value
     | StringValue String
     | ArrayValue (List Value)
     | ObjectValue (List ( String, Value ))
+    | FloatValue String
 
 
 null : Value
@@ -970,6 +971,9 @@ encode indent value =
         ObjectValue fields ->
             "{" ++ String.join "," (List.map (encodeField indent) fields) ++ "}"
 
+        FloatValue asString ->
+            asString
+
 
 encodeField : Int -> ( String, Value ) -> String
 encodeField indent ( key, value ) =
@@ -1011,15 +1015,42 @@ escapeChar char =
 """
     , """
 module Json.Decode exposing
-  ( Decoder, string, bool, int, float
-  , nullable, list, array, dict, keyValuePairs, oneOrMore
-  , field, at, index
-  , maybe, oneOf
-  , decodeString, decodeValue, Value, Error(..), errorToString
-  , map, map2, map3, map4, map5, map6, map7, map8
-  , lazy, value, null, succeed, fail, andThen
+    ( Decoder
+    , Error(..)
+    , Value
+    , andThen
+    , array
+    , at
+    , bool
+    , decodeString
+    , decodeValue
+    , dict
+    , errorToString
+    , fail
+    , field
+    , float
+    , index
+    , int
+    , keyValuePairs
+    , lazy
+    , list
+    , map
+    , map2
+    , map3
+    , map4
+    , map5
+    , map6
+    , map7
+    , map8
+    , maybe
+    , null
+    , nullable
+    , oneOf
+    , oneOrMore
+    , string
+    , succeed
+    , value
     )
-
 
 import Json.Encode exposing (Value(..))
 
@@ -1125,8 +1156,8 @@ decodeListRecursively result decoder values =
         [] ->
             Ok (List.reverse result)
 
-        value :: rest ->
-            case decoder value of
+        itemValue :: rest ->
+            case decoder itemValue of
                 Ok a ->
                     decodeListRecursively (a :: result) decoder rest
 
@@ -1139,8 +1170,8 @@ field key decoder jsonValue =
     case jsonValue of
         ObjectValue fields ->
             case List.filter (\\( k, _ ) -> k == key) fields of
-                [ (_, value) ] ->
-                    decoder value
+                [ ( _, fieldValue ) ] ->
+                    decoder fieldValue
 
                 _ ->
                     Err (Failure ("Expecting an object with a field named `" ++ key ++ "`") jsonValue)
@@ -1506,397 +1537,371 @@ decodeString decoder jsonString =
 
 
 parseJsonStringToValue : String -> Result String Value
-parseJsonStringToValue jsonString =
-    case parseValue (String.toList (String.trim jsonString)) of
+parseJsonStringToValue (String jsonChars) =
+    case parseValue jsonChars 0 of
         ( Ok ok, consumed ) ->
-            if consumed < String.length jsonString then
-                Err ("Unexpected string at the end: " ++ String.dropLeft consumed jsonString)
+            let
+                afterWhitespaceOffset : Int
+                afterWhitespaceOffset =
+                    skipWhitespace jsonChars consumed
+            in
+            case List.take 1 (List.drop afterWhitespaceOffset jsonChars) of
+                [ c ] ->
+                    Err
+                        ("Unexpected character at end of JSON, at index "
+                            ++ String.fromInt afterWhitespaceOffset
+                            ++ ": '"
+                            ++ String.fromChar c
+                            ++ "'"
+                        )
 
-            else
-                Ok ok
+                _ ->
+                    Ok ok
 
-        ( Err err, _ ) ->
-            Err err
+        ( Err err, consumed ) ->
+            Err ("Error at character " ++ String.fromInt consumed ++ ": " ++ err)
 
 
 type alias Parser a =
-    List Char -> ( Result String a, Int )
+    List Char -> Int -> ( Result String a, Int )
 
 
-parseValue : Parser Value
-parseValue str =
-    if str == [] then
-        ( Err "Unexpected end of input", 0 )
+parseValue : List Char -> Int -> ( Result String Value, Int )
+parseValue src offset0 =
+    let
+        -- First, skip any whitespace from offset0 forward
+        offset1 : Int
+        offset1 =
+            skipWhitespace src offset0
 
-    else if listStartsWith [ 'n', 'u', 'l', 'l' ] str then
-        ( Ok NullValue, 4 )
+        -- Peek at the next character
+        nextChar =
+            List.take 1 (List.drop offset1 src)
+    in
+    case nextChar of
+        [ c ] ->
+            case c of
+                'n' ->
+                    -- Attempt to parse `null`
+                    parseNull src offset1
 
-    else if listStartsWith [ 't', 'r', 'u', 'e' ] str then
-        ( Ok (BoolValue True), 4 )
+                't' ->
+                    -- Attempt to parse `true`
+                    parseTrue src offset1
 
-    else if listStartsWith [ 'f', 'a', 'l', 's', 'e' ] str then
-        ( Ok (BoolValue False), 5 )
+                'f' ->
+                    -- Attempt to parse `false`
+                    parseFalse src offset1
 
-    else if listStartsWith [ '"' ] str then
-        parseString (List.drop 1 str)
-            |> Tuple.mapFirst (Result.map (String.fromList >> StringValue))
-            |> Tuple.mapSecond ((+) 1)
+                '"' ->
+                    -- Parse a JSON string (the leading quote is consumed here)
+                    case parseString src (offset1 + 1) of
+                        ( Ok str, offset2 ) ->
+                            ( Ok (StringValue (String.fromList str)), offset2 )
 
-    else if listStartsWith [ '[' ] str then
-        parseArray (List.drop 1 str)
-            |> Tuple.mapFirst (Result.map ArrayValue)
-            |> Tuple.mapSecond ((+) 1)
+                        ( Err err, offset2 ) ->
+                            ( Err err, offset2 )
 
-    else if listStartsWith [ '{' ] str then
-        parseObject (List.drop 1 str)
-            |> Tuple.mapFirst (Result.map ObjectValue)
-            |> Tuple.mapSecond ((+) 1)
+                '[' ->
+                    -- Parse an array (leading '[' is already consumed).
+                    case parseArray src (offset1 + 1) of
+                        ( Ok values, offset2 ) ->
+                            ( Ok (ArrayValue values), offset2 )
 
-    else
-        parseInt str
-            |> Tuple.mapFirst (Result.map IntValue)
+                        ( Err err, offset2 ) ->
+                            ( Err err, offset2 )
+
+                '{' ->
+                    -- Parse an object (leading '{' is already consumed).
+                    case parseObjectRec [] src (offset1 + 1) of
+                        ( Ok fields, offset2 ) ->
+                            ( Ok (ObjectValue fields), offset2 )
+
+                        ( Err err, offset2 ) ->
+                            ( Err err, offset2 )
+
+                '-' ->
+                    -- Could be a negative number
+                    parseNumber src offset1
+
+                _ ->
+                    if Char.isDigit c then
+                        -- It’s some digit, so parse a (positive) number
+                        parseNumber src offset1
+
+                    else
+                        ( Err ("Unexpected character while parsing value: '" ++ String.fromChar c ++ "'")
+                        , offset1
+                        )
+
+        _ ->
+            -- We ran out of input
+            ( Err "Unexpected end of input while parsing value", offset1 )
+
+
+parseNull : List Char -> Int -> ( Result String Value, Int )
+parseNull src offset0 =
+    case List.take 4 (List.drop offset0 src) of
+        [ 'n', 'u', 'l', 'l' ] ->
+            ( Ok NullValue, offset0 + 4 )
+
+        _ ->
+            ( Err "Expecting 'null'", offset0 )
+
+
+parseTrue : List Char -> Int -> ( Result String Value, Int )
+parseTrue src offset0 =
+    case List.take 4 (List.drop offset0 src) of
+        [ 't', 'r', 'u', 'e' ] ->
+            ( Ok (BoolValue True), offset0 + 4 )
+
+        _ ->
+            ( Err "Expecting 'true'", offset0 )
+
+
+parseFalse : List Char -> Int -> ( Result String Value, Int )
+parseFalse src offset0 =
+    case List.take 5 (List.drop offset0 src) of
+        [ 'f', 'a', 'l', 's', 'e' ] ->
+            ( Ok (BoolValue False), offset0 + 5 )
+
+        _ ->
+            ( Err "Expecting 'false'", offset0 )
 
 
 parseString : Parser (List Char)
-parseString str =
-    -- We call parseJsonString with initial index = 0, collecting chars in [].
-    case parseJsonString str 0 [] of
-        Err msg ->
-            -- If parseJsonString fails, match the old return shape: (Err msg, 0)
-            ( Err msg, 0 )
-
-        Ok ( parsedString, usedCount ) ->
-            -- If it succeeds, we convert the parsedString into a list of chars
-            -- and return the number of characters used up.
-            ( Ok (String.toList parsedString), usedCount )
+parseString str offset =
+    parseJsonString str offset []
 
 
-parseInt : Parser Int
-parseInt str =
-    case str of
-        '-' :: rest ->
-            let
-                ( result, offset ) =
-                    parseUnsignedInt rest
-            in
-            case result of
-                Ok intAbsolute ->
-                    ( Ok -intAbsolute
-                    , offset + 1
-                    )
-
-                Err err ->
-                    ( Err err
-                    , offset + 1
-                    )
-
-        _ ->
-            parseUnsignedInt str
-
-
-parseUnsignedInt : Parser Int
-parseUnsignedInt str =
-    parseUnsignedIntHelp ( 0, Nothing ) str
-
-
-parseUnsignedIntHelp : ( Int, Maybe Int ) -> Parser Int
-parseUnsignedIntHelp previousDigits str =
+parseNumber : List Char -> Int -> ( Result String Value, Int )
+parseNumber src offset0 =
+    -- We need to parse a number, which could be an integer or a float.
+    -- We'll start by parsing an integer, then look for a decimal point.
     let
-        ( previousDigitsCount, maybePreviusDigitsValue ) =
-            previousDigits
+        ( intResult, offset1 ) =
+            parseInt src offset0
 
-        digitValueFromCharacter char =
-            case char of
-                '0' ->
-                    Just 0
+        -- <--- assumes you have parseInt (Int) returning (Result String Int, Int)
+    in
+    case intResult of
+        Ok intVal ->
+            -- If we successfully parsed an integer, look for a decimal point
+            let
+                nextChar =
+                    List.take 1 (List.drop offset1 src)
+            in
+            case nextChar of
+                [ '.' ] ->
+                    -- If we see a decimal point, parse the fractional part
+                    let
+                        ( denominatorResult, offset2 ) =
+                            parseUnsignedInt src (offset1 + 1)
+                    in
+                    case denominatorResult of
+                        Ok _ ->
+                            -- For now we just take the string as is
+                            ( Ok
+                                (FloatValue
+                                    (String.fromList (List.take (offset2 - offset0) (List.drop offset0 src)))
+                                )
+                            , offset2
+                            )
 
-                '1' ->
-                    Just 1
-
-                '2' ->
-                    Just 2
-
-                '3' ->
-                    Just 3
-
-                '4' ->
-                    Just 4
-
-                '5' ->
-                    Just 5
-
-                '6' ->
-                    Just 6
-
-                '7' ->
-                    Just 7
-
-                '8' ->
-                    Just 8
-
-                '9' ->
-                    Just 9
+                        Err err ->
+                            ( Err err, offset2 )
 
                 _ ->
-                    Nothing
+                    -- If no decimal point, we're done: it's an integer
+                    ( Ok (IntValue intVal), offset1 )
 
-        complete =
-            ( Result.fromMaybe "No digits found" maybePreviusDigitsValue
-            , previousDigitsCount
-            )
-    in
-    case str of
-        [] ->
-            complete
-
-        currentChar :: followingChars ->
-            case digitValueFromCharacter currentChar of
-                Just digitValue ->
-                    parseUnsignedIntHelp
-                        ( previousDigitsCount + 1
-                        , Just (Maybe.withDefault 0 maybePreviusDigitsValue * 10 + digitValue)
-                        )
-                        followingChars
-
-                Nothing ->
-                    complete
-
-
-countCharsWhile : (Char -> Bool) -> List Char -> Int
-countCharsWhile predicate str =
-    case str of
-        [] ->
-            0
-
-        char :: rest ->
-            if predicate char then
-                countCharsWhile predicate rest + 1
-
-            else
-                0
-
-
-parseArray : Parser (List Value)
-parseArray str =
-    parseArrayHelper [] str
-        |> Tuple.mapFirst (Result.map List.reverse)
-
-
-parseArrayHelper : List Value -> Parser (List Value)
-parseArrayHelper previousItems str =
-    let
-        strTrimmed =
-            dropWhileList isCharRemovedOnTrim str
-
-        trimmedLength =
-            List.length str - List.length strTrimmed
-    in
-    case strTrimmed of
-        [] ->
-            ( Err "Unexpected end of input while parsing array"
-            , 0
-            )
-
-        ']' :: _ ->
-            ( Ok previousItems
-            , trimmedLength + 1
-            )
-
-        _ ->
-            parseArrayHelperTrimmedNotEmpty previousItems strTrimmed
-                |> Tuple.mapSecond ((+) trimmedLength)
-
-
-parseArrayHelperTrimmedNotEmpty : List Value -> Parser (List Value)
-parseArrayHelperTrimmedNotEmpty previousItems strTrimmed =
-    let
-        ( valueResult, itemLength ) =
-            parseValue strTrimmed
-    in
-    case valueResult of
         Err err ->
-            ( Err err, itemLength )
+            ( Err err, offset1 )
 
-        Ok itemValue ->
+
+{-|
+
+    parseArray parses a JSON array starting at `offset` in the given `src` (a List Char).
+
+    Examples:
+
+        src = String.toList "[true, false, null]"
+        parseArray src 0
+        --> ( Ok [ BoolValue True, BoolValue False, NullValue ], finalOffset )
+
+-}
+parseArray : List Char -> Int -> ( Result String (List Value), Int )
+parseArray src offset0 =
+    -- First, skip any whitespace
+    let
+        offset1 =
+            skipWhitespace src offset0
+
+        -- Look at the next character
+        nextChar =
+            List.take 1 (List.drop offset1 src)
+    in
+    case nextChar of
+        [] ->
+            -- We ran out of characters entirely
+            ( Err "Unexpected end of input while parsing array", offset1 )
+
+        -- If it's a ']', that means an empty array: "[]"
+        [ ']' ] ->
+            ( Ok [], offset1 + 1 )
+
+        -- Otherwise, parse one or more items
+        _ ->
+            parseArrayItems [] src offset1
+
+
+{-|
+
+    parseArrayItems accumulates items in `acc` until we see a ']' or run out.
+    Returns (Ok items, newOffset) or (Err msg, newOffset).
+
+-}
+parseArrayItems : List Value -> List Char -> Int -> ( Result String (List Value), Int )
+parseArrayItems itemsBefore src offset0 =
+    -- First parse a single Value
+    let
+        ( valResult, offsetAfterVal ) =
+            parseValue src offset0
+
+        -- <--- assumes you have parseValue (Value) returning (Result String Value, Int)
+    in
+    case valResult of
+        Err msg ->
+            -- If the item fails, we bubble up the error
+            ( Err msg, offsetAfterVal )
+
+        Ok val ->
+            -- We successfully parsed one item: accumulate it, then look for comma or closing bracket
             let
-                strAfterItem =
-                    List.drop itemLength strTrimmed
+                offset1 =
+                    skipWhitespace src offsetAfterVal
 
-                strAfterValueTrimmed =
-                    dropWhileList isCharRemovedOnTrim strAfterItem
+                nextChar =
+                    List.take 1 (List.drop offset1 src)
 
-                trimmedLength =
-                    List.length strAfterItem - List.length strAfterValueTrimmed
+                items : List Value
+                items =
+                    Pine_kernel.concat [ itemsBefore, [ val ] ]
             in
-            case strAfterValueTrimmed of
-                ',' :: afterComma ->
-                    parseArrayHelper (itemValue :: previousItems) afterComma
-                        |> Tuple.mapSecond ((+) (itemLength + trimmedLength + 1))
+            case nextChar of
+                [ ',' ] ->
+                    -- If we see a comma, skip it and parse the next item
+                    parseArrayItems items src (offset1 + 1)
+
+                [ ']' ] ->
+                    -- End of array
+                    ( Ok items, offset1 + 1 )
+
+                [ c ] ->
+                    ( Err ("Expecting ',' or ']', got '" ++ String.fromChar c ++ "'"), offset1 )
 
                 _ ->
-                    parseArrayHelper (itemValue :: previousItems) strAfterValueTrimmed
-                        |> Tuple.mapSecond ((+) (itemLength + trimmedLength))
+                    -- We ran out unexpectedly, missing a ']' or another item
+                    ( Err "Unclosed array, expected ',' or ']'", offset1 )
 
 
-parseObject : Parser (List ( String, Value ))
-parseObject str =
-    -- Object parsing logic goes here
-    -- Similar to `parseArray`, but also needs to handle the colon (:) separating keys and values.
-    parseObjectHelper [] str
-        |> Tuple.mapFirst (Result.map List.reverse)
-
-
-parseObjectHelper : List ( String, Value ) -> Parser (List ( String, Value ))
-parseObjectHelper previousItems str =
+parseObjectRec : List ( String, Value ) -> List Char -> Int -> ( Result String (List ( String, Value )), Int )
+parseObjectRec fieldsBefore src offset0 =
+    -- First, skip any whitespace
     let
-        strTrimmed =
-            dropWhileList isCharRemovedOnTrim str
+        offset1 : Int
+        offset1 =
+            skipWhitespace src offset0
 
-        trimmedLength =
-            List.length str - List.length strTrimmed
+        -- Look at the next character
+        nextChar =
+            List.take 1 (List.drop offset1 src)
     in
-    case strTrimmed of
-        [] ->
-            ( Err "Unexpected end of input while parsing object"
-            , 0
-            )
+    case nextChar of
+        -- If it's a '}', that means an empty object: "{}"
+        [ '}' ] ->
+            ( Ok fieldsBefore, offset1 + 1 )
 
-        '}' :: rest ->
-            ( Ok previousItems
-            , trimmedLength + 1
-            )
-
-        _ ->
-            parseObjectHelperTrimmedNotEmpty previousItems strTrimmed
-                |> Tuple.mapSecond ((+) trimmedLength)
-
-
-parseObjectHelperTrimmedNotEmpty : List ( String, Value ) -> Parser (List ( String, Value ))
-parseObjectHelperTrimmedNotEmpty previousItems strTrimmed =
-    case strTrimmed of
-        [] ->
-            ( Err "Unexpected end of input while parsing object", 0 )
-
-        '"' :: rest ->
-            -- Parse the key string
+        -- Otherwise, parse one or more key-value pairs
+        [ '"' ] ->
             let
-                ( keyResult, keyConsumed ) =
-                    parseString rest
+                ( keyResult, offsetAfterKey ) =
+                    parseString src (offset1 + 1)
+
+                -- <--- assumes you have parseString (List Char) returning (Result String (List Char), Int)
             in
             case keyResult of
-                Err err ->
-                    ( Err ("Error parsing object key: " ++ err), keyConsumed + 1 )
+                Err msg ->
+                    -- If the key fails, we bubble up the error
+                    ( Err msg, offsetAfterKey )
 
                 Ok keyChars ->
+                    -- We successfully parsed one key: accumulate it, then look for colon and value
                     let
+                        keyString : String
                         keyString =
                             String.fromList keyChars
 
-                        totalKeyConsumed =
-                            keyConsumed + 1
+                        offset2 : Int
+                        offset2 =
+                            skipWhitespace src offsetAfterKey
 
-                        -- plus 1 for the starting '"'
-                        afterKey =
-                            List.drop totalKeyConsumed strTrimmed
-
-                        afterKeyTrimmed =
-                            dropWhileList isCharRemovedOnTrim afterKey
-
-                        trimmedLength =
-                            List.length afterKey - List.length afterKeyTrimmed
-
-                        totalConsumedKey =
-                            totalKeyConsumed + trimmedLength
+                        nextChar2 =
+                            List.take 1 (List.drop offset2 src)
                     in
-                    case afterKeyTrimmed of
-                        ':' :: afterColon ->
+                    case nextChar2 of
+                        [ ':' ] ->
+                            -- If we see a colon, skip it and parse the value
                             let
-                                afterColonTrimmed =
-                                    dropWhileList isCharRemovedOnTrim afterColon
+                                offset3 =
+                                    skipWhitespace src (offset2 + 1)
 
-                                trimmedAfterColonLength =
-                                    List.length afterColon - List.length afterColonTrimmed
-
-                                totalConsumedSoFar =
-                                    totalConsumedKey + 1 + trimmedAfterColonLength
-
-                                ( valueResult, valueConsumed ) =
-                                    parseValue afterColonTrimmed
+                                ( valResult, offsetAfterVal ) =
+                                    parseValue src offset3
                             in
-                            case valueResult of
+                            case valResult of
                                 Err err ->
-                                    ( Err ("Error parsing object value: " ++ err), totalConsumedSoFar + valueConsumed )
+                                    -- If the value fails, we bubble up the error
+                                    ( Err ("Error parsing object value: " ++ err), offsetAfterVal )
 
-                                Ok value ->
+                                Ok val ->
+                                    -- We successfully parsed one value: accumulate it, then look for comma or closing brace
                                     let
-                                        afterValue =
-                                            List.drop valueConsumed afterColonTrimmed
+                                        offset4 =
+                                            skipWhitespace src offsetAfterVal
 
-                                        afterValueTrimmed =
-                                            dropWhileList isCharRemovedOnTrim afterValue
+                                        nextChar3 =
+                                            List.take 1 (List.drop offset4 src)
 
-                                        trimmedAfterValueLength =
-                                            List.length afterValue - List.length afterValueTrimmed
-
-                                        totalConsumed =
-                                            totalConsumedSoFar + valueConsumed + trimmedAfterValueLength
+                                        fields : List ( String, Value )
+                                        fields =
+                                            Pine_kernel.concat [ fieldsBefore, [ ( keyString, val ) ] ]
                                     in
-                                    case afterValueTrimmed of
-                                        ',' :: restAfterComma ->
-                                            parseObjectHelper (( keyString, value ) :: previousItems) restAfterComma
-                                                |> Tuple.mapSecond ((+) (totalConsumed + 1))
+                                    case nextChar3 of
+                                        [ ',' ] ->
+                                            -- If we see a comma, skip it and parse the next item
+                                            parseObjectRec fields src (offset4 + 1)
 
-                                        '}' :: restAfterBrace ->
-                                            ( Ok (( keyString, value ) :: previousItems), totalConsumed + 1 )
+                                        [ '}' ] ->
+                                            -- End of object
+                                            ( Ok fields, offset4 + 1 )
 
-                                        [] ->
-                                            ( Err "Unexpected end of input while parsing object", totalConsumed )
+                                        [ c ] ->
+                                            ( Err ("Expecting ',' or '}', got '" ++ String.fromChar c ++ "'"), offset4 )
 
                                         _ ->
-                                            ( Err "Expected ',' or '}' after object value", totalConsumed )
+                                            -- We ran out unexpectedly, missing a '}' or another item
+                                            ( Err "Unclosed object, expected ',' or '}'", offset4 )
 
                         _ ->
-                            ( Err "Expected ':' after object key", totalConsumedKey )
+                            ( Err ("Expecting ':' after object key '" ++ keyString ++ "'"), offset2 )
+
+        [ c ] ->
+            ( Err ("Expecting '\\"' to start object key, got '" ++ String.fromChar c ++ "'"), offset1 )
 
         _ ->
-            ( Err "Expected '""' to start object key", 0 )
-
-
-listStartsWith : List a -> List a -> Bool
-listStartsWith prefix list =
-    List.take (List.length prefix) list == prefix
-
-
-dropWhileList : (Char -> Bool) -> List Char -> List Char
-dropWhileList predicate stringList =
-    case stringList of
-        [] ->
-            []
-
-        char :: rest ->
-            if predicate char then
-                dropWhileList predicate rest
-
-            else
-                stringList
-
-
-isCharRemovedOnTrim : Char -> Bool
-isCharRemovedOnTrim char =
-    if Pine_kernel.equal [ char, ' ' ] then
-        True
-
-    else if Pine_kernel.equal [ char, '\\t' ] then
-        True
-
-    else if Pine_kernel.equal [ char, '\\n' ] then
-        True
-
-    else if Pine_kernel.equal [ char, '\u{000D}' ] then
-        True
-
-    else
-        False
+            -- We ran out of characters entirely
+            ( Err "Unexpected end of input while parsing object", offset1 )
 
 
 errorToString : Error -> String
@@ -1912,8 +1917,8 @@ errorToString err =
             "One of the following errors occurred:\\n\\n"
                 ++ String.join "\\n\\n" (List.map errorToString errors)
 
-        Failure message value ->
-            message ++ "\\n\\n" ++ Json.Encode.encode 4 value
+        Failure message failValue ->
+            message ++ "\\n\\n" ++ Json.Encode.encode 4 failValue
 
 
 {-| Parse a JSON string from a `List Char`, starting at a given `index`,
@@ -1924,20 +1929,18 @@ accumulating into `soFar`. Returns either:
 
 Example usage:
 
-    parseJsonString (String.toList ""hello\\nworld" trailing stuff") 0 []
-    --> Ok ("hello
-world", 13)
+    parseJsonString (String.toList "\\"hello\\nworld\\" trailing stuff") 0 []
+    --> Ok ("hello\\nworld", 13)
 
 -}
-parseJsonString : List Char -> Int -> List Char -> Result String ( String, Int )
+parseJsonString : List Char -> Int -> List Char -> ( Result String (List Char), Int )
 parseJsonString source index soFar =
     case List.take 1 (List.drop index source) of
         [ c ] ->
             case c of
                 -- End of the JSON string if we encounter "
                 '"' ->
-                    -- Convert collected chars in `soFar` to a String
-                    Ok ( String.fromList soFar, index + 1 )
+                    ( Ok soFar, index + 1 )
 
                 -- Check for backslash escape
                 '\\\\' ->
@@ -1949,7 +1952,7 @@ parseJsonString source index soFar =
 
         _ ->
             -- We ran out of characters before finding a closing quote
-            Err "Unexpected end of input while reading JSON string"
+            ( Err "Unexpected end of input while reading JSON string", index )
 
 
 
@@ -1959,7 +1962,7 @@ parseJsonString source index soFar =
 {-| Handle a backslash-escape character.
 We consume the `\\` at position `index`, so we look at `(index + 1)` for the next char.
 -}
-parseEscape : List Char -> Int -> List Char -> Result String ( String, Int )
+parseEscape : List Char -> Int -> List Char -> ( Result String (List Char), Int )
 parseEscape source index soFar =
     -- We already know source !! index == '\\\\'
     case List.take 1 (List.drop (index + 1) source) of
@@ -2000,11 +2003,15 @@ parseEscape source index soFar =
 
                 -- Unrecognized escape
                 _ ->
-                    Err ("Unrecognized escape sequence: \\\\" ++ String.fromChar e)
+                    ( Err ("Unrecognized escape sequence: \\\\" ++ String.fromChar e)
+                    , index + 2
+                    )
 
         _ ->
             -- No character after the backslash
-            Err "Unexpected end of input after backslash in string escape"
+            ( Err "Unexpected end of input after backslash in string escape"
+            , index + 1
+            )
 
 
 {-| Parse a JSON Unicode escape of the form "\\\\uXXXX" where XXXX are 4 hex digits.
@@ -2012,7 +2019,7 @@ If it is a high surrogate in [0xD800..0xDBFF], look for a following "\\\\uXXXX"
 as a low surrogate in [0xDC00..0xDFFF]. If both are found, combine them into
 a single codepoint (e.g. "\\\\uD83C\\\\uDF32" --> 🌲).
 -}
-parseUnicodeEscape : List Char -> Int -> List Char -> Result String ( String, Int )
+parseUnicodeEscape : List Char -> Int -> List Char -> ( Result String (List Char), Int )
 parseUnicodeEscape source index soFar =
     let
         -- First, parse the 4 hex digits after the "\\u"
@@ -2020,20 +2027,22 @@ parseUnicodeEscape source index soFar =
         fourHexChars =
             List.take 4 (List.drop index source)
 
-        parseHexResult =
+        ( codeUnit, offsetAfterHex ) =
             convert1OrMoreHexadecimal 0 fourHexChars
 
         hi : Int
         hi =
-            parseHexResult.int
+            codeUnit
 
         offset : Int
         offset =
-            parseHexResult.offset
+            offsetAfterHex
     in
     if offset /= 4 then
         -- We did not get 4 valid hex digits
-        Err "Unexpected end of input in \\\\u escape (need 4 hex digits)"
+        ( Err "Unexpected end of input in \\\\u escape (need 4 hex digits)"
+        , index + 6
+        )
 
     else
     -- We have a potential code unit, see if it's a high surrogate
@@ -2049,20 +2058,22 @@ parseUnicodeEscape source index soFar =
                     fourHexChars2 =
                         List.take 4 (List.drop (index + 4 + 2) source)
 
-                    parseHexResult2 =
+                    ( codeUnit2, offsetAfterHex2 ) =
                         convert1OrMoreHexadecimal 0 fourHexChars2
 
                     lo : Int
                     lo =
-                        parseHexResult2.int
+                        codeUnit2
 
                     offset2 : Int
                     offset2 =
-                        parseHexResult2.offset
+                        offsetAfterHex2
                 in
                 if offset2 /= 4 then
                     -- The next \\u did not have 4 valid hex digits
-                    Err "Unexpected end of input in second \\\\u of a surrogate pair"
+                    ( Err "Unexpected end of input in second \\\\u of a surrogate pair"
+                    , index + 4 + 2 + 6
+                    )
 
                 else if 0xDC00 <= lo && lo <= 0xDFFF then
                     -- Combine into a single code point
@@ -2103,7 +2114,106 @@ parseUnicodeEscape source index soFar =
             (soFar ++ [ Char.fromCode hi ])
 
 
-convert1OrMoreHexadecimal : Int -> List Char -> { int : Int, offset : Int }
+parseInt : List Char -> Int -> ( Result String Int, Int )
+parseInt src offset0 =
+    let
+        nextChar =
+            List.take 1 (List.drop offset0 src)
+    in
+    case nextChar of
+        [ '-' ] ->
+            -- If we see a minus sign, parse the rest as an unsigned integer
+            let
+                ( unsignedResult, offset1 ) =
+                    parseUnsignedInt src (offset0 + 1)
+            in
+            case unsignedResult of
+                Ok unsignedVal ->
+                    ( Ok -unsignedVal, offset1 )
+
+                Err err ->
+                    ( Err err, offset1 )
+
+        _ ->
+            -- If no minus sign, parse the rest as an unsigned integer
+            parseUnsignedInt src offset0
+
+
+parseUnsignedInt : List Char -> Int -> ( Result String Int, Int )
+parseUnsignedInt src offset0 =
+    case List.take 1 (List.drop offset0 src) of
+        [ '0' ] ->
+            ( Ok 0, offset0 + 1 )
+
+        [ '1' ] ->
+            parseUnsignedIntRec 1 src (offset0 + 1)
+
+        [ '2' ] ->
+            parseUnsignedIntRec 2 src (offset0 + 1)
+
+        [ '3' ] ->
+            parseUnsignedIntRec 3 src (offset0 + 1)
+
+        [ '4' ] ->
+            parseUnsignedIntRec 4 src (offset0 + 1)
+
+        [ '5' ] ->
+            parseUnsignedIntRec 5 src (offset0 + 1)
+
+        [ '6' ] ->
+            parseUnsignedIntRec 6 src (offset0 + 1)
+
+        [ '7' ] ->
+            parseUnsignedIntRec 7 src (offset0 + 1)
+
+        [ '8' ] ->
+            parseUnsignedIntRec 8 src (offset0 + 1)
+
+        [ '9' ] ->
+            parseUnsignedIntRec 9 src (offset0 + 1)
+
+        _ ->
+            ( Err "Expecting a digit", offset0 )
+
+
+parseUnsignedIntRec : Int -> List Char -> Int -> ( Result String Int, Int )
+parseUnsignedIntRec upper src offset0 =
+    case List.take 1 (List.drop offset0 src) of
+        [ '0' ] ->
+            parseUnsignedIntRec (upper * 10) src (offset0 + 1)
+
+        [ '1' ] ->
+            parseUnsignedIntRec (upper * 10 + 1) src (offset0 + 1)
+
+        [ '2' ] ->
+            parseUnsignedIntRec (upper * 10 + 2) src (offset0 + 1)
+
+        [ '3' ] ->
+            parseUnsignedIntRec (upper * 10 + 3) src (offset0 + 1)
+
+        [ '4' ] ->
+            parseUnsignedIntRec (upper * 10 + 4) src (offset0 + 1)
+
+        [ '5' ] ->
+            parseUnsignedIntRec (upper * 10 + 5) src (offset0 + 1)
+
+        [ '6' ] ->
+            parseUnsignedIntRec (upper * 10 + 6) src (offset0 + 1)
+
+        [ '7' ] ->
+            parseUnsignedIntRec (upper * 10 + 7) src (offset0 + 1)
+
+        [ '8' ] ->
+            parseUnsignedIntRec (upper * 10 + 8) src (offset0 + 1)
+
+        [ '9' ] ->
+            parseUnsignedIntRec (upper * 10 + 9) src (offset0 + 1)
+
+        _ ->
+            ( Ok upper, offset0 )
+
+
+convert1OrMoreHexadecimal : Int -> List Char -> ( Int, Int )
 convert1OrMoreHexadecimal offset src =
     case List.take 1 (List.drop offset src) of
         [ '0' ] ->
@@ -2173,10 +2283,10 @@ convert1OrMoreHexadecimal offset src =
             convert0OrMoreHexadecimal 15 (offset + 1) src
 
         _ ->
-            { int = 0, offset = -1 }
+            ( 0, -1 )
 
 
-convert0OrMoreHexadecimal : Int -> Int -> List Char -> { int : Int, offset : Int }
+convert0OrMoreHexadecimal : Int -> Int -> List Char -> ( Int, Int )
 convert0OrMoreHexadecimal soFar offset src =
     case List.take 1 (List.drop offset src) of
         [ '0' ] ->
@@ -2246,7 +2356,26 @@ convert0OrMoreHexadecimal soFar offset src =
             convert0OrMoreHexadecimal (soFar * 16 + 15) (offset + 1) src
 
         _ ->
-            { int = soFar, offset = offset }
+            ( soFar, offset )
+
+
+skipWhitespace : List Char -> Int -> Int
+skipWhitespace str index =
+    case List.take 1 (List.drop index str) of
+        [ ' ' ] ->
+            skipWhitespace str (index + 1)
+
+        [ '\\t' ] ->
+            skipWhitespace str (index + 1)
+
+        [ '\\n' ] ->
+            skipWhitespace str (index + 1)
+
+        [ '\\u{000D}' ] ->
+            skipWhitespace str (index + 1)
+
+        _ ->
+            index
 
 """
     , """

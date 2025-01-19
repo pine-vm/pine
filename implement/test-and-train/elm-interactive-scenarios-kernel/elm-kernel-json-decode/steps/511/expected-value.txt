@@ -1,0 +1,1 @@
+Ok (ArrayValue [IntValue 37,BoolValue True,ObjectValue [("alfa",IntValue 123)],ArrayValue [],StringValue "testing",ObjectValue [],IntValue 41])
