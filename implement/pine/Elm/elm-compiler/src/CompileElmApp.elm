@@ -703,53 +703,18 @@ loweredForBlobEntryPoint :
     -> AppFiles
     -> Result (List (LocatedInSourceFiles CompilationError)) ( AppFiles, ElmMakeEntryPointStruct )
 loweredForBlobEntryPoint { compilationRootFilePath, compilationRootModule } sourceFiles =
-    ([ compilationRootModule.fileText
-     , String.trim """
-blob_main_as_base64 : String
-blob_main_as_base64 =
-    blobMain
-        |> Base64.fromBytes
-        |> Maybe.withDefault "Failed to encode as Base64"
-
-
-{-| Support function-level dead code elimination (<https://elm-lang.org/blog/small-assets-without-the-headache>) Elm code needed to inform the Elm compiler about our entry points.
--}
-main : Program Int {} String
-main =
-    Platform.worker
-        { init = always ( {}, Cmd.none )
-        , update = always (always ( blob_main_as_base64 |> always {}, Cmd.none ))
-        , subscriptions = always Sub.none
-        }
-"""
-     ]
-        |> String.join "\n\n"
-        |> addImportsInElmModuleText [ ( [ "Base64" ], Nothing ) ]
-        |> Result.mapError
-            (\err ->
-                [ LocatedInSourceFiles
-                    { filePath = compilationRootFilePath
-                    , locationInModuleText = Elm.Syntax.Range.emptyRange
-                    }
-                    (OtherCompilationError ("Failed to add import: " ++ err))
-                ]
-            )
-    )
-        |> Result.map
-            (\rootModuleText ->
-                ( sourceFiles
-                    |> updateFileContentAtPath (always (fileContentFromString rootModuleText)) compilationRootFilePath
-                , { elmMakeJavaScriptFunctionName =
-                        ((compilationRootModule.parsedSyntax.moduleDefinition
-                            |> Elm.Syntax.Node.value
-                            |> Elm.Syntax.Module.moduleName
-                         )
-                            ++ [ "blob_main_as_base64" ]
-                        )
-                            |> String.join "."
-                  }
+    Ok
+        ( sourceFiles
+        , { elmMakeJavaScriptFunctionName =
+                ((compilationRootModule.parsedSyntax.moduleDefinition
+                    |> Elm.Syntax.Node.value
+                    |> Elm.Syntax.Module.moduleName
+                 )
+                    ++ [ "blobMain" ]
                 )
-            )
+                    |> String.join "."
+          }
+        )
 
 
 sourceFileFunctionNameStart : String

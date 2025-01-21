@@ -9,6 +9,7 @@ using Pine.Core.Elm;
 using Pine.Elm;
 using Pine.Elm.Platform;
 using Pine.Elm019;
+using Pine.ElmInteractive;
 using Pine.PineVM;
 using System;
 using System.Collections.Generic;
@@ -2278,91 +2279,268 @@ public class Program
     {
         workingDirectoryRelative ??= [];
 
-        var pathToFileWithElmEntryPointFromWorkingDir =
-            pathToFileWithElmEntryPoint.Skip(workingDirectoryRelative.Count).ToImmutableList();
+        IReadOnlyList<string> pathToFileWithElmEntryPointFromWorkingDir =
+            [.. pathToFileWithElmEntryPoint.Skip(workingDirectoryRelative.Count)];
+
+        var loweringResult =
+            ElmAppCompilation.AsCompletelyLoweredElmApp(
+                sourceFiles: sourceFiles.ToImmutableDictionary(),
+                workingDirectoryRelative: workingDirectoryRelative,
+                interfaceConfig: new ElmAppInterfaceConfig(compilationRootFilePath: pathToFileWithElmEntryPoint));
+
+        var entryPointSourceFile =
+            sourceFiles[pathToFileWithElmEntryPoint];
+
+        var entryPointSourceFileText =
+            Encoding.UTF8.GetString(entryPointSourceFile.Span);
+
+        var entryPointModuleNameResult =
+            ElmSyntax.ElmModule.ParseModuleName(entryPointSourceFileText);
+
+        if (entryPointModuleNameResult.IsErrOrNull() is { } entryPointModuleNameErr)
+        {
+            return
+                "Failed to parse module name from entry point file: " + entryPointModuleNameErr;
+        }
+
+        if (entryPointModuleNameResult.IsOkOrNull() is not { } entryPointModuleNameOk)
+        {
+            throw new Exception(
+                "Unexpected entry point module name result type: " + entryPointModuleNameResult);
+        }
+
+        if (loweringResult.IsErrOrNull() is { } loweringErr)
+        {
+            return
+                "Failed lowering Elm code with " + loweringErr.Count + " error(s):\n" +
+                ElmAppCompilation.CompileCompilationErrorsDisplayText(loweringErr);
+        }
+
+        if (loweringResult.IsOkOrNull() is not { } loweringOk)
+        {
+            throw new Exception("Unexpected lowering result type: " + loweringResult);
+        }
+
+        var sourceFilesAfterLowering = loweringOk.result.compiledFiles;
+
+        Result<string, Elm019Binaries.ElmMakeOk> continueWithClassicEntryPoint()
+        {
+            return
+                Elm019Binaries.ElmMake(
+                    sourceFilesAfterLowering,
+                    workingDirectoryRelative: workingDirectoryRelative,
+                    pathToFileWithElmEntryPoint: pathToFileWithElmEntryPointFromWorkingDir,
+                    outputFileName: outputFileName.Replace('\\', '/').Split('/').Last(),
+                    elmMakeCommandAppendix: elmMakeCommandAppendix);
+        }
+
+        Result<string, Elm019Binaries.ElmMakeOk> continueWithBlobEntryPoint(
+            CompilerSerialInterface.ElmMakeEntryPointStruct entryPointStruct)
+        {
+            /*
+             * TODO: select elm.json for the given entry point
+             * */
+
+            var elmJsonFiles =
+                sourceFilesAfterLowering
+                .Where(entry => entry.Key.Last() is "elm.json")
+                .ToImmutableDictionary();
+
+            var elmJsonAggregateDependencies =
+                elmJsonFiles
+                .SelectMany(elmJsonFile =>
+                {
+                    try
+                    {
+                        var elmJsonParsed =
+                        System.Text.Json.JsonSerializer.Deserialize<ElmJsonStructure>(elmJsonFile.Value.Span);
+
+                        return
+                        new[]
+                        {
+                            elmJsonParsed?.Dependencies.Direct,
+                            elmJsonParsed?.Dependencies.Indirect,
+                            elmJsonParsed?.Dependencies.Flat
+                        }
+                        .WhereNotNull();
+                    }
+                    catch (Exception e)
+                    {
+                        Console.WriteLine("Failed to parse elm.json file: " + e);
+
+                        return [];
+                    }
+                })
+                .SelectMany(dependency => dependency)
+                .ToImmutableDictionary(
+                    keySelector: dependency => dependency.Key,
+                    elementSelector:
+                    dependency =>
+                    {
+                        var packageFiles =
+                            ElmPackageSource.LoadElmPackageAsync(dependency.Key, dependency.Value).Result;
+
+                        return packageFiles;
+                    });
+
+            var sourceElmModulesNames =
+                sourceFilesAfterLowering
+                .Where(entry => entry.Key.Last().EndsWith(".elm", StringComparison.OrdinalIgnoreCase))
+                .Select(entry => ElmSyntax.ElmModule.ParseModuleName(entry.Value).WithDefault(null))
+                .WhereNotNull()
+                .ToImmutableHashSet(EnumerableExtension.EqualityComparer<IReadOnlyList<string>>());
+
+            var packagesModulesNames =
+                new HashSet<IReadOnlyList<string>>(EnumerableExtension.EqualityComparer<IReadOnlyList<string>>());
+
+            var sourceFilesWithMergedPackages =
+                elmJsonAggregateDependencies
+                .Aggregate(
+                    seed: sourceFilesAfterLowering,
+                    func: (aggregate, package) =>
+                    {
+                        if (package.Key is "elm/core" ||
+                        package.Key is "elm/json" ||
+                        package.Key is "elm/bytes" ||
+                        package.Key is "elm/parser")
+                        {
+                            return aggregate;
+                        }
+
+                        var packageExposedModuleFiles =
+                        ElmPackage.ExposedModules(package.Value);
+
+                        return
+                        packageExposedModuleFiles
+                        .Aggregate(
+                            seed: aggregate,
+                            func: (innerAggregate, packageElmModuleFile) =>
+                            {
+                                var relativePath = packageElmModuleFile.Key;
+
+                                var moduleName = packageElmModuleFile.Value.moduleName;
+
+                                if (sourceElmModulesNames.Contains(moduleName))
+                                {
+                                    Console.WriteLine(
+                                        "Skipping Elm module file " +
+                                        string.Join("/", relativePath) +
+                                        " from package " + package.Key + " because it is already present in the source files.");
+
+                                    return innerAggregate;
+                                }
+
+                                if (packagesModulesNames.Contains(moduleName))
+                                {
+                                    Console.WriteLine(
+                                        "Skipping Elm module file " +
+                                        string.Join("/", relativePath) +
+                                        " from package " + package.Key + " because it is already present in the packages.");
+
+                                    return innerAggregate;
+                                }
+
+                                packagesModulesNames.Add(moduleName);
+
+                                return
+                                    innerAggregate.SetItem(
+                                        ["dependencies", .. package.Key.Split('/'), .. packageElmModuleFile.Key],
+                                        packageElmModuleFile.Value.fileContent);
+                            });
+                    });
+
+            var elmCompilerFromBundle =
+                BundledElmEnvironments.BundledElmCompilerCompiledEnvValue()
+                ??
+                throw new Exception("Failed to load Elm compiler from bundle.");
+
+            var elmCompiler =
+                ElmCompiler.ElmCompilerFromEnvValue(elmCompilerFromBundle)
+                .Extract(err => throw new Exception(err));
+
+            var pineVMCache = new PineVMCache();
+
+            var pineVM =
+                new PineVM(evalCache: pineVMCache.EvalCache);
+
+            var parseCache = new PineVMParseCache();
+
+            var elmCompilerCache = new ElmCompilerCache();
+
+            var compileResult =
+                InteractiveSessionPine.CompileInteractiveEnvironment(
+                    appCodeTree:
+                    PineValueComposition.SortedTreeFromSetOfBlobsWithStringPath(sourceFilesWithMergedPackages),
+                    overrideSkipLowering: true,
+                    elmCompiler: elmCompiler);
+
+            if (compileResult.IsErrOrNull() is { } compileErr)
+            {
+                return
+                    "Failed to compile Elm interactive env: " + compileErr;
+            }
+
+            if (compileResult.IsOkOrNull() is not { } compileOk)
+            {
+                throw new Exception("Unexpected compile result type: " + compileResult);
+            }
+
+            var parseFromEnvResult =
+                ElmInteractiveEnvironment.ParseFunctionFromElmModule(
+                    interactiveEnvironment: compileOk,
+                    moduleName: string.Join(".", entryPointModuleNameOk.ToArray()),
+                    "blobMain",
+                    parseCache);
+
+            {
+                if (parseFromEnvResult.IsErrOrNull() is { } parseErr)
+                {
+                    return "Failed to parse Elm module: " + parseErr;
+                }
+            }
+
+            if (parseFromEnvResult.IsOkOrNullable() is not { } parseFromEnvOk)
+            {
+                throw new Exception("Unexpected parse result type: " + parseFromEnvResult);
+            }
+
+            var parseDeclResult = ElmValueEncoding.PineValueAsElmValue(parseFromEnvOk.declValue, null, null);
+
+            if (parseDeclResult.IsErrOrNull() is { } parseDeclErr)
+            {
+                return "Failed to parse Elm value: " + parseDeclErr;
+            }
+
+            if (parseDeclResult.IsOkOrNull() is not { } parseDeclOk)
+            {
+                throw new Exception("Unexpected parse result type: " + parseDeclResult);
+            }
+
+            if (parseDeclOk is not ElmValue.ElmBytes bytesValue)
+            {
+                return "Expected Elm bytes value, but got: " + parseDeclOk;
+            }
+
+            return
+                new Elm019Binaries.ElmMakeOk(producedFile: bytesValue.Value);
+        }
 
         return
-            ElmAppCompilation.AsCompletelyLoweredElmApp(
-                    sourceFiles: sourceFiles.ToImmutableDictionary(),
-                    workingDirectoryRelative: workingDirectoryRelative,
-                    interfaceConfig: new ElmAppInterfaceConfig(compilationRootFilePath: pathToFileWithElmEntryPoint))
-                .MapError(err =>
-                    "Failed lowering Elm code with " + err.Count + " error(s):\n" +
-                    ElmAppCompilation.CompileCompilationErrorsDisplayText(err))
-                .AndThen(loweringOk =>
-                {
-                    var sourceFilesAfterLowering = loweringOk.result.compiledFiles;
-
-                    Result<string, Elm019Binaries.ElmMakeOk> continueWithClassicEntryPoint()
+            loweringOk.result.rootModuleEntryPointKind
+                .MapError(err => "Failed to get entry point main declaration: " + err)
+                .AndThen(rootModuleEntryPointKind =>
+                    rootModuleEntryPointKind switch
                     {
-                        return
-                            Elm019Binaries.ElmMake(
-                                sourceFilesAfterLowering,
-                                workingDirectoryRelative: workingDirectoryRelative,
-                                pathToFileWithElmEntryPoint: pathToFileWithElmEntryPointFromWorkingDir,
-                                outputFileName: outputFileName.Replace('\\', '/').Split('/').Last(),
-                                elmMakeCommandAppendix: elmMakeCommandAppendix);
-                    }
+                        CompilerSerialInterface.ElmMakeEntryPointKind.ClassicMakeEntryPoint =>
+                            continueWithClassicEntryPoint(),
 
-                    Result<string, Elm019Binaries.ElmMakeOk> continueWithBlobEntryPoint(
-                        CompilerSerialInterface.ElmMakeEntryPointStruct entryPointStruct)
-                    {
-                        return
-                            Elm019Binaries.ElmMakeToJavascript(
-                                    sourceFilesAfterLowering,
-                                    workingDirectoryRelative: workingDirectoryRelative,
-                                    pathToFileWithElmEntryPoint: pathToFileWithElmEntryPointFromWorkingDir,
-                                    elmMakeCommandAppendix: elmMakeCommandAppendix)
-                                .AndThen(makeJavascriptOk =>
-                                {
-                                    var javascriptFromElmMake =
-                                        Encoding.UTF8.GetString(makeJavascriptOk.producedFile.Span);
+                        CompilerSerialInterface.ElmMakeEntryPointKind.BlobMakeEntryPoint blob =>
+                            continueWithBlobEntryPoint(blob.EntryPointStruct),
 
-                                    var javascriptMinusCrashes =
-                                        ProcessFromElm019Code.JavascriptMinusCrashes(javascriptFromElmMake);
-
-                                    var functionNameInElm = entryPointStruct.elmMakeJavaScriptFunctionName;
-
-                                    var listFunctionToPublish =
-                                        new[]
-                                        {
-                                            (functionNameInElm: functionNameInElm,
-                                                publicName: "blob_main_as_base64",
-                                                arity: 0),
-                                        };
-
-                                    var finalJs =
-                                        ProcessFromElm019Code.PublishFunctionsFromJavascriptFromElmMake(
-                                            javascriptMinusCrashes,
-                                            listFunctionToPublish);
-
-                                    using var javascriptEngine = IJavaScriptEngine.BuildJavaScriptEngine();
-
-                                    javascriptEngine.Evaluate(finalJs);
-
-                                    var blobBase64 = (string)javascriptEngine.Evaluate("blob_main_as_base64");
-
-                                    return
-                                        Result<string, Elm019Binaries.ElmMakeOk>.ok(
-                                            new Elm019Binaries.ElmMakeOk(
-                                                producedFile: Convert.FromBase64String(blobBase64)));
-                                });
-                    }
-
-                    return
-                        loweringOk.result.rootModuleEntryPointKind
-                            .MapError(err => "Failed to get entry point main declaration: " + err)
-                            .AndThen(rootModuleEntryPointKind =>
-                                rootModuleEntryPointKind switch
-                                {
-                                    CompilerSerialInterface.ElmMakeEntryPointKind.ClassicMakeEntryPoint =>
-                                        continueWithClassicEntryPoint(),
-                                    CompilerSerialInterface.ElmMakeEntryPointKind.BlobMakeEntryPoint blob =>
-                                        continueWithBlobEntryPoint(blob.EntryPointStruct),
-
-                                    _ => throw new NotImplementedException()
-                                });
-                });
+                        _ =>
+                        throw new NotImplementedException(
+                            "Unexpected root module entry point kind: " + rootModuleEntryPointKind),
+                    });
     }
 
     public static IEnumerable<string> DescribeCompositionForHumans(

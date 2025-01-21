@@ -31,24 +31,11 @@ public class ProgramCommandMakeTests
                     "dependencies": {
                         "direct": {
                             "TSFoster/elm-bytes-extra": "1.3.0",
-                            "agu-z/elm-zip": "3.0.1",
-                            "danfishgold/base64-bytes": "1.1.0",
-                            "elm/browser": "1.0.2",
                             "elm/bytes": "1.0.8",
                             "elm/core": "1.0.5",
-                            "elm/html": "1.0.0",
-                            "elm/json": "1.1.3",
-                            "elm/time": "1.0.0",
-                            "elm/url": "1.0.0",
-                            "mdgriffith/elm-ui": "1.1.8"
+                            "elm/json": "1.1.3"
                         },
                         "indirect": {
-                            "elm/parser": "1.1.0",
-                            "elm/virtual-dom": "1.0.3",
-                            "elm-community/list-extra": "8.7.0",
-                            "folkertdev/elm-flate": "2.0.5",
-                            "justinmimbs/date": "4.0.1",
-                            "justinmimbs/time-extra": "1.1.1"
                         }
                     },
                     "test-dependencies": {
@@ -71,17 +58,20 @@ public class ProgramCommandMakeTests
 
                 blobMain : Bytes.Bytes
                 blobMain =
-                    Bytes.Extra.fromByteValues [ 0, 1, 3, 4 ]
+                    Bytes.Extra.fromByteValues [ 0, 1, 3, 4, 71 ]
 
                 """,
             },
         };
 
-        var outputBlob = GetOutputFileContentForCommandMake(
-            projectFiles: projectFiles.Select(file => ((IReadOnlyList<string>)file.path, (ReadOnlyMemory<byte>)Encoding.UTF8.GetBytes(file.content))).ToImmutableList(),
-            entryPointFilePath: ["src", "Build.elm"]);
+        var outputBlob =
+            GetOutputFileContentForCommandMake(
+                projectFiles:
+                [.. projectFiles
+                .Select(file => ((IReadOnlyList<string>)file.path, (ReadOnlyMemory<byte>)Encoding.UTF8.GetBytes(file.content)))],
+                entryPointFilePath: ["src", "Build.elm"]);
 
-        CollectionAssert.AreEqual(new byte[] { 0, 1, 3, 4 }, outputBlob.Span.ToArray());
+        CollectionAssert.AreEqual(new byte[] { 0, 1, 3, 4, 71 }, outputBlob.Span.ToArray());
     }
 
     private static ReadOnlyMemory<byte> GetOutputFileContentForCommandMake(
@@ -98,12 +88,13 @@ public class ProgramCommandMakeTests
         IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> projectFiles,
         IReadOnlyList<string> entryPointFilePath)
     {
-        var makeResult = Program.Make(
-            sourceFiles: projectFiles,
-            workingDirectoryRelative: null,
-            pathToFileWithElmEntryPoint: entryPointFilePath,
-            outputFileName: "should-not-matter",
-            elmMakeCommandAppendix: null);
+        var makeResult =
+            Program.Make(
+                sourceFiles: projectFiles,
+                workingDirectoryRelative: null,
+                pathToFileWithElmEntryPoint: entryPointFilePath,
+                outputFileName: "should-not-matter",
+                elmMakeCommandAppendix: null);
 
         return makeResult.Extract(fromErr: err => throw new Exception("Failed make command:\n" + err)).producedFile;
     }

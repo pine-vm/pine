@@ -146,6 +146,21 @@ public static class ElmModule
         public int Compare(T? x, T? y) => func(x, y);
     }
 
+    public static Result<string, IReadOnlyList<string>> ParseModuleName(ReadOnlyMemory<byte> moduleContent)
+    {
+        try
+        {
+            var moduleText =
+                System.Text.Encoding.UTF8.GetString(moduleContent.Span);
+
+            return ParseModuleName(moduleText);
+        }
+        catch (Exception exception)
+        {
+            return "Failed decoding text: " + exception.Message;
+        }
+    }
+
     public static Result<string, IReadOnlyList<string>> ParseModuleName(string moduleText)
     {
         {
