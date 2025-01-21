@@ -2376,6 +2376,11 @@ map mapItem array =
     List.map mapItem array
 
 
+indexedMap : (Int -> a -> b) -> Array a -> Array b
+indexedMap mapItem array =
+    List.indexedMap mapItem array
+
+
 foldr : (a -> b -> b) -> b -> Array a -> b
 foldr foldItem seed array =
     List.foldr foldItem seed array
@@ -2384,6 +2389,11 @@ foldr foldItem seed array =
 foldl : (a -> b -> b) -> b -> Array a -> b
 foldl foldItem seed array =
     List.foldl foldItem seed array
+
+
+filter : (a -> Bool) -> Array a -> Array a
+filter filterItem array =
+    List.filter filterItem array
 
 """
     , """

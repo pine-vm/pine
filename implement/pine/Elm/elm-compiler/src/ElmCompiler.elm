@@ -1754,7 +1754,7 @@ compileElmSyntaxRecord stack recordSetters =
             (\( Elm.Syntax.Node.Node _ fieldName, Elm.Syntax.Node.Node _ fieldExpr ) ->
                 case compileElmSyntaxExpression stack fieldExpr of
                     Err error ->
-                        Err ("Failed to compile record field: " ++ error)
+                        Err ("Failed to compile record field '" ++ fieldName ++ "': " ++ error)
 
                     Ok fieldExpression ->
                         Ok

@@ -385,6 +385,11 @@ succeed a =
     Decoder (\_ offset -> ( offset, a ))
 
 
+fail : Decoder a
+fail =
+    Decoder (\_ offset -> ( -1, [] ))
+
+
 map : (a -> b) -> Decoder a -> Decoder b
 map func (Decoder decodeA) =
     Decoder
