@@ -2337,117 +2337,8 @@ public class Program
         Result<string, Elm019Binaries.ElmMakeOk> continueWithBlobEntryPoint(
             CompilerSerialInterface.ElmMakeEntryPointStruct entryPointStruct)
         {
-            /*
-             * TODO: select elm.json for the given entry point
-             * */
-
-            var elmJsonFiles =
-                sourceFilesAfterLowering
-                .Where(entry => entry.Key.Last() is "elm.json")
-                .ToImmutableDictionary();
-
-            var elmJsonAggregateDependencies =
-                elmJsonFiles
-                .SelectMany(elmJsonFile =>
-                {
-                    try
-                    {
-                        var elmJsonParsed =
-                        System.Text.Json.JsonSerializer.Deserialize<ElmJsonStructure>(elmJsonFile.Value.Span);
-
-                        return
-                        new[]
-                        {
-                            elmJsonParsed?.Dependencies.Direct,
-                            elmJsonParsed?.Dependencies.Indirect,
-                            elmJsonParsed?.Dependencies.Flat
-                        }
-                        .WhereNotNull();
-                    }
-                    catch (Exception e)
-                    {
-                        Console.WriteLine("Failed to parse elm.json file: " + e);
-
-                        return [];
-                    }
-                })
-                .SelectMany(dependency => dependency)
-                .ToImmutableDictionary(
-                    keySelector: dependency => dependency.Key,
-                    elementSelector:
-                    dependency =>
-                    {
-                        var packageFiles =
-                            ElmPackageSource.LoadElmPackageAsync(dependency.Key, dependency.Value).Result;
-
-                        return packageFiles;
-                    });
-
-            var sourceElmModulesNames =
-                sourceFilesAfterLowering
-                .Where(entry => entry.Key.Last().EndsWith(".elm", StringComparison.OrdinalIgnoreCase))
-                .Select(entry => ElmSyntax.ElmModule.ParseModuleName(entry.Value).WithDefault(null))
-                .WhereNotNull()
-                .ToImmutableHashSet(EnumerableExtension.EqualityComparer<IReadOnlyList<string>>());
-
-            var packagesModulesNames =
-                new HashSet<IReadOnlyList<string>>(EnumerableExtension.EqualityComparer<IReadOnlyList<string>>());
-
             var sourceFilesWithMergedPackages =
-                elmJsonAggregateDependencies
-                .Aggregate(
-                    seed: sourceFilesAfterLowering,
-                    func: (aggregate, package) =>
-                    {
-                        if (package.Key is "elm/core" ||
-                        package.Key is "elm/json" ||
-                        package.Key is "elm/bytes" ||
-                        package.Key is "elm/parser")
-                        {
-                            return aggregate;
-                        }
-
-                        var packageExposedModuleFiles =
-                        ElmPackage.ExposedModules(package.Value);
-
-                        return
-                        packageExposedModuleFiles
-                        .Aggregate(
-                            seed: aggregate,
-                            func: (innerAggregate, packageElmModuleFile) =>
-                            {
-                                var relativePath = packageElmModuleFile.Key;
-
-                                var moduleName = packageElmModuleFile.Value.moduleName;
-
-                                if (sourceElmModulesNames.Contains(moduleName))
-                                {
-                                    Console.WriteLine(
-                                        "Skipping Elm module file " +
-                                        string.Join("/", relativePath) +
-                                        " from package " + package.Key + " because it is already present in the source files.");
-
-                                    return innerAggregate;
-                                }
-
-                                if (packagesModulesNames.Contains(moduleName))
-                                {
-                                    Console.WriteLine(
-                                        "Skipping Elm module file " +
-                                        string.Join("/", relativePath) +
-                                        " from package " + package.Key + " because it is already present in the packages.");
-
-                                    return innerAggregate;
-                                }
-
-                                packagesModulesNames.Add(moduleName);
-
-                                return
-                                    innerAggregate.SetItem(
-                                        ["dependencies", .. package.Key.Split('/'), .. packageElmModuleFile.Key],
-                                        packageElmModuleFile.Value.fileContent);
-                            });
-                    });
+                ElmAppDependencyResolution.MergePackagesElmModules(sourceFilesAfterLowering);
 
             var elmCompilerFromBundle =
                 BundledElmEnvironments.BundledElmCompilerCompiledEnvValue()
@@ -2527,20 +2418,20 @@ public class Program
 
         return
             loweringOk.result.rootModuleEntryPointKind
-                .MapError(err => "Failed to get entry point main declaration: " + err)
-                .AndThen(rootModuleEntryPointKind =>
-                    rootModuleEntryPointKind switch
-                    {
-                        CompilerSerialInterface.ElmMakeEntryPointKind.ClassicMakeEntryPoint =>
-                            continueWithClassicEntryPoint(),
+            .MapError(err => "Failed to get entry point main declaration: " + err)
+            .AndThen(rootModuleEntryPointKind =>
+                rootModuleEntryPointKind switch
+                {
+                    CompilerSerialInterface.ElmMakeEntryPointKind.ClassicMakeEntryPoint =>
+                        continueWithClassicEntryPoint(),
 
-                        CompilerSerialInterface.ElmMakeEntryPointKind.BlobMakeEntryPoint blob =>
-                            continueWithBlobEntryPoint(blob.EntryPointStruct),
+                    CompilerSerialInterface.ElmMakeEntryPointKind.BlobMakeEntryPoint blob =>
+                        continueWithBlobEntryPoint(blob.EntryPointStruct),
 
-                        _ =>
-                        throw new NotImplementedException(
-                            "Unexpected root module entry point kind: " + rootModuleEntryPointKind),
-                    });
+                    _ =>
+                    throw new NotImplementedException(
+                        "Unexpected root module entry point kind: " + rootModuleEntryPointKind),
+                });
     }
 
     public static IEnumerable<string> DescribeCompositionForHumans(

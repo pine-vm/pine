@@ -3,13 +3,12 @@ using Pine.ElmInteractive;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
-using System.Collections.Immutable;
 using System.Linq;
 
 namespace Pine.Elm.Platform;
 
 /// <summary>
-/// A mutating container for an Elm command-line interface app.
+/// Mutating container for an Elm command-line interface app.
 /// </summary>
 public class MutatingCommandLineApp
 {
@@ -96,6 +95,45 @@ public class MutatingCommandLineApp
         }
     }
 }
+
+/*
+
+{-| Use the type `CommandLineAppConfig` on a declaration named `runRoot` to declare a command-line program in an Elm module.
+A command-line program can subscribe to incoming bytes from standard input and can write to standard output and standard error.
+-}
+type alias CommandLineAppConfig state =
+    { init : InitEnvironment -> ( state, EventResponse state )
+    , subscriptions : state -> Subscriptions state
+    }
+
+
+type alias InitEnvironment =
+    { commandLine : String
+    , environmentVariables : List ( String, String )
+    }
+
+
+type alias Subscriptions state =
+    { stdIn : Maybe (Bytes.Bytes -> state -> ( state, EventResponse state ))
+    , posixTimeIsPast :
+        Maybe
+            { minimumPosixTimeMilli : Int
+            , update : { currentPosixTimeMilli : Int } -> state -> ( state, EventResponse state )
+            }
+    }
+
+
+type alias EventResponse state =
+    { commands : List (Command state)
+    , exit : Maybe Int
+    }
+
+
+type Command state
+    = SendToStdOutCmd Bytes.Bytes
+    | SendToStdErrCmd Bytes.Bytes
+
+ * */
 
 /// <summary>
 /// Configuration of an Elm command-line interface (CLI) app.
