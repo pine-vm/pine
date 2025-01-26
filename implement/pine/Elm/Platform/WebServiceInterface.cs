@@ -1,4 +1,5 @@
 using ElmTime.ElmInteractive;
+using ElmTime.ElmSyntax;
 using Pine.Core;
 using Pine.Core.PineVM;
 using Pine.ElmInteractive;
@@ -1148,19 +1149,42 @@ type alias TerminateVolatileProcessStruct =
     private static readonly ElmCompilerCache elmCompilerCache = new();
     private static readonly PineVMParseCache parseCache = new();
 
-    public static WebServiceConfig ConfigFromSourceFilesAndModuleName(
+    public static WebServiceConfig ConfigFromSourceFilesAndEntryFileName(
         TreeNodeWithStringPath sourceFiles,
-        IReadOnlyList<string> moduleName)
+        IReadOnlyList<string> entryFileName)
     {
+        if (sourceFiles.GetNodeAtPath(entryFileName) is not { } entryFileNode)
+        {
+            throw new Exception("Entry file not found: " + string.Join(".", entryFileName));
+        }
+
+        if (entryFileNode is not TreeNodeWithStringPath.BlobNode entryFileBlob)
+        {
+            throw new Exception("Entry file is not a blob: " + string.Join(".", entryFileName));
+        }
+
+        var entryFileText =
+            System.Text.Encoding.UTF8.GetString(entryFileBlob.Bytes.Span);
+
+        if (ElmModule.ParseModuleName(entryFileText).IsOkOrNull() is not { } moduleName)
+        {
+            throw new Exception("Failed to parse module name from entry file: " + string.Join(".", entryFileName));
+        }
+
         var sourceFilesWithPackages =
             PineValueComposition.SortedTreeFromSetOfBlobsWithStringPath(
                 ElmAppDependencyResolution.MergePackagesElmModules(
                     PineValueComposition.TreeToFlatDictionaryWithPathComparer(sourceFiles)));
 
+        var sourceFilesFiltered =
+            ElmCompiler.FilterTreeForCompilationRoots(
+                sourceFilesWithPackages,
+                [entryFileName]);
+
         using var interactiveSession =
             new InteractiveSessionPine(
                 ElmCompiler.CompilerSourceContainerFilesDefault.Value,
-                appCodeTree: sourceFilesWithPackages,
+                appCodeTree: sourceFilesFiltered,
                 overrideSkipLowering: true,
                 caching: true,
                 autoPGO: null);

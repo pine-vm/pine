@@ -53,9 +53,9 @@ public class ExampleAppsTests
             .Extract(err => throw new Exception("Failed parsing app source files as tree: " + err));
 
         var webServiceConfig =
-            WebServiceInterface.ConfigFromSourceFilesAndModuleName(
+            WebServiceInterface.ConfigFromSourceFilesAndEntryFileName(
                 webAppSourceTree,
-                ["Backend", "Main"]);
+                ["src", "Backend", "Main.elm"]);
 
         var webServiceApp =
             new MutatingWebServiceApp(webServiceConfig);
