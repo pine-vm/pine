@@ -881,6 +881,50 @@ charsAny predicate chars =
                 charsAny predicate rest
 
 
+indexes : String -> String -> List Int
+indexes (String pattern) (String string) =
+    indexesHelper 0 [] 0 pattern string
+
+
+indexesHelper : Int -> List Int -> Int -> List Char -> List Char -> List Int
+indexesHelper currentStart currentIndexes offset pattern string =
+    let
+        nextChar =
+            Pine_kernel.head (Pine_kernel.skip [ offset, string ])
+    in
+    if Pine_kernel.equal [ nextChar, [] ] then
+        currentIndexes
+
+    else if
+        Pine_kernel.equal
+            [ Pine_kernel.take
+                [ Pine_kernel.length pattern
+                , Pine_kernel.skip [ offset, string ]
+                ]
+            , pattern
+            ]
+    then
+        indexesHelper
+            (Pine_kernel.int_add [ offset, Pine_kernel.length pattern ])
+            (Pine_kernel.concat [ currentIndexes, [ offset ] ])
+            (Pine_kernel.int_add [ offset, 1 ])
+            pattern
+            string
+
+    else
+        indexesHelper
+            (Pine_kernel.int_add [ offset, 1 ])
+            currentIndexes
+            (Pine_kernel.int_add [ offset, 1 ])
+            pattern
+            string
+
+
+indices : String -> String -> List Int
+indices pattern string =
+    indexes pattern string
+
+
 toUpper : String -> String
 toUpper (String chars) =
     String (List.map Char.toUpper chars)

@@ -1,0 +1,1 @@
+String.indexes  "needle"  "haystack"
