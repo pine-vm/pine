@@ -1,0 +1,1 @@
+Url.fromString  "https://example.com/hats?q=top%20hat"

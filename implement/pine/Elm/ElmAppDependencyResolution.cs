@@ -77,7 +77,8 @@ public class ElmAppDependencyResolution
                     if (package.Key is "elm/core" ||
                     package.Key is "elm/json" ||
                     package.Key is "elm/bytes" ||
-                    package.Key is "elm/parser")
+                    package.Key is "elm/parser" ||
+                    package.Key is "elm/url")
                     {
                         return aggregate;
                     }

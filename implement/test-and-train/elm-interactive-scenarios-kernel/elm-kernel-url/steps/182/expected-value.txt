@@ -1,0 +1,1 @@
+Just { fragment = Nothing, host = "example.com", path = "/hats", port_ = Nothing, protocol = Https, query = Just "q=top%20hat" }
