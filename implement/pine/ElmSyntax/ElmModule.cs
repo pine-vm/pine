@@ -163,21 +163,50 @@ public static class ElmModule
 
     public static Result<string, IReadOnlyList<string>> ParseModuleName(string moduleText)
     {
+        // This pattern removes all leading:
+        //   - whitespace (\s)
+        //   - single-line comments (--... up to end of line)
+        //   - multi-line comments ({- ... -}), which can span multiple lines
+        // The * at the end repeats that pattern until it no longer matches.
+        // Using RegexOptions.Singleline so '.' can match across newlines within {- -}.
+        var textWithoutLeadingComments = Regex.Replace(
+            moduleText,
+            pattern: @"\A(?:
+                      \s+                                 # skip any whitespace
+                    | --[^\r\n]*(?:\r\n|\r|\n|$)         # skip single-line comment + EOL
+                    | \{\-[\s\S]*?\-\}                   # skip multi-line comment
+                  )*",
+            replacement: "",
+            options: RegexOptions.IgnorePatternWhitespace | RegexOptions.Singleline);
+
         {
-            var match = Regex.Match(moduleText, @"^(port\s+)?module\s+([\w.]+)\s+exposing");
+            // Match: optional `port `, then `module`, then a dotted identifier, then `exposing`.
+            // Example:  port module MyModule exposing
+
+            var match =
+                Regex.Match(
+                    textWithoutLeadingComments,
+                    @"^(port\s+)?module\s+([\w.]+)\s+exposing",
+                    RegexOptions.Singleline);
 
             if (match.Success)
             {
-                return Result<string, IReadOnlyList<string>>.ok(match.Groups[2].Value.Split('.'));
+                return Result<string, IReadOnlyList<string>>.ok(
+                    match.Groups[2].Value.Split('.'));
             }
         }
 
         {
-            var match = Regex.Match(moduleText, @"^effect\s+module\s+([\w.]+)\s+(where|exposing)");
+            var match =
+                Regex.Match(
+                    textWithoutLeadingComments,
+                    @"^effect\s+module\s+([\w.]+)\s+(where|exposing)",
+                    RegexOptions.Singleline);
 
             if (match.Success)
             {
-                return Result<string, IReadOnlyList<string>>.ok(match.Groups[1].Value.Split('.'));
+                return Result<string, IReadOnlyList<string>>.ok(
+                    match.Groups[1].Value.Split('.'));
             }
         }
 

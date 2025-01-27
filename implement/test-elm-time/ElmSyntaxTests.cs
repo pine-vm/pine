@@ -65,6 +65,20 @@ public class ElmSyntaxTests
             {
                 moduleText =
                 """
+                {-| Multi-line comment
+                -}
+
+                module Test exposing ( .. )
+                """,
+
+                expectedModuleName =
+                (IReadOnlyList<string>)["Test"]
+            },
+
+            new
+            {
+                moduleText =
+                """
                 effect module Task where { command = MyCmd } exposing
                   ( Task
                   , succeed, fail
@@ -87,7 +101,8 @@ public class ElmSyntaxTests
 
             if (parseModuleNameResult.IsErrOrNull() is { } err)
             {
-                Assert.Fail("Failed to parse module name: " + err);
+                Assert.Fail(
+                    "Failed to parse module name: " + err + "\nmodule text:\n" + testCase.moduleText);
             }
 
             if (parseModuleNameResult.IsOkOrNull() is not { } parsedName)
@@ -100,6 +115,31 @@ public class ElmSyntaxTests
                 parsedName.SequenceEqual(testCase.expectedModuleName),
                 message: "Module name");
         }
+    }
+
+    [TestMethod]
+    public void Parse_Elm_module_name_ignores_string_literal_content()
+    {
+        var moduleText =
+            """"
+            -- module TestModule exposing (..)
+
+            test =
+                [ ""
+                , """
+            module Bytes.Decode exposing (..)
+
+            """ ]
+
+                
+            """";
+
+        var parseModuleNameResult =
+            ElmModule.ParseModuleName(moduleText);
+
+        Assert.IsTrue(
+            parseModuleNameResult.IsErr(),
+            message: "Expected error");
     }
 
     [TestMethod]
