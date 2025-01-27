@@ -3745,7 +3745,7 @@ getDeclarationValueFromCompilation ( moduleName, nameInModule ) compilation =
                     ++ String.join "." moduleName
                     ++ "'. There are "
                     ++ String.fromInt (Dict.size compilation.availableModules)
-                    ++ " declarations in this scope: "
+                    ++ " modules available: "
                     ++ String.join ", " (List.map (String.join ".") (Dict.keys compilation.availableModules))
                 )
 
