@@ -792,12 +792,9 @@ toFloat (String chars) =
 
             Just (Elm_Float numAbs denom) ->
                 let
+                    numSigned : Int
                     numSigned =
-                        if Pine_kernel.equal [ numAbs, 0 ] then
-                            0
-
-                        else
-                            Pine_kernel.int_mul [ -1, numAbs ]
+                        Pine_kernel.int_mul [ -1, numAbs ]
                 in
                 Just (Elm_Float numSigned denom)
 
@@ -808,6 +805,212 @@ toFloat (String chars) =
 
             Just (Elm_Float numAbs denom) ->
                 Just (Elm_Float numAbs denom)
+
+
+fromFloat : Float -> String
+fromFloat float =
+    case float of
+        Elm_Float numerator denom ->
+            fromFloatDecimal 16 ( numerator, denom )
+
+        int ->
+            fromInt int
+
+
+fromFloatDecimal : Int -> ( Int, Int ) -> String
+fromFloatDecimal decimalPlacesMax ( numerator, denom ) =
+    case denom of
+        1 ->
+            fromInt numerator
+
+        0 ->
+            if
+                Pine_kernel.equal
+                    [ Pine_kernel.take [ 1, numerator ]
+                    , Pine_kernel.take [ 1, -1 ]
+                    ]
+            then
+                "-Infinity"
+
+            else
+                "Infinity"
+
+        _ ->
+            let
+                isNegative : Bool
+                isNegative =
+                    Pine_kernel.equal
+                        [ Pine_kernel.take [ 1, numerator ]
+                        , Pine_kernel.take [ 1, -1 ]
+                        ]
+
+                ( signStr, absNum ) =
+                    if isNegative then
+                        ( [ '-' ]
+                        , Pine_kernel.int_mul [ -1, numerator ]
+                        )
+
+                    else
+                        ( []
+                        , numerator
+                        )
+
+                intPart : Int
+                intPart =
+                    absNum // denom
+
+                remainder : Int
+                remainder =
+                    modBy denom absNum
+            in
+            if Pine_kernel.equal [ remainder, 0 ] || Pine_kernel.equal [ decimalPlacesMax, 0 ] then
+                -- No remainder OR no decimal places requested
+                String
+                    (Pine_kernel.concat
+                        [ signStr
+                        , fromIntAsList intPart
+                        ]
+                    )
+
+            else
+                -- 3) Scale and round remainder to get fractional part
+                let
+                    scale : Int
+                    scale =
+                        intPow 1 10 decimalPlacesMax
+
+                    scaledVal : Int
+                    scaledVal =
+                        Pine_kernel.int_mul [ remainder, scale ]
+
+                    scaledInt : Int
+                    scaledInt =
+                        scaledVal // denom
+
+                    leftover : Int
+                    leftover =
+                        modBy denom scaledVal
+
+                    -- 4) ROUND HALF-UP:
+                    scaledIntRounded : Int
+                    scaledIntRounded =
+                        if Pine_kernel.int_is_sorted_asc [ denom, Pine_kernel.int_mul [ leftover, 2 ] ] then
+                            Pine_kernel.int_add [ 1, scaledInt ]
+
+                        else
+                            scaledInt
+
+                    scaledStr : List Char
+                    scaledStr =
+                        fromIntAsList scaledIntRounded
+
+                    -- If scaledIntRounded >= scale (e.g. 100 when scale=100),
+                    -- that means we "overflowed" into the next integer. For instance:
+                    -- fromFloatDecimal 2 (Elm_Float 999 100)
+                    -- might round from "9.99" to "10.00".
+                    overflowed : Bool
+                    overflowed =
+                        Pine_kernel.int_is_sorted_asc [ scale, scaledIntRounded ]
+
+                    ( newIntPart, fractionDigits ) =
+                        if overflowed then
+                            -- increment integer part, fraction becomes e.g. "000"
+                            let
+                                incremented : Int
+                                incremented =
+                                    Pine_kernel.int_add [ intPart, 1 ]
+
+                                -- e.g. scaledStr = "100" => dropLeft 1 => "00"
+                                -- If scaledStr was "1000" => dropLeft 1 => "000"
+                                fractionNoSign : List Char
+                                fractionNoSign =
+                                    Pine_kernel.skip [ 1, scaledStr ]
+                            in
+                            ( incremented, fractionNoSign )
+
+                        else
+                            -- If not overflowed, we may need zero‐padding to the left.
+                            let
+                                neededZeros : Int
+                                neededZeros =
+                                    Pine_kernel.int_add
+                                        [ decimalPlacesMax
+                                        , Pine_kernel.int_mul [ -1, Pine_kernel.length scaledStr ]
+                                        ]
+
+                                fractionNoSign : List Char
+                                fractionNoSign =
+                                    Pine_kernel.concat
+                                        [ List.repeat neededZeros '0'
+                                        , scaledStr
+                                        ]
+                            in
+                            ( intPart, fractionNoSign )
+
+                    -- Now remove trailing zeros from fractionDigits.
+                    trimmedFraction : List Char
+                    trimmedFraction =
+                        removeTrailingZeros fractionDigits
+                in
+                if trimmedFraction == [] then
+                    -- Entire fractional part was zeros, so just show an integer.
+                    String
+                        (Pine_kernel.concat
+                            [ signStr
+                            , fromIntAsList newIntPart
+                            ]
+                        )
+
+                else
+                    String
+                        (Pine_kernel.concat
+                            [ signStr
+                            , fromIntAsList newIntPart
+                            , [ '.' ]
+                            , trimmedFraction
+                            ]
+                        )
+
+
+removeTrailingZeros : List Char -> List Char
+removeTrailingZeros chars =
+    removeTrailingZerosHelper (Pine_kernel.length chars) chars
+
+
+removeTrailingZerosHelper : Int -> List Char -> List Char
+removeTrailingZerosHelper offset chars =
+    if Pine_kernel.equal [ offset, 0 ] then
+        chars
+
+    else
+        let
+            nextOffset : Int
+            nextOffset =
+                Pine_kernel.int_add [ offset, -1 ]
+        in
+        case
+            Pine_kernel.take
+                [ 1
+                , Pine_kernel.skip [ nextOffset, chars ]
+                ]
+        of
+            [ '0' ] ->
+                removeTrailingZerosHelper nextOffset chars
+
+            _ ->
+                Pine_kernel.take [ offset, chars ]
+
+
+intPow : Int -> Int -> Int -> Int
+intPow acc base exponent =
+    if Pine_kernel.int_is_sorted_asc [ exponent, 0 ] then
+        acc
+
+    else
+        intPow
+            (Pine_kernel.int_mul [ acc, base ])
+            base
+            (Pine_kernel.int_add [ exponent, -1 ])
 
 
 toRationalComponentsLessSign : List Char -> Maybe ( Int, Int )

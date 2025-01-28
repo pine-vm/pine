@@ -106,3 +106,8 @@ escapeChar char =
 
         _ ->
             String.fromChar char
+
+
+float : Float -> Value
+float float =
+    FloatValue (String.fromFloat float)
