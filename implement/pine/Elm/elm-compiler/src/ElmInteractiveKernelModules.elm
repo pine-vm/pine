@@ -1190,6 +1190,24 @@ field key decoder jsonValue =
             Err (temporaryStubErrorNotImplemented jsonValue)
 
 
+float : Decoder Float
+float jsonValue =
+    case jsonValue of
+        FloatValue floatAsString ->
+            case String.toFloat floatAsString of
+                Just floatVal ->
+                    Ok floatVal
+
+                Nothing ->
+                    Err (Failure ("Expecting a float, but got: " ++ floatAsString) jsonValue)
+
+        IntValue intVal ->
+            Ok (toFloat intVal)
+
+        _ ->
+            Err (temporaryStubErrorNotImplemented jsonValue)
+
+
 map : (a -> b) -> Decoder a -> Decoder b
 map func decoder jsonValue =
     case decoder jsonValue of

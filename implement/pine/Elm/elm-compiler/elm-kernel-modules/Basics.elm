@@ -765,3 +765,17 @@ findLowerPowerOfTen int =
 
     else
         Pine_kernel.int_add [ findLowerPowerOfTen (idiv int 10), 1 ]
+
+
+isNaN : Float -> Bool
+isNaN number =
+    case number of
+        Elm_Float numerator denom ->
+            if Pine_kernel.equal [ denom, 0 ] then
+                Pine_kernel.equal [ numerator, 0 ]
+
+            else
+                False
+
+        _ ->
+            False

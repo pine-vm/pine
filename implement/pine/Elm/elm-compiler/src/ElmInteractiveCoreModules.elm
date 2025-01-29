@@ -705,6 +705,19 @@ findLowerPowerOfTen int =
         Pine_kernel.int_add [ findLowerPowerOfTen (idiv int 10), 1 ]
 
 
+isNaN : Float -> Bool
+isNaN number =
+    case number of
+        Elm_Float numerator denom ->
+            if Pine_kernel.equal [ denom, 0 ] then
+                Pine_kernel.equal [ numerator, 0 ]
+
+            else
+                False
+
+        _ ->
+            False
+
 """
     , """
 module Tuple exposing
@@ -2644,6 +2657,16 @@ foldl foldItem seed array =
 filter : (a -> Bool) -> Array a -> Array a
 filter filterItem array =
     List.filter filterItem array
+
+
+initialize : Int -> (Int -> a) -> Array a
+initialize n init =
+    List.map
+        init
+        (List.range
+            0
+            (Pine_kernel.int_add [ n, -1 ])
+        )
 
 """
     , """

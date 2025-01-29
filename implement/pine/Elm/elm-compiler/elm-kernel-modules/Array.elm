@@ -94,3 +94,13 @@ foldl foldItem seed array =
 filter : (a -> Bool) -> Array a -> Array a
 filter filterItem array =
     List.filter filterItem array
+
+
+initialize : Int -> (Int -> a) -> Array a
+initialize n init =
+    List.map
+        init
+        (List.range
+            0
+            (Pine_kernel.int_add [ n, -1 ])
+        )
