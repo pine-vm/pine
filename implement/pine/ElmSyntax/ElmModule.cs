@@ -163,21 +163,7 @@ public static class ElmModule
 
     public static Result<string, IReadOnlyList<string>> ParseModuleName(string moduleText)
     {
-        // This pattern removes all leading:
-        //   - whitespace (\s)
-        //   - single-line comments (--... up to end of line)
-        //   - multi-line comments ({- ... -}), which can span multiple lines
-        // The * at the end repeats that pattern until it no longer matches.
-        // Using RegexOptions.Singleline so '.' can match across newlines within {- -}.
-        var textWithoutLeadingComments = Regex.Replace(
-            moduleText,
-            pattern: @"\A(?:
-                      \s+                                 # skip any whitespace
-                    | --[^\r\n]*(?:\r\n|\r|\n|$)         # skip single-line comment + EOL
-                    | \{\-[\s\S]*?\-\}                   # skip multi-line comment
-                  )*",
-            replacement: "",
-            options: RegexOptions.IgnorePatternWhitespace | RegexOptions.Singleline);
+        var textWithoutLeadingComments = RemoveLeadingTrivia(moduleText);
 
         {
             // Match: optional `port `, then `module`, then a dotted identifier, then `exposing`.
@@ -215,15 +201,56 @@ public static class ElmModule
 
     public static IEnumerable<IReadOnlyList<string>> ParseModuleImportedModulesNames(string moduleText)
     {
-        foreach (var moduleTextLine in moduleText.Trim().ModuleLines())
-        {
-            var match = Regex.Match(moduleTextLine, @"^import\s+([\w.]+)(\s|$)");
+        var textWithoutLeadingComments = RemoveLeadingTrivia(moduleText);
 
-            if (match.Success)
+        bool inTripleQuotedString = false;
+
+        foreach (var line in ModuleLines(textWithoutLeadingComments))
+        {
+            // We'll do a simple toggle for every """ we see on the line.
+            // Each occurrence flips us from outside->inside or inside->outside.
+            int searchStart = 0;
+            while (true)
             {
-                yield return match.Groups[1].Value.Split('.');
+                var index = line.IndexOf("\"\"\"", searchStart, StringComparison.Ordinal);
+                if (index < 0)
+                    break;
+
+                inTripleQuotedString = !inTripleQuotedString;
+                searchStart = index + 3;
+            }
+
+            // Only parse imports if we are outside any triple-quoted string
+            if (!inTripleQuotedString)
+            {
+                var match = Regex.Match(line, @"^import\s+([\w.]+)(\s|$)");
+                if (match.Success)
+                {
+                    yield return match.Groups[1].Value.Split('.');
+                }
             }
         }
+    }
+
+    public static string RemoveLeadingTrivia(string moduleText)
+    {
+        // This pattern removes all leading:
+        //   - whitespace (\s)
+        //   - single-line comments (--... up to end of line)
+        //   - multi-line comments ({- ... -}), which can span multiple lines
+        // The * at the end repeats that pattern until it no longer matches.
+        // Using RegexOptions.Singleline so '.' can match across newlines within {- -}.
+        var textWithoutLeadingComments = Regex.Replace(
+            moduleText,
+            pattern: @"\A(?:
+                      \s+                                 # skip any whitespace
+                    | --[^\r\n]*(?:\r\n|\r|\n|$)         # skip single-line comment + EOL
+                    | \{\-[\s\S]*?\-\}                   # skip multi-line comment
+                  )*",
+            replacement: "",
+            options: RegexOptions.IgnorePatternWhitespace | RegexOptions.Singleline);
+
+        return textWithoutLeadingComments;
     }
 
     public static IEnumerable<string> ModuleLines(this string moduleText)

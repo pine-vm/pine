@@ -152,6 +152,7 @@ public class ElmSyntaxTests
                 moduleText = @"module TestModule exposing (..)",
                 expectedImports = System.Array.Empty<IReadOnlyList<string>>()
             },
+
             new
             {
                 moduleText = """
@@ -162,6 +163,7 @@ public class ElmSyntaxTests
                 import List exposing ((::))
                 import Maybe exposing (Maybe(..))
                 """,
+
                 expectedImports = new IReadOnlyList<string>[]
                 {
                     ["Basics"],
@@ -170,16 +172,56 @@ public class ElmSyntaxTests
                     ["Maybe"]
                 }
             },
+
+            new
+            {
+                moduleText = """"
+                module TestModule exposing (..)
+
+                import Dict
+
+                d = """
+                import List exposing ((::))
+                import Maybe exposing (Maybe(..))
+                """
+
+                """",
+
+                expectedImports = new IReadOnlyList<string>[]
+                {
+                    ["Dict"],
+                }
+            },
+
+            new
+            {
+                moduleText = """"
+                module TestModule exposing (..)
+
+                import Dict
+
+                {-
+                    import List exposing ((::))
+                    import Maybe exposing (Maybe(..))
+                -}
+
+                """",
+
+                expectedImports = new IReadOnlyList<string>[]
+                {
+                    ["Dict"],
+                }
+            },
         };
 
         foreach (var testCase in testCases)
         {
-            var actualImports =
+            var parsedImports =
                 ElmModule.ParseModuleImportedModulesNames(testCase.moduleText)
                 .ToImmutableHashSet(EnumerableExtension.EqualityComparer<IReadOnlyList<string>>());
 
             Assert.IsTrue(
-                actualImports.SequenceEqual(
+                parsedImports.SequenceEqual(
                     testCase.expectedImports,
                     EnumerableExtension.EqualityComparer<IReadOnlyList<string>>()));
         }
