@@ -2,6 +2,7 @@ using ElmTime.Elm019;
 using ElmTime.JavaScript;
 using Pine;
 using Pine.Core;
+using Pine.Elm;
 using Pine.Elm019;
 using Pine.ElmInteractive;
 using System;
@@ -156,8 +157,8 @@ public class ElmInteractive
             elmModulesTexts;
 
         using var evalElmPreparedJavaScriptEngine =
-            Pine.Elm.ElmCompiler.JavaScriptEngineFromElmCompilerSourceFiles(
-                Pine.Elm.ElmCompiler.CompilerSourceContainerFilesDefault.Value);
+            ElmCompiler.JavaScriptEngineFromElmCompilerSourceFiles(
+                ElmCompiler.CompilerSourceContainerFilesDefault.Value);
 
         Result<string, (CompileInteractiveEnvironmentResult compileResult, CompilationCache compilationCache)> chooseInitResult()
         {
@@ -835,7 +836,12 @@ public class ElmInteractive
         IReadOnlyList<IReadOnlyList<string>> rootFilePaths)
     {
         var allModules =
-            ModulesFilePathsAndTextsFromAppCodeTree(appCodeTree, skipLowering)
+            ModulesFilePathsAndTextsFromAppCodeTree(
+                appCodeTree,
+                skipLowering,
+                entryPointsFilePaths: rootFilePaths.ToImmutableHashSet(EnumerableExtension.EqualityComparer<IReadOnlyList<string>>()),
+                skipFilteringForSourceDirs: false,
+                mergeKernelModules: true)
             .Where(file => !ShouldIgnoreSourceFile(file.filePath, file.fileContent))
             .ToImmutableArray();
 
@@ -870,7 +876,10 @@ public class ElmInteractive
     public static IReadOnlyList<(IReadOnlyList<string> filePath, ReadOnlyMemory<byte> fileContent, string moduleText)>
         ModulesFilePathsAndTextsFromAppCodeTree(
         TreeNodeWithStringPath appCodeTree,
-        bool skipLowering)
+        bool skipLowering,
+        IReadOnlySet<IReadOnlyList<string>>? entryPointsFilePaths,
+        bool skipFilteringForSourceDirs,
+        bool mergeKernelModules)
     {
         var loweredTree =
             skipLowering
@@ -879,8 +888,24 @@ public class ElmInteractive
             :
             CompileTree(appCodeTree);
 
+        // After lowering we can remove all Elm modules not in the dependency tree of the entry points.
+
+        var treeFiltered =
+            entryPointsFilePaths is null || entryPointsFilePaths.Count < 1
+            ?
+            loweredTree
+            :
+            ElmCompiler.FilterTreeForCompilationRoots(
+                loweredTree,
+                entryPointsFilePaths,
+                skipFilteringForSourceDirs: skipFilteringForSourceDirs);
+
         var treeWithKernelModules =
-            InteractiveSessionPine.MergeDefaultElmCoreAndKernelModules(loweredTree);
+            mergeKernelModules
+            ?
+            InteractiveSessionPine.MergeDefaultElmCoreAndKernelModules(treeFiltered)
+            :
+            treeFiltered;
 
         return
             [.. TreeToFlatDictionaryWithPathComparer(treeWithKernelModules)

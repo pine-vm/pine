@@ -111,6 +111,60 @@ public class ExampleAppsTests
             "response content as string");
     }
 
+
+    [TestMethod]
+    public void Example_app_Elm_editor_webservice_sandbox()
+    {
+        var webAppSource =
+            ExampleAppValueFromExampleName("elm-editor");
+
+        var webAppSourceTree =
+            PineValueComposition.ParseAsTreeWithStringPath(webAppSource)
+            .Extract(err => throw new Exception("Failed parsing app source files as tree: " + err));
+
+        var webServiceConfig =
+            WebServiceInterface.ConfigFromSourceFilesAndEntryFileName(
+                webAppSourceTree,
+                ["src", "Backend", "Main.elm"]);
+
+        var webServiceApp =
+            new MutatingWebServiceApp(webServiceConfig);
+
+        var eventResponse =
+            webServiceApp.EventHttpRequest(
+                new WebServiceInterface.HttpRequestEventStruct
+                (
+                    HttpRequestId: "1",
+                    PosixTimeMilli: 0,
+                    RequestContext: new WebServiceInterface.HttpRequestContext
+                    (
+                        ClientAddress: null
+                    ),
+                    Request: new WebServiceInterface.HttpRequestProperties
+                    (
+                        Method: "GET",
+                        Uri: "/",
+                        BodyAsBase64: null,
+                        Headers: []
+                    )
+                ));
+
+        var allCommands =
+            webServiceApp.DequeueCommands();
+
+        var commandCreateVolatileProcess =
+            allCommands
+            .OfType<WebServiceInterface.Command.CreateVolatileProcess>()
+            .FirstOrDefault();
+
+        if (commandCreateVolatileProcess is null)
+        {
+            throw new Exception(
+                "Did not find expected command to create a volatile process among " +
+                allCommands.Count + " commands.");
+        }
+    }
+
     [TestMethod]
     public void Example_app_demo_backend_state()
     {

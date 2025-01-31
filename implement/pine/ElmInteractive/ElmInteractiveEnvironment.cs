@@ -73,7 +73,7 @@ public static class ElmInteractiveEnvironment
 
         if (parseEnvResult.IsOkOrNull() is not { } parsedEnv)
         {
-            throw new System.NotImplementedException(
+            throw new NotImplementedException(
                 "Unexpected result type: " + parseEnvResult.GetType());
         }
 

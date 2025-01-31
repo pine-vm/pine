@@ -30,6 +30,7 @@ public class PineExecutableBundleTests
                 combinedSourceFiles,
                 rootFilePaths: Pine.Elm.ElmCompiler.DefaultCompilerTreeRootModuleFilePaths,
                 skipLowering: true,
+                skipFilteringForSourceDirs: true,
                 overrideElmCompiler: elmCompilerFromBundle)
             .Extract(err => throw new System.Exception(err));
 

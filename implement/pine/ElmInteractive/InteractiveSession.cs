@@ -34,6 +34,7 @@ public interface IInteractiveSession : IDisposable
                 compilerSourceFiles: compilerSourceFiles,
                 appCodeTree: appCodeTree,
                 overrideSkipLowering: null,
+                entryPointsFilePaths: null,
                 caching: pineConfig.Caching,
                 autoPGO: pineConfig.DynamicPGOShare),
 

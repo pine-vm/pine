@@ -69,6 +69,7 @@ public class ElmInteractiveTests
                 compilerSourceFiles: CompileElmProgramCodeFiles,
                 appCodeTree: appCodeTree,
                 overrideSkipLowering: null,
+                entryPointsFilePaths: null,
                 caching: true,
                 autoPGO: null);
 
@@ -154,6 +155,7 @@ public class ElmInteractiveTests
                 compilerSourceFiles: CompileElmProgramCodeFiles,
                 appCodeTree: appCodeTree,
                 overrideSkipLowering: true,
+                entryPointsFilePaths: null,
                 dynamicPGOShare.GetVMAutoUpdating());
 
         {

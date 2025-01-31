@@ -1701,6 +1701,7 @@ public class Program
                                         compilerSourceFiles: compileElmProgramCodeFiles,
                                         appCodeTree: appCodeTree,
                                         overrideSkipLowering: null,
+                                        entryPointsFilePaths: null,
                                         pineVMWithCompiledAssembly);
                                 }
                             }
@@ -2338,7 +2339,9 @@ public class Program
             CompilerSerialInterface.ElmMakeEntryPointStruct entryPointStruct)
         {
             var sourceFilesWithMergedPackages =
-                ElmAppDependencyResolution.MergePackagesElmModules(sourceFilesAfterLowering);
+                ElmAppDependencyResolution.AppCompilationUnitsForEntryPoint(
+                    PineValueComposition.SortedTreeFromSetOfBlobsWithStringPath(sourceFilesAfterLowering),
+                    entryPointFilePath: pathToFileWithElmEntryPoint);
 
             var elmCompilerFromBundle =
                 BundledElmEnvironments.BundledElmCompilerCompiledEnvValue()
@@ -2360,9 +2363,10 @@ public class Program
 
             var compileResult =
                 InteractiveSessionPine.CompileInteractiveEnvironment(
-                    appCodeTree:
-                    PineValueComposition.SortedTreeFromSetOfBlobsWithStringPath(sourceFilesWithMergedPackages),
+                    appCodeTree: sourceFilesWithMergedPackages.files,
                     overrideSkipLowering: true,
+                    entryPointsFilePaths: [pathToFileWithElmEntryPoint],
+                    skipFilteringForSourceDirs: false,
                     elmCompiler: elmCompiler);
 
             if (compileResult.IsErrOrNull() is { } compileErr)

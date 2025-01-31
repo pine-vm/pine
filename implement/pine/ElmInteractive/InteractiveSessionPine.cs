@@ -2,6 +2,7 @@ using Pine;
 using Pine.Core;
 using Pine.Core.PineVM;
 using Pine.Elm;
+using Pine.Elm019;
 using Pine.ElmInteractive;
 using Pine.PineVM;
 using System;
@@ -37,19 +38,32 @@ public class InteractiveSessionPine : IInteractiveSession
 
     static readonly ConcurrentDictionary<string, Result<string, KeyValuePair<IReadOnlyList<string>, PineValue>>> TryParseModuleTextCache = new();
 
-    private static JavaScript.IJavaScriptEngine ParseSubmissionOrCompileDefaultJavaScriptEngine { get; } =
-        BuildParseSubmissionOrCompileDefaultJavaScriptEngine();
-
-    private static JavaScript.IJavaScriptEngine BuildParseSubmissionOrCompileDefaultJavaScriptEngine()
-    {
-        return ElmCompiler.JavaScriptEngineFromElmCompilerSourceFiles(
-            ElmCompiler.CompilerSourceContainerFilesDefault.Value);
-    }
-
     public InteractiveSessionPine(
         TreeNodeWithStringPath compilerSourceFiles,
         TreeNodeWithStringPath? appCodeTree,
         bool? overrideSkipLowering,
+        IReadOnlyList<IReadOnlyList<string>>? entryPointsFilePaths,
+        bool caching,
+        DynamicPGOShare? autoPGO)
+        :
+        this(
+            compilerSourceFiles: compilerSourceFiles,
+            appCodeTree:
+            appCodeTree is null ? null : AppCompilationUnits.WithoutPackages(appCodeTree),
+            overrideSkipLowering: overrideSkipLowering,
+            entryPointsFilePaths: entryPointsFilePaths,
+            BuildPineVM(
+                caching: caching,
+                autoPGO: autoPGO,
+                new PineVM.EvaluationConfig(ParseAndEvalCountLimit: 10_000_000)))
+    {
+    }
+
+    public InteractiveSessionPine(
+        TreeNodeWithStringPath compilerSourceFiles,
+        AppCompilationUnits? appCodeTree,
+        bool? overrideSkipLowering,
+        IReadOnlyList<IReadOnlyList<string>>? entryPointsFilePaths,
         bool caching,
         DynamicPGOShare? autoPGO)
         :
@@ -57,6 +71,7 @@ public class InteractiveSessionPine : IInteractiveSession
             compilerSourceFiles: compilerSourceFiles,
             appCodeTree: appCodeTree,
             overrideSkipLowering: overrideSkipLowering,
+            entryPointsFilePaths: entryPointsFilePaths,
             BuildPineVM(
                 caching: caching,
                 autoPGO: autoPGO,
@@ -68,20 +83,40 @@ public class InteractiveSessionPine : IInteractiveSession
         TreeNodeWithStringPath compilerSourceFiles,
         TreeNodeWithStringPath? appCodeTree,
         bool? overrideSkipLowering,
+        IReadOnlyList<IReadOnlyList<string>>? entryPointsFilePaths,
+        IPineVM pineVM)
+        :
+        this(
+            compilerSourceFiles: compilerSourceFiles,
+            appCodeTree:
+            appCodeTree is null ? null : AppCompilationUnits.WithoutPackages(appCodeTree),
+            overrideSkipLowering: overrideSkipLowering,
+            entryPointsFilePaths: entryPointsFilePaths,
+            pineVM)
+    {
+    }
+
+    public InteractiveSessionPine(
+        TreeNodeWithStringPath compilerSourceFiles,
+        AppCompilationUnits? appCodeTree,
+        bool? overrideSkipLowering,
+        IReadOnlyList<IReadOnlyList<string>>? entryPointsFilePaths,
         IPineVM pineVM)
         :
         this(
             compilerSourceFiles: compilerSourceFiles,
             appCodeTree: appCodeTree,
             overrideSkipLowering: overrideSkipLowering,
+            entryPointsFilePaths: entryPointsFilePaths,
             (pineVM, pineVMCache: null))
     {
     }
 
-    private InteractiveSessionPine(
+    public InteractiveSessionPine(
         TreeNodeWithStringPath compilerSourceFiles,
-        TreeNodeWithStringPath? appCodeTree,
+        AppCompilationUnits? appCodeTree,
         bool? overrideSkipLowering,
+        IReadOnlyList<IReadOnlyList<string>>? entryPointsFilePaths,
         (IPineVM pineVM, PineVMCache? pineVMCache) pineVMAndCache)
     {
         pineVM = pineVMAndCache.pineVM;
@@ -93,7 +128,9 @@ public class InteractiveSessionPine : IInteractiveSession
             System.Threading.Tasks.Task.Run(() =>
             CompileInteractiveEnvironment(
                 appCodeTree: appCodeTree,
-                overrideSkipLowering: overrideSkipLowering));
+                overrideSkipLowering: overrideSkipLowering,
+                entryPointsFilePaths: entryPointsFilePaths,
+                skipFilteringForSourceDirs: false));
     }
 
     public static (IPineVM, PineVMCache?) BuildPineVM(
@@ -120,13 +157,16 @@ public class InteractiveSessionPine : IInteractiveSession
         return
             new PineVM(
                 evalCache: cache?.EvalCache,
-                evaluationConfigDefault: evaluationConfig);
+                evaluationConfigDefault: evaluationConfig,
+                reportFunctionApplication: null);
     }
 
 
     private Result<string, PineValue> CompileInteractiveEnvironment(
-        TreeNodeWithStringPath? appCodeTree,
-        bool? overrideSkipLowering)
+        AppCompilationUnits? appCodeTree,
+        bool? overrideSkipLowering,
+        IReadOnlyList<IReadOnlyList<string>>? entryPointsFilePaths,
+        bool skipFilteringForSourceDirs)
     {
         if (buildCompilerResult.IsOkOrNull() is not { } elmCompiler)
         {
@@ -143,43 +183,42 @@ public class InteractiveSessionPine : IInteractiveSession
             CompileInteractiveEnvironment(
                 appCodeTree,
                 overrideSkipLowering: overrideSkipLowering,
+                entryPointsFilePaths: entryPointsFilePaths,
+                skipFilteringForSourceDirs: skipFilteringForSourceDirs,
                 elmCompiler,
                 compileEnvPineVM);
     }
 
     public static Result<string, PineValue>
         CompileInteractiveEnvironment(
-        TreeNodeWithStringPath? appCodeTree,
+        AppCompilationUnits? appCodeTree,
         bool? overrideSkipLowering,
+        IReadOnlyList<IReadOnlyList<string>>? entryPointsFilePaths,
+        bool skipFilteringForSourceDirs,
         ElmCompiler elmCompiler) =>
         CompileInteractiveEnvironment(
             appCodeTree,
             overrideSkipLowering: overrideSkipLowering,
+            entryPointsFilePaths: entryPointsFilePaths,
+            skipFilteringForSourceDirs: skipFilteringForSourceDirs,
             elmCompiler,
             compileEnvPineVM);
 
     public static Result<string, PineValue>
         CompileInteractiveEnvironment(
-        TreeNodeWithStringPath? appCodeTree,
+        AppCompilationUnits? appCodeTree,
         bool? overrideSkipLowering,
+        IReadOnlyList<IReadOnlyList<string>>? entryPointsFilePaths,
+        bool skipFilteringForSourceDirs,
         ElmCompiler elmCompiler,
         IPineVM pineVM)
     {
         var skipLowering =
             overrideSkipLowering ??
-            !ElmCompiler.CheckIfAppUsesLowering(appCodeTree ?? TreeNodeWithStringPath.EmptyTree);
+            !ElmCompiler.CheckIfAppUsesLowering(appCodeTree?.AppFiles ?? TreeNodeWithStringPath.EmptyTree);
 
-        var appCodeTreeWithCoreModules =
-            /*
-            ElmCompiler.MergeElmCoreModules(appCodeTree ?? TreeNodeWithStringPath.EmptyTree);
-            */
-            appCodeTree ?? TreeNodeWithStringPath.EmptyTree;
-
-        var orderedModules =
-            AppSourceFileTreesForIncrementalCompilation(
-                appCodeTreeWithCoreModules,
-                skipLowering: skipLowering)
-            .ToImmutableArray();
+        var appSourceFiles =
+            appCodeTree ?? AppCompilationUnits.WithoutPackages(TreeNodeWithStringPath.EmptyTree);
 
         var initialStateElmValue =
             ElmValueInterop.PineValueEncodedAsInElmCompiler(PineValue.EmptyList);
@@ -188,6 +227,136 @@ public class InteractiveSessionPine : IInteractiveSession
             ElmValueEncoding.ElmValueAsPineValue(initialStateElmValue);
 
         PineValue compiledNewEnvInCompiler = initialStateElmValueInCompiler;
+
+        var defaultKernelModulesTree =
+            ElmCompiler.ElmCoreAndKernelModuleFilesDefault.Value;
+
+        var appCodeModules =
+            appSourceFiles.AppFiles
+            .EnumerateBlobsTransitive()
+            .Where(blob => blob.path.Last().EndsWith(".elm", StringComparison.OrdinalIgnoreCase))
+            .Select(blob =>
+            {
+                var moduleText = System.Text.Encoding.UTF8.GetString(blob.blobContent.Span);
+
+                var moduleName =
+                ElmSyntax.ElmModule.ParseModuleName(moduleText)
+                .Extract(err => throw new Exception("Failed parsing module name: " + err));
+
+                return new KeyValuePair<IReadOnlyList<string>, ReadOnlyMemory<byte>>(moduleName, blob.blobContent);
+            })
+            .ToImmutableDictionary(EnumerableExtension.EqualityComparer<IReadOnlyList<string>>());
+
+        ReadOnlyMemory<byte>? replaceKernelModule(
+            IImmutableList<string> path,
+            ReadOnlyMemory<byte> blobContent)
+        {
+            if (!path.Last().EndsWith(".elm", StringComparison.OrdinalIgnoreCase))
+            {
+                return null;
+            }
+
+            if (ModuleNameFromFileContent(blobContent.Span) is not { } moduleName)
+            {
+                return null;
+            }
+
+            if (appCodeModules.TryGetValue(moduleName, out var appCodeModule) && 0 < appCodeModule.Length)
+            {
+                return appCodeModule;
+            }
+
+            return null;
+        }
+
+        var mergedKernelModulesTree =
+            PineValueComposition.SortedTreeFromSetOfBlobsWithStringPath(
+                defaultKernelModulesTree.EnumerateBlobsTransitive()
+                .Select(blob =>
+                (blob.path,
+                replaceKernelModule(blob.path, blob.blobContent) is { } overrideContent
+                ?
+                overrideContent
+                :
+                blob.blobContent)));
+
+        var mergedKernelModulesTreeBlobs =
+            mergedKernelModulesTree
+            .EnumerateBlobsTransitive()
+            .ToImmutableArray();
+
+        var appFilesAfterKernelModules =
+            PineValueComposition.SortedTreeFromSetOfBlobsWithStringPath(
+                appSourceFiles.AppFiles.EnumerateBlobsTransitive()
+                .Where(blob =>
+                !mergedKernelModulesTreeBlobs.Any(
+                    kernelBlob =>
+                    kernelBlob.blobContent.Span.SequenceEqual(blob.blobContent.Span))));
+
+        var compileKernelModulesResult =
+            CompileInteractiveEnvironmentUnitEncodedInCompiler(
+                compiledNewEnvInCompiler,
+                mergedKernelModulesTree,
+                entryPointsFilePaths: null,
+                elmCompiler,
+                pineVM: pineVM);
+
+        if (compileKernelModulesResult.IsErrOrNull() is { } compileKernelModulesErr)
+        {
+            return "Failed to compile kernel modules: " + compileKernelModulesErr;
+        }
+
+        if (compileKernelModulesResult.IsOkOrNull() is not { } compiledNewEnvInCompilerUnit)
+        {
+            throw new NotImplementedException(
+                "Unexpected result type: " + compileKernelModulesResult.GetType());
+        }
+
+        compiledNewEnvInCompiler = compiledNewEnvInCompilerUnit;
+
+        foreach (var package in appSourceFiles.Packages)
+        {
+            var packageName = package.elmJson.Name;
+
+            if (packageName is "elm/core" ||
+                packageName is "elm/json" ||
+                packageName is "elm/bytes" ||
+                packageName is "elm/parser" ||
+                packageName is "elm/url")
+            {
+                continue;
+            }
+
+            var compilePackageResult =
+                CompileInteractiveEnvironmentPackageEncodedInCompiler(
+                    compiledNewEnvInCompiler,
+                    package.files,
+                    package.elmJson,
+                    elmCompiler,
+                    pineVM: pineVM);
+
+            if (compilePackageResult.IsErrOrNull() is { } compilePackageErr)
+            {
+                return "Compiling package " + package.elmJson.Name + " failed: " + compilePackageErr;
+            }
+
+            if (compilePackageResult.IsOkOrNull() is not { } compilePackageOk)
+            {
+                throw new NotImplementedException(
+                    "Unexpected result type: " + compilePackageResult.GetType());
+            }
+
+            compiledNewEnvInCompiler = compilePackageOk;
+        }
+
+        var orderedModules =
+            AppSourceFileTreesForIncrementalCompilation(
+                appFilesAfterKernelModules,
+                skipLowering: skipLowering,
+                entryPointsFilePaths:
+                entryPointsFilePaths?.ToImmutableHashSet(EnumerableExtension.EqualityComparer<IReadOnlyList<string>>()),
+                skipFilteringForSourceDirs: skipFilteringForSourceDirs)
+            .ToImmutableArray();
 
         foreach (var compilationIncrement in orderedModules)
         {
@@ -199,7 +368,9 @@ public class InteractiveSessionPine : IInteractiveSession
 
             if (parseResult.IsErrOrNull() is { } parseErr)
             {
-                return "Failed parsing module " + string.Join(".", compilationIncrement.sourceModule.ModuleName) + ": " + parseErr;
+                return
+                    "Failed parsing module " +
+                    string.Join(".", compilationIncrement.sourceModule.ModuleName) + ": " + parseErr;
             }
 
             if (parseResult.IsOkOrNullable() is not { } parsedModule)
@@ -259,6 +430,143 @@ public class InteractiveSessionPine : IInteractiveSession
         return compiledNewEnvValue;
     }
 
+
+    public static Result<string, PineValue>
+        CompileInteractiveEnvironmentPackageEncodedInCompiler(
+        PineValue initialStateElmValueInCompiler,
+        TreeNodeWithStringPath packageFiles,
+        ElmJsonStructure elmJson,
+        ElmCompiler elmCompiler,
+        IPineVM pineVM)
+    {
+        IReadOnlyDictionary<string, IReadOnlyList<string>> fileNameFromModuleName =
+            packageFiles.EnumerateBlobsTransitive()
+            .Where(blob => blob.path.Last().EndsWith(".elm", StringComparison.OrdinalIgnoreCase))
+            .Select(blob =>
+            {
+                var moduleText = System.Text.Encoding.UTF8.GetString(blob.blobContent.Span);
+                var moduleName =
+                ElmSyntax.ElmModule.ParseModuleName(moduleText)
+                .Extract(err => throw new Exception("Failed parsing module name: " + err));
+
+                return new KeyValuePair<string, IReadOnlyList<string>>(
+                    string.Join(".", moduleName),
+                    blob.path);
+            })
+            .ToImmutableDictionary();
+
+        var entryPointsFilePaths =
+            elmJson.ExposedModules
+            .Select((moduleNameFlat) => fileNameFromModuleName[moduleNameFlat])
+            .ToImmutableHashSet(EnumerableExtension.EqualityComparer<IReadOnlyList<string>>());
+
+        var compilationUnitResult =
+            CompileInteractiveEnvironmentUnitEncodedInCompiler(
+                initialStateElmValueInCompiler,
+                packageFiles,
+                entryPointsFilePaths: entryPointsFilePaths,
+                elmCompiler,
+                pineVM);
+
+        if (compilationUnitResult.IsErrOrNull() is { } compilationUnitErr)
+        {
+            return "Failed to compile package: " + compilationUnitErr;
+        }
+
+        if (compilationUnitResult.IsOkOrNull() is not { } compiledNewEnvInCompilerUnit)
+        {
+            throw new NotImplementedException(
+                "Unexpected result type: " + compilationUnitResult.GetType());
+        }
+
+        // TODO: Filter non-exposed modules.
+
+        return compiledNewEnvInCompilerUnit;
+    }
+
+
+    public static Result<string, PineValue>
+        CompileInteractiveEnvironmentUnitEncodedInCompiler(
+        PineValue initialStateElmValueInCompiler,
+        TreeNodeWithStringPath sourceFiles,
+        IReadOnlySet<IReadOnlyList<string>>? entryPointsFilePaths,
+        ElmCompiler elmCompiler,
+        IPineVM pineVM)
+    {
+        PineValue compiledNewEnvInCompiler = initialStateElmValueInCompiler;
+
+        var modulesToCompile =
+            ElmInteractive.ModulesFilePathsAndTextsFromAppCodeTree(
+                sourceFiles,
+                skipLowering: true,
+                entryPointsFilePaths: entryPointsFilePaths,
+                skipFilteringForSourceDirs: true,
+                mergeKernelModules: false);
+
+        var modulesToCompileTexts =
+            modulesToCompile
+            .Where(sm => !ElmInteractive.ShouldIgnoreSourceFile(sm.filePath, sm.fileContent))
+            .Select(sm => sm.moduleText)
+            .ToImmutableArray();
+
+        var modulesTextsOrdered =
+            ElmSyntax.ElmModule.ModulesTextOrderedForCompilationByDependencies(
+                rootModulesTexts: modulesToCompileTexts,
+                availableModulesTexts: []);
+
+        var modulesToCompileOrdered =
+            modulesTextsOrdered
+            .Select(mt => modulesToCompile.First(c => c.moduleText == mt))
+            .ToImmutableArray();
+
+        foreach (var compilationIncrement in modulesToCompileOrdered)
+        {
+            var moduleName =
+                ElmSyntax.ElmModule.ParseModuleName(compilationIncrement.moduleText)
+                .Extract(err => throw new Exception("Failed parsing module name: " + err));
+
+            var parseResult =
+                CachedTryParseModuleText(
+                    compilationIncrement.moduleText,
+                    elmCompiler,
+                    pineVM);
+
+            if (parseResult.IsErrOrNull() is { } parseErr)
+            {
+                return
+                    "Failed parsing module " +
+                    string.Join(".", moduleName) + ": " + parseErr;
+            }
+
+            if (parseResult.IsOkOrNullable() is not { } parsedModule)
+            {
+                throw new NotImplementedException(
+                    "Unexpected parse result type: " + parseResult.GetType());
+            }
+
+            var parsedModuleNameFlat = string.Join(".", parsedModule.Key);
+
+            var compileModuleResult =
+                CompileOneElmModule(
+                    compiledNewEnvInCompiler,
+                    compilationIncrement.moduleText,
+                    parsedModule.Value,
+                    elmCompiler,
+                    pineVM: pineVM);
+
+            if (compileModuleResult.IsOkOrNull() is not { } compileModuleOk)
+            {
+                return
+                    "Compiling module " + parsedModuleNameFlat + " failed: " +
+                    compileModuleResult.Unpack(fromErr: err => err, fromOk: _ => "no err");
+            }
+
+            compiledNewEnvInCompiler = compileModuleOk;
+        }
+
+        return compiledNewEnvInCompiler;
+    }
+
     public static TreeNodeWithStringPath MergeDefaultElmCoreAndKernelModules(
         TreeNodeWithStringPath appCodeTree) =>
         MergeDefaultElmCoreAndKernelModules(
@@ -269,22 +577,6 @@ public class InteractiveSessionPine : IInteractiveSession
         TreeNodeWithStringPath appCodeTree,
         TreeNodeWithStringPath elmCoreAndKernelModuleFilesDefault)
     {
-        static IReadOnlyList<string>? moduleNameFromFileContent(ReadOnlySpan<byte> fileContent)
-        {
-            var blobChars = new char[fileContent.Length];
-
-            if (!System.Text.Encoding.UTF8.TryGetChars(fileContent, blobChars, out var charsWritten))
-                return [];
-
-            if (ElmSyntax.ElmModule.ParseModuleName(
-                new string(blobChars.AsSpan()[..charsWritten])).IsOkOrNull() is not { } moduleName)
-            {
-                return [];
-            }
-
-            return moduleName;
-        }
-
         var appCodeTreeModuleNames =
             appCodeTree.EnumerateBlobsTransitive()
             .SelectMany((blob) =>
@@ -294,7 +586,7 @@ public class InteractiveSessionPine : IInteractiveSession
                 if (!fileName.EndsWith(".elm", StringComparison.OrdinalIgnoreCase))
                     return (IEnumerable<IReadOnlyList<string>>)[];
 
-                if (moduleNameFromFileContent(blob.blobContent.Span) is not { } moduleName)
+                if (ModuleNameFromFileContent(blob.blobContent.Span) is not { } moduleName)
                 {
                     return [];
                 }
@@ -316,7 +608,7 @@ public class InteractiveSessionPine : IInteractiveSession
                     if (aggregate.GetNodeAtPath(nextBlob.path) is not null)
                         return aggregate;
 
-                    if (moduleNameFromFileContent(nextBlob.blobContent.Span) is { } moduleName)
+                    if (ModuleNameFromFileContent(nextBlob.blobContent.Span) is { } moduleName)
                     {
                         if (appCodeTreeModuleNames.Contains(moduleName))
                             return aggregate;
@@ -329,19 +621,41 @@ public class InteractiveSessionPine : IInteractiveSession
                 });
     }
 
+    static IReadOnlyList<string>? ModuleNameFromFileContent(ReadOnlySpan<byte> fileContent)
+    {
+        var blobChars = new char[fileContent.Length];
+
+        if (!System.Text.Encoding.UTF8.TryGetChars(fileContent, blobChars, out var charsWritten))
+            return null;
+
+        if (ElmSyntax.ElmModule.ParseModuleName(
+            new string(blobChars.AsSpan()[..charsWritten])).IsOkOrNull() is not { } moduleName)
+        {
+            return null;
+        }
+
+        return moduleName;
+    }
+
     public record ParsedModule(
         IReadOnlyList<string> FilePath,
         IReadOnlyList<string> ModuleName,
         string ModuleText);
 
-    public static IEnumerable<(TreeNodeWithStringPath tree, ParsedModule sourceModule)> AppSourceFileTreesForIncrementalCompilation(
+    public static IEnumerable<(TreeNodeWithStringPath tree, ParsedModule sourceModule)>
+        AppSourceFileTreesForIncrementalCompilation(
         TreeNodeWithStringPath appSourceFiles,
-        bool skipLowering)
+        bool skipLowering,
+        IReadOnlySet<IReadOnlyList<string>>? entryPointsFilePaths,
+        bool skipFilteringForSourceDirs)
     {
         var compileableSourceModules =
             ElmInteractive.ModulesFilePathsAndTextsFromAppCodeTree(
                 appSourceFiles,
-                skipLowering: skipLowering) ?? [];
+                skipLowering: skipLowering,
+                entryPointsFilePaths: entryPointsFilePaths,
+                skipFilteringForSourceDirs: skipFilteringForSourceDirs,
+                mergeKernelModules: false) ?? [];
 
         var baseTree =
             compileableSourceModules
@@ -720,8 +1034,9 @@ public class InteractiveSessionPine : IInteractiveSession
 
         var profilingSession = new InteractiveSessionPine(
             compilerSourceFiles: compileElmProgramCodeFiles,
-            appCodeTree: null,
+            appCodeTree: (AppCompilationUnits?)null,
             overrideSkipLowering: false,
+            entryPointsFilePaths: null,
             profilingVM.PineVM);
 
         foreach (var step in scenario.Steps)

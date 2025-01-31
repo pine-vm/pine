@@ -49,7 +49,13 @@ public static class ElmModule
                 moduleText =>
                 (moduleText,
                 parsedModule: new ParsedModule
-                (ModuleName: ParseModuleName(moduleText).Extract(err => throw new Exception("Failed parsing module name: " + err)),
+                (ModuleName: ParseModuleName(moduleText)
+                .Extract(err =>
+                throw new Exception(
+                    string.Concat(
+                        "Failed parsing module name: ", err,
+                        "\nmodule text (" + moduleText.Length.ToString() + "):\n:",
+                        moduleText.AsSpan(0, Math.Min(1000, moduleText.Length))))),
                 ImportedModulesNames:
                     ParseModuleImportedModulesNames(moduleText)
                     .ToImmutableHashSet(EnumerableExtension.EqualityComparer<IReadOnlyList<string>>())

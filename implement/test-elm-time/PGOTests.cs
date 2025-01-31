@@ -45,6 +45,7 @@ public class PGOTests
                 ElmCompiler.CompilerSourceFilesDefault.Value,
                 appCodeTree: appCodeTree,
                 overrideSkipLowering: true,
+                entryPointsFilePaths: null,
                 caching: true,
                 autoPGO: null);
 
@@ -431,6 +432,7 @@ public class PGOTests
                 ElmCompiler.CompilerSourceFilesDefault.Value,
                 appCodeTree: appCodeTree,
                 overrideSkipLowering: true,
+                entryPointsFilePaths: null,
                 caching: true,
                 autoPGO: null);
 
@@ -1054,6 +1056,7 @@ public class PGOTests
                 ElmCompiler.CompilerSourceFilesDefault.Value,
                 appCodeTree: appCodeTree,
                 overrideSkipLowering: true,
+                entryPointsFilePaths: null,
                 caching: true,
                 autoPGO: null);
 
@@ -1471,6 +1474,7 @@ public class PGOTests
                 ElmCompiler.CompilerSourceFilesDefault.Value,
                 appCodeTree: appCodeTree,
                 overrideSkipLowering: true,
+                entryPointsFilePaths: null,
                 caching: true,
                 autoPGO: null);
 

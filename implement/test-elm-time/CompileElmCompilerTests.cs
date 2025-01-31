@@ -33,8 +33,9 @@ public class CompileElmCompilerTests
         using var interactiveSession =
             new InteractiveSessionPine(
                 compilerProgram,
-                appCodeTree: null,
+                appCodeTree: (AppCompilationUnits?)null,
                 overrideSkipLowering: true,
+                entryPointsFilePaths: null,
                 caching: true,
                 autoPGO: pgoShare);
 
@@ -274,7 +275,8 @@ public class CompileElmCompilerTests
             new InteractiveSessionPine(
                 compilerProgram,
                 overrideSkipLowering: true,
-                appCodeTree: null,
+                appCodeTree: (AppCompilationUnits?)null,
+                entryPointsFilePaths: null,
                 caching: true,
                 autoPGO: pgoShare);
 
@@ -399,6 +401,7 @@ public class CompileElmCompilerTests
                 compilerSourceFiles: compilerProgram,
                 appCodeTree: compilerWithPackagesTree,
                 overrideSkipLowering: true,
+                entryPointsFilePaths: null,
                 caching: true,
                 autoPGO: null);
 
@@ -681,6 +684,7 @@ public class CompileElmCompilerTests
                     overrideSkipLowering: true,
                     compilerSourceFiles: compilerProgram,
                     appCodeTree: simpleElmModuleAppCodeTree,
+                    entryPointsFilePaths: null,
                     caching: true,
                     autoPGO: null);
 
@@ -874,10 +878,10 @@ public class CompileElmCompilerTests
         }
         */
 
-            /*
-             * Begin a dedicated training phase, compiling a small Elm module and then doing code-analysis
-             * and PGO for the entirety based on that simple scenario.
-             * */
+        /*
+         * Begin a dedicated training phase, compiling a small Elm module and then doing code-analysis
+         * and PGO for the entirety based on that simple scenario.
+         * */
 
         /*
 
@@ -1399,8 +1403,8 @@ public class CompileElmCompilerTests
                 actualEnvParsed.Modules.Single(m => m.moduleName == moduleName);
 
             foreach (var comparisonReport in CompareCompiledModules(expectedModule, actualModule))
-        {
-            yield return comparisonReport;
+            {
+                yield return comparisonReport;
             }
         }
 

@@ -763,7 +763,7 @@ type alias TerminateVolatileProcessStruct =
         ElmCompilerCache elmCompilerCache,
         PineVMParseCache parseCache)
     {
-        var asRecordResult = ElmValueEncoding.ParsePineValueAsRecord(pineValue);
+        var asRecordResult = ElmValueEncoding.ParsePineValueAsRecordTagged(pineValue);
 
         {
             if (asRecordResult.IsErrOrNull() is { } err)
@@ -1153,39 +1153,17 @@ type alias TerminateVolatileProcessStruct =
         TreeNodeWithStringPath sourceFiles,
         IReadOnlyList<string> entryFileName)
     {
-        if (sourceFiles.GetNodeAtPath(entryFileName) is not { } entryFileNode)
-        {
-            throw new Exception("Entry file not found: " + string.Join(".", entryFileName));
-        }
-
-        if (entryFileNode is not TreeNodeWithStringPath.BlobNode entryFileBlob)
-        {
-            throw new Exception("Entry file is not a blob: " + string.Join(".", entryFileName));
-        }
-
-        var entryFileText =
-            System.Text.Encoding.UTF8.GetString(entryFileBlob.Bytes.Span);
-
-        if (ElmModule.ParseModuleName(entryFileText).IsOkOrNull() is not { } moduleName)
-        {
-            throw new Exception("Failed to parse module name from entry file: " + string.Join(".", entryFileName));
-        }
-
-        var sourceFilesWithPackages =
-            PineValueComposition.SortedTreeFromSetOfBlobsWithStringPath(
-                ElmAppDependencyResolution.MergePackagesElmModules(
-                    PineValueComposition.TreeToFlatDictionaryWithPathComparer(sourceFiles)));
-
-        var sourceFilesFiltered =
-            ElmCompiler.FilterTreeForCompilationRoots(
-                sourceFilesWithPackages,
-                [entryFileName]);
+        var compilationUnitsPrepared =
+            ElmAppDependencyResolution.AppCompilationUnitsForEntryPoint(
+                sourceFiles,
+                entryFileName);
 
         using var interactiveSession =
             new InteractiveSessionPine(
                 ElmCompiler.CompilerSourceContainerFilesDefault.Value,
-                appCodeTree: sourceFilesFiltered,
+                appCodeTree: compilationUnitsPrepared.files,
                 overrideSkipLowering: true,
+                entryPointsFilePaths: null,
                 caching: true,
                 autoPGO: null);
 
@@ -1194,11 +1172,11 @@ type alias TerminateVolatileProcessStruct =
         var (declValue, _) =
             ElmInteractiveEnvironment.ParseFunctionFromElmModule(
                 compiledModulesValue,
-                moduleName: string.Join(".", moduleName),
+                moduleName: string.Join(".", compilationUnitsPrepared.entryModuleName),
                 declarationName: "webServiceMain",
                 parseCache)
             .Extract(err => throw new Exception(
-                $"Failed parsing webServiceMain declaration from module {string.Join(".", moduleName)}: {err}"));
+                $"Failed parsing webServiceMain declaration from module {string.Join(".", compilationUnitsPrepared.entryModuleName)}: {err}"));
 
         return ConfigFromDeclarationValue(declValue);
     }

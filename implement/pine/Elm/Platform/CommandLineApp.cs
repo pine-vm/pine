@@ -154,6 +154,8 @@ public record CommandLineAppConfig(
                 appCodeTree: sourceFiles,
                 // TODO: Migrate lowering implementation for portability.
                 overrideSkipLowering: true,
+                // TODO: Forward entry point.
+                entryPointsFilePaths: null,
                 caching: true,
                 autoPGO: null);
 

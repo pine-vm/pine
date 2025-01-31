@@ -150,7 +150,7 @@ public abstract record TreeNodeWithStringPath : IEquatable<TreeNodeWithStringPat
 
     public TreeNodeWithStringPath SetNodeAtPathSorted(IReadOnlyList<string> path, TreeNodeWithStringPath node)
     {
-        if (path.Count == 0)
+        if (path.Count is 0)
             return node;
 
         var pathFirstElement = path[0];
@@ -173,6 +173,13 @@ public abstract record TreeNodeWithStringPath : IEquatable<TreeNodeWithStringPat
 
         return SortedTree(treeEntries);
     }
+
+    public static TreeNodeWithStringPath MergeBlobs(
+        TreeNodeWithStringPath left,
+        TreeNodeWithStringPath right) =>
+        right.EnumerateBlobsTransitive()
+        .Aggregate(left, (acc, blob) => acc.SetNodeAtPathSorted(blob.path, Blob(blob.blobContent)));
+
 
     public static TreeNodeWithStringPath FilterNodesByPath(
         TreeNodeWithStringPath node,
