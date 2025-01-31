@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;
+using System.Linq;
 using System.Net.Http;
 using System.Threading.Tasks;
 
@@ -104,11 +105,12 @@ public class ElmPackageSource
     /// Given the raw bytes of a ZIP file, extract all files and return them as a dictionary
     /// from path segments to the file contents.
     /// </summary>
-    private static IReadOnlyDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> LoadElmPackageFromZipBytes(
+    public static IReadOnlyDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> LoadElmPackageFromZipBytes(
         byte[] zipBytes)
     {
-        var result = new Dictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>>(
-            EnumerableExtension.EqualityComparer<IReadOnlyList<string>>());
+        var result =
+            new Dictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>>(
+                EnumerableExtension.EqualityComparer<IReadOnlyList<string>>());
 
         using var memoryStream = new MemoryStream(zipBytes);
 
@@ -127,12 +129,53 @@ public class ElmPackageSource
             var fileContents = entryMemoryStream.ToArray();
 
             // Split the full name into segments
-            var pathSegments = entry.FullName.Split(new[] { '/' }, StringSplitOptions.RemoveEmptyEntries);
+            var pathSegments = entry.FullName.Split(['/'], StringSplitOptions.RemoveEmptyEntries);
 
             result[pathSegments] = fileContents;
         }
 
-        return result;
+        return UnpackElmPackageFilesDownloadedFromGitHub(result);
+    }
+
+    public static IReadOnlyDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> UnpackElmPackageFilesDownloadedFromGitHub(
+        IReadOnlyDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> rawDownload)
+    {
+        /*
+         * GitHub at least sometimes puts the repository files not at the
+         * root but into a directory with a name like 'core-1.0.5'
+         * */
+
+        if (!rawDownload.ContainsKey(["elm.json"]))
+        {
+            var directoryName =
+                rawDownload
+                .FirstOrDefault((filePath) => filePath.Key.Count is 2 && filePath.Key.Last() is "elm.json")
+                .Key?[0];
+
+            if (directoryName is not null)
+            {
+                var directoryFiles =
+                    new Dictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>>(
+                        EnumerableExtension.EqualityComparer<IReadOnlyList<string>>());
+
+                foreach (var (filePath, fileContent) in rawDownload)
+                {
+                    if (filePath.Count is 0)
+                    {
+                        continue;
+                    }
+
+                    if (filePath[0] == directoryName)
+                    {
+                        directoryFiles[[.. filePath.Skip(1)]] = fileContent;
+                    }
+                }
+
+                return directoryFiles;
+            }
+        }
+
+        return rawDownload;
     }
 
 
