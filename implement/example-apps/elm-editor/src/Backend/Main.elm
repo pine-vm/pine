@@ -64,9 +64,12 @@ subscriptions _ =
     }
 
 
-updateForHttpRequestEvent : Platform.WebService.HttpRequestEventStruct -> State -> ( State, Platform.WebService.Commands State )
-updateForHttpRequestEvent httpRequestEvent =
-    processEvent (HttpRequestEvent httpRequestEvent)
+updateForHttpRequestEvent :
+    Platform.WebService.HttpRequestEventStruct
+    -> State
+    -> ( State, Platform.WebService.Commands State )
+updateForHttpRequestEvent httpRequestEvent state =
+    processEvent (HttpRequestEvent httpRequestEvent) state
 
 
 processEvent : Event -> State -> ( State, Platform.WebService.Commands State )

@@ -1915,7 +1915,7 @@ prepareCompileForFileOpenedInEditor workspace =
                     , workingDirectoryPath = workingDirectoryPath
                     , entryPointFilePathFromWorkingDirectory = entryPointFilePath |> List.drop (List.length workingDirectoryPath)
                     , makeOptionDebug = workspace.enableInspectionOnCompile
-                    , outputType = CompileElmApp.ElmMakeOutputTypeHtml
+                    , outputType = FrontendBackendInterface.ElmMakeOutputTypeHtml
                     }
 
                 compile () =
@@ -2015,6 +2015,16 @@ continueLowering dependenciesFromCompletedIterations compilationOrigin =
             in
             case List.head errorsMissingDependencyElmMake of
                 Just missingDependencyElmMake ->
+                    let
+                        outputType : FrontendBackendInterface.ElmMakeOutputType
+                        outputType =
+                            case missingDependencyElmMake.outputType of
+                                CompileElmApp.ElmMakeOutputTypeHtml ->
+                                    FrontendBackendInterface.ElmMakeOutputTypeHtml
+
+                                CompileElmApp.ElmMakeOutputTypeJs ->
+                                    FrontendBackendInterface.ElmMakeOutputTypeJs
+                    in
                     LoweringContinue
                         { elmMakeRequest =
                             { files =
@@ -2024,7 +2034,7 @@ continueLowering dependenciesFromCompletedIterations compilationOrigin =
                             , workingDirectoryPath = []
                             , entryPointFilePathFromWorkingDirectory = missingDependencyElmMake.entryPointFilePath
                             , makeOptionDebug = missingDependencyElmMake.enableDebug
-                            , outputType = missingDependencyElmMake.outputType
+                            , outputType = outputType
                             }
                         , forDependencyElmMakeRequest = missingDependencyElmMake
                         }

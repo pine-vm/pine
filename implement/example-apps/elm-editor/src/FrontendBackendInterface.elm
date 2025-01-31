@@ -1,8 +1,12 @@
 module FrontendBackendInterface exposing (..)
 
 import Bytes
-import CompileElmApp
 import FileTree
+
+
+type ElmMakeOutputType
+    = ElmMakeOutputTypeHtml
+    | ElmMakeOutputTypeJs
 
 
 type RequestStructure
@@ -23,7 +27,7 @@ type alias ElmMakeRequestStructure =
     , workingDirectoryPath : List String
     , entryPointFilePathFromWorkingDirectory : List String
     , makeOptionDebug : Bool
-    , outputType : CompileElmApp.ElmMakeOutputType
+    , outputType : ElmMakeOutputType
     }
 
 
