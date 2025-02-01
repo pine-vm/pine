@@ -1,5 +1,7 @@
 module Json.Encode exposing (..)
 
+import Array
+
 
 type Value
     = NullValue
@@ -34,6 +36,11 @@ string =
 list : (item -> Value) -> List item -> Value
 list encodeItem items =
     ArrayValue (List.map encodeItem items)
+
+
+array : (a -> Value) -> Array.Array a -> Value
+array encodeItem items =
+    ArrayValue (List.map encodeItem (Array.toList items))
 
 
 object : List ( String, Value ) -> Value

@@ -36,6 +36,7 @@ module Json.Decode exposing
     , value
     )
 
+import Array
 import Json.Encode exposing (Value(..))
 
 
@@ -134,6 +135,21 @@ list decoder jsonValue =
             Err (temporaryStubErrorNotImplemented jsonValue)
 
 
+array : Decoder a -> Decoder (Array.Array a)
+array decoder jsonValue =
+    case jsonValue of
+        ArrayValue values ->
+            case decodeListRecursively [] decoder values of
+                Ok list ->
+                    Ok (Array.fromList list)
+
+                Err err ->
+                    Err err
+
+        _ ->
+            Err (temporaryStubErrorNotImplemented jsonValue)
+
+
 decodeListRecursively : List a -> Decoder a -> List Value -> Result Error (List a)
 decodeListRecursively result decoder values =
     case values of
@@ -177,6 +193,28 @@ float jsonValue =
 
         IntValue intVal ->
             Ok (toFloat intVal)
+
+        _ ->
+            Err (temporaryStubErrorNotImplemented jsonValue)
+
+
+index : Int -> Decoder a -> Decoder a
+index targetIndex decoder jsonValue =
+    case jsonValue of
+        ArrayValue values ->
+            case List.drop targetIndex values of
+                value :: _ ->
+                    decoder value
+
+                [] ->
+                    Err
+                        (Failure
+                            ("Expecting an array with at least "
+                                ++ String.fromInt (targetIndex + 1)
+                                ++ " entries"
+                            )
+                            jsonValue
+                        )
 
         _ ->
             Err (temporaryStubErrorNotImplemented jsonValue)
@@ -550,7 +588,7 @@ parseJsonStringToValue (String jsonChars) =
             case List.take 1 (List.drop afterWhitespaceOffset jsonChars) of
                 [ c ] ->
                     Err
-                        ("Unexpected character at end of JSON, at index "
+                        ("Unexpected character at end of JSON, at offset "
                             ++ String.fromInt afterWhitespaceOffset
                             ++ ": '"
                             ++ String.fromChar c
@@ -912,8 +950,8 @@ errorToString err =
         Field key subError ->
             "Field `" ++ key ++ "`: " ++ errorToString subError
 
-        Index index subError ->
-            "Index " ++ String.fromInt index ++ ": " ++ errorToString subError
+        Index offset subError ->
+            "Index " ++ String.fromInt offset ++ ": " ++ errorToString subError
 
         OneOf errors ->
             "One of the following errors occurred:\n\n"
@@ -923,7 +961,7 @@ errorToString err =
             message ++ "\n\n" ++ Json.Encode.encode 4 failValue
 
 
-{-| Parse a JSON string from a `List Char`, starting at a given `index`,
+{-| Parse a JSON string from a `List Char`, starting at a given `offset`,
 accumulating into `soFar`. Returns either:
 
   - `Ok (parsedString, newIndex)`
@@ -936,25 +974,25 @@ Example usage:
 
 -}
 parseJsonString : List Char -> Int -> List Char -> ( Result String (List Char), Int )
-parseJsonString source index soFar =
-    case List.take 1 (List.drop index source) of
+parseJsonString source offset soFar =
+    case List.take 1 (List.drop offset source) of
         [ c ] ->
             case c of
                 -- End of the JSON string if we encounter "
                 '"' ->
-                    ( Ok soFar, index + 1 )
+                    ( Ok soFar, offset + 1 )
 
                 -- Check for backslash escape
                 '\\' ->
-                    parseEscape source index soFar
+                    parseEscape source offset soFar
 
                 -- Otherwise, accumulate this character and keep going
                 _ ->
-                    parseJsonString source (index + 1) (List.concat [ soFar, [ c ] ])
+                    parseJsonString source (offset + 1) (List.concat [ soFar, [ c ] ])
 
         _ ->
             -- We ran out of characters before finding a closing quote
-            ( Err "Unexpected end of input while reading JSON string", index )
+            ( Err "Unexpected end of input while reading JSON string", offset )
 
 
 
@@ -962,57 +1000,57 @@ parseJsonString source index soFar =
 
 
 {-| Handle a backslash-escape character.
-We consume the `\` at position `index`, so we look at `(index + 1)` for the next char.
+We consume the `\` at position `offset`, so we look at `(offset + 1)` for the next char.
 -}
 parseEscape : List Char -> Int -> List Char -> ( Result String (List Char), Int )
-parseEscape source index soFar =
-    -- We already know source !! index == '\\'
-    case List.take 1 (List.drop (index + 1) source) of
+parseEscape source offset soFar =
+    -- We already know source !! offset == '\\'
+    case List.take 1 (List.drop (offset + 1) source) of
         [ e ] ->
             case e of
                 -- Standard JSON escapes
                 'n' ->
                     -- Append newline and continue
-                    parseJsonString source (index + 2) (soFar ++ [ '\n' ])
+                    parseJsonString source (offset + 2) (soFar ++ [ '\n' ])
 
                 'r' ->
-                    parseJsonString source (index + 2) (soFar ++ [ '\u{000D}' ])
+                    parseJsonString source (offset + 2) (soFar ++ [ '\u{000D}' ])
 
                 't' ->
-                    parseJsonString source (index + 2) (soFar ++ [ '\t' ])
+                    parseJsonString source (offset + 2) (soFar ++ [ '\t' ])
 
                 '"' ->
-                    parseJsonString source (index + 2) (soFar ++ [ '"' ])
+                    parseJsonString source (offset + 2) (soFar ++ [ '"' ])
 
                 '\\' ->
-                    parseJsonString source (index + 2) (soFar ++ [ '\\' ])
+                    parseJsonString source (offset + 2) (soFar ++ [ '\\' ])
 
                 '/' ->
-                    parseJsonString source (index + 2) (soFar ++ [ '/' ])
+                    parseJsonString source (offset + 2) (soFar ++ [ '/' ])
 
                 'b' ->
                     -- Typically backspace is ASCII 8, but some folks map it differently.
                     -- For now, let's do ASCII 8 (BS).
-                    parseJsonString source (index + 2) (soFar ++ [ Char.fromCode 8 ])
+                    parseJsonString source (offset + 2) (soFar ++ [ Char.fromCode 8 ])
 
                 'f' ->
                     -- Typically form feed is ASCII 12.
-                    parseJsonString source (index + 2) (soFar ++ [ Char.fromCode 12 ])
+                    parseJsonString source (offset + 2) (soFar ++ [ Char.fromCode 12 ])
 
                 'u' ->
                     -- JSON allows \uXXXX (4 hex digits)
-                    parseUnicodeEscape source (index + 2) soFar
+                    parseUnicodeEscape source (offset + 2) soFar
 
                 -- Unrecognized escape
                 _ ->
                     ( Err ("Unrecognized escape sequence: \\" ++ String.fromChar e)
-                    , index + 2
+                    , offset + 2
                     )
 
         _ ->
             -- No character after the backslash
             ( Err "Unexpected end of input after backslash in string escape"
-            , index + 1
+            , offset + 1
             )
 
 
@@ -1022,12 +1060,12 @@ as a low surrogate in [0xDC00..0xDFFF]. If both are found, combine them into
 a single codepoint (e.g. "\\uD83C\\uDF32" --> 🌲).
 -}
 parseUnicodeEscape : List Char -> Int -> List Char -> ( Result String (List Char), Int )
-parseUnicodeEscape source index soFar =
+parseUnicodeEscape source offset soFar =
     let
         -- First, parse the 4 hex digits after the "\u"
         fourHexChars : List Char
         fourHexChars =
-            List.take 4 (List.drop index source)
+            List.take 4 (List.drop offset source)
 
         ( codeUnit, offsetAfterHex ) =
             convert1OrMoreHexadecimal 0 fourHexChars
@@ -1035,15 +1073,11 @@ parseUnicodeEscape source index soFar =
         hi : Int
         hi =
             codeUnit
-
-        offset : Int
-        offset =
-            offsetAfterHex
     in
-    if offset /= 4 then
+    if offsetAfterHex /= 4 then
         -- We did not get 4 valid hex digits
         ( Err "Unexpected end of input in \\u escape (need 4 hex digits)"
-        , index + 6
+        , offset + 6
         )
 
     else
@@ -1052,13 +1086,13 @@ parseUnicodeEscape source index soFar =
         0xD800 <= hi && hi <= 0xDBFF
     then
         -- Possibly part of a surrogate pair; check the next 2 chars for "\u"
-        case List.take 2 (List.drop (index + 4) source) of
+        case List.take 2 (List.drop (offset + 4) source) of
             [ '\\', 'u' ] ->
                 -- Parse the next 4 hex digits (the low surrogate)
                 let
                     fourHexChars2 : List Char
                     fourHexChars2 =
-                        List.take 4 (List.drop (index + 4 + 2) source)
+                        List.take 4 (List.drop (offset + 4 + 2) source)
 
                     ( codeUnit2, offsetAfterHex2 ) =
                         convert1OrMoreHexadecimal 0 fourHexChars2
@@ -1074,7 +1108,7 @@ parseUnicodeEscape source index soFar =
                 if offset2 /= 4 then
                     -- The next \u did not have 4 valid hex digits
                     ( Err "Unexpected end of input in second \\u of a surrogate pair"
-                    , index + 4 + 2 + 6
+                    , offset + 4 + 2 + 6
                     )
 
                 else if 0xDC00 <= lo && lo <= 0xDFFF then
@@ -1088,7 +1122,7 @@ parseUnicodeEscape source index soFar =
                     parseJsonString
                         source
                         -- We used 4 hex digits + 2 extra chars "\u" + 4 more digits
-                        (index + 4 + 2 + 4)
+                        (offset + 4 + 2 + 4)
                         (soFar ++ [ Char.fromCode fullCodePoint ])
 
                 else
@@ -1098,21 +1132,21 @@ parseUnicodeEscape source index soFar =
                     -- This example will just treat the high code as a normal char:
                     parseJsonString
                         source
-                        (index + 4)
+                        (offset + 4)
                         (soFar ++ [ Char.fromCode hi ])
 
             _ ->
                 -- No second "\u"—so decode `hi` as-is.
                 parseJsonString
                     source
-                    (index + 4)
+                    (offset + 4)
                     (soFar ++ [ Char.fromCode hi ])
 
     else
         -- Not a high surrogate, just parse `\uXXXX` as a single character
         parseJsonString
             source
-            (index + 4)
+            (offset + 4)
             (soFar ++ [ Char.fromCode hi ])
 
 
@@ -1362,19 +1396,19 @@ convert0OrMoreHexadecimal soFar offset src =
 
 
 skipWhitespace : List Char -> Int -> Int
-skipWhitespace str index =
-    case List.take 1 (List.drop index str) of
+skipWhitespace str offset =
+    case List.take 1 (List.drop offset str) of
         [ ' ' ] ->
-            skipWhitespace str (index + 1)
+            skipWhitespace str (offset + 1)
 
         [ '\t' ] ->
-            skipWhitespace str (index + 1)
+            skipWhitespace str (offset + 1)
 
         [ '\n' ] ->
-            skipWhitespace str (index + 1)
+            skipWhitespace str (offset + 1)
 
         [ '\u{000D}' ] ->
-            skipWhitespace str (index + 1)
+            skipWhitespace str (offset + 1)
 
         _ ->
-            index
+            offset
