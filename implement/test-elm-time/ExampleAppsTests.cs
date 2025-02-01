@@ -4,6 +4,7 @@ using Pine.Elm.Platform;
 using System;
 using System.Linq;
 using System.Net;
+using System.Threading.Tasks;
 
 namespace TestElmTime;
 
@@ -111,10 +112,39 @@ public class ExampleAppsTests
             "response content as string");
     }
 
-
     [TestMethod]
-    public void Example_app_Elm_editor_webservice_sandbox()
+    public async Task Example_app_Elm_editor_webservice_sandbox()
     {
+        var elmModuleTextBeforeFormatting =
+            """"
+            module Common exposing (..)
+
+            a =
+                let
+                    b =
+                        1
+                    c =
+                        2
+                in
+                b   +      c
+            """";
+
+        var expectedElmModuleTextAfterFormatting =
+            """"
+            module Common exposing (..)
+
+
+            a =
+                let
+                    b =
+                        1
+
+                    c =
+                        2
+                in
+                b + c
+            """";
+
         var webAppSource =
             ExampleAppValueFromExampleName("elm-editor");
 
@@ -130,7 +160,12 @@ public class ExampleAppsTests
         var webServiceApp =
             new MutatingWebServiceApp(webServiceConfig);
 
-        var eventResponse =
+        await using var volatileProcessHost =
+            new VolatileProcessHost([webAppSource]);
+
+        // Send a request for warmup.
+
+        var formatRequestEventResponse =
             webServiceApp.EventHttpRequest(
                 new WebServiceInterface.HttpRequestEventStruct
                 (
@@ -142,28 +177,120 @@ public class ExampleAppsTests
                     ),
                     Request: new WebServiceInterface.HttpRequestProperties
                     (
-                        Method: "GET",
-                        Uri: "/",
+                        Method: "POST",
+                        Uri: "http://demohost/api",
                         BodyAsBase64: null,
                         Headers: []
                     )
                 ));
 
+        for (var i = 0; i < 10; i++)
+        {
+            await Task.Delay(TimeSpan.FromSeconds(1));
+
+            await volatileProcessHost.ExchangeAsync(webServiceApp);
+        }
+
+        var formatHttpRequestId = "123";
+
+        var formatRequest =
+            new ElmEditorApi.ElmEditorApiRequestStructure(
+                FormatElmModuleTextRequest: [elmModuleTextBeforeFormatting]);
+
+        webServiceApp.EventHttpRequest(
+            new WebServiceInterface.HttpRequestEventStruct
+            (
+                HttpRequestId: formatHttpRequestId,
+                PosixTimeMilli: 0,
+                RequestContext: new WebServiceInterface.HttpRequestContext
+                (
+                    ClientAddress: null
+                ),
+                Request: new WebServiceInterface.HttpRequestProperties
+                (
+                    Method: "POST",
+                    Uri: "http://demohost/api",
+                    BodyAsBase64:
+                    Convert.ToBase64String(
+                        System.Text.Encoding.UTF8.GetBytes(
+                            System.Text.Json.JsonSerializer.Serialize(formatRequest))),
+                    Headers: []
+                )
+            ));
+
+        for (var i = 0; i < 10; i++)
+        {
+            await Task.Delay(TimeSpan.FromSeconds(1));
+
+            await volatileProcessHost.ExchangeAsync(webServiceApp);
+        }
+
         var allCommands =
-            webServiceApp.DequeueCommands();
+            volatileProcessHost.DequeueCommands();
 
-        var commandCreateVolatileProcess =
+        var httpResponseCommands =
             allCommands
-            .OfType<WebServiceInterface.Command.CreateVolatileProcess>()
-            .FirstOrDefault();
+            .OfType<WebServiceInterface.Command.RespondToHttpRequest>()
+            .ToList();
 
-        if (commandCreateVolatileProcess is null)
+        var formatResponseCommand =
+            httpResponseCommands
+            .FirstOrDefault(cmd => cmd.Respond.HttpRequestId == formatHttpRequestId);
+
+        if (formatResponseCommand is null)
         {
             throw new Exception(
-                "Did not find expected command to create a volatile process among " +
+                "Did not find expected response to format request among " +
+                httpResponseCommands.Count + " HTTP response commands and " +
                 allCommands.Count + " commands.");
         }
+
+        var formatHttpResponseBodyBase64 =
+            formatResponseCommand.Respond.Response.BodyAsBase64;
+
+        if (formatHttpResponseBodyBase64 is null)
+        {
+            throw new Exception("Expected a response body.");
+        }
+
+        var formatHttpResponseBody =
+            Convert.FromBase64String(formatHttpResponseBodyBase64);
+
+        var formatResponseContentAsString =
+            System.Text.Encoding.UTF8.GetString(formatHttpResponseBody);
+
+        Assert.AreEqual(
+            200,
+            formatResponseCommand.Respond.Response.StatusCode,
+            "Response status code should be OK.\nresponseContentAsString:\n" + formatResponseContentAsString);
+
+        var formatResponseStructure =
+            System.Text.Json.JsonSerializer.Deserialize
+            <ElmEditorApi.ElmEditorApiResponseStructure>(
+                formatResponseContentAsString)!;
+
+        Assert.IsNull(
+            formatResponseStructure.ErrorResponse,
+            "formatResponseStructure.ErrorResponse should be null.\n" + formatResponseStructure.ErrorResponse);
+
+        var formattedText =
+            formatResponseStructure
+            ?.FormatElmModuleTextResponse
+            ?.FirstOrDefault()
+            ?.formattedText
+            .WithDefault(null);
+
+        Assert.IsNotNull(
+            formattedText,
+            "formatResponseStructure.FormatElmModuleTextResponse should contain a formatted text.");
+
+        Assert.AreEqual(
+            NormalizeStringTestingElmFormat(expectedElmModuleTextAfterFormatting),
+            NormalizeStringTestingElmFormat(formattedText));
     }
+
+    private static string NormalizeStringTestingElmFormat(string originalString) =>
+        originalString.Trim().Replace("\n\r", "\n").Replace("\r\n", "\n");
 
     [TestMethod]
     public void Example_app_demo_backend_state()

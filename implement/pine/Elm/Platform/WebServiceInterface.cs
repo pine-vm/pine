@@ -1,5 +1,5 @@
+using ElmTime;
 using ElmTime.ElmInteractive;
-using ElmTime.ElmSyntax;
 using Pine.Core;
 using Pine.Core.PineVM;
 using Pine.ElmInteractive;
@@ -188,12 +188,33 @@ type alias TerminateVolatileProcessStruct =
 
             var inputEncoded = EncodeHttpRequest(httpRequest);
 
+            return
+                ApplyUpdate(functionRecord, [inputEncoded], stateBefore, pineVM);
+        }
+
+        public static WebServiceEventResponse
+            ApplyUpdate(
+            ElmInteractiveEnvironment.FunctionRecord functionRecord,
+            IReadOnlyList<PineValue> argumentsBeforeState,
+            PineValue stateBefore,
+            IPineVM pineVM)
+        {
+            var expectedParameterCount =
+                argumentsBeforeState.Count + 1;
+
+            if (functionRecord.functionParameterCount != expectedParameterCount)
+            {
+                throw new Exception(
+                    "Expected function to have " + expectedParameterCount +
+                    " parameters but got: " + functionRecord.functionParameterCount);
+            }
+
             var responseValue =
                 ElmInteractiveEnvironment.ApplyFunction(
                     pineVM,
                     functionRecord,
-                    [inputEncoded, stateBefore])
-                .Extract(err => throw new Exception("Failed applying function httpRequest: " + err));
+                    [.. argumentsBeforeState, stateBefore])
+                .Extract(err => throw new Exception("Failed applying function: " + err));
 
             var parseResponseResult =
                 ParseWebServiceEventResponse(responseValue, elmCompilerCache, parseCache);
@@ -349,7 +370,120 @@ type alias TerminateVolatileProcessStruct =
                 ("name", new ElmValue.ElmString(header.Name)),
                 ("values", new ElmValue.ElmList(header.Values.Select(value => new ElmValue.ElmString(value)).ToArray()))
                 ]);
+
         return asElmValue;
+    }
+
+    public static PineValue EncodeCreateVolatileProcessResult(
+        Result<CreateVolatileProcessErrorStruct, CreateVolatileProcessComplete> result)
+    {
+        return
+            EncodeResult(
+                result,
+                encodeErr: EncodeCreateVolatileProcessErrorStruct,
+                encodeOk: EncodeCreateVolatileProcessComplete);
+    }
+
+    public static PineValue EncodeResult<ErrT, OkT>(
+        Result<ErrT, OkT> result,
+        Func<ErrT, PineValue> encodeErr,
+        Func<OkT, PineValue> encodeOk)
+    {
+        (string tagName, PineValue tagArg) DeconstructResult(
+            Result<ErrT, OkT> result)
+        {
+            return result switch
+            {
+                Result<ErrT, OkT>.Err err =>
+                    ("Err", encodeErr(err.Value)),
+
+                Result<ErrT, OkT>.Ok ok =>
+                    ("Ok", encodeOk(ok.Value)),
+
+                _ =>
+                throw new NotImplementedException("Unexpected result type: " + result)
+            };
+        }
+
+        var (tagString, argValue) = DeconstructResult(result);
+
+        return
+            PineValue.List(
+                [
+                PineValueAsString.ValueFromString(tagString),
+                PineValue.List(
+                    [
+                    argValue
+                    ])
+                ]);
+    }
+
+    public static PineValue EncodeCreateVolatileProcessErrorStruct(
+        CreateVolatileProcessErrorStruct error)
+    {
+        var asElmValue =
+            new ElmValue.ElmRecord(
+                [
+                ("exceptionToString", new ElmValue.ElmString(error.ExceptionToString))
+                ]);
+
+        return ElmValueEncoding.ElmValueAsPineValue(asElmValue);
+    }
+
+    public static PineValue EncodeCreateVolatileProcessComplete(
+        CreateVolatileProcessComplete complete)
+    {
+        var asElmValue =
+            new ElmValue.ElmRecord(
+                [
+                ("processId", new ElmValue.ElmString(complete.ProcessId))
+                ]);
+
+        return ElmValueEncoding.ElmValueAsPineValue(asElmValue);
+    }
+
+    public static PineValue EncodeRequestToVolatileProcessResult(
+        Result<RequestToVolatileProcessError, RequestToVolatileProcessComplete> result)
+    {
+        return
+            EncodeResult(
+                result,
+                encodeErr: EncodeRequestToVolatileProcessError,
+                encodeOk: EncodeRequestToVolatileProcessComplete);
+    }
+
+    public static PineValue EncodeRequestToVolatileProcessError(
+        RequestToVolatileProcessError error)
+    {
+        return error switch
+        {
+            RequestToVolatileProcessError.ProcessNotFound =>
+                PineValueAsString.ValueFromString("ProcessNotFound"),
+
+            _ =>
+            throw new NotImplementedException(
+                "Unexpected error type: " + error)
+        };
+    }
+
+    public static PineValue EncodeRequestToVolatileProcessComplete(
+        RequestToVolatileProcessComplete complete)
+    {
+        var asElmValue =
+            new ElmValue.ElmRecord(
+                [
+                ("exceptionToString", complete.ExceptionToString is null
+                    ? ElmValue.TagInstance("Nothing", [])
+                    : ElmValue.TagInstance("Just", [new ElmValue.ElmString(complete.ExceptionToString)])),
+
+                ("returnValueToString", complete.ReturnValueToString is null
+                    ? ElmValue.TagInstance("Nothing", [])
+                    : ElmValue.TagInstance("Just", [new ElmValue.ElmString(complete.ReturnValueToString)])),
+
+                ("durationInMilliseconds", new ElmValue.ElmInteger(complete.DurationInMilliseconds))
+                ]);
+
+        return ElmValueEncoding.ElmValueAsPineValue(asElmValue);
     }
 
     public static Result<string, WebServiceEventResponse> ParseWebServiceConfigInit(
@@ -843,7 +977,7 @@ type alias TerminateVolatileProcessStruct =
         ElmCompilerCache elmCompilerCache,
         PineVMParseCache parseCache)
     {
-        var asRecordResult = ElmValueEncoding.ParsePineValueAsRecord(pineValue);
+        var asRecordResult = ElmValueEncoding.ParsePineValueAsRecordTagged(pineValue);
 
         {
             if (asRecordResult.IsErrOrNull() is { } err)
@@ -1153,21 +1287,45 @@ type alias TerminateVolatileProcessStruct =
         TreeNodeWithStringPath sourceFiles,
         IReadOnlyList<string> entryFileName)
     {
+        var loweringResult =
+            ElmAppCompilation.AsCompletelyLoweredElmApp(
+                PineValueComposition.TreeToFlatDictionaryWithPathComparer(sourceFiles),
+                workingDirectoryRelative: [],
+                ElmAppInterfaceConfig.Default);
+
+        if (loweringResult.IsErrOrNull() is { } loweringErr)
+        {
+            throw new Exception("Failed lowering: " + loweringErr);
+        }
+
+        if (loweringResult.IsOkOrNull() is not { } loweringOk)
+        {
+            throw new Exception("Unexpected result type: " + loweringResult);
+        }
+
+        var loweredTree =
+            PineValueComposition.SortedTreeFromSetOfBlobsWithStringPath(loweringOk.result.compiledFiles);
+
         var compilationUnitsPrepared =
             ElmAppDependencyResolution.AppCompilationUnitsForEntryPoint(
-                sourceFiles,
+                loweredTree,
                 entryFileName);
 
-        using var interactiveSession =
-            new InteractiveSessionPine(
-                ElmCompiler.CompilerSourceContainerFilesDefault.Value,
-                appCodeTree: compilationUnitsPrepared.files,
-                overrideSkipLowering: true,
-                entryPointsFilePaths: null,
-                caching: true,
-                autoPGO: null);
+        PineValue build()
+        {
+            using var interactiveSession =
+                new InteractiveSessionPine(
+                    ElmCompiler.CompilerSourceContainerFilesDefault.Value,
+                    appCodeTree: compilationUnitsPrepared.files,
+                    overrideSkipLowering: true,
+                    entryPointsFilePaths: null,
+                    caching: true,
+                    autoPGO: null);
 
-        var compiledModulesValue = interactiveSession.CurrentEnvironmentValue();
+            return interactiveSession.CurrentEnvironmentValue();
+        }
+
+        var compiledModulesValue = build();
 
         var (declValue, _) =
             ElmInteractiveEnvironment.ParseFunctionFromElmModule(

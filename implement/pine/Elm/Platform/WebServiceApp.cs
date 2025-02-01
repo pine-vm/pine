@@ -1,6 +1,6 @@
+using ElmTime.ElmInteractive;
 using Pine.Core;
 using Pine.PineVM;
-using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 
@@ -56,6 +56,23 @@ public class MutatingWebServiceApp
         return eventResponse;
     }
 
+    public WebServiceInterface.WebServiceEventResponse ApplyUpdate(
+        ElmInteractiveEnvironment.FunctionRecord updateFunction,
+        IReadOnlyList<PineValue> updateArgsBeforeState)
+    {
+        var eventResponse =
+            WebServiceInterface.WebServiceConfig.ApplyUpdate(
+                updateFunction,
+                updateArgsBeforeState,
+                appState,
+                pineVM);
+
+        appState = eventResponse.State;
+
+        MutateConsolidatingAppResponse(eventResponse);
+
+        return eventResponse;
+    }
 
     private void MutateConsolidatingAppResponse(WebServiceInterface.WebServiceEventResponse eventResponse)
     {
