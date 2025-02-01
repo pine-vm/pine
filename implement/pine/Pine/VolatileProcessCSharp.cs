@@ -15,7 +15,7 @@ namespace Pine;
 
 public class VolatileProcessCSharp : VolatileProcess
 {
-    private readonly object @lock = new();
+    private readonly System.Threading.Lock @lock = new();
 
     private readonly object? scriptGlobals;
 
@@ -183,7 +183,7 @@ public class VolatileProcessCSharp : VolatileProcess
         Func<byte[], byte[]?> getFileFromHashSHA256)
         : MetadataReferenceResolver
     {
-        private readonly object @lock = new();
+        private readonly System.Threading.Lock @lock = new();
 
         private readonly SyntaxTree csharpScriptCodeSyntaxTree = CSharpSyntaxTree.ParseText(csharpScriptCode);
 

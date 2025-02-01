@@ -52,7 +52,7 @@ public class RateLimitMutableContainer(
     IRateLimit rateLimitState)
     : IMutableRateLimit
 {
-    private readonly object @lock = new();
+    private readonly System.Threading.Lock @lock = new();
 
     public bool AttemptPass(long time)
     {

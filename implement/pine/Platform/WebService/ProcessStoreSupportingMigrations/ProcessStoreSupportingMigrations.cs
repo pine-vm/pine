@@ -469,7 +469,7 @@ public class ProcessStoreWriterInFileStore : ProcessStoreInFileStore, IProcessSt
 
     private readonly Func<DateTimeOffset> getTimeForCompositionLogBatch;
 
-    private readonly object appendLock = new();
+    private readonly System.Threading.Lock appendLock = new();
 
     private (string hashBase16, IImmutableList<string> filePath)? lastCompositionRecord;
 

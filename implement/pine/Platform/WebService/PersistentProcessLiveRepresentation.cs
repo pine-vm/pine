@@ -34,7 +34,7 @@ public record struct ProcessAppConfig(
 
 public class PersistentProcessLiveRepresentation : IPersistentProcess, IDisposable
 {
-    private readonly object processLock = new();
+    private readonly System.Threading.Lock processLock = new();
 
     private string lastCompositionLogRecordHashBase16;
 

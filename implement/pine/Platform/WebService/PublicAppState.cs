@@ -34,7 +34,7 @@ public class PublicAppState
 
     private readonly System.Threading.Timer notifyTimeHasArrivedTimer;
 
-    private readonly object nextTimeToNotifyLock = new();
+    private readonly System.Threading.Lock nextTimeToNotifyLock = new();
 
     private DateTimeOffset? lastAppEventTimeHasArrived = null;
     private InterfaceToHost.NotifyWhenPosixTimeHasArrivedRequestStruct? nextTimeToNotify = null;
