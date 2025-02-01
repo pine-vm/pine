@@ -92,8 +92,10 @@ updatePartRequestsToVolatileProcess stateBefore =
                 [ Platform.WebService.CreateVolatileProcess
                     { programCode = VolatileProcess.volatileProcessProgramCode
                     , update =
-                        \createVolatileProcessResult ->
-                            processEvent (CreateVolatileProcessResponse createVolatileProcessResult)
+                        \createVolatileProcessResult state ->
+                            processEvent
+                                (CreateVolatileProcessResponse createVolatileProcessResult)
+                                state
                     }
                 ]
 
@@ -148,9 +150,10 @@ updatePartRequestsToVolatileProcess stateBefore =
                                         |> Maybe.andThen Common.decodeBase64ToString
                                         |> Maybe.withDefault "Error decoding base64"
                                 , update =
-                                    \requestToVolatileProcessResponse ->
+                                    \requestToVolatileProcessResponse state ->
                                         processEvent
                                             (RequestToVolatileProcessResponse taskId requestToVolatileProcessResponse)
+                                            state
                                 }
 
                         pendingTasksForRequestVolatileProcess =
@@ -233,11 +236,16 @@ updateForHttpRequestEventExceptRequestsToVolatileProcess httpRequestEvent stateB
               ]
             )
     in
-    case httpRequestEvent.request.uri |> Url.fromString of
+    case Url.fromString httpRequestEvent.request.uri of
         Nothing ->
             continueWithStaticHttpResponse
                 { statusCode = 500
-                , bodyAsBase64 = bodyFromString "Failed to parse URL"
+                , bodyAsBase64 =
+                    bodyFromString
+                        ("Failed to parse URL ("
+                            ++ httpRequestEvent.request.uri
+                            ++ ")"
+                        )
                 , headersToAdd = []
                 }
 
@@ -277,19 +285,14 @@ updateForHttpRequestEventExceptRequestsToVolatileProcess httpRequestEvent stateB
                         Just (Backend.Route.StaticFileRoute (Backend.Route.FrontendElmJavascriptRoute { debug })) ->
                             httpResponseOkWithBodyAsBase64
                                 (Just
-                                    (if debug then
-                                        CompilationInterface.ElmMake.elm_make____src_Frontend_Main_elm.debug.javascript.base64
-
-                                     else
-                                        CompilationInterface.ElmMake.elm_make____src_Frontend_Main_elm.javascript.base64
-                                    )
+                                    CompilationInterface.ElmMake.elm_make____src_Frontend_Main_elm.javascript.base64
                                 )
                                 (staticContentHttpHeaders { contentType = "text/javascript", contentEncoding = Nothing })
                                 |> continueWithStaticHttpResponse
 
                         Just (Backend.Route.StaticFileRoute Backend.Route.FrontendLanguageServiceWorkerJavaScriptRoute) ->
                             httpResponseOkWithBodyAsBase64
-                                (Just languageServiceWorkerJavaScriptBase64)
+                                (Just (languageServiceWorkerJavaScriptBase64 ()))
                                 (staticContentHttpHeaders { contentType = "text/javascript", contentEncoding = Nothing })
                                 |> continueWithStaticHttpResponse
 
@@ -301,10 +304,14 @@ updateForHttpRequestEventExceptRequestsToVolatileProcess httpRequestEvent stateB
                             )
 
 
-languageServiceWorkerJavaScript : String
-languageServiceWorkerJavaScript =
-    CompilationInterface.ElmMake.elm_make____src_LanguageServiceWorker_elm.javascript.utf8
-        ++ """
+languageServiceWorkerJavaScript : () -> String
+languageServiceWorkerJavaScript () =
+    case Base64.toString CompilationInterface.ElmMake.elm_make____src_LanguageServiceWorker_elm.javascript.base64 of
+        Nothing ->
+            "Failed decoding base64"
+
+        Just workerJavaScript ->
+            workerJavaScript ++ """
 const app = Elm.LanguageServiceWorker.init();
 
 onmessage = function ({ data }) {
@@ -319,10 +326,14 @@ app.ports.sendResponse.subscribe(function(response) {
 """
 
 
-languageServiceWorkerJavaScriptBase64 : String
-languageServiceWorkerJavaScriptBase64 =
-    Maybe.withDefault "Failed encoding as base64"
-        (Base64.fromString languageServiceWorkerJavaScript)
+languageServiceWorkerJavaScriptBase64 : () -> String
+languageServiceWorkerJavaScriptBase64 () =
+    case Base64.fromString (languageServiceWorkerJavaScript ()) of
+        Nothing ->
+            "Failed encoding as base64"
+
+        Just base64 ->
+            base64
 
 
 updateForRequestToVolatileProcessResult :
