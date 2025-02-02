@@ -79,7 +79,7 @@ type alias ElmMakeEntryPointStruct =
 
 
 type alias AppFiles =
-    Dict.Dict (List String) Bytes.Bytes
+    List ( List String, Bytes.Bytes )
 
 
 type CompilationError
@@ -201,7 +201,7 @@ type alias SourceParsedElmModule =
 
 
 type alias EntryPointClass =
-    SourceParsedElmModule -> Result { supportedDeclarationNames : Set.Set String } ProcessEntryPoint
+    SourceParsedElmModule -> Result { supportedDeclarationNames : List String } ProcessEntryPoint
 
 
 type alias ProcessEntryPoint =
@@ -221,10 +221,14 @@ type alias CompileEntryPointConfig =
     }
 
 
+type Range
+    = Range ( Int, Int ) ( Int, Int )
+
+
 defaultEntryPoints : List EntryPointClass
 defaultEntryPoints =
     [ entryPointClassFromSetOfEquallyProcessedFunctionNames
-        (Set.singleton "blobMain")
+        [ "blobMain" ]
         (\_ entryPointConfig ->
             loweredForBlobEntryPoint entryPointConfig
                 >> Result.map
@@ -235,7 +239,7 @@ defaultEntryPoints =
                     )
         )
     , entryPointClassFromSetOfEquallyProcessedFunctionNames
-        (Set.singleton "main")
+        [ "main" ]
         (\_ entryPointConfig compiledFiles ->
             Ok
                 { compiledFiles = compiledFiles
@@ -256,7 +260,7 @@ defaultEntryPoints =
 
 
 entryPointClassFromSetOfEquallyProcessedFunctionNames :
-    Set.Set String
+    List String
     -> (Elm.Syntax.Expression.Function -> ProcessEntryPoint)
     -> EntryPointClass
 entryPointClassFromSetOfEquallyProcessedFunctionNames supportedDeclarationNames processEntryPoint sourceModule =
@@ -281,16 +285,16 @@ entryPointClassFromSetOfEquallyProcessedFunctionNames supportedDeclarationNames 
 
 
 entryPointClassFromSetOfEquallyProcessedNames :
-    Set.Set String
+    List String
     -> (Elm.Syntax.Declaration.Declaration -> ProcessEntryPoint)
     -> EntryPointClass
 entryPointClassFromSetOfEquallyProcessedNames supportedDeclarationNames processEntryPoint sourceModule =
     let
+        declarationsNames : List ( String, Elm.Syntax.Declaration.Declaration )
         declarationsNames =
             sourceModule.parsedSyntax.declarations
-                |> List.map Elm.Syntax.Node.value
                 |> List.filterMap
-                    (\declaration ->
+                    (\(Elm.Syntax.Node.Node _ declaration) ->
                         case declaration of
                             Elm.Syntax.Declaration.FunctionDeclaration functionDeclaration ->
                                 Just
@@ -304,8 +308,10 @@ entryPointClassFromSetOfEquallyProcessedNames supportedDeclarationNames processE
     in
     case
         declarationsNames
-            |> List.filter (Tuple.first >> Set.member >> (|>) supportedDeclarationNames)
-            |> List.head
+            |> Common.listFind
+                (\( name, _ ) ->
+                    List.member name supportedDeclarationNames
+                )
     of
         Nothing ->
             Err { supportedDeclarationNames = supportedDeclarationNames }
@@ -334,64 +340,63 @@ asCompletelyLoweredElmApp entryPointClasses arguments =
 
         Ok sourceDirs ->
             let
+                sourceModules : List ( List String, SourceParsedElmModule )
                 sourceModules =
                     arguments.sourceFiles
                         |> elmModulesDictFromAppFiles
-                        |> Dict.toList
                         |> List.filterMap
                             (\( filePath, moduleResult ) ->
                                 moduleResult
                                     |> Result.toMaybe
                                     |> Maybe.map (Tuple.pair filePath)
                             )
-                        |> Dict.fromList
 
-                compilationInterfaceModuleDependencies : Dict.Dict String (List String)
-                compilationInterfaceModuleDependencies =
-                    [ ( "SourceFiles", modulesToAddForBytesCoding )
-                    , ( "ElmMake", modulesToAddForBytesCoding )
-                    , ( "GenerateJsonConverters", modulesToAddForBase64Coding )
-                    ]
-                        |> Dict.fromList
+                sourceModulesDict : Dict.Dict (List String) SourceParsedElmModule
+                sourceModulesDict =
+                    Dict.fromList sourceModules
 
-                usedCompilationInterfaceModules : Set.Set String
+                usedCompilationInterfaceModules : List String
                 usedCompilationInterfaceModules =
                     sourceModules
-                        |> Dict.foldl
-                            (\_ sourceModule ->
-                                Set.union
-                                    (Set.fromList
-                                        (List.concatMap
-                                            (\compilationInterfacePrefix ->
-                                                case sourceModule.moduleName of
-                                                    [] ->
-                                                        []
+                        |> List.map
+                            (\( _, sourceModule ) ->
+                                List.concatMap
+                                    (\compilationInterfacePrefix ->
+                                        case sourceModule.moduleName of
+                                            [] ->
+                                                []
 
-                                                    firstDirectory :: afterCommonPrefix ->
-                                                        if firstDirectory /= compilationInterfacePrefix then
+                                            firstDirectory :: afterCommonPrefix ->
+                                                if firstDirectory /= compilationInterfacePrefix then
+                                                    []
+
+                                                else
+                                                    case List.reverse afterCommonPrefix of
+                                                        lastPathComponent :: _ ->
+                                                            [ lastPathComponent
+                                                            , String.join "." afterCommonPrefix
+                                                            ]
+
+                                                        [] ->
                                                             []
-
-                                                        else
-                                                            case List.reverse afterCommonPrefix of
-                                                                lastPathComponent :: _ ->
-                                                                    [ lastPathComponent
-                                                                    , String.join "." afterCommonPrefix
-                                                                    ]
-
-                                                                [] ->
-                                                                    []
-                                            )
-                                            arguments.compilationInterfaceElmModuleNamePrefixes
-                                        )
                                     )
+                                    arguments.compilationInterfaceElmModuleNamePrefixes
                             )
-                            Set.empty
+                        |> List.concat
+                        |> Common.listUnique
 
+                modulesToAdd : List String
                 modulesToAdd =
                     usedCompilationInterfaceModules
-                        |> Set.toList
-                        |> List.filterMap (\moduleName -> Dict.get moduleName compilationInterfaceModuleDependencies)
-                        |> List.concat
+                        |> List.concatMap
+                            (\moduleName ->
+                                case Common.assocListGet moduleName compilationInterfaceModuleDependencies of
+                                    Nothing ->
+                                        []
+
+                                    Just moduleDependencies ->
+                                        moduleDependencies
+                            )
             in
             {-
                TODO: Reorder lowering so that one lowering stage can reuse results from another one.
@@ -408,7 +413,7 @@ asCompletelyLoweredElmApp entryPointClasses arguments =
                     sourceDirs
                 |> Result.andThen
                     (applyLoweringUnderPrefixes
-                        (mapJsonConvertersModuleText { originalSourceModules = sourceModules, sourceDirs = sourceDirs })
+                        (mapJsonConvertersModuleText { originalSourceModules = sourceModulesDict, sourceDirs = sourceDirs })
                         { prefixes = List.map (String.split ".") arguments.compilationInterfaceElmModuleNamePrefixes
                         , moduleNameEnd = [ "GenerateJsonConverters" ]
                         }
@@ -422,17 +427,29 @@ asCompletelyLoweredElmApp entryPointClasses arguments =
                         { prefixes = List.map (String.split ".") arguments.compilationInterfaceElmModuleNamePrefixes
                         , moduleNameEnd = [ "ElmMake" ]
                         }
-                        (\context -> OtherCompilationError >> locatedInSourceFilesFromJustFilePath context >> List.singleton)
+                        (\context ->
+                            OtherCompilationError
+                                >> locatedInSourceFilesFromJustFilePath context
+                                >> List.singleton
+                        )
                         sourceDirs
                     )
                 |> Result.andThen
                     (loweredForCompilationRoot
                         entryPointClasses
-                        { originalSourceModules = sourceModules
+                        { originalSourceModules = sourceModulesDict
                         , compilationRootFilePath = arguments.compilationRootFilePath
                         , interfaceToHostRootModuleName = arguments.interfaceToHostRootModuleName
                         }
                     )
+
+
+compilationInterfaceModuleDependencies : List ( String, List String )
+compilationInterfaceModuleDependencies =
+    [ ( "SourceFiles", modulesToAddForBytesCoding )
+    , ( "ElmMake", modulesToAddForBytesCoding )
+    , ( "GenerateJsonConverters", modulesToAddForBase64Coding )
+    ]
 
 
 findSourceDirectories :
@@ -442,7 +459,7 @@ findSourceDirectories arguments =
     let
         searchRecursive : List String -> Result String SourceDirectories
         searchRecursive currentDirectory =
-            case Dict.get (currentDirectory ++ [ "elm.json" ]) arguments.sourceFiles of
+            case Common.assocListGet (currentDirectory ++ [ "elm.json" ]) arguments.sourceFiles of
                 Nothing ->
                     if currentDirectory == [] then
                         Err "Did not find elm.json"
@@ -477,7 +494,7 @@ findSourceDirectories arguments =
                                     in
                                     case
                                         parsedSourceDirs
-                                            |> List.filter
+                                            |> Common.listFind
                                                 (\c ->
                                                     {- TODO:
                                                        Technically, the one containing compilationRootFilePath could also be one with parentLevel > 0.
@@ -485,7 +502,6 @@ findSourceDirectories arguments =
                                                     (c.parentLevel == 0)
                                                         && CompileElmAppListExtra.isPrefixOf c.subdirectories compilationRootFilePathFromElmJson
                                                 )
-                                            |> List.head
                                     of
                                         Nothing ->
                                             Err
@@ -603,7 +619,7 @@ applyLoweringUnderPrefix lowerModule { prefix, moduleNameEnd } errFromString sou
                         Ok intermediateFiles
 
                     else
-                        case Dict.get filePath intermediateFiles of
+                        case Common.assocListGet filePath intermediateFiles of
                             Nothing ->
                                 Ok intermediateFiles
 
@@ -619,14 +635,14 @@ applyLoweringUnderPrefix lowerModule { prefix, moduleNameEnd } errFromString sou
 
                                             Ok ( newAppCode, newModuleText ) ->
                                                 Ok
-                                                    (Dict.insert
+                                                    (Common.assocListInsert
                                                         filePath
                                                         (Bytes.Encode.encode (Bytes.Encode.string newModuleText))
                                                         newAppCode
                                                     )
         )
         (Ok sourceFiles)
-        (Dict.keys sourceFiles)
+        (List.map Tuple.first sourceFiles)
 
 
 loweredForCompilationRoot :
@@ -651,34 +667,40 @@ loweredForCompilationRoot entryPointClasses config sourceFiles =
 
         Just compilationRootModule ->
             let
+                entryPointMatchesResults : List (Result { supportedDeclarationNames : List String } ProcessEntryPoint)
                 entryPointMatchesResults =
                     entryPointClasses
                         |> List.map ((|>) compilationRootModule)
             in
-            case entryPointMatchesResults |> List.filterMap Result.toMaybe |> List.head of
+            case
+                entryPointMatchesResults
+                    |> Common.listMapFind Result.toMaybe
+            of
                 Nothing ->
                     let
+                        allSupportedDeclarationNames : List String
                         allSupportedDeclarationNames =
                             entryPointMatchesResults
                                 |> List.foldl
-                                    (\entryPointMatchesResult ->
+                                    (\entryPointMatchesResult aggregate ->
                                         case entryPointMatchesResult of
                                             Err { supportedDeclarationNames } ->
-                                                Set.union supportedDeclarationNames
+                                                List.concat [ supportedDeclarationNames, aggregate ]
 
                                             Ok _ ->
-                                                identity
+                                                aggregate
                                     )
-                                    Set.empty
+                                    []
+                                |> Common.listUnique
                     in
                     Ok
                         { compiledFiles = sourceFiles
                         , rootModuleEntryPointKind =
                             Err
                                 ("Found no declaration of an entry point. I only support the following "
-                                    ++ String.fromInt (Set.size allSupportedDeclarationNames)
+                                    ++ String.fromInt (List.length allSupportedDeclarationNames)
                                     ++ " names for entry points declarations: "
-                                    ++ String.join ", " (Set.toList allSupportedDeclarationNames)
+                                    ++ String.join ", " allSupportedDeclarationNames
                                 )
                         }
 
@@ -782,6 +804,7 @@ mapJsonConvertersModuleText { originalSourceModules, sourceDirs } ( sourceFiles,
 
                                 Just functionSignature ->
                                     let
+                                        functionName : String
                                         functionName =
                                             Elm.Syntax.Node.value (Elm.Syntax.Node.value functionSignature).name
                                     in
@@ -828,6 +851,7 @@ mapJsonConvertersModuleText { originalSourceModules, sourceDirs } ( sourceFiles,
                                 |> listFoldlToAggregateResult
                                     (\functionToReplace previousModuleText ->
                                         let
+                                            functionName : String
                                             functionName =
                                                 functionToReplace.functionName
 
@@ -835,6 +859,7 @@ mapJsonConvertersModuleText { originalSourceModules, sourceDirs } ( sourceFiles,
                                                 buildJsonConverterFunctionsForTypeAnnotation
                                                     functionToReplace.parsedTypeAnnotation
 
+                                            newFunction : String
                                             newFunction =
                                                 functionName
                                                     ++ " =\n    "
@@ -848,6 +873,7 @@ mapJsonConvertersModuleText { originalSourceModules, sourceDirs } ( sourceFiles,
                                                                ]
                                                         )
 
+                                            mapFunctionDeclarationLines : List String -> List String
                                             mapFunctionDeclarationLines originalFunctionTextLines =
                                                 [ originalFunctionTextLines |> List.take 1
                                                 , [ newFunction ]
@@ -889,15 +915,18 @@ mapAppFilesToSupportJsonConverters :
     -> ( AppFiles, { generatedModuleName : List String, modulesToImport : Set.Set (List String) } )
 mapAppFilesToSupportJsonConverters { generatedModuleNamePrefix, sourceDirs } typeAnnotationsBeforeDeduplicating choiceTypes appFilesBefore =
     let
+        generatedFunctions : { generatedFunctions : List GenerateFunctionFromTypeResult, modulesToImportForChoiceTypes : Set.Set (List String) }
         generatedFunctions =
             buildJsonConverterFunctionsForMultipleTypes typeAnnotationsBeforeDeduplicating choiceTypes
 
+        modulesToImport : Set.Set (List String)
         modulesToImport =
             generatedFunctions.generatedFunctions
                 |> List.map .modulesToImport
                 |> List.foldl Set.union Set.empty
                 |> Set.union generatedFunctions.modulesToImportForChoiceTypes
 
+        generatedModuleModulesToImport : List ( List String, Maybe String )
         generatedModuleModulesToImport =
             encodingModuleImportBase64
                 :: (modulesToImport
@@ -905,11 +934,13 @@ mapAppFilesToSupportJsonConverters { generatedModuleNamePrefix, sourceDirs } typ
                         |> List.map (Tuple.pair >> (|>) Nothing)
                    )
 
+        appFilesAfterExposingChoiceTypesInModules : AppFiles
         appFilesAfterExposingChoiceTypesInModules =
             generatedFunctions.modulesToImportForChoiceTypes
                 |> Set.toList
                 |> List.foldl (exposeAllInElmModuleInAppFiles sourceDirs) appFilesBefore
 
+        generatedModuleTextWithoutModuleDeclaration : String
         generatedModuleTextWithoutModuleDeclaration =
             [ [ generatedModuleModulesToImport
                     |> List.map importSyntaxTextFromModuleNameAndAlias
@@ -985,6 +1016,10 @@ buildJsonConverterFunctionsForMultipleTypes typeAnnotations choiceTypes =
             ]
                 |> Set.fromList
 
+        generatedFunctionsForTypes :
+            { generatedFunctions : List GenerateFunctionFromTypeResult
+            , modulesToImportForChoiceTypes : Set.Set (List String)
+            }
         generatedFunctionsForTypes =
             generateFunctionsForMultipleTypes
                 { generateFromTypeAnnotation =
@@ -1040,6 +1075,7 @@ buildEstimateJsonEncodeLengthFunctionsForMultipleTypes :
         }
 buildEstimateJsonEncodeLengthFunctionsForMultipleTypes typeAnnotations choiceTypes =
     let
+        defaultModulesToImportForFunction : Set.Set (List String)
         defaultModulesToImportForFunction =
             [ [ "Dict" ]
             , [ "Set" ]
@@ -1079,6 +1115,7 @@ buildEstimateJsonEncodeLengthFunctionsForMultipleTypes typeAnnotations choiceTyp
                 typeAnnotations
                 choiceTypes
 
+        generatedFunctions : List GenerateFunctionFromTypeResult
         generatedFunctions =
             generatedFunctionsForTypes.generatedFunctions
                 ++ estimateJsonEncodeLengthSupportingFunctionsTexts
@@ -1098,6 +1135,7 @@ generateFunctionsForMultipleTypes :
         }
 generateFunctionsForMultipleTypes config typeAnnotationsBeforeDeduplicating choiceTypes =
     let
+        modulesToImportForChoiceTypes : Set.Set (List String)
         modulesToImportForChoiceTypes =
             choiceTypes
                 |> Dict.keys
@@ -1107,16 +1145,19 @@ generateFunctionsForMultipleTypes config typeAnnotationsBeforeDeduplicating choi
                 |> List.map (String.split ".")
                 |> Set.fromList
 
+        generatedFunctionsFromTypeAnnotations : List GenerateFunctionFromTypeResult
         generatedFunctionsFromTypeAnnotations =
             typeAnnotationsBeforeDeduplicating
                 |> Common.listUnique
                 |> List.concatMap config.generateFromTypeAnnotation
 
+        generatedFunctionsFromChoiceTypes : List GenerateFunctionFromTypeResult
         generatedFunctionsFromChoiceTypes =
             choiceTypes
                 |> Dict.toList
                 |> List.concatMap config.generateFromChoiceType
 
+        generatedFunctions : List GenerateFunctionFromTypeResult
         generatedFunctions =
             generatedFunctionsFromTypeAnnotations ++ generatedFunctionsFromChoiceTypes
     in
@@ -1130,6 +1171,7 @@ buildJsonConverterFunctionsForTypeAnnotation :
     -> { encodeFunction : { name : String, text : String }, decodeFunction : { name : String, text : String } }
 buildJsonConverterFunctionsForTypeAnnotation typeAnnotation =
     let
+        jsonConverterExpressions : { encodeExpression : String, decodeExpression : String }
         jsonConverterExpressions =
             jsonConverterExpressionFromType
                 { encodeValueExpression = jsonEncodeParamName
@@ -1137,6 +1179,7 @@ buildJsonConverterFunctionsForTypeAnnotation typeAnnotation =
                 }
                 ( typeAnnotation, [] )
 
+        typeAnnotationText : String
         typeAnnotationText =
             buildTypeAnnotationText typeAnnotation
 
@@ -1147,12 +1190,15 @@ buildJsonConverterFunctionsForTypeAnnotation typeAnnotation =
                 |> String.fromInt
                 |> String.left 10
 
+        encodeFunctionName : String
         encodeFunctionName =
             jsonEncodeFunctionNamePrefix ++ nameCommonPart
 
+        decodeFunctionName : String
         decodeFunctionName =
             jsonDecodeFunctionNamePrefix ++ nameCommonPart
 
+        encodeFunctionText : String
         encodeFunctionText =
             encodeFunctionName
                 ++ " "
@@ -1160,6 +1206,7 @@ buildJsonConverterFunctionsForTypeAnnotation typeAnnotation =
                 ++ " =\n"
                 ++ indentElmCodeLines 1 jsonConverterExpressions.encodeExpression
 
+        decodeFunctionText : String
         decodeFunctionText =
             decodeFunctionName
                 ++ " =\n"
@@ -1173,6 +1220,7 @@ buildJsonConverterFunctionsForTypeAnnotation typeAnnotation =
 buildEstimateJsonEncodeLengthFunctionForTypeAnnotation : ElmTypeAnnotation -> { name : String, text : String }
 buildEstimateJsonEncodeLengthFunctionForTypeAnnotation typeAnnotation =
     let
+        jsonConverterExpressions : { estimateExpression : String }
         jsonConverterExpressions =
             estimateJsonEncodeLengthExpressionFromType
                 { encodeValueExpression = estimateJsonEncodeLengthParamName
@@ -1180,6 +1228,7 @@ buildEstimateJsonEncodeLengthFunctionForTypeAnnotation typeAnnotation =
                 }
                 ( typeAnnotation, [] )
 
+        typeAnnotationText : String
         typeAnnotationText =
             buildTypeAnnotationText typeAnnotation
 
@@ -1190,9 +1239,11 @@ buildEstimateJsonEncodeLengthFunctionForTypeAnnotation typeAnnotation =
                 |> String.fromInt
                 |> String.left 10
 
+        encodeFunctionName : String
         encodeFunctionName =
             estimateJsonEncodeLengthFunctionNamePrefix ++ nameCommonPart
 
+        estimateFunctionText : String
         estimateFunctionText =
             encodeFunctionName
                 ++ " "
@@ -1302,6 +1353,7 @@ type FileTreeNode blobStructure
                                             (always (fileContentFromString generatedModuleText))
                                             generatedModulePath
 
+                                interfaceModuleDeclaresTypeFileTreeNode : Bool
                                 interfaceModuleDeclaresTypeFileTreeNode =
                                     parsedModule.declarations
                                         |> List.any
@@ -1314,6 +1366,7 @@ type FileTreeNode blobStructure
                                                         False
                                             )
 
+                                addMappingFunctionIfTypeIsPresent : String -> Result String String
                                 addMappingFunctionIfTypeIsPresent =
                                     if interfaceModuleDeclaresTypeFileTreeNode then
                                         \moduleTextBefore ->
@@ -1360,86 +1413,88 @@ mapElmMakeModuleText :
     -> ( AppFiles, List String, String )
     -> Result (List LocatedCompilationError) ( AppFiles, String )
 mapElmMakeModuleText sourceDirs dependencies ( sourceFiles, moduleFilePath, moduleText ) =
-    parseElmModuleText moduleText
-        |> Result.mapError
-            (parserDeadEndsToString moduleText
-                >> (++) "Failed to parse Elm module text: "
-                >> OtherCompilationError
-                >> Elm.Syntax.Node.Node (syntaxRangeCoveringCompleteString moduleText)
-                >> List.singleton
-            )
-        |> Result.andThen
-            (\parsedModule ->
-                parsedModule.declarations
-                    -- TODO: Also share the 'map all functions' part with `mapJsonConvertersModuleText`
-                    |> List.filterMap declarationWithRangeAsFunctionDeclaration
-                    |> List.map
-                        (\declaration ->
-                            prepareReplaceFunctionInElmMakeModuleText dependencies
-                                sourceDirs
+    case parseElmModuleText moduleText of
+        Err err ->
+            Err
+                [ locatedInSourceFilesFromRange moduleFilePath
+                    (Elm.Syntax.Node.Node (syntaxRangeCoveringCompleteString moduleText)
+                        (OtherCompilationError
+                            ("Failed to parse Elm module text: " ++ parserDeadEndsToString moduleText err)
+                        )
+                    )
+                ]
+
+        Ok parsedModule ->
+            parsedModule.declarations
+                -- TODO: Also share the 'map all functions' part with `mapJsonConvertersModuleText`
+                |> List.filterMap declarationWithRangeAsFunctionDeclaration
+                |> List.map
+                    (\declaration ->
+                        prepareReplaceFunctionInElmMakeModuleText dependencies
+                            sourceDirs
+                            sourceFiles
+                            ( moduleFilePath, parsedModule )
+                            (Elm.Syntax.Node.value declaration)
+                            |> Result.mapError (List.map (Elm.Syntax.Node.Node (Elm.Syntax.Node.range declaration)))
+                            |> Result.map (Tuple.pair (Elm.Syntax.Node.range declaration))
+                    )
+                |> resultCombineConcatenatingErrors
+                |> Result.mapError List.concat
+                |> Result.andThen
+                    (\functionsToReplaceFunction ->
+                        let
+                            interfaceModuleName : Elm.Syntax.ModuleName.ModuleName
+                            interfaceModuleName =
+                                Elm.Syntax.Module.moduleName
+                                    (Elm.Syntax.Node.value parsedModule.moduleDefinition)
+
+                            generatedModuleTextWithoutModuleDeclaration : String
+                            generatedModuleTextWithoutModuleDeclaration =
+                                functionsToReplaceFunction
+                                    |> List.concatMap (Tuple.second >> .valueFunctionsTexts)
+                                    |> Set.fromList
+                                    |> Set.toList
+                                    |> String.join "\n\n"
+
+                            generatedModuleName : Elm.Syntax.ModuleName.ModuleName
+                            generatedModuleName =
+                                interfaceModuleName ++ [ "Generated_ElmMake" ]
+
+                            generatedModulePath : List String
+                            generatedModulePath =
+                                filePathFromElmModuleName sourceDirs generatedModuleName
+
+                            generatedModuleText : String
+                            generatedModuleText =
+                                [ "module " ++ String.join "." generatedModuleName ++ " exposing (..)"
+                                , generatedModuleTextWithoutModuleDeclaration
+                                ]
+                                    |> String.join "\n\n"
+
+                            appFiles : AppFiles
+                            appFiles =
                                 sourceFiles
-                                ( moduleFilePath, parsedModule )
-                                (Elm.Syntax.Node.value declaration)
-                                |> Result.mapError (List.map (Elm.Syntax.Node.Node (Elm.Syntax.Node.range declaration)))
-                                |> Result.map (Tuple.pair (Elm.Syntax.Node.range declaration))
-                        )
-                    |> resultCombineConcatenatingErrors
-                    |> Result.mapError List.concat
-                    |> Result.andThen
-                        (\functionsToReplaceFunction ->
-                            let
-                                interfaceModuleName : Elm.Syntax.ModuleName.ModuleName
-                                interfaceModuleName =
-                                    Elm.Syntax.Module.moduleName
-                                        (Elm.Syntax.Node.value parsedModule.moduleDefinition)
-
-                                generatedModuleTextWithoutModuleDeclaration =
-                                    functionsToReplaceFunction
-                                        |> List.concatMap (Tuple.second >> .valueFunctionsTexts)
-                                        |> Set.fromList
-                                        |> Set.toList
-                                        |> String.join "\n\n"
-
-                                generatedModuleName : Elm.Syntax.ModuleName.ModuleName
-                                generatedModuleName =
-                                    interfaceModuleName ++ [ "Generated_ElmMake" ]
-
-                                generatedModulePath : List String
-                                generatedModulePath =
-                                    filePathFromElmModuleName sourceDirs generatedModuleName
-
-                                generatedModuleText : String
-                                generatedModuleText =
-                                    [ "module " ++ String.join "." generatedModuleName ++ " exposing (..)"
-                                    , generatedModuleTextWithoutModuleDeclaration
+                                    |> updateFileContentAtPath
+                                        (always (fileContentFromString generatedModuleText))
+                                        generatedModulePath
+                        in
+                        functionsToReplaceFunction
+                            |> listFoldlToAggregateResult
+                                (\( declarationRange, replaceFunction ) previousAggregate ->
+                                    replaceFunction.updateInterfaceModuleText { generatedModuleName = generatedModuleName } previousAggregate
+                                        |> Result.mapError (Elm.Syntax.Node.Node declarationRange)
+                                )
+                                (addImportsInElmModuleText
+                                    [ encodingModuleImportBytes
+                                    , ( generatedModuleName, Nothing )
                                     ]
-                                        |> String.join "\n\n"
-
-                                appFiles : AppFiles
-                                appFiles =
-                                    sourceFiles
-                                        |> updateFileContentAtPath
-                                            (always (fileContentFromString generatedModuleText))
-                                            generatedModulePath
-                            in
-                            functionsToReplaceFunction
-                                |> listFoldlToAggregateResult
-                                    (\( declarationRange, replaceFunction ) previousAggregate ->
-                                        replaceFunction.updateInterfaceModuleText { generatedModuleName = generatedModuleName } previousAggregate
-                                            |> Result.mapError (Elm.Syntax.Node.Node declarationRange)
-                                    )
-                                    (addImportsInElmModuleText
-                                        [ encodingModuleImportBytes
-                                        , ( generatedModuleName, Nothing )
-                                        ]
-                                        moduleText
-                                        |> Result.mapError (Elm.Syntax.Node.Node (syntaxRangeCoveringCompleteString moduleText))
-                                    )
-                                |> Result.mapError (Elm.Syntax.Node.map OtherCompilationError >> List.singleton)
-                                |> Result.map (Tuple.pair appFiles)
-                        )
-            )
-        |> Result.mapError (List.map (locatedInSourceFilesFromRange moduleFilePath))
+                                    moduleText
+                                    |> Result.mapError (Elm.Syntax.Node.Node (syntaxRangeCoveringCompleteString moduleText))
+                                )
+                            |> Result.mapError (Elm.Syntax.Node.map OtherCompilationError >> List.singleton)
+                            |> Result.map (Tuple.pair appFiles)
+                    )
+                |> Result.mapError (List.map (locatedInSourceFilesFromRange moduleFilePath))
 
 
 locatedInSourceFilesFromRange : List String -> Elm.Syntax.Node.Node a -> LocatedInSourceFiles a
@@ -1454,12 +1509,13 @@ locatedInSourceFilesFromRange filePath (Elm.Syntax.Node.Node range a) =
 exposeAllInElmModuleInAppFiles : SourceDirectories -> List String -> AppFiles -> AppFiles
 exposeAllInElmModuleInAppFiles sourceDirs moduleName appFiles =
     let
+        moduleFilePath : List String
         moduleFilePath =
             filePathFromElmModuleName sourceDirs moduleName
     in
     case
         appFiles
-            |> Dict.get moduleFilePath
+            |> Common.assocListGet moduleFilePath
             |> Maybe.andThen stringFromFileContent
     of
         Nothing ->
@@ -1470,7 +1526,8 @@ exposeAllInElmModuleInAppFiles sourceDirs moduleName appFiles =
                 moduleText =
                     exposeAllInElmModule originalModuleText
             in
-            appFiles |> Dict.insert moduleFilePath (fileContentFromString moduleText)
+            appFiles
+                |> Common.assocListInsert moduleFilePath (fileContentFromString moduleText)
 
 
 exposeAllInElmModule : String -> String
@@ -1481,6 +1538,7 @@ exposeAllInElmModule moduleText =
 
         Ok parsedModule ->
             let
+                exposingListNode : Elm.Syntax.Node.Node Elm.Syntax.Exposing.Exposing
                 exposingListNode =
                     case Elm.Syntax.Node.value parsedModule.moduleDefinition of
                         Elm.Syntax.Module.NormalModule normalModule ->
@@ -1492,10 +1550,10 @@ exposeAllInElmModule moduleText =
                         Elm.Syntax.Module.EffectModule effectModule ->
                             effectModule.exposingList
 
-                exposingListRange =
-                    Elm.Syntax.Node.range exposingListNode
+                (Elm.Syntax.Node.Node exposingListRange exposingList) =
+                    exposingListNode
             in
-            case Elm.Syntax.Node.value exposingListNode of
+            case exposingList of
                 Elm.Syntax.Exposing.All _ ->
                     moduleText
 
@@ -1518,12 +1576,14 @@ appendLineAndStringInLogFile logLine =
 updateFileContentAtPath : (Maybe Bytes.Bytes -> Bytes.Bytes) -> List String -> AppFiles -> AppFiles
 updateFileContentAtPath updateFileContent filePath appFiles =
     let
+        fileContent : Bytes.Bytes
         fileContent =
             appFiles
-                |> Dict.get filePath
+                |> Common.assocListGet filePath
                 |> updateFileContent
     in
-    appFiles |> Dict.insert filePath fileContent
+    appFiles
+        |> Common.assocListInsert filePath fileContent
 
 
 type ElmTypeAnnotation
@@ -1620,9 +1680,8 @@ parseElmTypeAndDependenciesRecursivelyFromAnnotationInternal stack modules ( cur
 
         Elm.Syntax.TypeAnnotation.Record fieldsNodes ->
             fieldsNodes
-                |> List.map Elm.Syntax.Node.value
                 |> Common.resultListMapCombine
-                    (\( fieldNameNode, fieldAnnotation ) ->
+                    (\(Elm.Syntax.Node.Node _ ( fieldNameNode, fieldAnnotation )) ->
                         case
                             parseElmTypeAndDependenciesRecursivelyFromAnnotationInternal
                                 stack
@@ -1690,9 +1749,8 @@ parseElmTypeAndDependenciesRecursivelyFromAnnotationInternalTyped stack modules 
                         maybeInstantiatedModule =
                             if instantiatedModuleAlias == [] then
                                 currentModule.imports
-                                    |> List.map Elm.Syntax.Node.value
-                                    |> List.filterMap
-                                        (\moduleImport ->
+                                    |> Common.listMapFind
+                                        (\(Elm.Syntax.Node.Node _ moduleImport) ->
                                             case Maybe.map Elm.Syntax.Node.value moduleImport.exposingList of
                                                 Nothing ->
                                                     Nothing
@@ -1731,23 +1789,20 @@ parseElmTypeAndDependenciesRecursivelyFromAnnotationInternalTyped stack modules 
                                                     else
                                                         Nothing
                                         )
-                                    |> List.head
                                     |> Maybe.withDefault currentModule
                                     |> Just
 
                             else
                                 currentModule.imports
-                                    |> List.map Elm.Syntax.Node.value
-                                    |> List.filter
-                                        (\moduleImport ->
+                                    |> Common.listFind
+                                        (\(Elm.Syntax.Node.Node _ moduleImport) ->
                                             moduleImport.moduleAlias
                                                 |> Maybe.withDefault moduleImport.moduleName
                                                 |> Elm.Syntax.Node.value
                                                 |> (==) instantiatedModuleAlias
                                         )
-                                    |> List.head
                                     |> Maybe.andThen
-                                        (\matchingImport ->
+                                        (\(Elm.Syntax.Node.Node _ matchingImport) ->
                                             modules
                                                 |> findModuleByName (Elm.Syntax.Node.value matchingImport.moduleName)
                                                 |> Maybe.map (Tuple.second >> .parsedSyntax)
@@ -1759,9 +1814,8 @@ parseElmTypeAndDependenciesRecursivelyFromAnnotationInternalTyped stack modules 
 
                         Just instantiatedModule ->
                             instantiatedModule.declarations
-                                |> List.map Elm.Syntax.Node.value
-                                |> List.filterMap
-                                    (\declaration ->
+                                |> Common.listMapFind
+                                    (\(Elm.Syntax.Node.Node _ declaration) ->
                                         case declaration of
                                             Elm.Syntax.Declaration.AliasDeclaration aliasDeclaration ->
                                                 if Elm.Syntax.Node.value aliasDeclaration.name /= instantiatedLocalName then
@@ -1780,7 +1834,6 @@ parseElmTypeAndDependenciesRecursivelyFromAnnotationInternalTyped stack modules 
                                             _ ->
                                                 Nothing
                                     )
-                                |> List.head
                                 |> Maybe.map
                                     (\declaration ->
                                         case declaration of
@@ -1808,23 +1861,28 @@ parseElmTypeAndDependenciesRecursivelyFromAnnotationInternalTyped stack modules 
 
                                             ChoiceTypeDeclaration choiceTypeDeclaration ->
                                                 let
+                                                    typeName : String
                                                     typeName =
                                                         Elm.Syntax.Module.moduleName (Elm.Syntax.Node.value instantiatedModule.moduleDefinition)
                                                             ++ [ Elm.Syntax.Node.value choiceTypeDeclaration.name ]
                                                             |> String.join "."
 
+                                                    genericsNames : List String
                                                     genericsNames =
                                                         choiceTypeDeclaration.generics
                                                             |> List.map Elm.Syntax.Node.value
                                                 in
                                                 if stack.typesToIgnore |> Set.member typeName then
-                                                    Ok ( ChoiceElmType typeName, Dict.empty, genericsNames )
+                                                    Ok
+                                                        ( ChoiceElmType typeName
+                                                        , Dict.empty
+                                                        , genericsNames
+                                                        )
 
                                                 else
                                                     choiceTypeDeclaration.constructors
-                                                        |> List.map Elm.Syntax.Node.value
                                                         |> Common.resultListMapCombine
-                                                            (\constructor ->
+                                                            (\(Elm.Syntax.Node.Node _ constructor) ->
                                                                 constructor.arguments
                                                                     |> Common.resultListMapCombine
                                                                         (\constructorArgument ->
@@ -1925,6 +1983,7 @@ tryConcretizeRecordInstance :
     -> Result String { fields : List ( String, ElmTypeAnnotation ) }
 tryConcretizeRecordInstance typeArguments recordType =
     let
+        tryConcretizeFieldType : ElmTypeAnnotation -> Result String ElmTypeAnnotation
         tryConcretizeFieldType fieldType =
             case fieldType of
                 GenericType genericName ->
@@ -2020,6 +2079,7 @@ jsonConverterExpressionFromType :
     -> { encodeExpression : String, decodeExpression : String }
 jsonConverterExpressionFromType { encodeValueExpression, typeArgLocalName } ( typeAnnotation, typeArguments ) =
     let
+        typeArgumentsExpressions : List { encode : String, decode : String }
         typeArgumentsExpressions =
             typeArguments
                 |> List.map
@@ -2054,11 +2114,13 @@ jsonConverterExpressionFromType { encodeValueExpression, typeArgLocalName } ( ty
                 |> List.map .encode
                 |> String.join " "
 
+        typeArgumentsDecodeExpressionsText : String
         typeArgumentsDecodeExpressionsText =
             typeArgumentsExpressions
                 |> List.map .decode
                 |> String.join " "
 
+        continueWithAtomInJsonCore : String -> { encodeExpression : String, decodeExpression : String }
         continueWithAtomInJsonCore atomName =
             { encodeExpression =
                 [ "Json.Encode." ++ atomName
@@ -2113,6 +2175,7 @@ jsonConverterExpressionFromType { encodeValueExpression, typeArgLocalName } ( ty
 
             else
                 let
+                    fieldsExpressions : List { fieldName : String, encode : String, decode : String }
                     fieldsExpressions =
                         record.fields
                             |> List.map
@@ -2136,6 +2199,7 @@ jsonConverterExpressionFromType { encodeValueExpression, typeArgLocalName } ( ty
                                     }
                                 )
 
+                    decodeMap : String
                     decodeMap =
                         "(\\"
                             ++ (record.fields |> List.map Tuple.first |> String.join " ")
@@ -2204,16 +2268,20 @@ jsonConverterExpressionFromType { encodeValueExpression, typeArgLocalName } ( ty
 
         TupleElmType tuple ->
             let
+                itemsNames : List String
                 itemsNames =
                     List.range 0 (List.length tuple - 1)
                         |> List.map (String.fromInt >> (++) "item_")
 
+                decodeMap : String
                 decodeMap =
                     "(\\" ++ (itemsNames |> String.join " ") ++ " -> ( " ++ (itemsNames |> String.join ", ") ++ " ))"
 
+                getItemFunctionFromIndex : Int -> String
                 getItemFunctionFromIndex itemIndex =
                     "(\\( " ++ (itemsNames |> String.join ", ") ++ " ) -> item_" ++ String.fromInt itemIndex ++ ")"
 
+                itemsExpressions : List { localName : String, encode : String, decode : String }
                 itemsExpressions =
                     tuple
                         |> List.indexedMap
@@ -2340,22 +2408,27 @@ jsonConverterFunctionFromChoiceType :
     -> { encodeFunction : { name : String, text : String }, decodeFunction : { name : String, text : String } }
 jsonConverterFunctionFromChoiceType { choiceTypeName, encodeValueExpression, typeArgLocalName } choiceType =
     let
+        encodeParametersText : String
         encodeParametersText =
             choiceType.parameters
                 |> List.map (jsonConverterFunctionNameFromTypeParameterName >> .encodeName)
                 |> String.join " "
 
+        decodeParametersText : String
         decodeParametersText =
             choiceType.parameters
                 |> List.map (jsonConverterFunctionNameFromTypeParameterName >> .decodeName)
                 |> String.join " "
 
+        moduleName : String
         moduleName =
             moduleNameFromTypeName choiceTypeName
 
+        typeNameRepresentation : String
         typeNameRepresentation =
             jsonConverterFunctionNameCommonPartFromTypeName choiceTypeName
 
+        tagsExpressions : List { encode : String, decode : String }
         tagsExpressions =
             choiceType.tags
                 |> Dict.toList
@@ -2384,6 +2457,7 @@ jsonConverterFunctionFromChoiceType { choiceTypeName, encodeValueExpression, typ
                                             }
                                         )
 
+                            decodeInField : String
                             decodeInField =
                                 if tagParametersExpressions == [] then
                                     "jsonDecodeSucceedWhenNotNull " ++ moduleName ++ "." ++ tagName
@@ -2422,11 +2496,13 @@ jsonConverterFunctionFromChoiceType { choiceTypeName, encodeValueExpression, typ
                                            )
                                         ++ ")"
 
+                            encodeArguments : String
                             encodeArguments =
                                 tagParametersExpressions
                                     |> List.map .localName
                                     |> String.join " "
 
+                            encodeFirstLine : String
                             encodeFirstLine =
                                 [ moduleName ++ "." ++ tagName
                                 , encodeArguments
@@ -2435,6 +2511,7 @@ jsonConverterFunctionFromChoiceType { choiceTypeName, encodeValueExpression, typ
                                     |> List.filter (String.isEmpty >> not)
                                     |> String.join " "
 
+                            encodeSecondLine : String
                             encodeSecondLine =
                                 "Json.Encode.object [ ( \""
                                     ++ tagName
@@ -2456,29 +2533,35 @@ jsonConverterFunctionFromChoiceType { choiceTypeName, encodeValueExpression, typ
                         }
                     )
 
+        encodeListExpression : String
         encodeListExpression =
             tagsExpressions |> List.map .encode |> String.join "\n"
 
+        encodeExpression : String
         encodeExpression =
             [ "case " ++ encodeValueExpression ++ " of"
             , indentElmCodeLines 1 encodeListExpression
             ]
                 |> String.join "\n"
 
+        decodeListExpression : String
         decodeListExpression =
             "[ "
                 ++ (tagsExpressions |> List.map .decode |> String.join "\n, ")
                 ++ "\n]"
 
+        decodeExpression : String
         decodeExpression =
             [ "Json.Decode.oneOf"
             , indentElmCodeLines 1 decodeListExpression
             ]
                 |> String.join "\n"
 
+        encodeFunctionName : String
         encodeFunctionName =
             jsonEncodeFunctionNamePrefix ++ typeNameRepresentation
 
+        decodeFunctionName : String
         decodeFunctionName =
             jsonDecodeFunctionNamePrefix ++ typeNameRepresentation
     in
@@ -2518,6 +2601,7 @@ estimateJsonEncodeLengthExpressionFromType :
     -> { estimateExpression : String }
 estimateJsonEncodeLengthExpressionFromType { encodeValueExpression, typeArgLocalName } ( typeAnnotation, typeArguments ) =
     let
+        typeArgumentsExpressions : List { encode : String }
         typeArgumentsExpressions =
             typeArguments
                 |> List.map
@@ -2539,11 +2623,13 @@ estimateJsonEncodeLengthExpressionFromType { encodeValueExpression, typeArgLocal
                         }
                     )
 
+        typeArgumentsEncodeExpressionsText : String
         typeArgumentsEncodeExpressionsText =
             typeArgumentsExpressions
                 |> List.map .encode
                 |> String.join " "
 
+        continueWithLocalNameAndCommonPrefix : String -> { estimateExpression : String }
         continueWithLocalNameAndCommonPrefix localName =
             { estimateExpression =
                 [ estimateJsonEncodeLengthFunctionNamePrefix ++ localName
@@ -2723,17 +2809,21 @@ estimateSerializedSizeFunctionFromChoiceType :
     -> { name : String, text : String }
 estimateSerializedSizeFunctionFromChoiceType { choiceTypeName, encodeValueExpression, typeArgLocalName } choiceType =
     let
+        encodeParametersText : String
         encodeParametersText =
             choiceType.parameters
                 |> List.map (jsonConverterFunctionNameFromTypeParameterName >> .encodeName)
                 |> String.join " "
 
+        moduleName : String
         moduleName =
             moduleNameFromTypeName choiceTypeName
 
+        typeNameRepresentation : String
         typeNameRepresentation =
             jsonConverterFunctionNameCommonPartFromTypeName choiceTypeName
 
+        tagsExpressions : List { encode : String }
         tagsExpressions =
             choiceType.tags
                 |> Dict.toList
@@ -2830,16 +2920,14 @@ jsonConverterFunctionNameFromTypeParameterName paramName =
 
 jsonConverterFunctionNameCommonPartFromTypeName : String -> String
 jsonConverterFunctionNameCommonPartFromTypeName =
-    String.toList
-        >> List.map
-            (\char ->
-                if Char.isAlphaNum char then
-                    char
+    String.map
+        (\char ->
+            if Char.isAlphaNum char then
+                char
 
-                else
-                    '_'
-            )
-        >> String.fromList
+            else
+                '_'
+        )
 
 
 moduleNameFromTypeName : String -> String
@@ -3270,37 +3358,51 @@ estimateJsonEncodeLengthFunctionNamePrefix =
     "estimateJsonEncodeLength_"
 
 
-findModuleByName : List String -> Dict.Dict (List String) SourceParsedElmModule -> Maybe ( List String, SourceParsedElmModule )
+findModuleByName :
+    List String
+    -> Dict.Dict (List String) SourceParsedElmModule
+    -> Maybe ( List String, SourceParsedElmModule )
 findModuleByName moduleName =
     Dict.toList >> List.filter (Tuple.second >> .moduleName >> (==) moduleName) >> List.head
 
 
-elmModulesDictFromAppFiles : AppFiles -> Dict.Dict (List String) (Result String SourceParsedElmModule)
-elmModulesDictFromAppFiles =
-    Dict.filter
-        (List.reverse
-            >> List.head
-            >> Maybe.map (String.toLower >> String.endsWith ".elm")
-            >> Maybe.withDefault False
-            >> always
-        )
-        >> Dict.map
-            (\_ ->
-                stringFromFileContent
-                    >> Maybe.map Ok
-                    >> Maybe.withDefault (Err "Failed to decode file content as string")
-                    >> Result.andThen
-                        (\fileContentAsString ->
-                            parseElmModuleText fileContentAsString
-                                |> Result.mapError Parser.deadEndsToString
-                                |> Result.map
-                                    (\parsedSyntax ->
-                                        { fileText = fileContentAsString
-                                        , parsedSyntax = parsedSyntax
-                                        , moduleName = Elm.Syntax.Module.moduleName (Elm.Syntax.Node.value parsedSyntax.moduleDefinition)
-                                        }
-                                    )
-                        )
+elmModulesDictFromAppFiles : AppFiles -> List ( List String, Result String SourceParsedElmModule )
+elmModulesDictFromAppFiles appFiles =
+    appFiles
+        |> List.concatMap
+            (\( filePath, fileContent ) ->
+                case filePath |> List.reverse |> List.head of
+                    Nothing ->
+                        []
+
+                    Just fileName ->
+                        if String.endsWith ".elm" (String.toLower fileName) then
+                            let
+                                fileEntry : Result String SourceParsedElmModule
+                                fileEntry =
+                                    case stringFromFileContent fileContent of
+                                        Nothing ->
+                                            Err "Failed to decode file content as string"
+
+                                        Just fileContentAsString ->
+                                            case parseElmModuleText fileContentAsString of
+                                                Err err ->
+                                                    Err ("Failed parsing module text: " ++ Parser.deadEndsToString err)
+
+                                                Ok parsedSyntax ->
+                                                    Ok
+                                                        { fileText = fileContentAsString
+                                                        , parsedSyntax = parsedSyntax
+                                                        , moduleName = Elm.Syntax.Module.moduleName (Elm.Syntax.Node.value parsedSyntax.moduleDefinition)
+                                                        }
+                            in
+                            [ ( filePath
+                              , fileEntry
+                              )
+                            ]
+
+                        else
+                            []
             )
 
 
@@ -3385,6 +3487,7 @@ prepareReplaceFunctionInSourceFilesModuleText :
     -> Result String { valueFunctionText : String, updateInterfaceModuleText : { generatedModuleName : List String } -> String -> Result String String }
 prepareReplaceFunctionInSourceFilesModuleText sourceDirs sourceFiles currentModule originalFunctionDeclaration =
     let
+        functionName : String
         functionName =
             Elm.Syntax.Node.value
                 (Elm.Syntax.Node.value (Elm.Syntax.Node.value originalFunctionDeclaration).declaration).name
@@ -3582,6 +3685,7 @@ prepareReplaceFunctionInElmMakeModuleText :
             }
 prepareReplaceFunctionInElmMakeModuleText dependencies sourceDirs sourceFiles currentModule originalFunctionDeclaration =
     let
+        functionName : String
         functionName =
             Elm.Syntax.Node.value
                 (Elm.Syntax.Node.value originalFunctionDeclaration.declaration).name
@@ -3602,6 +3706,9 @@ prepareReplaceFunctionInElmMakeModuleText dependencies sourceDirs sourceFiles cu
                                 }
                             )
 
+                mapTreeLeaf :
+                    InterfaceElmMakeFunctionLeafConfig
+                    -> Result CompilationError { emitBlob : RecordTreeEmitElmMake, valueFunctionName : String }
                 mapTreeLeaf =
                     prepareElmMakeFunctionForEmit sourceDirs sourceFiles dependencies { filePathRepresentation = filePathRepresentation }
                         >> Result.andThen (continueMapResult >> Result.mapError OtherCompilationError)
@@ -3689,8 +3796,8 @@ prepareElmMakeFunctionForEmit sourceDirs sourceFiles dependencies { filePathRepr
                         ++ List.drop sharedLevels entryPointFileMatch.absolutePath
 
                 sourceFilesForElmMake =
-                    Dict.filter
-                        (\filePath _ -> includeFilePathInElmMakeRequest filePath)
+                    List.filter
+                        (\( filePath, _ ) -> includeFilePathInElmMakeRequest filePath)
                         sourceFiles
 
                 elmMakeRequest =
@@ -3723,17 +3830,22 @@ prepareElmMakeFunctionForEmit sourceDirs sourceFiles dependencies { filePathRepr
                     ]
                         |> List.concat
             in
-            case dependencies |> List.filter (Tuple.first >> dependencyKeysAreEqual dependencyKey) |> List.head of
+            case
+                dependencies
+                    |> Common.listFind (\( candidateKey, _ ) -> dependencyKeysAreEqual dependencyKey candidateKey)
+            of
                 Nothing ->
                     Err (MissingDependencyError dependencyKey)
 
                 Just ( _, dependencyValue ) ->
                     let
+                        variantName : String
                         variantName =
                             getNameComponentsFromLeafConfig config.elmMakeConfig
                                 |> List.sort
                                 |> String.join "_"
 
+                        valueFunctionName : String
                         valueFunctionName =
                             [ "elm_make_output"
                             , filePathRepresentation
@@ -3750,8 +3862,9 @@ prepareElmMakeFunctionForEmit sourceDirs sourceFiles dependencies { filePathRepr
 
 interfaceModuleRecordExpression : RecordTreeEmitInterfaceModule -> { sourceExpression : String } -> String
 interfaceModuleRecordExpression interfaceModuleTree context =
-    interfaceModuleTree
-        |> emitRecordExpressionFromRecordTree (\leafMap -> leafMap context)
+    emitRecordExpressionFromRecordTree
+        (\leafMap -> leafMap context)
+        interfaceModuleTree
 
 
 valueModuleRecordExpressionFromEncodings : RecordTreeEmitValueModule -> Bytes.Bytes -> Result String String
@@ -3774,13 +3887,15 @@ valueModuleRecordExpressionFromEncodings encodings blob =
 
 recordTreeEmitElmMake : RecordTreeEmit -> Bytes.Bytes -> Result String RecordTreeEmitElmMake
 recordTreeEmitElmMake recordTree bytes =
-    valueModuleRecordExpressionFromEncodings recordTree.valueModule bytes
-        |> Result.map
-            (\expression ->
+    case valueModuleRecordExpressionFromEncodings recordTree.valueModule bytes of
+        Err error ->
+            Err error
+
+        Ok expression ->
+            Ok
                 { interfaceModule = recordTree.interfaceModule
                 , valueModule = { expression = expression }
                 }
-            )
 
 
 buildBase64ElmExpression : Bytes.Bytes -> Result String String
@@ -3806,15 +3921,19 @@ buildUtf8ElmExpression bytes =
 buildUint32Uint8ElmExpression : Bytes.Bytes -> Result String String
 buildUint32Uint8ElmExpression bytes =
     let
+        uint32_count : Int
         uint32_count =
             Bytes.width bytes // 4
 
+        uint8_offset : Int
         uint8_offset =
             uint32_count * 4
 
+        uint8_count : Int
         uint8_count =
             Bytes.width bytes - uint8_offset
 
+        uint32_decoder : Bytes.Decode.Decoder (List Int)
         uint32_decoder =
             if uint32_count == 0 then
                 Bytes.Decode.succeed []
@@ -3822,6 +3941,7 @@ buildUint32Uint8ElmExpression bytes =
             else
                 bytes_decode_list uint32_count (Bytes.Decode.unsignedInt32 Bytes.BE)
 
+        uint8_decoder : Bytes.Decode.Decoder (List Int)
         uint8_decoder =
             if uint8_count == 0 then
                 Bytes.Decode.succeed []
@@ -3829,9 +3949,11 @@ buildUint32Uint8ElmExpression bytes =
             else
                 bytes_decode_withOffset uint8_offset (bytes_decode_list uint8_count (Bytes.Decode.unsignedInt32 Bytes.BE))
 
+        expressionFromListInt : List Int -> String
         expressionFromListInt list =
             "[ " ++ String.join ", " (List.map String.fromInt list) ++ " ]"
 
+        recordExpression : List ( String, String ) -> String
         recordExpression fields =
             "{ "
                 ++ (fields
@@ -3840,6 +3962,7 @@ buildUint32Uint8ElmExpression bytes =
                    )
                 ++ " }"
 
+        decoder : Bytes.Decode.Decoder { uint32 : List Int, uint8 : List Int }
         decoder =
             uint32_decoder
                 |> Bytes.Decode.andThen
@@ -3931,46 +4054,121 @@ includeFilePathInElmMakeRequest path =
                 || String.endsWith ".elm" fileName
 
 
-declarationWithRangeAsFunctionDeclaration : Elm.Syntax.Node.Node Elm.Syntax.Declaration.Declaration -> Maybe (Elm.Syntax.Node.Node Elm.Syntax.Expression.Function)
-declarationWithRangeAsFunctionDeclaration declaration =
-    case Elm.Syntax.Node.value declaration of
+declarationWithRangeAsFunctionDeclaration :
+    Elm.Syntax.Node.Node Elm.Syntax.Declaration.Declaration
+    -> Maybe (Elm.Syntax.Node.Node Elm.Syntax.Expression.Function)
+declarationWithRangeAsFunctionDeclaration (Elm.Syntax.Node.Node declarationRange declaration) =
+    case declaration of
         Elm.Syntax.Declaration.FunctionDeclaration functionDeclaration ->
-            Just (Elm.Syntax.Node.Node (Elm.Syntax.Node.range declaration) functionDeclaration)
+            Just (Elm.Syntax.Node.Node declarationRange functionDeclaration)
 
         _ ->
             Nothing
 
 
 getTextLinesFromRange : Elm.Syntax.Range.Range -> String -> List String
-getTextLinesFromRange range text =
+getTextLinesFromRange rangeRecord text =
     let
+        lines : List String
         lines =
             String.lines text
+
+        rangeRecordStart : Elm.Syntax.Range.Location
+        rangeRecordStart =
+            rangeRecord.start
+
+        rangeRecordEnd : Elm.Syntax.Range.Location
+        rangeRecordEnd =
+            rangeRecord.end
     in
-    lines
-        |> List.take range.end.row
-        |> List.drop (range.start.row - 1)
-        |> List.reverse
-        |> listMapFirstElement (String.left (range.end.column - 1))
-        |> List.reverse
-        |> listMapFirstElement (String.dropLeft (range.start.column - 1))
+    sliceRangeFromTextLines
+        lines
+        (Range
+            ( rangeRecordStart.row, rangeRecordStart.column )
+            ( rangeRecordEnd.row, rangeRecordEnd.column )
+        )
 
 
-listMapFirstElement : (a -> a) -> List a -> List a
-listMapFirstElement mapElement list =
-    case list of
-        firstElement :: followingElements ->
-            mapElement firstElement :: followingElements
+sliceRangeFromTextLines : List String -> Range -> List String
+sliceRangeFromTextLines textLines (Range ( startRow, startColumn ) ( endRow, endColumn )) =
+    let
+        startRowInt : Int
+        startRowInt =
+            startRow - 1
 
-        _ ->
-            list
+        endRowInt : Int
+        endRowInt =
+            endRow - 1
+
+        startColumnInt : Int
+        startColumnInt =
+            startColumn - 1
+
+        endColumnInt : Int
+        endColumnInt =
+            endColumn - 1
+
+        rangeRowCount : Int
+        rangeRowCount =
+            endRowInt - startRowInt
+
+        linesFromStart : List String
+        linesFromStart =
+            List.drop startRowInt textLines
+    in
+    if rangeRowCount == 0 then
+        case linesFromStart of
+            [] ->
+                []
+
+            line :: _ ->
+                [ String.slice startColumnInt endColumnInt line ]
+
+    else
+        let
+            firstLine : String
+            firstLine =
+                case linesFromStart of
+                    [] ->
+                        ""
+
+                    line :: _ ->
+                        String.dropLeft startColumnInt line
+
+            lastLine : String
+            lastLine =
+                case List.drop rangeRowCount linesFromStart of
+                    [] ->
+                        ""
+
+                    line :: _ ->
+                        String.left endColumnInt line
+
+            middleLines : List String
+            middleLines =
+                List.take
+                    (rangeRowCount - 1)
+                    (List.drop 1 linesFromStart)
+        in
+        List.concat
+            [ [ firstLine ]
+            , middleLines
+            , [ lastLine ]
+            ]
 
 
 indentElmCodeLines : Int -> String -> String
-indentElmCodeLines level =
-    String.lines
-        >> List.map ((++) (String.repeat level "    "))
-        >> String.join "\n"
+indentElmCodeLines level string =
+    let
+        indentString : String
+        indentString =
+            String.repeat level "    "
+    in
+    String.join
+        "\n"
+        (String.lines string
+            |> List.map (\line -> String.concat [ indentString, line ])
+        )
 
 
 type alias DeclarationFileMatch =
@@ -4006,8 +4204,8 @@ findFileTreeNodeWithPathMatchingRepresentationInFunctionName sourceDirs sourceFi
     let
         fileTree : FileTree.FileTreeNode Bytes.Bytes
         fileTree =
-            Dict.foldl
-                (\filePath fileContent ->
+            List.foldl
+                (\( filePath, fileContent ) ->
                     FileTree.setNodeAtPathInSortedFileTree
                         ( filePath, FileTree.BlobNode fileContent )
                 )
@@ -4085,17 +4283,14 @@ findFileTreeNodeWithPathMatchingRepresentationInFunctionName sourceDirs sourceFi
                             [ "..." ]
                         ]
             in
-            [ [ "Did not find any file or directory with a path matching the representation '"
-                    ++ pathPattern
-                    ++ "'."
-              ]
-            , [ "There are "
-                    ++ String.fromInt (Dict.size sourceFiles)
-                    ++ " files and directories available in this compilation: "
-                    ++ (examplesListItemsDisplayItems |> String.join ", ")
-              ]
+            [ "Did not find any file or directory with a path matching the representation '"
+                ++ pathPattern
+                ++ "'."
+            , "There are "
+                ++ String.fromInt (List.length sourceFiles)
+                ++ " files and directories available in this compilation: "
+                ++ (examplesListItemsDisplayItems |> String.join ", ")
             ]
-                |> List.concat
                 |> String.join "\n"
                 |> Err
 
@@ -4154,12 +4349,15 @@ addOrUpdateFunctionInElmModuleText { functionName, mapFunctionLines } moduleText
 replaceRangeInText : Elm.Syntax.Range.Range -> String -> String -> String
 replaceRangeInText range rangeReplacement originalText =
     let
+        originalTextLines : List String
         originalTextLines =
             String.lines originalText
 
+        startLines : List String
         startLines =
             originalTextLines |> List.take (range.start.row - 1)
 
+        lineStart : String
         lineStart =
             originalTextLines
                 |> List.drop (List.length startLines)
@@ -4179,15 +4377,18 @@ addImportsInElmModuleText imports moduleText =
         |> parseAndMapElmModuleText
             (\parsedModule ->
                 let
+                    moduleTextLines : List String
                     moduleTextLines =
                         String.lines moduleText
 
+                    insertionRow : Int
                     insertionRow =
                         parsedModule.imports
                             |> List.map (Elm.Syntax.Node.range >> .end >> .row)
                             |> List.maximum
                             |> Maybe.withDefault (Elm.Syntax.Node.range parsedModule.moduleDefinition).end.row
 
+                    importStatementsLines : List String
                     importStatementsLines =
                         imports |> List.map importSyntaxTextFromModuleNameAndAlias
                 in
@@ -4221,10 +4422,11 @@ mapElmModuleWithNameIfExists :
     -> Result err AppFiles
 mapElmModuleWithNameIfExists sourceDirs errFromString elmModuleName tryMapModuleText appCode =
     let
+        elmModuleFilePath : List String
         elmModuleFilePath =
             filePathFromElmModuleName sourceDirs (String.split "." elmModuleName)
     in
-    case Dict.get elmModuleFilePath appCode of
+    case Common.assocListGet elmModuleFilePath appCode of
         Nothing ->
             Ok appCode
 
@@ -4238,7 +4440,9 @@ mapElmModuleWithNameIfExists sourceDirs errFromString elmModuleName tryMapModule
                         |> Result.map
                             (\( newAppCode, newModuleText ) ->
                                 newAppCode
-                                    |> Dict.insert elmModuleFilePath (Bytes.Encode.encode (Bytes.Encode.string newModuleText))
+                                    |> Common.assocListInsert
+                                        elmModuleFilePath
+                                        (Bytes.Encode.encode (Bytes.Encode.string newModuleText))
                             )
 
 
@@ -4253,9 +4457,11 @@ parseSourceFileFunction currentModule functionDeclaration =
 
         Ok encodingFromDeclaration ->
             let
-                functionName =
-                    Elm.Syntax.Node.value
-                        (Elm.Syntax.Node.value functionDeclaration.declaration).name
+                (Elm.Syntax.Node.Node _ declaration) =
+                    functionDeclaration.declaration
+
+                (Elm.Syntax.Node.Node _ functionName) =
+                    declaration.name
             in
             parseSourceFileFunctionName functionName
                 |> Result.map
@@ -4302,6 +4508,7 @@ parseElmMakeModuleFunction :
     -> Result String ( String, InterfaceElmMakeFunctionConfig )
 parseElmMakeModuleFunction currentModule functionDeclaration =
     let
+        functionName : String
         functionName =
             Elm.Syntax.Node.value
                 (Elm.Syntax.Node.value functionDeclaration.declaration).name
@@ -4409,30 +4616,38 @@ parseElmMakeFunctionConfigFromRecordTreeInternal elmMakeConfig recordTree =
                 |> Result.map RecordTreeBranch
 
 
-prepareRecordTreeEmitForTreeOrBlobUnderPath : List String -> CompilationInterfaceRecordTreeNode a -> Result String RecordTreeEmit
+prepareRecordTreeEmitForTreeOrBlobUnderPath :
+    List String
+    -> CompilationInterfaceRecordTreeNode a
+    -> Result String RecordTreeEmit
 prepareRecordTreeEmitForTreeOrBlobUnderPath pathPrefix tree =
     let
+        mappingBase64 : { fieldName : String, valueModuleBuildExpression : Bytes.Bytes -> Result String String }
         mappingBase64 =
             { fieldName = "base64"
             , valueModuleBuildExpression = buildBase64ElmExpression
             }
 
+        mappingUtf8 : { fieldName : String, valueModuleBuildExpression : Bytes.Bytes -> Result String String }
         mappingUtf8 =
             { fieldName = "utf8"
             , valueModuleBuildExpression = buildUtf8ElmExpression
             }
 
+        mappingUint32Uint8 : { fieldName : String, valueModuleBuildExpression : Bytes.Bytes -> Result String String }
         mappingUint32Uint8 =
             { fieldName = "uint32_uint8"
             , valueModuleBuildExpression = buildUint32Uint8ElmExpression
             }
 
+        fromUint32Uint8ToBytes : String
         fromUint32Uint8ToBytes =
             [ "|> EncodeBytes.bytes_encoder_from_uint32_uint8"
             , "|> Bytes.Encode.encode"
             ]
                 |> String.join " "
 
+        mappingBytes : ( { fieldName : String, valueModuleBuildExpression : Bytes.Bytes -> Result String String }, Maybe String )
         mappingBytes =
             ( mappingUint32Uint8, Just fromUint32Uint8ToBytes )
 
@@ -4450,6 +4665,7 @@ prepareRecordTreeEmitForTreeOrBlobUnderPath pathPrefix tree =
         attemptMapLeaf : List String -> a -> Result String RecordTreeEmitBlobIntermediateResult
         attemptMapLeaf leafPath _ =
             let
+                path : List String
                 path =
                     pathPrefix ++ leafPath
             in
@@ -4548,6 +4764,7 @@ parseSourceFileFunctionFromTypeAnnotation typeAnnotation =
 
         InstanceElmType instance ->
             let
+                continueWithErrorUnexpectedInst : String -> Result String value
                 continueWithErrorUnexpectedInst detail =
                     Err ("Unexpected shape of instantiation: " ++ detail)
             in
@@ -4645,6 +4862,7 @@ emitRecordExpressionFromRecordTree expressionFromLeafValue tree =
 
         RecordTreeBranch fields ->
             let
+                fieldsExpressions : List String
                 fieldsExpressions =
                     fields
                         |> List.map
@@ -4667,9 +4885,12 @@ attemptMapRecordTreeLeaves :
 attemptMapRecordTreeLeaves pathPrefix attemptMapLeaf tree =
     case tree of
         RecordTreeLeaf leaf ->
-            attemptMapLeaf pathPrefix leaf
-                |> Result.mapError (Tuple.pair [] >> List.singleton)
-                |> Result.map RecordTreeLeaf
+            case attemptMapLeaf pathPrefix leaf of
+                Err error ->
+                    Err [ ( [], error ) ]
+
+                Ok ok ->
+                    Ok (RecordTreeLeaf ok)
 
         RecordTreeBranch fields ->
             let
@@ -4730,6 +4951,7 @@ parseInterfaceRecordTree :
     -> Result ( List String, e ) (CompilationInterfaceRecordTreeNode leaf)
 parseInterfaceRecordTree errorFromString integrateFieldName typeAnnotation seed =
     let
+        errorUnsupportedType : String -> Result ( List a, e ) value
         errorUnsupportedType typeText =
             Err ( [], errorFromString ("Unsupported type: " ++ typeText) )
     in
@@ -4813,7 +5035,9 @@ addModulesFromTextToAppFiles sourceDirs modulesToAdd sourceFiles =
                                         (Elm.Syntax.Module.moduleName (Elm.Syntax.Node.value moduleToAddSyntax.moduleDefinition))
                             in
                             prevFiles
-                                |> Dict.insert filePath (fileContentFromString moduleToAdd)
+                                |> Common.assocListInsert
+                                    filePath
+                                    (fileContentFromString moduleToAdd)
                         )
                     |> Result.withDefault prevFiles
             )
@@ -4874,8 +5098,9 @@ stringFromFileContent bytes =
 
 
 fileContentFromString : String -> Bytes.Bytes
-fileContentFromString =
-    Bytes.Encode.string >> Bytes.Encode.encode
+fileContentFromString string =
+    Bytes.Encode.encode
+        (Bytes.Encode.string string)
 
 
 parserDeadEndsToString : String -> List Parser.DeadEnd -> String
@@ -4958,7 +5183,7 @@ dependencyKeysAreEqual a b =
 
 elmMakeRequestsAreEqual : ElmMakeRequestStructure -> ElmMakeRequestStructure -> Bool
 elmMakeRequestsAreEqual a b =
-    (a == b) && areAppFilesEqual a.files b.files
+    (a == b) && areAppFilesContentsEqual a.files b.files
 
 
 mapLocatedInSourceFiles : (a -> b) -> LocatedInSourceFiles a -> LocatedInSourceFiles b
@@ -5004,15 +5229,18 @@ syntaxRangeCoveringCompleteModule file =
         |> Elm.Syntax.Range.combine
 
 
-areAppFilesEqual : AppFiles -> AppFiles -> Bool
-areAppFilesEqual a b =
+areAppFilesContentsEqual : AppFiles -> AppFiles -> Bool
+areAppFilesContentsEqual a b =
     {- Avoid bug in Elm core library as reported at https://github.com/elm/bytes/issues/15 :
        Convert to other representation before comparing.
        TODO: Remove conversion after switching to platorm that supports bytes comparison.
     -}
     let
         representationForComparison =
-            Dict.map (always Base64.fromBytes)
+            List.map
+                (\( _, fileContent ) ->
+                    Base64.fromBytes fileContent
+                )
     in
     representationForComparison a == representationForComparison b
 
@@ -5045,9 +5273,17 @@ resultCombineConcatenatingErrors =
 
 importSyntaxTextFromModuleNameAndAlias : ( List String, Maybe String ) -> String
 importSyntaxTextFromModuleNameAndAlias ( moduleName, maybeAlias ) =
-    "import "
-        ++ String.join "." moduleName
-        ++ (maybeAlias |> Maybe.map ((++) " as ") |> Maybe.withDefault "")
+    let
+        moduleNameFlat : String
+        moduleNameFlat =
+            String.join "." moduleName
+    in
+    case maybeAlias of
+        Nothing ->
+            "import " ++ moduleNameFlat
+
+        Just aliasString ->
+            "import " ++ moduleNameFlat ++ " as " ++ aliasString
 
 
 modulesToAddForBytesCoding : List String

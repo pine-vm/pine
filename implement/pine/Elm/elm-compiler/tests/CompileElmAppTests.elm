@@ -27,7 +27,7 @@ dependencies_encoding_roundtrip : Test.Test
 dependencies_encoding_roundtrip =
     [ ( "ElmMakeDependency Empty "
       , CompileElmApp.ElmMakeDependency
-            { files = Dict.empty
+            { files = []
             , entryPointFilePath = []
             , enableDebug = False
             , outputType = CompileElmApp.ElmMakeOutputTypeHtml
@@ -43,7 +43,6 @@ dependencies_encoding_roundtrip =
                   , Bytes.Encode.encode (Bytes.Encode.string "Main.elm content")
                   )
                 ]
-                    |> Dict.fromList
             , entryPointFilePath = defaultSourceDirs.mainSourceDirectoryPath ++ [ "Main.elm" ]
             , enableDebug = True
             , outputType = CompileElmApp.ElmMakeOutputTypeHtml
@@ -59,7 +58,6 @@ dependencies_encoding_roundtrip =
                   , Bytes.Encode.encode (Bytes.Encode.string "Main.elm content")
                   )
                 ]
-                    |> Dict.fromList
             , entryPointFilePath = defaultSourceDirs.mainSourceDirectoryPath ++ [ "Main.elm" ]
             , enableDebug = True
             , outputType = CompileElmApp.ElmMakeOutputTypeJs
@@ -156,9 +154,7 @@ subscriptions _ =
                                               , Bytes.Encode.encode (Bytes.Encode.string moduleText)
                                               )
                                             ]
-                                                |> Dict.fromList
                                                 |> CompileElmApp.elmModulesDictFromAppFiles
-                                                |> Dict.toList
                                                 |> List.filterMap
                                                     (\( filePath, moduleResult ) ->
                                                         moduleResult
@@ -1281,3 +1277,4 @@ buildAppFilesFromStringContents : Dict.Dict (List String) String -> CompileElmAp
 buildAppFilesFromStringContents =
     Dict.map
         (\_ text -> Bytes.Encode.encode (Bytes.Encode.string text))
+        >> Dict.toList

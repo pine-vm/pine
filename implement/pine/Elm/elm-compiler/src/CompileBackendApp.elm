@@ -42,7 +42,6 @@ import Elm.Syntax.ModuleName
 import Elm.Syntax.Node
 import Elm.Syntax.Range
 import Elm.Syntax.TypeAnnotation
-import Set
 
 
 type alias MigrationConfig =
@@ -79,18 +78,17 @@ exposeFunctionsToAdminModuleName =
     [ "Backend", "ExposeFunctionsToAdmin" ]
 
 
-platformModuleNameCandidates : Set.Set (List String)
+platformModuleNameCandidates : List (List String)
 platformModuleNameCandidates =
     [ [ "Platform", "WebService" ]
     , [ "Platform", "WebServer" ]
     ]
-        |> Set.fromList
 
 
 entryPoints : List EntryPointClass
 entryPoints =
     [ entryPointClassFromSetOfEquallyProcessedFunctionNames
-        (Set.fromList [ "webServiceMain", "webServerMain", "backendMain" ])
+        [ "webServiceMain", "webServerMain", "backendMain" ]
         (\functionDeclaration entryPointConfig ->
             loweredForBackendApp functionDeclaration entryPointConfig
                 >> Result.map
@@ -126,15 +124,17 @@ loweredForBackendApp appDeclaration config sourceFiles =
 
         Ok sourceDirs ->
             let
+                interfaceToHostRootFilePath : List String
                 interfaceToHostRootFilePath =
                     filePathFromElmModuleName sourceDirs config.interfaceToHostRootModuleName
 
+                entryPoint : { elmMakeJavaScriptFunctionName : String }
                 entryPoint =
                     { elmMakeJavaScriptFunctionName =
                         String.join "." (config.interfaceToHostRootModuleName ++ [ "interfaceToHost_processEvent" ])
                     }
             in
-            if Dict.get interfaceToHostRootFilePath sourceFiles /= Nothing then
+            if Common.assocListGet interfaceToHostRootFilePath sourceFiles /= Nothing then
                 -- Support integrating applications supplying their own lowered version.
                 Ok ( sourceFiles, entryPoint )
 
@@ -323,8 +323,12 @@ Backend.Generated.StateShim.exposedFunctionExpectingSingleArgumentAndAppState
                                                     case
                                                         config.originalSourceModules
                                                             |> Dict.values
-                                                            |> List.filter (.moduleName >> Set.member >> (|>) platformModuleNameCandidates)
-                                                            |> List.head
+                                                            |> Common.listFind
+                                                                (\candidate ->
+                                                                    List.member
+                                                                        candidate.moduleName
+                                                                        platformModuleNameCandidates
+                                                                )
                                                     of
                                                         Nothing ->
                                                             Err
@@ -337,6 +341,7 @@ Backend.Generated.StateShim.exposedFunctionExpectingSingleArgumentAndAppState
 
                                                         Just platformModule ->
                                                             let
+                                                                platformSupportingModules : WebServiceShimVersionModules
                                                                 platformSupportingModules =
                                                                     webServiceShimVersionModules platformModule
 
@@ -474,11 +479,15 @@ parseAppStateElmTypeAndDependenciesRecursively rootFunctionDeclaration sourceMod
                     ( ( parsedModuleFilePath, parsedModule ), stateTypeAnnotation.parameter )
                     |> Result.map
                         (\( stateType, dependencies ) ->
+                            let
+                                (Elm.Syntax.Node.Node _ instantiatedName) =
+                                    stateTypeAnnotation.instantiated
+                            in
                             { stateTypeAnnotation = stateType
                             , dependencies = dependencies
                             , instantiatedConfigTypeName =
-                                Tuple.first (Elm.Syntax.Node.value stateTypeAnnotation.instantiated)
-                                    ++ [ Tuple.second (Elm.Syntax.Node.value stateTypeAnnotation.instantiated) ]
+                                Tuple.first instantiatedName
+                                    ++ [ Tuple.second instantiatedName ]
                             }
                         )
             )
@@ -595,7 +604,10 @@ migrateStateTypeAnnotationFromElmModule parsedModule =
             )
         |> Maybe.withDefault
             (Err
-                (Elm.Syntax.Node.Node (syntaxRangeCoveringCompleteModule parsedModule) "Did not find function with matching name")
+                (Elm.Syntax.Node.Node
+                    (syntaxRangeCoveringCompleteModule parsedModule)
+                    "Did not find function with matching name"
+                )
             )
 
 
@@ -667,9 +679,14 @@ parseExposeFunctionsToAdminConfigFromDeclaration :
     -> Result (LocatedInSourceFiles String) ExposeFunctionsConfig
 parseExposeFunctionsToAdminConfigFromDeclaration { originalSourceModules, interfaceModuleFilePath, interfaceModule, backendStateType } functionDeclaration =
     let
-        functionName =
-            Elm.Syntax.Node.value (Elm.Syntax.Node.value functionDeclaration.declaration).name
+        (Elm.Syntax.Node.Node _ declaration) =
+            functionDeclaration.declaration
 
+        functionName : String
+        functionName =
+            Elm.Syntax.Node.value declaration.name
+
+        returnErrorInInterfaceModule : a -> Result (LocatedInSourceFiles a) value
         returnErrorInInterfaceModule error =
             Err
                 (LocatedInSourceFiles
@@ -679,8 +696,9 @@ parseExposeFunctionsToAdminConfigFromDeclaration { originalSourceModules, interf
                     error
                 )
 
+        parametersSourceCodeTexts : List String
         parametersSourceCodeTexts =
-            (Elm.Syntax.Node.value functionDeclaration.declaration).arguments
+            declaration.arguments
                 |> List.map
                     (\argumentNode ->
                         getTextLinesFromRange
@@ -703,11 +721,8 @@ parseExposeFunctionsToAdminConfigFromDeclaration { originalSourceModules, interf
                             [] ->
                                 returnErrorInInterfaceModule "Zero types in function type annotation?"
 
-                            returnTypeAnnotationNode :: functionArgumentsReversed ->
+                            (Elm.Syntax.Node.Node returnTypeAnnotationRange returnTypeAnnotation) :: functionArgumentsReversed ->
                                 let
-                                    returnTypeAnnotation =
-                                        Elm.Syntax.Node.value returnTypeAnnotationNode
-
                                     ( hasAppStateParam, functionArgumentsLessState ) =
                                         if
                                             (functionArgumentsReversed
@@ -726,7 +741,7 @@ parseExposeFunctionsToAdminConfigFromDeclaration { originalSourceModules, interf
                                         functionArgumentsReversed
                                             |> List.reverse
                                             |> List.indexedMap
-                                                (\parameterIndex parameterTypeAnnotationNode ->
+                                                (\parameterIndex (Elm.Syntax.Node.Node paramTypeAnnotationRange paramTypeAnnotation) ->
                                                     { patternSourceCodeText =
                                                         parametersSourceCodeTexts
                                                             |> List.drop parameterIndex
@@ -734,11 +749,11 @@ parseExposeFunctionsToAdminConfigFromDeclaration { originalSourceModules, interf
                                                             |> Maybe.withDefault "unknown"
                                                     , typeSourceCodeText =
                                                         getTextLinesFromRange
-                                                            (Elm.Syntax.Node.range parameterTypeAnnotationNode)
+                                                            paramTypeAnnotationRange
                                                             interfaceModule.fileText
                                                             |> String.join "\n"
                                                     , typeIsAppStateType =
-                                                        Elm.Syntax.Node.value parameterTypeAnnotationNode == backendStateType
+                                                        paramTypeAnnotation == backendStateType
                                                     }
                                                 )
 
@@ -758,6 +773,7 @@ parseExposeFunctionsToAdminConfigFromDeclaration { originalSourceModules, interf
                                         , ( { isDecoder = isDecoder }, typeAnnotation )
                                         )
 
+                                    argumentsJsonDecoders : List ( String, ( { isDecoder : Bool }, ElmTypeAnnotation ) )
                                     argumentsJsonDecoders =
                                         functionArgumentsLessState
                                             |> List.map
@@ -765,6 +781,7 @@ parseExposeFunctionsToAdminConfigFromDeclaration { originalSourceModules, interf
                                                     >> localJsonConverterFunctionFromTypeAnnotation { isDecoder = True }
                                                 )
 
+                                    returnTypeJsonEncoders : List ( String, ( { isDecoder : Bool }, ElmTypeAnnotation ) )
                                     returnTypeJsonEncoders =
                                         if returnTypeAnnotation == backendStateType then
                                             []
@@ -775,6 +792,7 @@ parseExposeFunctionsToAdminConfigFromDeclaration { originalSourceModules, interf
                                                 returnTypeAnnotation
                                             ]
 
+                                    returnTypeEncoderFunction : Maybe String
                                     returnTypeEncoderFunction =
                                         returnTypeJsonEncoders |> List.head |> Maybe.map Tuple.first
 
@@ -791,9 +809,11 @@ parseExposeFunctionsToAdminConfigFromDeclaration { originalSourceModules, interf
                                                 )
                                             |> Dict.fromList
 
+                                    exposedFunctionQualifiedName : String
                                     exposedFunctionQualifiedName =
                                         String.join "." (interfaceModule.moduleName ++ [ functionName ])
 
+                                    composeHandler : { expression : String, resultContainsAppState : Bool }
                                     composeHandler =
                                         buildExposedFunctionHandlerExpression
                                             { exposedFunctionQualifiedName = exposedFunctionQualifiedName
@@ -804,9 +824,10 @@ parseExposeFunctionsToAdminConfigFromDeclaration { originalSourceModules, interf
                                             , returnTypeEncoderFunction = returnTypeEncoderFunction
                                             }
 
+                                    returnTypeSourceCodeText : String
                                     returnTypeSourceCodeText =
                                         getTextLinesFromRange
-                                            (Elm.Syntax.Node.range returnTypeAnnotationNode)
+                                            returnTypeAnnotationRange
                                             interfaceModule.fileText
                                             |> String.join "\n"
                                 in
@@ -841,6 +862,7 @@ buildExposedFunctionHandlerExpression config =
     case config.parameterDecoderFunctions of
         [ singleParameterDecoderFunction ] ->
             let
+                returnValueEncodeExpression : String
                 returnValueEncodeExpression =
                     case config.returnTypeEncoderFunction of
                         Nothing ->
@@ -906,16 +928,20 @@ type alias WebServiceShimVersionModules =
 webServiceShimVersionModules : SourceParsedElmModule -> WebServiceShimVersionModules
 webServiceShimVersionModules platformModule =
     let
+        declarationsTexts : List String
         declarationsTexts =
             platformModule.parsedSyntax.declarations
                 |> List.map
-                    (\declarationNode ->
-                        getTextLinesFromRange
-                            (Elm.Syntax.Node.range declarationNode)
-                            platformModule.fileText
+                    (\(Elm.Syntax.Node.Node declarationRange _) ->
+                        String.join
+                            "\n"
+                            (getTextLinesFromRange
+                                declarationRange
+                                platformModule.fileText
+                            )
                     )
-                |> List.map (String.join "\n")
 
+        declarationsTextsContains : String -> Bool
         declarationsTextsContains string =
             declarationsTexts |> List.any (String.contains string)
     in

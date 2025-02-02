@@ -41,6 +41,20 @@ assocListGet key list =
                 assocListGet key rest
 
 
+assocListInsert : key -> value -> List ( key, value ) -> List ( key, value )
+assocListInsert key value list =
+    case assocListGetWithIndex key list of
+        Just ( index, _ ) ->
+            List.concat
+                [ List.take index list
+                , [ ( key, value ) ]
+                , List.drop (index + 1) list
+                ]
+
+        Nothing ->
+            ( key, value ) :: list
+
+
 listMapFind : (a -> Maybe b) -> List a -> Maybe b
 listMapFind mapItem list =
     case list of

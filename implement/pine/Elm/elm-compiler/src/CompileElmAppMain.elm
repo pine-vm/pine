@@ -10,7 +10,6 @@ import CompileElmApp
         , EntryPointClass
         , LocatedCompilationError
         )
-import Dict
 
 
 type CompilationIterationSuccess
@@ -28,7 +27,7 @@ asCompletelyLoweredElmApp sourceFiles dependencies compilationRootFilePath inter
     case
         CompileElmApp.asCompletelyLoweredElmApp
             defaultEntryPoints
-            { sourceFiles = Dict.fromList sourceFiles
+            { sourceFiles = sourceFiles
             , dependencies = dependencies
             , compilationRootFilePath = compilationRootFilePath
             , interfaceToHostRootModuleName = interfaceToHostRootModuleName
@@ -41,7 +40,7 @@ asCompletelyLoweredElmApp sourceFiles dependencies compilationRootFilePath inter
         Ok success ->
             Ok
                 (CompilationIterationSuccess
-                    (Dict.toList success.compiledFiles)
+                    success.compiledFiles
                     success.rootModuleEntryPointKind
                 )
 

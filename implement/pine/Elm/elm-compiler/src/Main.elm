@@ -197,7 +197,6 @@ jsonDecodeElmMakeOutputType =
 jsonEncodeAppCode : CompileElmApp.AppFiles -> Json.Encode.Value
 jsonEncodeAppCode appCode =
     appCode
-        |> Dict.toList
         |> Json.Encode.list jsonEncodeAppCodeEntry
 
 
@@ -212,7 +211,6 @@ jsonEncodeAppCodeEntry ( filePath, fileContent ) =
 jsonDecodeAppCode : Json.Decode.Decoder CompileElmApp.AppFiles
 jsonDecodeAppCode =
     Json.Decode.list jsonDecodeAppCodeEntry
-        |> Json.Decode.map Dict.fromList
 
 
 jsonDecodeAppCodeEntry : Json.Decode.Decoder ( List String, Bytes.Bytes )

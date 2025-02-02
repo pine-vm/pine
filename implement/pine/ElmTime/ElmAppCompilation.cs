@@ -1046,36 +1046,23 @@ namespace ElmTime
                 throw new Exception("Expected Elm record value, got: " + asElmValue);
             }
 
-            var filesValue = asElmRecord["files"];
+            var filesElmValue = asElmRecord["files"];
 
-            if (filesValue is null)
+            if (filesElmValue is null)
             {
                 throw new Exception("Expected field 'files' in Elm record.");
             }
 
-            var filesDict =
-                DictToListRecursive(ElmValueEncoding.ElmValueAsPineValue(filesValue));
+            if (filesElmValue is not ElmValue.ElmList filesElmList)
+            {
+                throw new Exception("Expected Elm list value, got: " + filesElmValue);
+            }
 
             IReadOnlyList<CompilerSerialInterface.AppCodeEntry> filesList =
-                filesDict.ToArray()
+                filesElmList.Elements
                 .Select(fileEntry =>
                 {
-                    var fileEntryElmValueResult =
-                    elmCompilerCache.PineValueDecodedAsElmValue(fileEntry);
-
-                    {
-                        if (fileEntryElmValueResult.IsErrOrNull() is { } err)
-                        {
-                            throw new Exception("Failed parsing as Elm value: " + err);
-                        }
-                    }
-
-                    if (fileEntryElmValueResult.IsOkOrNull() is not { } fileEntryElmValue)
-                    {
-                        throw new Exception("Unexpected result type: " + fileEntryElmValueResult.GetType());
-                    }
-
-                    if (fileEntryElmValue is not ElmValue.ElmList fileEntryList)
+                    if (fileEntry is not ElmValue.ElmList fileEntryList)
                     {
                         throw new Exception("Expected Elm list value, got: " + fileEntry);
                     }
@@ -1176,41 +1163,6 @@ namespace ElmTime
                 outputType: outputType,
                 enableDebug: enableDebug,
                 enableOptimize: false);
-        }
-
-        static ReadOnlyMemory<PineValue> DictToListRecursive(PineValue dict)
-        {
-            var tag = PineVM.ValueFromPathInValueOrEmptyList(dict, [0]);
-
-            if (tag == ElmValue.ElmDictEmptyTagNameAsValue)
-            {
-                return ReadOnlyMemory<PineValue>.Empty;
-            }
-
-            if (tag == ElmValue.ElmDictNotEmptyTagNameAsValue)
-            {
-                var dictNotEmptyArgs = PineVM.ValueFromPathInValueOrEmptyList(dict, [1]);
-
-                var argKey = PineVM.ValueFromPathInValueOrEmptyList(dictNotEmptyArgs, [1]);
-                var argValue = PineVM.ValueFromPathInValueOrEmptyList(dictNotEmptyArgs, [2]);
-                var argLeft = PineVM.ValueFromPathInValueOrEmptyList(dictNotEmptyArgs, [3]);
-                var argRight = PineVM.ValueFromPathInValueOrEmptyList(dictNotEmptyArgs, [4]);
-
-                var fromLeft = DictToListRecursive(argLeft);
-                var fromRight = DictToListRecursive(argRight);
-
-                var result = new PineValue[fromLeft.Length + fromRight.Length + 1];
-
-                fromLeft.Span.CopyTo(result);
-
-                result[fromLeft.Length] = PineValue.List([argKey, argValue]);
-
-                fromRight.Span.CopyTo(result.AsSpan(fromLeft.Length + 1));
-
-                return result;
-            }
-
-            throw new ParseExpressionException("Error in case-of block: No matching branch.");
         }
 
         private static CompilerSerialInterface.ElmMakeOutputType ParseElmMakeOutputType(ElmValue elmValue)
@@ -1578,7 +1530,7 @@ namespace ElmTime
             new(LoadCompilerElmProgramCodeFilesForElmBackend);
 
         public static Result<string, IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>>> LoadCompilerElmProgramCodeFilesForElmBackend() =>
-            Pine.Elm.ElmCompiler.LoadElmCompilerSourceCodeFiles();
+            ElmCompiler.LoadElmCompilerSourceCodeFiles();
 
         public static string CompileCompilationErrorsDisplayText(IReadOnlyList<LocatedCompilationError>? compilationErrors)
         {
