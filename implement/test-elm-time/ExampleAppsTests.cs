@@ -113,6 +113,46 @@ public class ExampleAppsTests
     }
 
     [TestMethod]
+    public void Example_app_Elm_editor_just_lowering()
+    {
+        var webAppSource =
+            ExampleAppValueFromExampleName("elm-editor");
+
+        var webAppSourceTree =
+            PineValueComposition.ParseAsTreeWithStringPath(webAppSource)
+            .Extract(err => throw new Exception("Failed parsing app source files as tree: " + err));
+
+        var loweringResult =
+            ElmTime.ElmAppCompilation.AsCompletelyLoweredElmApp(
+                PineValueComposition.TreeToFlatDictionaryWithPathComparer(webAppSourceTree),
+                workingDirectoryRelative: [],
+                ElmTime.ElmAppInterfaceConfig.Default);
+
+        if (loweringResult.IsErrOrNull() is { } loweringErr)
+        {
+            throw new Exception("Failed lowering: " + loweringErr);
+        }
+
+        if (loweringResult.IsOkOrNull() is not { } loweringOk)
+        {
+            throw new Exception("Unexpected result type: " + loweringResult);
+        }
+
+        var loweredTree =
+            PineValueComposition.SortedTreeFromSetOfBlobsWithStringPath(loweringOk.result.compiledFiles);
+
+        var loweredTreeValue =
+            PineValueComposition.FromTreeWithStringPath(loweredTree);
+
+        var hashingCache = new Pine.CompilePineToDotNet.CompilerMutableCache();
+
+        var loweredHash =
+            hashingCache.ComputeHash(loweredTreeValue);
+
+        Console.WriteLine("Lowered hash: " + CommonConversion.StringBase16(loweredHash));
+    }
+
+    [TestMethod]
     public async Task Example_app_Elm_editor_webservice_sandbox()
     {
         var elmModuleTextBeforeFormatting =
@@ -291,6 +331,38 @@ public class ExampleAppsTests
 
     private static string NormalizeStringTestingElmFormat(string originalString) =>
         originalString.Trim().Replace("\n\r", "\n").Replace("\r\n", "\n");
+
+
+
+    /*
+     * 
+    [TestMethod]
+    public async System.Threading.Tasks.Task Example_app_minimal_backend_hello_world()
+    {
+        var webAppSource =
+            ExampleAppValueFromExampleName("minimal-backend-hello-world");
+
+        using var testSetup = WebHostAdminInterfaceTestSetup.Setup(deployAppAndInitElmState: webAppSource);
+        using var server = await testSetup.StartWebHostNewAsync();
+        using var publicAppClient = testSetup.BuildPublicAppHttpClient();
+
+        var httpResponse =
+            await publicAppClient.GetAsync("");
+
+        var responseContentAsString =
+            await httpResponse.Content.ReadAsStringAsync();
+
+        Assert.AreEqual(
+            HttpStatusCode.OK,
+            httpResponse.StatusCode,
+            "Response status code should be OK.\nresponseContentAsString:\n" + responseContentAsString);
+
+        Assert.AreEqual(
+            "Hello, World!",
+            responseContentAsString,
+            "response content as string");
+    }
+    */
 
     [TestMethod]
     public void Example_app_demo_backend_state()
