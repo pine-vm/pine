@@ -1,6 +1,7 @@
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Pine.Core;
 using Pine.Elm.Platform;
+using Pine.ElmInteractive;
 using System;
 using System.Linq;
 using System.Net;
@@ -291,6 +292,77 @@ public class ExampleAppsTests
 
     private static string NormalizeStringTestingElmFormat(string originalString) =>
         originalString.Trim().Replace("\n\r", "\n").Replace("\r\n", "\n");
+
+
+    [TestMethod]
+    public void Counter_webapp_Json_adapter()
+    {
+        var webAppSourceTree =
+            PineValueComposition.SortedTreeFromSetOfBlobsWithStringPath(
+                TestSetup.CounterElmWebApp);
+
+        var loweringResult =
+            ElmTime.ElmAppCompilation.AsCompletelyLoweredElmApp(
+                PineValueComposition.TreeToFlatDictionaryWithPathComparer(webAppSourceTree),
+                workingDirectoryRelative: [],
+                ElmTime.ElmAppInterfaceConfig.Default);
+
+        if (loweringResult.IsErrOrNull() is { } loweringErr)
+        {
+            throw new Exception("Failed lowering: " + loweringErr);
+        }
+
+        if (loweringResult.IsOkOrNull() is not { } loweringOk)
+        {
+            throw new Exception("Unexpected result type: " + loweringResult);
+        }
+
+        var loweredTree =
+            PineValueComposition.SortedTreeFromSetOfBlobsWithStringPath(loweringOk.result.compiledFiles);
+
+        var loweredTreeValue =
+            PineValueComposition.FromTreeWithStringPath(loweredTree);
+
+        var webServiceConfig =
+            WebServiceInterface.ConfigFromSourceFilesAndEntryFileName(
+                loweredTree,
+                ["src", "Backend", "Main.elm"]);
+
+        var pineVMCache = new Pine.PineVM.PineVMCache();
+
+        var pineVM = new Pine.PineVM.PineVM(pineVMCache.EvalCache);
+
+        var initStateToJsonValue =
+            webServiceConfig.JsonAdapter.EncodeAppStateAsJsonValue(
+                webServiceConfig.Init.State,
+                pineVM)
+            .Extract(err => throw new Exception("Failed encoding app state as JSON: " + err));
+
+        var initStateFromJsonValueElm =
+            ElmValueEncoding.PineValueAsElmValue(initStateToJsonValue, null, null)
+            .Extract(err => throw new Exception("Failed encoding app state as Elm value: " + err));
+
+        var initStateJsonValueExpr =
+            ElmValue.RenderAsElmExpression(initStateFromJsonValueElm);
+
+        Assert.AreEqual(
+            "IntValue 0",
+            initStateJsonValueExpr.expressionString);
+
+        var decodedAppState =
+            webServiceConfig.JsonAdapter.DecodeAppStateFromJsonValue(
+                initStateToJsonValue,
+                pineVM)
+            .Extract(err => throw new Exception("Failed decoding app state from JSON: " + err));
+
+        var decodedAppStateElmValue =
+            ElmValueEncoding.PineValueAsElmValue(decodedAppState, null, null)
+            .Extract(err => throw new Exception("Failed encoding app state as Elm value: " + err));
+
+        Assert.AreEqual(
+            "0",
+            ElmValue.RenderAsElmExpression(decodedAppStateElmValue).expressionString);
+    }
 
     [TestMethod]
     public void Example_app_demo_backend_state()

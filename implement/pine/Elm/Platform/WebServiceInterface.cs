@@ -146,7 +146,8 @@ type alias TerminateVolatileProcessStruct =
 
     public record WebServiceConfig(
         WebServiceEventResponse Init,
-        ElmInteractiveEnvironment.FunctionRecord Subscriptions)
+        ElmInteractiveEnvironment.FunctionRecord Subscriptions,
+        ElmTimeJsonAdapter.Parsed JsonAdapter)
     {
         public static WebServiceEventResponse
             EventHttpRequest(
@@ -1291,7 +1292,11 @@ type alias TerminateVolatileProcessStruct =
             ElmAppCompilation.AsCompletelyLoweredElmApp(
                 PineValueComposition.TreeToFlatDictionaryWithPathComparer(sourceFiles),
                 workingDirectoryRelative: [],
-                ElmAppInterfaceConfig.Default);
+                ElmAppInterfaceConfig.Default
+                with
+                {
+                    compilationRootFilePath = entryFileName
+                });
 
         if (loweringResult.IsErrOrNull() is { } loweringErr)
         {
@@ -1306,10 +1311,13 @@ type alias TerminateVolatileProcessStruct =
         var loweredTree =
             PineValueComposition.SortedTreeFromSetOfBlobsWithStringPath(loweringOk.result.compiledFiles);
 
+        var loweredTreeCleaned =
+            ElmTimeJsonAdapter.CleanUpFromLoweredForJavaScript(loweredTree);
+
         var compilationUnitsPrepared =
             ElmAppDependencyResolution.AppCompilationUnitsForEntryPoint(
-                loweredTree,
-                entryFileName);
+                loweredTreeCleaned,
+                ["src", "Backend", "InterfaceToHost_Root.elm"]);
 
         PineValue build()
         {
@@ -1330,17 +1338,27 @@ type alias TerminateVolatileProcessStruct =
         var (declValue, _) =
             ElmInteractiveEnvironment.ParseFunctionFromElmModule(
                 compiledModulesValue,
-                moduleName: string.Join(".", compilationUnitsPrepared.entryModuleName),
+                moduleName: "Backend.Main",
                 declarationName: "webServiceMain",
                 parseCache)
             .Extract(err => throw new Exception(
                 $"Failed parsing webServiceMain declaration from module {string.Join(".", compilationUnitsPrepared.entryModuleName)}: {err}"));
 
-        return ConfigFromDeclarationValue(declValue);
+        var parseJsonAdapterResult =
+            ElmTimeJsonAdapter.Parsed.ParseFromCompiled(
+                compiledModulesValue,
+                parseCache);
+
+        var parsedJsonAdapter =
+            parseJsonAdapterResult
+            .Extract(err => throw new Exception("Failed parsing JsonAdapter: " + err));
+
+        return ConfigFromDeclarationValue(declValue, parsedJsonAdapter);
     }
 
     public static WebServiceConfig ConfigFromDeclarationValue(
-        PineValue webServiceMainDeclValue)
+        PineValue webServiceMainDeclValue,
+        ElmTimeJsonAdapter.Parsed jsonAdapter)
     {
         var webServiceMainRecordResult =
             ElmValueEncoding.ParsePineValueAsRecordTagged(webServiceMainDeclValue);
@@ -1380,6 +1398,7 @@ type alias TerminateVolatileProcessStruct =
 
         return new WebServiceConfig(
             Init: initResult,
-            Subscriptions: subscriptionsFunctionRecord);
+            Subscriptions: subscriptionsFunctionRecord,
+            jsonAdapter);
     }
 }

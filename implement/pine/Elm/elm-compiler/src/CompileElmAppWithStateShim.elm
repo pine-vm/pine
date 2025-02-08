@@ -500,12 +500,7 @@ composeRootElmModuleTextWithStateShim config =
     in
     "module "
         ++ config.interfaceToHostRootModuleName
-        ++ """ exposing
-    ( State
-    , interfaceToHost_initState
-    , interfaceToHost_processEvent
-    , main
-    )
+        ++ """ exposing (..)
 
 import """
         ++ config.appRootDeclarationModuleName
