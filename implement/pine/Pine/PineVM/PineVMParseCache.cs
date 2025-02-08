@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+using System.Collections.Concurrent;
 using Pine.Core;
 
 namespace Pine.PineVM;
@@ -8,20 +8,16 @@ namespace Pine.PineVM;
 /// </summary>
 public class PineVMParseCache
 {
-    private readonly Dictionary<PineValue, Result<string, Expression>> parseExprCache = [];
+    private readonly ConcurrentDictionary<PineValue, Result<string, Expression>> parseExprCache = [];
 
     public Result<string, Expression> ParseExpression(PineValue expressionValue)
     {
-        if (parseExprCache.TryGetValue(expressionValue, out var cachedResult))
-        {
-            return cachedResult;
-        }
-
-        var result = ExpressionEncoding.ParseExpressionFromValueDefault(expressionValue);
-
-        parseExprCache[expressionValue] = result;
-
-        return result;
+        return
+            parseExprCache
+            .GetOrAdd(
+                expressionValue,
+                valueFactory:
+                ExpressionEncoding.ParseExpressionFromValueDefault);
     }
 }
 
