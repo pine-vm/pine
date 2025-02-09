@@ -35,7 +35,7 @@ import Set
 
 
 type alias StateShimConfig =
-    { jsonConverterDeclarationsConfigs : Dict.Dict String StateShimConfigJsonConverterConfig
+    { jsonConverterDeclarationsConfigs : List ( String, StateShimConfigJsonConverterConfig )
     , jsonConverterDeclarations : Dict.Dict String StateShimConfigJsonConverter
     , appStateType : StateShimConfigSupportingType
     , initAppShimStateExpression : String
@@ -116,9 +116,11 @@ loweredForAppInStateManagementShim :
     -> Result (List (LocatedInSourceFiles CompilationError)) ( AppFiles, ElmMakeEntryPointStruct )
 loweredForAppInStateManagementShim sourceDirs stateShimConfig config sourceFiles =
     let
+        interfaceToHostRootFilePath : List String
         interfaceToHostRootFilePath =
             filePathFromElmModuleName sourceDirs config.interfaceToHostRootModuleName
 
+        entryPoint : { elmMakeJavaScriptFunctionName : String }
         entryPoint =
             { elmMakeJavaScriptFunctionName =
                 String.join "." (config.interfaceToHostRootModuleName ++ [ "interfaceToHost_processEvent" ])
@@ -134,19 +136,23 @@ loweredForAppInStateManagementShim sourceDirs stateShimConfig config sourceFiles
         |> Result.map
             (\supportingTypes ->
                 let
+                    appStateType : StateShimConfigSupportingType
                     appStateType =
                         stateShimConfig.appStateType
 
+                    jsonConverterDeclarations : Dict.Dict String StateShimConfigJsonConverter
                     jsonConverterDeclarations =
                         supportingTypes.jsonConverterDeclarations
                             |> Dict.union stateShimConfig.jsonConverterDeclarations
 
+                    supportingJsonConverterFunctionsDependencies : Dict.Dict String ElmChoiceTypeStruct
                     supportingJsonConverterFunctionsDependencies =
                         jsonConverterDeclarations
                             |> Dict.values
                             |> List.concatMap (.dependencies >> Dict.toList)
                             |> Dict.fromList
 
+                    jsonConvertedTypesDependencies : Dict.Dict String ElmChoiceTypeStruct
                     jsonConvertedTypesDependencies =
                         appStateType.dependencies
                             |> Dict.union (Tuple.second supportingTypes.stateShimRequestType)
@@ -163,9 +169,14 @@ loweredForAppInStateManagementShim sourceDirs stateShimConfig config sourceFiles
                                     |> List.map .typeAnnotation
                                )
 
+                    modulesToAdd : List String
                     modulesToAdd =
-                        modulesToAddForBase64Coding
-                            ++ List.map .fileText (Dict.values supportingTypes.modules)
+                        List.concat
+                            [ modulesToAddForBase64Coding
+                            , List.map
+                                (\( _, supportingModule ) -> supportingModule.fileText)
+                                supportingTypes.modules
+                            ]
 
                     ( appFiles, generateSerializersResult ) =
                         sourceFiles
@@ -177,27 +188,37 @@ loweredForAppInStateManagementShim sourceDirs stateShimConfig config sourceFiles
                                 typeToGenerateSerializersFor
                                 jsonConvertedTypesDependencies
 
+                    modulesToImport : List (List String)
                     modulesToImport =
-                        Set.toList generateSerializersResult.modulesToImport
-                            ++ stateShimConfig.modulesToImport
-                            ++ List.map .moduleName (Dict.values supportingTypes.modules)
+                        List.concat
+                            [ generateSerializersResult.modulesToImport
+                            , stateShimConfig.modulesToImport
+                            , List.map
+                                (\( _, supportingModule ) -> supportingModule.moduleName)
+                                supportingTypes.modules
+                            ]
 
+                    stateShimRequestFunctionsNamesInGeneratedModules : { encodeFunction : { name : String, text : String }, decodeFunction : { name : String, text : String } }
                     stateShimRequestFunctionsNamesInGeneratedModules =
                         buildJsonConverterFunctionsForTypeAnnotation (Tuple.first supportingTypes.stateShimRequestType)
 
+                    stateShimResponseResultFunctionsNamesInGeneratedModules : { encodeFunction : { name : String, text : String }, decodeFunction : { name : String, text : String } }
                     stateShimResponseResultFunctionsNamesInGeneratedModules =
                         buildJsonConverterFunctionsForTypeAnnotation (Tuple.first supportingTypes.stateShimResponseResultType)
 
+                    stateShimRequestDecodeFunction : ( List String, String )
                     stateShimRequestDecodeFunction =
                         ( generateSerializersResult.generatedModuleName
                         , stateShimRequestFunctionsNamesInGeneratedModules.decodeFunction.name
                         )
 
+                    stateShimResponseEncodeSerialFunction : ( List String, String )
                     stateShimResponseEncodeSerialFunction =
                         ( generateSerializersResult.generatedModuleName
                         , stateShimResponseResultFunctionsNamesInGeneratedModules.encodeFunction.name
                         )
 
+                    supportingJsonConverterFunctions : Dict.Dict String ( List String, String )
                     supportingJsonConverterFunctions =
                         jsonConverterDeclarations
                             |> Dict.map
@@ -218,18 +239,21 @@ loweredForAppInStateManagementShim sourceDirs stateShimConfig config sourceFiles
                                     )
                                 )
 
+                    appRootDeclarationModuleName : String
                     appRootDeclarationModuleName =
                         config.compilationRootModule.parsedSyntax.moduleDefinition
                             |> Elm.Syntax.Node.value
                             |> Elm.Syntax.Module.moduleName
                             |> String.join "."
 
+                    exposedFunctionsListSyntax : String
                     exposedFunctionsListSyntax =
                         stateShimConfig.exposedFunctions
                             |> Dict.toList
                             |> List.map composeExposedFunctionListEntrySyntax
                             |> String.join "\n,"
 
+                    exposedFunctionsRootModuleSupportingFunction : String
                     exposedFunctionsRootModuleSupportingFunction =
                         [ "config_exposedFunctions ="
                         , [ "[" ++ exposedFunctionsListSyntax
@@ -241,11 +265,13 @@ loweredForAppInStateManagementShim sourceDirs stateShimConfig config sourceFiles
                         ]
                             |> String.join "\n"
 
+                    estimateJsonEncodeStateLengthGenerated : { generatedFunctions : List CompileElmApp.GenerateFunctionFromTypeResult, modulesToImportForChoiceTypes : List (List String) }
                     estimateJsonEncodeStateLengthGenerated =
                         CompileElmApp.buildEstimateJsonEncodeLengthFunctionsForMultipleTypes
                             [ appStateType.typeAnnotation ]
                             appStateType.dependencies
 
+                    estimateAppStateJsonEncodeLengthFunctionName : String
                     estimateAppStateJsonEncodeLengthFunctionName =
                         (buildEstimateJsonEncodeLengthFunctionForTypeAnnotation appStateType.typeAnnotation).name
 
@@ -256,6 +282,7 @@ estimateJsonEncodeAppStateLength = """ ++ estimateAppStateJsonEncodeLengthFuncti
                         ]
                             ++ List.map .functionText estimateJsonEncodeStateLengthGenerated.generatedFunctions
 
+                    rootElmModuleText : String
                     rootElmModuleText =
                         composeRootElmModuleTextWithStateShim
                             { interfaceToHostRootModuleName = String.join "." config.interfaceToHostRootModuleName
@@ -286,6 +313,7 @@ estimateJsonEncodeAppStateLength = """ ++ estimateAppStateJsonEncodeLengthFuncti
 composeExposedFunctionListEntrySyntax : ( String, ExposedFunctionConfig ) -> String
 composeExposedFunctionListEntrySyntax ( functionName, functionConfig ) =
     let
+        syntaxFromBool : Bool -> String
         syntaxFromBool bool =
             if bool then
                 "True"
@@ -293,6 +321,7 @@ composeExposedFunctionListEntrySyntax ( functionName, functionConfig ) =
             else
                 "False"
 
+        parametersTexts : List String
         parametersTexts =
             functionConfig.description.parameters
                 |> List.map
@@ -340,11 +369,11 @@ composeExposedFunctionListEntrySyntax ( functionName, functionConfig ) =
 supportingTypesModules :
     SourceDirectories
     -> StateShimConfig
-    -> Dict.Dict (List String) SourceParsedElmModule
+    -> List ( List String, SourceParsedElmModule )
     ->
         Result
             (LocatedInSourceFiles String)
-            { modules : Dict.Dict (List String) SourceParsedElmModule
+            { modules : List ( List String, SourceParsedElmModule )
             , stateShimRequestType : ( ElmTypeAnnotation, Dict.Dict String ElmChoiceTypeStruct )
             , stateShimResponseResultType : ( ElmTypeAnnotation, Dict.Dict String ElmChoiceTypeStruct )
             , jsonConverterDeclarations : Dict.Dict String StateShimConfigJsonConverter
@@ -366,7 +395,6 @@ supportingTypesModules sourceDirs stateShimConfig originalSourceModules =
                 let
                     moduleFromName moduleName =
                         typesModules
-                            |> Dict.toList
                             |> List.filter (Tuple.second >> .moduleName >> (==) moduleName)
                             |> List.head
                 in
@@ -386,7 +414,9 @@ supportingTypesModules sourceDirs stateShimConfig originalSourceModules =
                                 Elm.Syntax.Node.Node Elm.Syntax.Range.emptyRange
 
                             fakeTypeAnnotationFromLocalName localName =
-                                Elm.Syntax.TypeAnnotation.Typed (syntaxNodeFromEmptyRange ( [], localName )) []
+                                Elm.Syntax.TypeAnnotation.Typed
+                                    (syntaxNodeFromEmptyRange ( [], localName ))
+                                    []
 
                             stateShimRequestFakeTypeAnnotation : Elm.Syntax.TypeAnnotation.TypeAnnotation
                             stateShimRequestFakeTypeAnnotation =
@@ -395,6 +425,15 @@ supportingTypesModules sourceDirs stateShimConfig originalSourceModules =
                             stateShimResponseResultFakeTypeAnnotation : Elm.Syntax.TypeAnnotation.TypeAnnotation
                             stateShimResponseResultFakeTypeAnnotation =
                                 fakeTypeAnnotationFromLocalName "ResponseOverSerialInterface"
+
+                            mergedModules : List ( List String, SourceParsedElmModule )
+                            mergedModules =
+                                List.foldl
+                                    (\( moduleName, typeModule ) aggregate ->
+                                        Common.assocListInsert moduleName typeModule aggregate
+                                    )
+                                    originalSourceModules
+                                    typesModules
 
                             fromStateShimConfigJsonConverterConfig :
                                 StateShimConfigJsonConverterConfig
@@ -410,7 +449,7 @@ supportingTypesModules sourceDirs stateShimConfig originalSourceModules =
 
                                     Just ( converterTypeModuleFilePath, converterTypeModule ) ->
                                         CompileElmApp.parseElmTypeAndDependenciesRecursivelyFromAnnotation
-                                            (Dict.union typesModules originalSourceModules)
+                                            mergedModules
                                             ( ( converterTypeModuleFilePath, converterTypeModule.parsedSyntax )
                                             , syntaxNodeFromEmptyRange
                                                 (fakeTypeAnnotationFromLocalName converterConfig.declarationName)
@@ -423,24 +462,28 @@ supportingTypesModules sourceDirs stateShimConfig originalSourceModules =
                                                     }
                                                 )
 
+                            jsonConverterDeclarationsResults : Result (LocatedInSourceFiles String) (List ( String, StateShimConfigJsonConverter ))
                             jsonConverterDeclarationsResults =
                                 stateShimConfig.jsonConverterDeclarationsConfigs
-                                    |> Dict.toList
                                     |> Common.resultListMapCombine
                                         (\( declarationName, converterConfig ) ->
-                                            fromStateShimConfigJsonConverterConfig converterConfig
-                                                |> Result.map (Tuple.pair declarationName)
+                                            case fromStateShimConfigJsonConverterConfig converterConfig of
+                                                Err err ->
+                                                    Err err
+
+                                                Ok converter ->
+                                                    Ok ( declarationName, converter )
                                         )
                         in
                         CompileElmApp.parseElmTypeAndDependenciesRecursivelyFromAnnotation
-                            (Dict.union typesModules originalSourceModules)
+                            mergedModules
                             ( ( stateShimTypesModuleFilePath, stateShimTypesModule.parsedSyntax )
                             , syntaxNodeFromEmptyRange stateShimRequestFakeTypeAnnotation
                             )
                             |> Result.andThen
                                 (\stateShimRequestType ->
                                     CompileElmApp.parseElmTypeAndDependenciesRecursivelyFromAnnotation
-                                        (Dict.union typesModules originalSourceModules)
+                                        mergedModules
                                         ( ( stateShimTypesModuleFilePath, stateShimTypesModule.parsedSyntax )
                                         , syntaxNodeFromEmptyRange stateShimResponseResultFakeTypeAnnotation
                                         )
@@ -463,19 +506,24 @@ supportingTypesModules sourceDirs stateShimConfig originalSourceModules =
 composeRootElmModuleTextWithStateShim : RootModuleConfig -> String
 composeRootElmModuleTextWithStateShim config =
     let
+        supportingJsonConverterFunctionsAliases : List ( String, ( List String, String ) )
         supportingJsonConverterFunctionsAliases =
             Dict.toList config.supportingJsonConverterFunctions
 
+        functionAliases : List ( String, ( List String, String ) )
         functionAliases =
-            [ ( "jsonDecodeStateShimRequest"
-              , config.stateShimRequestDecodeFunction
-              )
-            , ( "jsonEncodeStateShimResultResponse"
-              , config.stateShimResponseEncodeSerialFunction
-              )
-            ]
-                ++ supportingJsonConverterFunctionsAliases
+            List.concat
+                [ [ ( "jsonDecodeStateShimRequest"
+                    , config.stateShimRequestDecodeFunction
+                    )
+                  , ( "jsonEncodeStateShimResultResponse"
+                    , config.stateShimResponseEncodeSerialFunction
+                    )
+                  ]
+                , supportingJsonConverterFunctionsAliases
+                ]
 
+        supportingFunctionsText : String
         supportingFunctionsText =
             (functionAliases
                 |> List.map
@@ -488,6 +536,7 @@ composeRootElmModuleTextWithStateShim config =
                 ++ config.otherSupportingFunctions
                 |> String.join "\n\n\n"
 
+        importsText : String
         importsText =
             config.modulesToImport
                 |> Set.fromList
@@ -495,6 +544,7 @@ composeRootElmModuleTextWithStateShim config =
                 |> List.map (Tuple.pair >> (|>) Nothing >> importSyntaxTextFromModuleNameAndAlias)
                 |> String.join "\n"
 
+        appStateWithPlatformShim : String
         appStateWithPlatformShim =
             config.appStateWithPlatformShimTypeAnnotationFromAppStateAnnotation "AppState"
     in

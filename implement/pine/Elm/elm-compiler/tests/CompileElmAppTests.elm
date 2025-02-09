@@ -149,6 +149,7 @@ subscriptions _ =
                                         moduleFilePath =
                                             defaultSourceDirs.mainSourceDirectoryPath ++ [ "Backend", "Main.elm" ]
 
+                                        sourceModules : List ( List String, CompileElmApp.SourceParsedElmModule )
                                         sourceModules =
                                             [ ( moduleFilePath
                                               , Bytes.Encode.encode (Bytes.Encode.string moduleText)
@@ -161,7 +162,6 @@ subscriptions _ =
                                                             |> Result.toMaybe
                                                             |> Maybe.map (Tuple.pair filePath)
                                                     )
-                                                |> Dict.fromList
                                     in
                                     CompileBackendApp.parseAppStateElmTypeAndDependenciesRecursively
                                         rootFunctionDeclaration
@@ -272,7 +272,6 @@ parse_elm_type_annotation =
                             [ ( "TagA", [] )
                             , ( "TagB", [] )
                             ]
-                                |> Dict.fromList
                       }
                     )
                   ]
@@ -316,7 +315,6 @@ parse_elm_type_annotation =
                                 ]
                               )
                             ]
-                                |> Dict.fromList
                       }
                     )
                   ]
@@ -341,7 +339,6 @@ parse_elm_type_annotation =
                             [ ( "TagTerminate", [ CompileElmApp.LeafElmType CompileElmApp.IntLeaf ] )
                             , ( "TagRecurse", [ CompileElmApp.ChoiceElmType "WithChoice.RecursiveType" ] )
                             ]
-                                |> Dict.fromList
                       }
                     )
                   ]
@@ -369,7 +366,6 @@ parse_elm_type_annotation =
                             [ ( "TagA", [ CompileElmApp.GenericType "a" ] )
                             , ( "TagB", [] )
                             ]
-                                |> Dict.fromList
                       }
                     )
                   ]
@@ -421,7 +417,7 @@ parse_elm_type_annotation =
                     }
                 , [ ( "OtherModule.OurType"
                     , { parameters = []
-                      , tags = [ ( "TagA", [] ) ] |> Dict.fromList
+                      , tags = [ ( "TagA", [] ) ]
                       }
                     )
                   ]
@@ -450,7 +446,7 @@ parse_elm_type_annotation =
                     }
                 , [ ( "Namespace.SomeModule.OurType"
                     , { parameters = []
-                      , tags = [ ( "TagA", [] ) ] |> Dict.fromList
+                      , tags = [ ( "TagA", [] ) ]
                       }
                     )
                   ]
@@ -495,7 +491,6 @@ type alias MixedRecord =
                             [ ( "TagA", [] )
                             , ( "TagB", [ CompileElmApp.LeafElmType CompileElmApp.IntLeaf ] )
                             ]
-                                |> Dict.fromList
                       }
                     )
                   ]
@@ -546,13 +541,16 @@ type alias MixedRecord =
                                                           }
                                                         )
                                                     )
-                                                |> Dict.fromList
 
+                                        rootModuleImports : List String
                                         rootModuleImports =
                                             namedModules
-                                                |> Dict.values
-                                                |> List.map (.moduleName >> String.join "." >> (++) "import ")
+                                                |> List.map
+                                                    (\( _, parsedModule ) ->
+                                                        "import " ++ String.join "." parsedModule.moduleName
+                                                    )
 
+                                        rootModuleText : String
                                         rootModuleText =
                                             ("module Root exposing (..)"
                                                 :: ""
@@ -845,7 +843,7 @@ emit_json_coding_expression_from_choice_type =
       , choiceTypeName = "ModuleName.ChoiceType"
       , choiceType =
             { parameters = []
-            , tags = [ ( "TagA", [] ) ] |> Dict.fromList
+            , tags = [ ( "TagA", [] ) ]
             }
       , expectedResult =
             { encodeFunction = String.trim """
@@ -870,7 +868,6 @@ jsonDecode_ModuleName_ChoiceType =
                 [ ( "TagRecurse", [ CompileElmApp.ChoiceElmType "ModuleName.RecursiveType" ] )
                 , ( "TagTerminate", [ CompileElmApp.LeafElmType CompileElmApp.IntLeaf ] )
                 ]
-                    |> Dict.fromList
             }
       , expectedResult =
             { encodeFunction = String.trim """
@@ -903,7 +900,6 @@ jsonDecode_ModuleName_RecursiveType =
                     ]
                   )
                 ]
-                    |> Dict.fromList
             }
       , expectedResult =
             { encodeFunction = String.trim """
@@ -931,7 +927,6 @@ jsonDecode_ModuleName_TypeName =
                     ]
                   )
                 ]
-                    |> Dict.fromList
             }
       , expectedResult =
             { encodeFunction = String.trim """
@@ -958,7 +953,6 @@ jsonDecode_ModuleName_TypeName =
                     ]
                   )
                 ]
-                    |> Dict.fromList
             }
       , expectedResult =
             { encodeFunction = String.trim """
@@ -993,7 +987,6 @@ jsonDecode_ModuleName_TypeName jsonDecode_type_parameter_test =
                     ]
                   )
                 ]
-                    |> Dict.fromList
             }
       , expectedResult =
             { encodeFunction = String.trim """

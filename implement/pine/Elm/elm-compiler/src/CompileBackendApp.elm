@@ -188,7 +188,7 @@ loweredForBackendApp appDeclaration config sourceFiles =
                                                             ]
                                                                 ++ rootModuleSupportingFunctionsMigrate
 
-                                                        jsonConverterDeclarationsConfigs : Dict.Dict String StateShimConfigJsonConverterConfig
+                                                        jsonConverterDeclarationsConfigs : List ( String, StateShimConfigJsonConverterConfig )
                                                         jsonConverterDeclarationsConfigs =
                                                             [ ( "jsonDecodeBackendEvent"
                                                               , { isDecoder = True
@@ -203,7 +203,6 @@ loweredForBackendApp appDeclaration config sourceFiles =
                                                                 }
                                                               )
                                                             ]
-                                                                |> Dict.fromList
 
                                                         jsonConverterDeclarationsMigrate =
                                                             maybeMigrationConfig
@@ -322,9 +321,8 @@ Backend.Generated.StateShim.exposedFunctionExpectingSingleArgumentAndAppState
                                                     in
                                                     case
                                                         config.originalSourceModules
-                                                            |> Dict.values
                                                             |> Common.listFind
-                                                                (\candidate ->
+                                                                (\( _, candidate ) ->
                                                                     List.member
                                                                         candidate.moduleName
                                                                         platformModuleNameCandidates
@@ -339,7 +337,7 @@ Backend.Generated.StateShim.exposedFunctionExpectingSingleArgumentAndAppState
                                                                     (OtherCompilationError "Did not find platform module")
                                                                 ]
 
-                                                        Just platformModule ->
+                                                        Just ( _, platformModule ) ->
                                                             let
                                                                 platformSupportingModules : WebServiceShimVersionModules
                                                                 platformSupportingModules =
@@ -401,7 +399,7 @@ Backend.Generated.StateShim.exposedFunctionExpectingSingleArgument
 
 
 parseMigrationConfig :
-    { originalSourceModules : Dict.Dict (List String) SourceParsedElmModule }
+    { originalSourceModules : List ( List String, SourceParsedElmModule ) }
     -> Result (List (LocatedInSourceFiles CompilationError)) (Maybe MigrationConfig)
 parseMigrationConfig { originalSourceModules } =
     case findModuleByName appStateMigrationInterfaceModuleName originalSourceModules of
@@ -454,7 +452,7 @@ migrateFromStringPackageWebServiceShim =
 
 parseAppStateElmTypeAndDependenciesRecursively :
     Elm.Syntax.Expression.Function
-    -> Dict.Dict (List String) SourceParsedElmModule
+    -> List ( List String, SourceParsedElmModule )
     -> ( List String, Elm.Syntax.File.File )
     ->
         Result
@@ -494,7 +492,7 @@ parseAppStateElmTypeAndDependenciesRecursively rootFunctionDeclaration sourceMod
 
 
 parseAppStateMigrateElmTypeAndDependenciesRecursively :
-    Dict.Dict (List String) SourceParsedElmModule
+    List ( List String, SourceParsedElmModule )
     -> ( List String, Elm.Syntax.File.File )
     -> Result (LocatedInSourceFiles String) ( ( ElmTypeAnnotation, ElmTypeAnnotation ), Dict.Dict String ElmChoiceTypeStruct )
 parseAppStateMigrateElmTypeAndDependenciesRecursively sourceModules ( parsedModuleFilePath, parsedModule ) =
@@ -612,7 +610,7 @@ migrateStateTypeAnnotationFromElmModule parsedModule =
 
 
 parseExposeFunctionsToAdminConfig :
-    { originalSourceModules : Dict.Dict (List String) SourceParsedElmModule
+    { originalSourceModules : List ( List String, SourceParsedElmModule )
     , backendStateType : ElmTypeAnnotation
     }
     -> Result (List (LocatedInSourceFiles String)) (Maybe ExposeFunctionsConfig)
@@ -670,7 +668,7 @@ parseExposeFunctionsToAdminConfig { originalSourceModules, backendStateType } =
 
 
 parseExposeFunctionsToAdminConfigFromDeclaration :
-    { originalSourceModules : Dict.Dict (List String) SourceParsedElmModule
+    { originalSourceModules : List ( List String, SourceParsedElmModule )
     , interfaceModuleFilePath : List String
     , interfaceModule : SourceParsedElmModule
     , backendStateType : ElmTypeAnnotation
