@@ -13,6 +13,8 @@ public record LanguageServerRpcTarget(
 {
     public JsonRpc? JsonRpc { get; set; } = null;
 
+    private bool shutdown;
+
     private void Log(string message)
     {
         LogDelegate?.Invoke(message);
@@ -231,5 +233,36 @@ public record LanguageServerRpcTarget(
         Log($"Publishing {diagnostics.Count} diagnostics for {documentUri}");
 
         await jsonRpc.NotifyAsync("textDocument/publishDiagnostics", parameters);
+    }
+
+    /// <summary>
+    /// https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#shutdown
+    /// </summary>
+    [JsonRpcMethod("shutdown")]
+    public void Shutdown()
+    {
+        shutdown = true;
+
+        Log("Shutdown");
+    }
+
+    /// <summary>
+    /// https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#exit
+    /// </summary>
+    [JsonRpcMethod("exit")]
+    public void Exit()
+    {
+        if (shutdown)
+        {
+            Log("Exiting");
+
+            Environment.Exit(0);
+        }
+        else
+        {
+            Log("Shutdown not called before exit");
+
+            Environment.Exit(1);
+        }
     }
 }
