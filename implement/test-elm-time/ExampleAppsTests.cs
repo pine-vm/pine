@@ -349,20 +349,47 @@ public class ExampleAppsTests
             "IntValue 0",
             initStateJsonValueExpr.expressionString);
 
-        var decodedAppState =
-            webServiceConfig.JsonAdapter.DecodeAppStateFromJsonValue(
-                initStateToJsonValue,
-                pineVM)
-            .Extract(err => throw new Exception("Failed decoding app state from JSON: " + err));
+        {
+            var decodedAppState =
+                webServiceConfig.JsonAdapter.DecodeAppStateFromJsonValue(
+                    initStateToJsonValue,
+                    pineVM)
+                .Extract(err => throw new Exception("Failed decoding app state from JSON: " + err));
 
-        var decodedAppStateElmValue =
-            ElmValueEncoding.PineValueAsElmValue(decodedAppState, null, null)
-            .Extract(err => throw new Exception("Failed encoding app state as Elm value: " + err));
+            var decodedAppStateElmValue =
+                ElmValueEncoding.PineValueAsElmValue(decodedAppState, null, null)
+                .Extract(err => throw new Exception("Failed encoding app state as Elm value: " + err));
 
-        Assert.AreEqual(
-            "0",
-            ElmValue.RenderAsElmExpression(decodedAppStateElmValue).expressionString);
+            Assert.AreEqual(
+                "0",
+                ElmValue.RenderAsElmExpression(decodedAppStateElmValue).expressionString);
+        }
+
+        {
+            /*
+             * Migration function in this example app is the identity function.
+             * */
+
+            Assert.IsNotNull(
+                webServiceConfig.JsonAdapter.JsonDecodeMigratePreviousState,
+                nameof(webServiceConfig.JsonAdapter.JsonDecodeMigratePreviousState) + " should not be null.");
+
+            var decodedAppState =
+                webServiceConfig.JsonAdapter.DecodePreviousAppStateFromJsonValue(
+                    initStateToJsonValue,
+                    pineVM)
+                .Extract(err => throw new Exception("Failed decoding previous app state from JSON: " + err));
+
+            var decodedAppStateElmValue =
+                ElmValueEncoding.PineValueAsElmValue(decodedAppState, null, null)
+                .Extract(err => throw new Exception("Failed encoding app state as Elm value: " + err));
+
+            Assert.AreEqual(
+                "0",
+                ElmValue.RenderAsElmExpression(decodedAppStateElmValue).expressionString);
+        }
     }
+
 
     [TestMethod]
     public void Example_app_demo_backend_state()

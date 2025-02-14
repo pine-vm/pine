@@ -29,7 +29,9 @@ public class ElmTimeJsonAdapter
          * */
         PineValue JsonDecodeAppState,
         /*
-         * The Elm app compiler emits the 'parseMigrationConfig' declaration only if the Elm app has a migration module.
+         * The Elm app compiler emits the 'jsonDecodeMigratePreviousState' declaration only if the Elm app has a migration module.
+         * 
+         * jsonDecodeMigratePreviousState : Json.Decode.Decoder prevState
          * */
         PineValue? JsonDecodeMigratePreviousState,
         /*
@@ -191,6 +193,43 @@ public class ElmTimeJsonAdapter
                     pineVM,
                     JsonDecodeDecodeValue,
                     [JsonDecodeAppState, jsonValue]);
+
+            {
+                if (jsonDecodeApplyFunctionResult.IsErrOrNull() is { } err)
+                {
+                    return err;
+                }
+            }
+
+            if (jsonDecodeApplyFunctionResult.IsOkOrNull() is not { } jsonDecodeApplyFunctionOk)
+            {
+                throw new System.Exception(
+                    "Unexpected jsonDecodeApplyFunctionResult: " + jsonDecodeApplyFunctionResult);
+            }
+
+            return
+                ElmValueInterop.ParseElmResultValue(
+                    jsonDecodeApplyFunctionOk,
+                    err => "Failed to decode JSON value: " + err,
+                    Result<string, PineValue>.ok,
+                    invalid:
+                    err => throw new System.Exception("Invalid: " + err));
+        }
+
+        public Result<string, PineValue> DecodePreviousAppStateFromJsonValue(
+            PineValue jsonValue,
+            IPineVM pineVM)
+        {
+            if (JsonDecodeMigratePreviousState is null)
+            {
+                return "No migration function available";
+            }
+
+            var jsonDecodeApplyFunctionResult =
+                ElmInteractiveEnvironment.ApplyFunction(
+                    pineVM,
+                    JsonDecodeDecodeValue,
+                    [JsonDecodeMigratePreviousState, jsonValue]);
 
             {
                 if (jsonDecodeApplyFunctionResult.IsErrOrNull() is { } err)
