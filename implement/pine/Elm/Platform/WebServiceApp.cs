@@ -1,5 +1,6 @@
 using ElmTime.ElmInteractive;
 using Pine.Core;
+using Pine.Core.PineVM;
 using Pine.PineVM;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -17,12 +18,26 @@ public class MutatingWebServiceApp
 
     private readonly WebServiceInterface.WebServiceConfig appConfig;
 
-    private PineValue appState;
+    private (PineValue appState, WebServiceInterface.Subscriptions subscriptions) appStateAndSubscriptions;
+
+    public PineValue AppState => appStateAndSubscriptions.appState;
+
+    public IPineVM PineVM => pineVM;
+
+    public ElmTime.ElmTimeJsonAdapter.Parsed JsonAdapter => appConfig.JsonAdapter;
 
     private readonly ConcurrentQueue<WebServiceInterface.Command> commands = new();
 
     public IReadOnlyList<WebServiceInterface.Command> DequeueCommands() =>
         [.. commands.DequeueAllEnumerable()];
+
+    public void SetAppState(PineValue appState)
+    {
+        var subscriptions =
+            WebServiceInterface.WebServiceConfig.ParseSubscriptions(appConfig, appState, pineVM);
+
+        appStateAndSubscriptions = (appState, subscriptions);
+    }
 
     public MutatingWebServiceApp(
         WebServiceInterface.WebServiceConfig appConfig)
@@ -31,7 +46,7 @@ public class MutatingWebServiceApp
 
         pineVM = new PineVM.PineVM(pineVMCache.EvalCache);
 
-        appState = appConfig.Init.State;
+        SetAppState(appConfig.Init.State);
 
         foreach (var command in appConfig.Init.Commands)
         {
@@ -44,12 +59,12 @@ public class MutatingWebServiceApp
     {
         var eventResponse =
             WebServiceInterface.WebServiceConfig.EventHttpRequest(
-                appConfig,
+                appStateAndSubscriptions.subscriptions,
                 httpRequest,
-                appState,
+                AppState,
                 pineVM);
 
-        appState = eventResponse.State;
+        SetAppState(eventResponse.State);
 
         MutateConsolidatingAppResponse(eventResponse);
 
@@ -64,10 +79,10 @@ public class MutatingWebServiceApp
             WebServiceInterface.WebServiceConfig.ApplyUpdate(
                 updateFunction,
                 updateArgsBeforeState,
-                appState,
+                AppState,
                 pineVM);
 
-        appState = eventResponse.State;
+        SetAppState(eventResponse.State);
 
         MutateConsolidatingAppResponse(eventResponse);
 

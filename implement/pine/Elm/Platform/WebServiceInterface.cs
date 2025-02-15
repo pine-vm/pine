@@ -151,8 +151,26 @@ type alias TerminateVolatileProcessStruct =
     {
         public static WebServiceEventResponse
             EventHttpRequest(
-            WebServiceConfig config,
+            Subscriptions subscriptions,
             HttpRequestEventStruct httpRequest,
+            PineValue stateBefore,
+            IPineVM pineVM)
+        {
+            var functionRecord = subscriptions.HttpRequest;
+
+            if (functionRecord.functionParameterCount is not 2)
+            {
+                throw new Exception("Expected httpRequest function to have two parameters.");
+            }
+
+            var inputEncoded = EncodeHttpRequest(httpRequest);
+
+            return
+                ApplyUpdate(functionRecord, [inputEncoded], stateBefore, pineVM);
+        }
+
+        public static Subscriptions ParseSubscriptions(
+            WebServiceConfig config,
             PineValue stateBefore,
             IPineVM pineVM)
         {
@@ -176,21 +194,47 @@ type alias TerminateVolatileProcessStruct =
                 throw new Exception("Missing field: httpRequest");
             }
 
-            var functionRecord =
+            var httpRequestFunctionRecord =
                 ElmInteractiveEnvironment.ParseFunctionRecordFromValueTagged(
                     httpRequestFieldValue,
                     parseCache)
                 .Extract(err => throw new Exception("Failed parsing httpRequest function record: " + err));
 
-            if (functionRecord.functionParameterCount is not 2)
+            var posixTimeIsPastFieldValue =
+                subscriptionsElmRecord
+                .First(field => field.fieldName is "posixTimeIsPast").fieldValue;
+
+            if (posixTimeIsPastFieldValue is null)
             {
-                throw new Exception("Expected httpRequest function to have two parameters.");
+                throw new Exception("Missing field: posixTimeIsPast");
             }
 
-            var inputEncoded = EncodeHttpRequest(httpRequest);
+            var posixTimeIsPastSubscription =
+                ElmValueInterop.ParseElmMaybeValue<PosixTimeIsPastSubscription?>(
+                    posixTimeIsPastFieldValue,
+                    nothing: () => null,
+                    just: elmValue =>
+                    {
+                        var parsedPosixTimeIsPastSubscription =
+                            ElmInteractiveEnvironment.ParseFunctionRecordFromValueTagged(
+                                elmValue,
+                                parseCache)
+                            .Extract(err => throw new Exception("Failed parsing posixTimeIsPast function record: " + err));
 
-            return
-                ApplyUpdate(functionRecord, [inputEncoded], stateBefore, pineVM);
+                        if (parsedPosixTimeIsPastSubscription.functionParameterCount is not 1)
+                        {
+                            throw new Exception("Expected posixTimeIsPast function to have one parameter.");
+                        }
+
+                        return new PosixTimeIsPastSubscription(
+                            MinimumPosixTimeMilli: 0,
+                            Update: parsedPosixTimeIsPastSubscription);
+                    },
+                    invalid: err => throw new Exception("Failed parsing posixTimeIsPast: " + err));
+
+            return new Subscriptions(
+                HttpRequest: httpRequestFunctionRecord,
+                PosixTimeIsPast: posixTimeIsPastSubscription);
         }
 
         public static WebServiceEventResponse
@@ -258,11 +302,11 @@ type alias TerminateVolatileProcessStruct =
 
     public record Subscriptions(
         ElmInteractiveEnvironment.FunctionRecord HttpRequest,
-        Maybe<PosixTimeIsPastSubscription> PosixTimeIsPast);
+        PosixTimeIsPastSubscription? PosixTimeIsPast);
 
     public record HttpRequestEventStruct(
         string HttpRequestId,
-        int PosixTimeMilli,
+        long PosixTimeMilli,
         HttpRequestContext RequestContext,
         HttpRequestProperties Request);
 
