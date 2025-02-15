@@ -366,6 +366,22 @@ public class ExampleAppsTests
         }
 
         {
+            var decodedAppState =
+                webServiceConfig.JsonAdapter.DecodeAppStateFromJsonString(
+                    ElmValueEncoding.StringAsPineValue("123"),
+                    pineVM)
+                .Extract(err => throw new Exception("Failed decoding app state from JSON: " + err));
+
+            var decodedAppStateElmValue =
+                ElmValueEncoding.PineValueAsElmValue(decodedAppState, null, null)
+                .Extract(err => throw new Exception("Failed encoding app state as Elm value: " + err));
+
+            Assert.AreEqual(
+                "123",
+                ElmValue.RenderAsElmExpression(decodedAppStateElmValue).expressionString);
+        }
+
+        {
             /*
              * Migration function in this example app is the identity function.
              * */
@@ -387,6 +403,10 @@ public class ExampleAppsTests
             Assert.AreEqual(
                 "0",
                 ElmValue.RenderAsElmExpression(decodedAppStateElmValue).expressionString);
+
+            Assert.IsNotNull(
+                webServiceConfig.JsonAdapter.Migrate,
+                nameof(webServiceConfig.JsonAdapter.Migrate) + " should not be null.");
         }
     }
 
