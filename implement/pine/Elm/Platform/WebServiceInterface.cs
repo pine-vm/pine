@@ -169,6 +169,41 @@ type alias TerminateVolatileProcessStruct =
                 ApplyUpdate(functionRecord, [inputEncoded], stateBefore, pineVM);
         }
 
+        public static WebServiceEventResponse?
+            EventPosixTime(
+            Subscriptions subscriptions,
+            long posixTimeMilli,
+            PineValue stateBefore,
+            IPineVM pineVM)
+        {
+            if (subscriptions.PosixTimeIsPast is not { } posixTimeSub)
+            {
+                return null;
+            }
+
+            if (posixTimeMilli < posixTimeSub.MinimumPosixTimeMilli)
+            {
+                return null;
+            }
+
+            var functionRecord = posixTimeSub.Update;
+
+            if (functionRecord.functionParameterCount is not 2)
+            {
+                throw new Exception("Expected posixTimeIsPast function to have two parameters.");
+            }
+
+            var inputEncoded =
+                ElmValueEncoding.ElmValueAsPineValue(
+                    new ElmValue.ElmRecord(
+                        [
+                        ("currentPosixTimeMilli", new ElmValue.ElmInteger(posixTimeMilli))
+                        ]));
+
+            return
+                ApplyUpdate(functionRecord, [inputEncoded], stateBefore, pineVM);
+        }
+
         public static Subscriptions ParseSubscriptions(
             WebServiceConfig config,
             PineValue stateBefore,
@@ -213,28 +248,57 @@ type alias TerminateVolatileProcessStruct =
                 ElmValueInterop.ParseElmMaybeValue<PosixTimeIsPastSubscription?>(
                     posixTimeIsPastFieldValue,
                     nothing: () => null,
-                    just: elmValue =>
-                    {
-                        var parsedPosixTimeIsPastSubscription =
-                            ElmInteractiveEnvironment.ParseFunctionRecordFromValueTagged(
-                                elmValue,
-                                parseCache)
-                            .Extract(err => throw new Exception("Failed parsing posixTimeIsPast function record: " + err));
-
-                        if (parsedPosixTimeIsPastSubscription.functionParameterCount is not 1)
-                        {
-                            throw new Exception("Expected posixTimeIsPast function to have one parameter.");
-                        }
-
-                        return new PosixTimeIsPastSubscription(
-                            MinimumPosixTimeMilli: 0,
-                            Update: parsedPosixTimeIsPastSubscription);
-                    },
+                    just: ParsePosixTimeIsPastSubscription,
                     invalid: err => throw new Exception("Failed parsing posixTimeIsPast: " + err));
 
             return new Subscriptions(
                 HttpRequest: httpRequestFunctionRecord,
                 PosixTimeIsPast: posixTimeIsPastSubscription);
+        }
+
+        public static PosixTimeIsPastSubscription ParsePosixTimeIsPastSubscription(
+            PineValue posixTimeIsPastValue)
+        {
+            var posixTimeIsPastElmRecord =
+                ElmValueEncoding.ParsePineValueAsRecordTagged(posixTimeIsPastValue)
+                .Extract(err => throw new Exception("Failed parsing posixTimeIsPast value as Elm record: " + err));
+
+            var minimumPosixTimeMilliField =
+                posixTimeIsPastElmRecord
+                .First(field => field.fieldName is "minimumPosixTimeMilli").fieldValue;
+
+            if (minimumPosixTimeMilliField is null)
+            {
+                throw new Exception("Missing field: minimumPosixTimeMilli");
+            }
+
+            var minimumPosixTimeMilli =
+                PineValueAsInteger.SignedIntegerFromValueRelaxed(minimumPosixTimeMilliField)
+                .Extract(err => throw new Exception("Failed parsing minimumPosixTimeMilli: " + err));
+
+            var updateField =
+                posixTimeIsPastElmRecord
+                .First(field => field.fieldName is "update").fieldValue;
+
+            if (updateField is null)
+            {
+                throw new Exception("Missing field: update");
+            }
+
+            var updateFunctionRecord =
+                ElmInteractiveEnvironment.ParseFunctionRecordFromValueTagged(
+                    updateField,
+                    parseCache)
+                .Extract(err => throw new Exception("Failed parsing update function record: " + err));
+
+            if (updateFunctionRecord.functionParameterCount is not 2)
+            {
+                throw new Exception("Expected posixTimeIsPast function to have one parameter.");
+            }
+
+            return new PosixTimeIsPastSubscription(
+                MinimumPosixTimeMilli: (long)minimumPosixTimeMilli,
+                Update: updateFunctionRecord);
         }
 
         public static WebServiceEventResponse
@@ -311,7 +375,7 @@ type alias TerminateVolatileProcessStruct =
         HttpRequestProperties Request);
 
     public record PosixTimeIsPastSubscription(
-        int MinimumPosixTimeMilli,
+        long MinimumPosixTimeMilli,
         ElmInteractiveEnvironment.FunctionRecord Update);
 
     public record HttpRequestContext(

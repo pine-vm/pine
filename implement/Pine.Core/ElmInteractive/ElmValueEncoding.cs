@@ -535,7 +535,7 @@ public static class ElmValueEncoding
                 .Extract(err => throw new Exception(err)),
 
                 ElmValue.ElmInteger elmInteger =>
-                PineValueAsInteger.ValueFromSignedInteger((int)elmInteger.Value),
+                PineValueAsInteger.ValueFromSignedInteger(elmInteger.Value),
 
                 ElmValue.ElmString elmString =>
                 StringAsPineValue(elmString.Value),

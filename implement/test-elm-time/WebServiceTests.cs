@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Pine;
 using Pine.Core;
+using Pine.Elm.Platform;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
@@ -851,7 +852,8 @@ public class WebServiceTests
         var migrateAndSecondDeploymentZipArchive =
             ZipArchive.ZipArchiveFromEntries(migrateAndSecondDeployment);
 
-        using var testSetup = WebHostAdminInterfaceTestSetup.Setup(deployAppAndInitElmState: initialDeployment);
+        using var testSetup =
+            WebHostAdminInterfaceTestSetup.Setup(deployAppAndInitElmState: initialDeployment);
 
         using var server = testSetup.StartWebHost();
 
@@ -1368,11 +1370,14 @@ public class WebServiceTests
     }
 
     [TestMethod]
-    public void Web_host_supports_long_polling()
+    public async System.Threading.Tasks.Task Web_host_supports_long_polling()
     {
-        var appSourceFiles = TestSetup.GetElmAppFromSubdirectoryName("http-long-polling");
+        var appSourceFiles =
+            TestSetup.GetElmAppFromSubdirectoryName("http-long-polling");
 
-        using var testSetup = WebHostAdminInterfaceTestSetup.Setup(deployAppAndInitElmState: TestSetup.AppConfigComponentFromFiles(appSourceFiles));
+        using var testSetup =
+            WebHostAdminInterfaceTestSetup.Setup(
+                deployAppAndInitElmState: TestSetup.AppConfigComponentFromFiles(appSourceFiles));
 
         using var server = testSetup.StartWebHost();
 
@@ -1388,10 +1393,11 @@ public class WebServiceTests
 
             var httpStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
-            var httpResponse = publicAppClient.SendAsync(httpRequest).Result;
+            var httpResponse =
+                await publicAppClient.SendAsync(httpRequest);
 
             var responseContent =
-                httpResponse.Content.ReadAsByteArrayAsync().Result;
+                await httpResponse.Content.ReadAsByteArrayAsync();
 
             httpStopwatch.Stop();
 
@@ -1399,12 +1405,90 @@ public class WebServiceTests
                 expectedDelayMilliseconds <= httpStopwatch.ElapsedMilliseconds,
                 "expectedDelayMilliseconds <= httpStopwatch.ElapsedMilliseconds");
 
-            var additionalDelayMilliseconds = httpStopwatch.ElapsedMilliseconds - expectedDelayMilliseconds;
+            var additionalDelayMilliseconds =
+                httpStopwatch.ElapsedMilliseconds - expectedDelayMilliseconds;
 
             Assert.IsTrue(
                 additionalDelayMilliseconds < 1500,
                 "additionalDelayMilliseconds < 1500");
         }
+    }
+
+    [TestMethod]
+    public async System.Threading.Tasks.Task Web_host_supports_long_polling_sandbox()
+    {
+        var appSourceFiles =
+            TestSetup.GetElmAppFromSubdirectoryName("http-long-polling");
+
+        var appSourceTree =
+            PineValueComposition.SortedTreeFromSetOfBlobsWithStringPath(appSourceFiles);
+
+        var webServiceConfig =
+            WebServiceInterface.ConfigFromSourceFilesAndEntryFileName(
+                appSourceTree,
+                ["src", "Backend", "Main.elm"]);
+
+        var webServiceApp =
+            new MutatingWebServiceApp(webServiceConfig);
+
+        var timeUpdateTaskCancellation =
+            new System.Threading.CancellationTokenSource();
+
+        var timeUpdateTask =
+            System.Threading.Tasks.Task.Run(
+                () =>
+                {
+                    while (!timeUpdateTaskCancellation.Token.IsCancellationRequested)
+                    {
+                        System.Threading.Tasks.Task.Delay(100).Wait();
+
+                        webServiceApp.UpdateForPosixTime(
+                            posixTimeMilli: DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
+                    }
+                },
+                cancellationToken: timeUpdateTaskCancellation.Token);
+
+        for (var delay = 0; delay < 5; ++delay)
+        {
+            var expectedDelayMilliseconds = delay * 1000;
+
+            var httpRequest =
+                new WebServiceInterface.HttpRequestProperties(
+                    Method: "POST",
+                    Uri: "/test",
+                    BodyAsBase64: null,
+                    Headers:
+                    [new WebServiceInterface.HttpHeader(
+                        Name: "delay-milliseconds",
+                        Values: [expectedDelayMilliseconds.ToString()])]);
+
+            var httpStopwatch = System.Diagnostics.Stopwatch.StartNew();
+
+            var httpResponse =
+                await webServiceApp.HttpRequestSendAsync(
+                    new WebServiceInterface.HttpRequestEventStruct
+                    (
+                        HttpRequestId: "r-" + DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+                        PosixTimeMilli: DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+                        Request: httpRequest,
+                        RequestContext: new WebServiceInterface.HttpRequestContext(ClientAddress: null)
+                    ));
+
+            httpStopwatch.Stop();
+
+            Assert.IsTrue(
+                expectedDelayMilliseconds <= httpStopwatch.ElapsedMilliseconds,
+                "expectedDelayMilliseconds <= httpStopwatch.ElapsedMilliseconds");
+
+            var additionalDelayMilliseconds =
+                httpStopwatch.ElapsedMilliseconds - expectedDelayMilliseconds;
+
+            Assert.IsTrue(
+                additionalDelayMilliseconds < 1500,
+                "additionalDelayMilliseconds < 1500");
+        }
+
+        await timeUpdateTaskCancellation.CancelAsync();
     }
 
     [TestMethod]

@@ -51,38 +51,66 @@ updateForHttpRequestEvent httpRequestEvent stateBefore =
                 , httpRequestsToRespondTo = httpRequestEvent :: stateBefore.httpRequestsToRespondTo
             }
     in
-    state |> updateForHttpResponses
+    updateForHttpResponses state
 
 
 updateForHttpResponses : State -> ( State, Platform.WebService.Commands State )
-updateForHttpResponses state =
-    ( state
-    , state
-        |> getHttpRequestsWithCompletionTimes
-        |> List.filter (\( _, { completionPosixTimeMilli } ) -> completionPosixTimeMilli <= state.posixTimeMilli)
-        |> List.map Tuple.first
-        |> List.map
-            (\requestEvent ->
-                let
-                    ageInMilliseconds =
-                        state.posixTimeMilli - requestEvent.posixTimeMilli
-                in
-                { httpRequestId = requestEvent.httpRequestId
-                , response =
-                    { statusCode = 200
-                    , bodyAsBase64 =
-                        ("Completed in " ++ (ageInMilliseconds |> String.fromInt) ++ " milliseconds.")
-                            |> encodeStringToBytes
-                            |> Base64.fromBytes
-                    , headersToAdd = []
-                    }
+updateForHttpResponses stateBefore =
+    let
+        httpResponses :
+            List
+                { httpRequestId : String
+                , response : { statusCode : number, bodyAsBase64 : Maybe String, headersToAdd : List a }
                 }
-            )
+        httpResponses =
+            stateBefore
+                |> getHttpRequestsWithCompletionTimes
+                |> List.filter
+                    (\( _, { completionPosixTimeMilli } ) ->
+                        completionPosixTimeMilli <= stateBefore.posixTimeMilli
+                    )
+                |> List.map
+                    (\( requestEvent, _ ) ->
+                        let
+                            ageInMilliseconds : Int
+                            ageInMilliseconds =
+                                stateBefore.posixTimeMilli - requestEvent.posixTimeMilli
+                        in
+                        { httpRequestId = requestEvent.httpRequestId
+                        , response =
+                            { statusCode = 200
+                            , bodyAsBase64 =
+                                ("Completed in " ++ (ageInMilliseconds |> String.fromInt) ++ " milliseconds.")
+                                    |> encodeStringToBytes
+                                    |> Base64.fromBytes
+                            , headersToAdd = []
+                            }
+                        }
+                    )
+
+        state : State
+        state =
+            { stateBefore
+                | httpRequestsToRespondTo =
+                    stateBefore.httpRequestsToRespondTo
+                        |> List.filter
+                            (\requestEvent ->
+                                not
+                                    (httpResponses
+                                        |> List.any (.httpRequestId >> (==) requestEvent.httpRequestId)
+                                    )
+                            )
+            }
+    in
+    ( state
+    , httpResponses
         |> List.map Platform.WebService.RespondToHttpRequest
     )
 
 
-getHttpRequestsWithCompletionTimes : State -> List ( Platform.WebService.HttpRequestEventStruct, { completionPosixTimeMilli : Int } )
+getHttpRequestsWithCompletionTimes :
+    State
+    -> List ( Platform.WebService.HttpRequestEventStruct, { completionPosixTimeMilli : Int } )
 getHttpRequestsWithCompletionTimes state =
     state.httpRequestsToRespondTo
         |> List.map (\requestEvent -> ( requestEvent, completionTimeForHttpRequest requestEvent ))
