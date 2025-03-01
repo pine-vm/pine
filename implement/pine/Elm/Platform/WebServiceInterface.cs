@@ -308,16 +308,6 @@ type alias TerminateVolatileProcessStruct =
             PineValue stateBefore,
             IPineVM pineVM)
         {
-            var expectedParameterCount =
-                argumentsBeforeState.Count + 1;
-
-            if (functionRecord.functionParameterCount != expectedParameterCount)
-            {
-                throw new Exception(
-                    "Expected function to have " + expectedParameterCount +
-                    " parameters but got: " + functionRecord.functionParameterCount);
-            }
-
             var responseValue =
                 ElmInteractiveEnvironment.ApplyFunction(
                     pineVM,
@@ -347,12 +337,99 @@ type alias TerminateVolatileProcessStruct =
 
     public abstract record Command
     {
+        /*
+         * 
+        type Command state
+            = RespondToHttpRequest RespondToHttpRequestStruct
+            | CreateVolatileProcess (CreateVolatileProcessStruct state)
+              {-
+                 We use the `runtimeIdentifier` and `osPlatform` properties to select the right executable files when creating a (native) volatile process.
+                 The properties returned by this command comes from the `RuntimeInformation` documented at <https://learn.microsoft.com/en-us/dotnet/api/system.runtime.interopservices.runtimeinformation>
+              -}
+            | ReadRuntimeInformationCommand (ReadRuntimeInformationCommandStruct state)
+            | CreateVolatileProcessNativeCommand (CreateVolatileProcessNativeCommandStruct state)
+            | RequestToVolatileProcess (RequestToVolatileProcessStruct state)
+            | WriteToVolatileProcessNativeStdInCommand (WriteToVolatileProcessNativeStdInStruct state)
+            | ReadAllFromVolatileProcessNativeCommand (ReadAllFromVolatileProcessNativeStruct state)
+            | TerminateVolatileProcess TerminateVolatileProcessStruct
+
+
+        type alias ReadRuntimeInformationCommandStruct state =
+            Result String RuntimeInformationRecord -> state -> ( state, Commands state )
+
+
+        type alias RuntimeInformationRecord =
+            { runtimeIdentifier : String
+            , osPlatform : Maybe String
+            }
+
+
+        type alias CreateVolatileProcessNativeCommandStruct state =
+            { request : CreateVolatileProcessNativeRequestStruct
+            , update : CreateVolatileProcessResult -> state -> ( state, Commands state )
+            }
+
+
+        type alias CreateVolatileProcessNativeRequestStruct =
+            { executableFile : LoadDependencyStruct
+            , arguments : String
+            , environmentVariables : List ProcessEnvironmentVariableStruct
+            }
+
+
+        type alias ProcessEnvironmentVariableStruct =
+            { key : String
+            , value : String
+            }
+
+
+        type alias LoadDependencyStruct =
+            { hashSha256Base16 : String
+            , hintUrls : List String
+            }
+
+
+        type alias WriteToVolatileProcessNativeStdInStruct state =
+            { processId : String
+            , stdInBase64 : String
+            , update :
+                Result RequestToVolatileProcessError ()
+                -> state
+                -> ( state, Commands state )
+            }
+
+
+        type alias ReadAllFromVolatileProcessNativeStruct state =
+            { processId : String
+            , update :
+                Result RequestToVolatileProcessError ReadAllFromVolatileProcessNativeSuccessStruct
+                -> state
+                -> ( state, Commands state )
+            }
+
+
+        type alias ReadAllFromVolatileProcessNativeSuccessStruct =
+            { stdOutBase64 : String
+            , stdErrBase64 : String
+            , exitCode : Maybe Int
+            }
+
+         * */
+
         public sealed record RespondToHttpRequest(
             RespondToHttpRequestStruct Respond)
             : Command;
 
         public sealed record CreateVolatileProcess(
             CreateVolatileProcessStruct Create)
+            : Command;
+
+        public sealed record ReadRuntimeInformationCommand(
+            ReadRuntimeInformationCommandStruct Read)
+            : Command;
+
+        public sealed record CreateVolatileProcessNativeCommand(
+            CreateVolatileProcessNativeCommandStruct Create)
             : Command;
 
         public sealed record RequestToVolatileProcess(
@@ -362,7 +439,44 @@ type alias TerminateVolatileProcessStruct =
         public sealed record TerminateVolatileProcess(
             string ProcessId)
             : Command;
+
+        public sealed record WriteToVolatileProcessNativeStdInCommand(
+            WriteToVolatileProcessNativeStdInStruct Write)
+            : Command;
+
+        public sealed record ReadAllFromVolatileProcessNativeCommand(
+            ReadAllFromVolatileProcessNativeStruct Read)
+            : Command;
     }
+
+    public record ReadRuntimeInformationCommandStruct(
+        ElmInteractiveEnvironment.FunctionRecord Update);
+
+    public record ReadAllFromVolatileProcessNativeSuccessStruct(
+        string StdOutBase64,
+        string StdErrBase64,
+        int? ExitCode);
+
+    public record CreateVolatileProcessNativeCommandStruct(
+        CreateVolatileProcessNativeRequestStruct Request,
+        ElmInteractiveEnvironment.FunctionRecord Update);
+
+    public record CreateVolatileProcessNativeRequestStruct(
+        LoadDependencyStruct ExecutableFile,
+        string Arguments,
+        IReadOnlyList<ProcessEnvironmentVariableStruct> EnvironmentVariables);
+
+    public record ProcessEnvironmentVariableStruct(
+        string Key,
+        string Value);
+
+    public record LoadDependencyStruct(
+        string HashSha256Base16,
+        IReadOnlyList<string> HintUrls);
+
+    public record RuntimeInformationRecord(
+        string RuntimeIdentifier,
+        string? OsPlatform);
 
     public record Subscriptions(
         ElmInteractiveEnvironment.FunctionRecord HttpRequest,
@@ -409,6 +523,15 @@ type alias TerminateVolatileProcessStruct =
         string Request,
         ElmInteractiveEnvironment.FunctionRecord Update);
 
+    public record WriteToVolatileProcessNativeStdInStruct(
+        string ProcessId,
+        string StdInBase64,
+        ElmInteractiveEnvironment.FunctionRecord Update);
+
+    public record ReadAllFromVolatileProcessNativeStruct(
+        string ProcessId,
+        ElmInteractiveEnvironment.FunctionRecord Update);
+
     public record CreateVolatileProcessErrorStruct(
         string ExceptionToString);
 
@@ -418,6 +541,10 @@ type alias TerminateVolatileProcessStruct =
     public abstract record RequestToVolatileProcessError
     {
         public sealed record ProcessNotFound
+            : RequestToVolatileProcessError;
+
+        public sealed record RequestToVolatileProcessOtherError(
+            string Error)
             : RequestToVolatileProcessError;
 
         public static readonly RequestToVolatileProcessError ProcessNotFoundInstance =
@@ -493,6 +620,31 @@ type alias TerminateVolatileProcessStruct =
                 encodeOk: EncodeCreateVolatileProcessComplete);
     }
 
+    public static PineValue EncodeReadRuntimeInformationResult(
+        Result<string, RuntimeInformationRecord> result)
+    {
+        return
+            EncodeResult(
+                result,
+                encodeErr: PineValueAsString.ValueFromString,
+                encodeOk: EncodeRuntimeInformationRecord);
+    }
+
+    public static PineValue EncodeRuntimeInformationRecord(
+        RuntimeInformationRecord record)
+    {
+        var asElmValue =
+            new ElmValue.ElmRecord(
+                [
+                ("runtimeIdentifier", new ElmValue.ElmString(record.RuntimeIdentifier)),
+                ("osPlatform", record.OsPlatform is null
+                    ? ElmValue.TagInstance("Nothing", [])
+                    : ElmValue.TagInstance("Just", [new ElmValue.ElmString(record.OsPlatform)]))
+                ]);
+
+        return ElmValueEncoding.ElmValueAsPineValue(asElmValue);
+    }
+
     public static PineValue EncodeResult<ErrT, OkT>(
         Result<ErrT, OkT> result,
         Func<ErrT, PineValue> encodeErr,
@@ -561,13 +713,32 @@ type alias TerminateVolatileProcessStruct =
                 encodeOk: EncodeRequestToVolatileProcessComplete);
     }
 
+    public static PineValue EncodeWriteToVolatileProcessNativeStdInResult<T>(
+        Result<RequestToVolatileProcessError, T> result)
+    {
+        return
+            EncodeResult(
+                result,
+                encodeErr: EncodeRequestToVolatileProcessError,
+                encodeOk: _ => ElmValueEncoding.ElmValueAsPineValue(ElmValue.TagInstance("Ok", [])));
+    }
+
     public static PineValue EncodeRequestToVolatileProcessError(
         RequestToVolatileProcessError error)
     {
         return error switch
         {
             RequestToVolatileProcessError.ProcessNotFound =>
-                PineValueAsString.ValueFromString("ProcessNotFound"),
+                ElmValueEncoding.ElmValueAsPineValue(
+                    ElmValue.TagInstance(nameof(RequestToVolatileProcessError.ProcessNotFound), [])),
+
+            RequestToVolatileProcessError.RequestToVolatileProcessOtherError otherError =>
+                ElmValueEncoding.ElmValueAsPineValue(
+                    ElmValue.TagInstance(
+                        nameof(RequestToVolatileProcessError.RequestToVolatileProcessOtherError),
+                        [
+                            new ElmValue.ElmString(otherError.Error)
+                        ])),
 
             _ =>
             throw new NotImplementedException(
@@ -590,6 +761,32 @@ type alias TerminateVolatileProcessStruct =
                     : ElmValue.TagInstance("Just", [new ElmValue.ElmString(complete.ReturnValueToString)])),
 
                 ("durationInMilliseconds", new ElmValue.ElmInteger(complete.DurationInMilliseconds))
+                ]);
+
+        return ElmValueEncoding.ElmValueAsPineValue(asElmValue);
+    }
+
+    public static PineValue EncodeEncodeReadAllFromVolatileProcessNativeResult(
+        Result<RequestToVolatileProcessError, ReadAllFromVolatileProcessNativeSuccessStruct> result)
+    {
+        return
+            EncodeResult(
+                result,
+                encodeErr: EncodeRequestToVolatileProcessError,
+                encodeOk: EncodeReadAllFromVolatileProcessNativeSuccessStruct);
+    }
+
+    public static PineValue EncodeReadAllFromVolatileProcessNativeSuccessStruct(
+        ReadAllFromVolatileProcessNativeSuccessStruct complete)
+    {
+        var asElmValue =
+            new ElmValue.ElmRecord(
+                [
+                ("stdOutBase64", new ElmValue.ElmString(complete.StdOutBase64)),
+                ("stdErrBase64", new ElmValue.ElmString(complete.StdErrBase64)),
+                ("exitCode", complete.ExitCode is null
+                    ? ElmValue.TagInstance("Nothing", [])
+                    : ElmValue.TagInstance("Just", [new ElmValue.ElmInteger(complete.ExitCode.Value)]))
                 ]);
 
         return ElmValueEncoding.ElmValueAsPineValue(asElmValue);
@@ -645,6 +842,7 @@ type alias TerminateVolatileProcessStruct =
                     return "Failed to parse command: " + err;
                 }
             }
+
             if (parsedCommandResult.IsOkOrNull() is not { } command)
             {
                 throw new NotImplementedException(
@@ -721,6 +919,59 @@ type alias TerminateVolatileProcessStruct =
             return new Command.CreateVolatileProcess(createVolatileProcess);
         }
 
+        if (tag.tagName is nameof(Command.ReadRuntimeInformationCommand))
+        {
+            if (tag.tagArguments.Length is not 1)
+            {
+                return "Expected 1 argument but got: " + tag.tagArguments.Length;
+            }
+
+            var runtimeInformationRecordValue =
+                tag.tagArguments.Span[0];
+
+            var parsedRuntimeInformationRecord =
+                ParseReadRuntimeInformationCommandRecord(runtimeInformationRecordValue);
+
+            {
+                if (parsedRuntimeInformationRecord.IsErrOrNull() is { } err)
+                {
+                    return "Failed to parse RuntimeInformationRecord: " + err;
+                }
+            }
+
+            if (parsedRuntimeInformationRecord.IsOkOrNull() is not { } runtimeInformationRecord)
+            {
+                throw new NotImplementedException(
+                    "Unexpected return type: " + parsedRuntimeInformationRecord);
+            }
+
+            return new Command.ReadRuntimeInformationCommand(runtimeInformationRecord);
+        }
+
+        if (tag.tagName is nameof(Command.CreateVolatileProcessNativeCommand))
+        {
+            var parsedCreateVolatileProcessNativeCommand =
+                ParseCreateVolatileProcessNativeCommandStruct(
+                    tag.tagArguments.Span[0],
+                    elmCompilerCache,
+                    parseCache);
+            
+            {
+                if (parsedCreateVolatileProcessNativeCommand.IsErrOrNull() is { } err)
+                {
+                    return "Failed to parse CreateVolatileProcessNativeCommand: " + err;
+                }
+            }
+
+            if (parsedCreateVolatileProcessNativeCommand.IsOkOrNull() is not { } createVolatileProcessNativeCommand)
+            {
+                throw new NotImplementedException(
+                    "Unexpected return type: " + parsedCreateVolatileProcessNativeCommand);
+            }
+
+            return new Command.CreateVolatileProcessNativeCommand(createVolatileProcessNativeCommand);
+        }
+
         if (tag.tagName is nameof(Command.RequestToVolatileProcess))
         {
             var parsedRequestToVolatileProcess =
@@ -742,6 +993,54 @@ type alias TerminateVolatileProcessStruct =
             }
 
             return new Command.RequestToVolatileProcess(requestToVolatileProcess);
+        }
+
+        if (tag.tagName is nameof(Command.WriteToVolatileProcessNativeStdInCommand))
+        {
+            var parsedWriteToVolatileProcessNativeStdIn =
+                ParseWriteToVolatileProcessNativeStdInStruct(
+                    tag.tagArguments.Span[0],
+                    elmCompilerCache,
+                    parseCache);
+
+            {
+                if (parsedWriteToVolatileProcessNativeStdIn.IsErrOrNull() is { } err)
+                {
+                    return "Failed to parse WriteToVolatileProcessNativeStdIn: " + err;
+                }
+            }
+
+            if (parsedWriteToVolatileProcessNativeStdIn.IsOkOrNull() is not { } writeToVolatileProcessNativeStdIn)
+            {
+                throw new NotImplementedException(
+                    "Unexpected return type: " + parsedWriteToVolatileProcessNativeStdIn);
+            }
+
+            return new Command.WriteToVolatileProcessNativeStdInCommand(writeToVolatileProcessNativeStdIn);
+        }
+
+        if (tag.tagName is nameof(Command.ReadAllFromVolatileProcessNativeCommand))
+        {
+            var parsedReadAllFromVolatileProcessNative =
+                ParseReadAllFromVolatileProcessNativeStruct(
+                    tag.tagArguments.Span[0],
+                    elmCompilerCache,
+                    parseCache);
+
+            {
+                if (parsedReadAllFromVolatileProcessNative.IsErrOrNull() is { } err)
+                {
+                    return "Failed to parse ReadAllFromVolatileProcessNative: " + err;
+                }
+            }
+
+            if (parsedReadAllFromVolatileProcessNative.IsOkOrNull() is not { } readAllFromVolatileProcessNative)
+            {
+                throw new NotImplementedException(
+                    "Unexpected return type: " + parsedReadAllFromVolatileProcessNative);
+            }
+
+            return new Command.ReadAllFromVolatileProcessNativeCommand(readAllFromVolatileProcessNative);
         }
 
         if (tag.tagName is nameof(Command.TerminateVolatileProcess))
@@ -776,6 +1075,332 @@ type alias TerminateVolatileProcessStruct =
         }
 
         return "Unexpected tag: " + tag.tagName;
+    }
+
+    public static Result<string, ReadRuntimeInformationCommandStruct>
+        ParseReadRuntimeInformationCommandRecord(
+        PineValue pineValue)
+    {
+        var parseUpdateResult =
+            ElmInteractiveEnvironment.ParseFunctionRecordFromValueTagged(pineValue, parseCache);
+
+        {
+            if (parseUpdateResult.IsErrOrNull() is { } err)
+            {
+                return err;
+            }
+        }
+
+        if (parseUpdateResult.IsOkOrNull() is not { } parseUpdateOk)
+        {
+            throw new NotImplementedException(
+                "Unexpected return type: " + parseUpdateResult);
+        }
+
+        var remainingParamCount =
+            parseUpdateOk.functionParameterCount -
+            parseUpdateOk.argumentsAlreadyCollected.Length;
+
+        if (remainingParamCount is not 2)
+        {
+            return "Expected function to have two remaining parameters but got: " + remainingParamCount;
+        }
+
+        return new ReadRuntimeInformationCommandStruct(parseUpdateOk);
+    }
+
+    public static Result<string, CreateVolatileProcessNativeCommandStruct>
+        ParseCreateVolatileProcessNativeCommandStruct(
+        PineValue pineValue,
+        ElmCompilerCache elmCompilerCache,
+        PineVMParseCache parseCache)
+    {
+        var parseRecordResult =
+            ElmValueEncoding.ParsePineValueAsRecordTagged(pineValue);
+
+        {
+            if (parseRecordResult.IsErrOrNull() is { } err)
+            {
+                return "Failed to parse as record: " + err;
+            }
+        }
+
+        if (parseRecordResult.IsOkOrNull() is not { } elmRecordValue)
+        {
+            throw new NotImplementedException(
+                "Unexpected return type: " + parseRecordResult);
+        }
+
+        var requestValue =
+            elmRecordValue
+            .FirstOrDefault(field => field.fieldName is "request").fieldValue;
+
+        if (requestValue is null)
+        {
+            return "Missing field: request";
+        }
+
+        var parsedRequest =
+            ParseCreateVolatileProcessNativeRequestStruct(requestValue, elmCompilerCache);
+
+        {
+            if (parsedRequest.IsErrOrNull() is { } err)
+            {
+                return "Failed to parse request: " + err;
+            }
+        }
+
+        if (parsedRequest.IsOkOrNull() is not { } request)
+        {
+            throw new NotImplementedException(
+                "Unexpected return type: " + parsedRequest);
+        }
+
+        var updateValue =
+            elmRecordValue
+            .FirstOrDefault(field => field.fieldName is "update").fieldValue;
+
+        if (updateValue is null)
+        {
+            return "Missing field: update";
+        }
+
+        var parsedUpdate =
+            ElmInteractiveEnvironment.ParseFunctionRecordFromValueTagged(updateValue, parseCache);
+
+        {
+            if (parsedUpdate.IsErrOrNull() is { } err)
+            {
+                return "Failed to parse update: " + err;
+            }
+        }
+
+        if (parsedUpdate.IsOkOrNull() is not { } update)
+        {
+            throw new NotImplementedException(
+                "Unexpected return type: " + parsedUpdate);
+        }
+
+        var remainingParamCount =
+            update.functionParameterCount -
+            update.argumentsAlreadyCollected.Length;
+
+        if (remainingParamCount is not 2)
+        {
+            return "Expected function to have two remaining parameters but got: " + remainingParamCount;
+        }
+
+        return new CreateVolatileProcessNativeCommandStruct(request, update);
+    }
+
+    public static Result<string, CreateVolatileProcessNativeRequestStruct>
+        ParseCreateVolatileProcessNativeRequestStruct(
+            PineValue pineValue,
+            ElmCompilerCache elmCompilerCache)
+    {
+        var asElmValueResult =
+            elmCompilerCache.PineValueDecodedAsElmValue(pineValue);
+
+        {
+            if (asElmValueResult.IsErrOrNull() is { } err)
+            {
+                return "Failed to decode Elm value: " + err;
+            }
+        }
+
+        if (asElmValueResult.IsOkOrNull() is not { } elmValue)
+        {
+            throw new NotImplementedException(
+                "Unexpected return type: " + asElmValueResult);
+        }
+
+        if (elmValue is not ElmValue.ElmRecord elmRecordValue)
+        {
+            return "Unexpected Elm value: " + elmValue;
+        }
+
+        if (elmRecordValue.Fields.Count is not 3)
+        {
+            return "Unexpected number of fields: " + elmRecordValue.Fields.Count;
+        }
+
+        var executableFileValue = elmRecordValue["executableFile"];
+
+        if (executableFileValue is null)
+        {
+            return "Missing field: executableFile";
+        }
+
+        var parsedExecutableFile =
+            ParseLoadDependencyStruct(executableFileValue);
+
+        {
+            if (parsedExecutableFile.IsErrOrNull() is { } err)
+            {
+                return "Failed to parse executableFile: " + err;
+            }
+        }
+
+        if (parsedExecutableFile.IsOkOrNull() is not { } executableFile)
+        {
+            throw new NotImplementedException(
+                "Unexpected return type: " + parsedExecutableFile);
+        }
+
+        var argumentsValue = elmRecordValue["arguments"];
+
+        if (argumentsValue is null)
+        {
+            return "Missing field: arguments";
+        }
+
+        if (argumentsValue is not ElmValue.ElmString argumentsString)
+        {
+            return "Unexpected type in arguments: " + argumentsValue;
+        }
+
+        var environmentVariablesValue = elmRecordValue["environmentVariables"];
+
+        if (environmentVariablesValue is null)
+        {
+            return "Missing field: environmentVariables";
+        }
+
+        if (environmentVariablesValue is not ElmValue.ElmList environmentVariablesList)
+        {
+            return "Unexpected type in environmentVariables: " + environmentVariablesValue;
+        }
+
+        var environmentVariables =
+            new ProcessEnvironmentVariableStruct[environmentVariablesList.Elements.Count];
+
+        for (var i = 0; i < environmentVariables.Length; i++)
+        {
+            var environmentVariableValue = environmentVariablesList.Elements[i];
+
+            var parsedEnvironmentVariable =
+                ParseProcessEnvironmentVariableStruct(environmentVariableValue, elmCompilerCache);
+
+            {
+                if (parsedEnvironmentVariable.IsErrOrNull() is { } err)
+                {
+                    return "Failed to parse environment variable: " + err;
+                }
+            }
+
+            if (parsedEnvironmentVariable.IsOkOrNull() is not { } environmentVariable)
+            {
+                throw new NotImplementedException(
+                    "Unexpected return type: " + parsedEnvironmentVariable);
+            }
+
+            environmentVariables[i] = environmentVariable;
+        }
+
+        return new CreateVolatileProcessNativeRequestStruct(
+            executableFile,
+            argumentsString.Value,
+            environmentVariables);
+    }
+
+    public static Result<string, LoadDependencyStruct>
+        ParseLoadDependencyStruct(ElmValue elmValue)
+    {
+        if (elmValue is not ElmValue.ElmRecord elmRecordValue)
+        {
+            return "Unexpected Elm value: " + elmValue;
+        }
+
+        if (elmRecordValue.Fields.Count is not 2)
+        {
+            return "Unexpected number of fields: " + elmRecordValue.Fields.Count;
+        }
+
+        var hashSha256Base16Value = elmRecordValue["hashSha256Base16"];
+
+        if (hashSha256Base16Value is null)
+        {
+            return "Missing field: hashSha256Base16";
+        }
+
+        if (hashSha256Base16Value is not ElmValue.ElmString hashSha256Base16String)
+        {
+            return "Unexpected type in hashSha256Base16: " + hashSha256Base16Value;
+        }
+
+        var hintUrlsValue = elmRecordValue["hintUrls"];
+
+        if (hintUrlsValue is null)
+        {
+            return "Missing field: hintUrls";
+        }
+
+        if (hintUrlsValue is not ElmValue.ElmList hintUrlsList)
+        {
+            return "Unexpected type in hintUrls: " + hintUrlsValue;
+        }
+
+        var hintUrls = new string[hintUrlsList.Elements.Count];
+
+        for (var i = 0; i < hintUrls.Length; i++)
+        {
+            var hintUrlValue = hintUrlsList.Elements[i];
+
+            if (hintUrlValue is not ElmValue.ElmString hintUrlString)
+            {
+                return "Unexpected type in hintUrl: " + hintUrlValue;
+            }
+
+            hintUrls[i] = hintUrlString.Value;
+        }
+
+        return new LoadDependencyStruct(
+            hashSha256Base16String.Value,
+            hintUrls);
+    }
+
+    public static Result<string, ProcessEnvironmentVariableStruct>
+        ParseProcessEnvironmentVariableStruct(
+            ElmValue elmValue,
+            ElmCompilerCache elmCompilerCache)
+    {
+        if (elmValue is not ElmValue.ElmRecord elmRecordValue)
+        {
+            return "Unexpected Elm value: " + elmValue;
+        }
+
+        if (elmRecordValue.Fields.Count is not 2)
+        {
+            return "Unexpected number of fields: " + elmRecordValue.Fields.Count;
+        }
+
+        var keyValue = elmRecordValue["key"];
+
+        if (keyValue is null)
+        {
+            return "Missing field: key";
+        }
+
+        if (keyValue is not ElmValue.ElmString keyString)
+        {
+            return "Unexpected type in key: " + keyValue;
+        }
+
+        var valueValue = elmRecordValue["value"];
+
+        if (valueValue is null)
+        {
+            return "Missing field: value";
+        }
+
+        if (valueValue is not ElmValue.ElmString valueString)
+        {
+            return "Unexpected type in value: " + valueValue;
+        }
+
+        return new ProcessEnvironmentVariableStruct(
+            keyString.Value,
+            valueString.Value);
     }
 
     public static Result<string, RespondToHttpRequestStruct> ParseRespondToHttpRequestStruct(
@@ -1185,6 +1810,192 @@ type alias TerminateVolatileProcessStruct =
         return new RequestToVolatileProcessStruct(
             processIdString.Value,
             requestString.Value,
+            update);
+    }
+
+    public static Result<string, WriteToVolatileProcessNativeStdInStruct> ParseWriteToVolatileProcessNativeStdInStruct(
+        PineValue pineValue,
+        ElmCompilerCache elmCompilerCache,
+        PineVMParseCache parseCache)
+    {
+        var asRecordResult = ElmValueEncoding.ParsePineValueAsRecordTagged(pineValue);
+
+        {
+            if (asRecordResult.IsErrOrNull() is { } err)
+            {
+                return "Failed to parse as record: " + err;
+            }
+        }
+
+        if (asRecordResult.IsOkOrNull() is not { } record)
+        {
+            throw new NotImplementedException(
+                "Unexpected return type: " + asRecordResult);
+        }
+
+        if (record.Count is not 3)
+        {
+            return "Unexpected number of fields: " + record.Count;
+        }
+
+        var processIdValue = record.FirstOrDefault(field => field.fieldName is "processId");
+
+        if (processIdValue.fieldValue is null)
+        {
+            return "Missing field: processId";
+        }
+
+        var processIdAsElmValue =
+            elmCompilerCache.PineValueDecodedAsElmValue(processIdValue.fieldValue);
+        {
+            if (processIdAsElmValue.IsErrOrNull() is { } err)
+            {
+                return "Failed to decode processId: " + err;
+            }
+        }
+
+        if (processIdAsElmValue.IsOkOrNull() is not { } processIdElmValue)
+        {
+            throw new NotImplementedException(
+                "Unexpected return type: " + processIdAsElmValue);
+        }
+
+        if (processIdElmValue is not ElmValue.ElmString processIdString)
+        {
+            return "Unexpected type in processId: " + processIdElmValue;
+        }
+
+        var stdInBase64Value = record.FirstOrDefault(field => field.fieldName is "stdInBase64");
+
+        if (stdInBase64Value.fieldValue is null)
+        {
+            return "Missing field: stdInBase64";
+        }
+
+        var stdInBase64AsElmValue =
+            elmCompilerCache.PineValueDecodedAsElmValue(stdInBase64Value.fieldValue);
+        {
+            if (stdInBase64AsElmValue.IsErrOrNull() is { } err)
+            {
+                return "Failed to decode stdInBase64: " + err;
+            }
+        }
+
+        if (stdInBase64AsElmValue.IsOkOrNull() is not { } stdInBase64ElmValue)
+        {
+            throw new NotImplementedException(
+                "Unexpected return type: " + stdInBase64AsElmValue);
+        }
+
+        if (stdInBase64ElmValue is not ElmValue.ElmString stdInBase64String)
+        {
+            return "Unexpected type in stdInBase64: " + stdInBase64ElmValue;
+        }
+
+        var updateValue = record.FirstOrDefault(field => field.fieldName is "update");
+
+        if (updateValue.fieldValue is null)
+        {
+            return "Missing field: update";
+        }
+
+        var parseUpdateResult =
+            ElmInteractiveEnvironment.ParseFunctionRecordFromValueTagged(updateValue.fieldValue, parseCache);
+        {
+            if (parseUpdateResult.IsErrOrNull() is { } err)
+            {
+                return "Failed to parse update: " + err;
+            }
+        }
+
+        if (parseUpdateResult.IsOkOrNull() is not { } update)
+        {
+            throw new NotImplementedException(
+                "Unexpected return type: " + parseUpdateResult);
+        }
+
+        return new WriteToVolatileProcessNativeStdInStruct(
+            processIdString.Value,
+            stdInBase64String.Value,
+            update);
+    }
+
+    public static Result<string, ReadAllFromVolatileProcessNativeStruct> ParseReadAllFromVolatileProcessNativeStruct(
+        PineValue pineValue,
+        ElmCompilerCache elmCompilerCache,
+        PineVMParseCache parseCache)
+    {
+        var asRecordResult = ElmValueEncoding.ParsePineValueAsRecordTagged(pineValue);
+
+        {
+            if (asRecordResult.IsErrOrNull() is { } err)
+            {
+                return "Failed to parse as record: " + err;
+            }
+        }
+
+        if (asRecordResult.IsOkOrNull() is not { } record)
+        {
+            throw new NotImplementedException(
+                "Unexpected return type: " + asRecordResult);
+        }
+
+        if (record.Count is not 2)
+        {
+            return "Unexpected number of fields: " + record.Count;
+        }
+
+        var processIdValue = record.FirstOrDefault(field => field.fieldName is "processId");
+
+        if (processIdValue.fieldValue is null)
+        {
+            return "Missing field: processId";
+        }
+
+        var processIdAsElmValue =
+            elmCompilerCache.PineValueDecodedAsElmValue(processIdValue.fieldValue);
+        {
+            if (processIdAsElmValue.IsErrOrNull() is { } err)
+            {
+                return "Failed to decode processId: " + err;
+            }
+        }
+
+        if (processIdAsElmValue.IsOkOrNull() is not { } processIdElmValue)
+        {
+            throw new NotImplementedException(
+                "Unexpected return type: " + processIdAsElmValue);
+        }
+
+        if (processIdElmValue is not ElmValue.ElmString processIdString)
+        {
+            return "Unexpected type in processId: " + processIdElmValue;
+        }
+
+        var updateValue = record.FirstOrDefault(field => field.fieldName is "update");
+
+        if (updateValue.fieldValue is null)
+        {
+            return "Missing field: update";
+        }
+
+        var parseUpdateResult =
+            ElmInteractiveEnvironment.ParseFunctionRecordFromValueTagged(updateValue.fieldValue, parseCache);
+        {
+            if (parseUpdateResult.IsErrOrNull() is { } err)
+            {
+                return "Failed to parse update: " + err;
+            }
+        }
+
+        if (parseUpdateResult.IsOkOrNull() is not { } update)
+        {
+            throw new NotImplementedException(
+                "Unexpected return type: " + parseUpdateResult);
+        }
+
+        return new ReadAllFromVolatileProcessNativeStruct(
+            processIdString.Value,
             update);
     }
 

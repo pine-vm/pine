@@ -66,10 +66,16 @@ subscriptions state =
 
 updateForCurrentPosixTimeMilli : { currentPosixTimeMilli : Int } -> State -> ( State, Platform.WebService.Commands State )
 updateForCurrentPosixTimeMilli { currentPosixTimeMilli } stateBefore =
-    ( { stateBefore | timeMilli = currentPosixTimeMilli }
-    , case stateBefore.pendingHttpRequest of
+    let
+        state : State
+        state =
+            { stateBefore | timeMilli = currentPosixTimeMilli }
+    in
+    case stateBefore.pendingHttpRequest of
         Nothing ->
-            []
+            ( state
+            , []
+            )
 
         Just ( pendingHttpRequestContext, pendingHttpRequest ) ->
             if
@@ -81,10 +87,13 @@ updateForCurrentPosixTimeMilli { currentPosixTimeMilli } stateBefore =
                     -}
                     + 1300
             then
-                []
+                ( state
+                , []
+                )
 
             else
-                case stateBefore.volatileProcessId of
+                ( { state | pendingHttpRequest = Nothing }
+                , case stateBefore.volatileProcessId of
                     Nothing ->
                         [ httpResponseCommandInternalServerError pendingHttpRequest
                             "Volatile process disappeared"
@@ -93,10 +102,11 @@ updateForCurrentPosixTimeMilli { currentPosixTimeMilli } stateBefore =
                     Just volatileProcessId ->
                         [ Platform.WebService.ReadAllFromVolatileProcessNativeCommand
                             { processId = volatileProcessId
-                            , update = updateForReadFromVolatileProcess pendingHttpRequest
+                            , update =
+                                updateForReadFromVolatileProcess pendingHttpRequest
                             }
                         ]
-    )
+                )
 
 
 updateForHttpRequestEvent :
@@ -120,11 +130,16 @@ updateForHttpRequestEvent httpRequestEvent stateBefore =
                         runtimeInformation
                         stateBefore
 
-        Just volatileProcessId ->
-            continueWithVolatileProcess
-                { volatileProcessId = volatileProcessId }
-                httpRequestEvent
-                stateBefore
+        Just _ ->
+            ( { stateBefore
+                | pendingHttpRequest =
+                    Just
+                        ( { timeMilli = stateBefore.timeMilli }
+                        , httpRequestEvent
+                        )
+              }
+            , []
+            )
 
 
 createVolatileProcessForRuntimeInformation :
@@ -217,9 +232,12 @@ updateForCreateVolatileProcess httpRequestEvent createVolatileProcessResponse st
             )
 
         Ok { processId } ->
-            continueWithVolatileProcess { volatileProcessId = processId }
+            continueWithVolatileProcess
+                { volatileProcessId = processId }
                 httpRequestEvent
-                { stateBefore | volatileProcessId = Just processId }
+                { stateBefore
+                    | volatileProcessId = Just processId
+                }
 
 
 continueWithVolatileProcess :
@@ -228,30 +246,45 @@ continueWithVolatileProcess :
     -> State
     -> ( State, Platform.WebService.Commands State )
 continueWithVolatileProcess { volatileProcessId } httpRequestEvent stateBefore =
-    ( stateBefore
-    , case httpRequestEvent.request.bodyAsBase64 of
+    case stateBefore.pendingHttpRequest of
+        Just _ ->
+            ( stateBefore, [] )
+
         Nothing ->
-            [ httpResponseCommandInternalServerError
-                httpRequestEvent
-                "Missing body in HTTP request"
-            ]
-
-        Just bodyAsBase64 ->
-            case Base64.toString bodyAsBase64 of
+            case httpRequestEvent.request.bodyAsBase64 of
                 Nothing ->
-                    [ httpResponseCommandInternalServerError
-                        httpRequestEvent
-                        "Failed to decode body as Base64"
-                    ]
+                    ( stateBefore
+                    , [ httpResponseCommandInternalServerError
+                            httpRequestEvent
+                            "Missing body in HTTP request"
+                      ]
+                    )
 
-                Just _ ->
-                    [ Platform.WebService.WriteToVolatileProcessNativeStdInCommand
-                        { processId = volatileProcessId
-                        , stdInBase64 = bodyAsBase64
-                        , update = updateForWriteToVolatileProcess httpRequestEvent
-                        }
-                    ]
-    )
+                Just bodyAsBase64 ->
+                    case Base64.toString bodyAsBase64 of
+                        Nothing ->
+                            ( stateBefore
+                            , [ httpResponseCommandInternalServerError
+                                    httpRequestEvent
+                                    "Failed to decode body as Base64"
+                              ]
+                            )
+
+                        Just _ ->
+                            ( { stateBefore
+                                | pendingHttpRequest =
+                                    Just
+                                        ( { timeMilli = stateBefore.timeMilli }
+                                        , httpRequestEvent
+                                        )
+                              }
+                            , [ Platform.WebService.WriteToVolatileProcessNativeStdInCommand
+                                    { processId = volatileProcessId
+                                    , stdInBase64 = bodyAsBase64
+                                    , update = updateForWriteToVolatileProcess httpRequestEvent
+                                    }
+                              ]
+                            )
 
 
 updateForWriteToVolatileProcess :
@@ -262,7 +295,9 @@ updateForWriteToVolatileProcess :
 updateForWriteToVolatileProcess httpRequestEvent writeToVolatileProcessResponse stateBefore =
     let
         continueWithError error =
-            ( stateBefore
+            ( { stateBefore
+                | pendingHttpRequest = Nothing
+              }
             , [ httpResponseCommandInternalServerError httpRequestEvent error ]
             )
     in
@@ -274,13 +309,7 @@ updateForWriteToVolatileProcess httpRequestEvent writeToVolatileProcessResponse 
             continueWithError ("Error running in volatile process: " ++ err)
 
         Ok () ->
-            ( { stateBefore
-                | pendingHttpRequest =
-                    Just
-                        ( { timeMilli = stateBefore.timeMilli }
-                        , httpRequestEvent
-                        )
-              }
+            ( stateBefore
             , []
             )
 

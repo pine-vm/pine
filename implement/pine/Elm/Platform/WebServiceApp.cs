@@ -24,6 +24,9 @@ public class MutatingWebServiceApp
 
     public IPineVM PineVM => pineVM;
 
+    public long? PosixTimeSubscriptionMinimumTime =>
+        appStateAndSubscriptions.subscriptions?.PosixTimeIsPast?.MinimumPosixTimeMilli;
+
     public ElmTime.ElmTimeJsonAdapter.Parsed JsonAdapter => appConfig.JsonAdapter;
 
     private readonly ConcurrentQueue<WebServiceInterface.Command> commands = new();

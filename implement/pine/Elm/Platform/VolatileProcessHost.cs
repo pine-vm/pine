@@ -70,6 +70,26 @@ public class VolatileProcessHost(
                     () => PerformProcessTaskCreateVolatileProcessAndEncode(createVolatileProcess.Create));
         }
 
+        if (cmd is WebServiceInterface.Command.ReadRuntimeInformationCommand readRuntimeInformationCommand)
+        {
+            return
+                CreateTaskAsync(
+                    updateFunction: readRuntimeInformationCommand.Read.Update,
+                    responseDelegate:
+                    () => WebServiceInterface.EncodeReadRuntimeInformationResult(
+                        ReadRuntimeInformation()));
+        }
+
+        if (cmd is WebServiceInterface.Command.CreateVolatileProcessNativeCommand createVolatileProcessNativeCommand)
+        {
+            return
+                CreateTaskAsync(
+                    updateFunction: createVolatileProcessNativeCommand.Create.Update,
+                    responseDelegate:
+                    () => PerformProcessTaskCreateVolatileProcessNativeAndEncode(
+                        createVolatileProcessNativeCommand.Create.Request));
+        }
+
         if (cmd is WebServiceInterface.Command.RequestToVolatileProcess requestToVolatileProcess)
         {
             return
@@ -77,6 +97,26 @@ public class VolatileProcessHost(
                     updateFunction: requestToVolatileProcess.Request.Update,
                     responseDelegate:
                     () => PerformProcessTaskRequestToVolatileProcessAndEncode(requestToVolatileProcess.Request));
+        }
+
+        if (cmd is WebServiceInterface.Command.WriteToVolatileProcessNativeStdInCommand writeToVolatileProcessNativeStdInCommand)
+        {
+            return
+                CreateTaskAsync(
+                    updateFunction: writeToVolatileProcessNativeStdInCommand.Write.Update,
+                    responseDelegate:
+                    () => PerformWriteToVolatileProcessNativeStdInAndEncode(
+                        writeToVolatileProcessNativeStdInCommand.Write));
+        }
+
+        if (cmd is WebServiceInterface.Command.ReadAllFromVolatileProcessNativeCommand readAllFromVolatileProcessNativeCommand)
+        {
+            return
+                CreateTaskAsync(
+                    updateFunction: readAllFromVolatileProcessNativeCommand.Read.Update,
+                    responseDelegate:
+                    () => PerformReadAllFromVolatileProcessNativeAndEncode(
+                        readAllFromVolatileProcessNativeCommand.Read));
         }
 
         if (cmd is WebServiceInterface.Command.TerminateVolatileProcess terminateVolatileProcess)
@@ -87,6 +127,26 @@ public class VolatileProcessHost(
         }
 
         return null;
+    }
+
+    public static WebServiceInterface.RuntimeInformationRecord ReadRuntimeInformation()
+    {
+        var osPlatform =
+            new[]
+            {
+                System.Runtime.InteropServices.OSPlatform.Windows,
+                System.Runtime.InteropServices.OSPlatform.Linux,
+                System.Runtime.InteropServices.OSPlatform.OSX,
+            }
+            .Where(System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform)
+            .Cast<System.Runtime.InteropServices.OSPlatform?>()
+            .FirstOrDefault()?.ToString();
+
+        return new WebServiceInterface.RuntimeInformationRecord(
+            RuntimeIdentifier:
+            System.Runtime.InteropServices.RuntimeInformation.RuntimeIdentifier,
+            OsPlatform:
+            osPlatform);
     }
 
     private static Task<TaskResult> CreateTaskAsync(
@@ -139,10 +199,55 @@ public class VolatileProcessHost(
         }
     }
 
+    public PineValue PerformProcessTaskCreateVolatileProcessNativeAndEncode(
+        WebServiceInterface.CreateVolatileProcessNativeRequestStruct createVolatileProcess)
+    {
+        var result =
+            PerformProcessTaskCreateVolatileProcessNative(createVolatileProcess);
+
+        return WebServiceInterface.EncodeCreateVolatileProcessResult(result);
+    }
+
+    public CreateVolatileProcessResult PerformProcessTaskCreateVolatileProcessNative(
+        WebServiceInterface.CreateVolatileProcessNativeRequestStruct createVolatileProcess)
+    {
+        try
+        {
+            var volatileProcess =
+                new VolatileProcessNative(
+                    GetBlobWithSHA256,
+                    new ElmTime.Platform.WebService.InterfaceToHost.CreateVolatileProcessNativeStruct(
+                        new ElmTime.Platform.WebService.InterfaceToHost.LoadDependencyStruct(
+                            hashSha256Base16: createVolatileProcess.ExecutableFile.HashSha256Base16,
+                            hintUrls: [.. createVolatileProcess.ExecutableFile.HintUrls]),
+                        arguments: createVolatileProcess.Arguments,
+                        environmentVariables:
+                        [..createVolatileProcess.EnvironmentVariables
+                        .Select(ev =>
+                        new ElmTime.Platform.WebService.InterfaceToHost.ProcessEnvironmentVariable(
+                            key: ev.Key, value: ev.Value))]));
+
+            var volatileProcessId =
+                System.Threading.Interlocked.Increment(ref createVolatileProcessAttempts).ToString();
+
+            volatileProcesses[volatileProcessId] = volatileProcess;
+
+            return
+                new WebServiceInterface.CreateVolatileProcessComplete(ProcessId: volatileProcessId);
+        }
+        catch (Exception exception)
+        {
+            return
+                new WebServiceInterface.CreateVolatileProcessErrorStruct(
+                    ExceptionToString: exception.ToString());
+        }
+    }
+
     public PineValue PerformProcessTaskRequestToVolatileProcessAndEncode(
         WebServiceInterface.RequestToVolatileProcessStruct requestToVolatileProcess)
     {
-        var result = PerformProcessTaskRequestToVolatileProcess(requestToVolatileProcess);
+        var result =
+            PerformProcessTaskRequestToVolatileProcess(requestToVolatileProcess);
 
         return WebServiceInterface.EncodeRequestToVolatileProcessResult(result);
     }
@@ -197,6 +302,93 @@ public class VolatileProcessHost(
                 ReturnValueToString: returnValueToString,
                 ExceptionToString: exceptionToString,
                 DurationInMilliseconds: (int)clock.ElapsedMilliseconds);
+    }
+
+    public PineValue PerformWriteToVolatileProcessNativeStdInAndEncode(
+        WebServiceInterface.WriteToVolatileProcessNativeStdInStruct writeToVolatileProcessNativeStdIn)
+    {
+        var result =
+            PerformWriteToVolatileProcessNativeStdIn(writeToVolatileProcessNativeStdIn);
+
+        return WebServiceInterface.EncodeWriteToVolatileProcessNativeStdInResult(result);
+    }
+
+    public Result<WebServiceInterface.RequestToVolatileProcessError, object> PerformWriteToVolatileProcessNativeStdIn(
+        WebServiceInterface.WriteToVolatileProcessNativeStdInStruct writeToVolatileProcessNativeStdIn)
+    {
+        volatileProcesses.TryGetValue(writeToVolatileProcessNativeStdIn.ProcessId, out var volatileProcess);
+
+        if (volatileProcess is null)
+        {
+            return new WebServiceInterface.RequestToVolatileProcessError.ProcessNotFound();
+        }
+
+        if (volatileProcess is not VolatileProcessNative volatileProcessNative)
+        {
+            return
+                new WebServiceInterface.RequestToVolatileProcessError.RequestToVolatileProcessOtherError(
+                    "Process is not a native process");
+        }
+
+        try
+        {
+            var stdIn =
+                Convert.FromBase64String(writeToVolatileProcessNativeStdIn.StdInBase64);
+
+            volatileProcessNative.WriteToStdIn(stdIn);
+
+            return new object();
+        }
+        catch (Exception writeToVolatileProcessNativeStdInException)
+        {
+            return
+                new WebServiceInterface.RequestToVolatileProcessError.RequestToVolatileProcessOtherError(
+                    writeToVolatileProcessNativeStdInException.ToString());
+        }
+    }
+
+    public PineValue PerformReadAllFromVolatileProcessNativeAndEncode(
+        WebServiceInterface.ReadAllFromVolatileProcessNativeStruct readAllFromVolatileProcessNative)
+    {
+        var result =
+            PerformReadAllFromVolatileProcessNative(readAllFromVolatileProcessNative);
+
+        return WebServiceInterface.EncodeEncodeReadAllFromVolatileProcessNativeResult(result);
+    }
+
+    public Result<WebServiceInterface.RequestToVolatileProcessError, WebServiceInterface.ReadAllFromVolatileProcessNativeSuccessStruct>
+        PerformReadAllFromVolatileProcessNative(
+        WebServiceInterface.ReadAllFromVolatileProcessNativeStruct readAllFromVolatileProcessNative)
+    {
+        volatileProcesses.TryGetValue(readAllFromVolatileProcessNative.ProcessId, out var volatileProcess);
+
+        if (volatileProcess is null)
+        {
+            return new WebServiceInterface.RequestToVolatileProcessError.ProcessNotFound();
+        }
+
+        if (volatileProcess is not VolatileProcessNative volatileProcessNative)
+        {
+            return
+                new WebServiceInterface.RequestToVolatileProcessError.RequestToVolatileProcessOtherError(
+                    "Process is not a native process");
+        }
+        try
+        {
+            var read = volatileProcessNative.ReadAll();
+
+            return
+                new WebServiceInterface.ReadAllFromVolatileProcessNativeSuccessStruct(
+                    StdOutBase64: Convert.ToBase64String(read.StdOut.Span),
+                    StdErrBase64: Convert.ToBase64String(read.StdErr.Span),
+                    ExitCode: read.ExitCode);
+        }
+        catch (Exception readAllFromVolatileProcessNativeException)
+        {
+            return
+                new WebServiceInterface.RequestToVolatileProcessError.RequestToVolatileProcessOtherError(
+                    readAllFromVolatileProcessNativeException.ToString());
+        }
     }
 
     private byte[]? GetBlobWithSHA256(byte[] sha256)
