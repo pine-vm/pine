@@ -18,7 +18,7 @@ public class ExampleAppsTests
                 [".", "..", "..", "..", "..", "example-apps", exampleName]));
 
     [TestMethod]
-    public void Example_app_minimal_backend_hello_world()
+    public async Task Example_app_minimal_backend_hello_world()
     {
         var webAppSource =
             ExampleAppValueFromExampleName("minimal-backend-hello-world");
@@ -28,10 +28,10 @@ public class ExampleAppsTests
         using var publicAppClient = testSetup.BuildPublicAppHttpClient();
 
         var httpResponse =
-            publicAppClient.GetAsync("").Result;
+            await publicAppClient.GetAsync("");
 
         var responseContentAsString =
-            httpResponse.Content.ReadAsStringAsync().Result;
+            await httpResponse.Content.ReadAsStringAsync();
 
         Assert.AreEqual(
             HttpStatusCode.OK,

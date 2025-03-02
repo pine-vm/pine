@@ -24,7 +24,7 @@ public class ElmWebServiceAppTests
         TestSetup.AppConfigComponentFromFiles(TestSetup.HttpProxyWebApp);
 
     [TestMethod]
-    public void Restore_counter_http_web_app_on_server_restart()
+    public async System.Threading.Tasks.Task Restore_counter_http_web_app_on_server_restart()
     {
         var eventsAndExpectedResponses =
             TestSetup.CounterProcessTestEventsAndExpectedResponses(
@@ -42,7 +42,8 @@ public class ElmWebServiceAppTests
 
         Assert.IsTrue(2 < eventsAndExpectedResponsesBatches.Count, "More than two batches of events to test with.");
 
-        using var testSetup = WebHostAdminInterfaceTestSetup.Setup(deployAppAndInitElmState: CounterWebApp);
+        using var testSetup =
+            WebHostAdminInterfaceTestSetup.Setup(deployAppAndInitElmState: CounterWebApp);
 
         foreach (var eventsAndExpectedResponsesBatch in eventsAndExpectedResponsesBatches)
         {
@@ -50,12 +51,16 @@ public class ElmWebServiceAppTests
 
             foreach (var (serializedEvent, expectedResponse) in eventsAndExpectedResponsesBatch)
             {
-                using var client = testSetup.BuildPublicAppHttpClient();
+                using var client =
+                    testSetup.BuildPublicAppHttpClient();
 
                 var httpResponse =
-                    client.PostAsync("", new System.Net.Http.StringContent(serializedEvent, System.Text.Encoding.UTF8)).Result;
+                    await client.PostAsync(
+                        "",
+                        new System.Net.Http.StringContent(serializedEvent, System.Text.Encoding.UTF8));
 
-                var httpResponseContent = httpResponse.Content.ReadAsStringAsync().Result;
+                var httpResponseContent =
+                    await httpResponse.Content.ReadAsStringAsync();
 
                 Assert.AreEqual(expectedResponse, httpResponseContent, false, "server response");
             }

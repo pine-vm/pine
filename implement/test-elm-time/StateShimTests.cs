@@ -22,10 +22,12 @@ public class StateShimTests
 
         var fileStore = new FileStoreFromSystemIOFile(testSetup.ProcessStoreDirectory);
 
-        var processStore = new ElmTime.Platform.WebService.ProcessStoreSupportingMigrations.ProcessStoreWriterInFileStore(
-            fileStore,
-            getTimeForCompositionLogBatch:
-            () => DateTimeOffset.UtcNow, fileStore);
+        var processStore =
+            new ElmTime.Platform.WebService.ProcessStoreSupportingMigrations.ProcessStoreWriterInFileStore(
+                fileStore,
+                getTimeForCompositionLogBatch:
+                () => DateTimeOffset.UtcNow,
+                fileStore);
 
         using var calculatorProcess = testSetup.BranchProcess()!;
 
