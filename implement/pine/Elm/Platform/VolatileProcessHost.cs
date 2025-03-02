@@ -27,7 +27,7 @@ public class VolatileProcessHost(
     public IReadOnlyList<WebServiceInterface.Command> DequeueCommands() =>
         [.. commands.DequeueAllEnumerable()];
 
-    private readonly ConcurrentBag<Task<TaskResult>> tasks = [];
+    private readonly ConcurrentDictionary<Task<TaskResult>, object?> tasks = [];
 
     record TaskResult(
         ElmInteractiveEnvironment.FunctionRecord UpdateFunction,
@@ -37,9 +37,17 @@ public class VolatileProcessHost(
     {
         var tasksSnapshot = tasks.ToArray();
 
-        foreach (var task in tasks.TakeWhile(task => task.IsCompleted))
+        var completedTasks =
+            tasksSnapshot
+            .Where(task => task.Key.IsCompleted)
+            .ToArray();
+
+        foreach (var task in completedTasks)
         {
-            var taskResult = await task;
+            if (!tasks.TryRemove(task.Key, out _))
+                continue;
+
+            var taskResult = await task.Key;
 
             webServiceApp.ApplyUpdate(
                 taskResult.UpdateFunction,
@@ -50,7 +58,7 @@ public class VolatileProcessHost(
         {
             if (TaskForCmdAsync(cmd) is { } task)
             {
-                tasks.Add(task);
+                tasks[task] = null;
             }
             else
             {
@@ -282,7 +290,9 @@ public class VolatileProcessHost(
                     break;
 
                 case VolatileProcessNative volatileProcessNative:
-                    // TODO
+
+                    exceptionToString = "This request type is not supported for native processes";
+
                     break;
 
                 default:
@@ -395,7 +405,9 @@ public class VolatileProcessHost(
     {
         var matchFromSourceComposition =
             SourceCompositions
-            .Select(sourceComposition => PineValueHashTree.FindNodeByHash(sourceComposition, sha256));
+            .Select(sourceComposition => PineValueHashTree.FindNodeByHash(sourceComposition, sha256))
+            .WhereNotNull()
+            .FirstOrDefault();
 
         if (matchFromSourceComposition is not null)
         {

@@ -91,16 +91,10 @@ public class ElmWebServiceUsingVolatileProcessNativeTest
             await volatileProcessHost.ExchangeAsync(webServiceApp);
         }
 
-        var allCommands =
-            volatileProcessHost.DequeueCommands();
-
-        var httpResponseCommands =
-            allCommands
-            .OfType<WebServiceInterface.Command.RespondToHttpRequest>()
-            .ToList();
+        var httpResponses = webServiceApp.CopyHttpResponses();
 
         var formatResponseCommand =
-            httpResponseCommands
+            httpResponses
             .FirstOrDefault(cmd => cmd.Respond.HttpRequestId == formatHttpRequestId);
 
         var appStateElm =
@@ -113,8 +107,7 @@ public class ElmWebServiceUsingVolatileProcessNativeTest
         {
             throw new Exception(
                 "Did not find expected response to format request among " +
-                httpResponseCommands.Count + " HTTP response commands and " +
-                allCommands.Count + " commands.");
+                httpResponses.Count + " HTTP response commands.");
         }
 
         var formatHttpResponseBodyBase64 =

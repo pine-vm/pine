@@ -2,6 +2,7 @@ using ElmTime.ElmInteractive;
 using Pine.Core;
 using Pine.Core.PineVM;
 using Pine.PineVM;
+using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 
@@ -12,6 +13,8 @@ namespace Pine.Elm.Platform;
 /// </summary>
 public class MutatingWebServiceApp
 {
+    private readonly System.Threading.Lock stateLock = new();
+
     private readonly PineVMCache pineVMCache = new();
 
     private readonly PineVM.PineVM pineVM;
@@ -29,7 +32,12 @@ public class MutatingWebServiceApp
 
     public ElmTime.ElmTimeJsonAdapter.Parsed JsonAdapter => appConfig.JsonAdapter;
 
+    private readonly ConcurrentQueue<WebServiceInterface.Command.RespondToHttpRequest> httpResponses = new();
+
     private readonly ConcurrentQueue<WebServiceInterface.Command> commands = new();
+
+    public IReadOnlyList<WebServiceInterface.Command.RespondToHttpRequest> CopyHttpResponses() =>
+        [.. httpResponses];
 
     public IReadOnlyList<WebServiceInterface.Command> DequeueCommands() =>
         [.. commands.DequeueAllEnumerable()];
@@ -41,10 +49,13 @@ public class MutatingWebServiceApp
 
     private void SetAppState(PineValue appState)
     {
-        var subscriptions =
-            WebServiceInterface.WebServiceConfig.ParseSubscriptions(appConfig, appState, pineVM);
+        lock (stateLock)
+        {
+            var subscriptions =
+                WebServiceInterface.WebServiceConfig.ParseSubscriptions(appConfig, appState, pineVM);
 
-        appStateAndSubscriptions = (appState, subscriptions);
+            appStateAndSubscriptions = (appState, subscriptions);
+        }
     }
 
     public MutatingWebServiceApp(
@@ -65,62 +76,78 @@ public class MutatingWebServiceApp
     public WebServiceInterface.WebServiceEventResponse EventHttpRequest(
         WebServiceInterface.HttpRequestEventStruct httpRequest)
     {
-        var eventResponse =
-            WebServiceInterface.WebServiceConfig.EventHttpRequest(
-                appStateAndSubscriptions.subscriptions,
-                httpRequest,
-                AppState,
-                pineVM);
+        lock (stateLock)
+        {
+            var eventResponse =
+                WebServiceInterface.WebServiceConfig.EventHttpRequest(
+                    appStateAndSubscriptions.subscriptions,
+                    httpRequest,
+                    AppState,
+                    pineVM);
 
-        SetAppState(eventResponse.State);
+            SetAppState(eventResponse.State);
 
-        MutateConsolidatingAppResponse(eventResponse);
+            MutateConsolidatingAppResponse(eventResponse);
 
-        return eventResponse;
+            return eventResponse;
+        }
     }
 
     public WebServiceInterface.WebServiceEventResponse? UpdateForPosixTime(
         long posixTimeMilli)
     {
-        var eventResponse =
-            WebServiceInterface.WebServiceConfig.EventPosixTime(
-                subscriptions: appStateAndSubscriptions.subscriptions,
-                posixTimeMilli,
-                AppState,
-                pineVM);
-
-        if (eventResponse is not null)
+        lock (stateLock)
         {
-            SetAppState(eventResponse.State);
-            MutateConsolidatingAppResponse(eventResponse);
-        }
+            var eventResponse =
+                WebServiceInterface.WebServiceConfig.EventPosixTime(
+                    subscriptions: appStateAndSubscriptions.subscriptions,
+                    posixTimeMilli,
+                    AppState,
+                    pineVM);
 
-        return eventResponse;
+            if (eventResponse is not null)
+            {
+                SetAppState(eventResponse.State);
+                MutateConsolidatingAppResponse(eventResponse);
+            }
+
+            return eventResponse;
+        }
     }
 
     public WebServiceInterface.WebServiceEventResponse ApplyUpdate(
         ElmInteractiveEnvironment.FunctionRecord updateFunction,
         IReadOnlyList<PineValue> updateArgsBeforeState)
     {
-        var eventResponse =
-            WebServiceInterface.WebServiceConfig.ApplyUpdate(
-                updateFunction,
-                updateArgsBeforeState,
-                AppState,
-                pineVM);
+        lock (stateLock)
+        {
+            var eventResponse =
+                WebServiceInterface.WebServiceConfig.ApplyUpdate(
+                    updateFunction,
+                    updateArgsBeforeState,
+                    AppState,
+                    pineVM);
 
-        SetAppState(eventResponse.State);
+            SetAppState(eventResponse.State);
 
-        MutateConsolidatingAppResponse(eventResponse);
+            MutateConsolidatingAppResponse(eventResponse);
 
-        return eventResponse;
+            return eventResponse;
+        }
     }
 
     private void MutateConsolidatingAppResponse(WebServiceInterface.WebServiceEventResponse eventResponse)
     {
         foreach (var cmd in eventResponse.Commands)
         {
-            commands.Enqueue(cmd);
+            if (cmd is WebServiceInterface.Command.RespondToHttpRequest httpResponseCmd)
+            {
+                httpResponses.Enqueue(httpResponseCmd);
+            }
+            else
+            {
+                commands.Enqueue(cmd);
+            }
         }
     }
 
@@ -129,7 +156,7 @@ public class MutatingWebServiceApp
         System.Threading.CancellationToken cancellationToken = default)
     {
         return
-            await System.Threading.Tasks.Task.Run(() =>
+            await System.Threading.Tasks.Task.Run(async () =>
             {
                 EventHttpRequest(httpRequest);
 
@@ -137,18 +164,15 @@ public class MutatingWebServiceApp
                 {
                     cancellationToken.ThrowIfCancellationRequested();
 
-                    foreach (var cmd in commands)
+                    foreach (var httpResponse in httpResponses)
                     {
-                        if (cmd is WebServiceInterface.Command.RespondToHttpRequest httpResponseCmd)
+                        if (httpResponse.Respond.HttpRequestId == httpRequest.HttpRequestId)
                         {
-                            if (httpResponseCmd.Respond.HttpRequestId == httpRequest.HttpRequestId)
-                            {
-                                return httpResponseCmd.Respond.Response;
-                            }
+                            return httpResponse.Respond.Response;
                         }
                     }
 
-                    System.Threading.Tasks.Task.Delay(100).Wait();
+                    await System.Threading.Tasks.Task.Delay(TimeSpan.FromMilliseconds(100));
                 }
             });
     }

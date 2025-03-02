@@ -930,7 +930,7 @@ type alias TerminateVolatileProcessStruct =
                 tag.tagArguments.Span[0];
 
             var parsedRuntimeInformationRecord =
-                ParseReadRuntimeInformationCommandRecord(runtimeInformationRecordValue);
+                ParseRuntimeInformationRecord(runtimeInformationRecordValue);
 
             {
                 if (parsedRuntimeInformationRecord.IsErrOrNull() is { } err)
@@ -1078,7 +1078,7 @@ type alias TerminateVolatileProcessStruct =
     }
 
     public static Result<string, ReadRuntimeInformationCommandStruct>
-        ParseReadRuntimeInformationCommandRecord(
+        ParseRuntimeInformationRecord(
         PineValue pineValue)
     {
         var parseUpdateResult =
