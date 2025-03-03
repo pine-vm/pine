@@ -16,6 +16,7 @@ using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using static MoreLinq.Extensions.BatchExtension;
+using static MoreLinq.Extensions.SkipLastWhileExtension;
 
 namespace TestElmTime;
 
@@ -688,13 +689,13 @@ public class WebServiceTests
                     listFilesInDirectory: originalFileStore.ListFilesInDirectory);
             });
 
-        var delayMutateInFileStore = false;
+        var delayMutateInFileStore = true;
 
         runBeforeMutateInFileStore = new Action(() =>
         {
-            while (!delayMutateInFileStore)
+            while (delayMutateInFileStore)
             {
-                System.Threading.Tasks.Task.Delay(11).Wait();
+                System.Threading.Tasks.Task.Delay(TimeSpan.FromMilliseconds(11)).Wait();
             }
         });
 
@@ -704,7 +705,7 @@ public class WebServiceTests
 
         Assert.IsFalse(httpPostTask.IsCompleted, "HTTP task is not completed.");
 
-        delayMutateInFileStore = true;
+        delayMutateInFileStore = false;
 
         await System.Threading.Tasks.Task.Delay(TimeSpan.FromSeconds(1));
 
@@ -809,8 +810,9 @@ public class WebServiceTests
         {
             using var server = testSetup.StartWebHost();
 
-            using (var adminClient = testSetup.SetDefaultRequestHeaderAuthorizeForAdmin(
-                testSetup.BuildAdminInterfaceHttpClient()))
+            using (var adminClient =
+                testSetup.SetDefaultRequestHeaderAuthorizeForAdmin(
+                    testSetup.BuildAdminInterfaceHttpClient()))
             {
                 var deployHttpResponse =
                     await adminClient.PostAsync(
@@ -897,9 +899,17 @@ public class WebServiceTests
                 migrateHttpResponse.StatusCode,
                 "migrate-elm-state response status code is BadRequest");
 
+            if (migrateHttpResponse.Content is not { } migrateHttpResponseContent)
+            {
+                throw new InvalidOperationException("No response content.");
+            }
+
+            var migrateHttpResponseContentString =
+                await migrateHttpResponseContent.ReadAsStringAsync();
+
             Assert.IsTrue(
-                (await migrateHttpResponse.Content?.ReadAsStringAsync() ?? "").Contains("maybeString"),
-                "HTTP response content contains matching message");
+                migrateHttpResponseContentString.Contains("maybeString"),
+                "HTTP response content contains matching message (" + migrateHttpResponseContentString + ")");
         }
 
         using (var client = testSetup.BuildPublicAppHttpClient())
@@ -1564,17 +1574,26 @@ public class WebServiceTests
         var storeOriginalHistory =
             fileStoreWriter.History.ToImmutableList();
 
-        var lastWriteOperation = storeOriginalHistory.Last();
+        var storeHistoryLessTrailingReduction =
+            storeOriginalHistory
+            .SkipLastWhile(writeOperation =>
+            writeOperation.SetFileContent?.path
+            ?.Any((segment) => segment.Contains("reduction", StringComparison.OrdinalIgnoreCase)) ?? false);
+
+        var lastWriteOperation = storeHistoryLessTrailingReduction.Last();
 
         Assert.IsNotNull(lastWriteOperation.AppendFileContent?.path, "Last write operation was append");
 
         var storeHistoryWithCrash =
-            storeOriginalHistory.SkipLast(1).Append(new RecordingFileStoreWriter.WriteOperation
+            storeHistoryLessTrailingReduction
+            .SkipLast(1)
+            .Append(new RecordingFileStoreWriter.WriteOperation
             {
                 AppendFileContent = (lastWriteOperation.AppendFileContent.Value.path, Enumerable.Repeat((byte)4, 123).ToArray()),
             });
 
-        var fileStoreReaderAfterCrash = RecordingFileStoreWriter.WriteOperation.Apply(storeHistoryWithCrash, new EmptyFileStoreReader());
+        var fileStoreReaderAfterCrash =
+            RecordingFileStoreWriter.WriteOperation.Apply(storeHistoryWithCrash, new EmptyFileStoreReader());
 
         using (var testSetupAfterCrash = WebHostAdminInterfaceTestSetup.Setup(
             fileStore: new FileStoreFromWriterAndReader(fileStoreWriter, fileStoreReaderAfterCrash),
@@ -1597,11 +1616,11 @@ public class WebServiceTests
 
         var deployReport =
             ElmTime.Program.DeployApp(
-                sourcePath: "./../../../../example-apps/docker-image-default-app",
-                site: testDirectory,
-                siteDefaultPassword: null,
-                initElmAppState: true,
-                promptForPasswordOnConsole: false);
+            sourcePath: "./../../../../example-apps/docker-image-default-app",
+            site: testDirectory,
+            siteDefaultPassword: null,
+            initElmAppState: true,
+            promptForPasswordOnConsole: false);
 
         using (var restoredProcess =
             PersistentProcessLiveRepresentation.LoadFromStoreAndRestoreProcess(
