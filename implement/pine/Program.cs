@@ -2820,7 +2820,8 @@ public class Program
                     new Platform.WebService.ProcessStoreSupportingMigrations.ProcessStoreWriterInFileStore(
                         processStoreFileStore,
                         getTimeForCompositionLogBatch: () => DateTimeOffset.UtcNow,
-                        processStoreFileStore);
+                        processStoreFileStore,
+                        skipWritingComponentSecondTime: true);
 
                 var appConfigTree =
                     PineValueComposition.SortedTreeFromSetOfBlobsWithCommonFilePath(
@@ -3441,7 +3442,7 @@ public class Program
 
                 return (executableIsRegisteredOnPath, registerExecutableForCurrentUser);
             }
-        };
+        }
 
         return (commandName, checkInstallation);
     }

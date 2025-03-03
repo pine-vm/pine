@@ -157,7 +157,8 @@ public class StartupAdminInterface
             new ProcessStoreWriterInFileStore(
                 processStoreFileStore,
                 getTimeForCompositionLogBatch: getDateTimeOffset,
-                processStoreFileStore);
+                processStoreFileStore,
+                skipWritingComponentSecondTime: true);
 
         void startPublicApp()
         {

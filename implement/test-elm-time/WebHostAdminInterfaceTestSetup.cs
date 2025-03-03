@@ -175,7 +175,8 @@ public class WebHostAdminInterfaceTestSetup : IDisposable
             new ElmTime.Platform.WebService.ProcessStoreSupportingMigrations.ProcessStoreWriterInFileStore(
                 fileStore,
                 getTimeForCompositionLogBatch: persistentProcessHostDateTime ?? (() => DateTimeOffset.UtcNow),
-                fileStore);
+                fileStore,
+                skipWritingComponentSecondTime: true);
 
         processStoreWriter.StoreComponent(deployAppAndInitElmState);
 

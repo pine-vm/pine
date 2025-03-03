@@ -27,7 +27,8 @@ public class StateShimTests
                 fileStore,
                 getTimeForCompositionLogBatch:
                 () => DateTimeOffset.UtcNow,
-                fileStore);
+                fileStore,
+                skipWritingComponentSecondTime: true);
 
         using var calculatorProcess = testSetup.BranchProcess()!;
 

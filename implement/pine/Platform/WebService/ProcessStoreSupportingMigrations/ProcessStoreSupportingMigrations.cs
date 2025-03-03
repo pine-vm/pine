@@ -16,7 +16,8 @@ public record FileStoreReaderProjectionResult(
 
 public interface IProcessStoreWriter
 {
-    (ReadOnlyMemory<byte> recordHash, string recordHashBase16) AppendCompositionLogRecord(CompositionLogRecordInFile.CompositionEvent compositionEvent);
+    (ReadOnlyMemory<byte> recordHash, string recordHashBase16) AppendCompositionLogRecord(
+        CompositionLogRecordInFile.CompositionEvent compositionEvent);
 
     void StoreProvisionalReduction(ProvisionalReductionRecordInFile reduction);
 
@@ -57,7 +58,8 @@ public interface IProcessStoreReader
         var processStoreWriter = new ProcessStoreWriterInFileStore(
             originalFileStore,
             getTimeForCompositionLogBatch: () => DateTimeOffset.UtcNow,
-            fileStoreWriter);
+            fileStoreWriter,
+            skipWritingComponentSecondTime: false);
 
         processStoreWriter.AppendCompositionLogRecord(compositionLogEvent);
 
@@ -459,13 +461,17 @@ public class ProcessStoreWriterInFileStore : ProcessStoreInFileStore, IProcessSt
 
     protected IFileStoreWriter fileStore;
 
-    protected IFileStoreWriter LiteralElementFileStore => fileStore.ForSubdirectory(LiteralElementSubdirectory);
+    protected IFileStoreWriter LiteralElementFileStore =>
+        fileStore.ForSubdirectory(LiteralElementSubdirectory);
 
-    protected IFileStoreWriter DeflatedLiteralElementFileStore => fileStore.ForSubdirectory(DeflatedLiteralElementSubdirectory);
+    protected IFileStoreWriter DeflatedLiteralElementFileStore =>
+        fileStore.ForSubdirectory(DeflatedLiteralElementSubdirectory);
 
-    protected IFileStoreWriter ProvisionalReductionFileStore => fileStore.ForSubdirectory(ProvisionalReductionSubdirectory);
+    protected IFileStoreWriter ProvisionalReductionFileStore =>
+        fileStore.ForSubdirectory(ProvisionalReductionSubdirectory);
 
-    protected IFileStoreWriter CompositionLogLiteralFileStore => fileStore.ForSubdirectory(CompositionLogLiteralPath);
+    protected IFileStoreWriter CompositionLogLiteralFileStore =>
+        fileStore.ForSubdirectory(CompositionLogLiteralPath);
 
     private readonly Func<DateTimeOffset> getTimeForCompositionLogBatch;
 
@@ -473,13 +479,19 @@ public class ProcessStoreWriterInFileStore : ProcessStoreInFileStore, IProcessSt
 
     private (string hashBase16, IImmutableList<string> filePath)? lastCompositionRecord;
 
+    private readonly bool skipWritingComponentSecondTime;
+
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<PineValue, object?> componentsWritten = new();
+
     public ProcessStoreWriterInFileStore(
         IFileStoreReader fileStoreReader,
         Func<DateTimeOffset> getTimeForCompositionLogBatch,
-        IFileStoreWriter fileStore)
+        IFileStoreWriter fileStore,
+        bool skipWritingComponentSecondTime)
     {
         this.getTimeForCompositionLogBatch = getTimeForCompositionLogBatch;
         this.fileStore = fileStore;
+        this.skipWritingComponentSecondTime = skipWritingComponentSecondTime;
 
         var originalProcessStoreReader = new ProcessStoreReaderInFileStore(fileStoreReader);
 
@@ -487,11 +499,12 @@ public class ProcessStoreWriterInFileStore : ProcessStoreInFileStore, IProcessSt
             originalProcessStoreReader.EnumerateSerializedCompositionLogRecordsWithFilePathReverse().FirstOrDefault();
 
         lastCompositionRecord =
-            originalStoreLastCompositionRecord.record == null
+            originalStoreLastCompositionRecord.record is not { } lastStoredRecord
             ?
             null
             :
-            (CompositionLogRecordInFile.HashBase16FromCompositionRecord(originalStoreLastCompositionRecord.record), originalStoreLastCompositionRecord.filePath);
+            (CompositionLogRecordInFile.HashBase16FromCompositionRecord(lastStoredRecord),
+            originalStoreLastCompositionRecord.filePath);
     }
 
     public (ReadOnlyMemory<byte> recordHash, string recordHashBase16) AppendCompositionLogRecord(
@@ -555,12 +568,20 @@ public class ProcessStoreWriterInFileStore : ProcessStoreInFileStore, IProcessSt
 
     public void StoreComponent(PineValue component)
     {
-        StoreComponentAndGetHash(component);
+        if (skipWritingComponentSecondTime)
+        {
+            if (componentsWritten.ContainsKey(component))
+                return;
+        }
+
+        StoreComponentAndGetHashRecursive(component);
     }
 
-    private (ReadOnlyMemory<byte> hash, string hashBase16) StoreComponentAndGetHash(PineValue component)
+    private (ReadOnlyMemory<byte> hash, string hashBase16) StoreComponentAndGetHashRecursive(
+        PineValue component)
     {
-        var (serialRepresentation, dependencies) = PineValueHashTree.ComputeHashTreeNodeSerialRepresentation(component);
+        var (serialRepresentation, dependencies) =
+            PineValueHashTree.ComputeHashTreeNodeSerialRepresentation(component);
 
         var hash = CommonConversion.HashSHA256(serialRepresentation);
 
@@ -578,6 +599,8 @@ public class ProcessStoreWriterInFileStore : ProcessStoreInFileStore, IProcessSt
                         GetFilePathForComponentInComponentFileStore(hashBase16),
                         deflated.ToArray());
 
+                    componentsWritten.TryAdd(component, null);
+
                     return;
                 }
             }
@@ -585,13 +608,38 @@ public class ProcessStoreWriterInFileStore : ProcessStoreInFileStore, IProcessSt
             LiteralElementFileStore.SetFileContent(
                 GetFilePathForComponentInComponentFileStore(hashBase16),
                 serialRepresentation.ToArray());
+
+            componentsWritten.TryAdd(component, null);
         }
 
         storeSelf();
 
         foreach (var dependency in dependencies)
-            StoreComponent(dependency);
+        {
+            if (skipWritingComponentSecondTime)
+            {
+                if (componentsWritten.ContainsKey(dependency))
+                    continue;
+            }
+
+            StoreComponentAndGetHashRecursive(dependency);
+        }
 
         return (hash, hashBase16);
     }
 }
+
+public class DiscardingStoreWriter : IProcessStoreWriter
+{
+    public (ReadOnlyMemory<byte> recordHash, string recordHashBase16) AppendCompositionLogRecord(
+        CompositionLogRecordInFile.CompositionEvent compositionEvent) =>
+        (ReadOnlyMemory<byte>.Empty, "");
+
+    public void StoreComponent(PineValue component)
+    {
+    }
+    public void StoreProvisionalReduction(ProvisionalReductionRecordInFile reduction)
+    {
+    }
+}
+

@@ -56,16 +56,47 @@ public interface IFileStore : IFileStoreReader, IFileStoreWriter
 {
 }
 
-public class FileStoreFromSystemIOFile(string directoryPath) : IFileStore
+public class FileStoreFromSystemIOFile(
+    string directoryPath,
+    FileStoreFromSystemIOFile.FileStoreRetryOptions retryOptions) : IFileStore
 {
-    private readonly string directoryPath = directoryPath ?? throw new ArgumentNullException(nameof(directoryPath));
+    private readonly string directoryPath =
+        directoryPath
+        ??
+        throw new ArgumentNullException(nameof(directoryPath));
+
+    private readonly FileStoreRetryOptions retryOptions =
+        retryOptions
+        ??
+        throw new ArgumentNullException(nameof(retryOptions));
+
+    public FileStoreFromSystemIOFile(string directoryPath) : this(directoryPath, FileStoreRetryOptions.NoRetry)
+    {
+    }
+
+    public record FileStoreRetryOptions(
+        int MaxRetryAttempts,
+        TimeSpan InitialRetryDelay,
+        TimeSpan MaxRetryDelay)
+    {
+        /// <summary>
+        /// Gets a configuration that disables retries
+        /// </summary>
+        public static readonly FileStoreRetryOptions NoRetry =
+            new(MaxRetryAttempts: 0, TimeSpan.Zero, TimeSpan.Zero);
+    }
 
     private string CombinePath(IImmutableList<string> path)
     {
-        foreach (var pathComponent in path)
+        for (var i = 0; i < path.Count; i++)
         {
+            var pathComponent = path[i];
+
             if (pathComponent.Contains('\\') || pathComponent.Contains('/'))
-                throw new ArgumentException("Invalid character in path component '" + pathComponent + "'.");
+            {
+                throw new ArgumentException(
+                    "Invalid character in path component '" + pathComponent + "' at index " + i);
+            }
         }
 
         return Path.Combine([directoryPath, .. path]);
@@ -85,29 +116,37 @@ public class FileStoreFromSystemIOFile(string directoryPath) : IFileStore
             Directory.CreateDirectory(directoryPath);
     }
 
-    public void SetFileContent(IImmutableList<string> path, ReadOnlyMemory<byte> fileContent)
+    public void SetFileContent(
+        IImmutableList<string> path,
+        ReadOnlyMemory<byte> fileContent)
     {
         var filePath = CombinePath(path);
 
         var directoryPath = Path.GetDirectoryName(filePath);
 
-        if (directoryPath != null)
-            EnsureDirectoryExists(directoryPath);
+        ExecuteWithRetry(() =>
+        {
+            if (directoryPath is not null)
+                EnsureDirectoryExists(directoryPath);
 
-        using var fileStream = new FileStream(filePath, FileMode.Create, FileAccess.Write);
+            using var fileStream = new FileStream(filePath, FileMode.Create, FileAccess.Write);
 
-        fileStream.Write(fileContent.Span);
+            fileStream.Write(fileContent.Span);
 
-        fileStream.Flush();
+            fileStream.Flush();
+            return true;
+        });
     }
 
-    public void AppendFileContent(IImmutableList<string> path, ReadOnlyMemory<byte> fileContent)
+    public void AppendFileContent(
+        IImmutableList<string> path,
+        ReadOnlyMemory<byte> fileContent)
     {
         var filePath = CombinePath(path);
 
         var directoryPath = Path.GetDirectoryName(filePath);
 
-        if (directoryPath != null)
+        if (directoryPath is not null)
             EnsureDirectoryExists(directoryPath);
 
         using var fileStream = new FileStream(filePath, FileMode.Append, FileAccess.Write);
@@ -117,37 +156,93 @@ public class FileStoreFromSystemIOFile(string directoryPath) : IFileStore
         fileStream.Flush();
     }
 
-    public ReadOnlyMemory<byte>? GetFileContent(IImmutableList<string> path)
+    public ReadOnlyMemory<byte>? GetFileContent(
+        IImmutableList<string> path)
     {
         var filePath = CombinePath(path);
 
-        if (!File.Exists(filePath))
-            return null;
+        return ExecuteWithRetry<ReadOnlyMemory<byte>?>(() =>
+        {
+            if (!File.Exists(filePath))
+                return null;
 
-        return File.ReadAllBytes(filePath);
+            return File.ReadAllBytes(filePath);
+        });
     }
 
-    public IEnumerable<IImmutableList<string>> ListFilesInDirectory(IImmutableList<string> directoryPath)
+    public IEnumerable<IImmutableList<string>> ListFilesInDirectory(
+        IImmutableList<string> directoryPath)
     {
         var fileSystemDirectoryPath = CombinePath(directoryPath);
 
-        if (!Directory.Exists(fileSystemDirectoryPath))
-            return [];
-
         return
-            Directory.GetFiles(fileSystemDirectoryPath, "*", SearchOption.AllDirectories)
-            .Order()
-            .Select(filePath => Path.GetRelativePath(fileSystemDirectoryPath, filePath).Split(Path.DirectorySeparatorChar).ToImmutableList());
+            ExecuteWithRetry<IEnumerable<IImmutableList<string>>>(() =>
+            {
+                if (!Directory.Exists(fileSystemDirectoryPath))
+                    return [];
+
+                return
+                    Directory.GetFiles(fileSystemDirectoryPath, "*", SearchOption.AllDirectories)
+                    .Order()
+                    .Select(filePath =>
+                    Path.GetRelativePath(fileSystemDirectoryPath, filePath).Split(Path.DirectorySeparatorChar)
+                    .ToImmutableList());
+            });
     }
 
     public void DeleteFile(IImmutableList<string> path)
     {
         var fileSystemPath = CombinePath(path);
 
-        if (!File.Exists(fileSystemPath))
-            return;
+        ExecuteWithRetry(() =>
+        {
+            if (!File.Exists(fileSystemPath))
+                return true;
 
-        File.Delete(fileSystemPath);
+            File.Delete(fileSystemPath);
+            return true;
+        });
+    }
+
+    private T ExecuteWithRetry<T>(Func<T> operation) =>
+        ExecuteWithRetry(operation, retryOptions);
+
+    public static T ExecuteWithRetry<T>(
+        Func<T> operation,
+        FileStoreRetryOptions retryOptions)
+    {
+        // If retries are disabled, execute the operation directly
+        if (retryOptions.MaxRetryAttempts <= 0)
+        {
+            return operation();
+        }
+
+        int attempts = 0;
+        TimeSpan delay = retryOptions.InitialRetryDelay;
+
+        while (true)
+        {
+            try
+            {
+                attempts++;
+                return operation();
+            }
+            catch (IOException ex)
+            when (ex.HResult is unchecked((int)0x80070020)) // ERROR_SHARING_VIOLATION
+            {
+                if (!(attempts <= retryOptions.MaxRetryAttempts))
+                    throw; // Rethrow if we've reached max attempts
+
+                System.Threading.Thread.Sleep(delay);
+
+                // Increase delay with exponential backoff (up to max)
+                delay =
+                    TimeSpan.FromMilliseconds(
+                        Math.Min(
+                            delay.TotalMilliseconds * 2,
+                            retryOptions.MaxRetryDelay.TotalMilliseconds));
+            }
+        }
     }
 }
 
@@ -191,7 +286,7 @@ public class RecordingFileStoreWriter : IFileStoreWriter
 
         public IFileStoreReader Apply(IFileStoreReader previousState)
         {
-            if (SetFileContent?.path != null)
+            if (SetFileContent?.path is { } setFilePath)
             {
                 return new DelegatingFileStoreReader
                 (
@@ -199,7 +294,7 @@ public class RecordingFileStoreWriter : IFileStoreWriter
                     {
                         var previousFileContent = previousState.GetFileContent(filePath);
 
-                        if (filePath.SequenceEqual(SetFileContent.Value.path))
+                        if (filePath.SequenceEqual(setFilePath))
                         {
                             return SetFileContent.Value.fileContent;
                         }
@@ -210,9 +305,9 @@ public class RecordingFileStoreWriter : IFileStoreWriter
                     {
                         var previousFilesInDirectory = previousState.ListFilesInDirectory(directoryPath);
 
-                        if (SetFileContent.Value.path.Take(directoryPath.Count).SequenceEqual(directoryPath))
+                        if (setFilePath.Take(directoryPath.Count).SequenceEqual(directoryPath))
                         {
-                            return previousFilesInDirectory.Append(SetFileContent.Value.path.Skip(directoryPath.Count).ToImmutableList()).Distinct();
+                            return previousFilesInDirectory.Append(setFilePath.Skip(directoryPath.Count).ToImmutableList()).Distinct();
                         }
 
                         return previousFilesInDirectory;
@@ -220,7 +315,7 @@ public class RecordingFileStoreWriter : IFileStoreWriter
                 );
             }
 
-            if (AppendFileContent?.path != null)
+            if (AppendFileContent?.path is { } appendPath)
             {
                 return new DelegatingFileStoreReader
                 (
@@ -228,7 +323,7 @@ public class RecordingFileStoreWriter : IFileStoreWriter
                     {
                         var previousFileContent = previousState.GetFileContent(filePath);
 
-                        if (filePath.SequenceEqual(AppendFileContent.Value.path))
+                        if (filePath.SequenceEqual(appendPath))
                         {
                             return CommonConversion.Concat(
                                 (previousFileContent ?? ReadOnlyMemory<byte>.Empty).Span,
@@ -241,9 +336,9 @@ public class RecordingFileStoreWriter : IFileStoreWriter
                     {
                         var previousFilesInDirectory = previousState.ListFilesInDirectory(directoryPath);
 
-                        if (AppendFileContent.Value.path.Take(directoryPath.Count).SequenceEqual(directoryPath))
+                        if (appendPath.Take(directoryPath.Count).SequenceEqual(directoryPath))
                         {
-                            return previousFilesInDirectory.Append(AppendFileContent.Value.path.Skip(directoryPath.Count).ToImmutableList()).Distinct();
+                            return previousFilesInDirectory.Append(appendPath.Skip(directoryPath.Count).ToImmutableList()).Distinct();
                         }
 
                         return previousFilesInDirectory;

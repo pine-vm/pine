@@ -130,7 +130,8 @@ public class RunServer
                 new Platform.WebService.ProcessStoreSupportingMigrations.ProcessStoreWriterInFileStore(
                     processStoreFileStore,
                     getTimeForCompositionLogBatch: () => DateTimeOffset.UtcNow,
-                    processStoreFileStore);
+                    processStoreFileStore,
+                    skipWritingComponentSecondTime: true);
 
             processStoreWriter.StoreComponent(appConfigComponent);
 
