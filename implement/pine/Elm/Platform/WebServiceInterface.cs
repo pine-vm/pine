@@ -955,7 +955,7 @@ type alias TerminateVolatileProcessStruct =
                     tag.tagArguments.Span[0],
                     elmCompilerCache,
                     parseCache);
-            
+
             {
                 if (parsedCreateVolatileProcessNativeCommand.IsErrOrNull() is { } err)
                 {
@@ -2219,7 +2219,9 @@ type alias TerminateVolatileProcessStruct =
 
         if (loweringResult.IsErrOrNull() is { } loweringErr)
         {
-            throw new Exception("Failed lowering: " + loweringErr);
+            throw new Exception(
+                "Failed lowering with " + loweringErr.Count + " errors:\n" +
+                ElmAppCompilation.CompileCompilationErrorsDisplayText(loweringErr));
         }
 
         if (loweringResult.IsOkOrNull() is not { } loweringOk)
