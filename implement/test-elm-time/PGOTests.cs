@@ -421,7 +421,7 @@ public class PGOTests
                         { record | delta = fieldValue }
 
                     _ ->
-                        { record | other = fieldValue }
+                        { record | zz_other = fieldValue }
 
             """;
 
@@ -560,7 +560,7 @@ public class PGOTests
                     ("eta", ElmValue.Integer(121)),
                     ("theta", ElmValue.Integer(123)),
                     ("iota", ElmValue.Integer(127)),
-                    ("other", ElmValue.Integer(97))
+                    ("zz_other", ElmValue.Integer(97))
                     ]),
 
                 fieldId = 3,
@@ -577,7 +577,7 @@ public class PGOTests
                     ("eta", ElmValue.Integer(121)),
                     ("theta", ElmValue.Integer(123)),
                     ("iota", ElmValue.Integer(127)),
-                    ("other", ElmValue.Integer(171))
+                    ("zz_other", ElmValue.Integer(171))
                     ]),
             },
 
@@ -593,7 +593,7 @@ public class PGOTests
                     ("eta", ElmValue.Integer(1_121)),
                     ("theta", ElmValue.Integer(1_123)),
                     ("iota", ElmValue.Integer(1_127)),
-                    ("other", ElmValue.Integer(1_013))
+                    ("zz_other", ElmValue.Integer(1_013))
                     ]),
 
                 fieldId = 3,
@@ -610,7 +610,7 @@ public class PGOTests
                     ("eta", ElmValue.Integer(1_121)),
                     ("theta", ElmValue.Integer(1_123)),
                     ("iota", ElmValue.Integer(1_127)),
-                    ("other", ElmValue.Integer(11_871))
+                    ("zz_other", ElmValue.Integer(11_871))
                     ]),
             },
 
@@ -626,7 +626,7 @@ public class PGOTests
                     ("eta", ElmValue.Integer(2_121)),
                     ("theta", ElmValue.Integer(2_123)),
                     ("iota", ElmValue.Integer(2_127)),
-                    ("other", ElmValue.Integer(2_013))
+                    ("zz_other", ElmValue.Integer(2_013))
                     ]),
 
                 fieldId = 3,
@@ -643,7 +643,7 @@ public class PGOTests
                     ("eta", ElmValue.Integer(2_121)),
                     ("theta", ElmValue.Integer(2_123)),
                     ("iota", ElmValue.Integer(2_127)),
-                    ("other", ElmValue.Integer(17_951))
+                    ("zz_other", ElmValue.Integer(17_951))
                     ]),
             },
 
@@ -659,7 +659,7 @@ public class PGOTests
                     ("eta", ElmValue.Integer(3_121)),
                     ("theta", ElmValue.Integer(3_123)),
                     ("iota", ElmValue.Integer(3_127)),
-                    ("other", ElmValue.Integer(3_013))
+                    ("zz_other", ElmValue.Integer(3_013))
                     ]),
 
                 fieldId = 3,
@@ -676,7 +676,7 @@ public class PGOTests
                     ("eta", ElmValue.Integer(3_121)),
                     ("theta", ElmValue.Integer(3_123)),
                     ("iota", ElmValue.Integer(3_127)),
-                    ("other", ElmValue.Integer(37_951))
+                    ("zz_other", ElmValue.Integer(37_951))
                     ]),
             },
 
@@ -837,7 +837,7 @@ public class PGOTests
                     [
                     ("alfa", ElmValue.StringInstance("Arancino")),
                     ("beta", ElmValue.StringInstance("Bruschetta")),
-                    ("other", ElmValue.Integer(101)),
+                    ("zz_other", ElmValue.Integer(101)),
                     ("delta", ElmValue.StringInstance("Dolmades")),
                     ]),
 
@@ -850,7 +850,7 @@ public class PGOTests
                     [
                     ("alfa", ElmValue.StringInstance("Arancino")),
                     ("beta", ElmValue.StringInstance("Bruschetta")),
-                    ("other", ElmValue.Integer(131)),
+                    ("zz_other", ElmValue.Integer(131)),
                     ("delta", ElmValue.StringInstance("Dolmades")),
                     ])
             },
@@ -879,7 +879,10 @@ public class PGOTests
                     new PineVM.EvaluationConfig(ParseAndEvalCountLimit: 1234))
                 .Map(evalReport =>
                 {
-                    Assert.AreEqual(ElmValueEncoding.ElmValueAsPineValue(scenario.expected), evalReport.ReturnValue);
+                    Assert.AreEqual(
+                        ElmValueEncoding.ElmValueAsPineValue(scenario.expected),
+                        evalReport.ReturnValue,
+                        "New record value matches expected");
 
                     Console.WriteLine(
                         "Completed scenario using " + evalReport.InstructionCount +

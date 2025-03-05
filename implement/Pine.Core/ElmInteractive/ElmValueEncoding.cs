@@ -549,6 +549,7 @@ public static class ElmValueEncoding
                 ElmValue.ElmRecord elmRecord =>
                 ElmRecordAsPineValue(
                     [.. elmRecord.Fields
+                    .OrderBy(field => field.FieldName)
                     .Select(field => (field.FieldName, ElmValueAsPineValue(field.Value, additionalReusableEncodings, reportNewEncoding)))]),
 
                 ElmValue.ElmBytes elmBytes =>

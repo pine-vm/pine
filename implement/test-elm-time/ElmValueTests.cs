@@ -170,4 +170,34 @@ public class ElmValueTests
         Assert.AreEqual("gamma", parsedFields[2].fieldName);
         Assert.AreEqual(PineValueAsInteger.ValueFromSignedInteger(17), parsedFields[2].fieldValue);
     }
+
+    [TestMethod]
+    public void Elm_value_encoding_orders_record_fields()
+    {
+        /*
+         * When emitting equality checks, the implementation of the Elm compiler assumes record fields are always ordered.
+         * */
+
+        var elmRecordFormAlfa =
+            new ElmValue.ElmRecord(
+                [
+                ("beta", ElmValue.Integer(11)),
+                ("alfa", ElmValue.Integer(13)),
+                ("gamma", ElmValue.Integer(17))
+                ]);
+
+        var elmRecordFormBeta =
+            new ElmValue.ElmRecord(
+                [
+                ("alfa", ElmValue.Integer(13)),
+                ("beta", ElmValue.Integer(11)),
+                ("gamma", ElmValue.Integer(17))
+                ]);
+
+        var asPineValueFormAlfa = ElmValueEncoding.ElmValueAsPineValue(elmRecordFormAlfa);
+
+        var asPineValueFormBeta = ElmValueEncoding.ElmValueAsPineValue(elmRecordFormBeta);
+
+        Assert.AreEqual(asPineValueFormAlfa, asPineValueFormBeta);
+    }
 }
