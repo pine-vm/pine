@@ -8,4 +8,6 @@
 , String.toInt "-2"
 , String.toInt "12345"
 , String.toInt "-56789"
+, String.toInt "00"
+, String.toInt "0017"
 ]

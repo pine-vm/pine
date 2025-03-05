@@ -1793,11 +1793,7 @@ parseUnsignedInt : List Char -> Int -> Maybe Int
 parseUnsignedInt src offset0 =
     case List.take 1 (List.drop offset0 src) of
         [ '0' ] ->
-            if Pine_kernel.equal [ Pine_kernel.length src, offset0 + 1 ] then
-                Just 0
-
-            else
-                Nothing
+            parseUnsignedIntRec 0 src (offset0 + 1)
 
         [ '1' ] ->
             parseUnsignedIntRec 1 src (offset0 + 1)
