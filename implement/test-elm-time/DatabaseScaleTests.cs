@@ -23,19 +23,19 @@ public class DatabaseScaleTests
         using var server = testSetup.StartWebHost();
         using var publicAppClient = testSetup.BuildPublicAppHttpClient();
 
-        async Task<HttpResponseMessage> apiPostEntry(string entryId, ReadOnlyMemory<byte> entryContent)
+        async Task<HttpResponseMessage> apiPostEntryAsync(string entryId, ReadOnlyMemory<byte> entryContent)
         {
             return await publicAppClient.PostAsync("/api/entry/" + entryId, new ReadOnlyMemoryContent(entryContent));
         }
 
-        async Task<HttpResponseMessage> apiGetEntry(string entryId)
+        async Task<HttpResponseMessage> apiGetEntryAsync(string entryId)
         {
             return await publicAppClient.GetAsync("/api/entry/" + entryId);
         }
 
         var lastEntryIndex = 0;
 
-        async Task postEntriesBatch(
+        async Task postEntriesBatchAsync(
             int entriesCount,
             int entrySizeMin,
             int entrySizeRandom)
@@ -45,28 +45,47 @@ public class DatabaseScaleTests
                 .Range(0, entriesCount).Select(entryIndexInBatch => new
                 {
                     entryId = lastEntryIndex + entryIndexInBatch.ToString(),
-                    entryContent = RandomNumberGenerator.GetBytes(entrySizeMin + RandomNumberGenerator.GetInt32(0, entrySizeRandom))
+                    entryContent =
+                    RandomNumberGenerator.GetBytes(
+                        entrySizeMin + RandomNumberGenerator.GetInt32(0, entrySizeRandom))
                 })
                 .ToImmutableList();
 
             foreach (var item in entriesToPost)
             {
-                await apiPostEntry(item.entryId, item.entryContent);
+                await apiPostEntryAsync(item.entryId, item.entryContent);
             }
 
             foreach (var item in entriesToPost)
             {
-                var getResponse = await apiGetEntry(item.entryId);
+                var getResponse = await apiGetEntryAsync(item.entryId);
 
-                CollectionAssert.AreEqual(item.entryContent, await getResponse.Content.ReadAsByteArrayAsync());
+                Assert.AreEqual(
+                    200,
+                    (int)getResponse.StatusCode,
+                    "Check status code of entry " + item.entryId);
+
+                var responseContentAsByteArray =
+                    await getResponse.Content.ReadAsByteArrayAsync();
+
+                CollectionAssert.AreEqual(
+                    item.entryContent,
+                    responseContentAsByteArray,
+                    "Check content of entry " + item.entryId);
             }
 
             lastEntryIndex += entriesToPost.Count;
         }
 
-        await postEntriesBatch(entriesCount: 100, entrySizeMin: 10_000, entrySizeRandom: 10);
+        await postEntriesBatchAsync(
+            entriesCount: 100,
+            entrySizeMin: 10_000,
+            entrySizeRandom: 10);
 
-        await postEntriesBatch(entriesCount: 400, entrySizeMin: 10_000, entrySizeRandom: 10);
+        await postEntriesBatchAsync(
+            entriesCount: 400,
+            entrySizeMin: 10_000,
+            entrySizeRandom: 10);
 
         var responseJsonSerializerOptions = new JsonSerializerOptions();
 
@@ -81,7 +100,9 @@ public class DatabaseScaleTests
             var parsedResponse =
                 JsonSerializer.Deserialize<IReadOnlyList<(int entryId, GetEntryOverviewResponseEntry entryOverview)>>(
                     responseBody,
-                    responseJsonSerializerOptions);
+                    responseJsonSerializerOptions)
+                ??
+                throw new Exception("parsedResponse is null");
 
             var aggregateLength = parsedResponse.Sum(e => e.entryOverview.length);
 
