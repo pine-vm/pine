@@ -47,7 +47,12 @@ public class ElmTimeJsonAdapter
          * https://package.elm-lang.org/packages/elm/json/latest/Json-Decode#decodeString
          * decodeString : Decoder a -> String -> Result Error a
          * */
-        ElmInteractiveEnvironment.FunctionRecord JsonDecodeDecodeString)
+        ElmInteractiveEnvironment.FunctionRecord JsonDecodeDecodeString,
+        /*
+         * https://package.elm-lang.org/packages/elm/json/latest/Json-Encode#encode
+         * encode : Int -> Value -> String
+         * */
+        ElmInteractiveEnvironment.FunctionRecord JsonEncodeEncode)
     {
         public static Result<string, Parsed> ParseFromCompiled(
             PineValue compiledApp,
@@ -206,6 +211,44 @@ public class ElmTimeJsonAdapter
                     "Unexpected parseDecodeStringFunctionResult: " + parseDecodeStringFunctionResult);
             }
 
+            var moduleJsonEncode =
+                parseEnvOk.Modules
+                .FirstOrDefault(module => module.moduleName is "Json.Encode");
+
+            if (moduleJsonEncode.moduleValue is null)
+            {
+                return
+                    "Module 'Json.Encode' not found among " +
+                    parseEnvOk.Modules.Count + " modules: " +
+                    string.Join(", ", parseEnvOk.Modules.Select(module => module.moduleName));
+            }
+
+            moduleJsonEncode.moduleContent.FunctionDeclarations.TryGetValue(
+                "encode",
+                out var encodeFunctionValue);
+
+            if (encodeFunctionValue is null)
+            {
+                return "Function 'encode' not found in module 'Json.Encode'";
+            }
+
+            var parseEncodeFunctionResult =
+                ElmInteractiveEnvironment.ParseFunctionRecordFromValueTagged(
+                    encodeFunctionValue,
+                    parseCache);
+            {
+                if (parseEncodeFunctionResult.IsErrOrNull() is { } err)
+                {
+                    return
+                        "Failed to parse 'encode' function: " + err;
+                }
+            }
+
+            if (parseEncodeFunctionResult.IsOkOrNull() is not { } parseEncodeFunctionOk)
+            {
+                throw new System.Exception(
+                    "Unexpected parseEncodeFunctionResult: " + parseEncodeFunctionResult);
+            }
 
             PineValue? migrateFunctionValue = null;
 
@@ -237,7 +280,8 @@ public class ElmTimeJsonAdapter
                     JsonDecodeMigratePreviousState: jsonDecodeMigratePreviousStateValue,
                     Migrate: migrateFunctionRecord,
                     JsonDecodeDecodeValue: parseDecodeValueFunctionOk,
-                    JsonDecodeDecodeString: parseDecodeStringFunctionOk);
+                    JsonDecodeDecodeString: parseDecodeStringFunctionOk,
+                    JsonEncodeEncode: parseEncodeFunctionOk);
         }
 
         public Result<string, PineValue> EncodeAppStateAsJsonValue(
@@ -273,7 +317,7 @@ public class ElmTimeJsonAdapter
             return
                 ElmValueInterop.ParseElmResultValue(
                     jsonDecodeApplyFunctionOk,
-                    err => "Failed to decode JSON value: " + err,
+                    err => "Failed to decode JSON value: " + JsonDecodeErrorDisplayText(err),
                     Result<string, PineValue>.ok,
                     invalid:
                     err => throw new System.Exception("Invalid: " + err));
@@ -305,7 +349,7 @@ public class ElmTimeJsonAdapter
             return
                 ElmValueInterop.ParseElmResultValue(
                     jsonDecodeApplyFunctionOk,
-                    err => "Failed to decode JSON value: " + err,
+                    err => "Failed to decode JSON value: " + JsonDecodeErrorDisplayText(err),
                     Result<string, PineValue>.ok,
                     invalid:
                     err => throw new System.Exception("Invalid: " + err));
@@ -342,10 +386,123 @@ public class ElmTimeJsonAdapter
             return
                 ElmValueInterop.ParseElmResultValue(
                     jsonDecodeApplyFunctionOk,
-                    err => "Failed to decode JSON value: " + err,
+                    err => "Failed to decode JSON value: " + JsonDecodeErrorDisplayText(err),
                     Result<string, PineValue>.ok,
                     invalid:
                     err => throw new System.Exception("Invalid: " + err));
+        }
+
+        public Result<string, (PineValue newState, IReadOnlyList<PineValue> cmds)>
+            MigratePreviousAppState(
+            PineValue previousAppState,
+            IPineVM pineVM)
+        {
+            if (Migrate is null)
+            {
+                return "No migration function available";
+            }
+
+            var applyResult =
+                ElmInteractiveEnvironment.ApplyFunction(
+                    pineVM,
+                    Migrate,
+                    [previousAppState]);
+            {
+                if (applyResult.IsErrOrNull() is { } err)
+                {
+                    return "Failed apply migrate function: " + err;
+                }
+            }
+
+            if (applyResult.IsOkOrNull() is not { } applyOk)
+            {
+                throw new System.Exception("Unexpected applyResult: " + applyResult);
+            }
+
+            if (applyOk is not PineValue.ListValue applyList)
+            {
+                return "Unexpected apply result: Is not list but: " + applyResult;
+            }
+
+            if (applyList.Elements.Length is not 2)
+            {
+                return "Unexpected apply result: Expected 2 elements but got: " + applyList.Elements.Length;
+            }
+
+            var newState = applyList.Elements.Span[0];
+
+            var cmdsValue = applyList.Elements.Span[1];
+
+            if (cmdsValue is not PineValue.ListValue cmdsList)
+            {
+                return "Unexpected apply result: Commands is not a list but: " + cmdsValue;
+            }
+
+            return
+                Result<string, (PineValue newState, IReadOnlyList<PineValue> cmds)>
+                .ok((newState, cmdsList.Elements.ToArray()));
+        }
+
+        public Result<string, string> EncodeAppStateAsJsonString(
+            PineValue appState,
+            IPineVM pineVM)
+        {
+            var indentArgument = PineValueAsInteger.ValueFromSignedInteger(0);
+
+            var encodeResult =
+                ElmInteractiveEnvironment.ApplyFunction(
+                    pineVM,
+                    JsonEncodeEncode,
+                    [indentArgument, appState]);
+
+            {
+                if (encodeResult.IsErrOrNull() is { } err)
+                {
+                    return Result<string, string>.err(err);
+                }
+            }
+
+            if (encodeResult.IsOkOrNull() is not { } encodeOk)
+            {
+                throw new System.Exception("Unexpected encodeResult: " + encodeResult);
+            }
+
+            var decodeStringResult =
+                PineValueAsString.StringFromValue(encodeOk);
+
+            {
+                if (decodeStringResult.IsErrOrNull() is { } err)
+                {
+                    return Result<string, string>.err(err);
+                }
+            }
+
+            if (decodeStringResult.IsOkOrNull() is not { } decodeStringOk)
+            {
+                throw new System.Exception("Unexpected decodeStringResult: " + decodeStringResult);
+            }
+
+            return
+                Result<string, string>.ok(decodeStringOk);
+        }
+
+        public static string JsonDecodeErrorDisplayText(
+            PineValue jsonDecodeErrorValue)
+        {
+            var decodeResult =
+                ElmValueEncoding.PineValueAsElmValue(jsonDecodeErrorValue, null, null);
+
+            if (decodeResult.IsErrOrNull() is { } err)
+            {
+                return "Failed decoding error value: " + err;
+            }
+
+            if (decodeResult.IsOkOrNull() is not { } decodeOk)
+            {
+                throw new System.Exception("Unexpected decode result: " + decodeResult);
+            }
+
+            return ElmValue.RenderAsElmExpression(decodeOk).expressionString;
         }
     }
 

@@ -15,7 +15,7 @@ namespace TestElmTime;
 public class StateShimTests
 {
     [TestMethod]
-    public void Test_state_shim_with_calculator_app()
+    public async System.Threading.Tasks.Task Test_state_shim_with_calculator_app()
     {
         using var testSetup = WebHostAdminInterfaceTestSetup.Setup(
             deployAppAndInitElmState: ElmWebServiceAppTests.CalculatorWebApp);
@@ -30,7 +30,7 @@ public class StateShimTests
                 fileStore,
                 skipWritingComponentSecondTime: true);
 
-        using var calculatorProcess = testSetup.BranchProcess()!;
+        await using var calculatorProcess = testSetup.BranchProcess()!;
 
         var estimateStateLengthResult = calculatorProcess.EstimateSerializedStateLengthOnMainBranch();
 

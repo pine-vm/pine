@@ -1,4 +1,3 @@
-using ElmTime.JavaScript;
 using ElmTime.Platform.WebService.ProcessStoreSupportingMigrations;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
@@ -116,8 +115,6 @@ public class StartupAdminInterface
 
         var configuration = app.ApplicationServices.GetService<IConfiguration>();
 
-        var javaScriptEngineFactory = app.ApplicationServices.GetService<Func<IJavaScriptEngine>>();
-
         var adminPassword = configuration?.GetValue<string>(Configuration.AdminPasswordSettingKey);
 
         var disableLetsEncrypt =
@@ -135,8 +132,12 @@ public class StartupAdminInterface
 
         PublicHostProcess? publicAppHost = null;
 
+        System.Threading.CancellationTokenSource applicationStoppingCancellationTokenSource = new();
+
         void stopPublicApp()
         {
+            applicationStoppingCancellationTokenSource.Cancel();
+
             lock (avoidConcurrencyLock)
             {
                 if (publicAppHost is null)
@@ -146,7 +147,7 @@ public class StartupAdminInterface
 
                 publicAppHost?.WebHost?.StopAsync(TimeSpan.FromSeconds(10)).Wait();
                 publicAppHost?.WebHost?.Dispose();
-                publicAppHost?.ProcessLiveRepresentation?.Dispose();
+                publicAppHost?.ProcessLiveRepresentation?.DisposeAsync().AsTask().Wait();
                 publicAppHost = null;
             }
         }
@@ -245,13 +246,17 @@ public class StartupAdminInterface
             {
                 stopPublicApp();
 
+                applicationStoppingCancellationTokenSource = new();
+
                 logger.LogInformation("Begin to build the process live representation.");
 
                 var restoreProcessResult =
                     PersistentProcessLiveRepresentation.LoadFromStoreAndRestoreProcess(
                         new ProcessStoreReaderInFileStore(processStoreFileStore),
-                        logger: logEntry => logger.LogInformation(logEntry),
-                        overrideJavaScriptEngineFactory: javaScriptEngineFactory);
+                        processStoreWriter,
+                        applicationStoppingCancellationTokenSource.Token,
+                        getDateTimeOffset,
+                        logger: logEntry => logger.LogInformation(logEntry));
 
                 restoreProcessResult
                     .Unpack(
@@ -269,40 +274,6 @@ public class StartupAdminInterface
                         var cyclicReductionStoreLock = new object();
                         DateTimeOffset? cyclicReductionStoreLastTime = null;
                         var cyclicReductionStoreDistanceSeconds = (int)TimeSpan.FromMinutes(10).TotalSeconds;
-
-                        void maintainStoreReductions()
-                        {
-                            var currentDateTime = getDateTimeOffset();
-
-                            System.Threading.Thread.MemoryBarrier();
-                            var cyclicReductionStoreLastAge = currentDateTime - cyclicReductionStoreLastTime;
-
-                            if (!(cyclicReductionStoreLastAge?.TotalSeconds < cyclicReductionStoreDistanceSeconds))
-                            {
-                                if (System.Threading.Monitor.TryEnter(cyclicReductionStoreLock))
-                                {
-                                    try
-                                    {
-                                        var afterLockCyclicReductionStoreLastAge = currentDateTime - cyclicReductionStoreLastTime;
-
-                                        if (afterLockCyclicReductionStoreLastAge?.TotalSeconds < cyclicReductionStoreDistanceSeconds)
-                                            return;
-
-                                        lock (avoidConcurrencyLock)
-                                        {
-                                            var (_, _) = processLiveRepresentation.StoreReductionRecordForCurrentState(processStoreWriter!);
-                                        }
-
-                                        cyclicReductionStoreLastTime = currentDateTime;
-                                        System.Threading.Thread.MemoryBarrier();
-                                    }
-                                    finally
-                                    {
-                                        System.Threading.Monitor.Exit(cyclicReductionStoreLock);
-                                    }
-                                }
-                            }
-                        }
 
                         WebApplication buildWebApplication(
                             ProcessAppConfig processAppConfig,
@@ -324,35 +295,24 @@ public class StartupAdminInterface
                                 .FirstOrDefault();
 
                             var webServiceConfig =
-                                webServiceConfigFile == null
+                                webServiceConfigFile is null
                                 ?
                                 null
                                 :
-                                System.Text.Json.JsonSerializer.Deserialize<WebServiceConfigJson>(Encoding.UTF8.GetString(webServiceConfigFile.Value.Span));
+                                System.Text.Json.JsonSerializer.Deserialize<WebServiceConfigJson>(
+                                    Encoding.UTF8.GetString(webServiceConfigFile.Value.Span));
 
                             var serverAndElmAppConfig =
                                 new ServerAndElmAppConfig(
                                     ServerConfig: webServiceConfig,
-                                    ProcessEventInElmApp: serializedEvent =>
-                                    {
-                                        lock (avoidConcurrencyLock)
-                                        {
-                                            var elmEventResponse =
-                                                processLiveRepresentation.ProcessElmAppEvent(
-                                                    processStoreWriter!, serializedEvent);
-
-                                            maintainStoreReductions();
-
-                                            return elmEventResponse;
-                                        }
-                                    },
+                                    ProcessHttpRequestAsync: processLiveRepresentation.ProcessHttpRequestAsync,
                                     SourceComposition: processAppConfig.appConfigComponent,
                                     InitOrMigrateCmds: restoreProcessOk.initOrMigrateCmds,
                                     DisableLetsEncrypt: disableLetsEncrypt,
-                                    DisableHttps: disableHttps
-                                    );
+                                    DisableHttps: disableHttps);
 
-                            var publicAppState = new PublicAppState(
+                            var publicAppState =
+                            new PublicAppState(
                                 serverAndElmAppConfig: serverAndElmAppConfig,
                                 getDateTimeOffset: getDateTimeOffset);
 
@@ -374,8 +334,6 @@ public class StartupAdminInterface
                                     publicWebHostUrls: publicWebHostUrls,
                                     disableLetsEncrypt: disableLetsEncrypt,
                                     disableHttps: aspHostConfig.DisableHttps);
-
-                            publicAppState.ProcessEventTimeHasArrived();
 
                             return app;
                         }
@@ -504,7 +462,7 @@ public class StartupAdminInterface
 
             async System.Threading.Tasks.Task deployElmApp(bool initElmAppState)
             {
-                var deploymentZipArchive = await Asp.CopyRequestBody(context.Request);
+                var deploymentZipArchive = await Asp.CopyRequestBodyAsync(context.Request);
 
                 {
                     try
@@ -548,6 +506,7 @@ public class StartupAdminInterface
                 await attemptContinueWithCompositionEventAndSendHttpResponse(compositionLogEvent);
             }
 
+            /*
             Result<string, IReadOnlyList<StateShim.InterfaceToHost.NamedExposedFunction>> listDatabaseFunctions()
             {
                 if (getPublicAppHost() is not { } publicAppHost)
@@ -567,6 +526,7 @@ public class StartupAdminInterface
                     return publicAppHost.ProcessLiveRepresentation.ApplyFunctionOnMainBranch(storeWriter: processStoreWriter, request);
                 }
             }
+            */
 
             IReadOnlyList<ApiRoute> apiRoutes = null;
 
@@ -584,8 +544,11 @@ public class StartupAdminInterface
                                     path: apiRoute.path,
                                     methods: apiRoute.methods.Keys.ToImmutableList())).ToImmutableList(),
                                 databaseFunctions:
+                                /*
                                 listDatabaseFunctions()
-                                .Extract(_ => []))
+                                .Extract(_ => [])
+                                */
+                                [])
                             )
                         ),
 
@@ -645,39 +608,19 @@ public class StartupAdminInterface
 
                             var processLiveRepresentation = publicAppHost?.ProcessLiveRepresentation;
 
-                            var components = new List<PineValue>();
-
-                            var storeWriter = new DelegatingProcessStoreWriter
-                            (
-                                StoreComponentDelegate: components.Add,
-                                StoreProvisionalReductionDelegate: _ => { },
-                                AppendCompositionLogRecordDelegate: _ => throw new Exception("Unexpected use of interface.")
-                            );
-
-                            var reductionRecord =
-                                processLiveRepresentation?.StoreReductionRecordForCurrentState(storeWriter).reductionRecord;
-
-                            if (reductionRecord == null)
+                            if(processLiveRepresentation is null)
                             {
                                 context.Response.StatusCode = 500;
                                 await context.Response.WriteAsync("Not possible because there is no Elm app deployed at the moment.");
                                 return;
                             }
 
-                            var elmAppStateReductionHashBase16 = reductionRecord.elmAppState?.HashBase16;
+                            var encodeAppStateResult = processLiveRepresentation.GetAppStateOnMainBranch();
 
-                            var elmAppStateReductionComponent =
-                                components.First(c => CommonConversion.StringBase16(PineValueHashTree.ComputeHash(c)) == elmAppStateReductionHashBase16);
+                            var appStateString =
+                                encodeAppStateResult
+                                .Extract(fromErr: _ => throw new Exception("Failed to encode app state."));
 
-                            if (elmAppStateReductionComponent is not PineValue.BlobValue elmAppStateReductionComponentBlob)
-                                throw new Exception("elmAppStateReductionComponent is not a blob");
-
-                            var elmAppStateReductionString =
-                                Encoding.UTF8.GetString(elmAppStateReductionComponentBlob.Bytes.Span);
-
-                            context.Response.StatusCode = 200;
-                            context.Response.ContentType = "application/json";
-                            await context.Response.WriteAsync(elmAppStateReductionString);
                         })
                         .Add("post", async (context, publicAppHost) =>
                         {
@@ -691,7 +634,6 @@ public class StartupAdminInterface
                             .AndThen(maybeNull => Maybe.NothingFromNull(maybeNull).ToResult("Not possible because there is no app (state)."))
                             .AndThen(publicAppHost =>
                             publicAppHost.ProcessLiveRepresentation.SetStateOnMainBranch(
-                                storeWriter: processStoreWriter,
                                 elmAppStateToSet))
                             .Map(compositionLogEventAndResponse =>
                             new AttemptContinueWithCompositionEventReport
@@ -721,6 +663,7 @@ public class StartupAdminInterface
                         methods: ImmutableDictionary<string, ApiRouteMethodConfig>.Empty
                         .Add("post", async (_, _) => await deployElmApp(initElmAppState: false))
                     ),
+                    /*
                     new ApiRoute
                     (
                         path: PathApiListDatabaseFunctions,
@@ -741,6 +684,8 @@ public class StartupAdminInterface
                             }
                         })
                     ),
+                    */
+                    /*
                     new ApiRoute
                     (
                         path: PathApiApplyDatabaseFunction,
@@ -764,6 +709,7 @@ public class StartupAdminInterface
                             }
                         })
                     ),
+                    */
                     new ApiRoute
                     (
                         path: PathApiGuiRequest,
@@ -793,7 +739,7 @@ public class StartupAdminInterface
                         methods: ImmutableDictionary<string, ApiRouteMethodConfig>.Empty
                         .Add("post", async (context, _) =>
                         {
-                            var historyZipArchive = await Asp.CopyRequestBody(context.Request);
+                            var historyZipArchive = await Asp.CopyRequestBodyAsync(context.Request);
 
                             var replacementFiles =
                                 ZipArchive.EntriesFromZipArchive(historyZipArchive)
@@ -909,6 +855,7 @@ public class StartupAdminInterface
                 {
                     var lockStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
+                    /*
                     var storeReductionStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
                     var storeReductionReport =
@@ -920,6 +867,7 @@ public class StartupAdminInterface
                     logger.LogInformation(
                         message: nameof(truncateProcessHistory) + ": Stored reduction in {storeReductionDurationMs} ms",
                         storeReductionStopwatch.ElapsedMilliseconds);
+                    */
 
                     var getFilesForRestoreStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
@@ -970,8 +918,8 @@ public class StartupAdminInterface
                         filesForRestoreCount: filesForRestore.Count,
                         discoveredFilesCount: filePathsInProcessStorePartitions.Sum(partition => partition.Count),
                         deletedFilesCount: totalDeletedFilesCount,
-                        storeReductionTimeSpentMilli: (int)storeReductionStopwatch.ElapsedMilliseconds,
-                        storeReductionReport: storeReductionReport,
+                        storeReductionTimeSpentMilli: 0,
+                        storeReductionReport: null,
                         getFilesForRestoreTimeSpentMilli: (int)getFilesForRestoreStopwatch.ElapsedMilliseconds,
                         deleteFilesTimeSpentMilli: (int)deleteFilesStopwatch.ElapsedMilliseconds,
                         lockedTimeSpentMilli: (int)lockStopwatch.ElapsedMilliseconds,
@@ -1051,14 +999,6 @@ public class StartupAdminInterface
             {
                 lock (avoidConcurrencyLock)
                 {
-                    var storeReductionStopwatch = System.Diagnostics.Stopwatch.StartNew();
-
-                    var storeReductionReport =
-                        getPublicAppHost()
-                        ?.ProcessLiveRepresentation?.StoreReductionRecordForCurrentState(processStoreWriter).report;
-
-                    storeReductionStopwatch.Stop();
-
                     var (statusCode, report) =
                         AttemptContinueWithCompositionEventAndCommit(
                             compositionLogEvent,
@@ -1067,8 +1007,7 @@ public class StartupAdminInterface
 
                     report = report with
                     {
-                        storeReductionTimeSpentMilli = (int)storeReductionStopwatch.ElapsedMilliseconds,
-                        storeReductionReport = storeReductionReport
+                        storeReductionTimeSpentMilli = (int)0,
                     };
 
                     startPublicApp();

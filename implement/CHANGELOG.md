@@ -62,3 +62,8 @@ Published the first version of the Elm developer tools VS Code extension, with a
 ## 2025-01-03 - Introduced New Execution Engine And IR
 
 + Changed the internal intermediate representation used to run Pine programs, introducing a new compiler for that IR and a corresponding execution engine.
+
+## 2025-03-06 - Freed Web Service Platform from JS
+
+Resolved dependency on JavaScript in the web service platform. (https://github.com/pine-vm/pine/issues/20#issuecomment-1816129166)
+

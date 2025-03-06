@@ -34,7 +34,16 @@ public class WebHostAdminInterfaceTestSetup : IDisposable
 
     public string ProcessStoreDirectory => Path.Combine(testDirectory, "process-store");
 
-    private IFileStore defaultFileStore => new FileStoreFromSystemIOFile(ProcessStoreDirectory);
+    private IFileStore DefaultFileStore =>
+        new FileStoreFromSystemIOFile(
+            ProcessStoreDirectory,
+            retryOptions:
+            new FileStoreFromSystemIOFile.FileStoreRetryOptions
+            (
+                MaxRetryAttempts: 5,
+                InitialRetryDelay: TimeSpan.FromMilliseconds(100),
+                MaxRetryDelay: TimeSpan.FromMilliseconds(1000)
+            ));
 
     private readonly IFileStore fileStore;
 
@@ -56,13 +65,6 @@ public class WebHostAdminInterfaceTestSetup : IDisposable
         return webHost;
     }
 
-    public PersistentProcessLiveRepresentation? BranchProcess() =>
-        PersistentProcessLiveRepresentation.LoadFromStoreAndRestoreProcess(
-            storeReader: new ElmTime.Platform.WebService.ProcessStoreSupportingMigrations.ProcessStoreReaderInFileStore(fileStore),
-            logger: null)
-        .Extract(err => throw new Exception(err))
-        .process;
-
     public static WebHostAdminInterfaceTestSetup Setup(
         Func<DateTimeOffset>? persistentProcessHostDateTime = null,
         string? adminPassword = null,
@@ -72,7 +74,8 @@ public class WebHostAdminInterfaceTestSetup : IDisposable
             adminPassword: adminPassword,
             fileStore: fileStore,
             deployAppAndInitElmState: deployAppAndInitElmState,
-            webHostBuilderMap: builder => builder.WithSettingDateTimeOffsetDelegate(persistentProcessHostDateTime ?? (() => DateTimeOffset.UtcNow)),
+            webHostBuilderMap:
+            builder => builder.WithSettingDateTimeOffsetDelegate(persistentProcessHostDateTime ?? (() => DateTimeOffset.UtcNow)),
             persistentProcessHostDateTime: persistentProcessHostDateTime);
 
     public static WebHostAdminInterfaceTestSetup Setup(
@@ -101,7 +104,7 @@ public class WebHostAdminInterfaceTestSetup : IDisposable
 
     public System.Net.Http.HttpClient BuildPublicAppHttpClient()
     {
-        var handler = new System.Net.Http.HttpClientHandler()
+        var handler = new System.Net.Http.HttpClientHandler
         {
             AutomaticDecompression = System.Net.DecompressionMethods.GZip | System.Net.DecompressionMethods.Deflate
         };
@@ -150,7 +153,7 @@ public class WebHostAdminInterfaceTestSetup : IDisposable
     {
         this.testDirectory = testDirectory;
 
-        fileStore ??= defaultFileStore;
+        fileStore ??= DefaultFileStore;
 
         this.adminPassword = adminPassword ?? "notempty";
         this.fileStore = fileStore;

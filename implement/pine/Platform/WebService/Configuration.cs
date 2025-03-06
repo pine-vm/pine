@@ -77,11 +77,6 @@ public static class Configuration
         configuration?.GetValue<string>(PublicWebHostUrlsSettingKey)?.Split(',', ';') ??
         PublicWebHostUrlsDefault;
 
-    public static IWebHostBuilder WithJavaScriptEngineFactory(
-        this IWebHostBuilder orig,
-        Func<IJavaScriptEngine> javaScriptEngineFactory) =>
-        orig.ConfigureServices(serviceCollection => serviceCollection.AddSingleton(javaScriptEngineFactory));
-
     internal static DateTimeOffset GetDateTimeOffset(HttpContext context) =>
         context.RequestServices.GetService<Func<DateTimeOffset>>()!();
 }

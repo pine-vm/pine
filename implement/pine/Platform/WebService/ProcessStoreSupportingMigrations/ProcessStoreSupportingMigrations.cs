@@ -245,6 +245,8 @@ public class ProcessStoreReaderInFileStore(
     IFileStoreReader fileStore)
     : ProcessStoreInFileStore, IProcessStoreReader
 {
+    private readonly Pine.CompilePineToDotNet.CompilerMutableCache hashCache = new();
+
     protected IFileStoreReader LiteralElementFileStore => fileStore.ForSubdirectory(LiteralElementSubdirectory);
 
     protected IFileStoreReader DeflatedLiteralElementFileStore => fileStore.ForSubdirectory(DeflatedLiteralElementSubdirectory);
@@ -287,7 +289,7 @@ public class ProcessStoreReaderInFileStore(
                 fromErr: error => throw new Exception("Failed to load component " + componentHashBase16 + ": " + error),
                 fromOk: loadComponentResult =>
                 {
-                    if (CommonConversion.StringBase16(PineValueHashTree.ComputeHash(loadComponentResult)) != componentHashBase16)
+                    if (CommonConversion.StringBase16(hashCache.ComputeHash(loadComponentResult)) != componentHashBase16)
                         throw new Exception("Unexpected content in file " + componentHashBase16 + ": Content hash does not match.");
 
                     return loadComponentResult;
@@ -457,6 +459,8 @@ public class ProcessStoreReaderInFileStore(
 
 public class ProcessStoreWriterInFileStore : ProcessStoreInFileStore, IProcessStoreWriter
 {
+    private readonly Pine.CompilePineToDotNet.CompilerMutableCache hashCache = new();
+
     private static int TryDeflateSizeThreshold => 10_000;
 
     protected IFileStoreWriter fileStore;
@@ -577,11 +581,14 @@ public class ProcessStoreWriterInFileStore : ProcessStoreInFileStore, IProcessSt
         StoreComponentAndGetHashRecursive(component);
     }
 
+    private ReadOnlyMemory<byte>? DelegateGetHashOfComponent(PineValue pineValue) =>
+        hashCache.ComputeHash(pineValue);
+
     private (ReadOnlyMemory<byte> hash, string hashBase16) StoreComponentAndGetHashRecursive(
         PineValue component)
     {
         var (serialRepresentation, dependencies) =
-            PineValueHashTree.ComputeHashTreeNodeSerialRepresentation(component);
+            PineValueHashTree.ComputeHashTreeNodeSerialRepresentation(component, DelegateGetHashOfComponent);
 
         var hash = CommonConversion.HashSHA256(serialRepresentation);
 

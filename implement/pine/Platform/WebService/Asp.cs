@@ -75,26 +75,29 @@ public static class Asp
         ));
     }
 
-    public static async Task<InterfaceToHost.HttpRequest> AsPersistentProcessInterfaceHttpRequest(
-        HttpRequest httpRequest)
+    public static async Task<Pine.Elm.Platform.WebServiceInterface.HttpRequestProperties>
+        AsInterfaceHttpRequestAsync(HttpRequest httpRequest)
     {
         var httpHeaders =
             httpRequest.Headers
-            .Select(header => new InterfaceToHost.HttpHeader(name: header.Key, values: header.Value.ToArray().WhereNotNull().ToArray()))
+            .Select(header =>
+            new Pine.Elm.Platform.WebServiceInterface.HttpHeader(
+                Name: header.Key,
+                Values: [.. header.Value.ToArray().WhereNotNull()]))
             .ToArray();
 
-        var httpRequestBody = await CopyRequestBody(httpRequest);
+        var httpRequestBody = await CopyRequestBodyAsync(httpRequest);
 
-        return new InterfaceToHost.HttpRequest
+        return new Pine.Elm.Platform.WebServiceInterface.HttpRequestProperties
         (
-            method: httpRequest.Method,
-            uri: httpRequest.GetDisplayUrl(),
-            bodyAsBase64: Maybe.NothingFromNull(Convert.ToBase64String(httpRequestBody.Span)),
-            headers: httpHeaders
+            Method: httpRequest.Method,
+            Uri: httpRequest.GetDisplayUrl(),
+            BodyAsBase64: Convert.ToBase64String(httpRequestBody.Span),
+            Headers: httpHeaders
         );
     }
 
-    public static async Task<ReadOnlyMemory<byte>> CopyRequestBody(HttpRequest httpRequest)
+    public static async Task<ReadOnlyMemory<byte>> CopyRequestBodyAsync(HttpRequest httpRequest)
     {
         httpRequest.EnableBuffering(bufferThreshold: 100_000);
         httpRequest.Body.Position = 0;

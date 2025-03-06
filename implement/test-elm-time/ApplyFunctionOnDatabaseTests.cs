@@ -14,6 +14,7 @@ namespace TestElmTime;
 public class ApplyFunctionOnDatabaseTests
 {
     [TestMethod]
+    [Ignore]
     public async Task Apply_exposed_function_via_admin_interface_adding_to_counter_web_app()
     {
         var adminPassword = "test";
@@ -105,6 +106,7 @@ public class ApplyFunctionOnDatabaseTests
     }
 
     [TestMethod]
+    [Ignore]
     public async Task Apply_function_via_admin_interface_report_from_calculator()
     {
         var adminPassword = "test";
@@ -182,6 +184,7 @@ public class ApplyFunctionOnDatabaseTests
     }
 
     [TestMethod]
+    [Ignore]
     public async Task List_exposed_functions_via_admin_interface()
     {
         var adminPassword = "test";

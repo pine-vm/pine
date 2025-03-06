@@ -39,7 +39,8 @@ public class RunServer
         IFileStore buildProcessStoreFileStore()
         {
             if (processStorePath is not null)
-                return new FileStoreFromSystemIOFile(processStorePath);
+                return new FileStoreFromSystemIOFile(
+                    processStorePath);
 
             Console.WriteLine("I got no path to a persistent store for the process. This process will not be persisted!");
 
@@ -99,19 +100,6 @@ public class RunServer
                 processStoreFileStore.SetFileContent(file.Key.ToImmutableList(), file.Value.ToArray());
         }
 
-        var javaScriptEngineFactory =
-            elmEngineType switch
-            {
-                ElmInteractive.ElmEngineType.JavaScript_Jint =>
-                JavaScriptEngineJintOptimizedForElmApps.Create,
-
-                ElmInteractive.ElmEngineType.JavaScript_V8 =>
-                new Func<IJavaScriptEngine>(JavaScriptEngineFromJavaScriptEngineSwitcher.ConstructJavaScriptEngine),
-
-                object other =>
-                throw new NotImplementedException("Engine type not implemented here: " + other)
-            };
-
         if (deployApp is not null)
         {
             Console.WriteLine("Loading app config to deploy...");
@@ -151,8 +139,7 @@ public class RunServer
 
             var testDeployResult = PersistentProcessLiveRepresentation.TestContinueWithCompositionEvent(
                 compositionLogEvent: compositionLogEvent,
-                fileStoreReader: processStoreFileStore,
-                overrideJavaScriptEngineFactory: javaScriptEngineFactory)
+                fileStoreReader: processStoreFileStore)
             .Extract(error => throw new Exception("Attempt to deploy app config failed: " + error));
 
             foreach (var (filePath, fileContent) in testDeployResult.projectedFiles)
@@ -165,7 +152,6 @@ public class RunServer
                 .UseUrls(adminInterfaceUrls)
                 .UseStartup<StartupAdminInterface>()
                 .WithSettingPublicWebHostUrls(publicAppUrls)
-                .WithJavaScriptEngineFactory(javaScriptEngineFactory)
                 .WithProcessStoreFileStore(processStoreFileStore);
 
         if (adminPassword is not null)
