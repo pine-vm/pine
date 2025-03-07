@@ -2128,7 +2128,7 @@ public class Precompiled
         throw new ParseExpressionException("Error in case-of block: No matching branch.");
     }
 
-    static ReadOnlyMemory<PineValue> DictToListRecursive(PineValue dict)
+    public static ReadOnlyMemory<PineValue> DictToListRecursive(PineValue dict)
     {
         var tag = PineVM.ValueFromPathInValueOrEmptyList(dict, [0]);
 

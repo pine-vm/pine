@@ -506,7 +506,6 @@ public class StartupAdminInterface
                 await attemptContinueWithCompositionEventAndSendHttpResponse(compositionLogEvent);
             }
 
-            /*
             Result<string, IReadOnlyList<StateShim.InterfaceToHost.NamedExposedFunction>> listDatabaseFunctions()
             {
                 if (getPublicAppHost() is not { } publicAppHost)
@@ -523,10 +522,9 @@ public class StartupAdminInterface
                     if (getPublicAppHost() is not { } publicAppHost)
                         return "No application deployed.";
 
-                    return publicAppHost.ProcessLiveRepresentation.ApplyFunctionOnMainBranch(storeWriter: processStoreWriter, request);
+                    return publicAppHost.ProcessLiveRepresentation.ApplyFunctionOnMainBranch(request);
                 }
             }
-            */
 
             IReadOnlyList<ApiRoute> apiRoutes = null;
 
@@ -663,7 +661,6 @@ public class StartupAdminInterface
                         methods: ImmutableDictionary<string, ApiRouteMethodConfig>.Empty
                         .Add("post", async (_, _) => await deployElmApp(initElmAppState: false))
                     ),
-                    /*
                     new ApiRoute
                     (
                         path: PathApiListDatabaseFunctions,
@@ -684,8 +681,6 @@ public class StartupAdminInterface
                             }
                         })
                     ),
-                    */
-                    /*
                     new ApiRoute
                     (
                         path: PathApiApplyDatabaseFunction,
@@ -709,7 +704,6 @@ public class StartupAdminInterface
                             }
                         })
                     ),
-                    */
                     new ApiRoute
                     (
                         path: PathApiGuiRequest,

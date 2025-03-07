@@ -2,6 +2,7 @@ using ElmTime.JavaScript;
 using ElmTime.Platform.WebService.ProcessStoreSupportingMigrations;
 using Pine;
 using Pine.Core;
+using Pine.Core.PineVM;
 using Pine.Elm.Platform;
 using Pine.ElmInteractive;
 using Pine.PineVM;
@@ -33,6 +34,8 @@ public class PersistentProcessLiveRepresentation : IAsyncDisposable
     private readonly System.Threading.Lock processLock = new();
 
     public readonly ProcessAppConfig lastAppConfig;
+
+    private readonly Func<DateTimeOffset> getDateTimeOffset;
 
     private readonly WebServiceInterface.WebServiceConfig appConfigParsed;
 
@@ -96,6 +99,7 @@ public class PersistentProcessLiveRepresentation : IAsyncDisposable
     {
         this.lastAppConfig = lastAppConfig;
         this.storeWriter = storeWriter;
+        this.getDateTimeOffset = getDateTimeOffset;
 
         var appSourceTree =
             PineValueComposition.ParseAsTreeWithStringPath(lastAppConfig.appConfigComponent)
@@ -842,49 +846,185 @@ public class PersistentProcessLiveRepresentation : IAsyncDisposable
             JsonSerializer.Deserialize<JsonElement>(jsonString);
     }
 
-    /*
     public Result<string, AdminInterface.ApplyDatabaseFunctionSuccess> ApplyFunctionOnMainBranch(
-        IProcessStoreWriter storeWriter,
         AdminInterface.ApplyDatabaseFunctionRequest request)
     {
         lock (processLock)
         {
-            return
-                StateShim.StateShim.ApplyFunctionOnMainBranch(lastElmAppVolatileProcess, request)
-                .Map(applyFunctionSuccess =>
+            var clock = System.Diagnostics.Stopwatch.StartNew();
+
+            var appState = mutatingWebServiceApp.AppState;
+
+            var pineVMCache = new PineVMCache();
+
+            var pineVM = new PineVM(pineVMCache.EvalCache);
+
+            var matchingExposedFunction =
+                appConfigParsed.JsonAdapter.ExposedFunctions
+                .FirstOrDefault(exposedFunc => exposedFunc.Key == request.functionName)
+                .Value;
+
+            if (matchingExposedFunction is null)
+            {
+                return "Function not found: " + request.functionName;
+            }
+
+            var arguments = new PineValue[request.serializedArgumentsJson.Count];
+
+            for (int i = 0; i < request.serializedArgumentsJson.Count; i++)
+            {
+                var argumentJsonString = request.serializedArgumentsJson[i];
+
+                var parseArgumentResult =
+                    appConfigParsed.JsonAdapter.DecodeElmJsonValueFromString(
+                        argumentJsonString,
+                        pineVM);
+
                 {
-                    if (applyFunctionSuccess.committedResultingState)
+                    if (parseArgumentResult.IsErrOrNull() is { } err)
                     {
-                        var applyFunctionRecord = new CompositionLogRecordInFile.ApplyFunctionOnStateEvent(
-                            functionName: request.functionName,
-                            serializedArgumentsJson: request.serializedArgumentsJson);
-
-                        var compositionEvent =
-                            new CompositionLogRecordInFile.CompositionEvent
-                            {
-                                ApplyFunctionOnElmAppState = new ValueInFileStructure
-                                {
-                                    LiteralStringUtf8 = JsonSerializer.Serialize(applyFunctionRecord)
-                                }
-                            };
-
-                        var recordHash = storeWriter.AppendCompositionLogRecord(compositionEvent);
-
-                        lastCompositionLogRecordHashBase16 = recordHash.recordHashBase16;
+                        return "Failed to parse argument " + i + ": " + err;
                     }
+                }
 
-                    return applyFunctionSuccess;
-                });
+                if (parseArgumentResult.IsOkOrNull() is not { } parseArgumentOk)
+                {
+                    throw new Exception("Unexpected result: " + parseArgumentResult);
+                }
+
+                arguments[i] = parseArgumentOk;
+            }
+
+            var posixTimeMilli =
+                getDateTimeOffset().ToUnixTimeMilliseconds();
+
+            var applyFunctionResult =
+                ElmTimeJsonAdapter.ApplyExposedFunction(
+                    appStateBefore: appState,
+                    arguments: arguments,
+                    exposedFunction: matchingExposedFunction,
+                    pineVM: pineVM,
+                    posixTimeMilli: posixTimeMilli);
+
+            {
+                if (applyFunctionResult.IsErrOrNull() is { } err)
+                {
+                    return "Failed to apply function " + request.functionName + ": " + err;
+                }
+            }
+
+            if (applyFunctionResult.IsOkOrNull() is not { } applyFunctionOk)
+            {
+                throw new Exception("Unexpected result: " + applyFunctionResult);
+            }
+
+            bool committedResultingState = false;
+
+            if (request.commitResultingState)
+            {
+                if (applyFunctionOk.AppState is not { } appStateReturned)
+                {
+                    return
+                        "Requested commiting new app state, but the function " +
+                        request.functionName +
+                        " did not return a new app state.";
+                }
+
+                mutatingWebServiceApp.ResetAppState(appStateReturned);
+
+                committedResultingState = true;
+            }
+
+            bool producedStateDifferentFromStateArgument = false;
+
+            {
+                if (applyFunctionOk.AppState is { } appStateReturned)
+                {
+                    producedStateDifferentFromStateArgument = !appStateReturned.Equals(appState);
+                }
+            }
+
+            EnsurePersisted();
+
+            Maybe<JsonElement> resultLessStateJson =
+                applyFunctionOk.ResponseJsonValue is { } responseJsonValue
+                ?
+                Maybe<JsonElement>.just(
+                    ParseJsonElementFromElmJsonValue(responseJsonValue, pineVM)
+                    .Extract(err => throw new Exception("Failed decoding JsonElement: " + err)))
+                :
+                Maybe<JsonElement>.nothing();
+
+            return
+                new AdminInterface.ApplyDatabaseFunctionSuccess(
+                    new StateShim.InterfaceToHost.FunctionApplicationResult(
+                        resultLessStateJson: resultLessStateJson,
+                        producedStateDifferentFromStateArgument: producedStateDifferentFromStateArgument),
+                    new StateShim.ProcessStateShimRequestReport(
+                        SerializeTimeInMilliseconds: 0,
+                        SerializedRequest: "",
+                        SerializedResponse: "",
+                        Response: new StateShim.InterfaceToHost.StateShimResponseStruct.ListBranchesShimResponse([]),
+                        ProcessEventAndSerializeTimeInMilliseconds: (int)clock.Elapsed.TotalMilliseconds),
+                    committedResultingState);
         }
     }
-    */
 
-    /*
+    private Result<string, JsonElement> ParseJsonElementFromElmJsonValue(
+        PineValue elmJsonValue,
+        IPineVM pineVM)
+    {
+        var encodeResult =
+            appConfigParsed.JsonAdapter.EncodeJsonValueAsJsonString(
+                elmJsonValue,
+                indent: 0,
+                pineVM);
+
+        {
+            if (encodeResult.IsErrOrNull() is { } err)
+            {
+                return err;
+            }
+        }
+
+        if (encodeResult.IsOkOrNull() is not { } jsonString)
+        {
+            throw new Exception("Unexpected result: " + encodeResult);
+        }
+
+        return
+            JsonSerializer.Deserialize<JsonElement>(jsonString);
+    }
+
     public Result<string, IReadOnlyList<StateShim.InterfaceToHost.NamedExposedFunction>> ListDatabaseFunctions()
     {
-        return StateShim.StateShim.ListExposedFunctions(lastElmAppVolatileProcess);
+        return
+            Result<string, IReadOnlyList<StateShim.InterfaceToHost.NamedExposedFunction>>.ok(
+            [..appConfigParsed.JsonAdapter.ExposedFunctions
+            .Select(exposedFunc => new StateShim.InterfaceToHost.NamedExposedFunction(
+                functionName: exposedFunc.Key,
+                functionDescription: MapExposedFunctionDescription(exposedFunc.Value)))
+            ]);
     }
-    */
+
+    private static StateShim.InterfaceToHost.ExposedFunctionDescription MapExposedFunctionDescription(
+       ElmTimeJsonAdapter.ExposedFunction exposedFunction)
+    {
+        return
+            new StateShim.InterfaceToHost.ExposedFunctionDescription(
+                returnType:
+                new StateShim.InterfaceToHost.ExposedFunctionReturnTypeDescription(
+                    sourceCodeText: exposedFunction.Description.ReturnType.SourceCodeText,
+                    containsAppStateType: exposedFunction.Description.ReturnType.ContainsAppStateType),
+                parameters:
+                [
+                    ..exposedFunction.Description.Parameters
+                    .Select(param => new StateShim.InterfaceToHost.ExposedFunctionParameterDescription(
+                        patternSourceCodeText: param.PatternSourceCodeText,
+                        typeSourceCodeText: param.TypeSourceCodeText,
+                        typeIsAppStateType: param.TypeIsAppStateType))
+                ]);
+    }
 
     /*
     public Result<string, IReadOnlyList<string>> ListBranches()

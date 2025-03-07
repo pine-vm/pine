@@ -2,6 +2,7 @@ using ElmTime.ElmInteractive;
 using ElmTime.ElmSyntax;
 using Pine.Core;
 using Pine.Core.PineVM;
+using Pine.Elm;
 using Pine.ElmInteractive;
 using Pine.PineVM;
 using System.Collections.Generic;
@@ -18,6 +19,68 @@ public class ElmTimeJsonAdapter
         ["src", "Backend", "InterfaceToHost_Root.elm"];
 
     public const string RootModuleName = "Backend.InterfaceToHost_Root";
+
+    public const string RootModuleExposedFunctionsDeclName = "config_exposedFunctions";
+
+    public record ExposedFunction(
+        ExposedFunctionDescription Description,
+        ElmInteractiveEnvironment.FunctionRecord Handler);
+
+    public record ExposedFunctionDescription(
+        ExposedFunctionDescriptionReturnType ReturnType,
+        IReadOnlyList<ExposedFunctionDescriptionParameter> Parameters)
+    {
+        public override int GetHashCode()
+        {
+            var hashCode = new System.HashCode();
+
+            hashCode.Add(ReturnType);
+
+            for (int i = 0; i < Parameters.Count; ++i)
+            {
+                hashCode.Add(Parameters[i]);
+            }
+
+            return hashCode.ToHashCode();
+        }
+
+        public virtual bool Equals(ExposedFunctionDescription? other)
+        {
+            if (other is null)
+            {
+                return false;
+            }
+
+            if (!ReturnType.Equals(other.ReturnType))
+            {
+                return false;
+            }
+
+            if (Parameters.Count != other.Parameters.Count)
+            {
+                return false;
+            }
+
+            for (int i = 0; i < Parameters.Count; ++i)
+            {
+                if (!Parameters[i].Equals(other.Parameters[i]))
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+    }
+
+    public record ExposedFunctionDescriptionReturnType(
+        string SourceCodeText,
+        bool ContainsAppStateType);
+
+    public record ExposedFunctionDescriptionParameter(
+        string PatternSourceCodeText,
+        string TypeSourceCodeText,
+        bool TypeIsAppStateType);
 
     public record Parsed(
         /*
@@ -49,15 +112,23 @@ public class ElmTimeJsonAdapter
          * */
         ElmInteractiveEnvironment.FunctionRecord JsonDecodeDecodeString,
         /*
+         * https://package.elm-lang.org/packages/elm/json/latest/Json-Decode#value
+         * value : Decoder Value
+         * */
+        PineValue JsonDecodeValue,
+        /*
          * https://package.elm-lang.org/packages/elm/json/latest/Json-Encode#encode
          * encode : Int -> Value -> String
          * */
-        ElmInteractiveEnvironment.FunctionRecord JsonEncodeEncode)
+        ElmInteractiveEnvironment.FunctionRecord JsonEncodeEncode,
+        IReadOnlyList<KeyValuePair<string, ExposedFunction>> ExposedFunctions)
     {
         public static Result<string, Parsed> ParseFromCompiled(
             PineValue compiledApp,
             PineVMParseCache parseCache)
         {
+            ElmCompilerCache elmEncodingCache = new();
+
             var parseEnvResult =
                 ElmInteractiveEnvironment.ParseInteractiveEnvironment(compiledApp);
 
@@ -211,6 +282,15 @@ public class ElmTimeJsonAdapter
                     "Unexpected parseDecodeStringFunctionResult: " + parseDecodeStringFunctionResult);
             }
 
+            moduleJsonDecode.moduleContent.FunctionDeclarations.TryGetValue(
+                "value",
+                out var jsonDecodeValueDecl);
+
+            if (jsonDecodeValueDecl is null)
+            {
+                return "Declaration 'value' not found in module 'Json.Decode'";
+            }
+
             var moduleJsonEncode =
                 parseEnvOk.Modules
                 .FirstOrDefault(module => module.moduleName is "Json.Encode");
@@ -225,29 +305,29 @@ public class ElmTimeJsonAdapter
 
             moduleJsonEncode.moduleContent.FunctionDeclarations.TryGetValue(
                 "encode",
-                out var encodeFunctionValue);
+                out var jsonEncodeFunctionValue);
 
-            if (encodeFunctionValue is null)
+            if (jsonEncodeFunctionValue is null)
             {
                 return "Function 'encode' not found in module 'Json.Encode'";
             }
 
-            var parseEncodeFunctionResult =
+            var parseJsonEncodeFunctionResult =
                 ElmInteractiveEnvironment.ParseFunctionRecordFromValueTagged(
-                    encodeFunctionValue,
+                    jsonEncodeFunctionValue,
                     parseCache);
             {
-                if (parseEncodeFunctionResult.IsErrOrNull() is { } err)
+                if (parseJsonEncodeFunctionResult.IsErrOrNull() is { } err)
                 {
                     return
                         "Failed to parse 'encode' function: " + err;
                 }
             }
 
-            if (parseEncodeFunctionResult.IsOkOrNull() is not { } parseEncodeFunctionOk)
+            if (parseJsonEncodeFunctionResult.IsOkOrNull() is not { } parseJsonEncodeFunctionOk)
             {
                 throw new System.Exception(
-                    "Unexpected parseEncodeFunctionResult: " + parseEncodeFunctionResult);
+                    "Unexpected parseEncodeFunctionResult: " + parseJsonEncodeFunctionResult);
             }
 
             PineValue? migrateFunctionValue = null;
@@ -273,6 +353,43 @@ public class ElmTimeJsonAdapter
                     parseCache)
                 .Extract(err => throw new System.Exception("Failed to parse migrate function: " + err));
 
+            var exposedFunctionsDeclDictValue =
+                moduleRoot.moduleContent.FunctionDeclarations
+                .FirstOrDefault(kvp => kvp.Key == RootModuleExposedFunctionsDeclName)
+                .Value;
+
+            if (exposedFunctionsDeclDictValue is null)
+            {
+                return "Exposed functions declaration not found in root module " + RootModuleName;
+            }
+
+            var exposedFunctionsList = Precompiled.DictToListRecursive(exposedFunctionsDeclDictValue);
+
+            var exposedFunctions = new KeyValuePair<string, ExposedFunction>[exposedFunctionsList.Length];
+
+            for (int i = 0; i < exposedFunctionsList.Length; ++i)
+            {
+                var parseExposedFunctionResult =
+                    ParseExposedFunctionDictEntryValue(
+                        exposedFunctionsList.Span[i],
+                        parseCache,
+                        elmEncodingCache);
+
+                {
+                    if (parseExposedFunctionResult.IsErrOrNull() is { } err)
+                    {
+                        return "Failed to parse exposed function: " + err;
+                    }
+                }
+
+                if (parseExposedFunctionResult.IsOkOrNullable() is not { } parseExposedFunctionOk)
+                {
+                    throw new System.Exception("Unexpected parseExposedFunctionResult: " + parseExposedFunctionResult);
+                }
+
+                exposedFunctions[i] = parseExposedFunctionOk;
+            }
+
             return
                 new Parsed(
                     JsonEncodeAppState: parseJsonEncodeAppStateOk,
@@ -281,7 +398,335 @@ public class ElmTimeJsonAdapter
                     Migrate: migrateFunctionRecord,
                     JsonDecodeDecodeValue: parseDecodeValueFunctionOk,
                     JsonDecodeDecodeString: parseDecodeStringFunctionOk,
-                    JsonEncodeEncode: parseEncodeFunctionOk);
+                    JsonDecodeValue: jsonDecodeValueDecl,
+                    JsonEncodeEncode: parseJsonEncodeFunctionOk,
+                    ExposedFunctions: exposedFunctions);
+        }
+
+        /*
+         * 
+        config_exposedFunctions :
+            Dict.Dict
+                String
+                { description :
+                    { returnType : { sourceCodeText : String, containsAppStateType : Bool }, parameters : List { patternSourceCodeText : String, typeSourceCodeText : String, typeIsAppStateType : Bool } }
+                , handler :
+                    Backend.Generated.StateShimTypes.ApplyFunctionArguments
+                        (Maybe
+                            { nextTaskIndex : Int
+                            , posixTimeMilli : Int
+                            , createVolatileProcessTasks :
+                                Dict.Dict
+                                    Backend.Generated.WebServiceShimTypes.TaskId
+                                    (Platform.WebService.CreateVolatileProcessResult
+                                     -> Backend.Main.State
+                                     -> ( Backend.Main.State, Platform.WebService.Commands Backend.Main.State )
+                                    )
+                            , requestToVolatileProcessTasks : Dict.Dict Backend.Generated.WebServiceShimTypes.TaskId (Platform.WebService.RequestToVolatileProcessResult -> Backend.Main.State -> ( Backend.Main.State, Platform.WebService.Commands Backend.Main.State ))
+                            , terminateVolatileProcessTasks : Dict.Dict Backend.Generated.WebServiceShimTypes.TaskId ()
+                            , stateLessFramework : Backend.Main.State
+                            }
+                        )
+                    ->
+                        Result
+                            String
+                            ( Maybe
+                                { nextTaskIndex : Int
+                                , posixTimeMilli : Int
+                                , createVolatileProcessTasks : Dict.Dict Backend.Generated.WebServiceShimTypes.TaskId (Platform.WebService.CreateVolatileProcessResult -> Backend.Main.State -> ( Backend.Main.State, Platform.WebService.Commands Backend.Main.State ))
+                                , requestToVolatileProcessTasks : Dict.Dict Backend.Generated.WebServiceShimTypes.TaskId (Platform.WebService.RequestToVolatileProcessResult -> Backend.Main.State -> ( Backend.Main.State, Platform.WebService.Commands Backend.Main.State ))
+                                , terminateVolatileProcessTasks : Dict.Dict Backend.Generated.WebServiceShimTypes.TaskId ()
+                                , stateLessFramework : Backend.Main.State
+                                }
+                            , Maybe Json.Encode.Value
+                            )
+                }
+        config_exposedFunctions =
+            [...]
+         * */
+
+        public static Result<string, KeyValuePair<string, ExposedFunction>>
+            ParseExposedFunctionDictEntryValue(
+            PineValue dictItemValue,
+            PineVMParseCache parseCache,
+            ElmCompilerCache elmEncodingCache)
+        {
+            if (dictItemValue is not PineValue.ListValue dictItem)
+            {
+                return "Expected list value but got: " + dictItemValue;
+            }
+
+            if (dictItem.Elements.Length is not 2)
+            {
+                return "Expected 2 elements but got: " + dictItem.Elements.Length;
+            }
+
+            var dictItemSpan = dictItem.Elements.Span;
+
+            var exposedFunctionNameValue = dictItemSpan[0];
+
+            var exposedFunctionDescriptionAndHandlerValue = dictItemSpan[1];
+
+            var parseNameResult =
+                elmEncodingCache.PineValueDecodedAsElmValue(exposedFunctionNameValue);
+
+            {
+                if (parseNameResult.IsErrOrNull() is { } err)
+                {
+                    return "Failed to parse exposed function name: " + err;
+                }
+            }
+
+            if (parseNameResult.IsOkOrNull() is not { } parseNameOk)
+            {
+                throw new System.Exception("Unexpected parseNameResult: " + parseNameResult);
+            }
+
+            if (parseNameOk is not ElmValue.ElmString declName)
+            {
+                return "Expected string but got: " + parseNameOk;
+            }
+
+
+            var parseDescAndHandlerRecordResult =
+                ElmValueEncoding.ParsePineValueAsRecordTagged(exposedFunctionDescriptionAndHandlerValue);
+
+            {
+                if (parseDescAndHandlerRecordResult.IsErrOrNull() is { } err)
+                {
+                    return "Failed to parse exposed function description and handler: " + err;
+                }
+            }
+
+            if (parseDescAndHandlerRecordResult.IsOkOrNull() is not { } parseDescAndHandlerRecordOk)
+            {
+                throw new System.Exception("Unexpected parseDescAndHandlerRecordResult: " + parseDescAndHandlerRecordResult);
+            }
+
+            var exposedFunctionHandlerValue =
+                parseDescAndHandlerRecordOk
+                .FirstOrDefault(kvp => kvp.fieldName is "handler")
+                .fieldValue;
+
+            if (exposedFunctionHandlerValue is null)
+            {
+                return "Expected 'handler' field in exposed function description and handler record";
+            }
+
+            var parseHandlerResult =
+                ElmInteractiveEnvironment.ParseFunctionRecordFromValueTagged(
+                    exposedFunctionHandlerValue,
+                    parseCache);
+            {
+                if (parseHandlerResult.IsErrOrNull() is { } err)
+                {
+                    return "Failed to parse exposed function handler: " + err;
+                }
+            }
+
+            if (parseHandlerResult.IsOkOrNull() is not { } parseHandlerOk)
+            {
+                throw new System.Exception("Unexpected parseHandlerResult: " + parseHandlerResult);
+            }
+
+            var exposedFunctionDescriptionValue =
+                parseDescAndHandlerRecordOk
+                .FirstOrDefault(kvp => kvp.fieldName is "description")
+                .fieldValue;
+
+            if (exposedFunctionDescriptionValue is null)
+            {
+                return "Expected 'description' field in exposed function description and handler record";
+            }
+
+            var parseDescriptionResult =
+                ParseExposedFunctionDescription(
+                    exposedFunctionDescriptionValue,
+                    elmEncodingCache);
+
+            {
+                if (parseDescriptionResult.IsErrOrNull() is { } err)
+                {
+                    return "Failed to parse exposed function description: " + err;
+                }
+            }
+
+            if (parseDescriptionResult.IsOkOrNull() is not { } parseDescriptionOk)
+            {
+                throw new System.Exception("Unexpected parseDescriptionResult: " + parseDescriptionResult);
+            }
+
+            return
+                Result<string, KeyValuePair<string, ExposedFunction>>
+                .ok(
+                    KeyValuePair.Create(
+                        declName.Value,
+                        new ExposedFunction(
+                            Description: parseDescriptionOk,
+                            Handler: parseHandlerOk)));
+        }
+
+        public static Result<string, ExposedFunctionDescription> ParseExposedFunctionDescription(
+            PineValue exposedFunctionDescriptionValue,
+            ElmCompilerCache elmEncodingCache)
+        {
+            var asElmValueResult =
+                elmEncodingCache.PineValueDecodedAsElmValue(exposedFunctionDescriptionValue);
+
+            {
+                if (asElmValueResult.IsErrOrNull() is { } err)
+                {
+                    return "Failed to decode exposed function description as Elm value: " + err;
+                }
+            }
+
+            if (asElmValueResult.IsOkOrNull() is not { } asElmValueOk)
+            {
+                throw new System.Exception(
+                    "Unexpected asElmValueResult: " + asElmValueResult);
+            }
+
+            if (asElmValueOk is not ElmValue.ElmRecord exposedFunctionDescriptionRecord)
+            {
+                return "Expected record but got: " + asElmValueOk;
+            }
+
+            var returnTypeField =
+                exposedFunctionDescriptionRecord["returnType"];
+
+            if (returnTypeField is null)
+            {
+                return "Expected 'returnType' field in exposed function description record";
+            }
+
+            if (returnTypeField is not ElmValue.ElmRecord returnTypeRecord)
+            {
+                return "Expected record in 'returnType' but got: " + returnTypeField;
+            }
+
+            var sourceCodeTextField =
+                returnTypeRecord["sourceCodeText"];
+
+            if (sourceCodeTextField is null)
+            {
+                return "Expected 'sourceCodeText' field in exposed function description record";
+            }
+
+            var containsAppStateTypeField =
+                returnTypeRecord["containsAppStateType"];
+
+            if (containsAppStateTypeField is null)
+            {
+                return "Expected 'containsAppStateType' field in exposed function description record";
+            }
+
+            if (sourceCodeTextField is not ElmValue.ElmString sourceCodeTextString)
+            {
+                return "Expected string in 'sourceCodeText' but got: " + sourceCodeTextField;
+            }
+
+            if (containsAppStateTypeField is not ElmValue.ElmTag containsAppStateTypeTag)
+            {
+                return "Expected bool in 'containsAppStateType' but got: " + containsAppStateTypeField;
+            }
+
+            var parametersField =
+                exposedFunctionDescriptionRecord["parameters"];
+
+            if (parametersField is null)
+            {
+                return "Expected 'parameters' field in exposed function description record";
+            }
+
+            if (parametersField is not ElmValue.ElmList parametersList)
+            {
+                return "Expected list in 'parameters' but got: " + parametersField;
+            }
+
+            var parameters = new ExposedFunctionDescriptionParameter[parametersList.Elements.Count];
+
+            for (int i = 0; i < parametersList.Elements.Count; i++)
+            {
+                var parseParamResult =
+                    ParseExposedFunctionDescriptionParameter(
+                        parametersList.Elements[i]);
+
+                {
+                    if (parseParamResult.IsErrOrNull() is { } err)
+                    {
+                        return "Failed to parse parameter [" + i + "]: " + err;
+                    }
+                }
+
+                if (parseParamResult.IsOkOrNull() is not { } parseParamOk)
+                {
+                    throw new System.Exception("Unexpected parseParamResult: " + parseParamResult);
+                }
+
+                parameters[i] = parseParamOk;
+            }
+
+            return
+                new ExposedFunctionDescription(
+                    ReturnType:
+                    new ExposedFunctionDescriptionReturnType(
+                        SourceCodeText: sourceCodeTextString.Value,
+                        ContainsAppStateType: containsAppStateTypeTag.TagName is "True"),
+                    Parameters: parameters);
+        }
+
+        public static Result<string, ExposedFunctionDescriptionParameter> ParseExposedFunctionDescriptionParameter(
+            ElmValue parameterValue)
+        {
+            if (parameterValue is not ElmValue.ElmRecord parameterRecord)
+            {
+                return "Expected record but got: " + parameterValue;
+            }
+
+            var patternSourceCodeTextField =
+                parameterRecord["patternSourceCodeText"];
+
+            if (patternSourceCodeTextField is null)
+            {
+                return "Expected 'patternSourceCodeText' field in parameter record";
+            }
+
+            var typeSourceCodeTextField =
+                parameterRecord["typeSourceCodeText"];
+
+            if (typeSourceCodeTextField is null)
+            {
+                return "Expected 'typeSourceCodeText' field in parameter record";
+            }
+
+            var typeIsAppStateTypeField =
+                parameterRecord["typeIsAppStateType"];
+
+            if (typeIsAppStateTypeField is null)
+            {
+                return "Expected 'typeIsAppStateType' field in parameter record";
+            }
+
+            if (patternSourceCodeTextField is not ElmValue.ElmString patternSourceCodeTextString)
+            {
+                return "Expected string in 'patternSourceCodeText' but got: " + patternSourceCodeTextField;
+            }
+
+            if (typeSourceCodeTextField is not ElmValue.ElmString typeSourceCodeTextString)
+            {
+                return "Expected string in 'typeSourceCodeText' but got: " + typeSourceCodeTextField;
+            }
+
+            if (typeIsAppStateTypeField is not ElmValue.ElmTag typeIsAppStateTypeTag)
+            {
+                return "Expected bool in 'typeIsAppStateType' but got: " + typeIsAppStateTypeField;
+            }
+
+            return
+                new ExposedFunctionDescriptionParameter(
+                    PatternSourceCodeText: patternSourceCodeTextString.Value,
+                    TypeSourceCodeText: typeSourceCodeTextString.Value,
+                    TypeIsAppStateType: typeIsAppStateTypeTag.TagName is "True");
         }
 
         public Result<string, PineValue> EncodeAppStateAsJsonValue(
@@ -443,17 +888,65 @@ public class ElmTimeJsonAdapter
                 .ok((newState, cmdsList.Elements.ToArray()));
         }
 
+        public Result<string, PineValue> DecodeElmJsonValueFromString(
+            string jsonString,
+            IPineVM pineVM)
+        {
+            var jsonStringEncoded =
+                ElmValueEncoding.StringAsPineValue(jsonString);
+
+            var jsonDecodeApplyFunctionResult =
+                ElmInteractiveEnvironment.ApplyFunction(
+                    pineVM,
+                    JsonDecodeDecodeString,
+                    [JsonDecodeValue, jsonStringEncoded]);
+
+            {
+                if (jsonDecodeApplyFunctionResult.IsErrOrNull() is { } err)
+                {
+                    return err;
+                }
+            }
+
+            if (jsonDecodeApplyFunctionResult.IsOkOrNull() is not { } jsonDecodeApplyFunctionOk)
+            {
+                throw new System.Exception(
+                    "Unexpected jsonDecodeApplyFunctionResult: " + jsonDecodeApplyFunctionResult);
+            }
+
+            return
+                ElmValueInterop.ParseElmResultValue(
+                    jsonDecodeApplyFunctionOk,
+                    err =>
+                    "Failed to decode JSON value: " + JsonDecodeErrorDisplayText(err),
+                    Result<string, PineValue>.ok,
+                    invalid:
+                    err => throw new System.Exception("Invalid: " + err));
+        }
+
         public Result<string, string> EncodeAppStateAsJsonString(
             PineValue appState,
             IPineVM pineVM)
         {
-            var indentArgument = PineValueAsInteger.ValueFromSignedInteger(0);
+            return
+                EncodeJsonValueAsJsonString(
+                    appState,
+                    indent: 0,
+                    pineVM);
+        }
+
+        public Result<string, string> EncodeJsonValueAsJsonString(
+            PineValue elmJsonValue,
+            int indent,
+            IPineVM pineVM)
+        {
+            var indentArgument = PineValueAsInteger.ValueFromSignedInteger(indent);
 
             var encodeResult =
                 ElmInteractiveEnvironment.ApplyFunction(
                     pineVM,
                     JsonEncodeEncode,
-                    [indentArgument, appState]);
+                    [indentArgument, elmJsonValue]);
 
             {
                 if (encodeResult.IsErrOrNull() is { } err)
@@ -468,7 +961,7 @@ public class ElmTimeJsonAdapter
             }
 
             var decodeStringResult =
-                PineValueAsString.StringFromValue(encodeOk);
+                ElmValueEncoding.PineValueAsElmValue(encodeOk, null, null);
 
             {
                 if (decodeStringResult.IsErrOrNull() is { } err)
@@ -482,8 +975,13 @@ public class ElmTimeJsonAdapter
                 throw new System.Exception("Unexpected decodeStringResult: " + decodeStringResult);
             }
 
+            if (decodeStringOk is not ElmValue.ElmString decodeStringOkString)
+            {
+                return Result<string, string>.err("Expected string but got: " + decodeStringOk);
+            }
+
             return
-                Result<string, string>.ok(decodeStringOk);
+                Result<string, string>.ok(decodeStringOkString.Value);
         }
 
         public static string JsonDecodeErrorDisplayText(
@@ -505,6 +1003,244 @@ public class ElmTimeJsonAdapter
             return ElmValue.RenderAsElmExpression(decodeOk).expressionString;
         }
     }
+
+    public record ApplyExposedFunctionResponse(
+        PineValue? AppState,
+        PineValue? ResponseJsonValue);
+
+    public static Result<string, ApplyExposedFunctionResponse> ApplyExposedFunction(
+        PineValue? appStateBefore,
+        IReadOnlyList<ElmValue> arguments,
+        ExposedFunction exposedFunction,
+        IPineVM pineVM,
+        long posixTimeMilli)
+    {
+        var serializedArgumentsJson =
+            arguments
+            .Select(ElmValueJsonValueEncoding.EncodeAsJsonValuePineValue)
+            .ToArray();
+
+        return
+            ApplyExposedFunction(
+                appStateBefore: appStateBefore,
+                arguments: serializedArgumentsJson,
+                exposedFunction,
+                pineVM,
+                posixTimeMilli: posixTimeMilli);
+    }
+
+    public static Result<string, ApplyExposedFunctionResponse> ApplyExposedFunction(
+        PineValue? appStateBefore,
+        IReadOnlyList<PineValue> arguments,
+        ExposedFunction exposedFunction,
+        IPineVM pineVM,
+        long posixTimeMilli)
+    {
+        /*
+
+        type alias ApplyFunctionArguments state =
+            { stateArgument : state
+            , serializedArgumentsJson : List Json.Encode.Value
+            }
+
+
+        config_exposedFunctions :
+            Dict.Dict
+                String
+                { description :
+                    { returnType : { sourceCodeText : String, containsAppStateType : Bool }, parameters : List { patternSourceCodeText : String, typeSourceCodeText : String, typeIsAppStateType : Bool } }
+                , handler :
+                    Backend.Generated.StateShimTypes.ApplyFunctionArguments
+                        (Maybe
+                            { nextTaskIndex : Int
+                            , posixTimeMilli : Int
+                            , createVolatileProcessTasks :
+                                Dict.Dict
+                                    Backend.Generated.WebServiceShimTypes.TaskId
+                                    (Platform.WebService.CreateVolatileProcessResult
+                                     -> Backend.Main.State
+                                     -> ( Backend.Main.State, Platform.WebService.Commands Backend.Main.State )
+                                    )
+                            , requestToVolatileProcessTasks : Dict.Dict Backend.Generated.WebServiceShimTypes.TaskId (Platform.WebService.RequestToVolatileProcessResult -> Backend.Main.State -> ( Backend.Main.State, Platform.WebService.Commands Backend.Main.State ))
+                            , terminateVolatileProcessTasks : Dict.Dict Backend.Generated.WebServiceShimTypes.TaskId ()
+                            , stateLessFramework : Backend.Main.State
+                            }
+                        )
+                    ->
+                        Result
+                            String
+                            ( Maybe
+                                { nextTaskIndex : Int
+                                , posixTimeMilli : Int
+                                , createVolatileProcessTasks : Dict.Dict Backend.Generated.WebServiceShimTypes.TaskId (Platform.WebService.CreateVolatileProcessResult -> Backend.Main.State -> ( Backend.Main.State, Platform.WebService.Commands Backend.Main.State ))
+                                , requestToVolatileProcessTasks : Dict.Dict Backend.Generated.WebServiceShimTypes.TaskId (Platform.WebService.RequestToVolatileProcessResult -> Backend.Main.State -> ( Backend.Main.State, Platform.WebService.Commands Backend.Main.State ))
+                                , terminateVolatileProcessTasks : Dict.Dict Backend.Generated.WebServiceShimTypes.TaskId ()
+                                , stateLessFramework : Backend.Main.State
+                                }
+                            , Maybe Json.Encode.Value
+                            )
+                }
+        config_exposedFunctions =
+         * */
+
+        PineValue functionArgument()
+        {
+            if (appStateBefore is null)
+            {
+                return
+                    ElmValueEncoding.TagAsPineValue("Nothing", []);
+            }
+
+            var appStateIncludingShim =
+                ElmValueEncoding.ElmRecordAsPineValue(
+                    [
+                    ("nextTaskIndex", PineValueAsInteger.ValueFromSignedInteger(0)),
+                    ("posixTimeMilli", PineValueAsInteger.ValueFromSignedInteger(posixTimeMilli)),
+                    ("createVolatileProcessTasks", EmptyDictAsPineValue),
+                    ("requestToVolatileProcessTasks", EmptyDictAsPineValue),
+                    ("terminateVolatileProcessTasks", EmptyDictAsPineValue),
+                    ("stateLessFramework", appStateBefore)
+                    ]);
+
+            return
+                ElmValueEncoding.ElmRecordAsPineValue(
+                    [
+                    ("stateArgument",
+                    ElmValueEncoding.TagAsPineValue(
+                        "Just",
+                        [appStateIncludingShim])),
+
+                    ("serializedArgumentsJson",
+                    PineValue.List([..arguments]))
+                    ]);
+        }
+
+        var applyResult =
+            ElmInteractiveEnvironment.ApplyFunction(
+                pineVM,
+                exposedFunction.Handler,
+                [functionArgument()]);
+
+        {
+            if (applyResult.IsErrOrNull() is { } err)
+            {
+                return "Failed to apply exposed function: " + err;
+            }
+        }
+
+        if (applyResult.IsOkOrNull() is not { } applyOk)
+        {
+            throw new System.Exception("Unexpected applyResult: " + applyResult);
+        }
+
+        return
+            ParseApplyExposedFunctionResult(applyOk);
+    }
+
+    public static Result<string, ApplyExposedFunctionResponse> ParseApplyExposedFunctionResult(
+        PineValue applyResult)
+    {
+        return
+            ElmValueInterop.ParseElmResultValue(
+                applyResult,
+                err =>
+                ElmValueEncoding.PineValueAsElmValue(err, null, null)
+                .Unpack(
+                    fromErr:
+                    err => "Failed decoding error value: " + err,
+                    fromOk:
+                    ok => ElmValue.RenderAsElmExpression(ok).expressionString),
+                ok: ParseApplyExposedFunctionOk,
+                invalid:
+                err => throw new System.Exception("Invalid: " + err));
+    }
+
+    public static Result<string, ApplyExposedFunctionResponse> ParseApplyExposedFunctionOk(
+        PineValue applyResponse)
+    {
+        if (applyResponse is not PineValue.ListValue applyResponseList)
+        {
+            return "Expected list value but got: " + applyResponse;
+        }
+
+        if (applyResponseList.Elements.Length is not 2)
+        {
+            return "Expected 2 elements but got: " + applyResponseList.Elements.Length;
+        }
+
+        var applyResponseSpan = applyResponseList.Elements.Span;
+
+        var maybeStateIncludingShim = applyResponseSpan[0];
+
+        Result<string, PineValue> parseAppStateResult =
+            ElmValueInterop.ParseElmMaybeValue(
+                maybeStateIncludingShim,
+                nothing: () => Result<string, PineValue>.ok(null),
+                just: ParseApplyExposedFunctionOkStateIncludingShim,
+                invalid:
+                err => throw new System.Exception("Invalid: " + err));
+
+        if (parseAppStateResult.IsErrOrNull() is { } err)
+        {
+            return "Failed to parse app state: " + err;
+        }
+
+        PineValue? responseJsonValue =
+            ElmValueInterop.ParseElmMaybeValue(
+                applyResponseSpan[1],
+                nothing: () => null,
+                just: value => value,
+                invalid:
+                err => throw new System.Exception("Invalid: " + err));
+
+        return
+            new ApplyExposedFunctionResponse(
+                AppState: parseAppStateResult.IsOkOrNull(),
+                ResponseJsonValue: responseJsonValue);
+    }
+
+    public static Result<string, PineValue> ParseApplyExposedFunctionOkStateIncludingShim(
+        PineValue applyResponse)
+    {
+        /*
+        { nextTaskIndex : Int
+        , posixTimeMilli : Int
+        , createVolatileProcessTasks : Dict.Dict Backend.Generated.WebServiceShimTypes.TaskId (Platform.WebService.CreateVolatileProcessResult -> Backend.Main.State -> ( Backend.Main.State, Platform.WebService.Commands Backend.Main.State ))
+        , requestToVolatileProcessTasks : Dict.Dict Backend.Generated.WebServiceShimTypes.TaskId (Platform.WebService.RequestToVolatileProcessResult -> Backend.Main.State -> ( Backend.Main.State, Platform.WebService.Commands Backend.Main.State ))
+        , terminateVolatileProcessTasks : Dict.Dict Backend.Generated.WebServiceShimTypes.TaskId ()
+        , stateLessFramework : Backend.Main.State
+        }
+        */
+
+        var asRecordResult = ElmValueEncoding.ParsePineValueAsRecordTagged(applyResponse);
+
+        {
+            if (asRecordResult.IsErrOrNull() is { } err)
+            {
+                return "Failed to decode apply response as record: " + err;
+            }
+        }
+
+        if (asRecordResult.IsOkOrNull() is not { } asRecordOk)
+        {
+            throw new System.Exception("Unexpected asRecordResult: " + asRecordResult);
+        }
+
+        var stateLessFrameworkField =
+            asRecordOk
+            .FirstOrDefault(kvp => kvp.fieldName is "stateLessFramework")
+            .fieldValue;
+
+        if (stateLessFrameworkField is null)
+        {
+            return "Expected 'stateLessFramework' field in apply response record";
+        }
+
+        return Result<string, PineValue>.ok(stateLessFrameworkField);
+    }
+
+    private static readonly PineValue EmptyDictAsPineValue =
+        ElmValueEncoding.ElmValueAsPineValue(ElmValue.EmptyDict);
 
     /// <summary>
     /// The original lowering implementation added a 'main' declaration to account for DCE.

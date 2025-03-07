@@ -1,5 +1,8 @@
-﻿using Microsoft.VisualStudio.TestTools.UnitTesting;
+﻿using ElmTime;
+using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Pine.Core;
+using Pine.Elm.Platform;
+using Pine.ElmInteractive;
 using Pine.Json;
 using System;
 using System.Collections.Generic;
@@ -14,7 +17,6 @@ namespace TestElmTime;
 public class ApplyFunctionOnDatabaseTests
 {
     [TestMethod]
-    [Ignore]
     public async Task Apply_exposed_function_via_admin_interface_adding_to_counter_web_app()
     {
         var adminPassword = "test";
@@ -106,7 +108,6 @@ public class ApplyFunctionOnDatabaseTests
     }
 
     [TestMethod]
-    [Ignore]
     public async Task Apply_function_via_admin_interface_report_from_calculator()
     {
         var adminPassword = "test";
@@ -184,7 +185,6 @@ public class ApplyFunctionOnDatabaseTests
     }
 
     [TestMethod]
-    [Ignore]
     public async Task List_exposed_functions_via_admin_interface()
     {
         var adminPassword = "test";
@@ -267,6 +267,123 @@ public class ApplyFunctionOnDatabaseTests
                     typeIsAppStateType: true),
             },
             customUsageReportFunctionDescription!.parameters.ToList());
+    }
+
+
+    [TestMethod]
+    public void List_exposed_functions_sandbox()
+    {
+        var appConfigTree =
+            PineValueComposition.ParseAsTreeWithStringPath(ElmWebServiceAppTests.CalculatorWebApp)
+            .Extract(err => throw new Exception("Failed parsing app source files as tree: " + err));
+
+        var webServiceConfig =
+            WebServiceInterface.ConfigFromSourceFilesAndEntryFileName(
+                appConfigTree,
+                ["src", "Backend", "Main.elm"]);
+
+        var pineVM = new Pine.PineVM.PineVM();
+
+        var webServiceApp =
+            new MutatingWebServiceApp(webServiceConfig);
+
+        var exposedFunctions = webServiceConfig.JsonAdapter.ExposedFunctions;
+
+        var exposedFunctionApplyCalculatorOp =
+            exposedFunctions
+            .FirstOrDefault(exposedFunction =>
+            exposedFunction.Key is "Backend.ExposeFunctionsToAdmin.applyCalculatorOperation")
+            .Value;
+
+        Assert.IsNotNull(
+            exposedFunctionApplyCalculatorOp,
+            "Exposed function 'applyCalculatorOperation' not found in the app.");
+
+        Assert.AreEqual(
+            new ElmTimeJsonAdapter.ExposedFunctionDescription(
+                ReturnType:
+                new ElmTimeJsonAdapter.ExposedFunctionDescriptionReturnType(
+                    SourceCodeText: "Backend.State.State",
+                    ContainsAppStateType: true),
+                Parameters:
+                [
+                    new ElmTimeJsonAdapter.ExposedFunctionDescriptionParameter(
+                        PatternSourceCodeText: "operation",
+                        TypeSourceCodeText: "Calculator.CalculatorOperation",
+                        TypeIsAppStateType: false),
+
+                    new ElmTimeJsonAdapter.ExposedFunctionDescriptionParameter(
+                        PatternSourceCodeText: "stateBefore",
+                        TypeSourceCodeText: "Backend.State.State",
+                        TypeIsAppStateType: true)
+                ]),
+            exposedFunctionApplyCalculatorOp.Description);
+
+        var exposedFunctionCustomUsageReport =
+            exposedFunctions
+            .FirstOrDefault(exposedFunction =>
+            exposedFunction.Key is "Backend.ExposeFunctionsToAdmin.customUsageReport")
+            .Value;
+
+        Assert.IsNotNull(
+            exposedFunctionCustomUsageReport,
+            "Exposed function 'customUsageReport' not found in the app.");
+
+
+        {
+            /*
+            type CalculatorOperation
+                = AddOperation Int
+
+
+            applyCalculatorOperation : CalculatorOperation -> Int -> Int
+            applyCalculatorOperation operation numberBefore =
+                case operation of
+                    AddOperation addition ->
+                        numberBefore + addition
+             * */
+
+            var applyAdditionArgument =
+                ElmValue.TagInstance("AddOperation", [ElmValue.Integer(1234)]);
+
+            var applyResult =
+                ElmTimeJsonAdapter.ApplyExposedFunction(
+                    webServiceApp.AppState,
+                    [applyAdditionArgument],
+                    exposedFunctionApplyCalculatorOp,
+                    pineVM: pineVM,
+                    posixTimeMilli: 0);
+
+            if (applyResult.IsErrOrNull() is { } err)
+            {
+                throw new Exception("Failed applying exposed function: " + err);
+            }
+
+            if (applyResult.IsOkOrNull() is not { } applyOk)
+            {
+                throw new Exception(
+                    "Unexpected result type applying exposed function: " + applyResult);
+            }
+
+            var resultingState = applyOk.AppState;
+
+            if (resultingState is null)
+            {
+                throw new Exception("Resulting state is null.");
+            }
+
+            var parseStateAsElmValue =
+                ElmValueEncoding.PineValueAsElmValue(
+                    resultingState,
+                    null,
+                    null)
+                .Extract(err => throw new Exception("Failed encoding state as Elm value: " + err));
+
+            Assert.AreEqual(
+                "{ httpRequestCount = 0, operationsViaHttpRequestCount = 0, resultingNumber = 1234 }",
+                ElmValue.RenderAsElmExpression(parseStateAsElmValue).expressionString,
+                "Resulting app state");
+        }
     }
 
     [System.Text.Json.Serialization.JsonConverter(typeof(JsonConverterForChoiceType))]
