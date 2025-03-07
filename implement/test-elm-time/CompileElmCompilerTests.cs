@@ -85,7 +85,7 @@ public class CompileElmCompilerTests
     }
 
     [TestMethod]
-    public void Test_parse_simple_Elm_module_and_encode_as_Pine_value()
+    public async System.Threading.Tasks.Task Test_parse_simple_Elm_module_and_encode_as_Pine_value()
     {
         var elmModuleText =
             """
@@ -130,19 +130,23 @@ public class CompileElmCompilerTests
 
             """;
 
-        var compilerProgram = ElmCompiler.CompilerSourceContainerFilesDefault.Value;
+        var compilerProgram =
+            ElmCompiler.CompilerSourceContainerFilesDefault.Value;
 
-        using var compilerJavaScript =
-            ElmInteractive.PrepareJavaScriptEngineToEvaluateElm(
-                compilerProgram,
-                InteractiveSessionJavaScript.JavaScriptEngineFlavor.V8);
+        var elmCompiler =
+            (await ElmCompiler.GetElmCompilerAsync(compilerProgram))
+            .Extract(err => throw new Exception(err));
+
+        var pineVMCache = new PineVMCache();
+
+        var pineVM = new PineVM(pineVMCache.EvalCache);
 
         var parsedModulePineValue =
-            ElmInteractive.ParseElmModuleTextToPineValue(elmModuleText, compilerJavaScript)
+            elmCompiler.ParseElmModuleText(elmModuleText, pineVM)
             .Extract(err => throw new Exception(err));
 
         var responseAsElmValue =
-            ElmValueEncoding.PineValueAsElmValue(parsedModulePineValue, null, null)
+            elmCompilerCache.PineValueDecodedAsElmValue(parsedModulePineValue)
             .Extract(err => throw new Exception(err));
 
         var responseAsExpression =
