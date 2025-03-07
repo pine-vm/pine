@@ -16,7 +16,7 @@ public class JavaScriptEngineJintOptimizedForElmApps
     public static JavaScriptEngineJint Create() =>
         new(DelegatesIntoHost);
 
-    private static readonly IReadOnlyList<FunctionDelegateIntoHost> DelegatesIntoHost = BuildDelegatesIntoHost().ToImmutableList();
+    private static readonly IReadOnlyList<FunctionDelegateIntoHost> DelegatesIntoHost = [.. BuildDelegatesIntoHost()];
 
     private static IEnumerable<FunctionDelegateIntoHost> BuildDelegatesIntoHost()
     {
@@ -207,7 +207,7 @@ public class JavaScriptEngineJintOptimizedForElmApps
                     ElmInteropJint.ElmChoiceTypeTag(
                         engine,
                         "Tuple8",
-                        integersForElmTuple8.Select(i => new JsNumber(i)).ToArray()));
+                        [.. integersForElmTuple8.Select(i => new JsNumber(i))]));
             },
             parameterCount: 1);
 
@@ -234,7 +234,7 @@ public class JavaScriptEngineJintOptimizedForElmApps
                     ElmInteropJint.ElmChoiceTypeTag(
                         engine,
                         "Tuple8",
-                        integersForElmTuple8.Select(i => new JsNumber(i)).ToArray()));
+                        [.. integersForElmTuple8.Select(i => new JsNumber(i))]));
             },
             parameterCount: 1);
     }

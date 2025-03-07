@@ -50,9 +50,7 @@ public record FunctionCompilationEnv(
             GetPathsCommonPrefixes([.. pathsLessRedundant.Select(exprAndPath => exprAndPath.path)]);
 
         IReadOnlyList<IReadOnlyList<int>> pathsBeforeSorting =
-            pathsCommonPrefixes
-            .Where(path => envConstraint?.TryGetValue(path) is null)
-            .ToImmutableArray();
+            [.. pathsCommonPrefixes.Where(path => envConstraint?.TryGetValue(path) is null)];
 
         return
             [.. pathsBeforeSorting.Order(IntPathComparer.Instance)];
@@ -169,9 +167,7 @@ public record ExprFunctionCompilationInterface(
             GetPathsCommonPrefixes([.. pathsLessRedundant.Select(exprAndPath => exprAndPath.path)]);
 
         IReadOnlyList<IReadOnlyList<int>> pathsBeforeSorting =
-            pathsCommonPrefixes
-            .Where(path => envConstraint?.TryGetValue(path) is null)
-            .ToImmutableArray();
+            [.. pathsCommonPrefixes.Where(path => envConstraint?.TryGetValue(path) is null)];
 
         return
             [.. pathsBeforeSorting.Order(IntPathComparer.Instance)];

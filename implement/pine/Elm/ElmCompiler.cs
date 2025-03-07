@@ -826,7 +826,7 @@ public class ElmCompiler
             }
 
             // Move up one level:
-            currentDirectory = currentDirectory.Take(currentDirectory.Count - 1).ToArray();
+            currentDirectory = [.. currentDirectory.Take(currentDirectory.Count - 1)];
         }
     }
 

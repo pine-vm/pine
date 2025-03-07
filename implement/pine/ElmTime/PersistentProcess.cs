@@ -156,7 +156,7 @@ public class PersistentProcessWithHistoryOnFileFromElm019Code : IPersistentProce
             var compositionRecord = new CompositionRecordInFile
             (
                 ParentHashBase16: CommonConversion.StringBase16FromByteArray(lastStateHash),
-                AppendedEvents: serializedEvents.Select(@event => new ValueInFile(LiteralString: @event)).ToImmutableList()
+                AppendedEvents: [.. serializedEvents.Select(@event => new ValueInFile(LiteralString: @event))]
             );
 
             var serializedCompositionRecord =

@@ -54,7 +54,7 @@ public class ElmValueInterop
                 {
                     var byteItems =
                         new ElmValue.ElmList(
-                            blobValue.Bytes.ToArray().Select(byteInt => ElmValue.Integer(byteInt)).ToArray());
+                            [.. blobValue.Bytes.ToArray().Select(byteInt => ElmValue.Integer(byteInt))]);
 
                     var encoded =
                         ElmValue.TagInstance("BlobValue", [byteItems]);

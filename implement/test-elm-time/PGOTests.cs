@@ -257,7 +257,7 @@ public class PGOTests
             reports.Sum(report => report.InstructionCount) / reports.Count;
 
         IReadOnlyList<PineVM.EvaluationReport> RunScenariosWithGivenVM(PineVM pineVM) =>
-            usingRecordAccessScenarios
+            [.. usingRecordAccessScenarios
             .Select(scenario =>
             {
                 return
@@ -284,8 +284,7 @@ public class PGOTests
                     return evalReport;
                 }))
                 .Extract(fromErr: err => throw new Exception("Failed for scenario: " + err));
-            })
-            .ToImmutableArray();
+            })];
 
         var nonOptimizingPineVM =
             new PineVM(
@@ -860,7 +859,7 @@ public class PGOTests
             reports.Sum(report => report.InstructionCount) / reports.Count;
 
         IReadOnlyList<PineVM.EvaluationReport> RunScenariosWithGivenVM(PineVM pineVM) =>
-            recordUpdateScenarios
+            [.. recordUpdateScenarios
             .Select(scenario =>
             {
                 return
@@ -891,8 +890,7 @@ public class PGOTests
                     return evalReport;
                 }))
                 .Extract(fromErr: err => throw new Exception("Failed for scenario: " + err));
-            })
-            .ToImmutableArray();
+            })];
 
         var nonOptimizingPineVM = new PineVM();
 
@@ -1296,14 +1294,13 @@ public class PGOTests
         }
 
         IReadOnlyList<PineVM.EvaluationReport> RunScenariosWithGivenVM(PineVM pineVM) =>
-            usageScenarios
+            [.. usageScenarios
             .Select(scenario =>
             RunScenario(
                 scenarioList: scenario.list,
                 scenarioFunctionId: scenario.functionId,
                 scenarioExpected: scenario.expected,
-                pineVM: pineVM))
-            .ToImmutableArray();
+                pineVM: pineVM))];
 
         var nonOptimizingPineVM = new PineVM();
 
@@ -1665,14 +1662,13 @@ public class PGOTests
         }
 
         IReadOnlyList<PineVM.EvaluationReport> RunScenariosWithGivenVM(PineVM pineVM) =>
-            usageScenarios
+            [.. usageScenarios
             .Select(scenario =>
             RunScenario(
                 scenarioDict: dictFromList(scenario.list),
                 scenarioFunctionId: scenario.functionId,
                 scenarioExpected: scenario.expected,
-                pineVM: pineVM))
-            .ToImmutableArray();
+                pineVM: pineVM))];
 
         var nonOptimizingPineVM = new PineVM();
 

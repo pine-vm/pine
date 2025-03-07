@@ -305,8 +305,8 @@ public class CompileElmCompilerTests
                 pineVM,
                 stringSplitFunction,
                 arguments:
-                [ElmValueEncoding.ElmValueAsPineValue(new ElmValue.ElmString(",")),
-                    ElmValueEncoding.ElmValueAsPineValue(new ElmValue.ElmString("pizza,risotto,focaccia"))]);
+                [ElmValueEncoding.ElmValueAsPineValue(ElmValue.StringInstance(",")),
+                    ElmValueEncoding.ElmValueAsPineValue(ElmValue.StringInstance("pizza,risotto,focaccia"))]);
 
         var stringSplitResultElmValue =
             ElmValueEncoding.PineValueAsElmValue(
@@ -317,9 +317,9 @@ public class CompileElmCompilerTests
 
         Assert.AreEqual(
             new ElmValue.ElmList(
-                [new ElmValue.ElmString("pizza"),
-                    new ElmValue.ElmString("risotto"),
-                    new ElmValue.ElmString("focaccia")]),
+                [ElmValue.StringInstance("pizza"),
+                    ElmValue.StringInstance("risotto"),
+                    ElmValue.StringInstance("focaccia")]),
             stringSplitResultElmValue);
     }
 
@@ -443,7 +443,7 @@ public class CompileElmCompilerTests
                 .Extract(err => throw new Exception(err));
 
             var declarationValueAsElmValue =
-                ElmValueEncoding.PineValueAsElmValue(declarationValueResult, null, null)
+                elmCompilerCache.PineValueDecodedAsElmValue(declarationValueResult)
                 .Extract(err => throw new Exception(err));
 
             var (declarationValueAsElmValueAsExpr, _) =
@@ -515,7 +515,7 @@ public class CompileElmCompilerTests
             PineValue parsedModuleValue) =>
             ElmValueEncoding.ElmRecordAsPineValue(
                 [
-                ("fileText", ElmValueEncoding.ElmValueAsPineValue(new ElmValue.ElmString(fileText))),
+                ("fileText", ElmValueEncoding.ElmValueAsPineValue(ElmValue.StringInstance(fileText))),
                 ("parsedModule", parsedModuleValue)
                 ]);
 
@@ -557,7 +557,7 @@ public class CompileElmCompilerTests
             Assert.IsNotNull(compilerResponseValue, "compilerResponseValue");
 
             var compilerResponseElm =
-                ElmValueEncoding.PineValueAsElmValue(compilerResponseValue, null, null)
+                elmCompilerCache.PineValueDecodedAsElmValue(compilerResponseValue)
                 .Extract(err => throw new Exception(err));
 
             var compilerResponseValueString =
@@ -707,17 +707,11 @@ public class CompileElmCompilerTests
                 .Extract(err => throw new Exception("Failed compiling simple module: " + err));
 
             var pineSessionStateWrappedElm =
-                ElmValueEncoding.PineValueAsElmValue(
-                    pineSessionStateWrapped,
-                    null,
-                    null)
+                elmCompilerCache.PineValueDecodedAsElmValue(pineSessionStateWrapped)
                 .Extract(err => throw new Exception("Failed unwrapping pine session state: " + err));
 
             var pineSessionState =
-                ElmValueInterop.ElmValueDecodedAsInElmCompiler(
-                    pineSessionStateWrappedElm,
-                    null,
-                    null)
+                elmCompilerCache.DecodeElmValueFromCompiler(pineSessionStateWrappedElm)
                 .Extract(err => throw new Exception("Failed unwrapping pine session state: " + err));
 
             var pineSessionParsedEnv =

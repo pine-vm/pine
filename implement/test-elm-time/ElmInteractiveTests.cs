@@ -54,11 +54,10 @@ public class ElmInteractiveTests
 
         var scenariosTree =
             TreeNodeWithStringPath.SortedTree(
-                scenarios
+                [.. scenarios
                 .Select(scenario =>
                 (name: scenario.scenarioName,
-                component: LoadFromLocalFilesystem.LoadSortedTreeFromPath(scenario.scenarioDirectory)!))
-                .ToImmutableList());
+                component: LoadFromLocalFilesystem.LoadSortedTreeFromPath(scenario.scenarioDirectory)!))]);
 
         var parsedScenarios =
             ElmTime.ElmInteractive.TestElmInteractive.ParseElmInteractiveScenarios(scenariosTree, console);

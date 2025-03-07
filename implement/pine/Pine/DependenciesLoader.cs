@@ -79,7 +79,7 @@ public class DependenciesLoader
                     treesFromUrl =
                     loadedTreesFromUrl.GetOrAdd(
                         url,
-                        url => BlobLibrary.DownloadFromUrlAndExtractTrees(url).ToImmutableList());
+                        url => [.. BlobLibrary.DownloadFromUrlAndExtractTrees(url)]);
                 }
                 catch (Exception e)
                 {

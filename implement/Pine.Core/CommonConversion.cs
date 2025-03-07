@@ -8,9 +8,7 @@ namespace Pine.Core;
 public class CommonConversion
 {
     public static byte[] ByteArrayFromStringBase16(string base16) =>
-        Enumerable.Range(0, base16.Length / 2)
-        .Select(octetIndex => Convert.ToByte(base16.Substring(octetIndex * 2, 2), 16))
-        .ToArray();
+        [.. Enumerable.Range(0, base16.Length / 2).Select(octetIndex => Convert.ToByte(base16.Substring(octetIndex * 2, 2), 16))];
 
     public static string StringBase16FromByteArray(IReadOnlyList<byte> bytes) =>
         BitConverter.ToString(bytes as byte[] ?? [.. bytes]).Replace("-", "").ToLowerInvariant();

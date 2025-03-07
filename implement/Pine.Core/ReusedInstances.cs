@@ -780,7 +780,7 @@ public record ReusedInstances(
                     elmList.Elements,
 
                     ElmValue.ElmRecord elmRecord =>
-                    elmRecord.Fields.Select(kvp => kvp.Value).ToList(),
+                    [.. elmRecord.Fields.Select(kvp => kvp.Value)],
 
                     ElmValue.ElmTag elmTag =>
                     elmTag.Arguments,

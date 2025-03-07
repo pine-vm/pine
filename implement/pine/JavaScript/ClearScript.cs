@@ -75,10 +75,9 @@ public class ClearScriptV8
         }
 
         AuxiliarySearchPathAsList =
-            new[] { cacheDirectory }
+            [.. new[] { cacheDirectory }
             .Concat(AuxiliarySearchPathAsList ?? [])
-            .Distinct()
-            .ToList();
+            .Distinct()];
     }
 
 

@@ -61,7 +61,7 @@ public class ElmAppDependencyResolution
 
         IReadOnlyList<KeyValuePair<IReadOnlyList<string>, IReadOnlyList<IReadOnlyList<string>>>>
             remainingElmModulesNameAndImports =
-            sourceFilesFiltered
+            [.. sourceFilesFiltered
             .EnumerateBlobsTransitive()
             .Where(blob => blob.path.Last().EndsWith(".elm", StringComparison.OrdinalIgnoreCase))
             .Select(blob =>
@@ -76,8 +76,7 @@ public class ElmAppDependencyResolution
                 return new KeyValuePair<IReadOnlyList<string>, IReadOnlyList<IReadOnlyList<string>>>(
                     moduleName,
                     [.. ElmModule.ParseModuleImportedModulesNames(moduleText)]);
-            })
-            .ToImmutableList();
+            })];
 
         var remainingElmModulesImports =
             remainingElmModulesNameAndImports

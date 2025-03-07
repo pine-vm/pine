@@ -25,7 +25,7 @@ public class ElmValueTests
                 ("gamma", ElmValue.Integer(3)),
             ]),
 
-            new ElmValue.ElmString("Hello, world 👋"),
+            ElmValue.StringInstance("Hello, world 👋"),
 
             ElmValue.TagInstance("True", []),
             ElmValue.TagInstance("False", []),

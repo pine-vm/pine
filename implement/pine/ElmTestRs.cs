@@ -202,7 +202,7 @@ public class ElmTestRs
             [([(err, ElmTestRsConsoleOutputColor.RedColor)], overallSuccess: false)],
             fromOk:
             parsedLines =>
-            parsedLines.Select(l => OutputFromEvent(l.parsedLine)).ToImmutableList());
+            [.. parsedLines.Select(l => OutputFromEvent(l.parsedLine))]);
 
     public static (IReadOnlyList<(string text, ElmTestRsConsoleOutputColor color)> text, bool? overallSuccess) OutputFromEvent(
         ElmTestRsReportJsonEntry @event)

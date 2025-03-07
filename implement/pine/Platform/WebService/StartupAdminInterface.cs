@@ -540,9 +540,9 @@ public class StartupAdminInterface
                             new Gui.AdminInterfaceConfig(
                                 elmTimeVersionId: Program.AppVersionId,
                                 httpRoutes:
-                                apiRoutes.Select(apiRoute => new Gui.HttpRoute(
+                                [.. apiRoutes.Select(apiRoute => new Gui.HttpRoute(
                                     path: apiRoute.path,
-                                    methods: apiRoute.methods.Keys.ToImmutableList())).ToImmutableList(),
+                                    methods: [.. apiRoute.methods.Keys]))],
                                 databaseFunctions:
                                 /*
                                 listDatabaseFunctions()

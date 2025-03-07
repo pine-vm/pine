@@ -322,7 +322,7 @@ namespace ElmTime
                         currentIterationReport =
                             currentIterationReport with
                             {
-                                dependenciesReports = newDependencies.Select(depAndReport => depAndReport.Item2).ToImmutableList(),
+                                dependenciesReports = [.. newDependencies.Select(depAndReport => depAndReport.Item2)],
                                 totalTimeSpentMilli = (int)totalStopwatch.ElapsedMilliseconds
                             };
 
@@ -1059,7 +1059,7 @@ namespace ElmTime
             }
 
             IReadOnlyList<CompilerSerialInterface.AppCodeEntry> filesList =
-                filesElmList.Elements
+                [.. filesElmList.Elements
                 .Select(fileEntry =>
                 {
                     if (fileEntry is not ElmValue.ElmList fileEntryList)
@@ -1104,8 +1104,7 @@ namespace ElmTime
                     new CompilerSerialInterface.AppCodeEntry(
                         path: path,
                         content: new CompilerSerialInterface.BytesJson(contentBase64));
-                })
-                .ToImmutableList();
+                })];
 
             var entryPointFilePathValue = asElmRecord["entryPointFilePath"];
 

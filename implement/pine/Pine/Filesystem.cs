@@ -26,7 +26,7 @@ public static class Filesystem
         string directoryPath,
         Func<IReadOnlyList<string>, bool> filterByRelativeName,
         Func<IReadOnlyList<string>, IOException, bool>? ignoreFileOnIOException = null) =>
-        Directory.GetFiles(directoryPath, "*", SearchOption.AllDirectories)
+        [.. Directory.GetFiles(directoryPath, "*", SearchOption.AllDirectories)
         .Select(filePath =>
             (absolutePath: filePath,
             relativePath: (IReadOnlyList<string>)GetRelativePath(directoryPath, filePath).Split(Path.DirectorySeparatorChar)))
@@ -43,8 +43,7 @@ public static class Filesystem
             {
                 return [];
             }
-        })
-        .ToList();
+        })];
 
     public static string GetRelativePath(
         string relativeTo, string path, StringComparison comparisonType = StringComparison.InvariantCultureIgnoreCase)

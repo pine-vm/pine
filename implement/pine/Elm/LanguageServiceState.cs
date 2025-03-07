@@ -161,10 +161,10 @@ public class LanguageServiceState(
             HandleRequest(
                 new Interface.Request.AddElmPackageVersionRequest(
                     packageVersionId,
-                    filesContentsAsText.Select(e =>
+                    [.. filesContentsAsText.Select(e =>
                     (e.Key,
                     new Interface.FileTreeBlobNode(
-                        AsBase64: System.Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(e.Value)), AsText: e.Value))).ToList()));
+                        AsBase64: System.Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(e.Value)), AsText: e.Value)))]));
 
         if (genericRequestResult.IsErrOrNull() is { } err)
         {
@@ -346,13 +346,13 @@ public class LanguageServiceState(
                 ElmValueEncoding.ElmValueAsPineValue(
                     new ElmValue.ElmRecord(
                         [
-                        ("asBase64", new ElmValue.ElmString(blob.AsBase64)),
+                        ("asBase64", ElmValue.StringInstance(blob.AsBase64)),
                         ("asText",
                             blob.AsText is null
                             ?
                             ElmValue.TagInstance("Nothing", [])
                             :
-                            ElmValue.TagInstance("Just", [new ElmValue.ElmString(blob.AsText)]))
+                            ElmValue.TagInstance("Just", [ElmValue.StringInstance(blob.AsText)]))
                         ])));
     }
 

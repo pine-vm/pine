@@ -567,6 +567,103 @@ public static class PopularValues
         "endLineNumber",
         "endColumn",
 
+
+        // kernel modules Json.Encode and Json.Decode
+
+        "Json",
+        "Encode",
+        "Decode",
+        "Json.Encode",
+        "Json.Decode",
+
+        "Value",
+        "NullValue",
+        "BoolValue",
+        "IntValue",
+        "StringValue",
+        "ArrayValue",
+        "ObjectValue",
+        "FloatValue",
+
+        "null",
+        "bool",
+        "true",
+        "false",
+        "int",
+        "string",
+        "array",
+        "object",
+        "float",
+        "encode",
+
+        "Error",
+        "Field",
+        "Index",
+        "OneOf",
+        "Failure",
+
+        "Decoder",
+
+        "succeed",
+        "fail",
+        "list",
+
+
+        // module Platform.WebService
+
+        "WebService",
+        "Platform.WebService",
+
+        "WebServiceConfig",
+        "init",
+        "subscriptions",
+
+        "Subscriptions",
+        "httpRequest",
+        "posixTimeIsPast",
+
+        "HttpRequestProperties",
+        "method",
+        "uri",
+        "headers",
+        "bodyAsBase64",
+
+        "Commands",
+        "Command",
+        "RespondToHttpRequest",
+        "CreateVolatileProcess",
+        "RequestToVolatileProcess",
+        "TerminateVolatileProcess",
+        "ReadRuntimeInformationCommand",
+        "WriteToVolatileProcessNativeStdInCommand",
+        "ReadAllFromVolatileProcessNativeCommand",
+
+        "RespondToHttpRequestStruct",
+        "httpRequestId",
+        "response",
+
+        "HttpResponse",
+        "statusCode",
+        "headers",
+        "body",
+        "bodyAsBase64",
+
+        "HttpHeader",
+        "name",
+        "values",
+
+        "RequestToVolatileProcessResult",
+        "RequestToVolatileProcessError",
+        "ProcessNotFound",
+        "RequestToVolatileProcessComplete",
+        "exceptionToString",
+        "returnValueToString",
+        "durationInMilliseconds",
+
+        "RuntimeInformationRecord",
+        "runtimeIdentifier",
+        "osPlatform",
+
     ];
 
     public static IEnumerable<ElmValue> PopularElmValuesSource()

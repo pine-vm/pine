@@ -110,7 +110,7 @@ public abstract record TreeNodeWithStringPath : IEquatable<TreeNodeWithStringPat
             {
                 TreeNode tree => tree.Elements
                 .Where(treeNode => treeNode.name == pathFirstElement)
-                .Select(treeNode => treeNode.component.GetNodeAtPath(path.Skip(1).ToImmutableList()))
+                .Select(treeNode => treeNode.component.GetNodeAtPath([.. path.Skip(1)]))
                 .FirstOrDefault(),
 
                 _ => null
@@ -137,7 +137,7 @@ public abstract record TreeNodeWithStringPath : IEquatable<TreeNodeWithStringPat
                     return [];
 
                 var componentAfterRemoval =
-                    treeNode.component.RemoveNodeAtPath(path.Skip(1).ToImmutableArray());
+                    treeNode.component.RemoveNodeAtPath([.. path.Skip(1)]);
 
                 if (componentAfterRemoval == null)
                     return [];
@@ -158,7 +158,7 @@ public abstract record TreeNodeWithStringPath : IEquatable<TreeNodeWithStringPat
         var childNodeBefore = GetNodeAtPath([pathFirstElement]);
 
         var childNode =
-            (childNodeBefore ?? EmptyTree).SetNodeAtPathSorted(path.Skip(1).ToImmutableList(), node);
+            (childNodeBefore ?? EmptyTree).SetNodeAtPathSorted([.. path.Skip(1)], node);
 
         var treeEntries =
             (this switch

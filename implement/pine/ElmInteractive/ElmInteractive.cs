@@ -142,18 +142,14 @@ public class ElmInteractive
         var elmModulesTextsFromBaseInMemory =
             closestBaseInMemory is null ?
             elmModulesTexts :
-            elmModulesTexts
-            .Skip(closestBaseInMemory.AllModulesTextsList.Count)
-            .ToImmutableList();
+            [.. elmModulesTexts.Skip(closestBaseInMemory.AllModulesTextsList.Count)];
 
         var closestBaseFromFile =
             CompiledModulesCacheDefault.GetClosestBase(elmModulesTexts);
 
         var elmModulesTextsFromBaseFromFile =
             closestBaseFromFile.HasValue ?
-            elmModulesTexts
-            .Skip(closestBaseFromFile.Value.CompiledModules.Count)
-            .ToImmutableList() :
+            [.. elmModulesTexts.Skip(closestBaseFromFile.Value.CompiledModules.Count)] :
             elmModulesTexts;
 
         using var evalElmPreparedJavaScriptEngine =
@@ -278,7 +274,7 @@ public class ElmInteractive
 
                 return
                 (new CompileInteractiveEnvironmentResult(
-                    lastIncrementModulesTexts: elmModulesTexts.ToImmutableList(),
+                    lastIncrementModulesTexts: [.. elmModulesTexts],
                     environmentPineValueJson: environmentJson.json,
                     environmentPineValue: environmentPineValue,
                     environmentDictionary: environmentJson.dictionary,
@@ -322,7 +318,7 @@ public class ElmInteractive
             var lastIncrementModulesBlobs =
                 lastIncrementModulesTexts.Select(Encoding.UTF8.GetBytes).ToArray();
 
-            var selfValue = PineValue.List(lastIncrementModulesBlobs.Select(PineValue.Blob).ToArray());
+            var selfValue = PineValue.List([.. lastIncrementModulesBlobs.Select(PineValue.Blob)]);
 
             var selfHash = PineValueHashTree.ComputeHash(selfValue);
 
@@ -594,7 +590,7 @@ public class ElmInteractive
                 return new PineValueMappedForTransport(
                     ListAsString: null,
                     BlobAsInt: null,
-                    List: listComponent.Elements.ToArray().Select(item => FromPineValue(item, cache)).ToList(),
+                    List: [.. listComponent.Elements.ToArray().Select(item => FromPineValue(item, cache))],
                     Origin: pineValue);
             }
 

@@ -197,7 +197,8 @@ type alias TerminateVolatileProcessStruct =
                 ElmValueEncoding.ElmValueAsPineValue(
                     new ElmValue.ElmRecord(
                         [
-                        ("currentPosixTimeMilli", new ElmValue.ElmInteger(posixTimeMilli))
+                        ("currentPosixTimeMilli",
+                        ElmValue.Integer(posixTimeMilli))
                         ]));
 
             return
@@ -561,8 +562,8 @@ type alias TerminateVolatileProcessStruct =
         var asElmValue =
             new ElmValue.ElmRecord(
                 [
-                ("httpRequestId", new ElmValue.ElmString(httpRequest.HttpRequestId)),
-                ("posixTimeMilli", new ElmValue.ElmInteger(httpRequest.PosixTimeMilli)),
+                ("httpRequestId", ElmValue.StringInstance(httpRequest.HttpRequestId)),
+                ("posixTimeMilli", ElmValue.Integer(httpRequest.PosixTimeMilli)),
                 ("requestContext", EncodeHttpRequestContext(httpRequest.RequestContext)),
                 ("request", EncodeHttpRequestProperties(httpRequest.Request))
                 ]);
@@ -577,7 +578,7 @@ type alias TerminateVolatileProcessStruct =
                 [
                 ("clientAddress", requestContext.ClientAddress is null
                     ? ElmValue.TagInstance("Nothing", [])
-                    : ElmValue.TagInstance("Just", [new ElmValue.ElmString(requestContext.ClientAddress)]))
+                    : ElmValue.TagInstance("Just", [ElmValue.StringInstance(requestContext.ClientAddress)]))
                 ]);
 
         return asElmValue;
@@ -588,12 +589,12 @@ type alias TerminateVolatileProcessStruct =
         var asElmValue =
             new ElmValue.ElmRecord(
                 [
-                ("method", new ElmValue.ElmString(request.Method)),
-                ("uri", new ElmValue.ElmString(request.Uri)),
+                ("method", ElmValue.StringInstance(request.Method)),
+                ("uri", ElmValue.StringInstance(request.Uri)),
                 ("bodyAsBase64", request.BodyAsBase64 is null
                     ? ElmValue.TagInstance("Nothing", [])
-                    : ElmValue.TagInstance("Just", [new ElmValue.ElmString(request.BodyAsBase64)])),
-                ("headers", new ElmValue.ElmList(request.Headers.Select(EncodeHttpHeader).ToArray()))
+                    : ElmValue.TagInstance("Just", [ElmValue.StringInstance(request.BodyAsBase64)])),
+                ("headers", new ElmValue.ElmList([.. request.Headers.Select(EncodeHttpHeader)]))
                 ]);
         return asElmValue;
     }
@@ -603,8 +604,8 @@ type alias TerminateVolatileProcessStruct =
         var asElmValue =
             new ElmValue.ElmRecord(
                 [
-                ("name", new ElmValue.ElmString(header.Name)),
-                ("values", new ElmValue.ElmList(header.Values.Select(value => new ElmValue.ElmString(value)).ToArray()))
+                ("name", ElmValue.StringInstance(header.Name)),
+                ("values", new ElmValue.ElmList([.. header.Values.Select(value => ElmValue.StringInstance(value))]))
                 ]);
 
         return asElmValue;
@@ -636,10 +637,10 @@ type alias TerminateVolatileProcessStruct =
         var asElmValue =
             new ElmValue.ElmRecord(
                 [
-                ("runtimeIdentifier", new ElmValue.ElmString(record.RuntimeIdentifier)),
+                ("runtimeIdentifier", ElmValue.StringInstance(record.RuntimeIdentifier)),
                 ("osPlatform", record.OsPlatform is null
                     ? ElmValue.TagInstance("Nothing", [])
-                    : ElmValue.TagInstance("Just", [new ElmValue.ElmString(record.OsPlatform)]))
+                    : ElmValue.TagInstance("Just", [ElmValue.StringInstance(record.OsPlatform)]))
                 ]);
 
         return ElmValueEncoding.ElmValueAsPineValue(asElmValue);
@@ -685,7 +686,7 @@ type alias TerminateVolatileProcessStruct =
         var asElmValue =
             new ElmValue.ElmRecord(
                 [
-                ("exceptionToString", new ElmValue.ElmString(error.ExceptionToString))
+                ("exceptionToString", ElmValue.StringInstance(error.ExceptionToString))
                 ]);
 
         return ElmValueEncoding.ElmValueAsPineValue(asElmValue);
@@ -697,7 +698,7 @@ type alias TerminateVolatileProcessStruct =
         var asElmValue =
             new ElmValue.ElmRecord(
                 [
-                ("processId", new ElmValue.ElmString(complete.ProcessId))
+                ("processId", ElmValue.StringInstance(complete.ProcessId))
                 ]);
 
         return ElmValueEncoding.ElmValueAsPineValue(asElmValue);
@@ -737,7 +738,7 @@ type alias TerminateVolatileProcessStruct =
                     ElmValue.TagInstance(
                         nameof(RequestToVolatileProcessError.RequestToVolatileProcessOtherError),
                         [
-                            new ElmValue.ElmString(otherError.Error)
+                            ElmValue.StringInstance(otherError.Error)
                         ])),
 
             _ =>
@@ -754,13 +755,13 @@ type alias TerminateVolatileProcessStruct =
                 [
                 ("exceptionToString", complete.ExceptionToString is null
                     ? ElmValue.TagInstance("Nothing", [])
-                    : ElmValue.TagInstance("Just", [new ElmValue.ElmString(complete.ExceptionToString)])),
+                    : ElmValue.TagInstance("Just", [ElmValue.StringInstance(complete.ExceptionToString)])),
 
                 ("returnValueToString", complete.ReturnValueToString is null
                     ? ElmValue.TagInstance("Nothing", [])
-                    : ElmValue.TagInstance("Just", [new ElmValue.ElmString(complete.ReturnValueToString)])),
+                    : ElmValue.TagInstance("Just", [ElmValue.StringInstance(complete.ReturnValueToString)])),
 
-                ("durationInMilliseconds", new ElmValue.ElmInteger(complete.DurationInMilliseconds))
+                ("durationInMilliseconds", ElmValue.Integer(complete.DurationInMilliseconds))
                 ]);
 
         return ElmValueEncoding.ElmValueAsPineValue(asElmValue);
@@ -782,11 +783,11 @@ type alias TerminateVolatileProcessStruct =
         var asElmValue =
             new ElmValue.ElmRecord(
                 [
-                ("stdOutBase64", new ElmValue.ElmString(complete.StdOutBase64)),
-                ("stdErrBase64", new ElmValue.ElmString(complete.StdErrBase64)),
+                ("stdOutBase64", ElmValue.StringInstance(complete.StdOutBase64)),
+                ("stdErrBase64", ElmValue.StringInstance(complete.StdErrBase64)),
                 ("exitCode", complete.ExitCode is null
                     ? ElmValue.TagInstance("Nothing", [])
-                    : ElmValue.TagInstance("Just", [new ElmValue.ElmInteger(complete.ExitCode.Value)]))
+                    : ElmValue.TagInstance("Just", [ElmValue.Integer(complete.ExitCode.Value)]))
                 ]);
 
         return ElmValueEncoding.ElmValueAsPineValue(asElmValue);

@@ -798,7 +798,7 @@ public class InteractiveSessionPine : IInteractiveSession
         PineValue parsedModuleValue) =>
         ElmValueEncoding.ElmRecordAsPineValue(
             [
-            ("fileText", ElmValueEncoding.ElmValueAsPineValue(new ElmValue.ElmString(fileText)))
+            ("fileText", ElmValueEncoding.ElmValueAsPineValue(ElmValue.StringInstance(fileText)))
             ,("parsedModule", parsedModuleValue)
             ]);
 

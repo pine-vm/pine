@@ -1052,7 +1052,7 @@ public static class FileLocationEncoding
                     "ElmPackageFileLocation",
                     [
                         ElmPackageVersionIdentiferEncoding.Encode(elmPackageFileLocation.ElmPackageVersionIdentifer),
-                        ElmValue.ListInstance([..elmPackageFileLocation.ModulePath.Select(mp => new ElmValue.ElmString(mp))])
+                        ElmValue.ListInstance([..elmPackageFileLocation.ModulePath.Select(ElmValue.StringInstance)])
                     ]),
 
             _ =>
@@ -1144,8 +1144,8 @@ public static class ElmPackageVersionIdentiferEncoding
         return ElmValue.TagInstance(
             "ElmPackageVersion019Identifer",
             [
-                new ElmValue.ElmString(elmPackageVersionIdentifer.PackageName),
-                new ElmValue.ElmString(elmPackageVersionIdentifer.VersionTag)
+                ElmValue.StringInstance(elmPackageVersionIdentifer.PackageName),
+                ElmValue.StringInstance(elmPackageVersionIdentifer.VersionTag)
             ]);
     }
 

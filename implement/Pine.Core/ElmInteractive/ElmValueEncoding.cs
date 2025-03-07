@@ -79,7 +79,7 @@ public static class ElmValueEncoding
 
             if (asBigIntResult.IsOkOrNullable() is { } bigInt)
             {
-                return new ElmValue.ElmInteger(bigInt);
+                return ElmValue.Integer(bigInt);
             }
 
             if (asBigIntResult.IsErrOrNull() is { } err)
@@ -528,7 +528,8 @@ public static class ElmValueEncoding
             {
                 ElmValue.ElmList elmList =>
                 PineValue.List(
-                    [.. elmList.Elements.Select(item => ElmValueAsPineValue(item, additionalReusableEncodings, reportNewEncoding))]),
+                    [.. elmList.Elements
+                    .Select(item => ElmValueAsPineValue(item, additionalReusableEncodings, reportNewEncoding))]),
 
                 ElmValue.ElmChar elmChar =>
                 PineValueAsInteger.ValueFromUnsignedInteger(elmChar.Value)
@@ -550,7 +551,8 @@ public static class ElmValueEncoding
                 ElmRecordAsPineValue(
                     [.. elmRecord.Fields
                     .OrderBy(field => field.FieldName)
-                    .Select(field => (field.FieldName, ElmValueAsPineValue(field.Value, additionalReusableEncodings, reportNewEncoding)))]),
+                    .Select(field =>
+                    (field.FieldName, ElmValueAsPineValue(field.Value, additionalReusableEncodings, reportNewEncoding)))]),
 
                 ElmValue.ElmBytes elmBytes =>
                 PineValue.List(
@@ -576,7 +578,8 @@ public static class ElmValueEncoding
         return encoded;
     }
 
-    public static PineValue ElmRecordAsPineValue(IReadOnlyList<(string FieldName, PineValue FieldValue)> fields) =>
+    public static PineValue ElmRecordAsPineValue(
+        IReadOnlyList<(string FieldName, PineValue FieldValue)> fields) =>
         PineValue.List(
             [ElmValue.ElmRecordTypeTagNameAsValue,
             PineValue.List(

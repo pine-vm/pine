@@ -207,11 +207,11 @@ public static class RequestEncoding
                 new ElmValue.ElmRecord(
                     [
                         ("asBase64",
-                        new ElmValue.ElmString(fileTreeBlobNode.AsBase64)),
+                        ElmValue.StringInstance(fileTreeBlobNode.AsBase64)),
                         ("asText",
                             fileTreeBlobNode.AsText is { } asText
                             ?
-                            ElmValue.TagInstance("Just", [new ElmValue.ElmString(asText)])
+                            ElmValue.TagInstance("Just", [ElmValue.StringInstance(asText)])
                             :
                             ElmValue.TagInstance("Nothing", [])
                             )

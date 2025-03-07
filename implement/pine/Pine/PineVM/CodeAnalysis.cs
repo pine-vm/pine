@@ -88,14 +88,13 @@ public record EnvConstraintId
         IReadOnlyList<KeyValuePair<IReadOnlyList<int>, PineValue>> parsedEnvItems)
     {
         PineValue[] parsedEnvItemsPineValues =
-            parsedEnvItems
+            [.. parsedEnvItems
             .OrderBy(kv => kv.Key, IntPathComparer.Instance)
             .Select(envItem =>
             (PineValue)
             PineValue.List(
                 [PineValue.List([.. envItem.Key.Select(pathItem => PineValueAsInteger.ValueFromSignedInteger(pathItem))]),
-                envItem.Value]))
-            .ToArray();
+                envItem.Value]))];
 
         var hashBase16 =
             CommonConversion.StringBase16(compilerCache.ComputeHash(PineValue.List(parsedEnvItemsPineValues)));
