@@ -1832,7 +1832,36 @@ parseElmTypeAndDependenciesRecursivelyFromAnnotationInternalTyped stack modules 
                     in
                     case maybeInstantiatedModule of
                         Nothing ->
-                            Err ("Did not find referenced module '" ++ String.join "." instantiatedModuleAlias ++ "'")
+                            Err
+                                ("Did not find referenced module '"
+                                    ++ String.join "." instantiatedModuleAlias
+                                    ++ "'"
+                                    ++ "("
+                                    ++ String.fromInt (List.length currentModule.imports)
+                                    ++ " imports: "
+                                    ++ String.join ", "
+                                        (List.map
+                                            (\(Elm.Syntax.Node.Node _ imp) ->
+                                                let
+                                                    (Elm.Syntax.Node.Node _ impModuleName) =
+                                                        imp.moduleName
+                                                in
+                                                String.join "." impModuleName
+                                            )
+                                            currentModule.imports
+                                        )
+                                    ++ ", "
+                                    ++ String.fromInt (List.length modules)
+                                    ++ " available modules: "
+                                    ++ String.join ", "
+                                        (List.map
+                                            (\( availableModuleName, _ ) ->
+                                                String.join "." availableModuleName
+                                            )
+                                            modules
+                                        )
+                                    ++ ")"
+                                )
 
                         Just instantiatedModule ->
                             instantiatedModule.declarations
