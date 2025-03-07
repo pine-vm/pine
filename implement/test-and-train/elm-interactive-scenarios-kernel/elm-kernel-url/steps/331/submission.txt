@@ -1,0 +1,1 @@
+Url.fromString  "http://example.com/api" |> Maybe.andThen  TestParser.routeFromUrl

@@ -1,0 +1,1 @@
+Url.fromString "http://test.com/path" |> Maybe.andThen  (Url.Parser.parse  Url.Parser.string)
