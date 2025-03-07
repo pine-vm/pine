@@ -78,6 +78,9 @@ public abstract record ElmValue
     public static readonly PineValue ElmFloatTypeTagNameAsValue =
         PineValueAsString.ValueFromString(ElmFloatTypeTagName);
 
+    public static readonly ElmValue EmptyDict =
+        TagInstance(ElmDictEmptyTagName, []);
+
     public static ElmValue ListInstance(IReadOnlyList<ElmValue> Elements) =>
         new ElmList(Elements);
 

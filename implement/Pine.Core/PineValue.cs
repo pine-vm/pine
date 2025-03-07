@@ -141,6 +141,11 @@ public abstract record PineValue : IEquatable<PineValue>
         public readonly long BlobsBytesCount;
 
         /// <summary>
+        /// List value containing zero elements.
+        /// </summary>
+        public static ListValue Empty => EmptyList;
+
+        /// <summary>
         /// Construct a list value from a sequence of other values.
         /// </summary>
         public ListValue(ReadOnlyMemory<PineValue> elements)
