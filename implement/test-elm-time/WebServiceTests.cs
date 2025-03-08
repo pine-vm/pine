@@ -201,7 +201,6 @@ public class WebServiceTests
     }
 
     [TestMethod]
-    [Ignore("TODO: Implement inspection of store for testing")]
     public void Web_host_rate_limits_requests_before_reaching_persistent_process()
     {
         const int requestBatchSize = 100;
@@ -209,6 +208,10 @@ public class WebServiceTests
         const int rateLimitWindowSize = 10;
 
         var fileStoreWriter = new RecordingFileStoreWriter();
+
+        int fileStoreHistoryCountAppendOperations() =>
+            fileStoreWriter.History
+            .Count(op => op.AppendFileContent is not null);
 
         IFileStoreReader getCurrentFileStoreReader() =>
             fileStoreWriter.Apply(new EmptyFileStoreReader());
@@ -231,7 +234,13 @@ public class WebServiceTests
             Enumerable.Range(0, 3)
             .Select(batchIndex =>
                 Enumerable.Range(0, requestBatchSize)
-                .Select(indexInBatch => "Batch " + batchIndex + ", Event " + indexInBatch).ToList())
+                .Select(indexInBatch =>
+                new
+                {
+                    batchIndex,
+                    indexInBatch,
+                    addition = batchIndex * requestBatchSize + indexInBatch
+                }).ToList())
                 .ToList();
 
         var deploymentFiles =
@@ -254,26 +263,26 @@ public class WebServiceTests
                     PineValueComposition.SortedTreeFromSetOfBlobsWithStringPath(deploymentFiles)),
                 persistentProcessHostDateTime: () => persistentProcessHostDateTime);
 
-        IEnumerable<string> EnumerateStoredProcessEventsHttpRequestsBodies() =>
-            testSetup.EnumerateStoredUpdateElmAppStateForEvents()
-            .SelectMany(processEvent => processEvent switch
-            {
-                ElmTime.Platform.WebService.InterfaceToHost.BackendEventStruct.HttpRequestEvent httpRequestEvent =>
-                httpRequestEvent.Struct.request.bodyAsBase64
-                .Map(bodyAsBase64 => ImmutableList.Create(bodyAsBase64)).WithDefault([]),
+        long expectedSum = 0;
 
-                _ => []
-            })
-            .Select(bodyBase64 => System.Text.Encoding.UTF8.GetString(Convert.FromBase64String(bodyBase64)));
-
-        async System.Threading.Tasks.Task<HttpResponseMessage> PostStringContentToPublicAppAsync(string requestContent)
+        async System.Threading.Tasks.Task<HttpResponseMessage> PostStringContentToPublicAppAsync(
+            int addition)
         {
             using var client = testSetup.BuildPublicAppHttpClient();
 
-            return
+            var requestContent = System.Text.Json.JsonSerializer.Serialize(new { addition });
+
+            var response =
                 await client.PostAsync(
-                    "",
+                    requestContent,
                     new StringContent(requestContent, System.Text.Encoding.UTF8));
+
+            if (response.StatusCode == HttpStatusCode.OK)
+            {
+                expectedSum += addition;
+            }
+
+            return response;
         }
 
         IEnumerable<HttpResponseMessage> whereStatusCodeTooManyRequests(
@@ -287,17 +296,15 @@ public class WebServiceTests
                 {
                     letTimePassInPersistentProcessHost(TimeSpan.FromSeconds(1));
 
-                    return PostStringContentToPublicAppAsync(processEvent).Result;
+                    return PostStringContentToPublicAppAsync(processEvent.addition).Result;
                 }).ToList();
 
             whereStatusCodeTooManyRequests(firstBatchHttpResponses).Count()
             .Should().Be(0, "No HTTP response from the first batch has status code 'Too Many Requests'.");
-
-            CollectionAssert.IsSubsetOf(
-                requestsBatches[0],
-                EnumerateStoredProcessEventsHttpRequestsBodies().ToList(),
-                "All events from the first batch have been stored.");
         }
+
+        int storeAppendCountBeforeSecondBatch =
+            fileStoreHistoryCountAppendOperations();
 
         {
             var secondBatchHttpResponses =
@@ -306,42 +313,50 @@ public class WebServiceTests
                     //  Process the events in the second batch in smaller timespan so that effect of the rate-limit should be observable.
                     letTimePassInPersistentProcessHost(TimeSpan.FromSeconds(0.1));
 
-                    return PostStringContentToPublicAppAsync(processEvent).Result;
+                    return PostStringContentToPublicAppAsync(processEvent.addition).Result;
                 }).ToList();
 
             whereStatusCodeTooManyRequests(secondBatchHttpResponses).Count()
             .Should().BeGreaterThan(minimumNumberOfRequestsInFastBatchExpectedToBeBlockedByRateLimit,
                 "At least this many requests in the fast batch are expected to be answered with status code 'Too Many Requests'.");
-
-            requestsBatches[1].Except(EnumerateStoredProcessEventsHttpRequestsBodies()).Count()
-            .Should().BeGreaterThan(minimumNumberOfRequestsInFastBatchExpectedToBeBlockedByRateLimit,
-                "At least this many requests in the fast batch are expected to be filtered out by rate-limit before reaching the persistent process.");
         }
 
-        {
-            letTimePassInPersistentProcessHost(TimeSpan.FromSeconds(rateLimitWindowSize));
+        int storeAppendCountDuringSecondBatch =
+            fileStoreHistoryCountAppendOperations() - storeAppendCountBeforeSecondBatch;
 
+        storeAppendCountDuringSecondBatch.Should()
+            .BeLessThan(
+            requestBatchSize / 2,
+            "Not all events from the second batch have been stored.");
+
+        letTimePassInPersistentProcessHost(TimeSpan.FromSeconds(rateLimitWindowSize));
+
+        int storeAppendCountBeforeThirdBatch =
+            fileStoreHistoryCountAppendOperations();
+
+        {
             var thirdBatchHttpResponses =
                 requestsBatches[2].Select(processEvent =>
                 {
                     letTimePassInPersistentProcessHost(TimeSpan.FromSeconds(1));
 
-                    return PostStringContentToPublicAppAsync(processEvent).Result;
+                    return PostStringContentToPublicAppAsync(processEvent.addition).Result;
                 }).ToList();
 
             whereStatusCodeTooManyRequests(thirdBatchHttpResponses).Count()
             .Should().Be(0, "No HTTP response from the third batch has status code 'Too Many Requests'.");
-
-            CollectionAssert.IsSubsetOf(
-                requestsBatches[2],
-                EnumerateStoredProcessEventsHttpRequestsBodies().ToList(),
-                "All events from the third batch have been stored.");
         }
+
+        int storeAppendCountAfterThirdBatch =
+            fileStoreHistoryCountAppendOperations();
+
+        storeAppendCountAfterThirdBatch.Should()
+            .BeGreaterThanOrEqualTo(storeAppendCountBeforeThirdBatch + requestBatchSize,
+            "All events from the third batch have been stored.");
     }
 
     [TestMethod]
-    [Ignore("TODO: Implement inspection for automated testing")]
-    public async System.Threading.Tasks.Task Web_host_limits_http_request_size_reaching_persistent_process()
+    public async System.Threading.Tasks.Task Web_host_limits_http_request_size()
     {
         const int requestSizeLimit = 20_000;
 
@@ -356,19 +371,6 @@ public class WebServiceTests
         using var testSetup = WebHostAdminInterfaceTestSetup.Setup(
             deployAppAndInitElmState: PineValueComposition.FromTreeWithStringPath(
                 PineValueComposition.SortedTreeFromSetOfBlobsWithStringPath(deploymentFiles)));
-
-        IEnumerable<string> EnumerateStoredProcessEventsHttpRequestsBodies() =>
-            testSetup.EnumerateStoredUpdateElmAppStateForEvents()
-            .SelectMany(processEvent => processEvent switch
-            {
-                ElmTime.Platform.WebService.InterfaceToHost.BackendEventStruct.HttpRequestEvent httpRequestEvent =>
-                httpRequestEvent.Struct.request.bodyAsBase64
-                .Map(bodyAsBase64 => ImmutableList.Create(bodyAsBase64))
-                .WithDefault([]),
-
-                _ => []
-            })
-            .Select(bodyBase64 => System.Text.Encoding.UTF8.GetString(Convert.FromBase64String(bodyBase64)));
 
         async System.Threading.Tasks.Task<HttpResponseMessage> PostStringContentToPublicAppAsync(
             string requestContent)
@@ -387,9 +389,6 @@ public class WebServiceTests
             // Consider overhead from base64 encoding plus additional properties of an HTTP request.
             requestSizeLimit / 4 * 3 - 2000;
 
-        var httpRequestEventsInStoreBefore =
-            EnumerateStoredProcessEventsHttpRequestsBodies().Count();
-
         Assert.AreEqual(
             HttpStatusCode.OK,
             (await PostStringContentToPublicAppAsync(
@@ -397,19 +396,9 @@ public class WebServiceTests
             "Receive OK status code for sufficiently small request.");
 
         Assert.AreEqual(
-            httpRequestEventsInStoreBefore + 1,
-            EnumerateStoredProcessEventsHttpRequestsBodies().Count(),
-            "Sufficiently small HTTP request ended up in event.");
-
-        Assert.AreEqual(
             HttpStatusCode.RequestEntityTooLarge,
             (await PostStringContentToPublicAppAsync("too large content" + new string('_', requestSizeLimit))).StatusCode,
             "Receive non-OK status code for too large request.");
-
-        Assert.AreEqual(
-            httpRequestEventsInStoreBefore + 1,
-            EnumerateStoredProcessEventsHttpRequestsBodies().Count(),
-            "Too large HTTP request did not end up in event.");
     }
 
     [TestMethod]
