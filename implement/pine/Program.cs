@@ -1,6 +1,5 @@
 using ElmTime.Elm019;
 using ElmTime.ElmInteractive;
-using ElmTime.JavaScript;
 using McMaster.Extensions.CommandLineUtils;
 using Microsoft.AspNetCore.Hosting;
 using Pine;
@@ -25,7 +24,7 @@ namespace ElmTime;
 
 public class Program
 {
-    public static string AppVersionId => "0.3.34";
+    public static string AppVersionId => "0.4.0";
 
     private static int AdminInterfaceDefaultPort => 4000;
 
@@ -310,7 +309,7 @@ public class Program
                 dynamicPGOShare: null,
                 runServerCommand,
                 defaultFromEnvironmentVariablePrefix: "web_server",
-                defaultEngineConsideringEnvironmentVariable: fromEnv => fromEnv ?? ElmEngineTypeCLI.JavaScript_V8);
+                defaultEngineConsideringEnvironmentVariable: fromEnv => fromEnv ?? ElmEngineTypeCLI.Pine);
 
             runServerCommand.OnExecute(() =>
             {
@@ -2637,9 +2636,6 @@ public class Program
         {
             ElmEngineTypeCLI.JavaScript_Jint =>
             new ElmEngineType.JavaScript_Jint(),
-
-            ElmEngineTypeCLI.JavaScript_V8 =>
-            new ElmEngineType.JavaScript_V8(),
 
             ElmEngineTypeCLI.Pine =>
             new ElmEngineType.Pine(

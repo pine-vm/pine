@@ -1,4 +1,4 @@
-# Changelog - implement
+# Pine Changelog - Implement
 
 ## 2024-03-10 - Pine to CS Compiler - Change return type of compiled Pine expressions
 
@@ -65,5 +65,9 @@ Published the first version of the Elm developer tools VS Code extension, with a
 
 ## 2025-03-06 - Freed Web Service Platform from JS
 
-Resolved dependency on JavaScript in the web service platform. (https://github.com/pine-vm/pine/issues/20#issuecomment-1816129166)
++ Resolved dependency on JavaScript in the web service platform. (https://github.com/pine-vm/pine/issues/20#issuecomment-1816129166)
+
+## 2025-03-08 - Resolved Remaining Dependencies on V8 JavaScript Engine 🚀🔥✅
+
++ Resolved the last usage of the V8 JavaScript engine by switching applications over to Pine.
 

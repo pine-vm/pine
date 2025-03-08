@@ -20,14 +20,7 @@ public interface IInteractiveSession : IDisposable
             ElmEngineType.JavaScript_Jint =>
             new InteractiveSessionJavaScript(
                 compileElmProgramCodeFiles: compilerSourceFiles,
-                appCodeTree: appCodeTree,
-                InteractiveSessionJavaScript.JavaScriptEngineFlavor.Jint),
-
-            ElmEngineType.JavaScript_V8 =>
-            new InteractiveSessionJavaScript(
-                compileElmProgramCodeFiles: compilerSourceFiles,
-                appCodeTree: appCodeTree,
-                InteractiveSessionJavaScript.JavaScriptEngineFlavor.V8),
+                appCodeTree: appCodeTree),
 
             ElmEngineType.Pine pineConfig =>
             new InteractiveSessionPine(
@@ -50,7 +43,6 @@ public interface IInteractiveSession : IDisposable
 public enum ElmEngineTypeCLI
 {
     JavaScript_Jint = 1,
-    JavaScript_V8 = 2,
     Pine = 4,
     Pine_without_cache = 4001
 }
@@ -58,9 +50,6 @@ public enum ElmEngineTypeCLI
 public abstract record ElmEngineType
 {
     public record JavaScript_Jint
-        : ElmEngineType;
-
-    public record JavaScript_V8
         : ElmEngineType;
 
     public record Pine(

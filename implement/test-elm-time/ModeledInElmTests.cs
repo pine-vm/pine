@@ -45,7 +45,7 @@ public class ModeledInElmTests
                 ProcessFromElm019Code.JavascriptMinusCrashes(javaScriptFromElmMake),
                 [(functionNameInElm: "Main.tests", publicName: "published_tests", arity: 0)]);
 
-        var javaScriptEngine = JavaScriptEngineFromJavaScriptEngineSwitcher.ConstructClearScriptJavaScriptEngine();
+        var javaScriptEngine = JavaScriptEngineJintOptimizedForElmApps.Create();
 
         javaScriptEngine.Evaluate(javaScriptPreparedToRun);
 

@@ -116,7 +116,7 @@ public class ProcessFromElm019Code
                 startProcess: () => new ProcessHostedWithJavaScriptEngine(
                     javascriptPreparedToRun,
                     javascriptEngine: overrideJavaScriptEngineFactory?.Invoke() ??
-                    JavaScriptEngineFromJavaScriptEngineSwitcher.ConstructJavaScriptEngine()));
+                    JavaScriptEngineJintOptimizedForElmApps.Create()));
     }
 
     public const string appStateJsVarName = "app_state";

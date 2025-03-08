@@ -343,8 +343,7 @@ public class CompileElmCompilerTests
 
         using var compileJavaScriptEngine =
             ElmInteractive.PrepareJavaScriptEngineToEvaluateElm(
-                compileElmProgramCodeFiles: compilerProgram,
-                InteractiveSessionJavaScript.JavaScriptEngineFlavor.V8);
+                compileElmProgramCodeFiles: compilerProgram);
 
         var compilerPackageSourcesTrees =
             CompilerPackageSources

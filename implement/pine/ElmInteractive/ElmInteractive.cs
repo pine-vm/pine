@@ -234,7 +234,7 @@ public class ElmInteractive
         var javaScriptEngine =
             JavaScriptEngineJintOptimizedForElmApps.Create();
 
-        ElmTime.ElmInteractive.ElmInteractive.PrepareJavaScriptEngineToEvaluateElm(
+        PrepareJavaScriptEngineToEvaluateElm(
             compileElmProgramCodeFiles: compilerSourceFiles,
             javaScriptEngine);
 
@@ -979,21 +979,10 @@ public class ElmInteractive
     }
 
     public static IJavaScriptEngine PrepareJavaScriptEngineToEvaluateElm(
-        TreeNodeWithStringPath compileElmProgramCodeFiles,
-        InteractiveSessionJavaScript.JavaScriptEngineFlavor javaScriptEngineFlavor) =>
+        TreeNodeWithStringPath compileElmProgramCodeFiles) =>
         PrepareJavaScriptEngineToEvaluateElm(
             compileElmProgramCodeFiles,
-            javaScriptEngine: javaScriptEngineFlavor switch
-            {
-                InteractiveSessionJavaScript.JavaScriptEngineFlavor.Jint =>
-                JavaScriptEngineJintOptimizedForElmApps.Create(),
-
-                InteractiveSessionJavaScript.JavaScriptEngineFlavor.V8 =>
-                JavaScriptEngineFromJavaScriptEngineSwitcher.ConstructJavaScriptEngine(),
-
-                _ =>
-                throw new NotImplementedException("Not implemented: " + javaScriptEngineFlavor)
-            });
+            javaScriptEngine: JavaScriptEngineJintOptimizedForElmApps.Create());
 
     public static IJavaScriptEngine PrepareJavaScriptEngineToEvaluateElm(
         TreeNodeWithStringPath compileElmProgramCodeFiles,
