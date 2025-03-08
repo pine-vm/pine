@@ -1,5 +1,4 @@
 using ElmTime.ElmInteractive;
-using ElmTime.JavaScript;
 using Pine.Core;
 using Pine.Core.Elm;
 using Pine.Elm019;
@@ -218,42 +217,6 @@ public class ElmCompiler
         return compilerWithPackagesTree;
     }
 
-    public static TreeNodeWithStringPath MergeElmCoreModules(
-        TreeNodeWithStringPath compilerWithPackagesTree)
-    {
-        using var compileElmPreparedJavaScriptEngine =
-            JavaScriptEngineFromElmCompilerSourceFiles(CompilerSourceContainerFilesDefault.Value);
-
-        var defaultElmCoreModulesTexts =
-            ElmTime.ElmInteractive.ElmInteractive.GetDefaultElmCoreModulesTexts(compileElmPreparedJavaScriptEngine);
-
-        var defaultElmCoreModules =
-            defaultElmCoreModulesTexts
-            .Select(moduleText =>
-            (moduleName: ElmTime.ElmSyntax.ElmModule.ParseModuleName(moduleText).Extract(err => throw new Exception(err)),
-            moduleText))
-            .ToImmutableArray();
-
-        var compilerWithCoreModules =
-            defaultElmCoreModules
-            .Aggregate(
-                seed: compilerWithPackagesTree,
-                func: (aggregate, elmModule) =>
-                {
-                    IReadOnlyList<string> filePath =
-                    ["src"
-                    , .. elmModule.moduleName.SkipLast(1)
-                    , elmModule.moduleName.Last() + ".elm"
-                    ];
-
-                    var fileContent = Encoding.UTF8.GetBytes(elmModule.moduleText);
-
-                    return aggregate.SetNodeAtPathSorted(filePath, TreeNodeWithStringPath.Blob(fileContent));
-                });
-
-        return compilerWithCoreModules;
-    }
-
     public static Result<string, PineValue> LoadOrCompileInteractiveEnvironment(
         TreeNodeWithStringPath appCodeTree,
         IReadOnlyList<IReadOnlyList<string>> rootFilePaths,
@@ -302,35 +265,70 @@ public class ElmCompiler
         bool skipFilteringForSourceDirs,
         ElmCompiler? overrideElmCompiler = null)
     {
-        /*
-         * 2024-10-27:
-         * Change to depend less often on JavaScript to build an environment.
-         * Instead of always going the JavaScript route, default to the new Pine-based route.
-         * */
-
-        Result<string, PineValue> continueOnJavaScript()
+        Result<string, PineValue> continueWithBundledCompiler()
         {
+            var elmCompilerFromBundle =
+                BundledElmEnvironments.BundledElmCompilerCompiledEnvValue()
+                ??
+                throw new Exception("Failed to load Elm compiler from bundle.");
+
+            var overrideElmCompiler =
+                ElmCompilerFromEnvValue(elmCompilerFromBundle)
+                .Extract(err => throw new Exception(err));
+
             return
-                ElmTime.ElmInteractive.ElmInteractive.CompileInteractiveEnvironment(
-                    appCodeTree: appCodeTree,
+                CompileInteractiveEnvironment(
+                    appCodeTree,
                     rootFilePaths: rootFilePaths,
                     skipLowering: skipLowering,
-                    compilationCacheBefore: ElmTime.ElmInteractive.ElmInteractive.CompilationCache.Empty)
-                .Map(result => result.compileResult);
-        }
-
-        if (!skipLowering)
-        {
-            // We need to port some more dependencies before migrating lowering away from JavaScript.
-
-            return continueOnJavaScript();
+                    skipFilteringForSourceDirs: skipFilteringForSourceDirs,
+                    overrideElmCompiler: overrideElmCompiler);
         }
 
         var compilerSourceFilesDefault = CompilerSourceFilesDefault.Value;
 
         if (overrideElmCompiler is null && appCodeTree.Equals(compilerSourceFilesDefault))
         {
-            return continueOnJavaScript();
+            return continueWithBundledCompiler();
+        }
+
+        if (!skipLowering && CheckIfAppUsesLowering(appCodeTree))
+        {
+            var loweringResult =
+                ElmTime.ElmAppCompilation.AsCompletelyLoweredElmApp(
+                    PineValueComposition.TreeToFlatDictionaryWithPathComparer(appCodeTree),
+                    workingDirectoryRelative: [],
+                    ElmTime.ElmAppInterfaceConfig.Default
+                    with
+                    {
+                        compilationRootFilePath = rootFilePaths.Single()
+                    });
+
+            if (loweringResult.IsErrOrNull() is { } loweringErr)
+            {
+                throw new Exception(
+                    "Failed lowering with " + loweringErr.Count + " errors:\n" +
+                    ElmTime.ElmAppCompilation.CompileCompilationErrorsDisplayText(loweringErr));
+            }
+
+            if (loweringResult.IsOkOrNull() is not { } loweringOk)
+            {
+                throw new Exception("Unexpected result type: " + loweringResult);
+            }
+
+            var loweredTree =
+                PineValueComposition.SortedTreeFromSetOfBlobsWithStringPath(loweringOk.result.compiledFiles);
+
+            var loweredTreeCleaned =
+                ElmTime.ElmTimeJsonAdapter.CleanUpFromLoweredForJavaScript(loweredTree);
+
+            return
+                CompileInteractiveEnvironment(
+                    loweredTreeCleaned,
+                    rootFilePaths: rootFilePaths,
+                    skipLowering: true,
+                    skipFilteringForSourceDirs: skipFilteringForSourceDirs,
+                    overrideElmCompiler: overrideElmCompiler);
         }
 
         var defaultCompilerResult =
@@ -406,19 +404,6 @@ public class ElmCompiler
                 tree,
                 nodePath =>
                 !filePathsExcluded.Contains(nodePath));
-    }
-
-    public static IJavaScriptEngine JavaScriptEngineFromElmCompilerSourceFiles(
-        TreeNodeWithStringPath compilerSourceFiles)
-    {
-        var javaScriptEngine =
-            JavaScriptEngineFromJavaScriptEngineSwitcher.ConstructJavaScriptEngine();
-
-        ElmTime.ElmInteractive.ElmInteractive.PrepareJavaScriptEngineToEvaluateElm(
-            compileElmProgramCodeFiles: compilerSourceFiles,
-            javaScriptEngine);
-
-        return javaScriptEngine;
     }
 
     public static Result<string, ElmCompiler> ElmCompilerFromEnvValue(PineValue compiledEnv)

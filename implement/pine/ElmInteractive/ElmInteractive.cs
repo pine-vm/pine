@@ -153,7 +153,7 @@ public class ElmInteractive
             elmModulesTexts;
 
         using var evalElmPreparedJavaScriptEngine =
-            ElmCompiler.JavaScriptEngineFromElmCompilerSourceFiles(
+            JavaScriptEngineFromElmCompilerSourceFiles(
                 ElmCompiler.CompilerSourceContainerFilesDefault.Value);
 
         Result<string, (CompileInteractiveEnvironmentResult compileResult, CompilationCache compilationCache)> chooseInitResult()
@@ -226,6 +226,19 @@ public class ElmInteractive
                         },
                         aggregateSeed: seed);
             });
+    }
+
+    public static IJavaScriptEngine JavaScriptEngineFromElmCompilerSourceFiles(
+        TreeNodeWithStringPath compilerSourceFiles)
+    {
+        var javaScriptEngine =
+            JavaScriptEngineJintOptimizedForElmApps.Create();
+
+        ElmTime.ElmInteractive.ElmInteractive.PrepareJavaScriptEngineToEvaluateElm(
+            compileElmProgramCodeFiles: compilerSourceFiles,
+            javaScriptEngine);
+
+        return javaScriptEngine;
     }
 
     private static Result<string, (CompileInteractiveEnvironmentResult compileResult, CompilationCache compilationCache)>
