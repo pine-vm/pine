@@ -82,7 +82,7 @@ public class ElmWebServiceUsingVolatileProcessNativeTest
                 )
             ));
 
-        for (var i = 0; i < 10; i++)
+        for (var i = 0; i < 15; i++)
         {
             await Task.Delay(TimeSpan.FromSeconds(1));
 

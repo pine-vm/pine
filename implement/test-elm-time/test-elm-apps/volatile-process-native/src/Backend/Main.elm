@@ -85,7 +85,7 @@ updateForCurrentPosixTimeMilli { currentPosixTimeMilli } stateBefore =
                        The delay gradually increased due to sporadic failures of tests.
                        TODO: Explore how to get the response earlier.
                     -}
-                    + 1300
+                    + 8000
             then
                 ( state
                 , []
