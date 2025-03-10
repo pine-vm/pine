@@ -1268,11 +1268,10 @@ mapSourceFilesModuleText :
     -> Result (LocatedInSourceFiles String) ( AppFiles, String )
 mapSourceFilesModuleText sourceDirs ( sourceFiles, moduleFilePath, moduleText ) =
     let
-        mapErrorStringForFunctionDeclaration functionDeclaration =
+        mapErrorStringForFunctionDeclaration (Elm.Syntax.Node.Node _ functionDeclaration) =
             let
-                functionName =
-                    Elm.Syntax.Node.value
-                        (Elm.Syntax.Node.value (Elm.Syntax.Node.value functionDeclaration).declaration).name
+                (Elm.Syntax.Node.Node _ functionName) =
+                    (Elm.Syntax.Node.value functionDeclaration.declaration).name
             in
             (++) ("Failed to replace function '" ++ functionName ++ "': ")
 
@@ -1522,20 +1521,25 @@ exposeAllInElmModuleInAppFiles sourceDirs moduleName appFiles =
             filePathFromElmModuleName sourceDirs moduleName
     in
     case
-        appFiles
-            |> Common.assocListGet moduleFilePath
-            |> Maybe.andThen stringFromFileContent
+        Common.assocListGet moduleFilePath appFiles
     of
         Nothing ->
             appFiles
 
-        Just originalModuleText ->
-            let
-                moduleText =
-                    exposeAllInElmModule originalModuleText
-            in
-            appFiles
-                |> Common.assocListInsert moduleFilePath (fileContentFromString moduleText)
+        Just fileContent ->
+            case stringFromFileContent fileContent of
+                Nothing ->
+                    appFiles
+
+                Just originalModuleText ->
+                    let
+                        moduleText =
+                            exposeAllInElmModule originalModuleText
+                    in
+                    appFiles
+                        |> Common.assocListInsert
+                            moduleFilePath
+                            (fileContentFromString moduleText)
 
 
 exposeAllInElmModule : String -> String
@@ -1546,9 +1550,12 @@ exposeAllInElmModule moduleText =
 
         Ok parsedModule ->
             let
+                (Elm.Syntax.Node.Node _ moduleDefinition) =
+                    parsedModule.moduleDefinition
+
                 exposingListNode : Elm.Syntax.Node.Node Elm.Syntax.Exposing.Exposing
                 exposingListNode =
-                    case Elm.Syntax.Node.value parsedModule.moduleDefinition of
+                    case moduleDefinition of
                         Elm.Syntax.Module.NormalModule normalModule ->
                             normalModule.exposingList
 
@@ -3487,20 +3494,23 @@ parseJsonConverterDeclarationType :
     -> Result String { isDecoder : Bool, typeAnnotation : Elm.Syntax.Node.Node Elm.Syntax.TypeAnnotation.TypeAnnotation }
 parseJsonConverterDeclarationType signature =
     let
+        (Elm.Syntax.Node.Node _ typeAnnotation) =
+            signature.typeAnnotation
+
         errorValue detail =
             Err
                 ("Unexpected type signature ("
                     ++ detail
                     ++ "): "
-                    ++ (Elm.Syntax.Node.value signature.typeAnnotation
+                    ++ (typeAnnotation
                             |> Elm.Syntax.Encode.TypeAnnotation.encode
                             |> Json.Encode.encode 0
                        )
                 )
     in
-    case Elm.Syntax.Node.value signature.typeAnnotation of
-        Elm.Syntax.TypeAnnotation.Typed genericType typeArguments ->
-            if Tuple.second (Elm.Syntax.Node.value genericType) /= "Decoder" then
+    case typeAnnotation of
+        Elm.Syntax.TypeAnnotation.Typed (Elm.Syntax.Node.Node _ ( _, genericTypeLocalName )) typeArguments ->
+            if genericTypeLocalName /= "Decoder" then
                 errorValue "Generic type is not 'Decoder'"
 
             else
@@ -3514,16 +3524,16 @@ parseJsonConverterDeclarationType signature =
                     _ ->
                         errorValue "Unexpected number of type arguments for 'Decoder'"
 
-        Elm.Syntax.TypeAnnotation.FunctionTypeAnnotation leftType rightType ->
-            case Elm.Syntax.Node.value rightType of
-                Elm.Syntax.TypeAnnotation.Typed rightNameNode _ ->
-                    if Tuple.second (Elm.Syntax.Node.value rightNameNode) /= "Value" then
+        Elm.Syntax.TypeAnnotation.FunctionTypeAnnotation leftTypeNode (Elm.Syntax.Node.Node _ rightType) ->
+            case rightType of
+                Elm.Syntax.TypeAnnotation.Typed (Elm.Syntax.Node.Node _ ( _, rightNameLocal )) _ ->
+                    if rightNameLocal /= "Value" then
                         errorValue "right side of function type is not 'Value'"
 
                     else
                         Ok
                             { isDecoder = False
-                            , typeAnnotation = leftType
+                            , typeAnnotation = leftTypeNode
                             }
 
                 _ ->
@@ -3666,6 +3676,7 @@ prepareReplaceFunctionInSourceFilesModuleText sourceDirs sourceFiles currentModu
                                                                     ]
                                                                         |> String.join "\n|>"
 
+                                                        buildNewFunctionLines : List String -> List String
                                                         buildNewFunctionLines previousFunctionLines =
                                                             List.take 2 previousFunctionLines
                                                                 ++ [ indentElmCodeLines 1 fileExpression ]
@@ -3763,9 +3774,25 @@ prepareReplaceFunctionInElmMakeModuleText dependencies sourceDirs sourceFiles cu
                 mapTreeLeaf :
                     InterfaceElmMakeFunctionLeafConfig
                     -> Result CompilationError { emitBlob : RecordTreeEmitElmMake, valueFunctionName : String }
-                mapTreeLeaf =
-                    prepareElmMakeFunctionForEmit sourceDirs sourceFiles dependencies { filePathRepresentation = filePathRepresentation }
-                        >> Result.andThen (continueMapResult >> Result.mapError OtherCompilationError)
+                mapTreeLeaf leafConfig =
+                    case
+                        prepareElmMakeFunctionForEmit
+                            sourceDirs
+                            sourceFiles
+                            dependencies
+                            { filePathRepresentation = filePathRepresentation }
+                            leafConfig
+                    of
+                        Err err ->
+                            Err err
+
+                        Ok leafOk ->
+                            case continueMapResult leafOk of
+                                Err err ->
+                                    Err (OtherCompilationError err)
+
+                                Ok ok ->
+                                    Ok ok
 
                 mappedTreeResult : Result (List CompilationError) (CompilationInterfaceRecordTreeNode { emitBlob : RecordTreeEmitElmMake, valueFunctionName : String })
                 mappedTreeResult =
@@ -4648,17 +4675,21 @@ parseElmMakeFunctionConfigFromRecordTreeInternal :
     -> Result String InterfaceElmMakeFunctionConfig
 parseElmMakeFunctionConfigFromRecordTreeInternal elmMakeConfig recordTree =
     let
-        leafFromTree pathPrefix =
-            prepareRecordTreeEmitForTreeOrBlobUnderPath pathPrefix
-                >> Result.map (\emitBlob -> RecordTreeLeaf { elmMakeConfig = elmMakeConfig, emitBlob = emitBlob })
+        leafFromTree pathPrefix treeNode =
+            case prepareRecordTreeEmitForTreeOrBlobUnderPath pathPrefix treeNode of
+                Err err ->
+                    Err err
+
+                Ok emitBlob ->
+                    Ok (RecordTreeLeaf { elmMakeConfig = elmMakeConfig, emitBlob = emitBlob })
     in
     case recordTree of
         RecordTreeLeaf leaf ->
             leafFromTree [] (RecordTreeLeaf ())
 
         RecordTreeBranch branch ->
-            branch
-                |> Common.resultListMapCombine
+            case
+                Common.resultListMapCombine
                     (\( branchName, branchValue ) ->
                         (case integrateElmMakeFunctionRecordFieldName branchName elmMakeConfig of
                             Err _ ->
@@ -4669,7 +4700,13 @@ parseElmMakeFunctionConfigFromRecordTreeInternal elmMakeConfig recordTree =
                         )
                             |> Result.map (Tuple.pair branchName)
                     )
-                |> Result.map RecordTreeBranch
+                    branch
+            of
+                Err err ->
+                    Err err
+
+                Ok ok ->
+                    Ok (RecordTreeBranch ok)
 
 
 prepareRecordTreeEmitForTreeOrBlobUnderPath :
@@ -4749,12 +4786,20 @@ prepareRecordTreeEmitForTreeOrBlobUnderPath pathPrefix tree =
                             }
                         }
     in
-    tree
-        |> attemptMapRecordTreeLeaves [] attemptMapLeaf
-        |> Result.mapError
-            (List.map (\( errorPath, error ) -> "Error at path " ++ String.join "." errorPath ++ ": " ++ error) >> String.join ", ")
-        |> Result.map
-            (\mappedTree ->
+    case attemptMapRecordTreeLeaves [] attemptMapLeaf tree of
+        Err errorList ->
+            Err
+                ((List.map
+                    (\( errorPath, error ) ->
+                        "Error at path " ++ String.join "." errorPath ++ ": " ++ error
+                    )
+                    >> String.join ", "
+                 )
+                    errorList
+                )
+
+        Ok mappedTree ->
+            Ok
                 { interfaceModule = mappedTree |> mapRecordTreeLeaves .interfaceModule
                 , valueModule =
                     \valueBytes ->
@@ -4762,14 +4807,20 @@ prepareRecordTreeEmitForTreeOrBlobUnderPath pathPrefix tree =
                             |> enumerateLeavesFromRecordTree
                             |> Common.resultListMapCombine
                                 (\( _, leaf ) ->
-                                    leaf.valueModule.buildExpression valueBytes
-                                        |> Result.mapError ((++) ("Failed to build expression for field '" ++ leaf.valueModule.fieldName ++ "': "))
-                                        |> Result.map
-                                            (\expression -> ( leaf.valueModule.fieldName, { expression = expression } ))
+                                    case leaf.valueModule.buildExpression valueBytes of
+                                        Err err ->
+                                            Err
+                                                ("Failed to build expression for field '"
+                                                    ++ leaf.valueModule.fieldName
+                                                    ++ "': "
+                                                    ++ err
+                                                )
+
+                                        Ok expression ->
+                                            Ok ( leaf.valueModule.fieldName, { expression = expression } )
                                 )
                             |> Result.map Dict.fromList
                 }
-            )
 
 
 integrateElmMakeFunctionRecordFieldName : String -> InterfaceElmMakeConfig -> Result String InterfaceElmMakeConfig
@@ -4832,13 +4883,18 @@ parseSourceFileFunctionFromTypeAnnotation typeAnnotation =
                     else
                         case instance.arguments of
                             [ singleArgument ] ->
-                                singleArgument
-                                    |> parseSourceFileFunctionEncodingFromTypeAnnotation
-                                    |> Result.mapError ((++) "Failed to parse argument: ")
-                                    |> Result.map (\encoding -> { isTree = True, encoding = encoding })
+                                case parseSourceFileFunctionEncodingFromTypeAnnotation singleArgument of
+                                    Err err ->
+                                        Err ("Failed to parse argument: " ++ err)
+
+                                    Ok encoding ->
+                                        Ok { isTree = True, encoding = encoding }
 
                             _ ->
-                                continueWithErrorUnexpectedInst ("Unexpected number of arguments: " ++ String.fromInt (List.length instance.arguments))
+                                continueWithErrorUnexpectedInst
+                                    ("Unexpected number of arguments: "
+                                        ++ String.fromInt (List.length instance.arguments)
+                                    )
 
                 _ ->
                     continueWithErrorUnexpectedInst "Instantiated is not a choice type"
@@ -5020,10 +5076,17 @@ parseInterfaceRecordTree errorFromString integrateFieldName typeAnnotation seed 
                             |> Result.mapError (Tuple.pair [ fieldName ])
                             |> Result.andThen
                                 (\withFieldNameIntegrated ->
-                                    withFieldNameIntegrated
-                                        |> parseInterfaceRecordTree errorFromString integrateFieldName fieldType
-                                        |> Result.map (Tuple.pair fieldName)
-                                        |> Result.mapError (Tuple.mapFirst ((::) fieldName))
+                                    case
+                                        parseInterfaceRecordTree errorFromString
+                                            integrateFieldName
+                                            fieldType
+                                            withFieldNameIntegrated
+                                    of
+                                        Err ( errFst, errSnd ) ->
+                                            Err ( fieldName :: errFst, errSnd )
+
+                                        Ok ok ->
+                                            Ok ( fieldName, ok )
                                 )
                     )
                 |> Result.map RecordTreeBranch
@@ -5054,12 +5117,11 @@ enumerateLeavesFromRecordTree node =
             [ ( [], leaf ) ]
 
         RecordTreeBranch children ->
-            children
-                |> List.map
-                    (\( fieldName, child ) ->
-                        child |> enumerateLeavesFromRecordTree |> List.map (Tuple.mapFirst ((::) fieldName))
-                    )
-                |> List.concat
+            List.concatMap
+                (\( fieldName, child ) ->
+                    child |> enumerateLeavesFromRecordTree |> List.map (Tuple.mapFirst ((::) fieldName))
+                )
+                children
 
 
 filePathRepresentationInFunctionName : List String -> String
@@ -5257,6 +5319,7 @@ locatedInSourceFilesFromJustFilePath { filePath } err =
 syntaxRangeCoveringCompleteString : String -> Elm.Syntax.Range.Range
 syntaxRangeCoveringCompleteString string =
     let
+        lines : List String
         lines =
             String.lines string
     in

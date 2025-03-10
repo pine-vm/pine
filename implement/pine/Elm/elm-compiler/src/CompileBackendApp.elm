@@ -158,18 +158,21 @@ loweredForBackendApp appDeclaration config sourceFiles =
                                             |> Result.andThen
                                                 (\maybeExposeFunctionsToAdmin ->
                                                     let
+                                                        mainDeclarationName : String
                                                         mainDeclarationName =
                                                             appDeclaration.declaration
                                                                 |> Elm.Syntax.Node.value
                                                                 |> .name
                                                                 |> Elm.Syntax.Node.value
 
+                                                        appRootDeclarationModuleName : String
                                                         appRootDeclarationModuleName =
                                                             config.compilationRootModule.parsedSyntax.moduleDefinition
                                                                 |> Elm.Syntax.Node.value
                                                                 |> Elm.Syntax.Module.moduleName
                                                                 |> String.join "."
 
+                                                        mainDeclarationNameQualifiedName : String
                                                         mainDeclarationNameQualifiedName =
                                                             appRootDeclarationModuleName ++ "." ++ mainDeclarationName
 
@@ -534,9 +537,9 @@ stateTypeAnnotationFromRootFunctionDeclaration rootFunctionDeclaration =
         Nothing ->
             Err "Missing function signature"
 
-        Just signature ->
-            case Elm.Syntax.Node.value (Elm.Syntax.Node.value signature).typeAnnotation of
-                Elm.Syntax.TypeAnnotation.Typed instantiated typeArguments ->
+        Just (Elm.Syntax.Node.Node _ signature) ->
+            case signature.typeAnnotation of
+                Elm.Syntax.Node.Node _ (Elm.Syntax.TypeAnnotation.Typed instantiated typeArguments) ->
                     case typeArguments of
                         [ singleTypeArgument ] ->
                             Ok
@@ -558,55 +561,54 @@ migrateStateTypeAnnotationFromElmModule :
             (Elm.Syntax.Node.Node String)
             ( Elm.Syntax.Node.Node Elm.Syntax.TypeAnnotation.TypeAnnotation, Elm.Syntax.Node.Node Elm.Syntax.TypeAnnotation.TypeAnnotation )
 migrateStateTypeAnnotationFromElmModule parsedModule =
-    parsedModule.declarations
-        |> List.filterMap
-            (\declaration ->
-                case Elm.Syntax.Node.value declaration of
-                    Elm.Syntax.Declaration.FunctionDeclaration functionDeclaration ->
-                        if
-                            Elm.Syntax.Node.value (Elm.Syntax.Node.value functionDeclaration.declaration).name
-                                == appStateMigrationInterfaceFunctionName
-                        then
-                            Just functionDeclaration
+    case
+        parsedModule.declarations
+            |> Common.listMapFind
+                (\(Elm.Syntax.Node.Node _ declaration) ->
+                    case declaration of
+                        Elm.Syntax.Declaration.FunctionDeclaration functionDeclaration ->
+                            if
+                                Elm.Syntax.Node.value (Elm.Syntax.Node.value functionDeclaration.declaration).name
+                                    == appStateMigrationInterfaceFunctionName
+                            then
+                                Just functionDeclaration
 
-                        else
+                            else
+                                Nothing
+
+                        _ ->
                             Nothing
-
-                    _ ->
-                        Nothing
-            )
-        |> List.head
-        |> Maybe.map
-            (\functionDeclaration ->
-                (case functionDeclaration.signature of
-                    Nothing ->
-                        Err "Missing function signature"
-
-                    Just functionSignature ->
-                        case Elm.Syntax.Node.value (Elm.Syntax.Node.value functionSignature).typeAnnotation of
-                            Elm.Syntax.TypeAnnotation.FunctionTypeAnnotation inputType returnType ->
-                                case Elm.Syntax.Node.value returnType of
-                                    Elm.Syntax.TypeAnnotation.FunctionTypeAnnotation _ _ ->
-                                        Err "Too many parameters."
-
-                                    Elm.Syntax.TypeAnnotation.Tupled [ stateTypeAnnotation, _ ] ->
-                                        Ok ( inputType, stateTypeAnnotation )
-
-                                    _ ->
-                                        Err "Unexpected return type: Not a tuple."
-
-                            _ ->
-                                Err "Unexpected type annotation"
                 )
-                    |> Result.mapError (Elm.Syntax.Node.Node (Elm.Syntax.Node.range functionDeclaration.declaration))
-            )
-        |> Maybe.withDefault
-            (Err
+    of
+        Nothing ->
+            Err
                 (Elm.Syntax.Node.Node
                     (syntaxRangeCoveringCompleteModule parsedModule)
                     "Did not find function with matching name"
                 )
+
+        Just functionDeclaration ->
+            (case functionDeclaration.signature of
+                Nothing ->
+                    Err "Missing function signature"
+
+                Just (Elm.Syntax.Node.Node _ functionSignature) ->
+                    case Elm.Syntax.Node.value functionSignature.typeAnnotation of
+                        Elm.Syntax.TypeAnnotation.FunctionTypeAnnotation inputType (Elm.Syntax.Node.Node _ returnType) ->
+                            case returnType of
+                                Elm.Syntax.TypeAnnotation.FunctionTypeAnnotation _ _ ->
+                                    Err "Too many parameters."
+
+                                Elm.Syntax.TypeAnnotation.Tupled [ stateTypeAnnotation, _ ] ->
+                                    Ok ( inputType, stateTypeAnnotation )
+
+                                _ ->
+                                    Err "Unexpected return type: Not a tuple."
+
+                        _ ->
+                            Err "Unexpected type annotation"
             )
+                |> Result.mapError (Elm.Syntax.Node.Node (Elm.Syntax.Node.range functionDeclaration.declaration))
 
 
 parseExposeFunctionsToAdminConfig :
