@@ -1,4 +1,3 @@
-using ElmTime.JavaScript;
 using ElmTime.Platform.WebService.ProcessStoreSupportingMigrations;
 using Pine;
 using Pine.Core;
@@ -66,28 +65,6 @@ public class PersistentProcessLiveRepresentation : IAsyncDisposable
         byte[]? ApplyFunctionOnElmAppState = null,
         TreeNodeWithStringPath? DeployAppConfigAndInitElmAppState = null,
         TreeNodeWithStringPath? DeployAppConfigAndMigrateElmAppState = null);
-
-    public static ProcessFromElm019Code.PreparedProcess ProcessFromDeployment(
-        TreeNodeWithStringPath deployment,
-        ElmAppInterfaceConfig? overrideElmAppInterfaceConfig = null,
-        Func<IJavaScriptEngine>? overrideJavaScriptEngineFactory = null)
-    {
-        var deploymentFiles = PineValueComposition.TreeToFlatDictionaryWithPathComparer(deployment);
-
-        var compilationResult = ElmAppCompilation.AsCompletelyLoweredElmApp(
-            sourceFiles: deploymentFiles,
-            workingDirectoryRelative: [],
-            ElmAppInterfaceConfig.Default)
-            .Extract(error => throw new Exception(ElmAppCompilation.CompileCompilationErrorsDisplayText(error)));
-
-        var (loweredAppFiles, _) = compilationResult;
-
-        return
-            ProcessFromElm019Code.ProcessFromElmCodeFiles(
-                loweredAppFiles.compiledFiles,
-                overrideElmAppInterfaceConfig: overrideElmAppInterfaceConfig,
-                overrideJavaScriptEngineFactory: overrideJavaScriptEngineFactory);
-    }
 
     private PersistentProcessLiveRepresentation(
         ProcessAppConfig lastAppConfig,
@@ -624,48 +601,6 @@ public class PersistentProcessLiveRepresentation : IAsyncDisposable
         }
 
         return "Unexpected shape of composition event: " + JsonSerializer.Serialize(compositionEvent);
-    }
-
-    public static Result<string, StateShim.InterfaceToHost.StateShimResponseStruct> InitBranchesInElmInJsProcess(
-        IProcessWithStringInterface elmInJsProcess,
-        IReadOnlyList<string> stateDestinationBranches) =>
-        AttemptProcessRequest(
-            elmInJsProcess,
-            new StateShim.InterfaceToHost.StateShimRequestStruct.ApplyFunctionShimRequest(
-                new StateShim.InterfaceToHost.ApplyFunctionShimRequestStruct(
-                    functionName: "init",
-                    arguments: new StateShim.InterfaceToHost.ApplyFunctionArguments<Maybe<StateShim.InterfaceToHost.StateSource>>(
-                        stateArgument: Maybe<StateShim.InterfaceToHost.StateSource>.nothing(),
-                        serializedArgumentsJson: []),
-                    stateDestinationBranches: stateDestinationBranches)));
-
-    private record UpdateElmAppStateForEvent(
-        string functionName,
-        StateShim.InterfaceToHost.ApplyFunctionArguments<bool> arguments);
-
-    private static Result<string, StateShim.InterfaceToHost.StateShimResponseStruct> AttemptProcessRequest(
-        IProcessWithStringInterface process,
-        StateShim.InterfaceToHost.StateShimRequestStruct stateShimRequest)
-    {
-        var serializedInterfaceEvent = stateShimRequest.SerializeToJsonString();
-
-        var eventResponseSerial = process.ProcessEvent(serializedInterfaceEvent);
-
-        try
-        {
-            var eventResponse =
-                JsonSerializer.Deserialize<Result<string, StateShim.InterfaceToHost.StateShimResponseStruct>>(eventResponseSerial)!;
-
-            return
-                eventResponse
-                .MapError(decodeErr => "Hosted app failed to decode the event: " + decodeErr);
-        }
-        catch (Exception parseException)
-        {
-            return
-                "Failed to parse event response from the app. Looks like the loaded elm app is not compatible with the interface.\nI got following response from the app:\n" +
-                eventResponseSerial + "\nException: " + parseException;
-        }
     }
 
     private static CompositionEventWithResolvedDependencies? LoadCompositionEventDependencies(

@@ -185,7 +185,7 @@ namespace ElmTime
                 .Extract(error => throw new Exception(nameof(CachedCompilerElmProgramCodeFilesForElmBackend) + ": " + error));
 
             var (compilationResult, compilationReport) =
-                CachedElmAppCompilationIterationPine(
+                CachedElmAppCompilationIteration(
                     compilerElmProgramCodeFiles: compilerElmProgramCodeFiles,
                     sourceFiles: sourceFiles,
                     compilationRootFilePath: compilationRootFilePath,
@@ -369,131 +369,8 @@ namespace ElmTime
                     });
         }
 
-        private static readonly ConcurrentDictionary<string, (CompilationIterationResult compilationResult, TimeSpan lastUseTime)> ElmAppCompilationIterationCache = new();
-
-        private static void ElmAppCompilationIterationCacheRemoveOlderItems(long retainedSizeLimit) =>
-            Cache.RemoveItemsToLimitRetainedSize(
-                ElmAppCompilationIterationCache,
-                item => 1000 + EstimateCacheItemSizeInMemory(item.Value.compilationResult),
-                item => item.Value.lastUseTime,
-                retainedSizeLimit);
-
-        private static (CompilationIterationResult, CompilationIterationCompilationReport report) CachedElmAppCompilationIteration(
-            IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> compilerElmProgramCodeFiles,
-            IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> sourceFiles,
-            IReadOnlyList<string> compilationRootFilePath,
-            IReadOnlyList<string> interfaceToHostRootModuleName,
-            IReadOnlyList<(CompilerSerialInterface.DependencyKey key, ReadOnlyMemory<byte> value)> dependencies)
-        {
-            var totalStopwatch = System.Diagnostics.Stopwatch.StartNew();
-            var serializeStopwatch = System.Diagnostics.Stopwatch.StartNew();
-
-            var sourceFilesJson =
-                sourceFiles
-                .Select(appCodeFile => new CompilerSerialInterface.AppCodeEntry
-                (
-                    path: appCodeFile.Key,
-                    content: CompilerSerialInterface.BytesJson.AsJson(appCodeFile.Value)
-                ))
-                .ToImmutableList();
-
-            var dependenciesJson =
-                dependencies
-                .Select(dependency =>
-                new
-                {
-                    key = dependency.key,
-                    value = CompilerSerialInterface.BytesJson.AsJson(dependency.value),
-                })
-                .ToImmutableList();
-
-            var argumentsJson = System.Text.Json.JsonSerializer.Serialize(
-                new
-                {
-                    sourceFiles = sourceFilesJson,
-                    compilationInterfaceElmModuleNamePrefixes = ElmAppInterfaceConvention.CompilationInterfaceModuleNamePrefixes,
-                    dependencies = dependenciesJson,
-                    compilationRootFilePath = compilationRootFilePath,
-                    interfaceToHostRootModuleName = interfaceToHostRootModuleName,
-                }
-            );
-
-            var argumentsJsonHash =
-                CommonConversion.StringBase16(CommonConversion.HashSHA256(Encoding.UTF8.GetBytes(argumentsJson)));
-
-            serializeStopwatch.Stop();
-
-            System.Diagnostics.Stopwatch? prepareJavaScriptEngineStopwatch = null;
-            System.Diagnostics.Stopwatch? inJavaScriptEngineStopwatch = null;
-            System.Diagnostics.Stopwatch? deserializeStopwatch = null;
-
-            CompilationIterationResult compileNew()
-            {
-                prepareJavaScriptEngineStopwatch = System.Diagnostics.Stopwatch.StartNew();
-
-                var javaScriptEngine = CachedJavaScriptEngineToCompileFileTree(compilerElmProgramCodeFiles);
-
-                prepareJavaScriptEngineStopwatch.Stop();
-
-                inJavaScriptEngineStopwatch = System.Diagnostics.Stopwatch.StartNew();
-
-                var responseJson =
-                    javaScriptEngine.CallFunction("lowerSerialized", argumentsJson)
-                    .ToString()!;
-
-                inJavaScriptEngineStopwatch.Stop();
-
-                deserializeStopwatch = System.Diagnostics.Stopwatch.StartNew();
-
-                var compilationResponse =
-                    System.Text.Json.JsonSerializer.Deserialize<
-                        Result<
-                            string,
-                            Result<
-                                IReadOnlyList<CompilerSerialInterface.LocatedCompilationError>,
-                                CompilerSerialInterface.CompilationIterationSuccess>>>(responseJson)!;
-
-                var compilationResponseOk =
-                    compilationResponse
-                    .Extract(error => throw new Exception("Protocol error: " + error));
-
-                var mappedResult =
-                    compilationResponseOk.Map(compileSuccess =>
-                    new CompilationIterationSuccess(compiledFiles:
-                        compileSuccess.compiledFiles.ToImmutableDictionary(
-                            entry => entry.path,
-                            entry => (ReadOnlyMemory<byte>)Convert.FromBase64String(entry.content.AsBase64),
-                            keyComparer: EnumerableExtension.EqualityComparer<IReadOnlyList<string>>()),
-                            rootModuleEntryPointKind: compileSuccess.rootModuleEntryPointKind));
-
-                return mappedResult;
-            }
-
-            var result =
-                ElmAppCompilationIterationCache.AddOrUpdate(
-                    argumentsJsonHash,
-                    _ => (compileNew(), cacheItemTimeSource.Elapsed),
-                    (_, previousEntry) => (previousEntry.compilationResult, cacheItemTimeSource.Elapsed));
-
-            ElmAppCompilationIterationCacheRemoveOlderItems(50_000_000);
-
-            return
-                (result.compilationResult,
-                new CompilationIterationCompilationReport
-                (
-                    serializeTimeSpentMilli: (int)serializeStopwatch.ElapsedMilliseconds,
-                    prepareJavaScriptEngineTimeSpentMilli: (int?)prepareJavaScriptEngineStopwatch?.ElapsedMilliseconds,
-                    argumentsJsonHash: argumentsJsonHash,
-                    argumentsToJavaScriptEngineSerializedLength: argumentsJson.Length,
-                    inJavaScriptEngineTimeSpentMilli: (int?)inJavaScriptEngineStopwatch?.ElapsedMilliseconds,
-                    deserializeTimeSpentMilli: (int?)deserializeStopwatch?.ElapsedMilliseconds,
-                    totalTimeSpentMilli: (int)totalStopwatch.ElapsedMilliseconds
-                ));
-        }
-
-
         private static Result<string, (CompilationIterationResult, CompilationIterationCompilationReport report)>
-            CachedElmAppCompilationIterationPine(
+            CachedElmAppCompilationIteration(
             IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> compilerElmProgramCodeFiles,
             IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> sourceFiles,
             IReadOnlyList<string> compilationRootFilePath,
@@ -978,9 +855,8 @@ namespace ElmTime
                         "Expected list with one element, got: " + asElmList.Elements.Count);
                 }
 
-                var asElmString = asElmList.Elements[0] as ElmValue.ElmString;
 
-                if (asElmString is null)
+                if (asElmList.Elements[0] is not ElmValue.ElmString asElmString)
                 {
                     throw new Exception(
                         "Expected Elm string value, got: " + asElmList.Elements[0]);
@@ -1468,62 +1344,6 @@ namespace ElmTime
             FilePathFromModuleName(moduleName.Split('.'));
 
         public static string InterfaceToHostRootModuleName => "Backend.InterfaceToHost_Root";
-
-        public static IJavaScriptEngine CachedJavaScriptEngineToCompileFileTree(
-            IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> compilerElmProgramCodeFiles)
-        {
-            var compilerId =
-                CommonConversion.StringBase16(
-                    PineValueHashTree.ComputeHashSorted(
-                        PineValueComposition.SortedTreeFromSetOfBlobsWithStringPath(compilerElmProgramCodeFiles)));
-
-            return FileTreeCompilerJavaScriptEngineCache.GetOrAdd(
-                compilerId,
-                _ => CreateJavaScriptEngineToCompileFileTree(compilerElmProgramCodeFiles));
-        }
-
-        private static readonly ConcurrentDictionary<string, IJavaScriptEngine> FileTreeCompilerJavaScriptEngineCache = new();
-
-        public static IJavaScriptEngine CreateJavaScriptEngineToCompileFileTree(
-            IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> compilerElmProgramCodeFiles)
-        {
-            var javascript = BuildJavascriptToCompileFileTree(compilerElmProgramCodeFiles);
-
-            var javascriptEngine = IJavaScriptEngine.BuildJavaScriptEngine();
-
-            javascriptEngine.Evaluate(javascript);
-
-            return javascriptEngine;
-        }
-
-        private static string BuildJavascriptToCompileFileTree(
-            IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> compilerElmProgramCodeFiles)
-        {
-            var elmMakeResult =
-                Elm019Binaries.ElmMakeToJavascript(
-                    compilerElmProgramCodeFiles,
-                    workingDirectoryRelative: null,
-                    ["src", "Main.elm"]);
-
-            var javascriptFromElmMake =
-                Encoding.UTF8.GetString(
-                    elmMakeResult.Extract(err => throw new Exception("Failed elm make: " + err)).producedFile.Span);
-
-            var javascriptMinusCrashes = ProcessFromElm019Code.JavascriptMinusCrashes(javascriptFromElmMake);
-
-            var listFunctionToPublish =
-                new[]
-                {
-                    (functionNameInElm: "Main.lowerSerialized",
-                    publicName: "lowerSerialized",
-                    arity: 1),
-                };
-
-            return
-                ProcessFromElm019Code.PublishFunctionsFromJavascriptFromElmMake(
-                    javascriptMinusCrashes,
-                    listFunctionToPublish);
-        }
 
         public static readonly Lazy<Result<string, IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>>>> CachedCompilerElmProgramCodeFilesForElmBackend =
             new(LoadCompilerElmProgramCodeFilesForElmBackend);
